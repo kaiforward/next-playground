@@ -2,6 +2,10 @@
 
 Browser-based multiplayer space trading game. Players navigate star systems, trade goods between stations, and grow their wealth in a living economy.
 
+## Skills
+
+- `/bootstrap` — Run environment checks (node, deps, database, env, outdated packages, build)
+
 ## Commands
 
 - `npm run dev` — Start dev server (Turbopack)
@@ -45,3 +49,16 @@ Read these when working on related features:
 - Tailwind v4 theme is in `globals.css` (`@theme inline {}`), no tailwind.config.js.
 - API responses use `ApiResponse<T>` format: `{ data?: T, error?: string }`.
 - Forms use React Hook Form + Zod directly per component, no shared form abstractions.
+
+## Git Workflow
+
+- Feature branch per feature (`feat/feature-name`), PR to main when complete.
+- Commit after each meaningful unit of work (new model, API route, component).
+- Parallel agents for research/exploration only — sequential for writing code.
+- Never let two agents edit the same files (types, schema, constants are shared — handle sequentially).
+
+## Troubleshooting
+
+When hitting errors, don't fix symptoms directly. Step back and search for the canonical
+implementation pattern for the specific tool combination (e.g. "Next.js 16 + Prisma 7 + SQLite
+setup"). Official docs and standard patterns resolve issues faster than iterating on type errors.
