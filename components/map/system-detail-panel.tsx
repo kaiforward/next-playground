@@ -1,12 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
+import Link from "next/link";
 import { tv } from "tailwind-variants";
-import type { StarSystemInfo, EconomyType } from "@/lib/types/game";
+import type { StarSystemInfo, ShipState, EconomyType } from "@/lib/types/game";
 
 interface SystemDetailPanelProps {
   system: StarSystemInfo | null;
-  isPlayerHere: boolean;
-  onNavigate: () => void;
+  shipsHere: ShipState[];
+  currentTick: number;
+  onSelectShipForNavigation?: (ship: ShipState) => void;
   onClose: () => void;
 }
 
@@ -25,14 +28,29 @@ const economyBadge = tv({
 
 export function SystemDetailPanel({
   system,
-  isPlayerHere,
-  onNavigate,
+  shipsHere,
+  currentTick,
+  onSelectShipForNavigation,
   onClose,
 }: SystemDetailPanelProps) {
+  // Close on Escape key
+  useEffect(() => {
+    if (!system) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [system, onClose]);
+
   if (!system) return null;
 
   return (
-    <div className="fixed top-0 right-0 h-full w-80 bg-gray-900/95 border-l border-gray-700 shadow-2xl z-50 flex flex-col">
+    <div
+      className="fixed top-0 right-0 h-full w-80 bg-gray-900/95 border-l border-gray-700 shadow-2xl z-50 flex flex-col"
+      role="dialog"
+      aria-label={`${system.name} system details`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
         <h2 className="text-lg font-bold text-white">{system.name}</h2>
@@ -63,11 +81,6 @@ export function SystemDetailPanel({
           <span className={economyBadge({ economyType: system.economyType as EconomyType })}>
             {system.economyType}
           </span>
-          {isPlayerHere && (
-            <span className="ml-2 inline-block rounded-full bg-yellow-900/80 text-yellow-300 ring-1 ring-yellow-500/40 px-3 py-0.5 text-xs font-semibold uppercase tracking-wider">
-              Current Location
-            </span>
-          )}
         </div>
 
         {/* Description */}
@@ -80,6 +93,53 @@ export function SystemDetailPanel({
           </p>
         </div>
 
+        {/* Ships at this system */}
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+            Your Ships Here
+          </h3>
+          {shipsHere.length === 0 ? (
+            <p className="text-sm text-gray-500">No ships docked at this system.</p>
+          ) : (
+            <ul className="space-y-2">
+              {shipsHere.map((ship) => (
+                <li
+                  key={ship.id}
+                  className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5"
+                >
+                  <div>
+                    <Link
+                      href={`/ship/${ship.id}`}
+                      className="text-sm font-medium text-white hover:text-blue-300 transition-colors"
+                    >
+                      {ship.name}
+                    </Link>
+                    <div className="text-[10px] text-white/40">
+                      Fuel: {Math.round(ship.fuel)}/{ship.maxFuel}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {onSelectShipForNavigation && (
+                      <button
+                        onClick={() => onSelectShipForNavigation(ship)}
+                        className="text-xs font-medium py-1 px-2.5 rounded-md bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 transition-colors"
+                      >
+                        Navigate
+                      </button>
+                    )}
+                    <Link
+                      href={`/trade?shipId=${ship.id}&systemId=${system.id}`}
+                      className="text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
+                    >
+                      Trade
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* Coordinates */}
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
@@ -89,29 +149,16 @@ export function SystemDetailPanel({
             X: {system.x} &middot; Y: {system.y}
           </p>
         </div>
-
-        {/* System ID */}
-        <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
-            System ID
-          </h3>
-          <p className="text-sm text-gray-400 font-mono">{system.id}</p>
-        </div>
       </div>
 
       {/* Actions */}
       <div className="px-4 py-3 border-t border-gray-700 space-y-2">
-        <button
-          onClick={onNavigate}
-          disabled={isPlayerHere}
-          className={`w-full py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
-            isPlayerHere
-              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-              : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/30 active:scale-[0.98]"
-          }`}
+        <Link
+          href={`/system/${system.id}`}
+          className="block w-full py-2 px-4 rounded-lg text-sm font-semibold text-center bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/30 transition-all active:scale-[0.98]"
         >
-          {isPlayerHere ? "Already Here" : "Navigate Here"}
-        </button>
+          View System
+        </Link>
         <button
           onClick={onClose}
           className="w-full py-2 px-4 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition-all"

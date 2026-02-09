@@ -23,6 +23,7 @@ async function main() {
   await prisma.station.deleteMany();
   await prisma.good.deleteMany();
   await prisma.starSystem.deleteMany();
+  await prisma.gameWorld.deleteMany();
 
   // Seed goods
   const goodRecords: Record<string, { id: string }> = {};
@@ -99,6 +100,17 @@ async function main() {
     connCount += 2;
   }
   console.log(`  Created ${connCount} connections`);
+
+  // Seed GameWorld singleton
+  await prisma.gameWorld.create({
+    data: {
+      id: "world",
+      currentTick: 0,
+      tickRate: 5000,
+      lastTickAt: new Date(),
+    },
+  });
+  console.log("  Created GameWorld singleton");
 
   console.log("Seeding complete!");
 }

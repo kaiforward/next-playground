@@ -28,21 +28,40 @@ validateAndCalculateTrade(params) → { ok: true, delta } | { ok: false, error }
 
 ```
 validateNavigation(params) → { ok: true, fuelCost } | { ok: false, error }
+validateFleetNavigation(params) → { ok, fuelCost, travelDuration, departureTick, arrivalTick } | { ok: false, error }
+validateFleetRouteNavigation(params) → { ok, totalFuelCost, totalTravelDuration, departureTick, arrivalTick, destinationSystemId } | { ok: false, error }
 ```
 
 - Checks a direct connection exists between systems
 - Validates sufficient fuel
+- `validateFleetNavigation` adds: ship must be docked, calculates `travelDuration = ceil(fuelCost / 2)` (min 1)
+- `validateFleetRouteNavigation` validates a multi-hop route array, sums fuel/duration across all hops
+
+### Pathfinding (`lib/engine/pathfinding.ts`)
+
+```
+findShortestPath(originId, destinationId, connections) → PathResult | null
+findReachableSystems(originId, currentFuel, connections) → Map<string, ReachableSystem>
+validateRoute(route, connections, currentFuel) → RouteValidationResult
+```
+
+- Dijkstra-based lowest-fuel pathfinding between any two systems
+- Fuel-constrained reachability: all systems reachable within fuel budget
+- Linear route validation: walks each hop, checks connections exist and fuel suffices
+- Travel duration per hop: `ceil(fuelCost / 2)` (min 1)
 
 ### Economy Tick (`lib/engine/tick.ts`)
 
 ```
 simulateEconomyTick(markets) → updatedMarkets
+processShipArrivals(ships, currentTick) → arrivedShipIds
 ```
 
 - Producers gain supply, lose demand
 - Consumers lose supply, gain demand
 - Small random drift applied
 - All values clamped to `[5, 200]`
+- `processShipArrivals` returns ship IDs where `arrivalTick <= currentTick`
 
 ### NPC Traders (`lib/engine/npc.ts`)
 
@@ -55,24 +74,43 @@ All routes return `ApiResponse<T>` format: `{ data?: T, error?: string }`.
 
 | Route | Method | Description |
 |---|---|---|
+| `/api/game/fleet` | GET | Player's fleet state (credits + all ships) |
+| `/api/game/world` | GET | Game world state (currentTick, tickRate) |
+| `/api/game/tick-stream` | GET | SSE stream — pushes `TickEvent` on each tick |
+| `/api/game/ship/[shipId]/navigate` | POST | Order ship to navigate (sets in_transit) |
+| `/api/game/ship/[shipId]/trade` | POST | Execute trade for a docked ship |
 | `/api/game/systems` | GET | All systems + connections |
 | `/api/game/systems/[systemId]` | GET | Single system with station |
 | `/api/game/market/[systemId]` | GET | Market entries with computed prices |
-| `/api/game/trade` | POST | Buy/sell — validates, transacts, returns updated state |
-| `/api/game/navigate` | POST | Travel — validates fuel/connection, updates player location |
-| `/api/game/player` | GET | Full player state (ship, cargo, system) |
 | `/api/game/history/[systemId]` | GET | Last 50 trade history entries |
 
 ### Auth on API Routes
 
-All mutation routes (`trade`, `navigate`) and the `player` route use `getSessionPlayer()` to authenticate and look up the current player from the JWT session.
+Ship mutation routes (`navigate`, `trade`) and the `fleet` route use `getSessionPlayer()` to authenticate. Ship ownership is verified by checking the ship belongs to the player.
+
+### Tick System (Server-Driven)
+
+The game clock is driven by a **server-side tick engine** (`lib/tick-engine.ts`), a singleton that runs on a `setInterval`. It starts automatically via the Next.js instrumentation hook (`instrumentation.ts`) on server boot.
+
+Each tick:
+1. Checks if `tickRate` ms have elapsed since last tick
+2. Uses optimistic locking (`updateMany` with `currentTick` WHERE clause) to prevent double-processing
+3. Processes ship arrivals (in_transit → docked)
+4. Runs economy simulation on all markets
+5. Increments `currentTick`
+6. Emits a `TickEvent` via EventEmitter to connected SSE clients
+
+Clients connect to `GET /api/game/tick-stream` (Server-Sent Events). The `useTick` hook wraps an `EventSource` connection, and `TickProvider` shares a single connection across all game pages via React context.
 
 ## Tests
 
-20 unit tests across 3 files in `lib/engine/__tests__/`:
+58 unit tests across 6 files in `lib/engine/__tests__/`:
 
 - `pricing.test.ts` — 7 tests (equal s/d, high demand, high supply, clamping, zero supply)
-- `trade.test.ts` — 8 tests (buy/sell success, credit/cargo/supply validation, edge cases)
+- `trade.test.ts` — 11 tests (buy/sell success, credit/cargo/supply validation, edge cases, fleet trade docked guard)
 - `navigation.test.ts` — 5 tests (valid connection, exact fuel, no connection, insufficient fuel)
+- `fleet-navigation.test.ts` — 13 tests (docked requirement, travel duration calc, departure/arrival ticks, delegation, multi-hop route validation)
+- `pathfinding.test.ts` — 17 tests (shortest path, multi-hop optimal, reachability with fuel constraints, route validation)
+- `tick.test.ts` — 5 tests (ship arrival processing, edge cases)
 
 Run with: `npx vitest run`

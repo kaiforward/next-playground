@@ -1,32 +1,44 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { StarMap } from "@/components/map/star-map";
 import { useUniverse } from "@/lib/hooks/use-universe";
-import { usePlayer } from "@/lib/hooks/use-player";
+import { useFleet } from "@/lib/hooks/use-fleet";
+import { useTickContext } from "@/lib/hooks/use-tick-context";
 
 export default function MapPage() {
-  const { data, loading: universeLoading } = useUniverse();
-  const { player, loading: playerLoading, refresh } = usePlayer();
+  const searchParams = useSearchParams();
+  const initialShipId = searchParams.get("shipId") ?? undefined;
 
-  const handleNavigate = useCallback(
-    async (targetSystemId: string) => {
-      const res = await fetch("/api/game/navigate", {
+  const { data, loading: universeLoading } = useUniverse();
+  const { fleet, loading: fleetLoading, refresh } = useFleet();
+  const { currentTick, subscribeToArrivals } = useTickContext();
+  const [navError, setNavError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return subscribeToArrivals(() => refresh());
+  }, [subscribeToArrivals, refresh]);
+
+  const handleNavigateShip = useCallback(
+    async (shipId: string, route: string[]) => {
+      setNavError(null);
+      const res = await fetch(`/api/game/ship/${shipId}/navigate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetSystemId }),
+        body: JSON.stringify({ route }),
       });
       const json = await res.json();
       if (json.error) {
-        alert(json.error);
+        setNavError(json.error);
       } else {
         refresh();
       }
     },
-    [refresh]
+    [refresh],
   );
 
-  if (universeLoading || playerLoading || !data || !player) {
+  if (universeLoading || fleetLoading || !data || !fleet) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-60px)] w-full">
         <div className="text-center space-y-3">
@@ -38,11 +50,19 @@ export default function MapPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-60px)] w-full">
+    <div className="h-[calc(100vh-60px)] w-full relative">
+      {navError && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-900/90 border border-red-500/40 text-red-200 text-sm px-4 py-2 rounded-lg shadow-lg flex items-center gap-3">
+          <span>{navError}</span>
+          <button onClick={() => setNavError(null)} className="text-red-400 hover:text-white text-xs font-medium">Dismiss</button>
+        </div>
+      )}
       <StarMap
         universe={data}
-        initialPlayerSystemId={player.systemId}
-        onNavigate={handleNavigate}
+        ships={fleet.ships}
+        currentTick={currentTick}
+        onNavigateShip={handleNavigateShip}
+        initialSelectedShipId={initialShipId}
       />
     </div>
   );

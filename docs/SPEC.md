@@ -41,27 +41,40 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 | Ship Parts | Product | Manufactured at industrial stations |
 | Luxuries | Product | Produced at wealthy/core worlds |
 
-#### 3. Players & Ships
+#### 3. Players & Fleet
 
 - Players register and log in (simple auth)
-- Each player has: credits, current system/station, one ship
-- Ships have: cargo capacity, fuel tank size, current fuel level
-- Inventory is tied to the ship (cargo hold)
-- One ship type for MVP, upgradeable later
+- Each player has: credits, a fleet of ships (1:N)
+- Ships own their location (systemId), not players
+- Ships have: cargo capacity, fuel tank size, current fuel level, status (docked/in_transit)
+- Ships in transit have: destinationSystemId, departureTick, arrivalTick
+- Inventory is tied to individual ships (cargo holds)
+- One ship type for now, fleet expansion and ship types upgradeable later
 
 #### 4. Trading
 
-- Buy and sell goods at station markets
+- Buy and sell goods at station markets using a specific docked ship
+- Trade requires ship to be docked at the station's system
 - Prices vary by station based on supply/demand
 - Transactions update supply/demand levels at the station
 - Players can view current market prices and recent price history
 
 #### 5. Navigation
 
-- Players can travel to connected systems
-- Travel consumes fuel
-- Fuel can be purchased at stations
-- Star map shows systems, connections, and player location
+- Players order individual ships to navigate to connected systems
+- Travel consumes fuel and takes time (tick-based)
+- Travel duration: `ceil(fuelCost / 2)` ticks (minimum 1)
+- Ships are locked during transit (cannot trade or take other actions)
+- Star map shows all ship positions per system
+- UI shows transit progress with ETA
+
+#### 5b. Tick System
+
+- Game time advances via discrete ticks (GameWorld singleton)
+- Each tick: process ship arrivals, then run economy simulation
+- Client-side `useTick` hook calls `POST /api/game/tick` on interval
+- Server only advances if enough real time has elapsed (tickRate ms)
+- Optimistic locking prevents double-processing
 
 #### 6. Auth
 

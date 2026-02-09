@@ -5,12 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { MarketEntry, TradeType } from "@/lib/types/game";
-import type { TradeRequest } from "@/lib/types/api";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-
-function formatCredits(value: number): string {
-  return `${value.toLocaleString()} CR`;
-}
+import { formatCredits } from "@/lib/utils/format";
 
 const tradeSchema = z.object({
   quantity: z
@@ -27,7 +23,8 @@ interface TradeFormProps {
   cargoUsed: number;
   cargoMax: number;
   currentCargoQuantity: number;
-  onTrade: (request: TradeRequest) => void;
+  shipName?: string;
+  onTrade: (request: { goodId: string; quantity: number; type: TradeType }) => Promise<void>;
 }
 
 export function TradeForm({
@@ -36,6 +33,7 @@ export function TradeForm({
   cargoUsed,
   cargoMax,
   currentCargoQuantity,
+  shipName,
   onTrade,
 }: TradeFormProps) {
   const [tradeType, setTradeType] = useState<TradeType>("buy");
@@ -86,13 +84,14 @@ export function TradeForm({
     if (validationError) return;
     setIsSubmitting(true);
     try {
-      onTrade({
-        stationId: "station-sol",
+      await onTrade({
         goodId: good.goodId,
         quantity: data.quantity,
         type: tradeType,
       });
       reset({ quantity: 1 });
+    } catch {
+      // Error handling is done by the parent component
     } finally {
       setIsSubmitting(false);
     }
@@ -102,7 +101,7 @@ export function TradeForm({
     <Card variant="bordered" padding="md">
       <CardHeader
         title={`Trade ${good.goodName}`}
-        subtitle={`Unit price: ${formatCredits(good.currentPrice)}`}
+        subtitle={shipName ? `Ship: ${shipName} · ${formatCredits(good.currentPrice)}/unit` : `Unit price: ${formatCredits(good.currentPrice)}`}
       />
       <CardContent>
         {/* Buy / Sell tabs */}

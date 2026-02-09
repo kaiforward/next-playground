@@ -1,4 +1,4 @@
-import type { MarketEntry, TradeHistoryEntry, PlayerState } from "@/lib/types/game";
+import type { MarketEntry, TradeHistoryEntry, FleetState } from "@/lib/types/game";
 
 export const MOCK_MARKET: MarketEntry[] = [
   { goodId: "food", goodName: "Food", basePrice: 20, currentPrice: 18, supply: 120, demand: 30 },
@@ -45,28 +45,37 @@ export const MOCK_TRADE_HISTORY: TradeHistoryEntry[] = [
   },
 ];
 
-export const MOCK_PLAYER: PlayerState = {
+const SOL_SYSTEM = {
+  id: "sol",
+  name: "Sol",
+  economyType: "core" as const,
+  x: 400,
+  y: 300,
+  description: "Humanity's birthplace.",
+};
+
+export const MOCK_FLEET: FleetState = {
   id: "player-1",
   userId: "user-1",
   credits: 1000,
-  systemId: "sol",
-  system: {
-    id: "sol",
-    name: "Sol",
-    economyType: "core",
-    x: 400,
-    y: 300,
-    description: "Humanity's birthplace.",
-  },
-  ship: {
-    id: "ship-1",
-    name: "Starter Ship",
-    fuel: 85,
-    maxFuel: 100,
-    cargoMax: 50,
-    cargo: [
-      { goodId: "food", goodName: "Food", quantity: 10 },
-      { goodId: "ore", goodName: "Ore", quantity: 5 },
-    ],
-  },
+  ships: [
+    {
+      id: "ship-1",
+      name: "Starter Ship",
+      fuel: 85,
+      maxFuel: 100,
+      cargoMax: 50,
+      status: "docked",
+      systemId: "sol",
+      system: SOL_SYSTEM,
+      destinationSystemId: null,
+      destinationSystem: null,
+      departureTick: null,
+      arrivalTick: null,
+      cargo: [
+        { goodId: "food", goodName: "Food", quantity: 10 },
+        { goodId: "ore", goodName: "Ore", quantity: 5 },
+      ],
+    },
+  ],
 };

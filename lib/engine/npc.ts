@@ -66,8 +66,8 @@ export function simulateNpcTrade(
       item.demand,
     );
 
-    // Buy cheap goods
-    if (currentPrice < item.basePrice && item.supply > 5) {
+    // Buy cheap goods (guard against zero/negative prices from edge-case base prices)
+    if (currentPrice > 0 && currentPrice < item.basePrice && item.supply > 5) {
       const maxAffordable = Math.floor(credits / currentPrice);
       const maxFromSupply = Math.floor(item.supply * 0.1); // NPC buys at most 10% of supply
       const quantity = Math.min(maxAffordable, maxFromSupply, 5); // cap at 5 per good
