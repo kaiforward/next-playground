@@ -8,7 +8,8 @@ import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
 import type { MarketEntry, TradeType } from "@/lib/types/game";
-import { FormError } from "@/components/ui/form-error";
+import { FormError } from "@/components/form/form-error";
+import { PageContainer } from "@/components/ui/page-container";
 
 export default function TradePage() {
   const searchParams = useSearchParams();
@@ -114,33 +115,33 @@ export default function TradePage() {
 
   if (fleetLoading || marketLoading || !fleet) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <PageContainer>
         <h1 className="text-2xl font-bold mb-2">Station Market</h1>
         <p className="text-white/60">Loading market data...</p>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!ship) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <PageContainer>
         <h1 className="text-2xl font-bold mb-2">Station Market</h1>
         <p className="text-red-400">Ship not found.</p>
-      </div>
+      </PageContainer>
     );
   }
 
   if (ship.status !== "docked") {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <PageContainer>
         <h1 className="text-2xl font-bold mb-2">Station Market</h1>
         <p className="text-amber-400">This ship is currently in transit and cannot trade.</p>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <PageContainer>
       <h1 className="text-2xl font-bold mb-2">Station Market</h1>
       <p className="text-white/60 mb-6">
         Trading at {ship.system.name} with <span className="text-white">{ship.name}</span>
@@ -182,6 +183,6 @@ export default function TradePage() {
       <div className="mt-8">
         <SupplyDemandChart entries={market} />
       </div>
-    </div>
+    </PageContainer>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import type { ShipState } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { StatList, StatRow } from "@/components/ui/stat-row";
 import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 
@@ -24,61 +26,42 @@ export function ShipDetailPanel({ ship, currentTick }: ShipDetailPanelProps) {
       <Card variant="bordered" padding="md">
         <CardHeader title={ship.name} subtitle="Ship Details" />
         <CardContent className="space-y-4">
-          {/* Status */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-white/50">Status</span>
-            <Badge color={isDocked ? "green" : "amber"}>
-              {isDocked ? "Docked" : "In Transit"}
-            </Badge>
-          </div>
-
-          {/* Location */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-white/50">Location</span>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-white">{ship.system.name}</span>
-              <Badge color={ECONOMY_BADGE_COLOR[ship.system.economyType]}>
-                {ship.system.economyType}
+          <StatList>
+            <StatRow label="Status">
+              <Badge color={isDocked ? "green" : "amber"}>
+                {isDocked ? "Docked" : "In Transit"}
               </Badge>
-            </div>
-          </div>
+            </StatRow>
+
+            <StatRow label="Location">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-white">{ship.system.name}</span>
+                <Badge color={ECONOMY_BADGE_COLOR[ship.system.economyType]}>
+                  {ship.system.economyType}
+                </Badge>
+              </div>
+            </StatRow>
+          </StatList>
 
           {/* Transit info */}
           {!isDocked && (
             <ShipTransitIndicator ship={ship} currentTick={currentTick} />
           )}
 
-          {/* Fuel bar */}
-          <div>
-            <div className="flex justify-between text-xs text-white/50 mb-1">
-              <span>Fuel</span>
-              <span>{Math.round(ship.fuel)} / {ship.maxFuel}</span>
-            </div>
-            <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  fuelPercent < 20 ? "bg-red-500" : "bg-blue-500"
-                }`}
-                style={{ width: `${Math.min(fuelPercent, 100)}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Cargo bar */}
-          <div>
-            <div className="flex justify-between text-xs text-white/50 mb-1">
-              <span>Cargo</span>
-              <span>{cargoUsed} / {ship.cargoMax}</span>
-            </div>
-            <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  cargoPercent > 80 ? "bg-red-500" : "bg-amber-500"
-                }`}
-                style={{ width: `${Math.min(cargoPercent, 100)}%` }}
-              />
-            </div>
-          </div>
+          <ProgressBar
+            label="Fuel"
+            value={Math.round(ship.fuel)}
+            max={ship.maxFuel}
+            color={fuelPercent < 20 ? "red" : "blue"}
+            size="md"
+          />
+          <ProgressBar
+            label="Cargo"
+            value={cargoUsed}
+            max={ship.cargoMax}
+            color={cargoPercent > 80 ? "red" : "amber"}
+            size="md"
+          />
         </CardContent>
       </Card>
 
@@ -110,18 +93,22 @@ export function ShipDetailPanel({ ship, currentTick }: ShipDetailPanelProps) {
       {/* Actions */}
       {isDocked && (
         <div className="flex gap-3">
-          <Link
+          <Button
             href={`/trade?shipId=${ship.id}&systemId=${ship.systemId}`}
-            className="flex-1 text-center py-2.5 rounded-lg text-sm font-semibold bg-green-600 hover:bg-green-500 text-white transition-colors"
+            variant="action"
+            color="green"
+            className="flex-1"
           >
             Trade at {ship.system.name}
-          </Link>
-          <Link
+          </Button>
+          <Button
             href={`/map?shipId=${ship.id}`}
-            className="flex-1 text-center py-2.5 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            variant="action"
+            color="indigo"
+            className="flex-1"
           >
             Navigate
-          </Link>
+          </Button>
         </div>
       )}
     </div>

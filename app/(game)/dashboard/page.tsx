@@ -5,6 +5,7 @@ import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { PlayerSummary } from "@/components/dashboard/player-summary";
 import { FleetOverview } from "@/components/fleet/fleet-overview";
+import { PageContainer } from "@/components/ui/page-container";
 
 export default function DashboardPage() {
   const { fleet, loading: fleetLoading, refresh: refreshFleet } = useFleet();
@@ -16,15 +17,15 @@ export default function DashboardPage() {
 
   if (fleetLoading || !fleet) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <PageContainer>
         <h1 className="text-2xl font-bold mb-2">Command Center</h1>
         <p className="text-white/60">Loading your fleet...</p>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <PageContainer>
       <h1 className="text-2xl font-bold mb-2">Command Center</h1>
       <p className="text-white/60 mb-6">
         Your fleet overview. Ship status, cargo, and credits at a glance.
@@ -35,6 +36,6 @@ export default function DashboardPage() {
       </div>
 
       <FleetOverview ships={fleet.ships} currentTick={currentTick} />
-    </div>
+    </PageContainer>
   );
 }

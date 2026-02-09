@@ -7,6 +7,8 @@ import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/ui/page-container";
 import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
 import type { MarketEntry } from "@/lib/types/game";
 
@@ -40,10 +42,10 @@ export default function SystemViewPage({
 
   if (fleetLoading || !fleet) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <PageContainer size="md">
         <h1 className="text-2xl font-bold mb-2">System</h1>
         <p className="text-white/60">Loading...</p>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -55,7 +57,7 @@ export default function SystemViewPage({
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <PageContainer size="md">
       <div className="flex items-center gap-3 mb-6">
         <Link
           href="/map"
@@ -101,12 +103,9 @@ export default function SystemViewPage({
                     >
                       {ship.name}
                     </Link>
-                    <Link
-                      href={`/trade?shipId=${ship.id}&systemId=${systemId}`}
-                      className="text-xs font-medium py-1 px-3 rounded-md bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 transition-colors"
-                    >
+                    <Button href={`/trade?shipId=${ship.id}&systemId=${systemId}`} variant="pill" color="indigo" size="xs">
                       Trade
-                    </Link>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -160,6 +159,6 @@ export default function SystemViewPage({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   );
 }

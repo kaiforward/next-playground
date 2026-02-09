@@ -6,6 +6,7 @@ import { StarMap } from "@/components/map/star-map";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
+import { Button } from "@/components/ui/button";
 
 export default function MapPage() {
   const searchParams = useSearchParams();
@@ -54,7 +55,7 @@ export default function MapPage() {
       {navError && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-900/90 border border-red-500/40 text-red-200 text-sm px-4 py-2 rounded-lg shadow-lg flex items-center gap-3">
           <span>{navError}</span>
-          <button onClick={() => setNavError(null)} className="text-red-400 hover:text-white text-xs font-medium">Dismiss</button>
+          <Button variant="dismiss" onClick={() => setNavError(null)}>Dismiss</Button>
         </div>
       )}
       <StarMap

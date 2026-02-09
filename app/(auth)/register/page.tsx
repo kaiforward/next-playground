@@ -7,8 +7,9 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerSchema, type RegisterInput } from "@/lib/schemas/auth";
-import { TextInput } from "@/components/ui/text-input";
-import { FormError } from "@/components/ui/form-error";
+import { TextInput } from "@/components/form/text-input";
+import { FormError } from "@/components/form/form-error";
+import { Button } from "@/components/ui/button";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -110,13 +111,9 @@ export default function RegisterPage() {
             {...register("password")}
           />
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
+          <Button type="submit" disabled={loading} fullWidth>
             {loading ? "Creating account..." : "Create Account"}
-          </button>
+          </Button>
 
           <p className="text-center text-sm text-white/50 pt-2">
             Already have an account?{" "}
