@@ -3,6 +3,11 @@
  * No database dependency — operates entirely on passed-in values.
  */
 
+import type { ShipStatus } from "../types/game";
+
+/** Fraction of traded quantity that affects market demand (e.g. 0.1 = 10%). */
+const TRADE_DEMAND_IMPACT_FACTOR = 0.1;
+
 export interface TradeDelta {
   creditsDelta: number; // positive = player gains credits (sell), negative = player spends (buy)
   cargoQuantityDelta: number; // positive = player gains cargo (buy), negative = player loses (sell)
@@ -40,8 +45,8 @@ export function validateAndCalculateTrade(
     currentGoodQuantityInCargo,
   } = params;
 
-  if (quantity <= 0) {
-    return { ok: false, error: "Quantity must be greater than zero." };
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { ok: false, error: "Quantity must be a positive integer." };
   }
 
   const totalPrice = quantity * unitPrice;
@@ -77,7 +82,7 @@ export function validateAndCalculateTrade(
         creditsDelta: -totalPrice,
         cargoQuantityDelta: quantity,
         supplyDelta: -quantity,
-        demandDelta: Math.round(quantity * 0.1),
+        demandDelta: Math.round(quantity * TRADE_DEMAND_IMPACT_FACTOR),
         totalPrice,
       },
     };
@@ -97,8 +102,26 @@ export function validateAndCalculateTrade(
       creditsDelta: totalPrice,
       cargoQuantityDelta: -quantity,
       supplyDelta: quantity,
-      demandDelta: -Math.round(quantity * 0.1),
+      demandDelta: -Math.round(quantity * TRADE_DEMAND_IMPACT_FACTOR),
       totalPrice,
     },
   };
+}
+
+// ── Fleet-aware trade validation ────────────────────────────────
+
+export interface FleetTradeParams extends TradeParams {
+  shipStatus: ShipStatus;
+}
+
+export function validateFleetTrade(
+  params: FleetTradeParams,
+): TradeValidationResult {
+  const { shipStatus, ...tradeParams } = params;
+
+  if (shipStatus !== "docked") {
+    return { ok: false, error: "Ship must be docked to trade." };
+  }
+
+  return validateAndCalculateTrade(tradeParams);
 }

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Get the current player from the session.
+ * Get the current player from the session, including all ships.
  * Returns null if not authenticated or player not found.
  */
 export async function getSessionPlayer() {
@@ -12,10 +12,11 @@ export async function getSessionPlayer() {
   return prisma.player.findUnique({
     where: { userId: session.user.id },
     include: {
-      system: true,
-      ship: {
+      ships: {
         include: {
           cargo: { include: { good: true } },
+          system: true,
+          destination: true,
         },
       },
     },

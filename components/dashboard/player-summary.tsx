@@ -1,37 +1,25 @@
 "use client";
 
-import type { PlayerState, EconomyType } from "@/lib/types/game";
+import type { FleetState } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { StatDisplay } from "@/components/ui/stat-display";
-
-const economyBadgeColor: Record<
-  EconomyType,
-  "green" | "amber" | "blue" | "purple" | "slate"
-> = {
-  agricultural: "green",
-  mining: "amber",
-  industrial: "slate",
-  tech: "blue",
-  core: "purple",
-};
-
-function formatCredits(value: number): string {
-  return `${value.toLocaleString()} CR`;
-}
+import { formatCredits } from "@/lib/utils/format";
 
 interface PlayerSummaryProps {
-  player: PlayerState;
+  fleet: FleetState;
 }
 
-export function PlayerSummary({ player }: PlayerSummaryProps) {
+export function PlayerSummary({ fleet }: PlayerSummaryProps) {
+  const docked = fleet.ships.filter((s) => s.status === "docked").length;
+  const inTransit = fleet.ships.filter((s) => s.status === "in_transit").length;
+
   return (
     <Card variant="bordered" padding="md">
-      <CardHeader title="Commander Overview" subtitle="Your current status" />
+      <CardHeader title="Commander Overview" subtitle="Your fleet status" />
       <CardContent className="space-y-4">
         <StatDisplay
           label="Credits"
-          value={formatCredits(player.credits)}
+          value={formatCredits(fleet.credits)}
           icon={
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -46,17 +34,25 @@ export function PlayerSummary({ player }: PlayerSummaryProps) {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white/50">Current System</span>
+            <span className="text-sm text-white/50">Ships</span>
             <span className="text-sm font-medium text-white">
-              {player.system.name}
+              {fleet.ships.length}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white/50">Economy</span>
-            <Badge color={economyBadgeColor[player.system.economyType]}>
-              {player.system.economyType}
-            </Badge>
+            <span className="text-sm text-white/50">Docked</span>
+            <span className="text-sm font-medium text-green-400">
+              {docked}
+            </span>
           </div>
+          {inTransit > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-white/50">In Transit</span>
+              <span className="text-sm font-medium text-amber-400">
+                {inTransit}
+              </span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

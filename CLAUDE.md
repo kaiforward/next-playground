@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (20 tests, engine only)
+- `npx vitest run` — Run unit tests (58 tests, engine only)
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 
@@ -20,14 +20,15 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 
 ## Project Structure
 
-- `lib/engine/` — Pure game logic (pricing, trade, navigation, economy tick, NPC). Zero DB dependency.
-- `lib/auth/` — NextAuth config, helpers, password hashing
+- `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, NPC). Zero DB dependency.
+- `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
 - `lib/types/` — Shared types (`game.ts`, `api.ts`)
 - `lib/constants/` — Goods and universe definitions
-- `app/api/game/` — 7 API routes (systems, market, trade, navigate, player, history)
-- `app/(game)/` — Dashboard, map, trade pages (auth-protected via layout)
+- `lib/hooks/` — Client hooks (use-fleet, use-game-world, use-tick, use-universe, use-navigation-state)
+- `app/api/game/` — API routes (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, systems, market, history)
+- `app/(game)/` — Dashboard, map, trade, ship/[shipId], system/[systemId] (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
-- `components/` — UI components (map/, trade/, dashboard/, ui/)
+- `components/` — UI components (fleet/, map/, trade/, dashboard/, ui/)
 - `prisma/` — Schema and seed script
 
 ## Docs

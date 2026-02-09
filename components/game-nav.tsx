@@ -3,22 +3,30 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { TickDisplay } from "@/components/fleet/tick-display";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/dashboard", label: "Command Center" },
   { href: "/map", label: "Star Map" },
-  { href: "/trade", label: "Trade" },
 ];
 
-export default function GameNav({ userEmail }: { userEmail: string | null }) {
+interface GameNavProps {
+  userEmail: string | null;
+  currentTick: number;
+}
+
+export default function GameNav({ userEmail, currentTick }: GameNavProps) {
   const pathname = usePathname();
 
   return (
     <header className="border-b border-white/10 bg-black/40 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/dashboard" className="text-xl font-bold tracking-wider">
-          Stellar Trader
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="text-xl font-bold tracking-wider">
+            Stellar Trader
+          </Link>
+          <TickDisplay currentTick={currentTick} />
+        </div>
         <nav className="flex items-center gap-6">
           {NAV_ITEMS.map((item) => (
             <Link

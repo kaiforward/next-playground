@@ -5,10 +5,18 @@ import type { NodeProps } from "@xyflow/react";
 import { tv } from "tailwind-variants";
 import type { EconomyType } from "@/lib/types/game";
 
+export type NavigationNodeState =
+  | "origin"
+  | "reachable"
+  | "unreachable"
+  | "route_hop"
+  | "destination";
+
 export interface SystemNodeData {
   label: string;
   economyType: EconomyType;
-  isPlayerHere: boolean;
+  shipCount: number;
+  navigationState?: NavigationNodeState;
   [key: string]: unknown;
 }
 
@@ -21,6 +29,13 @@ const systemNode = tv({
       industrial: "bg-slate-700/60 border-slate-400 text-slate-100",
       tech: "bg-blue-900/60 border-blue-500 text-blue-100",
       core: "bg-purple-900/60 border-purple-500 text-purple-100",
+    },
+    navigationState: {
+      origin: "!border-cyan-400 ring-2 ring-cyan-400/40 scale-105",
+      reachable: "!border-white/60 ring-1 ring-white/20 hover:scale-105",
+      unreachable: "opacity-30 grayscale cursor-not-allowed",
+      route_hop: "!border-sky-400 ring-2 ring-sky-400/30",
+      destination: "!border-emerald-400 ring-2 ring-emerald-400/40 scale-105",
     },
   },
 });
@@ -53,12 +68,13 @@ const pulseRing = tv({
 
 export function SystemNode({ data }: NodeProps) {
   const nodeData = data as SystemNodeData;
-  const { label, economyType, isPlayerHere } = nodeData;
+  const { label, economyType, shipCount, navigationState } = nodeData;
+  const hasShips = shipCount > 0;
 
   return (
     <div className="relative">
-      {/* Pulsing ring for player's current location */}
-      {isPlayerHere && (
+      {/* Pulsing ring when player has ships here (only in default mode) */}
+      {hasShips && !navigationState && (
         <div className={pulseRing({ economyType })} />
       )}
 
@@ -75,14 +91,14 @@ export function SystemNode({ data }: NodeProps) {
       />
 
       {/* Node content */}
-      <div className={systemNode({ economyType })}>
+      <div className={systemNode({ economyType, navigationState })}>
         <div className="text-sm font-bold leading-tight">{label}</div>
         <div className={economyLabel({ economyType })}>
           {economyType}
         </div>
-        {isPlayerHere && (
+        {hasShips && (
           <div className="text-[9px] mt-0.5 text-yellow-300 font-medium">
-            YOU ARE HERE
+            {shipCount} SHIP{shipCount !== 1 ? "S" : ""}
           </div>
         )}
       </div>

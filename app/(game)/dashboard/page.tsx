@@ -1,34 +1,40 @@
 "use client";
 
-import { usePlayer } from "@/lib/hooks/use-player";
+import { useEffect } from "react";
+import { useFleet } from "@/lib/hooks/use-fleet";
+import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { PlayerSummary } from "@/components/dashboard/player-summary";
-import { ShipStatus } from "@/components/dashboard/ship-status";
-import { CargoList } from "@/components/dashboard/cargo-list";
+import { FleetOverview } from "@/components/fleet/fleet-overview";
 
 export default function DashboardPage() {
-  const { player, loading } = usePlayer();
+  const { fleet, loading: fleetLoading, refresh: refreshFleet } = useFleet();
+  const { currentTick, subscribeToArrivals } = useTickContext();
 
-  if (loading || !player) {
+  useEffect(() => {
+    return subscribeToArrivals(() => refreshFleet());
+  }, [subscribeToArrivals, refreshFleet]);
+
+  if (fleetLoading || !fleet) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
-        <p className="text-white/60">Loading your command center...</p>
+        <h1 className="text-2xl font-bold mb-2">Command Center</h1>
+        <p className="text-white/60">Loading your fleet...</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-2">Command Center</h1>
       <p className="text-white/60 mb-6">
-        Your command center. Ship status, cargo, and credits at a glance.
+        Your fleet overview. Ship status, cargo, and credits at a glance.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <PlayerSummary player={player} />
-        <ShipStatus ship={player.ship} />
-        <CargoList cargo={player.ship.cargo} cargoMax={player.ship.cargoMax} />
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+        <PlayerSummary fleet={fleet} />
       </div>
+
+      <FleetOverview ships={fleet.ships} currentTick={currentTick} />
     </div>
   );
 }

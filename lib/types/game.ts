@@ -15,14 +15,7 @@ export type GoodCategory =
 
 export type TradeType = "buy" | "sell";
 
-export interface PlayerState {
-  id: string;
-  userId: string;
-  credits: number;
-  systemId: string;
-  system: StarSystemInfo;
-  ship: ShipState;
-}
+export type ShipStatus = "docked" | "in_transit";
 
 export interface ShipState {
   id: string;
@@ -31,6 +24,25 @@ export interface ShipState {
   maxFuel: number;
   cargoMax: number;
   cargo: CargoItemState[];
+  status: ShipStatus;
+  systemId: string;
+  system: StarSystemInfo;
+  destinationSystemId: string | null;
+  destinationSystem: StarSystemInfo | null;
+  departureTick: number | null;
+  arrivalTick: number | null;
+}
+
+export interface FleetState {
+  id: string;
+  userId: string;
+  credits: number;
+  ships: ShipState[];
+}
+
+export interface GameWorldState {
+  currentTick: number;
+  tickRate: number;
 }
 
 export interface CargoItemState {

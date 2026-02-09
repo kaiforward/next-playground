@@ -1,5 +1,7 @@
 import type {
-  PlayerState,
+  FleetState,
+  ShipState,
+  GameWorldState,
   UniverseData,
   StarSystemInfo,
   MarketEntry,
@@ -14,7 +16,8 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
-export type PlayerResponse = ApiResponse<PlayerState>;
+export type FleetResponse = ApiResponse<FleetState>;
+export type GameWorldResponse = ApiResponse<GameWorldState>;
 export type UniverseResponse = ApiResponse<UniverseData>;
 export type SystemDetailResponse = ApiResponse<
   StarSystemInfo & { station: { id: string; name: string } | null }
@@ -22,29 +25,36 @@ export type SystemDetailResponse = ApiResponse<
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
 
-export interface TradeResult {
-  player: PlayerState;
+export interface ShipTradeResult {
+  ship: ShipState;
   updatedMarket: MarketEntry;
 }
-export type TradeResponse = ApiResponse<TradeResult>;
+export type ShipTradeResponse = ApiResponse<ShipTradeResult>;
 
-export interface NavigateResult {
-  player: PlayerState;
+export interface ShipNavigateResult {
+  ship: ShipState;
   fuelUsed: number;
+  travelDuration: number;
 }
-export type NavigateResponse = ApiResponse<NavigateResult>;
+export type ShipNavigateResponse = ApiResponse<ShipNavigateResult>;
+
+export interface TickEvent {
+  currentTick: number;
+  tickRate: number;
+  arrivedShipIds: string[];
+}
 
 // ── Requests ─────────────────────────────────────────────────────
 
-export interface TradeRequest {
+export interface ShipTradeRequest {
   stationId: string;
   goodId: string;
   quantity: number;
   type: TradeType;
 }
 
-export interface NavigateRequest {
-  targetSystemId: string;
+export interface ShipNavigateRequest {
+  route: string[]; // ordered [origin, ...hops, destination]
 }
 
 export interface RegisterRequest {

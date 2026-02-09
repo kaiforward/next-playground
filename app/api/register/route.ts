@@ -52,13 +52,14 @@ export async function POST(request: Request) {
         player: {
           create: {
             credits: 1000,
-            systemId: solSystem.id,
-            ship: {
+            ships: {
               create: {
                 name: "Starter Ship",
                 fuel: 100,
                 maxFuel: 100,
                 cargoMax: 50,
+                systemId: solSystem.id,
+                status: "docked",
               },
             },
           },
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(user, { status: 201 });
+    return NextResponse.json({ data: user }, { status: 201 });
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(

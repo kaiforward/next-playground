@@ -62,6 +62,14 @@ model VerificationToken {
 
 // ── Game ─────────────────────────────────────────────────────────
 
+model GameWorld {
+  id          String   @id @default("world")
+  currentTick Int      @default(0)
+  tickRate    Int      @default(5000)
+  lastTickAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Player {
   id        String   @id @default(cuid())
   userId    String   @unique
@@ -69,24 +77,29 @@ model Player {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ship     Ship?
-  systemId String
-  system   StarSystem @relation(fields: [systemId], references: [id])
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ships Ship[]
 }
 
 model Ship {
-  id           String   @id @default(cuid())
-  playerId     String   @unique
-  name         String   @default("Starter Ship")
-  fuel         Float    @default(100)
-  maxFuel      Float    @default(100)
-  cargoMax     Int      @default(50)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  playerId            String
+  name                String   @default("Starter Ship")
+  fuel                Float    @default(100)
+  maxFuel             Float    @default(100)
+  cargoMax            Int      @default(50)
+  status              String   @default("docked")
+  systemId            String
+  destinationSystemId String?
+  departureTick       Int?
+  arrivalTick         Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  player Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  cargo  CargoItem[]
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  system      StarSystem  @relation("ShipCurrentSystem", fields: [systemId], references: [id])
+  destination StarSystem? @relation("ShipDestination", fields: [destinationSystemId], references: [id])
+  cargo       CargoItem[]
 }
 
 model CargoItem {
@@ -109,8 +122,9 @@ model StarSystem {
   y           Float
   description String @default("")
 
-  station     Station?
-  players     Player[]
+  station         Station?
+  ships           Ship[]             @relation("ShipCurrentSystem")
+  incomingShips   Ship[]             @relation("ShipDestination")
   connectionsFrom SystemConnection[] @relation("FromSystem")
   connectionsTo   SystemConnection[] @relation("ToSystem")
 }

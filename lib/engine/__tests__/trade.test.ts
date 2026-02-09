@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateAndCalculateTrade } from "../trade";
+import { validateAndCalculateTrade, validateFleetTrade } from "../trade";
 
 describe("validateAndCalculateTrade", () => {
   const baseBuyParams = {
@@ -104,7 +104,7 @@ describe("validateAndCalculateTrade", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("Quantity must be greater than zero");
+      expect(result.error).toContain("Quantity must be a positive integer");
     }
   });
 
@@ -115,7 +115,48 @@ describe("validateAndCalculateTrade", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("Quantity must be greater than zero");
+      expect(result.error).toContain("Quantity must be a positive integer");
+    }
+  });
+});
+
+describe("validateFleetTrade", () => {
+  const baseParams = {
+    type: "buy" as const,
+    quantity: 5,
+    unitPrice: 100,
+    playerCredits: 1000,
+    currentCargoUsed: 10,
+    cargoMax: 50,
+    currentSupply: 20,
+    currentGoodQuantityInCargo: 0,
+    shipStatus: "docked" as const,
+  };
+
+  it("succeeds when ship is docked", () => {
+    const result = validateFleetTrade(baseParams);
+    expect(result.ok).toBe(true);
+  });
+
+  it("fails when ship is in transit", () => {
+    const result = validateFleetTrade({
+      ...baseParams,
+      shipStatus: "in_transit",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Ship must be docked to trade");
+    }
+  });
+
+  it("delegates validation to validateAndCalculateTrade when docked", () => {
+    const result = validateFleetTrade({
+      ...baseParams,
+      playerCredits: 100, // Not enough
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Not enough credits");
     }
   });
 });

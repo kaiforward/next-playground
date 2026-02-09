@@ -1,6 +1,7 @@
 /**
  * Economy simulation tick engine.
  * Adjusts supply/demand based on economy type, production, and consumption.
+ * Also handles ship arrival processing for fleet management.
  */
 
 export interface MarketTickEntry {
@@ -66,4 +67,25 @@ export function simulateEconomyTick(
 
     return { ...entry, supply, demand };
   });
+}
+
+// ── Ship arrival processing ─────────────────────────────────────
+
+export interface InTransitShip {
+  id: string;
+  arrivalTick: number;
+}
+
+/**
+ * Given a list of in-transit ships and the current tick,
+ * returns the IDs of ships that have arrived (arrivalTick <= currentTick).
+ * Pure function — no DB dependency.
+ */
+export function processShipArrivals(
+  ships: InTransitShip[],
+  currentTick: number,
+): string[] {
+  return ships
+    .filter((ship) => ship.arrivalTick <= currentTick)
+    .map((ship) => ship.id);
 }
