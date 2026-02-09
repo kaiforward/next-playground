@@ -1,21 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import type { MarketEntry, TradeType } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { NumberInput } from "@/components/ui/number-input";
 import { formatCredits } from "@/lib/utils/format";
-
-const tradeSchema = z.object({
-  quantity: z
-    .number({ error: "Quantity must be a number" })
-    .int({ message: "Quantity must be a whole number" })
-    .min(1, "Minimum quantity is 1"),
-});
-
-type TradeFormData = z.infer<typeof tradeSchema>;
+import {
+  createTradeSchema,
+  type TradeFormData,
+} from "@/lib/schemas/trade";
 
 interface TradeFormProps {
   good: MarketEntry;
@@ -39,19 +34,6 @@ export function TradeForm({
   const [tradeType, setTradeType] = useState<TradeType>("buy");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors },
-    reset,
-  } = useForm<TradeFormData>({
-    resolver: zodResolver(tradeSchema),
-    defaultValues: { quantity: 1 },
-  });
-
-  const quantity = watch("quantity") || 0;
-  const totalCost = quantity * good.currentPrice;
   const cargoSpaceAvailable = cargoMax - cargoUsed;
 
   const maxBuyByCredits = Math.floor(playerCredits / good.currentPrice);
@@ -59,29 +41,43 @@ export function TradeForm({
   const maxBuy = Math.min(maxBuyByCredits, maxBuyByCargo, good.supply);
   const maxSell = currentCargoQuantity;
 
-  function getValidationError(): string | null {
-    if (tradeType === "buy") {
-      if (totalCost > playerCredits) {
-        return `Not enough credits. You need ${formatCredits(totalCost)} but only have ${formatCredits(playerCredits)}.`;
-      }
-      if (quantity > cargoSpaceAvailable) {
-        return `Not enough cargo space. You have ${cargoSpaceAvailable} units free.`;
-      }
-      if (quantity > good.supply) {
-        return `Not enough supply. Only ${good.supply} units available.`;
-      }
-    } else {
-      if (quantity > currentCargoQuantity) {
-        return `You only have ${currentCargoQuantity} units of ${good.goodName} to sell.`;
-      }
-    }
-    return null;
-  }
+  const schemaCtx = useMemo(
+    () => ({
+      tradeType,
+      unitPrice: good.currentPrice,
+      playerCredits,
+      cargoSpaceAvailable,
+      supply: good.supply,
+      currentCargoQuantity,
+    }),
+    [tradeType, good.currentPrice, playerCredits, cargoSpaceAvailable, good.supply, currentCargoQuantity]
+  );
 
-  const validationError = getValidationError();
+  const schema = useMemo(() => createTradeSchema(schemaCtx), [schemaCtx]);
+  const resolver = useMemo(() => zodResolver(schema), [schema]);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    trigger,
+    formState: { errors, isValid },
+    reset,
+  } = useForm<TradeFormData>({
+    resolver,
+    defaultValues: { quantity: 1 },
+    mode: "onChange",
+  });
+
+  // Re-validate when context changes (e.g. tradeType toggle)
+  useEffect(() => {
+    trigger("quantity");
+  }, [schema, trigger]);
+
+  const quantity = watch("quantity") || 0;
+  const totalCost = quantity * good.currentPrice;
 
   async function onSubmit(data: TradeFormData) {
-    if (validationError) return;
     setIsSubmitting(true);
     try {
       await onTrade({
@@ -131,33 +127,19 @@ export function TradeForm({
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Quantity input */}
-          <div>
-            <label
-              htmlFor="quantity"
-              className="block text-xs font-medium text-white/50 uppercase tracking-wider mb-1"
-            >
-              Quantity
-            </label>
-            <input
-              id="quantity"
-              type="number"
-              min={1}
-              max={tradeType === "buy" ? maxBuy : maxSell}
-              {...register("quantity", { valueAsNumber: true })}
-              className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-            {errors.quantity && (
-              <p className="mt-1 text-xs text-red-400">
-                {errors.quantity.message}
-              </p>
-            )}
-            <p className="mt-1 text-xs text-white/40">
-              {tradeType === "buy"
+          <NumberInput
+            id="quantity"
+            label="Quantity"
+            min={1}
+            max={tradeType === "buy" ? maxBuy : maxSell}
+            error={errors.quantity?.message}
+            hint={
+              tradeType === "buy"
                 ? `Max: ${maxBuy} (credits: ${maxBuyByCredits}, cargo: ${maxBuyByCargo}, supply: ${good.supply})`
-                : `Max: ${maxSell} in cargo`}
-            </p>
-          </div>
+                : `Max: ${maxSell} in cargo`
+            }
+            {...register("quantity", { valueAsNumber: true })}
+          />
 
           {/* Preview */}
           <div className="rounded-lg bg-white/5 p-3 space-y-1">
@@ -185,17 +167,10 @@ export function TradeForm({
             </div>
           </div>
 
-          {/* Validation error */}
-          {validationError && (
-            <p className="text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2">
-              {validationError}
-            </p>
-          )}
-
           {/* Submit */}
           <button
             type="submit"
-            disabled={isSubmitting || !!validationError}
+            disabled={isSubmitting || !isValid}
             className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               tradeType === "buy"
                 ? "bg-green-600 hover:bg-green-500 text-white"

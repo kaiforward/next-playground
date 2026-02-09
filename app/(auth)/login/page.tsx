@@ -1,26 +1,36 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { loginSchema, type LoginInput } from "@/lib/schemas/auth";
+import { TextInput } from "@/components/ui/text-input";
+import { FormError } from "@/components/ui/form-error";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginInput>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  async function onSubmit(data: LoginInput) {
     setError("");
     setLoading(true);
 
     try {
       const result = await signIn("credentials", {
-        email,
-        password,
+        email: data.email,
+        password: data.password,
         redirect: false,
       });
 
@@ -46,53 +56,30 @@ export default function LoginPage() {
         </div>
 
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handleSubmit(onSubmit)}
           className="border border-white/10 rounded-lg p-6 bg-white/5 backdrop-blur-sm space-y-4"
         >
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-md px-4 py-3">
-              {error}
-            </div>
-          )}
+          <FormError message={error} />
 
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-white/70 mb-1.5"
-            >
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="commander@example.com"
-            />
-          </div>
+          <TextInput
+            id="email"
+            type="email"
+            label="Email"
+            autoComplete="email"
+            placeholder="commander@example.com"
+            error={errors.email?.message}
+            {...register("email")}
+          />
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-white/70 mb-1.5"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              minLength={6}
-              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter your password"
-            />
-          </div>
+          <TextInput
+            id="password"
+            type="password"
+            label="Password"
+            autoComplete="current-password"
+            placeholder="Enter your password"
+            error={errors.password?.message}
+            {...register("password")}
+          />
 
           <button
             type="submit"
