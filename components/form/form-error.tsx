@@ -1,4 +1,5 @@
 import { tv, type VariantProps } from "tailwind-variants";
+import { Button } from "@/components/ui/button";
 
 const formErrorVariants = tv({
   base: "text-sm rounded-md",
@@ -29,12 +30,9 @@ export function FormError({ message, variant, onDismiss }: FormErrorProps) {
     <div className={formErrorVariants({ variant })}>
       <span>{message}</span>
       {variant === "banner" && onDismiss && (
-        <button
-          onClick={onDismiss}
-          className="text-red-400 hover:text-white text-xs font-medium ml-4"
-        >
+        <Button variant="dismiss" onClick={onDismiss} className="ml-4">
           Dismiss
-        </button>
+        </Button>
       )}
     </div>
   );

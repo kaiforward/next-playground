@@ -5,7 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { MarketEntry, TradeType } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { NumberInput } from "@/components/ui/number-input";
+import { Button } from "@/components/ui/button";
+import { NumberInput } from "@/components/form/number-input";
 import { formatCredits } from "@/lib/utils/format";
 import {
   createTradeSchema,
@@ -168,21 +169,19 @@ export function TradeForm({
           </div>
 
           {/* Submit */}
-          <button
+          <Button
             type="submit"
             disabled={isSubmitting || !isValid}
-            className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              tradeType === "buy"
-                ? "bg-green-600 hover:bg-green-500 text-white"
-                : "bg-red-600 hover:bg-red-500 text-white"
-            }`}
+            variant="action"
+            color={tradeType === "buy" ? "green" : "red"}
+            fullWidth
           >
             {isSubmitting
               ? "Processing..."
               : tradeType === "buy"
                 ? `Buy ${good.goodName}`
                 : `Sell ${good.goodName}`}
-          </button>
+          </Button>
         </form>
       </CardContent>
     </Card>

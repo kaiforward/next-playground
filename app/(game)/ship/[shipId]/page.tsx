@@ -4,6 +4,7 @@ import { use, useEffect } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
+import { PageContainer } from "@/components/ui/page-container";
 import Link from "next/link";
 
 export default function ShipDetailPage({
@@ -21,10 +22,10 @@ export default function ShipDetailPage({
 
   if (loading || !fleet) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <PageContainer size="sm">
         <h1 className="text-2xl font-bold mb-2">Ship Details</h1>
         <p className="text-white/60">Loading...</p>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -32,7 +33,7 @@ export default function ShipDetailPage({
 
   if (!ship) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <PageContainer size="sm">
         <h1 className="text-2xl font-bold mb-2">Ship Not Found</h1>
         <p className="text-white/60 mb-4">This ship does not exist or does not belong to you.</p>
         <Link
@@ -41,12 +42,12 @@ export default function ShipDetailPage({
         >
           Back to Command Center
         </Link>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <PageContainer size="sm">
       <div className="flex items-center gap-3 mb-6">
         <Link
           href="/dashboard"
@@ -60,6 +61,6 @@ export default function ShipDetailPage({
       </div>
 
       <ShipDetailPanel ship={ship} currentTick={currentTick} />
-    </div>
+    </PageContainer>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { tv } from "tailwind-variants";
+import { Button } from "@/components/ui/button";
 import type { StarSystemInfo, ShipState, EconomyType } from "@/lib/types/game";
 
 interface SystemDetailPanelProps {
@@ -120,12 +121,14 @@ export function SystemDetailPanel({
                   </div>
                   <div className="flex items-center gap-2">
                     {onSelectShipForNavigation && (
-                      <button
+                      <Button
+                        variant="pill"
+                        color="cyan"
+                        size="xs"
                         onClick={() => onSelectShipForNavigation(ship)}
-                        className="text-xs font-medium py-1 px-2.5 rounded-md bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 transition-colors"
                       >
                         Navigate
-                      </button>
+                      </Button>
                     )}
                     <Link
                       href={`/trade?shipId=${ship.id}&systemId=${system.id}`}
@@ -153,18 +156,19 @@ export function SystemDetailPanel({
 
       {/* Actions */}
       <div className="px-4 py-3 border-t border-gray-700 space-y-2">
-        <Link
+        <Button
           href={`/system/${system.id}`}
-          className="block w-full py-2 px-4 rounded-lg text-sm font-semibold text-center bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/30 transition-all active:scale-[0.98]"
+          variant="action"
+          color="indigo"
+          size="md"
+          fullWidth
+          className="shadow-lg shadow-indigo-900/30 active:scale-[0.98]"
         >
           View System
-        </Link>
-        <button
-          onClick={onClose}
-          className="w-full py-2 px-4 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition-all"
-        >
+        </Button>
+        <Button onClick={onClose} variant="ghost" size="md" fullWidth>
           Close
-        </button>
+        </Button>
       </div>
     </div>
   );

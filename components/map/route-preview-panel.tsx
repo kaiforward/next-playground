@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import type { ShipState, StarSystemInfo } from "@/lib/types/game";
 import type { PathResult } from "@/lib/engine/pathfinding";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
@@ -123,20 +124,25 @@ export function RoutePreviewPanel({
 
         {/* Actions */}
         <div className="px-4 py-3 border-t border-white/10 flex gap-2">
-          <button
+          <Button
             onClick={onConfirm}
             disabled={isNavigating}
-            className="flex-1 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="action"
+            color="indigo"
+            size="md"
+            className="flex-1"
           >
             {isNavigating ? "Launching..." : "Confirm"}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onCancel}
             disabled={isNavigating}
-            className="flex-1 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+            variant="ghost"
+            size="md"
+            className="flex-1"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     </div>

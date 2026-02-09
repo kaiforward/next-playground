@@ -3,7 +3,9 @@
 import Link from "next/link";
 import type { ShipState } from "@/lib/types/game";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 
 interface ShipCardProps {
@@ -44,53 +46,28 @@ export function ShipCard({ ship, currentTick }: ShipCardProps) {
           <ShipTransitIndicator ship={ship} currentTick={currentTick} />
         )}
 
-        {/* Fuel bar */}
-        <div>
-          <div className="flex justify-between text-[10px] text-white/40 mb-0.5">
-            <span>Fuel</span>
-            <span>{Math.round(ship.fuel)} / {ship.maxFuel}</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                fuelPercent < 20 ? "bg-red-500" : "bg-blue-500"
-              }`}
-              style={{ width: `${Math.min(fuelPercent, 100)}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Cargo bar */}
-        <div>
-          <div className="flex justify-between text-[10px] text-white/40 mb-0.5">
-            <span>Cargo</span>
-            <span>{cargoUsed} / {ship.cargoMax}</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                cargoPercent > 80 ? "bg-red-500" : "bg-amber-500"
-              }`}
-              style={{ width: `${Math.min(cargoPercent, 100)}%` }}
-            />
-          </div>
-        </div>
+        <ProgressBar
+          label="Fuel"
+          value={Math.round(ship.fuel)}
+          max={ship.maxFuel}
+          color={fuelPercent < 20 ? "red" : "blue"}
+        />
+        <ProgressBar
+          label="Cargo"
+          value={cargoUsed}
+          max={ship.cargoMax}
+          color={cargoPercent > 80 ? "red" : "amber"}
+        />
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
-          <Link
-            href={`/ship/${ship.id}`}
-            className="flex-1 text-center py-1.5 rounded-md text-xs font-medium bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-colors"
-          >
+          <Button href={`/ship/${ship.id}`} variant="ghost" size="sm" className="flex-1 bg-white/5 text-white/60 hover:bg-white/10">
             Details
-          </Link>
+          </Button>
           {isDocked && (
-            <Link
-              href={`/trade?shipId=${ship.id}&systemId=${ship.systemId}`}
-              className="flex-1 text-center py-1.5 rounded-md text-xs font-medium bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 transition-colors"
-            >
+            <Button href={`/trade?shipId=${ship.id}&systemId=${ship.systemId}`} variant="pill" color="indigo" size="sm" className="flex-1">
               Trade
-            </Link>
+            </Button>
           )}
         </div>
       </CardContent>

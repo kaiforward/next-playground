@@ -28,7 +28,9 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 - `app/api/game/` — API routes (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, systems, market, history)
 - `app/(game)/` — Dashboard, map, trade, ship/[shipId], system/[systemId] (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
-- `components/` — UI components (fleet/, map/, trade/, dashboard/, ui/)
+- `components/ui/` — Primitives (Button, Card, Badge, ProgressBar, PageContainer, StatRow)
+- `components/form/` — Form controls (TextInput, NumberInput, FormError)
+- `components/fleet/`, `map/`, `trade/`, `dashboard/` — Feature components
 - `prisma/` — Schema and seed script
 
 ## Docs
@@ -42,6 +44,13 @@ Read these when working on related features:
 - `docs/star-map.md` — React Flow map, custom nodes, data flow
 - `docs/trading-ui.md` — Market table, trade forms, charts, dashboard components
 
+## Design Principles
+
+- **Separation of concerns** — Components render UI; they don't fetch data or hold business logic. Prefer additional boilerplate (hooks, schemas, services) over mixing concerns in components.
+- **Reusability first** — Extract shared UI into `components/ui/` or `components/form/`. Never duplicate markup that already has a component. Keep variant counts small and intentional.
+- **Scalability** — Design for the next 10 uses, not just the current one. Use `tv()` variants, typed props, and semantic HTML (`<dl>` for key-value, `<button>` for actions).
+- **Security** — Validate at system boundaries (API routes, form schemas). Use Prisma transactions with optimistic locking for mutations. Never trust client state for writes.
+
 ## Conventions
 
 - Engine functions are pure — no DB imports. Test with Vitest.
@@ -49,7 +58,16 @@ Read these when working on related features:
 - Prisma Client imported from `@/app/generated/prisma/client`.
 - Tailwind v4 theme is in `globals.css` (`@theme inline {}`), no tailwind.config.js.
 - API responses use `ApiResponse<T>` format: `{ data?: T, error?: string }`.
-- Forms use React Hook Form + Zod directly per component, no shared form abstractions.
+- Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput` from `components/form/`, never raw `<input>`.
+
+## UI Components
+
+Use existing components instead of inline markup. When a pattern appears twice, extract it.
+
+- **Button** (`components/ui/button.tsx`) — All clickable actions. Variants: `primary`, `action`, `ghost`, `pill`, `dismiss`. Colors: `blue`, `green`, `red`, `indigo`, `cyan`. Supports `href` for link-as-button.
+- **PageContainer** — All page wrappers. Sizes: `sm` (3xl), `md` (4xl), `lg` (7xl, default).
+- **ProgressBar** — Labeled bars with ARIA. Colors: `blue`, `amber`, `red`. Sizes: `sm`, `md`.
+- **Card** / **Badge** / **StatList+StatRow** — Layout and data display primitives.
 
 ## Git Workflow
 
