@@ -1,20 +1,29 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { registerSchema, type RegisterInput } from "@/lib/schemas/auth";
+import { TextInput } from "@/components/ui/text-input";
+import { FormError } from "@/components/ui/form-error";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RegisterInput>({
+    resolver: zodResolver(registerSchema),
+  });
+
+  async function onSubmit(data: RegisterInput) {
     setError("");
     setLoading(true);
 
@@ -22,20 +31,24 @@ export default function RegisterPage() {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          password: data.password,
+        }),
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Registration failed");
+        const json = await res.json();
+        setError(json.error || "Registration failed");
         setLoading(false);
         return;
       }
 
       // Auto sign-in after successful registration
       const signInResult = await signIn("credentials", {
-        email,
-        password,
+        email: data.email,
+        password: data.password,
         redirect: false,
       });
 
@@ -62,73 +75,40 @@ export default function RegisterPage() {
         </div>
 
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handleSubmit(onSubmit)}
           className="border border-white/10 rounded-lg p-6 bg-white/5 backdrop-blur-sm space-y-4"
         >
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-md px-4 py-3">
-              {error}
-            </div>
-          )}
+          <FormError message={error} />
 
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-white/70 mb-1.5"
-            >
-              Commander Name
-            </label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              autoComplete="name"
-              minLength={2}
-              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="Commander Shepard"
-            />
-          </div>
+          <TextInput
+            id="name"
+            type="text"
+            label="Commander Name"
+            autoComplete="name"
+            placeholder="Commander Shepard"
+            error={errors.name?.message}
+            {...register("name")}
+          />
 
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-white/70 mb-1.5"
-            >
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="commander@example.com"
-            />
-          </div>
+          <TextInput
+            id="email"
+            type="email"
+            label="Email"
+            autoComplete="email"
+            placeholder="commander@example.com"
+            error={errors.email?.message}
+            {...register("email")}
+          />
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-white/70 mb-1.5"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="new-password"
-              minLength={6}
-              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="At least 6 characters"
-            />
-          </div>
+          <TextInput
+            id="password"
+            type="password"
+            label="Password"
+            autoComplete="new-password"
+            placeholder="At least 6 characters"
+            error={errors.password?.message}
+            {...register("password")}
+          />
 
           <button
             type="submit"

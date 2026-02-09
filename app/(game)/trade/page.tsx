@@ -8,6 +8,7 @@ import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
 import type { MarketEntry, TradeType } from "@/lib/types/game";
+import { FormError } from "@/components/ui/form-error";
 
 export default function TradePage() {
   const searchParams = useSearchParams();
@@ -145,12 +146,9 @@ export default function TradePage() {
         Trading at {ship.system.name} with <span className="text-white">{ship.name}</span>
       </p>
 
-      {tradeError && (
-        <div className="mb-6 bg-red-900/40 border border-red-500/30 text-red-200 text-sm px-4 py-3 rounded-lg flex items-center justify-between">
-          <span>{tradeError}</span>
-          <button onClick={() => setTradeError(null)} className="text-red-400 hover:text-white text-xs font-medium ml-4">Dismiss</button>
-        </div>
-      )}
+      <div className="mb-6">
+        <FormError message={tradeError} variant="banner" onDismiss={() => setTradeError(null)} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className={selectedGood ? "lg:col-span-2" : "lg:col-span-3"}>
