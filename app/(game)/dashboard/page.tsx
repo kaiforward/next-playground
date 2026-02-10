@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { PlayerSummary } from "@/components/dashboard/player-summary";
@@ -8,12 +7,8 @@ import { FleetOverview } from "@/components/fleet/fleet-overview";
 import { PageContainer } from "@/components/ui/page-container";
 
 export default function DashboardPage() {
-  const { fleet, loading: fleetLoading, refresh: refreshFleet } = useFleet();
-  const { currentTick, subscribeToArrivals } = useTickContext();
-
-  useEffect(() => {
-    return subscribeToArrivals(() => refreshFleet());
-  }, [subscribeToArrivals, refreshFleet]);
+  const { fleet, loading: fleetLoading } = useFleet();
+  const { currentTick } = useTickContext();
 
   if (fleetLoading || !fleet) {
     return (

@@ -1,21 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/query/fetcher";
+import { queryKeys } from "@/lib/query/keys";
 import type { UniverseData } from "@/lib/types/game";
 
 export function useUniverse() {
-  const [data, setData] = useState<UniverseData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.universe,
+    queryFn: () => apiFetch<UniverseData>("/api/game/systems"),
+    staleTime: Infinity, // static data — never refetch
+  });
 
-  useEffect(() => {
-    fetch("/api/game/systems")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.data) setData(json.data);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { data, loading };
+  return {
+    data: data ?? null,
+    loading: isLoading,
+  };
 }

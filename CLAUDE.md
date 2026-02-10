@@ -16,7 +16,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 ## Tech Stack
 
-Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, SQLite via better-sqlite3, Prisma 7 (driver adapter required), NextAuth v5 (JWT/Credentials), React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
+Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, SQLite via better-sqlite3, Prisma 7 (driver adapter required), NextAuth v5 (JWT/Credentials), TanStack Query v5, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
 
 ## Project Structure
 
@@ -24,12 +24,15 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 - `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
 - `lib/types/` — Shared types (`game.ts`, `api.ts`)
 - `lib/constants/` — Goods and universe definitions
-- `lib/hooks/` — Client hooks (use-fleet, use-game-world, use-tick, use-universe, use-navigation-state)
-- `app/api/game/` — API routes (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, systems, market, history)
+- `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation). Called by route handlers and future server components.
+- `lib/query/` — TanStack Query setup (client factory, query key factory, typed apiFetch helper)
+- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-game-world, use-universe, use-market, use-trade-history), mutation hooks (use-trade-mutation, use-navigate-mutation), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state)
+- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, systems, market, history)
 - `app/(game)/` — Dashboard, map, trade, ship/[shipId], system/[systemId] (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
 - `components/ui/` — Primitives (Button, Card, Badge, ProgressBar, PageContainer, StatRow)
 - `components/form/` — Form controls (TextInput, NumberInput, FormError)
+- `components/providers/` — Context providers (session-provider, query-provider)
 - `components/fleet/`, `map/`, `trade/`, `dashboard/` — Feature components
 - `prisma/` — Schema and seed script
 
@@ -58,6 +61,8 @@ Read these when working on related features:
 - Prisma Client imported from `@/app/generated/prisma/client`.
 - Tailwind v4 theme is in `globals.css` (`@theme inline {}`), no tailwind.config.js.
 - API responses use `ApiResponse<T>` format: `{ data?: T, error?: string }`.
+- Services layer (`lib/services/`) holds all DB/business logic. Route handlers are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions.
+- Client data fetching uses TanStack Query hooks (`lib/hooks/`). Query keys are centralized in `lib/query/keys.ts`. Ship arrival invalidation is centralized in `useTickInvalidation` — pages do not subscribe to arrivals individually.
 - Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput` from `components/form/`, never raw `<input>`.
 
 ## UI Components

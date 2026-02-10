@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { use } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
@@ -13,12 +13,8 @@ export default function ShipDetailPage({
   params: Promise<{ shipId: string }>;
 }) {
   const { shipId } = use(params);
-  const { fleet, loading, refresh } = useFleet();
-  const { currentTick, subscribeToArrivals } = useTickContext();
-
-  useEffect(() => {
-    return subscribeToArrivals(() => refresh());
-  }, [subscribeToArrivals, refresh]);
+  const { fleet, loading } = useFleet();
+  const { currentTick } = useTickContext();
 
   if (loading || !fleet) {
     return (

@@ -1,16 +1,15 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use } from "react";
 import Link from "next/link";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
-import { useTickContext } from "@/lib/hooks/use-tick-context";
+import { useMarket } from "@/lib/hooks/use-market";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
 import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
-import type { MarketEntry } from "@/lib/types/game";
 
 export default function SystemViewPage({
   params,
@@ -18,27 +17,9 @@ export default function SystemViewPage({
   params: Promise<{ systemId: string }>;
 }) {
   const { systemId } = use(params);
-  const { fleet, loading: fleetLoading, refresh } = useFleet();
+  const { fleet, loading: fleetLoading } = useFleet();
   const { data: universeData } = useUniverse();
-  const { subscribeToArrivals } = useTickContext();
-
-  useEffect(() => {
-    return subscribeToArrivals(() => refresh());
-  }, [subscribeToArrivals, refresh]);
-
-  const [market, setMarket] = useState<MarketEntry[]>([]);
-  const [marketLoading, setMarketLoading] = useState(true);
-
-  // Fetch market data
-  useEffect(() => {
-    fetch(`/api/game/market/${systemId}`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.data) setMarket(json.data.entries);
-      })
-      .catch(console.error)
-      .finally(() => setMarketLoading(false));
-  }, [systemId]);
+  const { market, loading: marketLoading } = useMarket(systemId);
 
   if (fleetLoading || !fleet) {
     return (
@@ -49,7 +30,6 @@ export default function SystemViewPage({
     );
   }
 
-  // Get system info from universe data (works even if player has no ships here)
   const systemInfo = universeData?.systems.find((s) => s.id === systemId) ?? null;
 
   const shipsHere = fleet.ships.filter(

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StarMap } from "@/components/map/star-map";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
+import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
 import { Button } from "@/components/ui/button";
 
 export default function MapPage() {
@@ -13,30 +14,21 @@ export default function MapPage() {
   const initialShipId = searchParams.get("shipId") ?? undefined;
 
   const { data, loading: universeLoading } = useUniverse();
-  const { fleet, loading: fleetLoading, refresh } = useFleet();
-  const { currentTick, subscribeToArrivals } = useTickContext();
+  const { fleet, loading: fleetLoading } = useFleet();
+  const { currentTick } = useTickContext();
+  const { mutateAsync: navigateAsync } = useNavigateMutation();
   const [navError, setNavError] = useState<string | null>(null);
-
-  useEffect(() => {
-    return subscribeToArrivals(() => refresh());
-  }, [subscribeToArrivals, refresh]);
 
   const handleNavigateShip = useCallback(
     async (shipId: string, route: string[]) => {
       setNavError(null);
-      const res = await fetch(`/api/game/ship/${shipId}/navigate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ route }),
-      });
-      const json = await res.json();
-      if (json.error) {
-        setNavError(json.error);
-      } else {
-        refresh();
+      try {
+        await navigateAsync({ shipId, route });
+      } catch (err) {
+        setNavError(err instanceof Error ? err.message : "Navigation failed.");
       }
     },
-    [refresh],
+    [navigateAsync],
   );
 
   if (universeLoading || fleetLoading || !data || !fleet) {
