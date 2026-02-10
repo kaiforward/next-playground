@@ -38,10 +38,16 @@ export interface ShipNavigateResult {
 }
 export type ShipNavigateResponse = ApiResponse<ShipNavigateResult>;
 
+/** Client-facing tick event (per-player filtered by SSE route). */
 export interface TickEvent {
   currentTick: number;
   tickRate: number;
-  arrivedShipIds: string[];
+  /** Merged global events from all processors. */
+  events: Record<string, unknown[]>;
+  /** Player-scoped events (filtered to this client). */
+  playerEvents: Record<string, unknown[]>;
+  /** Which processors ran this tick (dev/debug only). */
+  processors?: string[];
 }
 
 // ── Requests ─────────────────────────────────────────────────────

@@ -2,7 +2,15 @@ import "dotenv/config";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { GOODS } from "@/lib/constants/goods";
-import { SYSTEMS, CONNECTIONS, ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
+import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
+import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
+import {
+  UNIVERSE_GEN,
+  REGION_IDENTITIES,
+  REGION_NAME_PREFIXES,
+  ECONOMY_TYPE_WEIGHTS,
+} from "@/lib/constants/universe-gen";
+import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import type { EconomyType } from "@/lib/types/game";
 
 const adapter = new PrismaBetterSqlite3({
@@ -13,7 +21,33 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log("Seeding database...");
 
-  // Clear existing data
+  // ── Generate universe ──
+  const params: GenParams = {
+    seed: UNIVERSE_GEN.SEED,
+    regionCount: UNIVERSE_GEN.REGION_COUNT,
+    systemsPerRegion: UNIVERSE_GEN.SYSTEMS_PER_REGION,
+    mapSize: UNIVERSE_GEN.MAP_SIZE,
+    regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
+    systemScatterRadius: UNIVERSE_GEN.SYSTEM_SCATTER_RADIUS,
+    systemMinDistance: UNIVERSE_GEN.SYSTEM_MIN_DISTANCE,
+    extraEdgeFraction: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
+    gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
+    intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
+    maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
+  };
+
+  const universe = generateUniverse(
+    params,
+    REGION_IDENTITIES,
+    REGION_NAME_PREFIXES,
+    ECONOMY_TYPE_WEIGHTS,
+  );
+
+  console.log(
+    `  Generated: ${universe.regions.length} regions, ${universe.systems.length} systems, ${universe.connections.length} connections`,
+  );
+
+  // ── Clear existing data ──
   await prisma.tradeHistory.deleteMany();
   await prisma.cargoItem.deleteMany();
   await prisma.stationMarket.deleteMany();
@@ -23,9 +57,10 @@ async function main() {
   await prisma.station.deleteMany();
   await prisma.good.deleteMany();
   await prisma.starSystem.deleteMany();
+  await prisma.region.deleteMany();
   await prisma.gameWorld.deleteMany();
 
-  // Seed goods
+  // ── Seed goods ──
   const goodRecords: Record<string, { id: string }> = {};
   for (const [key, def] of Object.entries(GOODS)) {
     const good = await prisma.good.create({
@@ -35,82 +70,100 @@ async function main() {
   }
   console.log(`  Created ${Object.keys(goodRecords).length} goods`);
 
-  // Seed star systems + stations
-  const systemRecords: Record<string, { id: string }> = {};
-  for (const [key, def] of Object.entries(SYSTEMS)) {
-    const system = await prisma.starSystem.create({
+  // ── Seed regions ──
+  const regionIds: string[] = [];
+  for (const region of universe.regions) {
+    const created = await prisma.region.create({
       data: {
-        name: def.name,
-        economyType: def.economyType,
-        x: def.x,
-        y: def.y,
-        description: def.description,
+        name: region.name,
+        identity: region.identity,
+        x: region.x,
+        y: region.y,
+      },
+    });
+    regionIds.push(created.id);
+  }
+  console.log(`  Created ${regionIds.length} regions`);
+
+  // ── Seed systems + stations + markets ──
+  const systemIds: string[] = new Array(universe.systems.length);
+
+  for (const sys of universe.systems) {
+    const regionId = regionIds[sys.regionIndex];
+    const stationName = `${sys.name} Station`;
+
+    const created = await prisma.starSystem.create({
+      data: {
+        name: sys.name,
+        economyType: sys.economyType,
+        x: sys.x,
+        y: sys.y,
+        description: sys.description,
+        regionId,
+        isGateway: sys.isGateway,
         station: {
-          create: { name: def.stationName },
+          create: { name: stationName },
         },
       },
       include: { station: true },
     });
-    systemRecords[key] = system;
+    systemIds[sys.index] = created.id;
 
-    // Create market entries for each good at this station
-    const stationId = system.station!.id;
-    const produces = ECONOMY_PRODUCTION[def.economyType as EconomyType] ?? [];
-    const consumes = ECONOMY_CONSUMPTION[def.economyType as EconomyType] ?? [];
+    // Create market entries for each good
+    const stationId = created.station!.id;
+    const produces = ECONOMY_PRODUCTION[sys.economyType as EconomyType] ?? [];
+    const consumes = ECONOMY_CONSUMPTION[sys.economyType as EconomyType] ?? [];
 
     for (const [goodKey, goodRec] of Object.entries(goodRecords)) {
       const isProduced = produces.includes(goodKey);
       const isConsumed = consumes.includes(goodKey);
 
-      // Producers have high supply/low demand, consumers the opposite
-      let supply = 50;
-      let demand = 50;
-      if (isProduced) {
-        supply = 120;
-        demand = 30;
-      } else if (isConsumed) {
-        supply = 30;
-        demand = 120;
-      }
+      const target = isProduced
+        ? EQUILIBRIUM_TARGETS.produces
+        : isConsumed
+          ? EQUILIBRIUM_TARGETS.consumes
+          : EQUILIBRIUM_TARGETS.neutral;
 
       await prisma.stationMarket.create({
         data: {
           stationId,
           goodId: goodRec.id,
-          supply,
-          demand,
+          supply: target.supply,
+          demand: target.demand,
         },
       });
     }
   }
-  console.log(`  Created ${Object.keys(systemRecords).length} star systems with stations and markets`);
+  console.log(
+    `  Created ${universe.systems.length} star systems with stations and markets`,
+  );
 
-  // Seed connections (bidirectional)
-  let connCount = 0;
-  for (const [fromKey, toKey, fuelCost] of CONNECTIONS) {
-    const fromId = systemRecords[fromKey].id;
-    const toId = systemRecords[toKey].id;
-
+  // ── Seed connections (already bidirectional from generator) ──
+  for (const conn of universe.connections) {
     await prisma.systemConnection.create({
-      data: { fromSystemId: fromId, toSystemId: toId, fuelCost },
+      data: {
+        fromSystemId: systemIds[conn.fromSystemIndex],
+        toSystemId: systemIds[conn.toSystemIndex],
+        fuelCost: conn.fuelCost,
+      },
     });
-    await prisma.systemConnection.create({
-      data: { fromSystemId: toId, toSystemId: fromId, fuelCost },
-    });
-    connCount += 2;
   }
-  console.log(`  Created ${connCount} connections`);
+  console.log(`  Created ${universe.connections.length} connections`);
 
-  // Seed GameWorld singleton
+  // ── Seed GameWorld singleton ──
+  const startingSystemId = systemIds[universe.startingSystemIndex];
   await prisma.gameWorld.create({
     data: {
       id: "world",
       currentTick: 0,
       tickRate: 5000,
       lastTickAt: new Date(),
+      startingSystemId,
     },
   });
-  console.log("  Created GameWorld singleton");
+  console.log(
+    `  Created GameWorld (starting system: ${universe.systems[universe.startingSystemIndex].name})`,
+  );
 
   console.log("Seeding complete!");
 }

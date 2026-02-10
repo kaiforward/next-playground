@@ -1,6 +1,15 @@
 import type { UniverseData } from "@/lib/types/game";
 
 export const MOCK_UNIVERSE: UniverseData = {
+  regions: [
+    {
+      id: "mock-region",
+      name: "Mock Region",
+      identity: "trade_hub",
+      x: 400,
+      y: 300,
+    },
+  ],
   systems: [
     {
       id: "sol",
@@ -10,6 +19,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 300,
       description:
         "Humanity's birthplace. A bustling hub of commerce and culture.",
+      regionId: "mock-region",
+      isGateway: false,
     },
     {
       id: "alpha_centauri",
@@ -19,6 +30,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 200,
       description:
         "A cutting-edge research colony pushing the boundaries of science.",
+      regionId: "mock-region",
+      isGateway: false,
     },
     {
       id: "kepler",
@@ -28,6 +41,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 150,
       description:
         "Rich asteroid belts provide an endless supply of raw ore.",
+      regionId: "mock-region",
+      isGateway: false,
     },
     {
       id: "vega",
@@ -37,6 +52,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 350,
       description:
         "Lush terraformed worlds produce food for the sector.",
+      regionId: "mock-region",
+      isGateway: false,
     },
     {
       id: "sirius",
@@ -46,6 +63,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 420,
       description:
         "Massive orbital factories churn out fuel and ship components.",
+      regionId: "mock-region",
+      isGateway: true,
     },
     {
       id: "proxima",
@@ -54,6 +73,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       x: 700,
       y: 350,
       description: "A remote but mineral-rich frontier outpost.",
+      regionId: "mock-region",
+      isGateway: false,
     },
     {
       id: "arcturus",
@@ -63,6 +84,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 480,
       description:
         "A wealthy trade nexus connecting the outer colonies.",
+      regionId: "mock-region",
+      isGateway: false,
     },
     {
       id: "barnard",
@@ -72,6 +95,8 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 100,
       description:
         "Quiet farming communities among gentle rolling hills.",
+      regionId: "mock-region",
+      isGateway: false,
     },
   ],
   connections: [

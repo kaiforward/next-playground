@@ -2,22 +2,39 @@
 
 ## Overview
 
-Interactive star map built with React Flow (`@xyflow/react` v12). Players can view the galaxy, see ship positions, and navigate ships between systems via multi-hop route planning.
+Interactive star map built with React Flow (`@xyflow/react` v12). Two-level view: **region overview** (~8 aggregate nodes) and **system detail** (~25 nodes within one region). Players can view the galaxy, see ship positions, and navigate ships between systems via multi-hop route planning.
 
 ## Components
 
 ### `components/map/star-map.tsx`
 
-The main canvas component. Responsibilities:
-- Converts `UniverseData` (systems + connections) into React Flow nodes and edges
+The main canvas component. Manages two view levels:
+
+**Region view (zoomed out):**
+- Each region renders as a `RegionNode` showing: region name, identity, system count, ship count
+- Inter-region gateway connections shown as edges between region nodes
+- ~8 nodes — trivially fast to render
+- Clicking a region transitions to system view for that region
+
+**System view (zoomed in):**
+- Shows all ~25 systems within one region as `SystemNode` components
+- Intra-region connections with fuel cost labels
+- Gateway systems have distinct styling and show connections to other regions
+- Navigation mode operates within this view
+- Back button returns to region view
+
+Additional responsibilities:
 - Deduplicates bidirectional connections into single edges with fuel cost labels
-- Manages selected system state and navigation mode
 - Integrates `useNavigationState` hook for 3-phase navigation flow
 - Dynamic node styling (navigation state variants) and edge styling (route highlighting)
 - Accepts `initialSelectedShipId` prop to auto-enter navigation mode from URL
 - Dark theme with dot background, styled controls, and colour-coded minimap
 
 **Important:** `nodeTypes` is defined outside the component to prevent infinite re-renders (React Flow compares by reference).
+
+### `components/map/region-node.tsx`
+
+Custom React Flow node for region-level view. Shows region name, economic identity with colour coding, system count, and ship count badge. Identity colours match the economy type palette.
 
 ### `components/map/system-node.tsx`
 
@@ -74,9 +91,18 @@ Deep linking: `/map?shipId=X` auto-enters navigation mode for ship X on load.
 1. `app/(game)/map/page.tsx` fetches universe data via `useUniverse()` and fleet via `useFleet()`
 2. Reads `?shipId` from URL search params for deep linking
 3. Passes data to `StarMap` along with `onNavigateShip(shipId, route)` callback
-4. On navigate: POSTs `{ route }` to `/api/game/ship/[shipId]/navigate`, refreshes fleet on success
+4. On navigate: POSTs `{ route }` to `/api/game/ship/[shipId]/navigate`, invalidates fleet query on success
 5. Ship positions and navigation states update nodes in real-time via `useMemo`
+6. Region utilities (`lib/utils/region.ts`) handle filtering connections and systems by region
 
-## Star System Layout
+## Layout
 
-Systems are positioned on a 2D canvas using their x/y coordinates from the seed data. The map uses `fitView` with 0.3 padding to show all systems on load.
+**Region view:** Regions are positioned using their center coordinates from the seed data. `fitView` shows all regions.
+
+**System view:** Systems within a region are positioned using their x/y coordinates. `fitView` scopes to the selected region's systems. Gateway systems are visually distinct and positioned at region borders.
+
+**Utilities** (`lib/utils/region.ts`):
+- `buildSystemRegionMap` — Maps system IDs to their region
+- `getIntraRegionConnections` — Connections within a single region
+- `getInterRegionConnections` — Gateway connections between regions
+- `getGatewayTargetRegions` — Which regions a gateway system connects to

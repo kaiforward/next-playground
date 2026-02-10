@@ -1,6 +1,6 @@
 "use client";
 
-import type { ShipState } from "@/lib/types/game";
+import type { ShipState, RegionInfo } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,10 @@ import { ShipTransitIndicator } from "./ship-transit-indicator";
 interface ShipDetailPanelProps {
   ship: ShipState;
   currentTick: number;
+  regions?: RegionInfo[];
 }
 
-export function ShipDetailPanel({ ship, currentTick }: ShipDetailPanelProps) {
+export function ShipDetailPanel({ ship, currentTick, regions }: ShipDetailPanelProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
@@ -35,11 +36,16 @@ export function ShipDetailPanel({ ship, currentTick }: ShipDetailPanelProps) {
             </StatRow>
 
             <StatRow label="Location">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-white">{ship.system.name}</span>
                 <Badge color={ECONOMY_BADGE_COLOR[ship.system.economyType]}>
                   {ship.system.economyType}
                 </Badge>
+                {regions && (
+                  <span className="text-xs text-white/40">
+                    {regions.find((r) => r.id === ship.system.regionId)?.name}
+                  </span>
+                )}
               </div>
             </StatRow>
           </StatList>

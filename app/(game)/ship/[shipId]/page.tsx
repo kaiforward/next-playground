@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
+import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
 import { PageContainer } from "@/components/ui/page-container";
@@ -14,6 +15,7 @@ export default function ShipDetailPage({
 }) {
   const { shipId } = use(params);
   const { fleet, loading } = useFleet();
+  const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
 
   if (loading || !fleet) {
@@ -56,7 +58,7 @@ export default function ShipDetailPage({
         <h1 className="text-2xl font-bold">Ship Details</h1>
       </div>
 
-      <ShipDetailPanel ship={ship} currentTick={currentTick} />
+      <ShipDetailPanel ship={ship} currentTick={currentTick} regions={universeData?.regions} />
     </PageContainer>
   );
 }

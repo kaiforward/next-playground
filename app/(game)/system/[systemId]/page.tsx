@@ -32,6 +32,9 @@ export default function SystemViewPage({
   }
 
   const systemInfo = universeData?.systems.find((s) => s.id === systemId) ?? null;
+  const regionInfo = systemInfo
+    ? universeData?.regions.find((r) => r.id === systemInfo.regionId) ?? null
+    : null;
 
   const shipsHere = fleet.ships.filter(
     (s) => s.status === "docked" && s.systemId === systemId
@@ -57,11 +60,22 @@ export default function SystemViewPage({
           {systemInfo?.name ?? "System"}
         </h1>
         {systemInfo && (
-          <Badge color={ECONOMY_BADGE_COLOR[systemInfo.economyType]}>
-            {systemInfo.economyType}
-          </Badge>
+          <>
+            <Badge color={ECONOMY_BADGE_COLOR[systemInfo.economyType]}>
+              {systemInfo.economyType}
+            </Badge>
+            {systemInfo.isGateway && (
+              <Badge color="amber">Gateway</Badge>
+            )}
+          </>
         )}
       </div>
+
+      {regionInfo && (
+        <p className="text-sm text-white/40 mb-2">
+          Region: <span className="text-white/60">{regionInfo.name}</span>
+        </p>
+      )}
 
       {systemInfo && (
         <p className="text-white/60 mb-6">{systemInfo.description}</p>

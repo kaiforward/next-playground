@@ -1,14 +1,15 @@
 "use client";
 
-import type { ShipState } from "@/lib/types/game";
+import type { ShipState, RegionInfo } from "@/lib/types/game";
 import { ShipCard } from "./ship-card";
 
 interface FleetOverviewProps {
   ships: ShipState[];
   currentTick: number;
+  regions?: RegionInfo[];
 }
 
-export function FleetOverview({ ships, currentTick }: FleetOverviewProps) {
+export function FleetOverview({ ships, currentTick, regions }: FleetOverviewProps) {
   const docked = ships.filter((s) => s.status === "docked").length;
   const inTransit = ships.filter((s) => s.status === "in_transit").length;
 
@@ -27,7 +28,7 @@ export function FleetOverview({ ships, currentTick }: FleetOverviewProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {ships.map((ship) => (
-          <ShipCard key={ship.id} ship={ship} currentTick={currentTick} />
+          <ShipCard key={ship.id} ship={ship} currentTick={currentTick} regions={regions} />
         ))}
       </div>
     </div>
