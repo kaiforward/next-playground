@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionPlayerId } from "@/lib/auth/get-player";
+import { parseJsonBody } from "@/lib/api/parse-json";
 import { executeNavigation } from "@/lib/services/navigation";
 import type { ShipNavigateRequest, ShipNavigateResponse } from "@/lib/types/api";
 
@@ -10,10 +11,8 @@ export async function POST(
   try {
     const { shipId } = await params;
 
-    let body: ShipNavigateRequest;
-    try {
-      body = (await request.json()) as ShipNavigateRequest;
-    } catch {
+    const body = await parseJsonBody<ShipNavigateRequest>(request);
+    if (!body) {
       return NextResponse.json<ShipNavigateResponse>(
         { error: "Invalid JSON body." },
         { status: 400 },

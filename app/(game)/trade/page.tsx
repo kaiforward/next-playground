@@ -11,6 +11,7 @@ import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
 import type { TradeType } from "@/lib/types/game";
+import { getCargoUsed } from "@/lib/utils/cargo";
 import { FormError } from "@/components/form/form-error";
 import { PageContainer } from "@/components/ui/page-container";
 
@@ -40,13 +41,17 @@ export default function TradePage() {
     ? market.find((e) => e.goodId === selectedGoodId)
     : undefined;
 
-  const cargoUsed = ship
-    ? ship.cargo.reduce((sum, item) => sum + item.quantity, 0)
-    : 0;
+  const cargoUsed = useMemo(
+    () => ship ? getCargoUsed(ship.cargo) : 0,
+    [ship],
+  );
 
-  const currentCargoQuantity = selectedGoodId && ship
-    ? ship.cargo.find((c) => c.goodId === selectedGoodId)?.quantity ?? 0
-    : 0;
+  const currentCargoQuantity = useMemo(
+    () => selectedGoodId && ship
+      ? ship.cargo.find((c) => c.goodId === selectedGoodId)?.quantity ?? 0
+      : 0,
+    [ship, selectedGoodId],
+  );
 
   const priceHistory = useMemo(() => {
     if (!selectedGoodId) return [];

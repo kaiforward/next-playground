@@ -4,6 +4,7 @@
  */
 
 import { validateRoute } from "./pathfinding";
+import { hopDuration } from "./travel";
 
 export interface ConnectionInfo {
   fromSystemId: string;
@@ -81,7 +82,7 @@ export function validateFleetNavigation(
     return baseResult;
   }
 
-  const travelDuration = Math.max(1, Math.ceil(baseResult.fuelCost / 2));
+  const travelDuration = hopDuration(baseResult.fuelCost);
   const departureTick = currentTick;
   const arrivalTick = currentTick + travelDuration;
 

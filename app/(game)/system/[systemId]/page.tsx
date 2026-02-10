@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useMemo } from "react";
 import Link from "next/link";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
 import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
+import { getPriceTrendPct } from "@/lib/utils/market";
 
 export default function SystemViewPage({
   params,
@@ -34,6 +35,11 @@ export default function SystemViewPage({
 
   const shipsHere = fleet.ships.filter(
     (s) => s.status === "docked" && s.systemId === systemId
+  );
+
+  const topMarket = useMemo(
+    () => [...market].sort((a, b) => b.currentPrice - a.currentPrice).slice(0, 6),
+    [market],
   );
 
   return (
@@ -103,12 +109,9 @@ export default function SystemViewPage({
               <p className="text-sm text-white/30 py-4 text-center">No market data.</p>
             ) : (
               <ul className="space-y-2">
-                {[...market]
-                  .sort((a, b) => b.currentPrice - a.currentPrice)
-                  .slice(0, 6)
-                  .map((entry) => {
+                {topMarket.map((entry) => {
                     const diff = entry.currentPrice - entry.basePrice;
-                    const pct = ((diff / entry.basePrice) * 100).toFixed(0);
+                    const pct = getPriceTrendPct(entry.currentPrice, entry.basePrice).toFixed(0);
                     return (
                       <li
                         key={entry.goodId}
