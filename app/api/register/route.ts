@@ -31,14 +31,25 @@ export async function POST(request: Request) {
 
     const passwordHash = await hashPassword(password);
 
-    // Find the Sol star system for starting location
-    const solSystem = await prisma.starSystem.findUnique({
-      where: { name: "Sol" },
+    // Look up starting system from GameWorld
+    const world = await prisma.gameWorld.findUnique({
+      where: { id: "world" },
     });
 
-    if (!solSystem) {
+    if (!world?.startingSystemId) {
       return NextResponse.json(
         { error: "Game world not initialized. Please run the seed script." },
+        { status: 500 },
+      );
+    }
+
+    const startingSystem = await prisma.starSystem.findUnique({
+      where: { id: world.startingSystemId },
+    });
+
+    if (!startingSystem) {
+      return NextResponse.json(
+        { error: "Starting system not found. Please re-seed the database." },
         { status: 500 },
       );
     }
@@ -58,7 +69,7 @@ export async function POST(request: Request) {
                 fuel: 100,
                 maxFuel: 100,
                 cargoMax: 50,
-                systemId: solSystem.id,
+                systemId: startingSystem.id,
                 status: "docked",
               },
             },

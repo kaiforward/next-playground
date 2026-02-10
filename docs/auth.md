@@ -44,10 +44,17 @@ The `app/(game)/layout.tsx` is an async server component that:
 
 ### API Route Auth
 
-Game API routes use `getSessionPlayer()` from `lib/auth/get-player.ts` which:
+Game API routes use helpers from `lib/auth/get-player.ts`:
+
+**`getSessionPlayer()`** — Full player with all ships, cargo, and systems:
 1. Calls `auth()` to get the session
 2. Looks up the Player by `userId` from the session
-3. Returns the full player with ship, cargo, and system
+3. Returns the full player with ships, cargo, and systems (or null)
+
+**`getSessionPlayerId()`** — Lightweight auth for routes that delegate to the services layer:
+1. Calls `auth()` to get the session
+2. Returns just the player ID string (or null)
+3. Used by mutation routes (`navigate`, `trade`) that pass the ID to a service function
 
 ### Environment Variables
 

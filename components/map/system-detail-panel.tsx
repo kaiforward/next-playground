@@ -6,11 +6,19 @@ import { tv } from "tailwind-variants";
 import { Button } from "@/components/ui/button";
 import type { StarSystemInfo, ShipState, EconomyType } from "@/lib/types/game";
 
+interface GatewayTarget {
+  regionId: string;
+  regionName: string;
+}
+
 interface SystemDetailPanelProps {
   system: StarSystemInfo | null;
   shipsHere: ShipState[];
   currentTick: number;
+  regionName?: string;
+  gatewayTargetRegions?: GatewayTarget[];
   onSelectShipForNavigation?: (ship: ShipState) => void;
+  onJumpToRegion?: (regionId: string) => void;
   onClose: () => void;
 }
 
@@ -31,7 +39,10 @@ export function SystemDetailPanel({
   system,
   shipsHere,
   currentTick,
+  regionName,
+  gatewayTargetRegions,
   onSelectShipForNavigation,
+  onJumpToRegion,
   onClose,
 }: SystemDetailPanelProps) {
   // Close on Escape key
@@ -77,12 +88,48 @@ export function SystemDetailPanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Economy badge */}
-        <div>
+        {/* Economy badge + region + gateway */}
+        <div className="flex flex-wrap items-center gap-2">
           <span className={economyBadge({ economyType: system.economyType as EconomyType })}>
             {system.economyType}
           </span>
+          {system.isGateway && (
+            <span className="inline-block rounded-full px-3 py-0.5 text-xs font-semibold uppercase tracking-wider bg-amber-900/80 text-amber-300 ring-1 ring-amber-500/40">
+              Gateway
+            </span>
+          )}
         </div>
+
+        {regionName && (
+          <p className="text-xs text-white/50">
+            Region: <span className="text-white/70">{regionName}</span>
+          </p>
+        )}
+
+        {/* Connected regions (gateway only) */}
+        {gatewayTargetRegions && gatewayTargetRegions.length > 0 && onJumpToRegion && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+              Connected Regions
+            </h3>
+            <div className="space-y-1.5">
+              {gatewayTargetRegions.map((target) => (
+                <button
+                  key={target.regionId}
+                  onClick={() => onJumpToRegion(target.regionId)}
+                  className="w-full flex items-center justify-between py-2 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition-colors text-left"
+                >
+                  <span className="text-sm text-amber-200">
+                    Jump to {target.regionName}
+                  </span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-amber-400">
+                    <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <div>

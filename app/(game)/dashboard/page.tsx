@@ -1,6 +1,7 @@
 "use client";
 
 import { useFleet } from "@/lib/hooks/use-fleet";
+import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { PlayerSummary } from "@/components/dashboard/player-summary";
 import { FleetOverview } from "@/components/fleet/fleet-overview";
@@ -8,6 +9,7 @@ import { PageContainer } from "@/components/ui/page-container";
 
 export default function DashboardPage() {
   const { fleet, loading: fleetLoading } = useFleet();
+  const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
 
   if (fleetLoading || !fleet) {
@@ -30,7 +32,7 @@ export default function DashboardPage() {
         <PlayerSummary fleet={fleet} />
       </div>
 
-      <FleetOverview ships={fleet.ships} currentTick={currentTick} />
+      <FleetOverview ships={fleet.ships} currentTick={currentTick} regions={universeData?.regions} />
     </PageContainer>
   );
 }

@@ -71,8 +71,12 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 #### 5b. Tick System
 
 - Game time advances via discrete ticks (GameWorld singleton)
-- Each tick: process ship arrivals, then run economy simulation
-- Client-side `useTick` hook calls `POST /api/game/tick` on interval
+- Server-side **tick processor pipeline** (`lib/tick/`) runs on a 1s poll interval
+- Each tick: topologically sorted processors run sequentially (ship arrivals, economy simulation)
+- Processors declare `frequency` (run every N ticks) and `offset` (phase stagger)
+- Economy uses round-robin regional processing (one region per tick across ~8 regions)
+- Clients connect via SSE (`GET /api/game/tick-stream`); `useTick` hook wraps EventSource
+- Per-player event filtering: SSE route sends global events + only the connected player's events
 - Server only advances if enough real time has elapsed (tickRate ms)
 - Optimistic locking prevents double-processing
 
@@ -134,26 +138,7 @@ Good           (reference table: name, type, base price)
 
 ## Technical Stack
 
-| Layer | Technology | Notes |
-|---|---|---|
-| Framework | Next.js 16 (App Router, Turbopack) | |
-| Language | TypeScript 5 (strict) | |
-| Styling | Tailwind CSS v4 + tailwind-variants | Theme in `globals.css`, no `tailwind.config.js` |
-| Database | SQLite via `better-sqlite3` | Migrate to PostgreSQL later |
-| ORM | Prisma 7 | Query compiler (Rust-free), requires driver adapter |
-| DB Adapter | `@prisma/adapter-better-sqlite3` | Prisma 7 requires explicit adapter for all DBs |
-| Prisma Client | Generated to `app/generated/prisma/client` | Import from `@/app/generated/prisma/client` |
-| Prisma Singleton | `lib/prisma.ts` | Global-cached, passes adapter to `PrismaClient` |
-| Auth | NextAuth v5 (`next-auth@beta`) | JWT sessions, Credentials provider |
-| Auth Adapter | `@auth/prisma-adapter` | For NextAuth + Prisma integration |
-| Password Hashing | `bcryptjs` (12 rounds) | |
-| Forms | React Hook Form + Zod (v4) | Direct per-component, no config abstraction |
-| Star Map | `@xyflow/react` (React Flow v12) | Custom node types, dark theme |
-| Charts | Recharts | LineChart (price history), BarChart (supply/demand) |
-| Seed Runner | `tsx` (dev) | Runs `prisma/seed.ts` via `prisma.config.ts` |
-| Testing | Vitest 4 | Engine unit tests only (pure functions) |
-
-### Key Setup Details
+See `CLAUDE.md` for the canonical tech stack reference. Key setup details:
 
 - **Prisma 7 breaking change:** The `prisma-client` generator uses a query compiler instead of the old Rust engine. All database access requires a driver adapter passed to `new PrismaClient({ adapter })`. See `lib/prisma.ts` for the pattern.
 - **Seed configuration:** Prisma 7 moved the seed command from `package.json` to `prisma.config.ts` under `migrations.seed`. The current command is `npx tsx --tsconfig tsconfig.json prisma/seed.ts`.

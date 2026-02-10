@@ -56,11 +56,11 @@ Card listing cargo items with quantities and a progress bar for total cargo used
 
 ### Dashboard (`app/(game)/dashboard/page.tsx`)
 
-Fetches live player data via `usePlayer()` hook. Responsive grid: 1 column mobile, 2 tablet, 3 desktop.
+Fetches fleet data via `useFleet()` hook and universe data via `useUniverse()`. Responsive grid: 1 column mobile, 2 tablet, 3 desktop.
 
 ### Trade (`app/(game)/trade/page.tsx`)
 
-Fetches live market data from `/api/game/market/[systemId]` and player state. On trade:
-1. POSTs to `/api/game/trade`
-2. Refreshes player state
-3. Updates the specific market entry from the response
+Fetches live market data from `/api/game/market/[systemId]` and fleet state via TanStack Query hooks. On trade:
+1. POSTs to `/api/game/ship/[shipId]/trade` (ship-scoped)
+2. Invalidates fleet and market queries on success
+3. TanStack Query refetches automatically

@@ -3,9 +3,12 @@
 import { createContext, useContext } from "react";
 import { useTick } from "./use-tick";
 
+type EventCallback = (events: unknown[]) => void;
+
 interface TickContextValue {
   currentTick: number;
   isConnected: boolean;
+  subscribeToEvent: (eventName: string, cb: EventCallback) => () => void;
   subscribeToArrivals: (cb: (shipIds: string[]) => void) => () => void;
 }
 

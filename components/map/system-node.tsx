@@ -16,6 +16,7 @@ export interface SystemNodeData {
   label: string;
   economyType: EconomyType;
   shipCount: number;
+  isGateway?: boolean;
   navigationState?: NavigationNodeState;
   [key: string]: unknown;
 }
@@ -68,7 +69,7 @@ const pulseRing = tv({
 
 export function SystemNode({ data }: NodeProps) {
   const nodeData = data as SystemNodeData;
-  const { label, economyType, shipCount, navigationState } = nodeData;
+  const { label, economyType, shipCount, isGateway, navigationState } = nodeData;
   const hasShips = shipCount > 0;
 
   return (
@@ -92,6 +93,15 @@ export function SystemNode({ data }: NodeProps) {
 
       {/* Node content */}
       <div className={systemNode({ economyType, navigationState })}>
+        {/* Gateway indicator */}
+        {isGateway && (
+          <div
+            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 border border-amber-300 flex items-center justify-center"
+            title="Gateway system"
+          >
+            <span className="text-[8px] font-bold text-amber-950">G</span>
+          </div>
+        )}
         <div className="text-sm font-bold leading-tight">{label}</div>
         <div className={economyLabel({ economyType })}>
           {economyType}

@@ -22,6 +22,8 @@ export function serializeShip(ship: {
     x: number;
     y: number;
     description: string;
+    regionId: string;
+    isGateway: boolean;
   };
   destination: {
     id: string;
@@ -30,6 +32,8 @@ export function serializeShip(ship: {
     x: number;
     y: number;
     description: string;
+    regionId: string;
+    isGateway: boolean;
   } | null;
   cargo: Array<{
     goodId: string;
@@ -52,6 +56,8 @@ export function serializeShip(ship: {
       x: ship.system.x,
       y: ship.system.y,
       description: ship.system.description,
+      regionId: ship.system.regionId,
+      isGateway: ship.system.isGateway,
     },
     destinationSystemId: ship.destinationSystemId,
     destinationSystem: ship.destination
@@ -62,6 +68,8 @@ export function serializeShip(ship: {
           x: ship.destination.x,
           y: ship.destination.y,
           description: ship.destination.description,
+          regionId: ship.destination.regionId,
+          isGateway: ship.destination.isGateway,
         }
       : null,
     departureTick: ship.departureTick,

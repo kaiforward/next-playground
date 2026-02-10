@@ -52,6 +52,8 @@ const SOL_SYSTEM = {
   x: 400,
   y: 300,
   description: "Humanity's birthplace.",
+  regionId: "mock-region",
+  isGateway: false,
 };
 
 export const MOCK_FLEET: FleetState = {

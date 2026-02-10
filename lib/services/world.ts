@@ -18,5 +18,6 @@ export async function getGameWorld(): Promise<GameWorldState> {
   return {
     currentTick: world.currentTick,
     tickRate: world.tickRate,
+    startingSystemId: world.startingSystemId,
   };
 }

@@ -1,12 +1,26 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
-import type { UniverseData, EconomyType, StarSystemInfo } from "@/lib/types/game";
+import type {
+  UniverseData,
+  EconomyType,
+  StarSystemInfo,
+  RegionIdentity,
+} from "@/lib/types/game";
 
 /**
- * Get all star systems and connections.
+ * Get all regions, star systems, and connections.
  */
 export async function getUniverse(): Promise<UniverseData> {
-  const [systems, connections] = await Promise.all([
+  const [regions, systems, connections] = await Promise.all([
+    prisma.region.findMany({
+      select: {
+        id: true,
+        name: true,
+        identity: true,
+        x: true,
+        y: true,
+      },
+    }),
     prisma.starSystem.findMany({
       select: {
         id: true,
@@ -15,6 +29,8 @@ export async function getUniverse(): Promise<UniverseData> {
         x: true,
         y: true,
         description: true,
+        regionId: true,
+        isGateway: true,
       },
     }),
     prisma.systemConnection.findMany({
@@ -28,6 +44,13 @@ export async function getUniverse(): Promise<UniverseData> {
   ]);
 
   return {
+    regions: regions.map((r) => ({
+      id: r.id,
+      name: r.name,
+      identity: r.identity as RegionIdentity,
+      x: r.x,
+      y: r.y,
+    })),
     systems: systems.map((s) => ({
       id: s.id,
       name: s.name,
@@ -35,6 +58,8 @@ export async function getUniverse(): Promise<UniverseData> {
       x: s.x,
       y: s.y,
       description: s.description,
+      regionId: s.regionId,
+      isGateway: s.isGateway,
     })),
     connections: connections.map((c) => ({
       id: c.id,
@@ -72,6 +97,8 @@ export async function getSystemDetail(
     x: system.x,
     y: system.y,
     description: system.description,
+    regionId: system.regionId,
+    isGateway: system.isGateway,
     station: system.station
       ? { id: system.station.id, name: system.station.name }
       : null,

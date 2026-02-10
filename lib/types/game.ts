@@ -7,6 +7,21 @@ export type EconomyType =
   | "tech"
   | "core";
 
+export type RegionIdentity =
+  | "resource_rich"
+  | "agricultural"
+  | "industrial"
+  | "tech"
+  | "trade_hub";
+
+export interface RegionInfo {
+  id: string;
+  name: string;
+  identity: RegionIdentity;
+  x: number;
+  y: number;
+}
+
 export type GoodCategory =
   | "raw"
   | "manufactured"
@@ -43,6 +58,7 @@ export interface FleetState {
 export interface GameWorldState {
   currentTick: number;
   tickRate: number;
+  startingSystemId: string | null;
 }
 
 export interface CargoItemState {
@@ -58,6 +74,8 @@ export interface StarSystemInfo {
   x: number;
   y: number;
   description: string;
+  regionId: string;
+  isGateway: boolean;
 }
 
 export interface SystemConnectionInfo {
@@ -101,6 +119,7 @@ export interface TradeHistoryEntry {
 }
 
 export interface UniverseData {
+  regions: RegionInfo[];
   systems: StarSystemInfo[];
   connections: SystemConnectionInfo[];
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -9,16 +9,24 @@ import {
   type Node,
   type Edge,
   type NodeMouseHandler,
+  type ReactFlowInstance,
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import type { UniverseData, StarSystemInfo, ShipState } from "@/lib/types/game";
+import type { UniverseData, StarSystemInfo, ShipState, RegionInfo } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemNode, type NavigationNodeState } from "@/components/map/system-node";
+import { RegionNode } from "@/components/map/region-node";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
+import {
+  buildSystemRegionMap,
+  getIntraRegionConnections,
+  getInterRegionConnections,
+  getGatewayTargetRegions,
+} from "@/lib/utils/region";
 
 interface StarMapProps {
   universe: UniverseData;
@@ -28,15 +36,21 @@ interface StarMapProps {
   initialSelectedShipId?: string;
 }
 
+type MapViewLevel =
+  | { level: "region" }
+  | { level: "system"; regionId: string };
+
 // IMPORTANT: nodeTypes must be defined outside the component to prevent
 // infinite re-renders. React Flow compares this by reference.
 const nodeTypes = {
   systemNode: SystemNode,
+  regionNode: RegionNode,
 };
 
 const EDGE_COLOR = "rgba(148, 163, 184, 0.4)";
 const EDGE_DIM = "rgba(148, 163, 184, 0.12)";
 const EDGE_ROUTE = "rgba(99, 179, 237, 0.9)";
+const EDGE_REGION = "rgba(148, 163, 184, 0.5)";
 
 export function StarMap({
   universe,
@@ -46,21 +60,60 @@ export function StarMap({
   initialSelectedShipId,
 }: StarMapProps) {
   const [selectedSystem, setSelectedSystem] = useState<StarSystemInfo | null>(null);
+  const rfInstance = useRef<ReactFlowInstance | null>(null);
 
-  // Convert universe connections to engine ConnectionInfo format
-  const connectionInfos: ConnectionInfo[] = useMemo(
-    () =>
-      universe.connections.map((c) => ({
-        fromSystemId: c.fromSystemId,
-        toSystemId: c.toSystemId,
-        fuelCost: c.fuelCost,
-      })),
-    [universe.connections],
+  // ── Region map (stable memo) ────────────────────────────────────
+  const systemRegionMap = useMemo(
+    () => buildSystemRegionMap(universe.systems),
+    [universe.systems],
   );
 
+  const regionMap = useMemo(
+    () => new Map(universe.regions.map((r) => [r.id, r])),
+    [universe.regions],
+  );
+
+  // ── Auto-focus: start in player's region or region overview ─────
+  const initialViewLevel = useMemo((): MapViewLevel => {
+    const dockedShip = initialSelectedShipId
+      ? ships.find((s) => s.id === initialSelectedShipId && s.status === "docked")
+      : ships.find((s) => s.status === "docked");
+
+    if (dockedShip) {
+      const regionId = systemRegionMap.get(dockedShip.systemId);
+      if (regionId) return { level: "system", regionId };
+    }
+    return { level: "region" };
+    // Only compute on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [viewLevel, setViewLevel] = useState<MapViewLevel>(initialViewLevel);
+
+  // ── Intra-region connections for system view ────────────────────
+  const activeRegionConnections = useMemo((): ConnectionInfo[] => {
+    if (viewLevel.level !== "system") return [];
+    return getIntraRegionConnections(
+      viewLevel.regionId,
+      universe.connections,
+      systemRegionMap,
+    ).map((c) => ({
+      fromSystemId: c.fromSystemId,
+      toSystemId: c.toSystemId,
+      fuelCost: c.fuelCost,
+    }));
+  }, [viewLevel, universe.connections, systemRegionMap]);
+
+  // ── Active region systems ───────────────────────────────────────
+  const activeRegionSystems = useMemo((): StarSystemInfo[] => {
+    if (viewLevel.level !== "system") return [];
+    return universe.systems.filter((s) => s.regionId === viewLevel.regionId);
+  }, [viewLevel, universe.systems]);
+
+  // ── Navigation hook — scoped to active region ───────────────────
   const navigation = useNavigationState({
-    connections: connectionInfos,
-    systems: universe.systems,
+    connections: activeRegionConnections,
+    systems: activeRegionSystems,
     onNavigateShip,
   });
 
@@ -70,6 +123,7 @@ export function StarMap({
   // Auto-select ship from URL query param on mount
   useEffect(() => {
     if (!initialSelectedShipId) return;
+    if (viewLevel.level !== "system") return;
     const ship = ships.find(
       (s) => s.id === initialSelectedShipId && s.status === "docked",
     );
@@ -80,7 +134,20 @@ export function StarMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSelectedShipId]);
 
-  // Compute ship counts per system (docked ships only)
+  // ── fitView on view level transitions ───────────────────────────
+  const prevViewLevelRef = useRef(viewLevel);
+  useEffect(() => {
+    if (prevViewLevelRef.current !== viewLevel) {
+      prevViewLevelRef.current = viewLevel;
+      // Short delay to let React Flow render new nodes before fitting
+      const timer = setTimeout(() => {
+        rfInstance.current?.fitView({ padding: 0.3, duration: 300 });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [viewLevel]);
+
+  // ── Compute ship counts per system (docked ships only) ──────────
   const shipsAtSystem = useMemo(() => {
     const map: Record<string, number> = {};
     for (const ship of ships) {
@@ -91,6 +158,29 @@ export function StarMap({
     return map;
   }, [ships]);
 
+  // ── Ships per region ────────────────────────────────────────────
+  const shipsPerRegion = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const ship of ships) {
+      if (ship.status === "docked") {
+        const regionId = systemRegionMap.get(ship.systemId);
+        if (regionId) {
+          map[regionId] = (map[regionId] ?? 0) + 1;
+        }
+      }
+    }
+    return map;
+  }, [ships, systemRegionMap]);
+
+  // ── Systems per region ──────────────────────────────────────────
+  const systemsPerRegion = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of universe.systems) {
+      map[s.regionId] = (map[s.regionId] ?? 0) + 1;
+    }
+    return map;
+  }, [universe.systems]);
+
   // Ships docked at the selected system
   const shipsAtSelected = useMemo(
     () =>
@@ -100,13 +190,14 @@ export function StarMap({
     [selectedSystem, ships],
   );
 
-  // Compute navigation state for each node
+  // ── Navigation state per node (system view only) ────────────────
   const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
     const states = new Map<string, NavigationNodeState>();
+    if (viewLevel.level !== "system") return states;
 
     if (mode.phase === "ship_selected") {
       const originId = mode.ship.systemId;
-      for (const system of universe.systems) {
+      for (const system of activeRegionSystems) {
         if (system.id === originId) {
           states.set(system.id, "origin");
         } else if (mode.reachable.has(system.id)) {
@@ -120,7 +211,7 @@ export function StarMap({
       const destId = mode.destination.id;
       const routeSet = new Set(mode.route.path);
 
-      for (const system of universe.systems) {
+      for (const system of activeRegionSystems) {
         if (system.id === originId) {
           states.set(system.id, "origin");
         } else if (system.id === destId) {
@@ -136,7 +227,7 @@ export function StarMap({
     }
 
     return states;
-  }, [mode, universe.systems]);
+  }, [mode, activeRegionSystems, viewLevel]);
 
   // Route edges set (for highlighting)
   const routeEdgeSet = useMemo((): Set<string> => {
@@ -149,29 +240,85 @@ export function StarMap({
     return set;
   }, [mode]);
 
-  // Convert universe data to ReactFlow nodes
-  const nodes: Node[] = useMemo(
-    () =>
-      universe.systems.map((system) => ({
-        id: system.id,
-        type: "systemNode",
-        position: { x: system.x, y: system.y },
-        data: {
-          label: system.name,
-          economyType: system.economyType,
-          shipCount: shipsAtSystem[system.id] ?? 0,
-          navigationState: nodeNavigationStates.get(system.id),
-        },
-      })),
-    [universe.systems, shipsAtSystem, nodeNavigationStates],
-  );
+  // ── Inter-region edges (for region view) ────────────────────────
+  const interRegionEdges = useMemo((): Edge[] => {
+    const crossConns = getInterRegionConnections(universe.connections, systemRegionMap);
+    const seen = new Set<string>();
+    const edges: Edge[] = [];
 
-  // Convert connections to ReactFlow edges (deduplicated)
+    for (const c of crossConns) {
+      const rFrom = systemRegionMap.get(c.fromSystemId)!;
+      const rTo = systemRegionMap.get(c.toSystemId)!;
+      const pairKey = [rFrom, rTo].sort().join("--");
+      if (seen.has(pairKey)) continue;
+      seen.add(pairKey);
+
+      edges.push({
+        id: `region-${pairKey}`,
+        source: rFrom,
+        target: rTo,
+        style: {
+          stroke: EDGE_REGION,
+          strokeWidth: 3,
+          strokeDasharray: "8 4",
+        },
+      });
+    }
+    return edges;
+  }, [universe.connections, systemRegionMap]);
+
+  // ── Nodes & edges based on view level ───────────────────────────
+  const nodes: Node[] = useMemo(() => {
+    if (viewLevel.level === "region") {
+      return universe.regions.map((region) => ({
+        id: region.id,
+        type: "regionNode",
+        position: { x: region.x, y: region.y },
+        data: {
+          label: region.name,
+          identity: region.identity,
+          systemCount: systemsPerRegion[region.id] ?? 0,
+          shipCount: shipsPerRegion[region.id] ?? 0,
+        },
+      }));
+    }
+
+    // System view — only systems in active region
+    return activeRegionSystems.map((system) => ({
+      id: system.id,
+      type: "systemNode",
+      position: { x: system.x, y: system.y },
+      data: {
+        label: system.name,
+        economyType: system.economyType,
+        shipCount: shipsAtSystem[system.id] ?? 0,
+        isGateway: system.isGateway,
+        navigationState: nodeNavigationStates.get(system.id),
+      },
+    }));
+  }, [
+    viewLevel,
+    universe.regions,
+    activeRegionSystems,
+    systemsPerRegion,
+    shipsPerRegion,
+    shipsAtSystem,
+    nodeNavigationStates,
+  ]);
+
   const edges: Edge[] = useMemo(() => {
+    if (viewLevel.level === "region") return interRegionEdges;
+
+    // System view — intra-region connections
+    const regionConns = getIntraRegionConnections(
+      viewLevel.regionId,
+      universe.connections,
+      systemRegionMap,
+    );
     const seen = new Set<string>();
     const dedupedEdges: Edge[] = [];
 
-    for (const conn of universe.connections) {
+    for (const conn of regionConns) {
       const pairKey = [conn.fromSystemId, conn.toSystemId].sort().join("--");
       if (seen.has(pairKey)) continue;
       seen.add(pairKey);
@@ -207,45 +354,80 @@ export function StarMap({
     }
 
     return dedupedEdges;
-  }, [universe.connections, routeEdgeSet, isNavigationActive]);
+  }, [
+    viewLevel,
+    universe.connections,
+    systemRegionMap,
+    interRegionEdges,
+    routeEdgeSet,
+    isNavigationActive,
+  ]);
 
+  // ── Gateway target regions for detail panel ─────────────────────
+  const selectedGatewayTargets = useMemo(() => {
+    if (!selectedSystem?.isGateway) return [];
+    const targetRegionIds = getGatewayTargetRegions(
+      selectedSystem.id,
+      universe.connections,
+      systemRegionMap,
+    );
+    return targetRegionIds
+      .map((rid) => {
+        const region = regionMap.get(rid);
+        return region ? { regionId: rid, regionName: region.name } : null;
+      })
+      .filter((t): t is { regionId: string; regionName: string } => t !== null);
+  }, [selectedSystem, universe.connections, systemRegionMap, regionMap]);
+
+  // ── Active region info for back button ──────────────────────────
+  const activeRegion: RegionInfo | undefined =
+    viewLevel.level === "system" ? regionMap.get(viewLevel.regionId) : undefined;
+
+  // ── Selected system region name ─────────────────────────────────
+  const selectedRegionName = selectedSystem
+    ? regionMap.get(selectedSystem.regionId)?.name
+    : undefined;
+
+  // ── Click handlers ──────────────────────────────────────────────
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
-      // In ship_selected phase, clicking a node selects it as destination
+      // Region view — click drills into that region
+      if (viewLevel.level === "region") {
+        setViewLevel({ level: "system", regionId: node.id });
+        return;
+      }
+
+      // System view — navigation logic
       if (mode.phase === "ship_selected") {
-        // Clicking unreachable = no-op
         if (!mode.reachable.has(node.id) && node.id !== mode.ship.systemId) {
           return;
         }
-        // Clicking origin = cancel navigation
         if (node.id === mode.ship.systemId) {
           navigation.cancel();
           return;
         }
-        const system = universe.systems.find((s) => s.id === node.id);
+        const system = activeRegionSystems.find((s) => s.id === node.id);
         if (system) {
           navigation.selectDestination(system);
         }
         return;
       }
 
-      // In route_preview phase, clicks are ignored (use panel buttons)
       if (mode.phase === "route_preview") return;
 
       // Default mode — open system detail panel
-      const system = universe.systems.find((s) => s.id === node.id);
+      const system = activeRegionSystems.find((s) => s.id === node.id);
       if (system) {
         setSelectedSystem(system);
       }
     },
-    [universe.systems, mode, navigation],
+    [viewLevel, activeRegionSystems, mode, navigation],
   );
 
   const handleClose = useCallback(() => {
     setSelectedSystem(null);
   }, []);
 
-  // When entering navigation mode, close the detail panel
   const handleSelectShipForNavigation = useCallback(
     (ship: ShipState) => {
       setSelectedSystem(null);
@@ -254,6 +436,21 @@ export function StarMap({
     [navigation],
   );
 
+  const handleBackToRegions = useCallback(() => {
+    navigation.cancel();
+    setSelectedSystem(null);
+    setViewLevel({ level: "region" });
+  }, [navigation]);
+
+  const handleJumpToRegion = useCallback((regionId: string) => {
+    setSelectedSystem(null);
+    setViewLevel({ level: "system", regionId });
+  }, []);
+
+  const handleInit = useCallback((instance: ReactFlowInstance) => {
+    rfInstance.current = instance;
+  }, []);
+
   return (
     <div className="relative h-full w-full">
       <ReactFlow
@@ -261,6 +458,7 @@ export function StarMap({
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
+        onInit={handleInit}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         minZoom={0.3}
@@ -287,12 +485,50 @@ export function StarMap({
               tech: "#3b82f6",
               core: "#a855f7",
             };
-            return economyColors[(node.data as { economyType?: string })?.economyType ?? ""] ?? "#6b7280";
+            const identityColors: Record<string, string> = {
+              resource_rich: "#f59e0b",
+              agricultural: "#22c55e",
+              industrial: "#94a3b8",
+              tech: "#3b82f6",
+              trade_hub: "#a855f7",
+            };
+            const data = node.data as Record<string, unknown>;
+            if (data.economyType) {
+              return economyColors[data.economyType as string] ?? "#6b7280";
+            }
+            if (data.identity) {
+              return identityColors[data.identity as string] ?? "#6b7280";
+            }
+            return "#6b7280";
           }}
           maskColor="rgba(0, 0, 0, 0.7)"
           className="!bg-gray-900/90 !border-gray-700 !rounded-lg"
         />
       </ReactFlow>
+
+      {/* Back to regions button (system view only) */}
+      {viewLevel.level === "system" && !isNavigationActive && (
+        <button
+          onClick={handleBackToRegions}
+          className="absolute top-4 left-4 z-50 flex items-center gap-2 rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-gray-800/90 transition-colors shadow-lg"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
+          </svg>
+          {activeRegion?.name ?? "Regions"}
+        </button>
+      )}
+
+      {/* Region view hint */}
+      {viewLevel.level === "region" && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
+            <span className="text-sm text-white/60">
+              Click a region to explore its systems
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Navigation mode banner */}
       {mode.phase === "ship_selected" && (
@@ -318,21 +554,24 @@ export function StarMap({
           ship={mode.ship}
           destination={mode.destination}
           route={mode.route}
-          connections={connectionInfos}
-          systems={universe.systems}
+          connections={activeRegionConnections}
+          systems={activeRegionSystems}
           isNavigating={navigation.isNavigating}
           onConfirm={navigation.confirmNavigation}
           onCancel={navigation.cancel}
         />
       )}
 
-      {/* Detail panel overlay (hidden during navigation mode) */}
-      {!isNavigationActive && (
+      {/* Detail panel overlay (hidden during navigation mode, system view only) */}
+      {viewLevel.level === "system" && !isNavigationActive && (
         <SystemDetailPanel
           system={selectedSystem}
           shipsHere={shipsAtSelected}
           currentTick={currentTick}
+          regionName={selectedRegionName}
+          gatewayTargetRegions={selectedGatewayTargets}
           onSelectShipForNavigation={handleSelectShipForNavigation}
+          onJumpToRegion={handleJumpToRegion}
           onClose={handleClose}
         />
       )}

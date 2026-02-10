@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ShipState } from "@/lib/types/game";
+import type { ShipState, RegionInfo } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,10 @@ import { ShipTransitIndicator } from "./ship-transit-indicator";
 interface ShipCardProps {
   ship: ShipState;
   currentTick: number;
+  regions?: RegionInfo[];
 }
 
-export function ShipCard({ ship, currentTick }: ShipCardProps) {
+export function ShipCard({ ship, currentTick, regions }: ShipCardProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
@@ -42,6 +43,11 @@ export function ShipCard({ ship, currentTick }: ShipCardProps) {
             <span className="text-white/70">{ship.system.name}</span>
             {" — "}
             {ship.system.economyType}
+            {regions && (
+              <span className="text-white/30">
+                {" "}({regions.find((r) => r.id === ship.system.regionId)?.name})
+              </span>
+            )}
           </div>
         ) : (
           <ShipTransitIndicator ship={ship} currentTick={currentTick} />

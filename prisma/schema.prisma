@@ -63,11 +63,21 @@ model VerificationToken {
 // ── Game ─────────────────────────────────────────────────────────
 
 model GameWorld {
-  id          String   @id @default("world")
-  currentTick Int      @default(0)
-  tickRate    Int      @default(5000)
-  lastTickAt  DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default("world")
+  currentTick      Int      @default(0)
+  tickRate         Int      @default(5000)
+  lastTickAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  startingSystemId String?
+}
+
+model Region {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  identity String
+  x        Float
+  y        Float
+  systems  StarSystem[]
 }
 
 model Player {
@@ -117,18 +127,23 @@ model CargoItem {
 }
 
 model StarSystem {
-  id          String @id @default(cuid())
-  name        String @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   economyType String
   x           Float
   y           Float
-  description String @default("")
+  description String  @default("")
+  regionId    String
+  isGateway   Boolean @default(false)
 
+  region          Region             @relation(fields: [regionId], references: [id])
   station         Station?
   ships           Ship[]             @relation("ShipCurrentSystem")
   incomingShips   Ship[]             @relation("ShipDestination")
   connectionsFrom SystemConnection[] @relation("FromSystem")
   connectionsTo   SystemConnection[] @relation("ToSystem")
+
+  @@index([regionId])
 }
 
 model SystemConnection {
