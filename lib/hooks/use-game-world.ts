@@ -1,42 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/query/fetcher";
+import { queryKeys } from "@/lib/query/keys";
 import type { GameWorldState } from "@/lib/types/game";
 
 export function useGameWorld() {
-  const [world, setWorld] = useState<GameWorldState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const { data, isLoading, error } = useQuery({
+    queryKey: queryKeys.world,
+    queryFn: () => apiFetch<GameWorldState>("/api/game/world"),
+    staleTime: 5_000, // world state changes on every tick
+  });
 
-  const refresh = useCallback(() => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    fetch("/api/game/world", { signal: controller.signal })
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.data) {
-          setWorld(json.data);
-          setError(null);
-        } else if (json.error) {
-          setError(json.error);
-        }
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error(err);
-          setError("Failed to load game world.");
-        }
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    return () => abortRef.current?.abort();
-  }, [refresh]);
-
-  return { world, loading, error, refresh };
+  return {
+    world: data ?? null,
+    loading: isLoading,
+    error: error?.message ?? null,
+  };
 }

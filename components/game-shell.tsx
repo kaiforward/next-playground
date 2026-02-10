@@ -2,6 +2,7 @@
 
 import GameNav from "@/components/game-nav";
 import { TickProvider, useTickContext } from "@/lib/hooks/use-tick-context";
+import { useTickInvalidation } from "@/lib/hooks/use-tick-invalidation";
 
 interface GameShellProps {
   userEmail: string | null;
@@ -21,6 +22,7 @@ function GameShellInner({
   children,
 }: GameShellProps) {
   const { currentTick } = useTickContext();
+  useTickInvalidation();
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">

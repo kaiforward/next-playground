@@ -1,31 +1,19 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getGameWorld } from "@/lib/services/world";
+import { ServiceError } from "@/lib/services/errors";
 import type { GameWorldResponse } from "@/lib/types/api";
 
-/**
- * GET /api/game/world
- * Returns the current game world state (tick info).
- */
 export async function GET() {
   try {
-    const world = await prisma.gameWorld.findUnique({
-      where: { id: "world" },
-    });
-
-    if (!world) {
+    const data = await getGameWorld();
+    return NextResponse.json<GameWorldResponse>({ data });
+  } catch (error) {
+    if (error instanceof ServiceError) {
       return NextResponse.json<GameWorldResponse>(
-        { error: "Game world not initialized." },
-        { status: 500 },
+        { error: error.message },
+        { status: error.status },
       );
     }
-
-    return NextResponse.json<GameWorldResponse>({
-      data: {
-        currentTick: world.currentTick,
-        tickRate: world.tickRate,
-      },
-    });
-  } catch (error) {
     console.error("GET /api/game/world error:", error);
     return NextResponse.json<GameWorldResponse>(
       { error: "Failed to fetch game world." },

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import AuthSessionProvider from "@/components/providers/session-provider";
+import { GameQueryProvider } from "@/components/providers/query-provider";
 import { GameShell } from "@/components/game-shell";
 
 export default async function GameLayout({
@@ -16,9 +17,11 @@ export default async function GameLayout({
 
   return (
     <AuthSessionProvider>
-      <GameShell userEmail={session.user?.email ?? null}>
-        {children}
-      </GameShell>
+      <GameQueryProvider>
+        <GameShell userEmail={session.user?.email ?? null}>
+          {children}
+        </GameShell>
+      </GameQueryProvider>
     </AuthSessionProvider>
   );
 }

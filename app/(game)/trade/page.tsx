@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useFleet } from "@/lib/hooks/use-fleet";
+import { useMarket } from "@/lib/hooks/use-market";
+import { useTradeHistory } from "@/lib/hooks/use-trade-history";
+import { useTradeMutation } from "@/lib/hooks/use-trade-mutation";
 import { MarketTable } from "@/components/trade/market-table";
 import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
-import type { MarketEntry, TradeType } from "@/lib/types/game";
+import type { TradeType } from "@/lib/types/game";
 import { FormError } from "@/components/form/form-error";
 import { PageContainer } from "@/components/ui/page-container";
 
@@ -17,12 +20,11 @@ export default function TradePage() {
   const shipId = searchParams.get("shipId");
   const systemId = searchParams.get("systemId");
 
-  const { fleet, loading: fleetLoading, refresh: refreshFleet } = useFleet();
-  const [market, setMarket] = useState<MarketEntry[]>([]);
-  const [stationId, setStationId] = useState<string | null>(null);
-  const [marketLoading, setMarketLoading] = useState(true);
+  const { fleet, loading: fleetLoading } = useFleet();
+  const { market, stationId, loading: marketLoading } = useMarket(systemId);
+  const { history } = useTradeHistory(systemId);
+  const { mutateAsync: tradeAsync } = useTradeMutation({ shipId, stationId, systemId });
   const [selectedGoodId, setSelectedGoodId] = useState<string | undefined>();
-  const [priceHistory, setPriceHistory] = useState<{ time: string; price: number }[]>([]);
   const [tradeError, setTradeError] = useState<string | null>(null);
 
   // Redirect if missing params
@@ -33,42 +35,6 @@ export default function TradePage() {
   }, [shipId, systemId, router]);
 
   const ship = fleet?.ships.find((s) => s.id === shipId);
-
-  // Fetch market data for the system
-  useEffect(() => {
-    if (!systemId) return;
-    setMarketLoading(true);
-    fetch(`/api/game/market/${systemId}`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.data) {
-          setMarket(json.data.entries);
-          setStationId(json.data.stationId);
-        }
-      })
-      .catch(console.error)
-      .finally(() => setMarketLoading(false));
-  }, [systemId]);
-
-  // Fetch price history when a good is selected
-  useEffect(() => {
-    if (!systemId || !selectedGoodId) return;
-    fetch(`/api/game/history/${systemId}`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.data) {
-          const goodHistory = (json.data as Array<{ goodId: string; price: number; createdAt: string }>)
-            .filter((h) => h.goodId === selectedGoodId)
-            .slice(-10)
-            .map((h, i) => ({
-              time: `T-${10 - i}`,
-              price: h.price,
-            }));
-          setPriceHistory(goodHistory);
-        }
-      })
-      .catch(console.error);
-  }, [systemId, selectedGoodId]);
 
   const selectedGood = selectedGoodId
     ? market.find((e) => e.goodId === selectedGoodId)
@@ -82,33 +48,29 @@ export default function TradePage() {
     ? ship.cargo.find((c) => c.goodId === selectedGoodId)?.quantity ?? 0
     : 0;
 
+  const priceHistory = useMemo(() => {
+    if (!selectedGoodId) return [];
+    return history
+      .filter((h) => h.goodId === selectedGoodId)
+      .slice(-10)
+      .map((h, i) => ({
+        time: `T-${10 - i}`,
+        price: h.price,
+      }));
+  }, [history, selectedGoodId]);
+
   const handleTrade = useCallback(
     async (request: { goodId: string; quantity: number; type: TradeType }) => {
-      if (!shipId || !stationId) return;
       setTradeError(null);
-      const res = await fetch(`/api/game/ship/${shipId}/trade`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...request, stationId }),
-      });
-      const json = await res.json();
-      if (json.error) {
-        setTradeError(json.error);
-        throw new Error(json.error);
-      } else {
-        refreshFleet();
-        if (json.data?.updatedMarket) {
-          setMarket((prev) =>
-            prev.map((e) =>
-              e.goodId === json.data.updatedMarket.goodId
-                ? json.data.updatedMarket
-                : e
-            )
-          );
-        }
+      try {
+        await tradeAsync(request);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Trade failed.";
+        setTradeError(message);
+        throw err;
       }
     },
-    [shipId, stationId, refreshFleet]
+    [tradeAsync],
   );
 
   if (!shipId || !systemId) return null;
