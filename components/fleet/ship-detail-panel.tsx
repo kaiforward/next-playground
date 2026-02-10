@@ -1,6 +1,7 @@
 "use client";
 
 import type { ShipState } from "@/lib/types/game";
+import { getCargoUsed } from "@/lib/utils/cargo";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,7 @@ interface ShipDetailPanelProps {
 
 export function ShipDetailPanel({ ship, currentTick }: ShipDetailPanelProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
-  const cargoUsed = ship.cargo.reduce((sum, item) => sum + item.quantity, 0);
+  const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
 

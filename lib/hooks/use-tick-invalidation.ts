@@ -16,7 +16,7 @@ export function useTickInvalidation() {
   useEffect(() => {
     return subscribeToArrivals(() => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
-      queryClient.invalidateQueries({ queryKey: ["market"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
     });
   }, [subscribeToArrivals, queryClient]);
 }

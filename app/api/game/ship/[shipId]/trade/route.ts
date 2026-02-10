@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionPlayerId } from "@/lib/auth/get-player";
+import { parseJsonBody } from "@/lib/api/parse-json";
 import { executeTrade } from "@/lib/services/trade";
 import type { ShipTradeRequest, ShipTradeResponse } from "@/lib/types/api";
 
@@ -10,10 +11,8 @@ export async function POST(
   try {
     const { shipId } = await params;
 
-    let body: ShipTradeRequest;
-    try {
-      body = (await request.json()) as ShipTradeRequest;
-    } catch {
+    const body = await parseJsonBody<ShipTradeRequest>(request);
+    if (!body) {
       return NextResponse.json<ShipTradeResponse>(
         { error: "Invalid JSON body." },
         { status: 400 },

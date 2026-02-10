@@ -40,7 +40,29 @@ No test file exists. Both `simulateNpcTrade` and `pickNpcDestination` need cover
 - Single outgoing connection — returns that system (deterministic)
 - Multiple outgoing connections — returns one of them (mock Math.random)
 
+## Outdated Documentation
+
+Docs have concrete errors and gaps from the services/TanStack Query migration. Not blocking — CLAUDE.md covers patterns for development. Fix when next onboarding or doing a major feature.
+
+**Errors to fix:**
+- `trading-ui.md`: references non-existent `usePlayer()` hook (should be `useFleet()`)
+- `trading-ui.md`: wrong endpoint `/api/game/trade` (should be `/api/game/ship/[shipId]/trade`)
+- `SPEC.md` line 75: describes polling tick system (actually SSE via `tick-stream`)
+- `auth.md`: only mentions `getSessionPlayer()`, not the lightweight `getSessionPlayerId()` variant routes actually use
+
+**Gaps:**
+- No doc covers services layer (`lib/services/`) or TanStack Query hooks — only CLAUDE.md
+- SPEC.md "Technical Stack" section duplicates CLAUDE.md — trim or cross-reference
+- `data-model.md` should document the convention of adding `@@index` for foreign keys used in frequent queries (e.g., `Ship.playerId`, `TradeHistory.stationId`)
+
 ## Infrastructure
+
+### Loading & Error State Strategy
+Now that all data fetching uses TanStack Query, revisit loading/error handling holistically. Currently pages check `isLoading` individually but don't display query errors. Consider:
+- Consistent error display per page (use `isError` / `error` from query hooks)
+- Suspense boundaries for page-level loading (replace manual `if (loading)` checks)
+- Error boundaries wrapping game pages to catch unexpected failures
+- Query boundaries for deferred fetches (e.g., modal popups, slide-over panels that fetch on open)
 
 ### Rate Limiting on Registration
 `POST /api/register` has no rate limiting. An attacker could create thousands of accounts, each receiving a starter ship and 1000 credits. Add per-IP rate limiting middleware.

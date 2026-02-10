@@ -1,6 +1,7 @@
 "use client";
 
 import type { MarketEntry } from "@/lib/types/game";
+import { getPriceTrendPct } from "@/lib/utils/market";
 import { DataTable, type Column } from "@/components/ui/data-table";
 
 function formatCredits(value: number): string {
@@ -61,7 +62,7 @@ export function MarketTable({
       sortable: false,
       render: (row) => {
         const diff = row.currentPrice - row.basePrice;
-        const pct = ((diff / row.basePrice) * 100).toFixed(1);
+        const pct = getPriceTrendPct(row.currentPrice, row.basePrice).toFixed(1);
         if (diff > 0) {
           return (
             <span className="text-green-400 font-medium">

@@ -100,6 +100,8 @@ model Ship {
   system      StarSystem  @relation("ShipCurrentSystem", fields: [systemId], references: [id])
   destination StarSystem? @relation("ShipDestination", fields: [destinationSystemId], references: [id])
   cargo       CargoItem[]
+
+  @@index([playerId])
 }
 
 model CargoItem {
@@ -188,4 +190,6 @@ model TradeHistory {
 
   station Station @relation(fields: [stationId], references: [id])
   good    Good    @relation(fields: [goodId], references: [id])
+
+  @@index([stationId])
 }

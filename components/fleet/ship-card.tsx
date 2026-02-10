@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ShipState } from "@/lib/types/game";
+import { getCargoUsed } from "@/lib/utils/cargo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,7 @@ interface ShipCardProps {
 
 export function ShipCard({ ship, currentTick }: ShipCardProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
-  const cargoUsed = ship.cargo.reduce((sum, item) => sum + item.quantity, 0);
+  const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
 

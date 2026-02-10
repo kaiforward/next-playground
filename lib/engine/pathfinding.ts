@@ -4,6 +4,7 @@
  */
 
 import type { ConnectionInfo } from "./navigation";
+import { hopDuration } from "./travel";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -40,11 +41,6 @@ function buildAdjacencyList(
     neighbors.push({ toSystemId: c.toSystemId, fuelCost: c.fuelCost });
   }
   return adj;
-}
-
-/** Travel duration for a single hop (matches existing formula). */
-function hopDuration(fuelCost: number): number {
-  return Math.max(1, Math.ceil(fuelCost / 2));
 }
 
 // ── Dijkstra — lowest-fuel path ────────────────────────────────
