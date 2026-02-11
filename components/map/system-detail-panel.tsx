@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import { tv } from "tailwind-variants";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import type { StarSystemInfo, ShipState, EconomyType } from "@/lib/types/game";
 
 interface GatewayTarget {
@@ -45,22 +45,14 @@ export function SystemDetailPanel({
   onJumpToRegion,
   onClose,
 }: SystemDetailPanelProps) {
-  // Close on Escape key
-  useEffect(() => {
-    if (!system) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [system, onClose]);
-
   if (!system) return null;
 
   return (
-    <div
-      className="fixed top-0 right-0 h-full w-80 bg-gray-900/95 border-l border-gray-700 shadow-2xl z-50 flex flex-col"
-      role="dialog"
+    <Dialog
+      open
+      onClose={onClose}
+      initialFocus="[aria-label='Close panel']"
+      className="fixed top-12 right-0 h-[calc(100%-3rem)] w-80 bg-gray-900 border-l border-gray-700 shadow-2xl z-50 flex flex-col"
       aria-label={`${system.name} system details`}
     >
       {/* Header */}
@@ -131,15 +123,17 @@ export function SystemDetailPanel({
           </div>
         )}
 
-        {/* Description */}
-        <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
-            Description
-          </h3>
-          <p className="text-sm text-gray-300 leading-relaxed">
-            {system.description}
-          </p>
-        </div>
+        {/* Description (hidden when empty — procedural systems have no description yet) */}
+        {system.description && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+              Description
+            </h3>
+            <p className="text-sm text-gray-300 leading-relaxed">
+              {system.description}
+            </p>
+          </div>
+        )}
 
         {/* Ships at this system */}
         <div>
@@ -217,6 +211,6 @@ export function SystemDetailPanel({
           Close
         </Button>
       </div>
-    </div>
+    </Dialog>
   );
 }

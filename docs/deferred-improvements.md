@@ -43,35 +43,9 @@ See `docs/tick-engine-redesign.md` Step 5.
 
 ## Missing Test Coverage
 
-### `simulateEconomyTick` (lib/engine/tick.ts)
-
-Now accepts an optional RNG parameter for deterministic testing. Scenarios needed:
-
-- Good produced by its economy type (supply increases, demand decreases)
-- Good consumed by its economy type (supply decreases, demand increases)
-- Good that is both produced and consumed simultaneously
-- Good that is neither produced nor consumed (drift only)
-- Supply/demand clamping at bounds (5 and 200)
-- Mean-reversion toward equilibrium targets (produces/consumes/neutral)
-- Immutability: input array is not mutated
-
 ### `npc.ts` (lib/engine/npc.ts)
 
-No test file exists. Both `simulateNpcTrade` and `pickNpcDestination` need coverage. Note: this NPC code predates the tick pipeline and may be superseded by the economy redesign (Tier 1/Tier 2 NPC architecture in `docs/tick-engine-redesign.md`).
-
-**`simulateNpcTrade` scenarios:**
-- Empty market (no goods available) — returns no trades
-- Good below buy threshold with sufficient supply — NPC buys
-- Good below buy threshold but supply <= 5 — NPC does not buy
-- Good above sell threshold with sufficient demand — NPC sells
-- Good above sell threshold but demand <= 10 — NPC does not sell
-- NPC credits exhaustion mid-loop — stops buying, can still sell
-- Multiple goods meeting buy criteria — processes all within credit budget
-
-**`pickNpcDestination` scenarios:**
-- No outgoing connections — returns null
-- Single outgoing connection — returns that system
-- Multiple outgoing connections — returns one of them (mock RNG)
+No test file exists. This NPC code predates the tick pipeline and may be superseded by the economy redesign (Tier 1/Tier 2 NPC architecture in `docs/tick-engine-redesign.md`). Add tests if the code is retained; otherwise remove the module when it's replaced.
 
 ## UI & Frontend
 
@@ -98,9 +72,9 @@ Error display currently uses `alert()` (blocking, unstyled). Replace with toast 
 
 `GameNav` has no mobile breakpoints. Add hamburger menu or responsive collapse below ~640px.
 
-### Focus Trap on Slide-Over Panels
+### Focus Trap on Slide-Over Panels ✅
 
-`SystemDetailPanel` and `RoutePreviewPanel` have no focus trap. Add `focus-trap-react` or equivalent for accessibility.
+Implemented via reusable `Dialog` component (`components/ui/dialog.tsx`) wrapping native `<dialog>`. Supports modal (`showModal()`, browser-native focus trap) and non-modal (`.show()`, manual Escape + focus management) modes. Both map panels (`SystemDetailPanel`, `RoutePreviewPanel`) use non-modal. Includes `useDialog` convenience hook for open/close state.
 
 ## Infrastructure
 

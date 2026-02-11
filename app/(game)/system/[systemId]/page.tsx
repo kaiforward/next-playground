@@ -77,7 +77,7 @@ export default function SystemViewPage({
         </p>
       )}
 
-      {systemInfo && (
+      {systemInfo?.description && (
         <p className="text-white/60 mb-6">{systemInfo.description}</p>
       )}
 

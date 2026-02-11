@@ -19,8 +19,8 @@ export default function GameNav({ userEmail, currentTick }: GameNavProps) {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-white/10 bg-black/40 backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <header className="h-12 border-b border-white/10 bg-black/40 backdrop-blur-sm">
+      <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="text-xl font-bold tracking-wider">
             Stellar Trader

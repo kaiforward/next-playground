@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import type { ShipState, StarSystemInfo } from "@/lib/types/game";
 import type { PathResult } from "@/lib/engine/pathfinding";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
@@ -54,7 +55,12 @@ export function RoutePreviewPanel({
   }
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[380px] max-w-[calc(100%-2rem)]">
+    <Dialog
+      open
+      onClose={onCancel}
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[380px] max-w-[calc(100%-2rem)]"
+      aria-label={`Route preview: ${ship.name} to ${destination.name}`}
+    >
       <div className="rounded-xl border border-white/10 bg-gray-900/95 backdrop-blur shadow-2xl">
         {/* Header */}
         <div className="px-4 py-3 border-b border-white/10">
@@ -145,6 +151,6 @@ export function RoutePreviewPanel({
           </Button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
