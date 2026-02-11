@@ -72,6 +72,7 @@ Use existing components instead of inline markup. When a pattern appears twice, 
 - **Button** (`components/ui/button.tsx`) — All clickable actions. Variants: `primary`, `action`, `ghost`, `pill`, `dismiss`. Colors: `blue`, `green`, `red`, `indigo`, `cyan`. Supports `href` for link-as-button.
 - **PageContainer** — All page wrappers. Sizes: `sm` (3xl), `md` (4xl), `lg` (7xl, default).
 - **ProgressBar** — Labeled bars with ARIA. Colors: `blue`, `amber`, `red`. Sizes: `sm`, `md`.
+- **Dialog** (`components/ui/dialog.tsx`) — Native `<dialog>` wrapper. Props: `open`, `onClose`, `modal` (default false), `initialFocus`. Non-modal uses `.show()` + manual Escape/focus; modal uses `showModal()` + browser-native focus trap. Companion `useDialog` hook for open/close state.
 - **Card** / **Badge** / **StatList+StatRow** — Layout and data display primitives.
 
 ## Git Workflow

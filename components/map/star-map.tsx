@@ -5,7 +5,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   type Node,
   type Edge,
   type NodeMouseHandler,
@@ -475,34 +474,6 @@ export function StarMap({
         <Controls
           className="!bg-gray-800 !border-gray-700 !rounded-lg !shadow-lg [&>button]:!bg-gray-800 [&>button]:!border-gray-700 [&>button]:!text-gray-300 [&>button:hover]:!bg-gray-700"
           showInteractive={false}
-        />
-        <MiniMap
-          nodeColor={(node) => {
-            const economyColors: Record<string, string> = {
-              agricultural: "#22c55e",
-              mining: "#f59e0b",
-              industrial: "#94a3b8",
-              tech: "#3b82f6",
-              core: "#a855f7",
-            };
-            const identityColors: Record<string, string> = {
-              resource_rich: "#f59e0b",
-              agricultural: "#22c55e",
-              industrial: "#94a3b8",
-              tech: "#3b82f6",
-              trade_hub: "#a855f7",
-            };
-            const data = node.data as Record<string, unknown>;
-            if (data.economyType) {
-              return economyColors[data.economyType as string] ?? "#6b7280";
-            }
-            if (data.identity) {
-              return identityColors[data.identity as string] ?? "#6b7280";
-            }
-            return "#6b7280";
-          }}
-          maskColor="rgba(0, 0, 0, 0.7)"
-          className="!bg-gray-900/90 !border-gray-700 !rounded-lg"
         />
       </ReactFlow>
 
