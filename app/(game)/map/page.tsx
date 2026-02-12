@@ -7,6 +7,7 @@ import { useUniverse } from "@/lib/hooks/use-universe";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
+import { useEvents } from "@/lib/hooks/use-events";
 import { Button } from "@/components/ui/button";
 
 export default function MapPage() {
@@ -17,6 +18,7 @@ export default function MapPage() {
   const { fleet, loading: fleetLoading } = useFleet();
   const { currentTick } = useTickContext();
   const { mutateAsync: navigateAsync } = useNavigateMutation();
+  const { events } = useEvents();
   const [navError, setNavError] = useState<string | null>(null);
 
   const handleNavigateShip = useCallback(
@@ -56,6 +58,7 @@ export default function MapPage() {
         currentTick={currentTick}
         onNavigateShip={handleNavigateShip}
         initialSelectedShipId={initialShipId}
+        events={events}
       />
     </div>
   );

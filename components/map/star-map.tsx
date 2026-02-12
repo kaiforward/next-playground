@@ -13,7 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import type { UniverseData, StarSystemInfo, ShipState, RegionInfo } from "@/lib/types/game";
+import type { UniverseData, StarSystemInfo, ShipState, RegionInfo, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemNode, type NavigationNodeState } from "@/components/map/system-node";
 import { RegionNode } from "@/components/map/region-node";
@@ -33,6 +33,7 @@ interface StarMapProps {
   currentTick: number;
   onNavigateShip: (shipId: string, route: string[]) => Promise<void>;
   initialSelectedShipId?: string;
+  events?: ActiveEvent[];
 }
 
 type MapViewLevel =
@@ -57,6 +58,7 @@ export function StarMap({
   currentTick,
   onNavigateShip,
   initialSelectedShipId,
+  events = [],
 }: StarMapProps) {
   const [selectedSystem, setSelectedSystem] = useState<StarSystemInfo | null>(null);
   const rfInstance = useRef<ReactFlowInstance | null>(null);
@@ -189,6 +191,30 @@ export function StarMap({
     [selectedSystem, ships],
   );
 
+  // ── Events per system (deduplicated event types) ───────────────
+  const eventsPerSystem = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const event of events) {
+      if (!event.systemId) continue;
+      const existing = map.get(event.systemId);
+      if (existing) {
+        if (!existing.includes(event.type)) existing.push(event.type);
+      } else {
+        map.set(event.systemId, [event.type]);
+      }
+    }
+    return map;
+  }, [events]);
+
+  // ── Events at selected system ─────────────────────────────────
+  const eventsAtSelected = useMemo(
+    () =>
+      selectedSystem
+        ? events.filter((e) => e.systemId === selectedSystem.id)
+        : [],
+    [selectedSystem, events],
+  );
+
   // ── Navigation state per node (system view only) ────────────────
   const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
     const states = new Map<string, NavigationNodeState>();
@@ -293,6 +319,7 @@ export function StarMap({
         shipCount: shipsAtSystem[system.id] ?? 0,
         isGateway: system.isGateway,
         navigationState: nodeNavigationStates.get(system.id),
+        activeEventTypes: eventsPerSystem.get(system.id),
       },
     }));
   }, [
@@ -303,6 +330,7 @@ export function StarMap({
     shipsPerRegion,
     shipsAtSystem,
     nodeNavigationStates,
+    eventsPerSystem,
   ]);
 
   const edges: Edge[] = useMemo(() => {
@@ -541,6 +569,7 @@ export function StarMap({
           currentTick={currentTick}
           regionName={selectedRegionName}
           gatewayTargetRegions={selectedGatewayTargets}
+          activeEvents={eventsAtSelected}
           onSelectShipForNavigation={handleSelectShipForNavigation}
           onJumpToRegion={handleJumpToRegion}
           onClose={handleClose}

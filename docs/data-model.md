@@ -28,6 +28,8 @@ All models are defined in `prisma/schema.prisma`. The database uses SQLite with 
 | `Good` | Tradeable commodity definition | Reference table |
 | `StationMarket` | Supply/demand per good per station | Belongs to Station + Good |
 | `TradeHistory` | Record of completed trades | Belongs to Station + Good |
+| `GameEvent` | Active world event instance | Belongs to StarSystem + Region, has many EventModifiers. Tracks type, phase, severity, duration, spread source |
+| `EventModifier` | Active modifier from an event | Belongs to GameEvent. domain (economy/navigation), type, target (system/region), parameter, value |
 
 Key design decisions:
 - Ships own location (`systemId`) instead of players. Players can have multiple ships (1:N).
@@ -47,6 +49,7 @@ Key design decisions:
 - `lib/constants/universe.ts` — Economy production/consumption rules per economy type
 - `lib/constants/economy.ts` — Simulation constants (reversion rate, noise, production/consumption rates, equilibrium targets)
 - `lib/constants/universe-gen.ts` — Universe generation parameters (region count, systems per region, distances, fuel costs)
+- `lib/constants/events.ts` — Event definitions (war, plague, trade_festival, conflict_spillover, plague_risk), spawn/cap constants, modifier caps
 
 ## Seed Script
 

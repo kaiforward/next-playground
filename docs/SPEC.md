@@ -65,14 +65,26 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 - Travel consumes fuel and takes time (tick-based)
 - Travel duration: `ceil(fuelCost / 2)` ticks (minimum 1)
 - Ships are locked during transit (cannot trade or take other actions)
+- Ships arriving at systems with active danger events risk cargo loss (20-40% per item, danger capped at 50%)
 - Star map shows all ship positions per system
 - UI shows transit progress with ETA
 
-#### 5b. Tick System
+#### 5b. Events
+
+- World events spawn randomly at eligible systems (weighted by type, filtered by economy type)
+- Events progress through phases (e.g. War: Tensions → Escalation → Active Conflict → Aftermath → Recovery)
+- Each phase applies modifiers to the economy (equilibrium shifts, rate multipliers, reversion dampening) and/or navigation (danger levels)
+- Events can spread to neighbouring systems (e.g. war spawns conflict_spillover, plague spawns plague_risk)
+- Navigation danger: ships arriving at systems with active danger modifiers risk cargo loss (20-40% per item)
+- Player visibility: SSE notifications on event spawn/phase change, event indicators on star map, events section on system detail page
+- Event definitions are data-driven — adding a new event type requires no code changes
+- See `docs/design/event-catalog.md` for implemented and planned events
+
+#### 5c. Tick System
 
 - Game time advances via discrete ticks (GameWorld singleton)
 - Server-side **tick processor pipeline** (`lib/tick/`) runs on a 1s poll interval
-- Each tick: topologically sorted processors run sequentially (ship arrivals, economy simulation)
+- Each tick: topologically sorted processors run sequentially (ship arrivals with danger checks, events lifecycle, economy simulation with modifiers)
 - Processors declare `frequency` (run every N ticks) and `offset` (phase stagger)
 - Economy uses round-robin regional processing (one region per tick across ~8 regions)
 - Clients connect via SSE (`GET /api/game/tick-stream`); `useTick` hook wraps EventSource
@@ -110,11 +122,10 @@ Good           (reference table: name, type, base price)
 
 ### Living Economy
 
-- **Cron-based ticks:** Background process updates economy at regular intervals instead of on-demand
-- **LLM-generated events:** AI creates narrative events that affect the game world mechanically
-  - "A meteor storm disrupts mining in the Kepler system — ore prices surge"
-  - "The Trade Guild announces a new shipping route between Sol and Vega"
-  - Events have both flavour text and mechanical effects (supply/demand modifiers)
+- ~~**Cron-based ticks:**~~ Implemented — server-side tick engine with processor pipeline
+- ~~**Dynamic events:**~~ Implemented — event system with modifier infrastructure, multi-phase arcs, spread, navigation danger
+- **More event types:** Mining boom, pirate raid, solar storm, and more — see `docs/design/event-catalog.md`
+- **Simulation enhancements:** Supply chains, seasonal cycles, speculative bubbles, player-triggered events — see `docs/design/simulation-enhancements.md`
 - **NPC factions:** Trade guilds, pirate groups, colonial governments with AI-driven goals and strategies
 
 ### Expanded Gameplay

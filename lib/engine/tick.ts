@@ -14,6 +14,16 @@ export interface MarketTickEntry {
   economyType: string;
   produces: string[];
   consumes: string[];
+  /** Additive shift to the supply equilibrium target. Default 0. */
+  supplyTargetShift?: number;
+  /** Additive shift to the demand equilibrium target. Default 0. */
+  demandTargetShift?: number;
+  /** Multiplier on production rate. Default 1.0. */
+  productionMult?: number;
+  /** Multiplier on consumption rate. Default 1.0. */
+  consumptionMult?: number;
+  /** Multiplier on reversion rate (dampening). Default 1.0. */
+  reversionMult?: number;
 }
 
 export interface EconomySimParams {
@@ -92,24 +102,35 @@ export function simulateEconomyTick(
   return markets.map((entry) => {
     const target = getEquilibrium(entry, params);
 
+    // Apply modifier shifts to equilibrium targets (default 0)
+    const effectiveSupplyTarget = target.supply + (entry.supplyTargetShift ?? 0);
+    const effectiveDemandTarget = target.demand + (entry.demandTargetShift ?? 0);
+
+    // Apply reversion dampening (default 1.0 = no change)
+    const effectiveReversion = reversionRate * (entry.reversionMult ?? 1);
+
     // Random noise for supply and demand (independent draws)
     const supplyNoise = (rng() * 2 - 1) * noiseAmplitude;
     const demandNoise = (rng() * 2 - 1) * noiseAmplitude;
 
-    // Start with mean-reverting drift
-    let supply = driftValue(entry.supply, target.supply, reversionRate, supplyNoise, minLevel, maxLevel);
-    let demand = driftValue(entry.demand, target.demand, reversionRate, demandNoise, minLevel, maxLevel);
+    // Start with mean-reverting drift toward modified targets
+    let supply = driftValue(entry.supply, effectiveSupplyTarget, effectiveReversion, supplyNoise, minLevel, maxLevel);
+    let demand = driftValue(entry.demand, effectiveDemandTarget, effectiveReversion, demandNoise, minLevel, maxLevel);
+
+    // Apply modifier-scaled production/consumption rates (default 1.0)
+    const effectiveProduction = productionRate * (entry.productionMult ?? 1);
+    const effectiveConsumption = consumptionRate * (entry.consumptionMult ?? 1);
 
     // Production effect: producers generate supply, slightly reduce demand
     if (entry.produces.includes(entry.goodId)) {
-      supply = clamp(supply + productionRate, minLevel, maxLevel);
-      demand = clamp(demand - Math.round(productionRate * 0.3), minLevel, maxLevel);
+      supply = clamp(supply + effectiveProduction, minLevel, maxLevel);
+      demand = clamp(demand - Math.round(effectiveProduction * 0.3), minLevel, maxLevel);
     }
 
     // Consumption effect: consumers deplete supply, generate demand
     if (entry.consumes.includes(entry.goodId)) {
-      supply = clamp(supply - consumptionRate, minLevel, maxLevel);
-      demand = clamp(demand + Math.round(consumptionRate * 0.5), minLevel, maxLevel);
+      supply = clamp(supply - effectiveConsumption, minLevel, maxLevel);
+      demand = clamp(demand + Math.round(effectiveConsumption * 0.5), minLevel, maxLevel);
     }
 
     return { ...entry, supply, demand };

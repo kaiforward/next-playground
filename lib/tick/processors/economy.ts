@@ -6,6 +6,8 @@ import {
 } from "@/lib/constants/universe";
 import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
+import { MODIFIER_CAPS } from "@/lib/constants/events";
+import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
 import type { EconomyType } from "@/lib/types/game";
 
 /** Reverse lookup: Good.name → GOODS key (e.g. "Food" → "food"). */
@@ -48,6 +50,7 @@ export const economyProcessor: TickProcessor = {
   name: "economy",
   // Runs every tick; round-robin region selection happens inside process()
   frequency: 1,
+  dependsOn: ["events"],
 
   async process(ctx): Promise<TickProcessorResult> {
     // Get all regions to determine round-robin target
@@ -77,17 +80,58 @@ export const economyProcessor: TickProcessor = {
       },
     });
 
+    // Collect system IDs in this region for modifier querying
+    const systemIds = [...new Set(markets.map((m) => m.station.system.id))];
+
+    // Query active economy modifiers targeting systems in this region or the region itself
+    const rawModifiers = systemIds.length > 0
+      ? await ctx.tx.eventModifier.findMany({
+          where: {
+            domain: "economy",
+            OR: [
+              { targetType: "system", targetId: { in: systemIds } },
+              { targetType: "region", targetId: targetRegion.id },
+            ],
+          },
+        })
+      : [];
+
+    // Index modifiers by system ID (region-scoped modifiers apply to all systems)
+    const regionMods = rawModifiers.filter((m) => m.targetType === "region");
+    const modifiersBySystem = new Map<string, ModifierRow[]>();
+    for (const sysId of systemIds) {
+      modifiersBySystem.set(sysId, [...regionMods]);
+    }
+    for (const mod of rawModifiers) {
+      if (mod.targetType === "system" && mod.targetId) {
+        modifiersBySystem.get(mod.targetId)?.push(mod);
+      }
+    }
+
     // Build tick entries for the simulation engine
     const tickEntries = markets.map((m) => {
       const econ = m.station.system.economyType as EconomyType;
+      const goodKey = goodNameToKey.get(m.good.name) ?? m.good.name;
+      const sysMods = modifiersBySystem.get(m.station.system.id) ?? [];
+      const agg = sysMods.length > 0
+        ? aggregateModifiers(sysMods, goodKey, MODIFIER_CAPS)
+        : undefined;
+
       return {
-        goodId: goodNameToKey.get(m.good.name) ?? m.good.name,
+        goodId: goodKey,
         supply: m.supply,
         demand: m.demand,
         basePrice: m.good.basePrice,
         economyType: econ,
         produces: ECONOMY_PRODUCTION[econ] ?? [],
         consumes: ECONOMY_CONSUMPTION[econ] ?? [],
+        ...(agg && {
+          supplyTargetShift: agg.supplyTargetShift,
+          demandTargetShift: agg.demandTargetShift,
+          productionMult: agg.productionMult,
+          consumptionMult: agg.consumptionMult,
+          reversionMult: agg.reversionMult,
+        }),
       };
     });
 
@@ -103,8 +147,10 @@ export const economyProcessor: TickProcessor = {
 
     await batchUpdateMarkets(ctx.tx, updates);
 
+    const modCount = rawModifiers.length;
     console.log(
-      `[economy] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${markets.length} markets`,
+      `[economy] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${markets.length} markets` +
+      (modCount > 0 ? `, ${modCount} active modifier(s)` : ""),
     );
 
     return {

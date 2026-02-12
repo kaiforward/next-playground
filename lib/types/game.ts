@@ -123,3 +123,19 @@ export interface UniverseData {
   systems: StarSystemInfo[];
   connections: SystemConnectionInfo[];
 }
+
+export interface ActiveEvent {
+  id: string;
+  type: string;
+  name: string;
+  phase: string;
+  phaseDisplayName: string;
+  systemId: string | null;
+  systemName: string | null;
+  regionId: string | null;
+  startTick: number;
+  phaseStartTick: number;
+  phaseDuration: number;
+  ticksRemaining: number;
+  severity: number;
+}

@@ -1,9 +1,12 @@
+import { aggregateDangerLevel, rollCargoLoss, type CargoLossEntry } from "@/lib/engine/danger";
+import type { ModifierRow } from "@/lib/engine/events";
 import type { TickProcessor, TickProcessorResult } from "../types";
 
 interface ArrivedShip {
   shipId: string;
   systemId: string;
   playerId: string;
+  cargoLost?: CargoLossEntry[];
 }
 
 export const shipArrivalsProcessor: TickProcessor = {
@@ -16,33 +19,110 @@ export const shipArrivalsProcessor: TickProcessor = {
         status: "in_transit",
         arrivalTick: { lte: ctx.tick },
       },
-      select: { id: true, destinationSystemId: true, playerId: true },
+      select: {
+        id: true,
+        destinationSystemId: true,
+        playerId: true,
+        cargo: { select: { id: true, goodId: true, quantity: true } },
+      },
     });
 
     if (arrivingShips.length === 0) {
       return {};
     }
 
+    // Collect unique destination system IDs to batch-query navigation modifiers
+    const destinationIds = [
+      ...new Set(
+        arrivingShips
+          .map((s) => s.destinationSystemId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+
+    // Query all navigation modifiers for destination systems in one go
+    const navModifiers = destinationIds.length > 0
+      ? await ctx.tx.eventModifier.findMany({
+          where: {
+            domain: "navigation",
+            targetType: "system",
+            targetId: { in: destinationIds },
+          },
+          select: {
+            targetId: true,
+            domain: true,
+            type: true,
+            targetType: true,
+            goodId: true,
+            parameter: true,
+            value: true,
+          },
+        })
+      : [];
+
+    // Group modifiers by system ID for quick lookup
+    const modsBySystem = new Map<string, ModifierRow[]>();
+    for (const mod of navModifiers) {
+      if (!mod.targetId) continue;
+      const existing = modsBySystem.get(mod.targetId) ?? [];
+      existing.push(mod as ModifierRow);
+      modsBySystem.set(mod.targetId, existing);
+    }
+
     const arrived: ArrivedShip[] = [];
 
     for (const ship of arrivingShips) {
-      if (ship.destinationSystemId) {
-        await ctx.tx.ship.update({
-          where: { id: ship.id },
-          data: {
-            systemId: ship.destinationSystemId,
-            status: "docked",
-            destinationSystemId: null,
-            departureTick: null,
-            arrivalTick: null,
-          },
-        });
-        arrived.push({
-          shipId: ship.id,
+      if (!ship.destinationSystemId) continue;
+
+      // Dock the ship
+      await ctx.tx.ship.update({
+        where: { id: ship.id },
+        data: {
           systemId: ship.destinationSystemId,
-          playerId: ship.playerId,
-        });
+          status: "docked",
+          destinationSystemId: null,
+          departureTick: null,
+          arrivalTick: null,
+        },
+      });
+
+      // Check danger at destination
+      const systemMods = modsBySystem.get(ship.destinationSystemId) ?? [];
+      const danger = aggregateDangerLevel(systemMods);
+      let cargoLost: CargoLossEntry[] | undefined;
+
+      if (danger > 0 && ship.cargo.length > 0) {
+        const losses = rollCargoLoss(
+          danger,
+          ship.cargo,
+          Math.random,
+        );
+
+        if (losses.length > 0) {
+          // Apply cargo losses in DB
+          for (const loss of losses) {
+            const cargoItem = ship.cargo.find((c) => c.goodId === loss.goodId);
+            if (!cargoItem) continue;
+
+            if (loss.remaining <= 0) {
+              await ctx.tx.cargoItem.delete({ where: { id: cargoItem.id } });
+            } else {
+              await ctx.tx.cargoItem.update({
+                where: { id: cargoItem.id },
+                data: { quantity: loss.remaining },
+              });
+            }
+          }
+          cargoLost = losses;
+        }
       }
+
+      arrived.push({
+        shipId: ship.id,
+        systemId: ship.destinationSystemId,
+        playerId: ship.playerId,
+        cargoLost,
+      });
     }
 
     // Group arrivals by player for scoped events
@@ -50,6 +130,15 @@ export const shipArrivalsProcessor: TickProcessor = {
     for (const a of arrived) {
       const existing = playerEvents.get(a.playerId) ?? {};
       existing["shipArrived"] = [...(existing["shipArrived"] ?? []), a];
+
+      // Emit separate cargoLost event if losses occurred
+      if (a.cargoLost && a.cargoLost.length > 0) {
+        existing["cargoLost"] = [
+          ...(existing["cargoLost"] ?? []),
+          { shipId: a.shipId, systemId: a.systemId, losses: a.cargoLost },
+        ];
+      }
+
       playerEvents.set(a.playerId, existing);
     }
 

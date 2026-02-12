@@ -1,4 +1,5 @@
 import type { EconomyType, RegionIdentity } from "@/lib/types/game";
+import type { EVENT_DEFINITIONS } from "./events";
 
 /** Mapping from economy type to Badge color prop. */
 export const ECONOMY_BADGE_COLOR: Record<
@@ -10,6 +11,18 @@ export const ECONOMY_BADGE_COLOR: Record<
   industrial: "slate",
   tech: "blue",
   core: "purple",
+};
+
+/** Mapping from event type to Badge/dot color. */
+export const EVENT_TYPE_BADGE_COLOR: Record<
+  keyof typeof EVENT_DEFINITIONS,
+  "red" | "amber" | "purple" | "green" | "blue" | "slate"
+> = {
+  war: "red",
+  plague: "amber",
+  trade_festival: "purple",
+  conflict_spillover: "red",
+  plague_risk: "amber",
 };
 
 /** Mapping from region identity to Badge color prop. */

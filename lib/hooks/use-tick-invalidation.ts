@@ -24,6 +24,14 @@ export function useTickInvalidation() {
       subscribeToEvent("economyTick", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
       }),
+      // Event notifications → refresh events cache
+      subscribeToEvent("eventNotifications", () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.events });
+      }),
+      // Cargo lost → refresh fleet (cargo quantities changed)
+      subscribeToEvent("cargoLost", () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+      }),
     ];
 
     return () => unsubs.forEach((unsub) => unsub());

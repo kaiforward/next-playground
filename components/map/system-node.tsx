@@ -4,6 +4,7 @@ import { Handle, Position } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
 import { tv } from "tailwind-variants";
 import type { EconomyType } from "@/lib/types/game";
+import { EventDot } from "@/components/events/event-dot";
 
 export type NavigationNodeState =
   | "origin"
@@ -18,6 +19,7 @@ export interface SystemNodeData {
   shipCount: number;
   isGateway?: boolean;
   navigationState?: NavigationNodeState;
+  activeEventTypes?: string[];
   [key: string]: unknown;
 }
 
@@ -69,7 +71,7 @@ const pulseRing = tv({
 
 export function SystemNode({ data }: NodeProps) {
   const nodeData = data as SystemNodeData;
-  const { label, economyType, shipCount, isGateway, navigationState } = nodeData;
+  const { label, economyType, shipCount, isGateway, navigationState, activeEventTypes } = nodeData;
   const hasShips = shipCount > 0;
 
   return (
@@ -112,6 +114,15 @@ export function SystemNode({ data }: NodeProps) {
           </div>
         )}
       </div>
+
+      {/* Event indicator dots */}
+      {activeEventTypes && activeEventTypes.length > 0 && navigationState !== "unreachable" && (
+        <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 flex gap-1">
+          {activeEventTypes.map((type) => (
+            <EventDot key={type} eventType={type} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

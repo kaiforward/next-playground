@@ -297,7 +297,7 @@ export const processors: TickProcessor[] = [
 - All 58 existing tests pass, clean build
 
 ### Step 2: Regional economy, gateways, & batch writes ← CURRENT
-Full design doc: [`docs/economy-sim.md`](./economy-sim.md)
+Full design doc: [`docs/design/archive/economy-sim.md`](./economy-sim.md)
 
 **2a — Schema + Seed + Universe Generation:**
 - Add `Region` model, `regionId` and `isGateway` to `StarSystem`
@@ -326,7 +326,7 @@ Full design doc: [`docs/economy-sim.md`](./economy-sim.md)
 - Gateway stations become the points where inter-region economic pressure manifests
 - Trade flows between regions happen at a lower frequency (every full region cycle)
 - This creates the core gameplay loop: players discover and exploit regional price differences
-- **Extends `docs/economy-sim.md`** with NPC pressure parameters and inter-region flow model
+- **Extends `docs/design/archive/economy-sim.md`** with NPC pressure parameters and inter-region flow model
 
 ### Step 4: New processors (future PRs)
 - Production processor (dependsOn: economy, staggered via offset)
@@ -435,6 +435,6 @@ With independent transactions, region processing can be fully parallel — each 
 
 | Doc | Status | Covers |
 |---|---|---|
-| [`docs/economy-sim.md`](./economy-sim.md) | ✅ Complete | Regional model, gateways, two-tier navigation, mean-reverting formulas, batch writes, universe generation, map visualization |
-| `docs/economy-sim.md` expansion | Before Step 3 | Ambient NPC trade pressure parameters, inter-region trade flow model, price gradient propagation |
+| [`docs/design/archive/economy-sim.md`](./economy-sim.md) | ✅ Complete | Regional model, gateways, two-tier navigation, mean-reverting formulas, batch writes, universe generation, map visualization |
+| `docs/design/archive/economy-sim.md` expansion | Before Step 3 | Ambient NPC trade pressure parameters, inter-region trade flow model, price gradient propagation |
 | `docs/npc-agents.md` | Before Step 4 | Tier 2 NPC decision trees, mission framework, player interaction model |
