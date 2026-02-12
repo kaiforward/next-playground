@@ -25,6 +25,20 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   plague_risk: "amber",
 };
 
+/** Mapping from notification type to toast/badge accent color. */
+export const NOTIFICATION_BADGE_COLOR: Record<
+  string,
+  "red" | "amber" | "purple" | "green" | "blue" | "slate"
+> = {
+  war: "red",
+  plague: "amber",
+  trade_festival: "purple",
+  conflict_spillover: "red",
+  plague_risk: "amber",
+  ship_arrived: "blue",
+  cargo_lost: "red",
+};
+
 /** Mapping from region identity to Badge color prop. */
 export const REGION_IDENTITY_BADGE_COLOR: Record<
   RegionIdentity,

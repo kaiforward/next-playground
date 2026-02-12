@@ -282,15 +282,24 @@ describe("generateConnections", () => {
     expect(reachable.size).toBe(regions.length);
   });
 
-  it("gateway connections have higher fuel cost than intra-region average", () => {
-    const { connections } = makeFullUniverse();
-    const intraCosts = connections.filter((c) => !c.isGateway).map((c) => c.fuelCost);
-    const gatewayCosts = connections.filter((c) => c.isGateway).map((c) => c.fuelCost);
+  it("gateway connections apply the fuel multiplier to distance-based cost", () => {
+    const { systems, connections } = makeFullUniverse();
+    const gateways = connections.filter((c) => c.isGateway);
 
-    const avgIntra = intraCosts.reduce((a, b) => a + b, 0) / intraCosts.length;
-    const avgGateway = gatewayCosts.reduce((a, b) => a + b, 0) / gatewayCosts.length;
+    for (const conn of gateways) {
+      const from = systems.find((s) => s.index === conn.fromSystemIndex)!;
+      const to = systems.find((s) => s.index === conn.toSystemIndex)!;
+      const dist = distance(from.x, from.y, to.x, to.y);
 
-    expect(avgGateway).toBeGreaterThan(avgIntra);
+      // Expected: round((dist / scatterRadius) * baseFuel * multiplier, 1), min 1
+      const expected = Math.max(
+        1,
+        Math.round(
+          (dist / params.systemScatterRadius) * params.intraRegionBaseFuel * params.gatewayFuelMultiplier * 10,
+        ) / 10,
+      );
+      expect(conn.fuelCost).toBe(expected);
+    }
   });
 
   it("connections are bidirectional", () => {

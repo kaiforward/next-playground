@@ -60,12 +60,9 @@ No test file exists. This NPC code predates the tick pipeline and may be superse
 
 ## UI & Frontend
 
-### Map Layout Polish
+### Map Layout Polish ✅
 
-The two-level star map (region overview + system detail) is functional but systems within regions are visually cramped. Needs layout tuning:
-- System scatter radius and minimum distance adjustments (`lib/constants/universe-gen.ts`)
-- React Flow layout options (force-directed or manual spacing)
-- Region node sizing and padding
+System spacing tuned via `lib/constants/universe-gen.ts` constants (scatter radius, min distance). Inter-region navigation implemented — pathfinder and route preview work across gateway connections, region view highlights reachable/unreachable regions during navigation.
 
 ### Loading & Error State Strategy
 
@@ -75,9 +72,13 @@ All data fetching uses TanStack Query. Revisit loading/error handling:
 - Error boundaries wrapping game pages
 - Query boundaries for deferred fetches (modals, slide-over panels)
 
-### Toast/Notification System
+### Toast/Notification System ✅
 
-Error display currently uses `alert()` (blocking, unstyled). Replace with toast notifications (`sonner` or lightweight custom). Non-blocking, styled error/success messages.
+Unified notification system implemented:
+- **Server-side**: Event and ship-arrival processors emit enriched notifications with `{ message, type, refs }` — refs carry entity IDs/labels for linking (system, ship).
+- **Client-side**: `EventHistoryProvider` subscribes to `eventNotifications` (global) and `gameNotifications` (player-scoped) SSE channels. Ring buffer (100 entries), exposes `subscribe()` for toasts and `notifications` for history.
+- **Toasts**: `EventToastContainer` renders non-blocking toasts with accent colours, auto-dismiss, and clickable entity links (system → blue, ship → cyan).
+- **History**: `EventHistoryDialog` (modal) shows scrollable event log with relative timestamps, type badges, and entity links. Opened via bell icon in `GameNav`.
 
 ### Responsive Navigation
 

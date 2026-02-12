@@ -142,7 +142,7 @@ export const eventsProcessor: TickProcessor = {
   frequency: 1,
 
   async process(ctx): Promise<TickProcessorResult> {
-    const notifications: { message: string; type: string }[] = [];
+    const notifications: { message: string; type: string; refs: Record<string, { id: string; label: string }> }[] = [];
 
     // ── 1. Fetch all active events ────────────────────────────────
     const dbEvents = await ctx.tx.gameEvent.findMany({
@@ -185,7 +185,11 @@ export const eventsProcessor: TickProcessor = {
       if (result === "expire") {
         expiredIds.push(snap.id);
         const sysName = systemNameById.get(snap.id) ?? "Unknown";
-        notifications.push({ message: `${def.name} at ${sysName} has ended.`, type: snap.type });
+        notifications.push({
+          message: `${def.name} at ${sysName} has ended.`,
+          type: snap.type,
+          refs: snap.systemId ? { system: { id: snap.systemId, label: sysName } } : {},
+        });
         continue;
       }
 
@@ -232,6 +236,7 @@ export const eventsProcessor: TickProcessor = {
           notifications.push({
             message: nextPhase.notification.replace("{systemName}", sysName),
             type: snap.type,
+            refs: snap.systemId ? { system: { id: snap.systemId, label: sysName } } : {},
           });
         }
 
@@ -286,6 +291,7 @@ export const eventsProcessor: TickProcessor = {
               notifications.push({
                 message: childPhase.notification.replace("{systemName}", childSysName),
                 type: decision.type,
+                refs: { system: { id: decision.systemId, label: childSysName } },
               });
             }
 
@@ -393,6 +399,7 @@ export const eventsProcessor: TickProcessor = {
           notifications.push({
             message: firstPhase.notification.replace("{systemName}", sysName),
             type: decision.type,
+            refs: { system: { id: decision.systemId, label: sysName } },
           });
         }
 
