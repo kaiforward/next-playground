@@ -58,7 +58,7 @@ export default function ShipDetailPage({
         <h1 className="text-2xl font-bold">Ship Details</h1>
       </div>
 
-      <ShipDetailPanel ship={ship} currentTick={currentTick} regions={universeData?.regions} />
+      <ShipDetailPanel ship={ship} currentTick={currentTick} regions={universeData?.regions} playerCredits={fleet.credits} />
     </PageContainer>
   );
 }
