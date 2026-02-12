@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 export default function MapPage() {
   const searchParams = useSearchParams();
   const initialShipId = searchParams.get("shipId") ?? undefined;
+  const initialSystemId = searchParams.get("systemId") ?? undefined;
 
   const { data, loading: universeLoading } = useUniverse();
   const { fleet, loading: fleetLoading } = useFleet();
@@ -58,6 +59,7 @@ export default function MapPage() {
         currentTick={currentTick}
         onNavigateShip={handleNavigateShip}
         initialSelectedShipId={initialShipId}
+        initialSelectedSystemId={initialSystemId}
         events={events}
       />
     </div>

@@ -33,7 +33,37 @@ interface StarMapProps {
   currentTick: number;
   onNavigateShip: (shipId: string, route: string[]) => Promise<void>;
   initialSelectedShipId?: string;
+  initialSelectedSystemId?: string;
   events?: ActiveEvent[];
+}
+
+// ── Session storage helpers ─────────────────────────────────────────
+const SESSION_KEY = "stellarTrader:mapState";
+
+interface MapSessionState {
+  regionId?: string;
+  selectedSystemId?: string;
+}
+
+function getMapSessionState(): MapSessionState | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as MapSessionState) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setMapSessionState(state: MapSessionState | null): void {
+  try {
+    if (state) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
+    } else {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+  } catch {
+    // SSR or storage full — ignore
+  }
 }
 
 type MapViewLevel =
@@ -58,9 +88,9 @@ export function StarMap({
   currentTick,
   onNavigateShip,
   initialSelectedShipId,
+  initialSelectedSystemId,
   events = [],
 }: StarMapProps) {
-  const [selectedSystem, setSelectedSystem] = useState<StarSystemInfo | null>(null);
   const rfInstance = useRef<ReactFlowInstance | null>(null);
 
   // ── Region map (stable memo) ────────────────────────────────────
@@ -74,22 +104,51 @@ export function StarMap({
     [universe.regions],
   );
 
-  // ── Auto-focus: start in player's region or region overview ─────
-  const initialViewLevel = useMemo((): MapViewLevel => {
+  // ── Mount priority chain: query param > session storage > ship fallback ─
+  const initialState = useMemo((): { viewLevel: MapViewLevel; selectedSystem: StarSystemInfo | null } => {
+    // 1. Query param — highest priority
+    if (initialSelectedSystemId) {
+      const system = universe.systems.find((s) => s.id === initialSelectedSystemId);
+      if (system) {
+        return {
+          viewLevel: { level: "system", regionId: system.regionId },
+          selectedSystem: system,
+        };
+      }
+    }
+
+    // 2. Session storage — middle priority
+    const session = getMapSessionState();
+    if (session?.regionId) {
+      const region = universe.regions.find((r) => r.id === session.regionId);
+      if (region) {
+        const selectedSystem = session.selectedSystemId
+          ? universe.systems.find((s) => s.id === session.selectedSystemId) ?? null
+          : null;
+        return {
+          viewLevel: { level: "system", regionId: session.regionId },
+          selectedSystem,
+        };
+      }
+    }
+
+    // 3. Ship-based fallback — lowest priority
     const dockedShip = initialSelectedShipId
       ? ships.find((s) => s.id === initialSelectedShipId && s.status === "docked")
       : ships.find((s) => s.status === "docked");
 
     if (dockedShip) {
       const regionId = systemRegionMap.get(dockedShip.systemId);
-      if (regionId) return { level: "system", regionId };
+      if (regionId) return { viewLevel: { level: "system", regionId }, selectedSystem: null };
     }
-    return { level: "region" };
+
+    return { viewLevel: { level: "region" }, selectedSystem: null };
     // Only compute on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [viewLevel, setViewLevel] = useState<MapViewLevel>(initialViewLevel);
+  const [viewLevel, setViewLevel] = useState<MapViewLevel>(initialState.viewLevel);
+  const [selectedSystem, setSelectedSystem] = useState<StarSystemInfo | null>(initialState.selectedSystem);
 
   // ── All connections as ConnectionInfo (for cross-region nav) ────
   const allConnections = useMemo((): ConnectionInfo[] =>
@@ -460,6 +519,7 @@ export function StarMap({
           return;
         }
         setViewLevel({ level: "system", regionId: node.id });
+        setMapSessionState({ regionId: node.id });
         return;
       }
 
@@ -485,6 +545,7 @@ export function StarMap({
       const system = activeRegionSystems.find((s) => s.id === node.id);
       if (system) {
         setSelectedSystem(system);
+        setMapSessionState({ regionId: viewLevel.regionId, selectedSystemId: system.id });
       }
     },
     [viewLevel, activeRegionSystems, mode, navigation, isNavigationActive, regionNavigationStates],
@@ -492,7 +553,10 @@ export function StarMap({
 
   const handleClose = useCallback(() => {
     setSelectedSystem(null);
-  }, []);
+    if (viewLevel.level === "system") {
+      setMapSessionState({ regionId: viewLevel.regionId });
+    }
+  }, [viewLevel]);
 
   const handleSelectShipForNavigation = useCallback(
     (ship: ShipState) => {
@@ -505,11 +569,13 @@ export function StarMap({
   const handleBackToRegions = useCallback(() => {
     setSelectedSystem(null);
     setViewLevel({ level: "region" });
+    setMapSessionState(null);
   }, []);
 
   const handleJumpToRegion = useCallback((regionId: string) => {
     setSelectedSystem(null);
     setViewLevel({ level: "system", regionId });
+    setMapSessionState({ regionId });
   }, []);
 
   const handleInit = useCallback((instance: ReactFlowInstance) => {

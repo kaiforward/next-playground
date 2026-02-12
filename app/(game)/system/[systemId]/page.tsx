@@ -57,7 +57,7 @@ export default function SystemViewPage({
     <PageContainer size="md">
       <div className="flex items-center gap-3 mb-6">
         <Link
-          href="/map"
+          href={`/map?systemId=${systemId}`}
           className="text-white/40 hover:text-white transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">

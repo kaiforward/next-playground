@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (195 tests, engine + API)
+- `npx vitest run` — Run unit tests (204 tests, engine + API)
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 

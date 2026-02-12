@@ -14,6 +14,8 @@ import type { TradeType } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
 import { FormError } from "@/components/form/form-error";
 import { PageContainer } from "@/components/ui/page-container";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function TradePage() {
   const searchParams = useSearchParams();
@@ -110,9 +112,21 @@ export default function TradePage() {
   return (
     <PageContainer>
       <h1 className="text-2xl font-bold mb-2">Station Market</h1>
-      <p className="text-white/60 mb-6">
-        Trading at {ship.system.name} with <span className="text-white">{ship.name}</span>
+      <p className="text-white/60 mb-1">
+        Trading at{" "}
+        <Link href={`/system/${systemId}`} className="text-white/80 hover:text-white underline underline-offset-2 transition-colors">
+          {ship.system.name}
+        </Link>{" "}
+        with{" "}
+        <Link href={`/ship/${shipId}`} className="text-white hover:text-blue-300 underline underline-offset-2 transition-colors">
+          {ship.name}
+        </Link>
       </p>
+      <div className="mb-6">
+        <Button href={`/map?systemId=${systemId}`} variant="pill" color="cyan" size="xs">
+          View on Map
+        </Button>
+      </div>
 
       <div className="mb-6">
         <FormError message={tradeError} variant="banner" onDismiss={() => setTradeError(null)} />
