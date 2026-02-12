@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (185 tests, engine only)
+- `npx vitest run` — Run unit tests (195 tests, engine + API)
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 
@@ -23,7 +23,7 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 - `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, NPC, events, danger). Zero DB dependency.
 - `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
 - `lib/types/` — Shared types (`game.ts`, `api.ts`)
-- `lib/constants/` — Goods, universe, economy, and event definitions
+- `lib/constants/` — Goods, universe, economy, event, and rate-limit definitions
 - `lib/tick/` — Tick engine, processor pipeline, registry. Processors: ship-arrivals (docking + danger + gameNotifications), events (lifecycle + spread + enriched refs), economy (simulation + modifiers).
 - `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation, events). Called by route handlers and future server components.
 - `lib/query/` — TanStack Query setup (client factory, query key factory, typed apiFetch helper)
@@ -47,12 +47,13 @@ Reference docs (how things work now):
 - `docs/economy-engine.md` — Engine functions, API routes, test coverage
 - `docs/star-map.md` — React Flow map, custom nodes, data flow
 - `docs/trading-ui.md` — Market table, trade forms, charts, dashboard components
+- `docs/rate-limiting.md` — Rate-limit tiers, sliding window store, route integration
 
 Design docs (plans and backlog):
 
 - `docs/design/event-catalog.md` — Implemented and planned event definitions (arcs, shocks, ideas)
 - `docs/design/simulation-enhancements.md` — Future mechanics requiring new engine capabilities
-- `docs/design/deferred-improvements.md` — Tracked backlog of deferred work
+- `docs/design/BACKLOG.md` — Prioritized backlog (sized, grouped by readiness). Delete items when shipped.
 - `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system)
 
 ## Design Principles

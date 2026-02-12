@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionPlayerId } from "@/lib/auth/get-player";
 import { parseJsonBody } from "@/lib/api/parse-json";
 import { executeTrade } from "@/lib/services/trade";
+import { rateLimit } from "@/lib/api/rate-limit";
+import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
 import type { ShipTradeRequest, ShipTradeResponse } from "@/lib/types/api";
 
 export async function POST(
@@ -26,6 +28,12 @@ export async function POST(
         { status: 404 },
       );
     }
+
+    const mutationLimit = rateLimit({
+      key: `mutation:${playerId}`,
+      tier: RATE_LIMIT_TIERS.mutation,
+    });
+    if (mutationLimit) return mutationLimit;
 
     const result = await executeTrade(playerId, shipId, body);
 

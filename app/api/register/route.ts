@@ -2,8 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth/credentials";
 import { registerSchema } from "@/lib/schemas/auth";
+import { rateLimit, getClientIp } from "@/lib/api/rate-limit";
+import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
 
 export async function POST(request: Request) {
+  const limited = rateLimit({
+    key: `auth:${getClientIp(request)}`,
+    tier: RATE_LIMIT_TIERS.auth,
+  });
+  if (limited) return limited;
+
   try {
     const body = await request.json();
 
