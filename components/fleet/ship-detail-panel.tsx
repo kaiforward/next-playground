@@ -9,14 +9,16 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatList, StatRow } from "@/components/ui/stat-row";
 import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
+import { RefuelPanel } from "./refuel-panel";
 
 interface ShipDetailPanelProps {
   ship: ShipState;
   currentTick: number;
   regions?: RegionInfo[];
+  playerCredits?: number;
 }
 
-export function ShipDetailPanel({ ship, currentTick, regions }: ShipDetailPanelProps) {
+export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: ShipDetailPanelProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
@@ -71,6 +73,11 @@ export function ShipDetailPanel({ ship, currentTick, regions }: ShipDetailPanelP
           />
         </CardContent>
       </Card>
+
+      {/* Refuel panel — visible when docked with room in tank */}
+      {isDocked && ship.fuel < ship.maxFuel && playerCredits != null && (
+        <RefuelPanel ship={ship} playerCredits={playerCredits} />
+      )}
 
       {/* Cargo hold card */}
       <Card variant="bordered" padding="md">

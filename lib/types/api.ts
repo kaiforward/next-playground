@@ -65,6 +65,16 @@ export interface ShipNavigateRequest {
   route: string[]; // ordered [origin, ...hops, destination]
 }
 
+export interface ShipRefuelRequest {
+  amount: number;
+}
+
+export interface ShipRefuelResult {
+  ship: ShipState;
+  creditSpent: number;
+}
+export type ShipRefuelResponse = ApiResponse<ShipRefuelResult>;
+
 export interface RegisterRequest {
   name: string;
   email: string;
