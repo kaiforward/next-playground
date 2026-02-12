@@ -78,6 +78,7 @@ model Region {
   x        Float
   y        Float
   systems  StarSystem[]
+  events   GameEvent[]
 }
 
 model Player {
@@ -142,6 +143,7 @@ model StarSystem {
   incomingShips   Ship[]             @relation("ShipDestination")
   connectionsFrom SystemConnection[] @relation("FromSystem")
   connectionsTo   SystemConnection[] @relation("ToSystem")
+  events          GameEvent[]
 
   @@index([regionId])
 }
@@ -207,4 +209,47 @@ model TradeHistory {
   good    Good    @relation(fields: [goodId], references: [id])
 
   @@index([stationId])
+}
+
+// ── Events ──────────────────────────────────────────────────────
+
+model GameEvent {
+  id             String  @id @default(cuid())
+  type           String                        // Event definition key: "war", "plague", etc.
+  phase          String                        // Current phase name: "tensions", "active", etc.
+  systemId       String?                       // Target system (null for region-level events)
+  regionId       String?                       // Target region
+  startTick      Int                           // Tick when event was created
+  phaseStartTick Int                           // Tick when current phase began
+  phaseDuration  Int                           // Ticks until next phase transition
+  severity       Float   @default(1.0)         // Intensity multiplier (spread events are weaker)
+  sourceEventId  String?                       // Parent event (for spread events)
+  metadata       String  @default("{}")        // JSON: event-specific data
+
+  system       StarSystem?    @relation(fields: [systemId], references: [id])
+  region       Region?        @relation(fields: [regionId], references: [id])
+  sourceEvent  GameEvent?     @relation("EventSpread", fields: [sourceEventId], references: [id])
+  spreadEvents GameEvent[]    @relation("EventSpread")
+  modifiers    EventModifier[]
+
+  @@index([type])
+  @@index([systemId])
+  @@index([regionId])
+}
+
+model EventModifier {
+  id         String  @id @default(cuid())
+  eventId    String
+  domain     String                    // "economy", "navigation", "combat", "reputation"
+  type       String                    // "equilibrium_shift", "rate_multiplier", "reversion_dampening"
+  targetType String                    // "system", "region"
+  targetId   String?                   // systemId or regionId
+  goodId     String?                   // Specific good key, or null for all goods
+  parameter  String                    // "supply_target", "demand_target", "production_rate", etc.
+  value      Float                     // Modifier value
+
+  event GameEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([domain, targetType, targetId])
+  @@index([eventId])
 }

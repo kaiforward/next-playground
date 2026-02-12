@@ -14,10 +14,10 @@ The current mean-reverting drift model keeps prices stable but predictable — o
 - **Supply chain dependencies** — Production chains where goods are inputs to other goods (e.g., ore + fuel → ship_parts). Disruptions cascade through the chain, creating emergent price volatility.
 - **Cyclical demand** — Shifting demand patterns over long timescales so "best routes" rotate rather than being permanently solved.
 - **Reversion rate tuning** — Current 5% reversion may be too aggressive. Slower reversion means player trades leave a bigger, longer-lasting mark.
-- **NPC trade pressure (Tier 1)** — Statistical trade flows (not individual agents) that create intra-region arbitrage and inter-region flows through gateways. See `docs/tick-engine-redesign.md` Step 3 for the initial sketch. Deferred because the current model needs disruption mechanics first — NPC trade would accelerate price flattening, making the predictability problem worse.
+- **NPC trade pressure (Tier 1)** — Statistical trade flows (not individual agents) that create intra-region arbitrage and inter-region flows through gateways. See `docs/design/archive/tick-engine-redesign.md` Step 3 for the initial sketch. Deferred because the current model needs disruption mechanics first — NPC trade would accelerate price flattening, making the predictability problem worse.
 - **Inter-region trade flows** — Goods flowing between regions via gateway stations based on regional surplus/deficit. Creates visible trade volume at gateways and regional price gradients. Depends on the economy redesign to determine flow mechanics.
 
-Design docs to create/expand: `docs/economy-sim.md` (NPC pressure, inter-region flows, disruption model).
+Design docs to create/expand: `docs/design/archive/economy-sim.md` (NPC pressure, inter-region flows, disruption model).
 
 ### New Tick Processors
 
@@ -27,9 +27,20 @@ The pipeline supports adding processors as one file + one registry line. Planned
 - **Production** — Supply chain simulation. `dependsOn: ["economy"]`, staggered via `offset`. Requires supply chain design.
 - **NPC agents (Tier 2)** — Distinct gameplay NPCs with decision trees, missions, rivals. Separate from Tier 1 statistical pressure. Low frequency, only simulates NPCs relevant to active players. Design doc needed: `docs/npc-agents.md`.
 
+### Events Processor Query Optimization (PostgreSQL)
+
+The events processor re-fetches all `GameEvent` rows 3 times per tick: initial load, post-transition (for spread evaluation), and post-expiry (for spawn caps). On SQLite this is microseconds (~15 rows, in-process). On PostgreSQL each is a network roundtrip.
+
+Similarly, spread event creation queries system names individually (N+1).
+
+Options at migration time:
+- **In-memory event store** — Load events once on startup, process lifecycle/spread/spawn in-memory, batch-write changes. DB becomes a persistence layer. Best performance, biggest change.
+- **Split into sub-processors** — `event-lifecycle`, `event-spread`, `event-spawn` each fetch once with `dependsOn` ordering. Cleaner separation, same query count but simpler per-processor.
+- **In-memory bookkeeping** — Fetch once, track mutations in an array. Fragile (state drift risk), not recommended.
+
 ### Batch Writes (PostgreSQL)
 
-Economy processor currently uses individual Prisma `update` calls inside a shared transaction — fast enough on SQLite at ~150 rows per region tick. True batch SQL (`UPDATE...FROM VALUES` with parameterized queries) deferred to the PostgreSQL migration. See `docs/tick-engine-redesign.md` Step 5.
+Economy processor currently uses individual Prisma `update` calls inside a shared transaction — fast enough on SQLite at ~150 rows per region tick. True batch SQL (`UPDATE...FROM VALUES` with parameterized queries) deferred to the PostgreSQL migration. See `docs/design/archive/tick-engine-redesign.md` Step 5.
 
 ### PostgreSQL Migration
 
@@ -39,13 +50,13 @@ Swap Prisma adapter from better-sqlite3 to pg. Enables:
 - Region processors running fully parallel across workers
 - Parameterized batch writes
 
-See `docs/tick-engine-redesign.md` Step 5.
+See `docs/design/archive/tick-engine-redesign.md` Step 5.
 
 ## Missing Test Coverage
 
 ### `npc.ts` (lib/engine/npc.ts)
 
-No test file exists. This NPC code predates the tick pipeline and may be superseded by the economy redesign (Tier 1/Tier 2 NPC architecture in `docs/tick-engine-redesign.md`). Add tests if the code is retained; otherwise remove the module when it's replaced.
+No test file exists. This NPC code predates the tick pipeline and may be superseded by the economy redesign (Tier 1/Tier 2 NPC architecture in `docs/design/archive/tick-engine-redesign.md`). Add tests if the code is retained; otherwise remove the module when it's replaced.
 
 ## UI & Frontend
 
@@ -88,4 +99,4 @@ Implemented via reusable `Dialog` component (`components/ui/dialog.tsx`) wrappin
 
 ### Curated Universe Names
 
-Current universe generation uses generic procedural names ("Forge-7"). Add curated name pools or hybrid naming (procedural placement + curated identity) for more flavour. See `docs/economy-sim.md` Universe Generation section.
+Current universe generation uses generic procedural names ("Forge-7"). Add curated name pools or hybrid naming (procedural placement + curated identity) for more flavour. See `docs/design/archive/economy-sim.md` Universe Generation section.

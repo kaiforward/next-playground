@@ -7,6 +7,7 @@ import type {
   MarketEntry,
   TradeHistoryEntry,
   TradeType,
+  ActiveEvent,
 } from "./game";
 
 // ── Responses ────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ export type SystemDetailResponse = ApiResponse<
 >;
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
+export type EventsResponse = ApiResponse<ActiveEvent[]>;
 
 export interface ShipTradeResult {
   ship: ShipState;

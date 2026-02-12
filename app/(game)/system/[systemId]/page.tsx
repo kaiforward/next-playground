@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useMarket } from "@/lib/hooks/use-market";
+import { useEvents } from "@/lib/hooks/use-events";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
@@ -21,6 +23,17 @@ export default function SystemViewPage({
   const { fleet, loading: fleetLoading } = useFleet();
   const { data: universeData } = useUniverse();
   const { market, loading: marketLoading } = useMarket(systemId);
+  const { events } = useEvents();
+
+  const systemEvents = useMemo(
+    () => events.filter((e) => e.systemId === systemId),
+    [events, systemId],
+  );
+
+  const topMarket = useMemo(
+    () => [...market].sort((a, b) => b.currentPrice - a.currentPrice).slice(0, 6),
+    [market],
+  );
 
   if (fleetLoading || !fleet) {
     return (
@@ -38,11 +51,6 @@ export default function SystemViewPage({
 
   const shipsHere = fleet.ships.filter(
     (s) => s.status === "docked" && s.systemId === systemId
-  );
-
-  const topMarket = useMemo(
-    () => [...market].sort((a, b) => b.currentPrice - a.currentPrice).slice(0, 6),
-    [market],
   );
 
   return (
@@ -79,6 +87,14 @@ export default function SystemViewPage({
 
       {systemInfo?.description && (
         <p className="text-white/60 mb-6">{systemInfo.description}</p>
+      )}
+
+      {systemEvents.length > 0 && (
+        <Card variant="bordered" padding="md" className="mb-6">
+          <CardContent>
+            <ActiveEventsSection events={systemEvents} />
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

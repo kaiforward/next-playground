@@ -4,7 +4,8 @@ import Link from "next/link";
 import { tv } from "tailwind-variants";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import type { StarSystemInfo, ShipState, EconomyType } from "@/lib/types/game";
+import type { StarSystemInfo, ShipState, EconomyType, ActiveEvent } from "@/lib/types/game";
+import { ActiveEventsSection } from "@/components/events/active-events-section";
 
 interface GatewayTarget {
   regionId: string;
@@ -17,6 +18,7 @@ interface SystemDetailPanelProps {
   currentTick: number;
   regionName?: string;
   gatewayTargetRegions?: GatewayTarget[];
+  activeEvents?: ActiveEvent[];
   onSelectShipForNavigation?: (ship: ShipState) => void;
   onJumpToRegion?: (regionId: string) => void;
   onClose: () => void;
@@ -41,6 +43,7 @@ export function SystemDetailPanel({
   currentTick,
   regionName,
   gatewayTargetRegions,
+  activeEvents,
   onSelectShipForNavigation,
   onJumpToRegion,
   onClose,
@@ -134,6 +137,9 @@ export function SystemDetailPanel({
             </p>
           </div>
         )}
+
+        {/* Active events */}
+        {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
 
         {/* Ships at this system */}
         <div>

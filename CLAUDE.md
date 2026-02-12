@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (58 tests, engine only)
+- `npx vitest run` — Run unit tests (185 tests, engine only)
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 
@@ -20,25 +20,26 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 
 ## Project Structure
 
-- `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, NPC). Zero DB dependency.
+- `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, NPC, events, danger). Zero DB dependency.
 - `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
 - `lib/types/` — Shared types (`game.ts`, `api.ts`)
-- `lib/constants/` — Goods and universe definitions
-- `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation). Called by route handlers and future server components.
+- `lib/constants/` — Goods, universe, economy, and event definitions
+- `lib/tick/` — Tick engine, processor pipeline, registry. Processors: ship-arrivals (docking + danger), events (lifecycle + spread), economy (simulation + modifiers).
+- `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation, events). Called by route handlers and future server components.
 - `lib/query/` — TanStack Query setup (client factory, query key factory, typed apiFetch helper)
-- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-game-world, use-universe, use-market, use-trade-history), mutation hooks (use-trade-mutation, use-navigate-mutation), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state)
-- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, systems, market, history)
+- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-game-world, use-universe, use-market, use-trade-history, use-events), mutation hooks (use-trade-mutation, use-navigate-mutation), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state)
+- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, systems, market, history, events)
 - `app/(game)/` — Dashboard, map, trade, ship/[shipId], system/[systemId] (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
 - `components/ui/` — Primitives (Button, Card, Badge, ProgressBar, PageContainer, StatRow)
 - `components/form/` — Form controls (TextInput, NumberInput, FormError)
 - `components/providers/` — Context providers (session-provider, query-provider)
-- `components/fleet/`, `map/`, `trade/`, `dashboard/` — Feature components
+- `components/fleet/`, `map/`, `trade/`, `dashboard/`, `events/` — Feature components
 - `prisma/` — Schema and seed script
 
 ## Docs
 
-Read these when working on related features:
+Reference docs (how things work now):
 
 - `docs/SPEC.md` — Full game spec, MVP scope, and future enhancement ideas
 - `docs/data-model.md` — Prisma schema, types, constants, seed details
@@ -46,6 +47,13 @@ Read these when working on related features:
 - `docs/economy-engine.md` — Engine functions, API routes, test coverage
 - `docs/star-map.md` — React Flow map, custom nodes, data flow
 - `docs/trading-ui.md` — Market table, trade forms, charts, dashboard components
+
+Design docs (plans and backlog):
+
+- `docs/design/event-catalog.md` — Implemented and planned event definitions (arcs, shocks, ideas)
+- `docs/design/simulation-enhancements.md` — Future mechanics requiring new engine capabilities
+- `docs/design/deferred-improvements.md` — Tracked backlog of deferred work
+- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system)
 
 ## Design Principles
 

@@ -224,6 +224,125 @@ describe("simulateEconomyTick", () => {
   });
 });
 
+// ── Modifier integration ────────────────────────────────────────
+
+describe("modifier integration", () => {
+  it("shifts supply target upward via supplyTargetShift", () => {
+    // Neutral entry: base target supply=60. Shift +40 → effective target 100.
+    // Supply at 60, reversion pulls toward 100: (100-60)*0.05 = +2
+    const entry = makeEntry({ supply: 60, demand: 60, supplyTargetShift: 40 });
+    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
+    // Without shift: (60-60)*0.05 = 0, supply stays at 60
+    // With shift: (100-60)*0.05 = +2, supply becomes 62
+    expect(result.supply).toBe(62);
+  });
+
+  it("shifts demand target upward via demandTargetShift", () => {
+    const entry = makeEntry({ supply: 60, demand: 60, demandTargetShift: 80 });
+    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
+    // demand target: 60 + 80 = 140. reversion: (140-60)*0.05 = +4 → 64
+    expect(result.demand).toBe(64);
+  });
+
+  it("scales production via productionMult", () => {
+    // Producer at equilibrium: supply=120, target=120
+    // productionMult=0.5 → effective production = 3 * 0.5 = 1.5
+    const entry = makeEntry({
+      supply: 120, demand: 40,
+      produces: ["ore"],
+      productionMult: 0.5,
+    });
+    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
+    // supply: 120 + 0 reversion + 0 noise + 1.5 production = 121.5 → clamped/rounded?
+    // driftValue rounds: clamp(round(120 + 0 + 0), 5, 200) = 120, then + 1.5 = 121.5
+    // But supply is not rounded after production — it's clamped. Let's check.
+    // Actually: driftValue returns Math.round(120 + 0 + 0) = 120
+    // then supply = clamp(120 + 1.5, 5, 200) = 121.5
+    expect(result.supply).toBe(121.5);
+    // With full production (no mult): 120 + 3 = 123
+    const [full] = simulateEconomyTick(
+      [makeEntry({ supply: 120, demand: 40, produces: ["ore"] })],
+      defaultParams,
+      zeroNoiseRng,
+    );
+    expect(full.supply).toBe(123);
+    expect(result.supply).toBeLessThan(full.supply);
+  });
+
+  it("scales consumption via consumptionMult", () => {
+    const entry = makeEntry({
+      supply: 40, demand: 120,
+      consumes: ["ore"],
+      consumptionMult: 0.5,
+    });
+    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
+    // consumption = 2 * 0.5 = 1. supply: 40 - 1 = 39
+    expect(result.supply).toBe(39);
+    // Without mult: 40 - 2 = 38
+    const [full] = simulateEconomyTick(
+      [makeEntry({ supply: 40, demand: 120, consumes: ["ore"] })],
+      defaultParams,
+      zeroNoiseRng,
+    );
+    expect(full.supply).toBe(38);
+    expect(result.supply).toBeGreaterThan(full.supply);
+  });
+
+  it("dampens reversion via reversionMult", () => {
+    // Supply=100, target=60. Normal reversion: (60-100)*0.05 = -2 → 98
+    // With reversionMult=0.5: (60-100)*(0.05*0.5) = -1 → 99
+    const entry = makeEntry({ supply: 100, demand: 60, reversionMult: 0.5 });
+    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
+    expect(result.supply).toBe(99);
+
+    // Without dampening: supply should be 98
+    const [nodamp] = simulateEconomyTick(
+      [makeEntry({ supply: 100, demand: 60 })],
+      defaultParams,
+      zeroNoiseRng,
+    );
+    expect(nodamp.supply).toBe(98);
+  });
+
+  it("defaults produce identical results to no modifiers", () => {
+    const plain = makeEntry({ supply: 80, demand: 50, produces: ["ore"] });
+    const withDefaults = makeEntry({
+      supply: 80, demand: 50, produces: ["ore"],
+      supplyTargetShift: 0,
+      demandTargetShift: 0,
+      productionMult: 1.0,
+      consumptionMult: 1.0,
+      reversionMult: 1.0,
+    });
+    const rng1 = sequenceRng([0.3, 0.7]);
+    const rng2 = sequenceRng([0.3, 0.7]);
+    const [r1] = simulateEconomyTick([plain], defaultParams, rng1);
+    const [r2] = simulateEconomyTick([withDefaults], defaultParams, rng2);
+    expect(r1.supply).toBe(r2.supply);
+    expect(r1.demand).toBe(r2.demand);
+  });
+
+  it("combined modifiers converge toward shifted equilibrium", () => {
+    // Large demand shift + dampened reversion: run many ticks
+    let entries = [makeEntry({
+      supply: 60, demand: 60,
+      demandTargetShift: 60, // target demand: 60 + 60 = 120
+      reversionMult: 0.5,
+    })];
+    for (let i = 0; i < 200; i++) {
+      entries = simulateEconomyTick(entries, defaultParams, zeroNoiseRng);
+      // Re-apply modifiers each tick (they persist)
+      entries = entries.map((e) => ({
+        ...e,
+        demandTargetShift: 60,
+        reversionMult: 0.5,
+      }));
+    }
+    // Demand should have converged toward 120
+    expect(entries[0].demand).toBeGreaterThan(100);
+  });
+});
+
 // ── processShipArrivals (unchanged) ─────────────────────────────
 
 describe("processShipArrivals", () => {
