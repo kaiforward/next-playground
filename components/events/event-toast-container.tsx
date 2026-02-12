@@ -1,33 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { tv } from "tailwind-variants";
-import { useTickContext } from "@/lib/hooks/use-tick-context";
-import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
+import { useEventHistory } from "@/components/providers/event-history-provider";
+import { NOTIFICATION_BADGE_COLOR } from "@/lib/constants/ui";
+import type { GameNotification, EntityRef } from "@/lib/types/game";
 
-type AccentColor = "red" | "amber" | "purple";
+type AccentColor = "red" | "amber" | "purple" | "blue" | "green" | "slate";
 
 interface Toast {
   id: number;
   message: string;
   accentColor: AccentColor;
-}
-
-interface EventNotification {
-  message: string;
-  type: string;
+  refs: Partial<Record<string, EntityRef>>;
 }
 
 const DISMISS_MS = 8_000;
 const MAX_VISIBLE = 5;
 
-const ACCENT_MAP: Record<string, AccentColor> = {
-  red: "red",
-  amber: "amber",
-};
-
-function toAccentColor(badgeColor: string): AccentColor {
-  return ACCENT_MAP[badgeColor] ?? "purple";
+function toAccentColor(type: string): AccentColor {
+  return NOTIFICATION_BADGE_COLOR[type] ?? "purple";
 }
 
 const toastAccent = tv({
@@ -37,14 +30,15 @@ const toastAccent = tv({
       red: "border-l-red-500",
       amber: "border-l-amber-500",
       purple: "border-l-purple-500",
+      blue: "border-l-blue-500",
+      green: "border-l-green-500",
+      slate: "border-l-slate-500",
     },
   },
 });
 
-let nextId = 0;
-
 export function EventToastContainer() {
-  const { subscribeToEvent } = useTickContext();
+  const { subscribe } = useEventHistory();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -58,35 +52,30 @@ export function EventToastContainer() {
   }, []);
 
   const addToast = useCallback(
-    (message: string, type: string) => {
-      const id = nextId++;
-      const accentColor = toAccentColor(EVENT_TYPE_BADGE_COLOR[type]);
+    (notification: GameNotification) => {
+      const accentColor = toAccentColor(notification.type);
 
       setToasts((prev) => {
-        const next = [...prev, { id, message, accentColor }];
-        // Trim oldest when over limit
+        const next = [...prev, {
+          id: notification.id,
+          message: notification.message,
+          accentColor,
+          refs: notification.refs,
+        }];
         return next.length > MAX_VISIBLE ? next.slice(next.length - MAX_VISIBLE) : next;
       });
 
       const timer = setTimeout(() => {
-        dismissToast(id);
+        dismissToast(notification.id);
       }, DISMISS_MS);
-      timersRef.current.set(id, timer);
+      timersRef.current.set(notification.id, timer);
     },
     [dismissToast],
   );
 
   useEffect(() => {
-    const unsub = subscribeToEvent("eventNotifications", (events: unknown[]) => {
-      for (const evt of events) {
-        const n = evt as EventNotification;
-        if (n.message) {
-          addToast(n.message, n.type);
-        }
-      }
-    });
-    return unsub;
-  }, [subscribeToEvent, addToast]);
+    return subscribe(addToast);
+  }, [subscribe, addToast]);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -103,7 +92,9 @@ export function EventToastContainer() {
     <div role="status" aria-live="polite" className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2">
       {toasts.map((toast) => (
         <div key={toast.id} className={toastAccent({ color: toast.accentColor })}>
-          {toast.message}
+          <div>{toast.message}</div>
+          {/* Entity links */}
+          <EntityLinks refs={toast.refs} />
           <button
             onClick={() => dismissToast(toast.id)}
             className="absolute top-1.5 right-1.5 text-gray-500 hover:text-white transition-colors p-0.5"
@@ -115,6 +106,43 @@ export function EventToastContainer() {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Renders clickable links for entity refs (system, ship). */
+function EntityLinks({ refs }: { refs: Partial<Record<string, EntityRef>> }) {
+  const links: React.ReactNode[] = [];
+
+  if (refs.system) {
+    links.push(
+      <Link
+        key="system"
+        href={`/system/${refs.system.id}`}
+        className="text-blue-400 hover:text-blue-300 transition-colors"
+      >
+        {refs.system.label}
+      </Link>,
+    );
+  }
+
+  if (refs.ship) {
+    links.push(
+      <Link
+        key="ship"
+        href={`/ship/${refs.ship.id}`}
+        className="text-cyan-400 hover:text-cyan-300 transition-colors"
+      >
+        {refs.ship.label}
+      </Link>,
+    );
+  }
+
+  if (links.length === 0) return null;
+
+  return (
+    <div className="flex gap-2 mt-1 text-xs">
+      {links}
     </div>
   );
 }

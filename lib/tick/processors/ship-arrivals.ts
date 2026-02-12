@@ -4,7 +4,9 @@ import type { TickProcessor, TickProcessorResult } from "../types";
 
 interface ArrivedShip {
   shipId: string;
+  shipName: string;
   systemId: string;
+  destName: string;
   playerId: string;
   cargoLost?: CargoLossEntry[];
 }
@@ -21,9 +23,11 @@ export const shipArrivalsProcessor: TickProcessor = {
       },
       select: {
         id: true,
+        name: true,
         destinationSystemId: true,
         playerId: true,
         cargo: { select: { id: true, goodId: true, quantity: true } },
+        destination: { select: { name: true } },
       },
     });
 
@@ -119,7 +123,9 @@ export const shipArrivalsProcessor: TickProcessor = {
 
       arrived.push({
         shipId: ship.id,
+        shipName: ship.name,
         systemId: ship.destinationSystemId,
+        destName: ship.destination?.name ?? "Unknown",
         playerId: ship.playerId,
         cargoLost,
       });
@@ -139,6 +145,26 @@ export const shipArrivalsProcessor: TickProcessor = {
         ];
       }
 
+      // Emit gameNotifications for the notification system
+      const notifications = existing["gameNotifications"] ?? [];
+      const shipRef = { id: a.shipId, label: a.shipName };
+      const systemRef = { id: a.systemId, label: a.destName };
+
+      notifications.push({
+        message: `${a.shipName} arrived at ${a.destName}`,
+        type: "ship_arrived",
+        refs: { ship: shipRef, system: systemRef },
+      });
+
+      if (a.cargoLost && a.cargoLost.length > 0) {
+        notifications.push({
+          message: `${a.shipName} lost cargo near ${a.destName}`,
+          type: "cargo_lost",
+          refs: { ship: shipRef, system: systemRef },
+        });
+      }
+
+      existing["gameNotifications"] = notifications;
       playerEvents.set(a.playerId, existing);
     }
 

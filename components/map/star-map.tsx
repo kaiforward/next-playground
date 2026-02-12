@@ -91,6 +91,16 @@ export function StarMap({
 
   const [viewLevel, setViewLevel] = useState<MapViewLevel>(initialViewLevel);
 
+  // ── All connections as ConnectionInfo (for cross-region nav) ────
+  const allConnections = useMemo((): ConnectionInfo[] =>
+    universe.connections.map((c) => ({
+      fromSystemId: c.fromSystemId,
+      toSystemId: c.toSystemId,
+      fuelCost: c.fuelCost,
+    })),
+    [universe.connections],
+  );
+
   // ── Intra-region connections for system view ────────────────────
   const activeRegionConnections = useMemo((): ConnectionInfo[] => {
     if (viewLevel.level !== "system") return [];
@@ -111,10 +121,10 @@ export function StarMap({
     return universe.systems.filter((s) => s.regionId === viewLevel.regionId);
   }, [viewLevel, universe.systems]);
 
-  // ── Navigation hook — scoped to active region ───────────────────
+  // ── Navigation hook — uses all connections for cross-region ─────
   const navigation = useNavigationState({
-    connections: activeRegionConnections,
-    systems: activeRegionSystems,
+    connections: allConnections,
+    systems: universe.systems,
     onNavigateShip,
   });
 
@@ -215,6 +225,29 @@ export function StarMap({
     [selectedSystem, events],
   );
 
+  // ── Navigation state per region (region view during nav) ────────
+  const regionNavigationStates = useMemo((): Map<string, "origin" | "reachable" | "unreachable"> => {
+    const states = new Map<string, "origin" | "reachable" | "unreachable">();
+    if (!isNavigationActive) return states;
+    // TS already narrows mode to ship_selected | route_preview here
+    const { ship, reachable } = mode as Exclude<typeof mode, { phase: "default" }>;
+
+    const shipRegionId = systemRegionMap.get(ship.systemId);
+
+    for (const region of universe.regions) {
+      if (region.id === shipRegionId) {
+        states.set(region.id, "origin");
+      } else {
+        // A region is reachable if any system in it is reachable
+        const hasReachable = universe.systems.some(
+          (s) => s.regionId === region.id && reachable.has(s.id),
+        );
+        states.set(region.id, hasReachable ? "reachable" : "unreachable");
+      }
+    }
+    return states;
+  }, [isNavigationActive, mode, systemRegionMap, universe.regions, universe.systems]);
+
   // ── Navigation state per node (system view only) ────────────────
   const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
     const states = new Map<string, NavigationNodeState>();
@@ -304,6 +337,7 @@ export function StarMap({
           identity: region.identity,
           systemCount: systemsPerRegion[region.id] ?? 0,
           shipCount: shipsPerRegion[region.id] ?? 0,
+          navigationState: regionNavigationStates.get(region.id),
         },
       }));
     }
@@ -331,6 +365,7 @@ export function StarMap({
     shipsAtSystem,
     nodeNavigationStates,
     eventsPerSystem,
+    regionNavigationStates,
   ]);
 
   const edges: Edge[] = useMemo(() => {
@@ -420,6 +455,10 @@ export function StarMap({
     (_event, node) => {
       // Region view — click drills into that region
       if (viewLevel.level === "region") {
+        // Block clicking unreachable regions during navigation
+        if (isNavigationActive && regionNavigationStates.get(node.id) === "unreachable") {
+          return;
+        }
         setViewLevel({ level: "system", regionId: node.id });
         return;
       }
@@ -448,7 +487,7 @@ export function StarMap({
         setSelectedSystem(system);
       }
     },
-    [viewLevel, activeRegionSystems, mode, navigation],
+    [viewLevel, activeRegionSystems, mode, navigation, isNavigationActive, regionNavigationStates],
   );
 
   const handleClose = useCallback(() => {
@@ -464,10 +503,9 @@ export function StarMap({
   );
 
   const handleBackToRegions = useCallback(() => {
-    navigation.cancel();
     setSelectedSystem(null);
     setViewLevel({ level: "region" });
-  }, [navigation]);
+  }, []);
 
   const handleJumpToRegion = useCallback((regionId: string) => {
     setSelectedSystem(null);
@@ -506,7 +544,7 @@ export function StarMap({
       </ReactFlow>
 
       {/* Back to regions button (system view only) */}
-      {viewLevel.level === "system" && !isNavigationActive && (
+      {viewLevel.level === "system" && (
         <button
           onClick={handleBackToRegions}
           className="absolute top-4 left-4 z-50 flex items-center gap-2 rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-gray-800/90 transition-colors shadow-lg"
@@ -518,8 +556,8 @@ export function StarMap({
         </button>
       )}
 
-      {/* Region view hint */}
-      {viewLevel.level === "region" && (
+      {/* Region view hint (only when not navigating) */}
+      {viewLevel.level === "region" && !isNavigationActive && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
             <span className="text-sm text-white/60">
@@ -529,7 +567,7 @@ export function StarMap({
         </div>
       )}
 
-      {/* Navigation mode banner */}
+      {/* Navigation mode banner (shown on both region and system views) */}
       {mode.phase === "ship_selected" && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="flex items-center gap-3 rounded-lg border border-cyan-500/30 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
@@ -553,8 +591,8 @@ export function StarMap({
           ship={mode.ship}
           destination={mode.destination}
           route={mode.route}
-          connections={activeRegionConnections}
-          systems={activeRegionSystems}
+          connections={allConnections}
+          systems={universe.systems}
           isNavigating={navigation.isNavigating}
           onConfirm={navigation.confirmNavigation}
           onCancel={navigation.cancel}

@@ -5,11 +5,14 @@ import type { NodeProps } from "@xyflow/react";
 import { tv } from "tailwind-variants";
 import type { RegionIdentity } from "@/lib/types/game";
 
+export type RegionNavigationState = "origin" | "reachable" | "unreachable";
+
 export interface RegionNodeData {
   label: string;
   identity: RegionIdentity;
   systemCount: number;
   shipCount: number;
+  navigationState?: RegionNavigationState;
   [key: string]: unknown;
 }
 
@@ -22,6 +25,11 @@ const regionNode = tv({
       industrial: "bg-slate-700/50 border-slate-400/70 text-slate-100",
       tech: "bg-blue-900/50 border-blue-500/70 text-blue-100",
       trade_hub: "bg-purple-900/50 border-purple-500/70 text-purple-100",
+    },
+    navigationState: {
+      origin: "ring-2 ring-cyan-400 ring-offset-2 ring-offset-gray-950",
+      reachable: "ring-2 ring-white/60 ring-offset-2 ring-offset-gray-950",
+      unreachable: "opacity-40 grayscale cursor-not-allowed hover:scale-100",
     },
   },
 });
@@ -54,12 +62,14 @@ const pulseRing = tv({
 
 export function RegionNode({ data }: NodeProps) {
   const nodeData = data as RegionNodeData;
-  const { label, identity, systemCount, shipCount } = nodeData;
+  const { label, identity, systemCount, shipCount, navigationState } = nodeData;
   const hasShips = shipCount > 0;
+  // Hide pulse ring during navigation mode to avoid visual noise
+  const showPulse = hasShips && !navigationState;
 
   return (
     <div className="relative">
-      {hasShips && <div className={pulseRing({ identity })} />}
+      {showPulse && <div className={pulseRing({ identity })} />}
 
       <Handle
         type="target"
@@ -72,7 +82,7 @@ export function RegionNode({ data }: NodeProps) {
         className="!bg-transparent !border-0 !w-0 !h-0"
       />
 
-      <div className={regionNode({ identity })}>
+      <div className={regionNode({ identity, navigationState })}>
         <div className="text-base font-bold leading-tight">{label}</div>
         <div className={identityLabel({ identity })}>
           {identity.replace("_", " ")}

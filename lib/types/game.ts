@@ -139,3 +139,20 @@ export interface ActiveEvent {
   ticksRemaining: number;
   severity: number;
 }
+
+// ── Notification types ──────────────────────────────────────────
+
+export interface EntityRef {
+  id: string;
+  label: string;
+}
+
+export interface GameNotification {
+  /** Client-side sequence number, used as React key. */
+  id: number;
+  message: string;
+  type: string;
+  refs: Partial<Record<string, EntityRef>>;
+  /** Date.now() when received client-side. */
+  receivedAt: number;
+}

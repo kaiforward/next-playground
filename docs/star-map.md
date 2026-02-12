@@ -29,12 +29,23 @@ Additional responsibilities:
 - Dynamic node styling (navigation state variants) and edge styling (route highlighting)
 - Accepts `initialSelectedShipId` prop to auto-enter navigation mode from URL
 - Dark theme with dot background, styled controls, and colour-coded minimap
+- **Cross-region navigation**: Navigation hook receives all connections (not just intra-region), so pathfinding works across gateways. Region view highlights reachable/unreachable regions during navigation. Players can switch between region and system views while navigation persists.
 
 **Important:** `nodeTypes` is defined outside the component to prevent infinite re-renders (React Flow compares by reference).
 
 ### `components/map/region-node.tsx`
 
 Custom React Flow node for region-level view. Shows region name, economic identity with colour coding, system count, and ship count badge. Identity colours match the economy type palette.
+
+**Navigation state variants** — applied when a ship is selected and the player switches to region view:
+
+| State | Visual |
+|---|---|
+| `origin` | Cyan ring (region containing the ship) |
+| `reachable` | White ring (region has at least one reachable system) |
+| `unreachable` | Dimmed (opacity-40), grayscale, no pointer |
+
+Pulse ring animation is hidden during navigation to reduce visual noise.
 
 ### `components/map/system-node.tsx`
 
@@ -83,6 +94,8 @@ Multi-hop navigation uses a 3-phase state machine (`lib/hooks/use-navigation-sta
 1. **Default** — Normal map interaction. Click a system to open the detail panel.
 2. **Ship Selected** — Player clicked "Navigate" on a ship. All reachable systems are highlighted, unreachable systems are dimmed. A banner shows the selected ship. Click a reachable system to preview the route, or Cancel.
 3. **Route Preview** — Optimal path computed via Dijkstra. Route edges highlighted on the map. Route preview panel shows hop-by-hop breakdown. Confirm sends the ship, Cancel returns to ship selection.
+
+Navigation is **cross-region aware**: the hook uses all connections (including gateway links), so routes can span multiple regions. During navigation, the player can switch to region view — reachable regions are highlighted, unreachable regions are dimmed and unclickable. The "Back to regions" button is always available (navigation persists across view switches). The route preview panel resolves system names from the full universe.
 
 Deep linking: `/map?shipId=X` auto-enters navigation mode for ship X on load.
 
