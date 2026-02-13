@@ -64,6 +64,7 @@ export const MOCK_FLEET: FleetState = {
     {
       id: "ship-1",
       name: "Starter Ship",
+      shipType: "shuttle",
       fuel: 85,
       maxFuel: 100,
       cargoMax: 50,

@@ -7,6 +7,7 @@ import type { ShipState, ShipStatus, EconomyType } from "@/lib/types/game";
 export function serializeShip(ship: {
   id: string;
   name: string;
+  shipType: string;
   fuel: number;
   maxFuel: number;
   cargoMax: number;
@@ -44,6 +45,7 @@ export function serializeShip(ship: {
   return {
     id: ship.id,
     name: ship.name,
+    shipType: ship.shipType,
     fuel: ship.fuel,
     maxFuel: ship.maxFuel,
     cargoMax: ship.cargoMax,
