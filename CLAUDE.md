@@ -20,7 +20,7 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 
 ## Project Structure
 
-- `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, NPC, events, danger, refuel, snapshot). Zero DB dependency.
+- `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, events, danger, refuel, snapshot). Zero DB dependency.
 - `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
 - `lib/types/` — Shared types (`game.ts`, `api.ts`)
 - `lib/constants/` — Goods, universe, economy, event, rate-limit, fuel, and snapshot definitions

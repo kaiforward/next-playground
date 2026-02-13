@@ -27,26 +27,29 @@ export async function executeTrade(
     return { ok: false, error: "Quantity must be a positive integer.", status: 400 };
   }
 
-  // Fetch player with ships to verify ownership
+  // Fetch player (need credits for validation) + ship by ID, verify ownership
   const player = await prisma.player.findUnique({
     where: { id: playerId },
-    include: {
-      ships: {
-        include: {
-          cargo: { include: { good: true } },
-          system: true,
-          destination: true,
-        },
-      },
-    },
+    select: { id: true, credits: true },
   });
 
   if (!player) {
     return { ok: false, error: "Player not found.", status: 404 };
   }
 
-  const ship = player.ships.find((s) => s.id === shipId);
-  if (!ship) {
+  const ship = await prisma.ship.findUnique({
+    where: { id: shipId },
+    select: {
+      id: true,
+      playerId: true,
+      status: true,
+      systemId: true,
+      cargoMax: true,
+      cargo: true,
+    },
+  });
+
+  if (!ship || ship.playerId !== playerId) {
     return { ok: false, error: "Ship not found or does not belong to you.", status: 404 };
   }
 

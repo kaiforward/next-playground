@@ -124,11 +124,6 @@ processShipArrivals(ships, currentTick) → arrivedShipIds
 - Constants in `lib/constants/economy.ts` (reversion rate, noise, production/consumption rates, equilibrium targets)
 - `processShipArrivals` returns ship IDs where `arrivalTick <= currentTick`
 
-### NPC Traders (`lib/engine/npc.ts`)
-
-- `pickNpcDestination` — random connected system
-- `simulateNpcTrade` — buys cheap goods (< basePrice), sells expensive goods (> 1.5x basePrice)
-
 ## API Routes
 
 All routes return `ApiResponse<T>` format: `{ data?: T, error?: string }`.
@@ -150,7 +145,7 @@ All routes return `ApiResponse<T>` format: `{ data?: T, error?: string }`.
 
 ### Auth on API Routes
 
-Ship mutation routes (`navigate`, `trade`) use `getSessionPlayerId()` for lightweight auth, delegating to the services layer for DB queries. Read routes (`fleet`, `market`, `systems`) use `getSessionPlayer()` or `getSessionPlayerId()` depending on whether they need the full player object.
+All authenticated routes use `getSessionPlayerId()` for lightweight auth, delegating to the services layer for DB queries.
 
 ### Tick System (Processor Pipeline)
 
