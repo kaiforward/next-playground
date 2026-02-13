@@ -29,7 +29,7 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 - `lib/query/` — TanStack Query setup (client factory, query key factory, typed apiFetch helper)
 - `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-game-world, use-universe, use-market, use-trade-history, use-events, use-price-history), mutation hooks (use-trade-mutation, use-navigate-mutation, use-refuel-mutation), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state), notifications (use-event-history via provider)
 - `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, ship/[shipId]/refuel, systems, market, history, events, prices/[systemId])
-- `app/(game)/` — Dashboard, map, trade, ship/[shipId], system/[systemId] (auth-protected via layout)
+- `app/(game)/` — Dashboard, map, ship/[shipId], system/[systemId] with tabbed sub-routes (overview, market, ships) (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
 - `components/ui/` — Primitives (Button, Card, Badge, ProgressBar, PageContainer, StatRow)
 - `components/form/` — Form controls (TextInput, NumberInput, RangeInput, FormError)

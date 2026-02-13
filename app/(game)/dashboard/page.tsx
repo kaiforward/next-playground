@@ -32,7 +32,7 @@ export default function DashboardPage() {
         <PlayerSummary fleet={fleet} />
       </div>
 
-      <FleetOverview ships={fleet.ships} currentTick={currentTick} regions={universeData?.regions} />
+      <FleetOverview ships={fleet.ships} currentTick={currentTick} regions={universeData?.regions} playerCredits={fleet.credits} />
     </PageContainer>
   );
 }

@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatList, StatRow } from "@/components/ui/stat-row";
 import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
+import { useDialog } from "@/components/ui/dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
-import { RefuelPanel } from "./refuel-panel";
+import { RefuelDialog } from "./refuel-dialog";
 
 interface ShipDetailPanelProps {
   ship: ShipState;
@@ -23,6 +24,8 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: S
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
+  const needsFuel = isDocked && ship.fuel < ship.maxFuel;
+  const refuelDialog = useDialog();
 
   return (
     <div className="space-y-6">
@@ -74,11 +77,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: S
         </CardContent>
       </Card>
 
-      {/* Refuel panel — visible when docked with room in tank */}
-      {isDocked && ship.fuel < ship.maxFuel && playerCredits != null && (
-        <RefuelPanel ship={ship} playerCredits={playerCredits} />
-      )}
-
       {/* Cargo hold card */}
       <Card variant="bordered" padding="md">
         <CardHeader title="Cargo Hold" subtitle={`${cargoUsed} / ${ship.cargoMax} units`} />
@@ -108,13 +106,23 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: S
       {isDocked && (
         <div className="flex gap-3">
           <Button
-            href={`/trade?shipId=${ship.id}&systemId=${ship.systemId}`}
+            href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
             variant="action"
             color="green"
             className="flex-1"
           >
-            Trade at {ship.system.name}
+            Market
           </Button>
+          {needsFuel && playerCredits != null && (
+            <Button
+              variant="pill"
+              color="cyan"
+              size="md"
+              onClick={refuelDialog.onOpen}
+            >
+              Refuel
+            </Button>
+          )}
           <Button
             href={`/map?shipId=${ship.id}`}
             variant="action"
@@ -124,6 +132,16 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: S
             Navigate
           </Button>
         </div>
+      )}
+
+      {/* Refuel dialog */}
+      {needsFuel && playerCredits != null && (
+        <RefuelDialog
+          ship={ship}
+          playerCredits={playerCredits}
+          open={refuelDialog.open}
+          onClose={refuelDialog.onClose}
+        />
       )}
     </div>
   );

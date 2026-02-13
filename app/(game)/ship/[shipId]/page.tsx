@@ -1,6 +1,7 @@
 "use client";
 
 import { use } from "react";
+import { useSearchParams } from "next/navigation";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
@@ -14,9 +15,16 @@ export default function ShipDetailPage({
   params: Promise<{ shipId: string }>;
 }) {
   const { shipId } = use(params);
+  const searchParams = useSearchParams();
   const { fleet, loading } = useFleet();
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
+
+  // ?from=system-{id} → back to system page; fallback to dashboard
+  const from = searchParams.get("from");
+  const backHref = from?.startsWith("system-")
+    ? `/system/${from.slice(7)}`
+    : "/dashboard";
 
   if (loading || !fleet) {
     return (
@@ -48,7 +56,7 @@ export default function ShipDetailPage({
     <PageContainer size="sm">
       <div className="flex items-center gap-3 mb-6">
         <Link
-          href="/dashboard"
+          href={backHref}
           className="text-white/40 hover:text-white transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
