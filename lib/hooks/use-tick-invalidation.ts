@@ -32,6 +32,10 @@ export function useTickInvalidation() {
       subscribeToEvent("cargoLost", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
       }),
+      // Price snapshots → refresh price history
+      subscribeToEvent("priceSnapshot", () => {
+        queryClient.invalidateQueries({ queryKey: ["priceHistory"] });
+      }),
     ];
 
     return () => unsubs.forEach((unsub) => unsub());

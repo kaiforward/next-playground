@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useMarket } from "@/lib/hooks/use-market";
-import { useTradeHistory } from "@/lib/hooks/use-trade-history";
+import { usePriceHistory } from "@/lib/hooks/use-price-history";
 import { useTradeMutation } from "@/lib/hooks/use-trade-mutation";
 import { MarketTable } from "@/components/trade/market-table";
 import { TradeForm } from "@/components/trade/trade-form";
@@ -25,7 +25,7 @@ export default function TradePage() {
 
   const { fleet, loading: fleetLoading } = useFleet();
   const { market, stationId, loading: marketLoading } = useMarket(systemId);
-  const { history } = useTradeHistory(systemId);
+  const { history } = usePriceHistory(systemId);
   const { mutateAsync: tradeAsync } = useTradeMutation({ shipId, stationId, systemId });
   const [selectedGoodId, setSelectedGoodId] = useState<string | undefined>();
   const [tradeError, setTradeError] = useState<string | null>(null);
@@ -57,13 +57,12 @@ export default function TradePage() {
 
   const priceHistory = useMemo(() => {
     if (!selectedGoodId) return [];
-    return history
-      .filter((h) => h.goodId === selectedGoodId)
-      .slice(-10)
-      .map((h, i) => ({
-        time: `T-${10 - i}`,
-        price: h.price,
-      }));
+    const goodHistory = history.find((h) => h.goodId === selectedGoodId);
+    if (!goodHistory) return [];
+    return goodHistory.points.map((p) => ({
+      time: `T${p.tick}`,
+      price: p.price,
+    }));
   }, [history, selectedGoodId]);
 
   const handleTrade = useCallback(
@@ -144,22 +143,23 @@ export default function TradePage() {
         </div>
 
         {selectedGood && (
-          <div className="space-y-6">
-            <TradeForm
-              good={selectedGood}
-              playerCredits={fleet.credits}
-              cargoUsed={cargoUsed}
-              cargoMax={ship.cargoMax}
-              currentCargoQuantity={currentCargoQuantity}
-              shipName={ship.name}
-              onTrade={handleTrade}
-            />
-            {priceHistory.length > 0 && (
-              <PriceChart data={priceHistory} goodName={selectedGood.goodName} />
-            )}
-          </div>
+          <TradeForm
+            good={selectedGood}
+            playerCredits={fleet.credits}
+            cargoUsed={cargoUsed}
+            cargoMax={ship.cargoMax}
+            currentCargoQuantity={currentCargoQuantity}
+            shipName={ship.name}
+            onTrade={handleTrade}
+          />
         )}
       </div>
+
+      {selectedGood && priceHistory.length > 0 && (
+        <div className="mt-8">
+          <PriceChart data={priceHistory} goodName={selectedGood.goodName} cargoQuantity={currentCargoQuantity} />
+        </div>
+      )}
 
       <div className="mt-8">
         <SupplyDemandChart entries={market} />

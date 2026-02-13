@@ -54,6 +54,7 @@ async function main() {
   await prisma.systemConnection.deleteMany();
   await prisma.ship.deleteMany();
   await prisma.player.deleteMany();
+  await prisma.priceHistory.deleteMany();
   await prisma.station.deleteMany();
   await prisma.good.deleteMany();
   await prisma.starSystem.deleteMany();
@@ -137,6 +138,14 @@ async function main() {
   console.log(
     `  Created ${universe.systems.length} star systems with stations and markets`,
   );
+
+  // ── Seed price history (one row per system) ──
+  for (const sysId of systemIds) {
+    await prisma.priceHistory.create({
+      data: { systemId: sysId, entries: "[]" },
+    });
+  }
+  console.log(`  Created ${systemIds.length} price history rows`);
 
   // ── Seed connections (already bidirectional from generator) ──
   for (const conn of universe.connections) {

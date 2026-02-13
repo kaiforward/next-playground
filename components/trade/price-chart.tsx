@@ -14,14 +14,19 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 interface PriceChartProps {
   data: { time: string; price: number }[];
   goodName: string;
+  cargoQuantity?: number;
 }
 
-export function PriceChart({ data, goodName }: PriceChartProps) {
+export function PriceChart({ data, goodName, cargoQuantity }: PriceChartProps) {
+  const subtitle = cargoQuantity
+    ? `You own ${cargoQuantity} unit${cargoQuantity === 1 ? "" : "s"}`
+    : "You own none";
+
   return (
     <Card variant="bordered" padding="md">
       <CardHeader
         title={`${goodName} Price History`}
-        subtitle="Recent price fluctuations"
+        subtitle={subtitle}
       />
       <CardContent>
         <div className="w-full h-64">
