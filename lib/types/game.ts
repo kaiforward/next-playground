@@ -35,6 +35,7 @@ export type ShipStatus = "docked" | "in_transit";
 export interface ShipState {
   id: string;
   name: string;
+  shipType: string;
   fuel: number;
   maxFuel: number;
   cargoMax: number;

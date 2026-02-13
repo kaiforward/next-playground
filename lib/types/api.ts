@@ -77,6 +77,17 @@ export interface ShipRefuelResult {
 }
 export type ShipRefuelResponse = ApiResponse<ShipRefuelResult>;
 
+export interface ShipPurchaseRequest {
+  systemId: string;
+  shipType: string;
+}
+
+export interface ShipPurchaseResult {
+  ship: ShipState;
+  creditSpent: number;
+}
+export type ShipPurchaseResponse = ApiResponse<ShipPurchaseResult>;
+
 export interface RegisterRequest {
   name: string;
   email: string;

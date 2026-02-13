@@ -4,6 +4,7 @@ import { hashPassword } from "@/lib/auth/credentials";
 import { registerSchema } from "@/lib/schemas/auth";
 import { rateLimit, getClientIp } from "@/lib/api/rate-limit";
 import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
+import { SHIP_TYPES } from "@/lib/constants/ships";
 
 export async function POST(request: Request) {
   const limited = rateLimit({
@@ -74,9 +75,10 @@ export async function POST(request: Request) {
             ships: {
               create: {
                 name: "Starter Ship",
-                fuel: 100,
-                maxFuel: 100,
-                cargoMax: 50,
+                shipType: "shuttle",
+                fuel: SHIP_TYPES.shuttle.fuel,
+                maxFuel: SHIP_TYPES.shuttle.fuel,
+                cargoMax: SHIP_TYPES.shuttle.cargo,
                 systemId: startingSystem.id,
                 status: "docked",
               },

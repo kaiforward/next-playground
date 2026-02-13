@@ -96,6 +96,7 @@ model Ship {
   id                  String   @id @default(cuid())
   playerId            String
   name                String   @default("Starter Ship")
+  shipType            String   @default("shuttle")
   fuel                Float    @default(100)
   maxFuel             Float    @default(100)
   cargoMax            Int      @default(50)
