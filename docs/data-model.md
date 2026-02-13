@@ -20,7 +20,7 @@ All models are defined in `prisma/schema.prisma`. The database uses SQLite with 
 | `GameWorld` | Tick state singleton | Tracks currentTick, tickRate, lastTickAt |
 | `Region` | Group of ~25 systems | Has many StarSystems. Identity: resource_rich, agricultural, industrial, tech, trade_hub |
 | `Player` | Game profile | 1:1 with User, has many Ships |
-| `Ship` | Player's vessel | Belongs to Player, belongs to StarSystem (current + destination), has many CargoItems |
+| `Ship` | Player's vessel | Belongs to Player, belongs to StarSystem (current + destination), has many CargoItems. Has `shipType` field (default "shuttle") for ship type definitions |
 | `CargoItem` | Goods in cargo hold | Belongs to Ship + Good, unique per ship+good |
 | `StarSystem` | A location in the universe | Belongs to Region, has Station, has Ships, has connections. `isGateway` marks inter-region connection points |
 | `SystemConnection` | Jump lane between systems | From/To StarSystem, has fuelCost. Gateway connections have higher fuel cost |
@@ -53,6 +53,7 @@ Key design decisions:
 - `lib/constants/events.ts` — Event definitions (war, plague, trade_festival, conflict_spillover, plague_risk), spawn/cap constants, modifier caps
 - `lib/constants/fuel.ts` — Base fuel price for refueling
 - `lib/constants/snapshot.ts` — Snapshot interval (20 ticks) and max entries (50)
+- `lib/constants/ships.ts` — Ship type definitions (shuttle, freighter), purchasable types filter
 
 ## Seed Script
 
@@ -73,6 +74,5 @@ Generation is deterministic given a seed value (`UNIVERSE_GEN.SEED`). Run with: 
 - `app/(auth)/login/page.tsx`, `register/page.tsx` — Auth pages
 - `app/(game)/dashboard/page.tsx` — Command Center (fleet overview)
 - `app/(game)/map/page.tsx` — Fleet-aware star map
-- `app/(game)/trade/page.tsx` — Ship-contextual trading (requires shipId + systemId query params)
-- `app/(game)/ship/[shipId]/page.tsx` — Ship detail view
-- `app/(game)/system/[systemId]/page.tsx` — System info + docked ships + market summary
+- `app/(game)/ship/[shipId]/page.tsx` — Ship detail view with contextual back navigation
+- `app/(game)/system/[systemId]/` — Tabbed system hub (overview, market, ships, shipyard) with shared layout

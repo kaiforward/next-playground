@@ -58,9 +58,9 @@ Card listing cargo items with quantities and a progress bar for total cargo used
 
 Fetches fleet data via `useFleet()` hook and universe data via `useUniverse()`. Responsive grid: 1 column mobile, 2 tablet, 3 desktop.
 
-### Trade (`app/(game)/trade/page.tsx`)
+### Market Tab (`app/(game)/system/[systemId]/market/page.tsx`)
 
-Fetches live market data from `/api/game/market/[systemId]`, fleet state, and price history via TanStack Query hooks. Context links to system detail page and map view. On trade:
+Market trading is a tab within the system hub (not a standalone page). Fetches live market data from `/api/game/market/[systemId]`, fleet state, and price history via TanStack Query hooks. Ship selector supports browse-only mode when no ships are docked. On trade:
 1. POSTs to `/api/game/ship/[shipId]/trade` (ship-scoped)
 2. Invalidates fleet and market queries on success
 3. TanStack Query refetches automatically
