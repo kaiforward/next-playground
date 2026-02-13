@@ -7,9 +7,10 @@ interface FleetOverviewProps {
   ships: ShipState[];
   currentTick: number;
   regions?: RegionInfo[];
+  playerCredits?: number;
 }
 
-export function FleetOverview({ ships, currentTick, regions }: FleetOverviewProps) {
+export function FleetOverview({ ships, currentTick, regions, playerCredits }: FleetOverviewProps) {
   const docked = ships.filter((s) => s.status === "docked").length;
   const inTransit = ships.filter((s) => s.status === "in_transit").length;
 
@@ -28,7 +29,7 @@ export function FleetOverview({ ships, currentTick, regions }: FleetOverviewProp
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {ships.map((ship) => (
-          <ShipCard key={ship.id} ship={ship} currentTick={currentTick} regions={regions} />
+          <ShipCard key={ship.id} ship={ship} currentTick={currentTick} regions={regions} playerCredits={playerCredits} />
         ))}
       </div>
     </div>

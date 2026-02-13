@@ -157,7 +157,7 @@ export function SystemDetailPanel({
                 >
                   <div>
                     <Link
-                      href={`/ship/${ship.id}`}
+                      href={`/ship/${ship.id}?from=system-${system.id}`}
                       className="text-sm font-medium text-white hover:text-blue-300 transition-colors"
                     >
                       {ship.name}
@@ -178,7 +178,7 @@ export function SystemDetailPanel({
                       </Button>
                     )}
                     <Link
-                      href={`/trade?shipId=${ship.id}&systemId=${system.id}`}
+                      href={`/system/${system.id}/market?shipId=${ship.id}`}
                       className="text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
                     >
                       Trade

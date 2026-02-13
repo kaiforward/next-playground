@@ -3,25 +3,20 @@
 import { use, useMemo } from "react";
 import Link from "next/link";
 import { useFleet } from "@/lib/hooks/use-fleet";
-import { useUniverse } from "@/lib/hooks/use-universe";
 import { useMarket } from "@/lib/hooks/use-market";
 import { useEvents } from "@/lib/hooks/use-events";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageContainer } from "@/components/ui/page-container";
-import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
 import { getPriceTrendPct } from "@/lib/utils/market";
 
-export default function SystemViewPage({
+export default function SystemOverviewPage({
   params,
 }: {
   params: Promise<{ systemId: string }>;
 }) {
   const { systemId } = use(params);
   const { fleet, loading: fleetLoading } = useFleet();
-  const { data: universeData } = useUniverse();
   const { market, loading: marketLoading } = useMarket(systemId);
   const { events } = useEvents();
 
@@ -36,59 +31,15 @@ export default function SystemViewPage({
   );
 
   if (fleetLoading || !fleet) {
-    return (
-      <PageContainer size="md">
-        <h1 className="text-2xl font-bold mb-2">System</h1>
-        <p className="text-white/60">Loading...</p>
-      </PageContainer>
-    );
+    return <p className="text-white/60">Loading...</p>;
   }
-
-  const systemInfo = universeData?.systems.find((s) => s.id === systemId) ?? null;
-  const regionInfo = systemInfo
-    ? universeData?.regions.find((r) => r.id === systemInfo.regionId) ?? null
-    : null;
 
   const shipsHere = fleet.ships.filter(
     (s) => s.status === "docked" && s.systemId === systemId
   );
 
   return (
-    <PageContainer size="md">
-      <div className="flex items-center gap-3 mb-6">
-        <Link
-          href={`/map?systemId=${systemId}`}
-          className="text-white/40 hover:text-white transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-            <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
-          </svg>
-        </Link>
-        <h1 className="text-2xl font-bold">
-          {systemInfo?.name ?? "System"}
-        </h1>
-        {systemInfo && (
-          <>
-            <Badge color={ECONOMY_BADGE_COLOR[systemInfo.economyType]}>
-              {systemInfo.economyType}
-            </Badge>
-            {systemInfo.isGateway && (
-              <Badge color="amber">Gateway</Badge>
-            )}
-          </>
-        )}
-      </div>
-
-      {regionInfo && (
-        <p className="text-sm text-white/40 mb-2">
-          Region: <span className="text-white/60">{regionInfo.name}</span>
-        </p>
-      )}
-
-      {systemInfo?.description && (
-        <p className="text-white/60 mb-6">{systemInfo.description}</p>
-      )}
-
+    <>
       {systemEvents.length > 0 && (
         <Card variant="bordered" padding="md" className="mb-6">
           <CardContent>
@@ -114,12 +65,12 @@ export default function SystemViewPage({
                     className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5"
                   >
                     <Link
-                      href={`/ship/${ship.id}`}
+                      href={`/ship/${ship.id}?from=system-${systemId}`}
                       className="text-sm font-medium text-white hover:text-blue-300 transition-colors"
                     >
                       {ship.name}
                     </Link>
-                    <Button href={`/trade?shipId=${ship.id}&systemId=${systemId}`} variant="pill" color="indigo" size="xs">
+                    <Button href={`/system/${systemId}/market?shipId=${ship.id}`} variant="pill" color="indigo" size="xs">
                       Trade
                     </Button>
                   </li>
@@ -172,6 +123,6 @@ export default function SystemViewPage({
           </CardContent>
         </Card>
       </div>
-    </PageContainer>
+    </>
   );
 }

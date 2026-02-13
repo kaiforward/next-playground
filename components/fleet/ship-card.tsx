@@ -7,19 +7,29 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { useDialog } from "@/components/ui/dialog";
+import { RefuelDialog } from "./refuel-dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 
 interface ShipCardProps {
   ship: ShipState;
   currentTick: number;
   regions?: RegionInfo[];
+  /** When set, ship detail links include ?from={backTo} for contextual back navigation. */
+  backTo?: string;
+  /** Required for refuel dialog. */
+  playerCredits?: number;
 }
 
-export function ShipCard({ ship, currentTick, regions }: ShipCardProps) {
+export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: ShipCardProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
+  const needsFuel = isDocked && ship.fuel < ship.maxFuel;
+
+  const detailHref = backTo ? `/ship/${ship.id}?from=${backTo}` : `/ship/${ship.id}`;
+  const refuelDialog = useDialog();
 
   return (
     <Card variant="bordered" padding="sm">
@@ -27,7 +37,7 @@ export function ShipCard({ ship, currentTick, regions }: ShipCardProps) {
         {/* Header */}
         <div className="flex items-center justify-between">
           <Link
-            href={`/ship/${ship.id}`}
+            href={detailHref}
             className="text-sm font-bold text-white hover:text-blue-300 transition-colors"
           >
             {ship.name}
@@ -68,16 +78,31 @@ export function ShipCard({ ship, currentTick, regions }: ShipCardProps) {
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
-          <Button href={`/ship/${ship.id}`} variant="ghost" size="sm" className="flex-1 bg-white/5 text-white/60 hover:bg-white/10">
+          <Button href={detailHref} variant="ghost" size="sm" className="flex-1 bg-white/5 text-white/60 hover:bg-white/10">
             Details
           </Button>
           {isDocked && (
-            <Button href={`/trade?shipId=${ship.id}&systemId=${ship.systemId}`} variant="pill" color="indigo" size="sm" className="flex-1">
+            <Button href={`/system/${ship.systemId}/market?shipId=${ship.id}`} variant="pill" color="indigo" size="sm" className="flex-1">
               Trade
+            </Button>
+          )}
+          {needsFuel && playerCredits != null && (
+            <Button variant="pill" color="cyan" size="sm" onClick={refuelDialog.onOpen}>
+              Refuel
             </Button>
           )}
         </div>
       </CardContent>
+
+      {/* Refuel dialog */}
+      {needsFuel && playerCredits != null && (
+        <RefuelDialog
+          ship={ship}
+          playerCredits={playerCredits}
+          open={refuelDialog.open}
+          onClose={refuelDialog.onClose}
+        />
+      )}
     </Card>
   );
 }
