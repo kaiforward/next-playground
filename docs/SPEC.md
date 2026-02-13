@@ -48,9 +48,10 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 - Ships own their location (systemId), not players
 - Ships have: cargo capacity, fuel tank size, current fuel level, status (docked/in_transit)
 - Ships in transit have: destinationSystemId, departureTick, arrivalTick
+- Ships have a `shipType` determining base stats (fuel, cargo). Current types: Shuttle (100 fuel, 50 cargo, starter), Freighter (80 fuel, 120 cargo, 5,000 CR)
 - Ships can refuel at any station — cost scales with amount and base fuel price, UI uses a range slider for partial refueling
+- New ships can be purchased at any system's shipyard tab (purchasable types only, auto-named "Freighter #1" etc.)
 - Inventory is tied to individual ships (cargo holds)
-- One ship type for now, fleet expansion and ship types upgradeable later
 
 #### 4. Trading
 
@@ -133,7 +134,8 @@ Good           (reference table: name, type, base price)
 
 ### Expanded Gameplay
 
-- **Multiple ship types:** Freighters (high cargo), scouts (long range), fighters (combat)
+- ~~**Multiple ship types:**~~ Implemented — Shuttle (starter) and Freighter (purchasable), with ship type system and shipyard UI
+- **More ship types:** Scouts (long range), fighters (combat), specialized haulers
 - **Ship upgrades:** Better engines, larger cargo holds, weapons
 - **Combat:** Pirates, system defence, player encounters
 - **Missions/quests:** Delivery contracts, bounty hunting, exploration

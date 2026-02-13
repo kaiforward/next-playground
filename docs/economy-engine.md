@@ -108,6 +108,16 @@ appendSnapshot(existing, entry, max) → PriceHistoryEntry[]
 - `appendSnapshot`: immutably appends entry and caps at `max` via `.slice(-max)`
 - Constants in `lib/constants/snapshot.ts` (SNAPSHOT_INTERVAL: 20, MAX_SNAPSHOTS: 50)
 
+### Shipyard (`lib/engine/shipyard.ts`)
+
+```
+validateShipPurchase({ shipType, playerCredits }) → { ok: true; data: { shipTypeDef, totalCost } } | { ok: false; error }
+```
+
+- Validates ship type exists in `SHIP_TYPES`, is purchasable (price > 0), and player can afford it
+- Returns the full `ShipTypeDefinition` and total cost on success
+- Ship types defined in `lib/constants/ships.ts`: shuttle (100 fuel, 50 cargo, starter-only) and freighter (80 fuel, 120 cargo, 5,000 CR)
+
 ### Economy Tick (`lib/engine/tick.ts`)
 
 ```
@@ -142,6 +152,7 @@ All routes return `ApiResponse<T>` format: `{ data?: T, error?: string }`.
 | `/api/game/events` | GET | Active events with system/region info |
 | `/api/game/ship/[shipId]/refuel` | POST | Refuel a docked ship (amount in body) |
 | `/api/game/prices/[systemId]` | GET | Price snapshot history for a system |
+| `/api/game/shipyard` | POST | Purchase a new ship at a system's shipyard |
 
 ### Auth on API Routes
 
@@ -175,7 +186,7 @@ See `docs/design/archive/tick-engine-redesign.md` for the original architecture 
 
 ## Tests
 
-212 unit tests across 12 files in `lib/engine/__tests__/` and `lib/api/__tests__/`:
+217 unit tests across 13 files in `lib/engine/__tests__/` and `lib/api/__tests__/`:
 
 - `pricing.test.ts` — 7 tests (equal s/d, high demand, high supply, clamping, zero supply)
 - `trade.test.ts` — 11 tests (buy/sell success, credit/cargo/supply validation, edge cases, fleet trade docked guard)
@@ -188,6 +199,7 @@ See `docs/design/archive/tick-engine-redesign.md` for the original architecture 
 - `danger.test.ts` — 19 tests (danger level aggregation, cargo loss rolling, edge cases, caps)
 - `refuel.test.ts` — 9 tests (cost calculation, max refuel, edge cases)
 - `snapshot.test.ts` — 8 tests (price entry building, grouping, append/cap, immutability)
+- `shipyard.test.ts` — 5 tests (valid purchase, exact credits, unknown type, starter-only type, insufficient credits)
 - `rate-limit.test.ts` — 10 tests (sliding window store, tier enforcement)
 
 Run with: `npx vitest run`
