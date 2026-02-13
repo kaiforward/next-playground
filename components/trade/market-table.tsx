@@ -12,12 +12,15 @@ interface MarketTableProps {
   entries: MarketEntry[];
   onSelectGood: (goodId: string) => void;
   selectedGoodId?: string;
+  /** Quantity of each good the player currently owns, keyed by goodId. */
+  cargoByGoodId?: Map<string, number>;
 }
 
 export function MarketTable({
   entries,
   onSelectGood,
   selectedGoodId,
+  cargoByGoodId,
 }: MarketTableProps) {
   const columns: Column<MarketEntry & Record<string, unknown>>[] = [
     {
@@ -28,6 +31,21 @@ export function MarketTable({
         <span className="font-medium text-white">{row.goodName}</span>
       ),
     },
+    ...(cargoByGoodId
+      ? [
+          {
+            key: "owned" as const,
+            label: "Owned",
+            sortable: false,
+            render: (row: MarketEntry & Record<string, unknown>) => {
+              const qty = cargoByGoodId.get(row.goodId) ?? 0;
+              return qty > 0
+                ? <span className="text-white font-medium">{qty}</span>
+                : <span className="text-white/30">0</span>;
+            },
+          },
+        ]
+      : []),
     {
       key: "basePrice",
       label: "Base Price",

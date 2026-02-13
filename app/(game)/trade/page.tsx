@@ -48,6 +48,11 @@ export default function TradePage() {
     [ship],
   );
 
+  const cargoByGoodId = useMemo(
+    () => new Map(ship?.cargo.map((c) => [c.goodId, c.quantity]) ?? []),
+    [ship],
+  );
+
   const currentCargoQuantity = useMemo(
     () => selectedGoodId && ship
       ? ship.cargo.find((c) => c.goodId === selectedGoodId)?.quantity ?? 0
@@ -138,6 +143,7 @@ export default function TradePage() {
               entries={market}
               onSelectGood={setSelectedGoodId}
               selectedGoodId={selectedGoodId}
+              cargoByGoodId={cargoByGoodId}
             />
           </div>
         </div>
