@@ -9,9 +9,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 Well-defined, can start now.
 
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
-- **[S] Eager loading optimization** — `getSessionPlayer()` loads full player with all ships/cargo. For single-ship routes (`navigate`, `trade`), only one ship is needed. Add targeted query as fleet grows.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
-- **[S] npc.ts — test or remove** — `lib/engine/npc.ts` has no tests. Predates the tick pipeline and may be superseded by the NPC architecture below. Add tests if retained; remove if replaced.
 - **[M] Event content expansion** — 4 fully designed event definitions ready to add: Mining Boom, Supply Shortage, Pirate Raid, Solar Storm. See [event-catalog.md](./event-catalog.md) "Ready to Implement" section.
 - **[M] Loading & error state strategy** — Consistent error display per page (`isError`/`error` from query hooks), Suspense boundaries for page-level loading, error boundaries wrapping game pages, query boundaries for deferred fetches (modals, panels).
 
