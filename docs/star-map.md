@@ -31,6 +31,8 @@ Additional responsibilities:
 - Dark theme with dot background, styled controls, and colour-coded minimap
 - **Cross-region navigation**: Navigation hook receives all connections (not just intra-region), so pathfinding works across gateways. Region view highlights reachable/unreachable regions during navigation. Players can switch between region and system views while navigation persists.
 
+**Viewport persistence:** Map viewport (position, zoom) is preserved across page navigations via `useRef` + `onViewportChange`. Returning to the map resores the previous view instead of resetting to `fitView`.
+
 **Important:** `nodeTypes` is defined outside the component to prevent infinite re-renders (React Flow compares by reference).
 
 ### `components/map/region-node.tsx`

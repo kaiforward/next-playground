@@ -28,6 +28,7 @@ All models are defined in `prisma/schema.prisma`. The database uses SQLite with 
 | `Good` | Tradeable commodity definition | Reference table |
 | `StationMarket` | Supply/demand per good per station | Belongs to Station + Good |
 | `TradeHistory` | Record of completed trades | Belongs to Station + Good |
+| `PriceHistory` | Rolling price snapshots per system | 1:1 with StarSystem (unique systemId). JSON `entries` column: `{ tick, prices: Record<goodId, price> }[]`, capped at 50 entries |
 | `GameEvent` | Active world event instance | Belongs to StarSystem + Region, has many EventModifiers. Tracks type, phase, severity, duration, spread source |
 | `EventModifier` | Active modifier from an event | Belongs to GameEvent. domain (economy/navigation), type, target (system/region), parameter, value |
 
@@ -50,6 +51,8 @@ Key design decisions:
 - `lib/constants/economy.ts` — Simulation constants (reversion rate, noise, production/consumption rates, equilibrium targets)
 - `lib/constants/universe-gen.ts` — Universe generation parameters (region count, systems per region, distances, fuel costs)
 - `lib/constants/events.ts` — Event definitions (war, plague, trade_festival, conflict_spillover, plague_risk), spawn/cap constants, modifier caps
+- `lib/constants/fuel.ts` — Base fuel price for refueling
+- `lib/constants/snapshot.ts` — Snapshot interval (20 ticks) and max entries (50)
 
 ## Seed Script
 
@@ -59,6 +62,7 @@ Key design decisions:
 - ~1,200 market entries (6 goods × ~200 stations) with supply/demand based on economy type
 - Intra-region connections (MST + extra edges) and inter-region gateway connections
 - 1-3 gateway systems per region for inter-region travel
+- 200 PriceHistory rows (one per system, initially empty JSON arrays)
 - 6 goods, 1 GameWorld singleton (tick 0, 5000ms tick rate)
 
 Generation is deterministic given a seed value (`UNIVERSE_GEN.SEED`). Run with: `npx prisma db seed`
