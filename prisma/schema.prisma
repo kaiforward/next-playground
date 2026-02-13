@@ -144,6 +144,7 @@ model StarSystem {
   connectionsFrom SystemConnection[] @relation("FromSystem")
   connectionsTo   SystemConnection[] @relation("ToSystem")
   events          GameEvent[]
+  priceHistory    PriceHistory?
 
   @@index([regionId])
 }
@@ -209,6 +210,14 @@ model TradeHistory {
   good    Good    @relation(fields: [goodId], references: [id])
 
   @@index([stationId])
+}
+
+model PriceHistory {
+  id       String @id @default(cuid())
+  systemId String @unique
+  entries  String @default("[]") // JSON: { tick: number, prices: Record<goodId, price> }[]
+
+  system StarSystem @relation(fields: [systemId], references: [id])
 }
 
 // ── Events ──────────────────────────────────────────────────────

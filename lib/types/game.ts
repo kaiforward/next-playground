@@ -140,6 +140,19 @@ export interface ActiveEvent {
   severity: number;
 }
 
+// ── Price history types ─────────────────────────────────────────
+
+export interface PriceSnapshotPoint {
+  tick: number;
+  price: number;
+}
+
+export interface SystemPriceHistory {
+  goodId: string;
+  goodName: string;
+  points: PriceSnapshotPoint[];
+}
+
 // ── Notification types ──────────────────────────────────────────
 
 export interface EntityRef {
