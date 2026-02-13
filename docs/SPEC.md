@@ -48,6 +48,7 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 - Ships own their location (systemId), not players
 - Ships have: cargo capacity, fuel tank size, current fuel level, status (docked/in_transit)
 - Ships in transit have: destinationSystemId, departureTick, arrivalTick
+- Ships can refuel at any station — cost scales with amount and base fuel price, UI uses a range slider for partial refueling
 - Inventory is tied to individual ships (cargo holds)
 - One ship type for now, fleet expansion and ship types upgradeable later
 
@@ -58,6 +59,8 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 - Prices vary by station based on supply/demand
 - Transactions update supply/demand levels at the station
 - Players can view current market prices and recent price history
+- Price history is recorded automatically every 20 ticks via snapshots (independent of player trades), stored as a rolling 50-entry JSON array per system
+- Price chart shows snapshot-based data at full width with player cargo quantity indicator
 
 #### 5. Navigation
 
@@ -84,7 +87,7 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 
 - Game time advances via discrete ticks (GameWorld singleton)
 - Server-side **tick processor pipeline** (`lib/tick/`) runs on a 1s poll interval
-- Each tick: topologically sorted processors run sequentially (ship arrivals with danger checks, events lifecycle, economy simulation with modifiers)
+- Each tick: topologically sorted processors run sequentially (ship arrivals with danger checks, events lifecycle, economy simulation with modifiers, price snapshots every 20 ticks)
 - Processors declare `frequency` (run every N ticks) and `offset` (phase stagger)
 - Economy uses round-robin regional processing (one region per tick across ~8 regions)
 - Clients connect via SSE (`GET /api/game/tick-stream`); `useTick` hook wraps EventSource
@@ -141,7 +144,7 @@ Good           (reference table: name, type, base price)
 
 ### Technical
 
-- **Dynamic economy visualisation:** Charts showing price trends, trade volume, supply/demand over time
+- ~~**Dynamic economy visualisation:**~~ Partially implemented — price snapshot system with per-system charts. Trade volume and cross-system comparisons still future
 - **Real-time updates:** WebSockets for live price changes and player positions
 - **Mobile-responsive UI:** Playable on phones/tablets
 

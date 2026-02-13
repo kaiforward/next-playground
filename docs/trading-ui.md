@@ -32,7 +32,7 @@ Buy/sell form using React Hook Form + Zod:
 
 ### Price Chart (`components/trade/price-chart.tsx`)
 
-Recharts `LineChart` showing historical prices for the selected good. Dark theme, blue trend line, CR-formatted tooltip.
+Recharts `LineChart` showing snapshot-based price history for the selected good. Displayed at full width below the trade area (same level as Supply/Demand chart). Shows player cargo quantity in the subtitle ("You own X units" / "You own none"). Data comes from `usePriceHistory` hook (periodic snapshots every 20 ticks), not from trade history — so charts populate even with zero player trades. Dark theme, blue trend line, CR-formatted tooltip. Auto-refreshes via SSE `priceSnapshot` event invalidation.
 
 ### Supply/Demand Chart (`components/trade/supply-demand-chart.tsx`)
 
@@ -60,7 +60,9 @@ Fetches fleet data via `useFleet()` hook and universe data via `useUniverse()`. 
 
 ### Trade (`app/(game)/trade/page.tsx`)
 
-Fetches live market data from `/api/game/market/[systemId]` and fleet state via TanStack Query hooks. On trade:
+Fetches live market data from `/api/game/market/[systemId]`, fleet state, and price history via TanStack Query hooks. Context links to system detail page and map view. On trade:
 1. POSTs to `/api/game/ship/[shipId]/trade` (ship-scoped)
 2. Invalidates fleet and market queries on success
 3. TanStack Query refetches automatically
+
+Price chart and supply/demand chart are full-width below the market table + trade form grid.
