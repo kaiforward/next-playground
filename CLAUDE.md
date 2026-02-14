@@ -55,6 +55,7 @@ Reference docs (how things work now):
 Design docs (plans and backlog):
 
 - `docs/design/economy-balance.md` — Data-driven economy improvements (goods balance, universe utilization, luxury rework)
+- `docs/design/goods-and-economy-types.md` — Scale discussion: how many goods/economy types, browser game research, open questions
 - `docs/design/event-catalog.md` — Implemented and planned event definitions (arcs, shocks, ideas)
 - `docs/design/simulation-enhancements.md` — Future mechanics requiring new engine capabilities
 - `docs/design/BACKLOG.md` — Prioritized backlog (sized, grouped by readiness). Delete items when shipped.
