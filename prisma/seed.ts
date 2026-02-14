@@ -4,6 +4,7 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { GOODS } from "@/lib/constants/goods";
 import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
 import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
+import type { GoodEquilibrium } from "@/lib/constants/goods";
 import {
   UNIVERSE_GEN,
   REGION_IDENTITIES,
@@ -76,6 +77,8 @@ async function main() {
         mass: def.mass,
         volatility: def.volatility,
         hazard: def.hazard,
+        priceFloor: def.priceFloor,
+        priceCeiling: def.priceCeiling,
       },
     });
     goodRecords[key] = good;
@@ -131,11 +134,12 @@ async function main() {
     for (const [goodKey, goodRec] of Object.entries(goodRecords)) {
       const isProduced = produces.includes(goodKey);
       const isConsumed = consumes.includes(goodKey);
+      const goodEq = GOODS[goodKey]?.equilibrium;
 
       const target = isProduced
-        ? EQUILIBRIUM_TARGETS.produces
+        ? (goodEq?.produces ?? EQUILIBRIUM_TARGETS.produces)
         : isConsumed
-          ? EQUILIBRIUM_TARGETS.consumes
+          ? (goodEq?.consumes ?? EQUILIBRIUM_TARGETS.consumes)
           : EQUILIBRIUM_TARGETS.neutral;
 
       await prisma.stationMarket.create({

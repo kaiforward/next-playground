@@ -60,7 +60,7 @@ export function executeBotTick(
     );
     if (!market) continue;
 
-    const price = calculatePrice(market.basePrice, market.supply, market.demand);
+    const price = calculatePrice(market.basePrice, market.supply, market.demand, market.priceFloor, market.priceCeiling);
     const revenue = price * cargo.quantity;
     player = { ...player, credits: player.credits + revenue };
 
@@ -108,7 +108,7 @@ export function executeBotTick(
     );
 
     if (buyMarket) {
-      const price = calculatePrice(buyMarket.basePrice, buyMarket.supply, buyMarket.demand);
+      const price = calculatePrice(buyMarket.basePrice, buyMarket.supply, buyMarket.demand, buyMarket.priceFloor, buyMarket.priceCeiling);
       const totalCost = price * decision.buyQuantity;
 
       if (totalCost <= player.credits && buyMarket.supply >= decision.buyQuantity) {

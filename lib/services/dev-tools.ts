@@ -256,7 +256,7 @@ export async function getEconomySnapshot(): Promise<ServiceResult<{ systems: Eco
       goodName: m.good.name,
       supply: m.supply,
       demand: m.demand,
-      price: calculatePrice(m.good.basePrice, m.supply, m.demand),
+      price: calculatePrice(m.good.basePrice, m.supply, m.demand, m.good.priceFloor, m.good.priceCeiling),
     })),
   }));
 
@@ -294,10 +294,11 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
 
       const isProduced = produces.includes(goodKey);
       const isConsumed = consumes.includes(goodKey);
+      const goodEq = GOODS[goodKey]?.equilibrium;
       const target = isProduced
-        ? EQUILIBRIUM_TARGETS.produces
+        ? (goodEq?.produces ?? EQUILIBRIUM_TARGETS.produces)
         : isConsumed
-          ? EQUILIBRIUM_TARGETS.consumes
+          ? (goodEq?.consumes ?? EQUILIBRIUM_TARGETS.consumes)
           : EQUILIBRIUM_TARGETS.neutral;
 
       await tx.stationMarket.update({

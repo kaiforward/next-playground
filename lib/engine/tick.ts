@@ -30,6 +30,10 @@ export interface MarketTickEntry {
   consumptionRate?: number;
   /** Per-good volatility multiplier on noise amplitude. Default 1.0. */
   volatility?: number;
+  /** Per-good equilibrium target for producing systems. Overrides params.equilibrium.produces. */
+  equilibriumProduces?: { supply: number; demand: number };
+  /** Per-good equilibrium target for consuming systems. Overrides params.equilibrium.consumes. */
+  equilibriumConsumes?: { supply: number; demand: number };
 }
 
 export interface EconomySimParams {
@@ -61,8 +65,8 @@ function getEquilibrium(
   entry: MarketTickEntry,
   params: EconomySimParams,
 ): { supply: number; demand: number } {
-  if (entry.produces.includes(entry.goodId)) return params.equilibrium.produces;
-  if (entry.consumes.includes(entry.goodId)) return params.equilibrium.consumes;
+  if (entry.produces.includes(entry.goodId)) return entry.equilibriumProduces ?? params.equilibrium.produces;
+  if (entry.consumes.includes(entry.goodId)) return entry.equilibriumConsumes ?? params.equilibrium.consumes;
   return params.equilibrium.neutral;
 }
 

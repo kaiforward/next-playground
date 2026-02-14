@@ -361,6 +361,7 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       ? aggregateModifiers(sysMods, m.goodId, modifierCaps)
       : undefined;
 
+    const goodConst = constants.goods[m.goodId];
     return {
       goodId: m.goodId,
       supply: m.supply,
@@ -371,7 +372,9 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       consumes: Object.keys(sys.consumes),
       productionRate: sys.produces[m.goodId],
       consumptionRate: sys.consumes[m.goodId],
-      volatility: constants.goods[m.goodId]?.volatility,
+      volatility: goodConst?.volatility,
+      equilibriumProduces: goodConst?.equilibrium.produces,
+      equilibriumConsumes: goodConst?.equilibrium.consumes,
       ...(agg && {
         supplyTargetShift: agg.supplyTargetShift,
         demandTargetShift: agg.demandTargetShift,

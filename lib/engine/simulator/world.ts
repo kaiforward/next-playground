@@ -99,14 +99,17 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     for (const [goodKey, goodDef] of goodEntries) {
       const isProduced = goodKey in sys.produces;
       const isConsumed = goodKey in sys.consumes;
+      const goodConst = constants.goods[goodKey];
+      const goodEq = goodConst?.equilibrium;
+
       const target = isProduced
-        ? constants.equilibrium.produces
+        ? (goodEq?.produces ?? constants.equilibrium.produces)
         : isConsumed
-          ? constants.equilibrium.consumes
+          ? (goodEq?.consumes ?? constants.equilibrium.consumes)
           : constants.equilibrium.neutral;
 
       // Use overridden base price if available, otherwise the good definition's price
-      const basePrice = constants.goods[goodKey]?.basePrice ?? goodDef.basePrice;
+      const basePrice = goodConst?.basePrice ?? goodDef.basePrice;
 
       markets.push({
         systemId: sys.id,
@@ -114,6 +117,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         basePrice,
         supply: target.supply,
         demand: target.demand,
+        priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
+        priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
       });
     }
   }

@@ -74,6 +74,8 @@ export async function executeTrade(
     marketEntry.good.basePrice,
     marketEntry.supply,
     marketEntry.demand,
+    marketEntry.good.priceFloor,
+    marketEntry.good.priceCeiling,
   );
 
   const currentCargoUsed = ship.cargo.reduce((sum, c) => sum + c.quantity, 0);
@@ -197,6 +199,8 @@ export async function executeTrade(
     updatedMarket.good.basePrice,
     updatedMarket.supply,
     updatedMarket.demand,
+    updatedMarket.good.priceFloor,
+    updatedMarket.good.priceCeiling,
   );
 
   return {

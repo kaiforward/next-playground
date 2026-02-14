@@ -38,4 +38,43 @@ describe("calculatePrice", () => {
     const price = calculatePrice(100, -10, 50);
     expect(price).toBe(500);
   });
+
+  describe("custom clamps", () => {
+    it("uses custom minMult", () => {
+      // demand/supply = 0.05, raw = 5, custom min = 0.1*100 = 10
+      const price = calculatePrice(100, 100, 5, 0.1, 5.0);
+      expect(price).toBe(10);
+    });
+
+    it("uses custom maxMult", () => {
+      // demand/supply = 10, raw = 1000, custom max = 8.0*100 = 800
+      const price = calculatePrice(100, 10, 100, 0.2, 8.0);
+      expect(price).toBe(800);
+    });
+
+    it("uses custom maxMult when supply is 0", () => {
+      const price = calculatePrice(100, 0, 50, 0.1, 4.0);
+      expect(price).toBe(400);
+    });
+
+    it("tier 0 goods have wider range than tier 2", () => {
+      // Tier 0 clamps: 0.1x - 8.0x (water/food/ore/textiles)
+      const tier0Low = calculatePrice(10, 200, 1, 0.1, 8.0);
+      expect(tier0Low).toBe(1); // 0.1 * 10
+      const tier0High = calculatePrice(10, 1, 200, 0.1, 8.0);
+      expect(tier0High).toBe(80); // 8.0 * 10
+
+      // Tier 2 clamps: 0.2x - 4.0x (electronics/machinery/weapons)
+      const tier2Low = calculatePrice(100, 200, 1, 0.2, 4.0);
+      expect(tier2Low).toBe(20); // 0.2 * 100
+      const tier2High = calculatePrice(100, 1, 200, 0.2, 4.0);
+      expect(tier2High).toBe(400); // 4.0 * 100
+    });
+
+    it("defaults match legacy behavior (0.2x - 5.0x)", () => {
+      const withDefaults = calculatePrice(100, 10, 100);
+      const explicit = calculatePrice(100, 10, 100, 0.2, 5.0);
+      expect(withDefaults).toBe(explicit);
+    });
+  });
 });

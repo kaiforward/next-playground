@@ -11,7 +11,7 @@ import type { SimWorld, SimShip, SimMarketEntry } from "../types";
 
 /** Get the current price for a market entry. */
 export function getPrice(m: SimMarketEntry): number {
-  return calculatePrice(m.basePrice, m.supply, m.demand);
+  return calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
 }
 
 /** Get market entries for a specific system. */
@@ -48,7 +48,7 @@ export function estimateSellPrice(
     (m) => m.systemId === targetSystemId && m.goodId === goodId,
   );
   if (!market) return 0;
-  return calculatePrice(market.basePrice, market.supply, market.demand) * quantity;
+  return calculatePrice(market.basePrice, market.supply, market.demand, market.priceFloor, market.priceCeiling) * quantity;
 }
 
 /** Estimate buy cost for a good at the current system. */
@@ -63,7 +63,7 @@ export function estimateBuyPrice(
   );
   if (!market) return Infinity;
   if (market.supply < quantity) return Infinity;
-  return calculatePrice(market.basePrice, market.supply, market.demand) * quantity;
+  return calculatePrice(market.basePrice, market.supply, market.demand, market.priceFloor, market.priceCeiling) * quantity;
 }
 
 export interface ProfitOpportunity {

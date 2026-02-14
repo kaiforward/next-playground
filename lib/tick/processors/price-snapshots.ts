@@ -18,7 +18,7 @@ export const priceSnapshotsProcessor: TickProcessor = {
         goodId: true,
         supply: true,
         demand: true,
-        good: { select: { basePrice: true } },
+        good: { select: { basePrice: true, priceFloor: true, priceCeiling: true } },
         station: { select: { system: { select: { id: true } } } },
       },
     });
@@ -33,6 +33,8 @@ export const priceSnapshotsProcessor: TickProcessor = {
       supply: m.supply,
       demand: m.demand,
       basePrice: m.good.basePrice,
+      priceFloor: m.good.priceFloor,
+      priceCeiling: m.good.priceCeiling,
     }));
 
     const newEntries = buildPriceEntry(marketInputs, ctx.tick);

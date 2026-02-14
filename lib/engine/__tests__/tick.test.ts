@@ -208,6 +208,57 @@ describe("simulateEconomyTick", () => {
     });
   });
 
+  describe("per-good equilibrium overrides", () => {
+    it("uses equilibriumProduces when present", () => {
+      // Custom target: supply=80, demand=60 (instead of global 120/40)
+      const entry = makeEntry({
+        supply: 80,
+        demand: 60,
+        produces: ["ore"],
+        equilibriumProduces: { supply: 80, demand: 60 },
+      });
+      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
+      // At custom equilibrium: reversion = 0 for both, only production effect
+      // supply: 80 + 0 reversion + 0 noise + 3 production = 83
+      expect(result.supply).toBe(83);
+      // demand: 60 + 0 reversion + 0 noise - round(3*0.3)=1 = 59
+      expect(result.demand).toBe(59);
+    });
+
+    it("uses equilibriumConsumes when present", () => {
+      // Custom target: supply=50, demand=100 (instead of global 40/120)
+      const entry = makeEntry({
+        supply: 50,
+        demand: 100,
+        consumes: ["ore"],
+        equilibriumConsumes: { supply: 50, demand: 100 },
+      });
+      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
+      // At custom equilibrium: reversion = 0, only consumption effect
+      // supply: 50 - 2 = 48
+      expect(result.supply).toBe(48);
+      // demand: 100 + round(2*0.5) = 101
+      expect(result.demand).toBe(101);
+    });
+
+    it("falls back to global equilibrium when per-good not set", () => {
+      const withOverride = makeEntry({
+        supply: 60, demand: 60, produces: ["ore"],
+        equilibriumProduces: { supply: 120, demand: 40 },
+      });
+      const withoutOverride = makeEntry({
+        supply: 60, demand: 60, produces: ["ore"],
+      });
+      const rng1 = sequenceRng([0.5, 0.5]);
+      const rng2 = sequenceRng([0.5, 0.5]);
+      const [r1] = simulateEconomyTick([withOverride], defaultParams, rng1);
+      const [r2] = simulateEconomyTick([withoutOverride], defaultParams, rng2);
+      // Both use the same target (120/40) so results match
+      expect(r1.supply).toBe(r2.supply);
+      expect(r1.demand).toBe(r2.demand);
+    });
+  });
+
   describe("convergence", () => {
     it("converges toward equilibrium over many ticks", () => {
       // Start far from producer equilibrium, run 200 ticks with zero noise

@@ -40,6 +40,8 @@ export interface SimMarketEntry {
   basePrice: number;
   supply: number;
   demand: number;
+  priceFloor: number;
+  priceCeiling: number;
 }
 
 export interface SimEvent {

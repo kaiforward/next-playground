@@ -119,6 +119,7 @@ export const economyProcessor: TickProcessor = {
         ? aggregateModifiers(sysMods, goodKey, MODIFIER_CAPS)
         : undefined;
 
+      const goodDef = GOODS[goodKey];
       return {
         goodId: goodKey,
         supply: m.supply,
@@ -129,7 +130,9 @@ export const economyProcessor: TickProcessor = {
         consumes: getConsumedGoods(econ),
         productionRate: getProductionRate(econ, goodKey),
         consumptionRate: getConsumptionRate(econ, goodKey),
-        volatility: GOODS[goodKey]?.volatility,
+        volatility: goodDef?.volatility,
+        equilibriumProduces: goodDef?.equilibrium.produces,
+        equilibriumConsumes: goodDef?.equilibrium.consumes,
         ...(agg && {
           supplyTargetShift: agg.supplyTargetShift,
           demandTargetShift: agg.demandTargetShift,

@@ -174,15 +174,17 @@ model Station {
 }
 
 model Good {
-  id          String @id @default(cuid())
-  name        String @unique
-  description String @default("")
-  basePrice   Float
-  tier        Int    @default(0)
-  volume      Int    @default(1)
-  mass        Float  @default(1.0)
-  volatility  Float  @default(1.0)
-  hazard      String @default("none")
+  id           String @id @default(cuid())
+  name         String @unique
+  description  String @default("")
+  basePrice    Float
+  tier         Int    @default(0)
+  volume       Int    @default(1)
+  mass         Float  @default(1.0)
+  volatility   Float  @default(1.0)
+  hazard       String @default("none")
+  priceFloor   Float  @default(0.2)
+  priceCeiling Float  @default(5.0)
 
   cargoItems CargoItem[]
   markets    StationMarket[]
