@@ -133,12 +133,41 @@ export interface SimRunContext {
 
 // ── Metrics ─────────────────────────────────────────────────────
 
+export interface GoodTradeRecord {
+  goodId: string;
+  /** Quantity bought (0 if only sold this tick). */
+  bought: number;
+  /** Quantity sold (0 if only bought this tick). */
+  sold: number;
+  /** Credits spent buying. */
+  buyCost: number;
+  /** Credits earned selling. */
+  sellRevenue: number;
+}
+
 export interface TickMetrics {
   tick: number;
   credits: number;
   tradeCount: number;
   tradeProfitSum: number;
   fuelSpent: number;
+  /** Per-good trade data recorded this tick. */
+  goodsTraded: GoodTradeRecord[];
+  /** System the bot was at (or departed from) this tick. Null if in transit. */
+  systemVisited: string | null;
+  /** True if the bot was docked but found no profitable trade this tick. */
+  idle: boolean;
+}
+
+export interface GoodBreakdownEntry {
+  goodId: string;
+  timesBought: number;
+  timesSold: number;
+  totalQuantityBought: number;
+  totalQuantitySold: number;
+  totalSpent: number;
+  totalRevenue: number;
+  netProfit: number;
 }
 
 export interface PlayerSummary {
@@ -155,13 +184,84 @@ export interface PlayerSummary {
   profitPerFuel: number;
   /** Credits at each tick for charting. */
   creditsCurve: number[];
+  /** Aggregate stats per good across the full run. */
+  goodBreakdown: GoodBreakdownEntry[];
+  /** Number of unique systems visited during the run. */
+  uniqueSystemsVisited: number;
+  /** Top 5 most-visited systems with visit counts. */
+  topSystems: { systemId: string; systemName: string; visits: number }[];
+  /** Fraction of total systems visited at least once. */
+  explorationRate: number;
+  /** Number of ticks spent docked with no trade available. */
+  idleTicks: number;
+  /** Idle rate as fraction of total docked ticks. */
+  idleRate: number;
+  /** Earning rate per tick as a rolling window (window size = 50 ticks). */
+  earningRateCurve: number[];
 }
+
+// ── Market health ───────────────────────────────────────────────
+
+export interface MarketSnapshot {
+  systemId: string;
+  goodId: string;
+  supply: number;
+  demand: number;
+  price: number;
+}
+
+export interface MarketHealthSummary {
+  /** Per-good average price standard deviation across systems (high = trade opportunity). */
+  priceDispersion: { goodId: string; avgStdDev: number }[];
+  /** Per-good average distance from equilibrium at simulation end. */
+  equilibriumDrift: { goodId: string; avgSupplyDrift: number; avgDemandDrift: number }[];
+}
+
+// ── Event impact ────────────────────────────────────────────────
+
+/** Lifecycle record for an event (tracked during simulation). */
+export interface EventLifecycle {
+  id: string;
+  type: string;
+  systemId: string;
+  severity: number;
+  startTick: number;
+  endTick: number;
+  sourceEventId: string | null;
+}
+
+export interface EventImpact {
+  eventId: string;
+  eventType: string;
+  systemId: string;
+  systemName: string;
+  severity: number;
+  startTick: number;
+  endTick: number;
+  duration: number;
+  /** Average bot earning rate (credits/tick) in the N ticks before the event. */
+  preEventEarningRate: number;
+  /** Average bot earning rate during the event. */
+  duringEventEarningRate: number;
+  /** Earning rate change as a percentage. */
+  earningRateChangePct: number;
+  /** Average price change at the affected system (across all goods). */
+  priceImpactPct: number;
+}
+
+// ── Results ─────────────────────────────────────────────────────
 
 export interface SimResults {
   config: SimConfig;
   constants: SimConstants;
   overrides: SimConstantOverrides;
   summaries: PlayerSummary[];
+  /** Market state sampled at regular intervals. */
+  marketSnapshots: { tick: number; markets: MarketSnapshot[] }[];
+  /** Derived market health metrics. */
+  marketHealth: MarketHealthSummary;
+  /** Impact measurement for each event that occurred. */
+  eventImpacts: EventImpact[];
   /** Optional label for experiment tracking. */
   label?: string;
   /** Total wall-clock time in ms. */

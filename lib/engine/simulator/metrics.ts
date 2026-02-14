@@ -2,7 +2,13 @@
  * Metrics tracking and summary computation for simulator bots.
  */
 
-import type { TickMetrics, PlayerSummary, SimPlayer } from "./types";
+import type {
+  TickMetrics,
+  PlayerSummary,
+  SimPlayer,
+  GoodTradeRecord,
+  GoodBreakdownEntry,
+} from "./types";
 
 /** Record metrics for a single tick. */
 export function recordTickMetrics(
@@ -11,6 +17,9 @@ export function recordTickMetrics(
   tradeCount: number,
   tradeProfitSum: number,
   fuelSpent: number,
+  goodsTraded: GoodTradeRecord[],
+  systemVisited: string | null,
+  idle: boolean,
 ): TickMetrics {
   return {
     tick,
@@ -18,13 +27,88 @@ export function recordTickMetrics(
     tradeCount,
     tradeProfitSum,
     fuelSpent,
+    goodsTraded,
+    systemVisited,
+    idle,
   };
+}
+
+/** Aggregate per-good trade records into a breakdown summary. */
+function aggregateGoodsBreakdown(metrics: TickMetrics[]): GoodBreakdownEntry[] {
+  const map = new Map<string, GoodBreakdownEntry>();
+
+  for (const m of metrics) {
+    for (const rec of m.goodsTraded) {
+      let entry = map.get(rec.goodId);
+      if (!entry) {
+        entry = {
+          goodId: rec.goodId,
+          timesBought: 0,
+          timesSold: 0,
+          totalQuantityBought: 0,
+          totalQuantitySold: 0,
+          totalSpent: 0,
+          totalRevenue: 0,
+          netProfit: 0,
+        };
+        map.set(rec.goodId, entry);
+      }
+      if (rec.bought > 0) {
+        entry.timesBought++;
+        entry.totalQuantityBought += rec.bought;
+        entry.totalSpent += rec.buyCost;
+      }
+      if (rec.sold > 0) {
+        entry.timesSold++;
+        entry.totalQuantitySold += rec.sold;
+        entry.totalRevenue += rec.sellRevenue;
+      }
+    }
+  }
+
+  // Compute net profit
+  for (const entry of map.values()) {
+    entry.netProfit = entry.totalRevenue - entry.totalSpent;
+  }
+
+  return [...map.values()].sort((a, b) => b.netProfit - a.netProfit);
+}
+
+/** Compute route diversity stats from system visit history. */
+function computeRouteDiversity(
+  metrics: TickMetrics[],
+  totalSystems: number,
+  systemNames: Map<string, string>,
+): Pick<PlayerSummary, "uniqueSystemsVisited" | "topSystems" | "explorationRate"> {
+  const visitCounts = new Map<string, number>();
+
+  for (const m of metrics) {
+    if (m.systemVisited) {
+      visitCounts.set(m.systemVisited, (visitCounts.get(m.systemVisited) ?? 0) + 1);
+    }
+  }
+
+  const uniqueSystemsVisited = visitCounts.size;
+  const explorationRate = totalSystems > 0 ? uniqueSystemsVisited / totalSystems : 0;
+
+  const topSystems = [...visitCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([systemId, visits]) => ({
+      systemId,
+      systemName: systemNames.get(systemId) ?? systemId,
+      visits,
+    }));
+
+  return { uniqueSystemsVisited, topSystems, explorationRate };
 }
 
 /** Compute a player summary from their full metrics history. */
 export function computeSummary(
   player: SimPlayer,
   metrics: TickMetrics[],
+  totalSystems: number,
+  systemNames: Map<string, string>,
 ): PlayerSummary {
   const totalTrades = metrics.reduce((sum, m) => sum + m.tradeCount, 0);
   const totalProfit = metrics.reduce((sum, m) => sum + m.tradeProfitSum, 0);
@@ -45,6 +129,22 @@ export function computeSummary(
   const avgProfitPerTrade = totalTrades > 0 ? totalProfit / totalTrades : 0;
   const profitPerFuel = totalFuelSpent > 0 ? totalProfit / totalFuelSpent : 0;
 
+  const diversity = computeRouteDiversity(metrics, totalSystems, systemNames);
+
+  // Idle analysis — count ticks where bot was docked but found no trade
+  const idleTicks = metrics.filter((m) => m.idle).length;
+  const dockedTicks = metrics.filter((m) => m.systemVisited !== null).length;
+  const idleRate = dockedTicks > 0 ? idleTicks / dockedTicks : 0;
+
+  // Earning rate curve — rolling window average of credits delta per tick
+  const WINDOW_SIZE = 50;
+  const earningRateCurve = creditsCurve.map((credits, i) => {
+    const windowStart = Math.max(0, i - WINDOW_SIZE);
+    const delta = credits - creditsCurve[windowStart];
+    const windowLen = i - windowStart || 1;
+    return delta / windowLen;
+  });
+
   return {
     playerId: player.id,
     playerName: player.name,
@@ -57,5 +157,10 @@ export function computeSummary(
     totalFuelSpent,
     profitPerFuel,
     creditsCurve,
+    goodBreakdown: aggregateGoodsBreakdown(metrics),
+    ...diversity,
+    idleTicks,
+    idleRate,
+    earningRateCurve,
   };
 }
