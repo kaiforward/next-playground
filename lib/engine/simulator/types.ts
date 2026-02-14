@@ -6,6 +6,7 @@
 import type { EconomyType, RegionIdentity } from "@/lib/types/game";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SimConstants, SimConstantOverrides } from "./constants";
+import type { SimAdjacencyList } from "./pathfinding-cache";
 
 // ── World model ─────────────────────────────────────────────────
 
@@ -126,6 +127,8 @@ export interface SimRunContext {
   constants: SimConstants;
   disableRandomEvents: boolean;
   eventInjections: EventInjection[];
+  /** Pre-built adjacency list for simulator pathfinding (avoids rebuilding per call). */
+  adjacencyList: SimAdjacencyList;
 }
 
 // ── Metrics ─────────────────────────────────────────────────────

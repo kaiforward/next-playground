@@ -4,13 +4,14 @@
 
 import type { TradeStrategy, TradeDecision } from "./types";
 import { getReachable, findOpportunities } from "./helpers";
+import type { SimAdjacencyList } from "../pathfinding-cache";
 import type { SimPlayer, SimShip, SimWorld } from "../types";
 
 export function createGreedyStrategy(): TradeStrategy {
   return {
     name: "greedy",
-    evaluate(player: SimPlayer, ship: SimShip, world: SimWorld): TradeDecision | null {
-      const reachable = getReachable(world, ship);
+    evaluate(player: SimPlayer, ship: SimShip, world: SimWorld, adj?: SimAdjacencyList): TradeDecision | null {
+      const reachable = getReachable(world, ship, adj);
       if (reachable.size === 0) return null;
 
       const opportunities = findOpportunities(world, ship, reachable, player.credits);

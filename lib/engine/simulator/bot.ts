@@ -5,11 +5,9 @@
 
 import { calculatePrice } from "@/lib/engine/pricing";
 import { hopDuration } from "@/lib/engine/travel";
-import { findShortestPath } from "@/lib/engine/pathfinding";
-import type { ConnectionInfo } from "@/lib/engine/navigation";
-import type { SimConstants } from "./constants";
+import { findShortestPathCached } from "./pathfinding-cache";
 import type { TradeStrategy } from "./strategies/types";
-import type { SimWorld, SimPlayer, SimShip, SimMarketEntry, TickMetrics } from "./types";
+import type { SimWorld, SimPlayer, SimShip, SimMarketEntry, SimRunContext, TickMetrics } from "./types";
 import { recordTickMetrics } from "./metrics";
 
 interface BotTickResult {
@@ -25,8 +23,9 @@ export function executeBotTick(
   playerId: string,
   world: SimWorld,
   strategy: TradeStrategy,
-  constants: SimConstants,
+  ctx: SimRunContext,
 ): BotTickResult {
+  const { constants, adjacencyList } = ctx;
   let player = world.players.find((p) => p.id === playerId)!;
   let ship = world.ships.find((s) => s.playerId === playerId)!;
   let markets = [...world.markets];
@@ -91,7 +90,7 @@ export function executeBotTick(
     markets,
   };
 
-  const decision = strategy.evaluate(player, ship, worldForEval);
+  const decision = strategy.evaluate(player, ship, worldForEval, adjacencyList);
 
   if (decision) {
     // 4. Buy goods
@@ -131,8 +130,7 @@ export function executeBotTick(
     }
 
     // 5. Navigate to target
-    const connections: ConnectionInfo[] = world.connections;
-    const path = findShortestPath(ship.systemId, decision.targetSystemId, connections);
+    const path = findShortestPathCached(ship.systemId, decision.targetSystemId, adjacencyList);
 
     if (path && path.totalFuelCost <= ship.fuel) {
       fuelSpent = path.totalFuelCost;

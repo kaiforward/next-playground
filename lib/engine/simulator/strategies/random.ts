@@ -5,13 +5,14 @@
 import type { RNG } from "@/lib/engine/universe-gen";
 import type { TradeStrategy, TradeDecision } from "./types";
 import { getReachable, getMarkets, getCargoUsed, getPrice } from "./helpers";
+import type { SimAdjacencyList } from "../pathfinding-cache";
 import type { SimPlayer, SimShip, SimWorld } from "../types";
 
 export function createRandomStrategy(rng: RNG): TradeStrategy {
   return {
     name: "random",
-    evaluate(player: SimPlayer, ship: SimShip, world: SimWorld): TradeDecision | null {
-      const reachable = getReachable(world, ship);
+    evaluate(player: SimPlayer, ship: SimShip, world: SimWorld, adj?: SimAdjacencyList): TradeDecision | null {
+      const reachable = getReachable(world, ship, adj);
       if (reachable.size === 0) return null;
 
       // Pick random target

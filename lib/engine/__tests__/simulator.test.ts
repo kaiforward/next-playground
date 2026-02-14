@@ -12,6 +12,7 @@ function defaultCtx(overrides?: Partial<SimRunContext>): SimRunContext {
     constants: DEFAULT_SIM_CONSTANTS,
     disableRandomEvents: false,
     eventInjections: [],
+    adjacencyList: new Map(),
     ...overrides,
   };
 }
