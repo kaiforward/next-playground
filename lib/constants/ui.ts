@@ -38,6 +38,9 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   plague_risk: "amber",
   ship_arrived: "blue",
   cargo_lost: "red",
+  hazard_incident: "amber",
+  import_duty: "slate",
+  contraband_seized: "red",
 };
 
 /** Mapping from region identity to Badge color prop. */

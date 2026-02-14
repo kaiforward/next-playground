@@ -16,12 +16,52 @@ export const DANGER_CONSTANTS = {
   MAX_LOSS_FRACTION: 0.4,
 } as const;
 
+export const HAZARD_CONSTANTS = {
+  /** Base incident chance for low-hazard goods (3%). */
+  LOW_BASE_CHANCE: 0.03,
+  /** Base incident chance for high-hazard goods (6%). */
+  HIGH_BASE_CHANCE: 0.06,
+  /** Danger level scaling: effectiveChance = base + danger × scaling. */
+  DANGER_SCALING: 0.5,
+  /** Minimum loss fraction for low-hazard incident (10%). */
+  LOW_MIN_LOSS: 0.10,
+  /** Maximum loss fraction for low-hazard incident (25%). */
+  LOW_MAX_LOSS: 0.25,
+  /** Minimum loss fraction for high-hazard incident (50%). */
+  HIGH_MIN_LOSS: 0.50,
+  /** Maximum loss fraction for high-hazard incident (100%). */
+  HIGH_MAX_LOSS: 1.0,
+} as const;
+
+export const LEGALITY_CONSTANTS = {
+  /** Base inspection chance before government modifier (25%). */
+  BASE_INSPECTION_CHANCE: 0.25,
+} as const;
+
 // ── Types ────────────────────────────────────────────────────────
 
 export interface CargoLossEntry {
   goodId: string;
   lost: number;
   remaining: number;
+}
+
+export interface HazardIncidentEntry {
+  goodId: string;
+  hazard: "low" | "high";
+  lost: number;
+  remaining: number;
+}
+
+export interface ImportDutyEntry {
+  goodId: string;
+  seized: number;
+  remaining: number;
+}
+
+export interface ContrabandSeizedEntry {
+  goodId: string;
+  seized: number;
 }
 
 // ── Functions ────────────────────────────────────────────────────
@@ -73,6 +113,115 @@ export function rollCargoLoss(
         goodId: item.goodId,
         lost,
         remaining: item.quantity - lost,
+      });
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Roll for hazard incidents on cargo at arrival.
+ *
+ * Each hazardous cargo stack rolls independently. Non-hazardous goods (hazard: "none")
+ * are never affected. Danger level compounds with the base chance.
+ */
+export function rollHazardIncidents(
+  cargo: { goodId: string; quantity: number; hazard: "none" | "low" | "high" }[],
+  dangerLevel: number,
+  rng: () => number,
+): HazardIncidentEntry[] {
+  const entries: HazardIncidentEntry[] = [];
+
+  for (const item of cargo) {
+    if (item.hazard === "none" || item.quantity <= 0) continue;
+
+    const baseChance = item.hazard === "high"
+      ? HAZARD_CONSTANTS.HIGH_BASE_CHANCE
+      : HAZARD_CONSTANTS.LOW_BASE_CHANCE;
+    const effectiveChance = baseChance + dangerLevel * HAZARD_CONSTANTS.DANGER_SCALING;
+
+    if (rng() >= effectiveChance) continue;
+
+    // Incident — determine loss fraction
+    const minLoss = item.hazard === "high"
+      ? HAZARD_CONSTANTS.HIGH_MIN_LOSS
+      : HAZARD_CONSTANTS.LOW_MIN_LOSS;
+    const maxLoss = item.hazard === "high"
+      ? HAZARD_CONSTANTS.HIGH_MAX_LOSS
+      : HAZARD_CONSTANTS.LOW_MAX_LOSS;
+    const lossFraction = minLoss + rng() * (maxLoss - minLoss);
+    const lost = Math.min(Math.ceil(item.quantity * lossFraction), item.quantity);
+
+    if (lost > 0) {
+      entries.push({
+        goodId: item.goodId,
+        hazard: item.hazard,
+        lost,
+        remaining: item.quantity - lost,
+      });
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Apply import duty to taxed goods. Deterministic — no RNG.
+ *
+ * seized = Math.ceil(quantity × taxRate), capped at quantity.
+ */
+export function applyImportDuty(
+  cargo: { goodId: string; quantity: number }[],
+  taxedGoods: string[],
+  taxRate: number,
+): ImportDutyEntry[] {
+  if (taxRate <= 0 || taxedGoods.length === 0) return [];
+
+  const taxedSet = new Set(taxedGoods);
+  const entries: ImportDutyEntry[] = [];
+
+  for (const item of cargo) {
+    if (!taxedSet.has(item.goodId) || item.quantity <= 0) continue;
+
+    const seized = Math.min(Math.ceil(item.quantity * taxRate), item.quantity);
+    if (seized > 0) {
+      entries.push({
+        goodId: item.goodId,
+        seized,
+        remaining: item.quantity - seized,
+      });
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Roll for contraband inspection at arrival. Full confiscation on detection.
+ *
+ * inspectionChance = BASE_INSPECTION_CHANCE × inspectionModifier.
+ * If modifier is 0, returns [] immediately (no inspections).
+ */
+export function rollContrabandInspection(
+  cargo: { goodId: string; quantity: number }[],
+  contrabandGoods: string[],
+  inspectionModifier: number,
+  rng: () => number,
+): ContrabandSeizedEntry[] {
+  if (inspectionModifier <= 0 || contrabandGoods.length === 0) return [];
+
+  const contrabandSet = new Set(contrabandGoods);
+  const inspectionChance = LEGALITY_CONSTANTS.BASE_INSPECTION_CHANCE * inspectionModifier;
+  const entries: ContrabandSeizedEntry[] = [];
+
+  for (const item of cargo) {
+    if (!contrabandSet.has(item.goodId) || item.quantity <= 0) continue;
+
+    if (rng() < inspectionChance) {
+      entries.push({
+        goodId: item.goodId,
+        seized: item.quantity,
       });
     }
   }

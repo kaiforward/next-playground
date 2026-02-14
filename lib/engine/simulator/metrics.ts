@@ -8,6 +8,7 @@ import type {
   SimPlayer,
   GoodTradeRecord,
   GoodBreakdownEntry,
+  GovernmentSellEntry,
 } from "./types";
 
 /** Record metrics for a single tick. */
@@ -103,6 +104,29 @@ function computeRouteDiversity(
   return { uniqueSystemsVisited, topSystems, explorationRate };
 }
 
+/** Aggregate sell trades by destination government type. */
+function aggregateGovernmentSellBreakdown(metrics: TickMetrics[]): GovernmentSellEntry[] {
+  const map = new Map<string, { totalSold: number; totalRevenue: number }>();
+
+  for (const m of metrics) {
+    for (const rec of m.goodsTraded) {
+      if (rec.sold > 0 && rec.sellGovernmentType) {
+        let entry = map.get(rec.sellGovernmentType);
+        if (!entry) {
+          entry = { totalSold: 0, totalRevenue: 0 };
+          map.set(rec.sellGovernmentType, entry);
+        }
+        entry.totalSold += rec.sold;
+        entry.totalRevenue += rec.sellRevenue;
+      }
+    }
+  }
+
+  return [...map.entries()]
+    .map(([governmentType, data]) => ({ governmentType, ...data }))
+    .sort((a, b) => b.totalRevenue - a.totalRevenue);
+}
+
 /** Compute a player summary from their full metrics history. */
 export function computeSummary(
   player: SimPlayer,
@@ -162,5 +186,6 @@ export function computeSummary(
     idleTicks,
     idleRate,
     earningRateCurve,
+    governmentSellBreakdown: aggregateGovernmentSellBreakdown(metrics),
   };
 }

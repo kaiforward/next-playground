@@ -1,6 +1,18 @@
-import { aggregateDangerLevel, DANGER_CONSTANTS, rollCargoLoss, type CargoLossEntry } from "@/lib/engine/danger";
+import {
+  aggregateDangerLevel,
+  DANGER_CONSTANTS,
+  rollCargoLoss,
+  rollHazardIncidents,
+  applyImportDuty,
+  rollContrabandInspection,
+  type CargoLossEntry,
+  type HazardIncidentEntry,
+  type ImportDutyEntry,
+  type ContrabandSeizedEntry,
+} from "@/lib/engine/danger";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { GOODS } from "@/lib/constants/goods";
 import type { GovernmentType } from "@/lib/types/game";
 import type { TickProcessor, TickProcessorResult } from "../types";
 
@@ -10,6 +22,9 @@ interface ArrivedShip {
   systemId: string;
   destName: string;
   playerId: string;
+  hazardIncidents?: HazardIncidentEntry[];
+  importDuties?: ImportDutyEntry[];
+  contrabandSeized?: ContrabandSeizedEntry[];
   cargoLost?: CargoLossEntry[];
 }
 
@@ -92,39 +107,108 @@ export const shipArrivalsProcessor: TickProcessor = {
         },
       });
 
-      // Check danger at destination (event modifiers + government baseline)
+      // Compute danger at destination (event modifiers + government baseline)
       const systemMods = modsBySystem.get(ship.destinationSystemId) ?? [];
       const govType = ship.destination?.region?.governmentType as GovernmentType | undefined;
-      const govBaseline = govType ? (GOVERNMENT_TYPES[govType]?.dangerBaseline ?? 0) : 0;
+      const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
+      const govBaseline = govDef?.dangerBaseline ?? 0;
       const danger = Math.min(
         aggregateDangerLevel(systemMods) + govBaseline,
         DANGER_CONSTANTS.MAX_DANGER,
       );
+
+      // Mutable local cargo tracking — each stage mutates quantities for the next
+      const localCargo = ship.cargo.map((c) => ({
+        id: c.id,
+        goodId: c.goodId,
+        quantity: c.quantity,
+      }));
+
+      let hazardIncidents: HazardIncidentEntry[] | undefined;
+      let importDuties: ImportDutyEntry[] | undefined;
+      let contrabandSeized: ContrabandSeizedEntry[] | undefined;
       let cargoLost: CargoLossEntry[] | undefined;
 
-      if (danger > 0 && ship.cargo.length > 0) {
-        const losses = rollCargoLoss(
-          danger,
-          ship.cargo,
+      // ── Stage 1: Hazard incidents ──
+      if (localCargo.length > 0) {
+        const enriched = localCargo
+          .filter((c) => c.quantity > 0)
+          .map((c) => ({
+            goodId: c.goodId,
+            quantity: c.quantity,
+            hazard: (GOODS[c.goodId]?.hazard ?? "none") as "none" | "low" | "high",
+          }));
+
+        const incidents = rollHazardIncidents(enriched, danger, Math.random);
+        if (incidents.length > 0) {
+          for (const inc of incidents) {
+            const item = localCargo.find((c) => c.goodId === inc.goodId);
+            if (item) item.quantity = inc.remaining;
+          }
+          hazardIncidents = incidents;
+        }
+      }
+
+      // ── Stage 2: Import duty (taxed goods) ──
+      if (govDef && govDef.taxed.length > 0 && govDef.taxRate > 0) {
+        const duties = applyImportDuty(
+          localCargo.filter((c) => c.quantity > 0),
+          govDef.taxed,
+          govDef.taxRate,
+        );
+        if (duties.length > 0) {
+          for (const duty of duties) {
+            const item = localCargo.find((c) => c.goodId === duty.goodId);
+            if (item) item.quantity = duty.remaining;
+          }
+          importDuties = duties;
+        }
+      }
+
+      // ── Stage 3: Contraband inspection ──
+      if (govDef && govDef.contraband.length > 0 && govDef.inspectionModifier > 0) {
+        const seized = rollContrabandInspection(
+          localCargo.filter((c) => c.quantity > 0),
+          govDef.contraband,
+          govDef.inspectionModifier,
           Math.random,
         );
-
-        if (losses.length > 0) {
-          // Apply cargo losses in DB
-          for (const loss of losses) {
-            const cargoItem = ship.cargo.find((c) => c.goodId === loss.goodId);
-            if (!cargoItem) continue;
-
-            if (loss.remaining <= 0) {
-              await ctx.tx.cargoItem.delete({ where: { id: cargoItem.id } });
-            } else {
-              await ctx.tx.cargoItem.update({
-                where: { id: cargoItem.id },
-                data: { quantity: loss.remaining },
-              });
-            }
+        if (seized.length > 0) {
+          for (const s of seized) {
+            const item = localCargo.find((c) => c.goodId === s.goodId);
+            if (item) item.quantity = 0;
           }
-          cargoLost = losses;
+          contrabandSeized = seized;
+        }
+      }
+
+      // ── Stage 4: Existing event-based danger (operates on reduced cargo) ──
+      if (danger > 0) {
+        const remainingCargo = localCargo.filter((c) => c.quantity > 0);
+        if (remainingCargo.length > 0) {
+          const losses = rollCargoLoss(danger, remainingCargo, Math.random);
+          if (losses.length > 0) {
+            for (const loss of losses) {
+              const item = localCargo.find((c) => c.goodId === loss.goodId);
+              if (item) item.quantity = loss.remaining;
+            }
+            cargoLost = losses;
+          }
+        }
+      }
+
+      // ── Persist cargo changes to DB ──
+      for (const item of localCargo) {
+        const original = ship.cargo.find((c) => c.goodId === item.goodId);
+        if (!original || original.quantity === item.quantity) continue;
+
+        if (item.quantity <= 0) {
+          await ctx.tx.cargoItem.delete({ where: { id: original.id } });
+        } else {
+          await ctx.tx.cargoItem.update({
+            where: { id: original.id },
+            data: { quantity: item.quantity },
+          });
         }
       }
 
@@ -134,6 +218,9 @@ export const shipArrivalsProcessor: TickProcessor = {
         systemId: ship.destinationSystemId,
         destName: ship.destination?.name ?? "Unknown",
         playerId: ship.playerId,
+        hazardIncidents,
+        importDuties,
+        contrabandSeized,
         cargoLost,
       });
     }
@@ -162,6 +249,37 @@ export const shipArrivalsProcessor: TickProcessor = {
         type: "ship_arrived",
         refs: { ship: shipRef, system: systemRef },
       });
+
+      if (a.hazardIncidents && a.hazardIncidents.length > 0) {
+        const goodNames = a.hazardIncidents.map((i) => GOODS[i.goodId]?.name ?? i.goodId).join(", ");
+        notifications.push({
+          message: `${a.shipName}: hazard incident — ${goodNames} damaged near ${a.destName}`,
+          type: "hazard_incident",
+          refs: { ship: shipRef, system: systemRef },
+        });
+      }
+
+      if (a.importDuties && a.importDuties.length > 0) {
+        const details = a.importDuties
+          .map((d) => `${d.seized} ${GOODS[d.goodId]?.name ?? d.goodId}`)
+          .join(", ");
+        notifications.push({
+          message: `${a.shipName}: import duty — ${details} seized at ${a.destName}`,
+          type: "import_duty",
+          refs: { ship: shipRef, system: systemRef },
+        });
+      }
+
+      if (a.contrabandSeized && a.contrabandSeized.length > 0) {
+        const details = a.contrabandSeized
+          .map((s) => `${s.seized} ${GOODS[s.goodId]?.name ?? s.goodId}`)
+          .join(", ");
+        notifications.push({
+          message: `${a.shipName}: contraband confiscated — ${details} at ${a.destName}`,
+          type: "contraband_seized",
+          refs: { ship: shipRef, system: systemRef },
+        });
+      }
 
       if (a.cargoLost && a.cargoLost.length > 0) {
         notifications.push({

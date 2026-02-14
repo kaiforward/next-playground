@@ -6,7 +6,16 @@
 import { simulateEconomyTick, type MarketTickEntry, type EconomySimParams } from "@/lib/engine/tick";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
+import { GOODS } from "@/lib/constants/goods";
 import type { GovernmentType } from "@/lib/types/game";
+import {
+  aggregateDangerLevel,
+  rollCargoLoss,
+  rollHazardIncidents,
+  applyImportDuty,
+  rollContrabandInspection,
+  DANGER_CONSTANTS,
+} from "@/lib/engine/danger";
 import {
   checkPhaseTransition,
   buildModifiersForPhase,
@@ -105,22 +114,100 @@ function resolveInjectionTarget(
 
 // ── Ship arrivals ───────────────────────────────────────────────
 
-function processSimShipArrivals(world: SimWorld): SimWorld {
+function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
   const ships = world.ships.map((ship) => {
     if (
-      ship.status === "in_transit" &&
-      ship.arrivalTick !== null &&
-      ship.arrivalTick <= world.tick
+      ship.status !== "in_transit" ||
+      ship.arrivalTick === null ||
+      ship.arrivalTick > world.tick
     ) {
-      return {
-        ...ship,
-        status: "docked" as const,
-        systemId: ship.destinationSystemId!,
-        destinationSystemId: null,
-        arrivalTick: null,
-      };
+      return ship;
     }
-    return ship;
+
+    const destSystemId = ship.destinationSystemId!;
+    let cargo = [...(ship.cargo ?? []).map((c) => ({ ...c }))];
+
+    // Look up destination system → region → government
+    const destSystem = world.systems.find((s) => s.id === destSystemId);
+    const destRegion = destSystem
+      ? world.regions.find((r) => r.id === destSystem.regionId)
+      : undefined;
+    const govDef = destRegion
+      ? GOVERNMENT_TYPES[destRegion.governmentType as GovernmentType]
+      : undefined;
+
+    // Compute danger level from navigation modifiers + government baseline
+    const navMods = world.modifiers.filter(
+      (m) => m.domain === "navigation" && m.targetType === "system" && m.targetId === destSystemId,
+    );
+    const govBaseline = govDef?.dangerBaseline ?? 0;
+    const danger = Math.min(
+      aggregateDangerLevel(navMods) + govBaseline,
+      DANGER_CONSTANTS.MAX_DANGER,
+    );
+
+    // Stage 1: Hazard incidents
+    const enriched = cargo
+      .filter((c) => c.quantity > 0)
+      .map((c) => ({
+        goodId: c.goodId,
+        quantity: c.quantity,
+        hazard: (GOODS[c.goodId]?.hazard ?? "none") as "none" | "low" | "high",
+      }));
+    const hazardLosses = rollHazardIncidents(enriched, danger, rng);
+    for (const inc of hazardLosses) {
+      const item = cargo.find((c) => c.goodId === inc.goodId);
+      if (item) item.quantity = inc.remaining;
+    }
+
+    // Stage 2: Import duty
+    if (govDef && govDef.taxed.length > 0 && govDef.taxRate > 0) {
+      const duties = applyImportDuty(
+        cargo.filter((c) => c.quantity > 0),
+        govDef.taxed,
+        govDef.taxRate,
+      );
+      for (const duty of duties) {
+        const item = cargo.find((c) => c.goodId === duty.goodId);
+        if (item) item.quantity = duty.remaining;
+      }
+    }
+
+    // Stage 3: Contraband inspection
+    if (govDef && govDef.contraband.length > 0 && govDef.inspectionModifier > 0) {
+      const seized = rollContrabandInspection(
+        cargo.filter((c) => c.quantity > 0),
+        govDef.contraband,
+        govDef.inspectionModifier,
+        rng,
+      );
+      for (const s of seized) {
+        const item = cargo.find((c) => c.goodId === s.goodId);
+        if (item) item.quantity = 0;
+      }
+    }
+
+    // Stage 4: Existing event-based danger
+    if (danger > 0) {
+      const remaining = cargo.filter((c) => c.quantity > 0);
+      const losses = rollCargoLoss(danger, remaining, rng);
+      for (const loss of losses) {
+        const item = cargo.find((c) => c.goodId === loss.goodId);
+        if (item) item.quantity = loss.remaining;
+      }
+    }
+
+    // Remove empty cargo stacks
+    cargo = cargo.filter((c) => c.quantity > 0);
+
+    return {
+      ...ship,
+      status: "docked" as const,
+      systemId: destSystemId,
+      destinationSystemId: null,
+      arrivalTick: null,
+      cargo,
+    };
   });
   return { ...world, ships };
 }
@@ -446,7 +533,7 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
  */
 export function simulateWorldTick(world: SimWorld, rng: RNG, ctx: SimRunContext): SimWorld {
   let w = { ...world, tick: world.tick + 1 };
-  w = processSimShipArrivals(w);
+  w = processSimShipArrivals(w, rng);
   w = processSimEvents(w, rng, ctx);
   w = processSimEconomy(w, rng, ctx.constants);
   return w;

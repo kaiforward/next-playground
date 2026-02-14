@@ -8,13 +8,16 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
-- **[S] Hazard affects danger** — Carrying hazardous cargo (weapons, chemicals, fuel) increases danger rolls on arrival. See [economy-balance.md](./economy-balance.md) Proposal 6.
 - **[M] Event content expansion** — 4 fully designed event definitions ready to add: Mining Boom, Supply Shortage, Pirate Raid, Solar Storm. See [event-catalog.md](./event-catalog.md) "Ready to Implement" section.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
 - **[M] Loading & error state strategy** — Consistent error display per page (`isError`/`error` from query hooks), Suspense boundaries for page-level loading, error boundaries wrapping game pages, query boundaries for deferred fetches (modals, panels).
+
+- **[M] Hazard chain reactions** — When a `high` hazard good has an incident, it can trigger `low` hazard goods in the same hold (fuel + weapons = cascading disaster). Makes carrying multiple hazardous goods exponentially risky rather than linearly. Depends on hazard incidents shipping first.
+- **[S] Smuggler suspicion / escalating heat** — Track per-player per-region suspicion level. Each successful smuggle raises it, getting caught resets but raises the base inspection rate permanently. Creates emergent "smuggler reputation" without a formal system. Decay over time.
+- **[S] Bribe system for inspections** — When caught with contraband, option to pay a bribe (2× the fine) to avoid confiscation. Corrupt governments (corporate, frontier) accept more often. Federation almost never. Money sink that rewards cash reserves.
 
 ## Needs Design
 

@@ -205,6 +205,39 @@ export function generateRegions(
     }
   }
 
+  // Government coverage guarantee: ensure every government type appears at least once
+  if (governmentWeights) {
+    const allGovTypes = Object.keys(
+      Object.values(governmentWeights)[0],
+    ) as GovernmentType[];
+    const present = new Set(regions.map((r) => r.governmentType));
+    const missing = allGovTypes.filter((g) => !present.has(g));
+
+    for (const missingGov of missing) {
+      // Count how many regions have each government type
+      const govCounts = new Map<string, number>();
+      for (const r of regions) {
+        govCounts.set(r.governmentType, (govCounts.get(r.governmentType) ?? 0) + 1);
+      }
+
+      // Only consider regions whose government type is duplicated (count > 1)
+      const candidates = regions.filter(
+        (r) => (govCounts.get(r.governmentType) ?? 0) > 1,
+      );
+
+      if (candidates.length === 0) continue; // safety: can't swap without duplicates
+
+      // Pick the candidate with the highest weight affinity for the missing type
+      candidates.sort((a, b) => {
+        const wA = governmentWeights[a.identity]?.[missingGov] ?? 0;
+        const wB = governmentWeights[b.identity]?.[missingGov] ?? 0;
+        return wB - wA;
+      });
+
+      candidates[0].governmentType = missingGov;
+    }
+  }
+
   return regions;
 }
 

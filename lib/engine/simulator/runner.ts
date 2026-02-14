@@ -16,7 +16,7 @@ import {
   computeEventImpacts,
 } from "./event-analysis";
 import { STRATEGIES } from "./strategies";
-import type { SimConfig, SimResults, SimRunContext, TickMetrics, MarketSnapshot, EventLifecycle } from "./types";
+import type { SimConfig, SimResults, SimRunContext, TickMetrics, MarketSnapshot, EventLifecycle, RegionOverviewEntry } from "./types";
 import type { SimConstantOverrides } from "./constants";
 import type { TradeStrategy } from "./strategies/types";
 
@@ -40,12 +40,31 @@ export function runSimulation(
   // Build adjacency list once (connections don't change during simulation)
   const adjacencyList = buildSimAdjacencyList(world.connections);
 
+  // Build systemId → governmentType lookup
+  const regionGovMap = new Map(world.regions.map((r) => [r.id, r.governmentType]));
+  const systemToGov = new Map(
+    world.systems.map((s) => [s.id, regionGovMap.get(s.regionId) ?? "unknown"]),
+  );
+
+  // Build region overview for output
+  const systemsPerRegion = new Map<string, number>();
+  for (const s of world.systems) {
+    systemsPerRegion.set(s.regionId, (systemsPerRegion.get(s.regionId) ?? 0) + 1);
+  }
+  const regionOverview: RegionOverviewEntry[] = world.regions.map((r) => ({
+    name: r.name,
+    identity: r.identity,
+    governmentType: r.governmentType,
+    systemCount: systemsPerRegion.get(r.id) ?? 0,
+  }));
+
   // Build run context
   const ctx: SimRunContext = {
     constants,
     disableRandomEvents: config.disableRandomEvents ?? false,
     eventInjections: config.eventInjections ?? [],
     adjacencyList,
+    systemToGov,
   };
 
   // Create strategy instances (one per player)
@@ -131,6 +150,7 @@ export function runSimulation(
     marketSnapshots,
     marketHealth,
     eventImpacts,
+    regionOverview,
     label,
     elapsedMs: performance.now() - start,
   };
