@@ -10,8 +10,8 @@ import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy"
 import { GOODS } from "@/lib/constants/goods";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
-import type { EconomyType, GovernmentType } from "@/lib/types/game";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
+import { toEconomyType, toGovernmentType } from "@/lib/types/guards";
 
 /** Reverse lookup: Good.name → GOODS key (e.g. "Food" → "food"). */
 const goodNameToKey = new Map(
@@ -112,11 +112,11 @@ export const economyProcessor: TickProcessor = {
     }
 
     // Look up government modifiers for this region
-    const govDef = GOVERNMENT_TYPES[targetRegion.governmentType as GovernmentType];
+    const govDef = GOVERNMENT_TYPES[toGovernmentType(targetRegion.governmentType)];
 
     // Build tick entries for the simulation engine
     const tickEntries = markets.map((m) => {
-      const econ = m.station.system.economyType as EconomyType;
+      const econ = toEconomyType(m.station.system.economyType);
       const goodKey = goodNameToKey.get(m.good.name) ?? m.good.name;
       const sysMods = modifiersBySystem.get(m.station.system.id) ?? [];
       const agg = sysMods.length > 0

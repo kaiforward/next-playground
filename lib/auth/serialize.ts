@@ -1,4 +1,5 @@
-import type { ShipState, ShipStatus, EconomyType } from "@/lib/types/game";
+import type { ShipState } from "@/lib/types/game";
+import { toShipStatus, toEconomyType } from "@/lib/types/guards";
 
 /**
  * Serialize a Prisma ship record (with included relations) into a ShipState.
@@ -49,12 +50,12 @@ export function serializeShip(ship: {
     fuel: ship.fuel,
     maxFuel: ship.maxFuel,
     cargoMax: ship.cargoMax,
-    status: ship.status as ShipStatus,
+    status: toShipStatus(ship.status),
     systemId: ship.systemId,
     system: {
       id: ship.system.id,
       name: ship.system.name,
-      economyType: ship.system.economyType as EconomyType,
+      economyType: toEconomyType(ship.system.economyType),
       x: ship.system.x,
       y: ship.system.y,
       description: ship.system.description,
@@ -66,7 +67,7 @@ export function serializeShip(ship: {
       ? {
           id: ship.destination.id,
           name: ship.destination.name,
-          economyType: ship.destination.economyType as EconomyType,
+          economyType: toEconomyType(ship.destination.economyType),
           x: ship.destination.x,
           y: ship.destination.y,
           description: ship.destination.description,

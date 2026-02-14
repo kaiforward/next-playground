@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/keys";
+import { apiMutate } from "@/lib/query/fetcher";
 import type { ShipPurchaseResult } from "@/lib/types/api";
 
 interface PurchaseShipParams {
@@ -14,15 +15,7 @@ export function usePurchaseShipMutation() {
 
   return useMutation({
     mutationFn: async ({ systemId, shipType }: PurchaseShipParams) => {
-      const res = await fetch("/api/game/shipyard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ systemId, shipType }),
-      });
-      const json = await res.json();
-
-      if (json.error) throw new Error(json.error);
-      return json.data as ShipPurchaseResult;
+      return apiMutate<ShipPurchaseResult>("/api/game/shipyard", { systemId, shipType });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fleet });

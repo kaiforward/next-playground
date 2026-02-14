@@ -287,9 +287,8 @@ export function StarMap({
   // ── Navigation state per region (region view during nav) ────────
   const regionNavigationStates = useMemo((): Map<string, "origin" | "reachable" | "unreachable"> => {
     const states = new Map<string, "origin" | "reachable" | "unreachable">();
-    if (!isNavigationActive) return states;
-    // TS already narrows mode to ship_selected | route_preview here
-    const { ship, reachable } = mode as Exclude<typeof mode, { phase: "default" }>;
+    if (mode.phase === "default") return states;
+    const { ship, reachable } = mode;
 
     const shipRegionId = systemRegionMap.get(ship.systemId);
 

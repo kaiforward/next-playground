@@ -12,7 +12,7 @@ import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { calculatePrice } from "@/lib/engine/pricing";
-import type { EconomyType } from "@/lib/types/game";
+import { toEconomyType } from "@/lib/types/guards";
 
 // ── Result types ────────────────────────────────────────────────
 
@@ -287,7 +287,7 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
 
     let resetCount = 0;
     for (const m of markets) {
-      const econ = m.station.system.economyType as EconomyType;
+      const econ = toEconomyType(m.station.system.economyType);
       const goodKey = goodKeyByName.get(m.good.name) ?? m.good.name;
       const produces = getProducedGoods(econ);
       const consumes = getConsumedGoods(econ);

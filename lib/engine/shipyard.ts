@@ -3,7 +3,8 @@
  * No database dependency — operates entirely on passed-in values.
  */
 
-import { SHIP_TYPES, type ShipTypeId, type ShipTypeDefinition } from "../constants/ships";
+import { SHIP_TYPES, type ShipTypeDefinition } from "../constants/ships";
+import { isShipTypeId } from "../types/guards";
 
 export interface ShipPurchaseParams {
   shipType: string;
@@ -19,10 +20,10 @@ export function validateShipPurchase(
 ): ShipPurchaseValidationResult {
   const { shipType, playerCredits } = params;
 
-  const def = SHIP_TYPES[shipType as ShipTypeId];
-  if (!def) {
+  if (!isShipTypeId(shipType)) {
     return { ok: false, error: `Unknown ship type: "${shipType}".` };
   }
+  const def = SHIP_TYPES[shipType];
 
   if (def.price <= 0) {
     return { ok: false, error: `${def.name} is not available for purchase.` };

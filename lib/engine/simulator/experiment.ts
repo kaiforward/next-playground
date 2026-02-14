@@ -101,6 +101,7 @@ export function experimentToSimConfig(exp: ExperimentConfig): {
 } {
   const injections: EventInjection[] = (exp.events?.inject ?? []).map((inj) => ({
     tick: inj.tick,
+    // Zod schema structurally matches InjectionTarget but TS can't verify union compatibility
     target: inj.target as InjectionTarget,
     eventType: inj.type,
     severity: inj.severity,
@@ -114,6 +115,7 @@ export function experimentToSimConfig(exp: ExperimentConfig): {
     disableRandomEvents: exp.events?.disableRandom ?? false,
   };
 
+  // Zod schema validates a subset of SimConstantOverrides fields
   const overrides = (exp.overrides ?? {}) as SimConstantOverrides;
 
   return { config, overrides, label: exp.label };

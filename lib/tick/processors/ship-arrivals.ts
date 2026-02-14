@@ -13,7 +13,7 @@ import {
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import type { GovernmentType } from "@/lib/types/game";
+import { toGovernmentType } from "@/lib/types/guards";
 import type { TickProcessor, TickProcessorResult } from "../types";
 
 interface ArrivedShip {
@@ -86,7 +86,7 @@ export const shipArrivalsProcessor: TickProcessor = {
     for (const mod of navModifiers) {
       if (!mod.targetId) continue;
       const existing = modsBySystem.get(mod.targetId) ?? [];
-      existing.push(mod as ModifierRow);
+      existing.push(mod);
       modsBySystem.set(mod.targetId, existing);
     }
 
@@ -109,7 +109,9 @@ export const shipArrivalsProcessor: TickProcessor = {
 
       // Compute danger at destination (event modifiers + government baseline)
       const systemMods = modsBySystem.get(ship.destinationSystemId) ?? [];
-      const govType = ship.destination?.region?.governmentType as GovernmentType | undefined;
+      const govType = ship.destination?.region?.governmentType
+        ? toGovernmentType(ship.destination.region.governmentType)
+        : undefined;
       const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
       const govBaseline = govDef?.dangerBaseline ?? 0;
       const danger = Math.min(

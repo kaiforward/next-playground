@@ -7,7 +7,6 @@ import { simulateEconomyTick, type MarketTickEntry, type EconomySimParams } from
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import type { GovernmentType } from "@/lib/types/game";
 import {
   aggregateDangerLevel,
   rollCargoLoss,
@@ -133,7 +132,7 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
       ? world.regions.find((r) => r.id === destSystem.regionId)
       : undefined;
     const govDef = destRegion
-      ? GOVERNMENT_TYPES[destRegion.governmentType as GovernmentType]
+      ? GOVERNMENT_TYPES[destRegion.governmentType]
       : undefined;
 
     // Compute danger level from navigation modifiers + government baseline
@@ -443,7 +442,7 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
   const modifierCaps = constants.events.modifierCaps;
 
   // Look up government modifiers for this region
-  const govDef = GOVERNMENT_TYPES[targetRegion.governmentType as GovernmentType];
+  const govDef = GOVERNMENT_TYPES[targetRegion.governmentType];
 
   // Build tick entries
   const tickEntries: MarketTickEntry[] = regionMarkets.map((m) => {

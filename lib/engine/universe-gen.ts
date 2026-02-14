@@ -4,6 +4,7 @@
  */
 
 import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
+import { ALL_GOVERNMENT_TYPES } from "@/lib/types/guards";
 
 // ── Output types ────────────────────────────────────────────────
 
@@ -207,9 +208,7 @@ export function generateRegions(
 
   // Government coverage guarantee: ensure every government type appears at least once
   if (governmentWeights) {
-    const allGovTypes = Object.keys(
-      Object.values(governmentWeights)[0],
-    ) as GovernmentType[];
+    const allGovTypes = ALL_GOVERNMENT_TYPES;
     const present = new Set(regions.map((r) => r.governmentType));
     const missing = allGovTypes.filter((g) => !present.has(g));
 

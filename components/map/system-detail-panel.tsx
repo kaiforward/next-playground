@@ -4,7 +4,7 @@ import Link from "next/link";
 import { tv } from "tailwind-variants";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import type { StarSystemInfo, ShipState, EconomyType, ActiveEvent } from "@/lib/types/game";
+import type { StarSystemInfo, ShipState, ActiveEvent } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 
 interface GatewayTarget {
@@ -86,7 +86,7 @@ export function SystemDetailPanel({
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         {/* Economy badge + region + gateway */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className={economyBadge({ economyType: system.economyType as EconomyType })}>
+          <span className={economyBadge({ economyType: system.economyType })}>
             {system.economyType}
           </span>
           {system.isGateway && (

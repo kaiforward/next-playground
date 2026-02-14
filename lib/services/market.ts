@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { ServiceError } from "./errors";
-import type { MarketEntry, TradeHistoryEntry, TradeType } from "@/lib/types/game";
+import type { MarketEntry, TradeHistoryEntry } from "@/lib/types/game";
+import { toTradeType } from "@/lib/types/guards";
 
 /**
  * Get market data for the station in the given system.
@@ -72,7 +73,7 @@ export async function getTradeHistory(
     goodName: h.good.name,
     price: h.price,
     quantity: h.quantity,
-    type: h.type as TradeType,
+    type: toTradeType(h.type),
     createdAt: h.createdAt.toISOString(),
   }));
 }

@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/keys";
+import { apiMutate } from "@/lib/query/fetcher";
 import type { ShipRefuelResult } from "@/lib/types/api";
 
 export function useRefuelMutation(shipId: string | null) {
@@ -10,16 +11,7 @@ export function useRefuelMutation(shipId: string | null) {
   return useMutation({
     mutationFn: async (amount: number) => {
       if (!shipId) throw new Error("Missing shipId");
-
-      const res = await fetch(`/api/game/ship/${shipId}/refuel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount }),
-      });
-      const json = await res.json();
-
-      if (json.error) throw new Error(json.error);
-      return json.data as ShipRefuelResult;
+      return apiMutate<ShipRefuelResult>(`/api/game/ship/${shipId}/refuel`, { amount });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
