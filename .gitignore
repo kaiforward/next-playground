@@ -46,5 +46,9 @@ next-env.d.ts
 *.db
 *.db-journal
 
+# experiment results (auto-saved by simulate --config)
+/experiments
+!/experiments/examples/
+
 # claude local settings
 .claude/settings.local.json

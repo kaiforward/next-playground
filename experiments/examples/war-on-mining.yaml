@@ -1,0 +1,15 @@
+label: war-impact-on-mining
+seed: 42
+ticks: 500
+
+bots:
+  - strategy: greedy
+    count: 1
+
+events:
+  disableRandom: true
+  inject:
+    - tick: 50
+      target: { economyType: mining }
+      type: war
+      severity: 1.5

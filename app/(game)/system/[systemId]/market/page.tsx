@@ -11,6 +11,7 @@ import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
 import { FormError } from "@/components/form/form-error";
+import { SelectInput } from "@/components/form/select-input";
 import type { TradeType } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
 
@@ -99,25 +100,21 @@ export default function SystemMarketPage({
     <>
       {/* Ship selector — only shown when ships are docked here */}
       {shipsHere.length > 0 && (
-        <div className="mb-6">
-          <label className="flex items-center gap-3">
-            <span className="text-sm text-white/60">Ship:</span>
-            <select
-              value={selectedShipId}
-              onChange={(e) => {
-                setSelectedShipId(e.target.value);
-                setTradeError(null);
-              }}
-              className="rounded-lg bg-white/5 border border-white/10 text-sm text-white px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            >
-              <option value="">Browse only</option>
-              {shipsHere.map((ship) => (
-                <option key={ship.id} value={ship.id}>
-                  {ship.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="mb-6 max-w-xs">
+          <SelectInput
+            label="Ship"
+            size="md"
+            options={[
+              { value: "", label: "Browse only" },
+              ...shipsHere.map((ship) => ({ value: ship.id, label: ship.name })),
+            ]}
+            value={selectedShipId}
+            onChange={(v) => {
+              setSelectedShipId(v);
+              setTradeError(null);
+            }}
+            isSearchable={false}
+          />
         </div>
       )}
 

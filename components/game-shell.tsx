@@ -5,6 +5,7 @@ import { TickProvider, useTickContext } from "@/lib/hooks/use-tick-context";
 import { useTickInvalidation } from "@/lib/hooks/use-tick-invalidation";
 import { EventHistoryProvider } from "@/components/providers/event-history-provider";
 import { EventToastContainer } from "@/components/events/event-toast-container";
+import { DevToolsPanel } from "@/components/dev-tools/dev-tools-panel";
 
 interface GameShellProps {
   userEmail: string | null;
@@ -32,6 +33,7 @@ function GameShellInner({
         <GameNav userEmail={userEmail} currentTick={currentTick} />
         <main className="flex-1">{children}</main>
         <EventToastContainer />
+        {process.env.NODE_ENV === "development" && <DevToolsPanel />}
       </div>
     </EventHistoryProvider>
   );
