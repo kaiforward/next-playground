@@ -2,16 +2,13 @@
  * CLI entry point for running economy simulations.
  *
  * Usage:
- *   npm run simulate -- --ticks 500 --strategies greedy,random --seed 42 --json
- *   npm run simulate -- --config experiments/examples/war-on-mining.yaml
+ *   npm run simulate                                            # Quick sanity check
+ *   npm run simulate -- --config experiments/examples/baseline.yaml  # Real experiment
+ *   npm run simulate -- --json                                  # Quick run, JSON output
  *
  * Options:
- *   --ticks N        Number of ticks to simulate (default: 500)
- *   --strategies S   Comma-separated list of strategies (default: all)
- *   --seed N         RNG seed for determinism (default: 42)
- *   --bots N         Number of bots per strategy (default: 1)
- *   --json           Output raw JSON instead of formatted table
  *   --config PATH    Load experiment from YAML config file
+ *   --json           Output raw JSON instead of formatted table
  *   --help           Show this help message
  */
 
@@ -30,19 +27,11 @@ import type { SimConfig, BotConfig, PlayerSummary } from "../lib/engine/simulato
 // ── Argument parsing ────────────────────────────────────────────
 
 function parseArgs(argv: string[]): {
-  ticks: number;
-  strategies: string[];
-  seed: number;
-  bots: number;
   json: boolean;
   help: boolean;
   config?: string;
 } {
   const result = {
-    ticks: 500,
-    strategies: [...STRATEGY_NAMES],
-    seed: 42,
-    bots: 1,
     json: false,
     help: false,
     config: undefined as string | undefined,
@@ -51,18 +40,6 @@ function parseArgs(argv: string[]): {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
-      case "--ticks":
-        result.ticks = parseInt(argv[++i], 10);
-        break;
-      case "--strategies":
-        result.strategies = argv[++i].split(",").map((s) => s.trim());
-        break;
-      case "--seed":
-        result.seed = parseInt(argv[++i], 10);
-        break;
-      case "--bots":
-        result.bots = parseInt(argv[++i], 10);
-        break;
       case "--json":
         result.json = true;
         break;
@@ -199,23 +176,19 @@ Usage:
   npm run simulate -- [options]
 
 Options:
-  --ticks N        Number of ticks to simulate (default: 500)
-  --strategies S   Comma-separated strategies: ${STRATEGY_NAMES.join(", ")} (default: all)
-  --bots N         Bots per strategy (default: 1)
-  --seed N         RNG seed (default: 42)
-  --json           Output JSON instead of table
   --config PATH    Load experiment from YAML config file (saves result to experiments/)
+  --json           Output JSON instead of table
   --help           Show this help
 
-Config Mode:
-  When --config is used, the YAML file controls all simulation parameters.
-  Other flags (--ticks, --strategies, etc.) are ignored.
-  Results are auto-saved to experiments/<slug>-<timestamp>.json.
+Quick Run:
+  Running with no flags runs all strategies (${STRATEGY_NAMES.join(", ")}),
+  1 bot each, 500 ticks, seed 42. For custom parameters, use --config with a
+  YAML file — see experiments/examples/ for templates.
 
 Examples:
-  npm run simulate                                           # Quick run, all strategies
-  npm run simulate -- --ticks 200 --strategies greedy        # Custom quick run
-  npm run simulate -- --config experiments/examples/baseline.yaml   # Experiment from YAML
+  npm run simulate                                                 # Quick sanity check
+  npm run simulate -- --config experiments/examples/baseline.yaml  # Experiment from YAML
+  npm run simulate -- --json                                       # Quick run, JSON output
 `);
   process.exit(0);
 }
@@ -224,28 +197,20 @@ Examples:
 if (args.config) {
   runExperiment(args.config, args.json);
 } else {
-  // Validate strategies
-  for (const s of args.strategies) {
-    if (!STRATEGY_NAMES.includes(s)) {
-      console.error(`Unknown strategy: "${s}". Available: ${STRATEGY_NAMES.join(", ")}`);
-      process.exit(1);
-    }
-  }
-
-  const botConfigs: BotConfig[] = args.strategies.map((strategy) => ({
+  // Hardcoded quick-run: all strategies, 1 bot each, 500 ticks, seed 42
+  const botConfigs: BotConfig[] = STRATEGY_NAMES.map((strategy) => ({
     strategy,
-    count: args.bots,
+    count: 1,
   }));
 
   const config: SimConfig = {
-    tickCount: args.ticks,
+    tickCount: 500,
     bots: botConfigs,
-    seed: args.seed,
+    seed: 42,
   };
 
   console.log(
-    `Running simulation: ${args.ticks} ticks, seed ${args.seed}, ` +
-    `strategies: ${args.strategies.join(", ")}, ${args.bots} bot(s) each\n`,
+    `Running quick-run: 500 ticks, seed 42, strategies: ${STRATEGY_NAMES.join(", ")}, 1 bot each\n`,
   );
 
   const results = runSimulation(config);

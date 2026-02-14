@@ -72,30 +72,27 @@ Pure-engine, in-memory simulation. No database — generates a universe, runs bo
 
 ### CLI Usage
 
-Two modes: quick-run (CLI flags) for ad-hoc checks, and `--config` (YAML) for reproducible experiments. New features go in `--config` only — the CLI flags are frozen at their current set.
+Two modes: bare `npm run simulate` for a quick sanity check, and `--config` (YAML) for reproducible experiments. Custom parameters (ticks, strategies, seed, bots) are controlled exclusively through YAML configs.
 
 ```bash
-# All strategies, 500 ticks (default)
+# Quick sanity check — all strategies, 1 bot, 500 ticks, seed 42
 npm run simulate
 
-# Custom configuration
-npm run simulate -- --ticks 500 --strategies greedy,random --seed 42
+# Experiment from YAML config
+npm run simulate -- --config experiments/examples/baseline.yaml
 
-# JSON output for scripting
-npm run simulate -- --ticks 500 --json
+# Quick run with JSON output
+npm run simulate -- --json
 
 # See all options
 npm run simulate -- --help
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--ticks N` | 500 | Ticks to simulate |
-| `--strategies S` | all | Comma-separated: `random`, `nearest`, `greedy`, `optimal` |
-| `--bots N` | 1 | Bots per strategy |
-| `--seed N` | 42 | RNG seed (deterministic) |
-| `--json` | false | JSON output instead of table |
-| `--config PATH` | — | Load experiment from YAML (see [Experiment System](#experiment-system)) |
+| Flag | Description |
+|------|-------------|
+| `--config PATH` | Load experiment from YAML (see [Experiment System](#experiment-system)) |
+| `--json` | JSON output instead of table |
+| `--help` | Show help |
 
 ### Output
 
@@ -130,22 +127,23 @@ Market impact: selling adds supply + reduces demand, buying removes supply + add
 
 ```
 lib/engine/simulator/
-  types.ts        — SimWorld, SimConfig, SimResults, TickMetrics, PlayerSummary, SimRunContext
-  constants.ts    — SimConstants, resolveConstants(), DEFAULT_SIM_CONSTANTS
-  experiment.ts   — ExperimentConfigSchema (Zod), YAML→SimConfig conversion, result serialization
-  world.ts        — createSimWorld() using generateUniverse()
-  economy.ts      — simulateWorldTick() (arrivals → events → economy)
-  bot.ts          — executeBotTick() (refuel → sell → evaluate → buy → navigate)
-  metrics.ts      — recordTickMetrics(), computeSummary()
-  runner.ts       — runSimulation() orchestrator
+  types.ts              — SimWorld, SimConfig, SimResults, TickMetrics, PlayerSummary, SimRunContext
+  constants.ts          — SimConstants, resolveConstants(), DEFAULT_SIM_CONSTANTS
+  experiment.ts         — ExperimentConfigSchema (Zod), YAML→SimConfig conversion, result serialization
+  world.ts              — createSimWorld() using generateUniverse()
+  economy.ts            — simulateWorldTick() (arrivals → events → economy)
+  bot.ts                — executeBotTick() (refuel → sell → evaluate → buy → navigate)
+  metrics.ts            — recordTickMetrics(), computeSummary()
+  runner.ts             — runSimulation() orchestrator
+  pathfinding-cache.ts  — Pre-built adjacency list + cached Dijkstra (sim-internal, avoids per-call rebuild)
   strategies/
-    types.ts      — TradeStrategy interface, TradeDecision type
-    helpers.ts    — Shared profit/price/reachability utils
-    random.ts     — Random strategy
-    nearest.ts    — Nearest-profit strategy
-    greedy.ts     — Best profit-per-tick strategy
-    optimal.ts    — 2-leg lookahead strategy
-    index.ts      — STRATEGIES registry map
+    types.ts            — TradeStrategy interface, TradeDecision type
+    helpers.ts          — Shared profit/price/reachability utils
+    random.ts           — Random strategy
+    nearest.ts          — Nearest-profit strategy
+    greedy.ts           — Best profit-per-tick strategy
+    optimal.ts          — 2-leg lookahead strategy (top-10 leg2 cap)
+    index.ts            — STRATEGIES registry map
 ```
 
 The simulator mirrors the real tick processor pipeline (ship arrivals → events → economy) but operates entirely in memory. All state is immutable — each tick returns a new `SimWorld`.
@@ -253,8 +251,8 @@ Two targeting modes for injected events:
 ## Tuning Workflow
 
 1. **Identify**: "Players earn credits too fast"
-2. **Quantify**: `npm run simulate -- --ticks 500 --strategies greedy`
-3. **Tune**: Create a YAML config with overrides (or edit constants directly)
+2. **Quantify**: `npm run simulate` (quick sanity check with all strategies)
+3. **Tune**: Create a YAML config with overrides
 4. **Re-run**: `npm run simulate -- --config experiments/examples/my-test.yaml`
 5. **Compare**: Saved JSON results include full constants snapshot for diffing
 6. **Verify in-game**: Use dev tools UI to spawn events, advance ticks, observe behavior

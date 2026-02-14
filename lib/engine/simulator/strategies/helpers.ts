@@ -4,6 +4,8 @@
 
 import { calculatePrice } from "@/lib/engine/pricing";
 import { findReachableSystems, type ReachableSystem } from "@/lib/engine/pathfinding";
+import { findReachableSystemsCached } from "../pathfinding-cache";
+import type { SimAdjacencyList } from "../pathfinding-cache";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import type { SimWorld, SimShip, SimMarketEntry } from "../types";
 
@@ -26,7 +28,11 @@ export function getCargoUsed(ship: SimShip): number {
 export function getReachable(
   world: SimWorld,
   ship: SimShip,
+  adj?: SimAdjacencyList,
 ): Map<string, ReachableSystem> {
+  if (adj) {
+    return findReachableSystemsCached(ship.systemId, ship.fuel, adj);
+  }
   const connections: ConnectionInfo[] = world.connections;
   return findReachableSystems(ship.systemId, ship.fuel, connections);
 }

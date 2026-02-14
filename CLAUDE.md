@@ -11,8 +11,8 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
 - `npx vitest run` — Run unit tests (217 tests, engine + API)
-- `npm run simulate` — Run economy simulator (quick-run, all strategies)
-- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). New simulator features go here only — don't expand the CLI flags.
+- `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42)
+- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). Custom parameters (ticks, strategies, seed, bots) go through YAML only.
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 

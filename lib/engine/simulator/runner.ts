@@ -8,6 +8,7 @@ import { simulateWorldTick } from "./economy";
 import { executeBotTick } from "./bot";
 import { computeSummary } from "./metrics";
 import { resolveConstants } from "./constants";
+import { buildSimAdjacencyList } from "./pathfinding-cache";
 import { STRATEGIES } from "./strategies";
 import type { SimConfig, SimResults, SimRunContext, TickMetrics } from "./types";
 import type { SimConstantOverrides } from "./constants";
@@ -27,15 +28,19 @@ export function runSimulation(
   const rng = mulberry32(config.seed);
   const constants = resolveConstants(overrides);
 
+  // Create world with bots
+  let world = createSimWorld(config, constants);
+
+  // Build adjacency list once (connections don't change during simulation)
+  const adjacencyList = buildSimAdjacencyList(world.connections);
+
   // Build run context
   const ctx: SimRunContext = {
     constants,
     disableRandomEvents: config.disableRandomEvents ?? false,
     eventInjections: config.eventInjections ?? [],
+    adjacencyList,
   };
-
-  // Create world with bots
-  let world = createSimWorld(config, constants);
 
   // Create strategy instances (one per player)
   const strategyMap = new Map<string, TradeStrategy>();
@@ -64,7 +69,7 @@ export function runSimulation(
 
     for (const player of sortedPlayers) {
       const strategy = strategyMap.get(player.id)!;
-      const result = executeBotTick(player.id, world, strategy, constants);
+      const result = executeBotTick(player.id, world, strategy, ctx);
       world = result.world;
       metricsMap.get(player.id)!.push(result.metrics);
     }
