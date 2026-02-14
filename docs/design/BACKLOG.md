@@ -8,7 +8,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
-- **[M] Hazard incidents + trade legality** — Two new arrival-time systems: (1) hazardous cargo incident rolls (leak/catastrophic per hazard level), (2) deterministic import duty for taxed goods + RNG inspection/confiscation for contraband per government type. See [economy-balance.md](./economy-balance.md) Proposals 6+8.
 - **[M] Event content expansion** — 4 fully designed event definitions ready to add: Mining Boom, Supply Shortage, Pirate Raid, Solar Storm. See [event-catalog.md](./event-catalog.md) "Ready to Implement" section.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
