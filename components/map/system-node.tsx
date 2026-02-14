@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position } from "@xyflow/react";
-import type { NodeProps } from "@xyflow/react";
+import type { Node, NodeProps } from "@xyflow/react";
 import { tv } from "tailwind-variants";
 import type { EconomyType } from "@/lib/types/game";
 import { EventDot } from "@/components/events/event-dot";
@@ -72,9 +72,8 @@ const pulseRing = tv({
   },
 });
 
-export function SystemNode({ data }: NodeProps) {
-  const nodeData = data as SystemNodeData;
-  const { label, economyType, shipCount, isGateway, navigationState, activeEventTypes } = nodeData;
+export function SystemNode({ data }: NodeProps<Node<SystemNodeData>>) {
+  const { label, economyType, shipCount, isGateway, navigationState, activeEventTypes } = data;
   const hasShips = shipCount > 0;
 
   return (

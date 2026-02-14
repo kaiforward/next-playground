@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { TickControlSection } from "./tick-control-section";
 import { EventSpawnerSection } from "./event-spawner-section";
 import { EconomyOverviewSection } from "./economy-overview-section";
@@ -16,13 +17,15 @@ export function DevToolsPanel() {
   return (
     <div className="fixed bottom-4 right-16 z-50">
       {/* Toggle button */}
-      <button
+      <Button
+        variant="primary"
+        size="sm"
         onClick={() => setOpen(!open)}
-        className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg transition-colors text-sm"
+        className="absolute bottom-0 right-0 w-9 h-9 rounded-full p-0 bg-indigo-600 hover:bg-indigo-500 shadow-lg"
         title="Dev Tools"
       >
         {open ? "\u2715" : "\u2699"}
-      </button>
+      </Button>
 
       {/* Panel */}
       {open && (

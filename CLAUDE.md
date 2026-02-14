@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (265 tests, engine + API)
+- `npx vitest run` — Run unit tests (300 tests, engine + API)
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). Outputs summary table, goods breakdown, route diversity, market health, event impact, idle stats.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). New simulator features go here only — don't expand the CLI flags.
 - `npx prisma db seed` — Seed database
@@ -24,19 +24,20 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 
 - `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, events, danger, refuel, snapshot, shipyard). Zero DB dependency.
 - `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
-- `lib/types/` — Shared types (`game.ts`, `api.ts`)
+- `lib/types/` — Shared types (`game.ts`, `api.ts`) and runtime type guards (`guards.ts`) for Prisma boundary validation
 - `lib/constants/` — Goods (12), universe (6 economy types, per-good rates), economy, government (4 types), event, rate-limit, fuel, snapshot, and ship type definitions
 - `lib/tick/` — Tick engine, processor pipeline, registry. Processors: ship-arrivals (docking + danger + gameNotifications), events (lifecycle + spread + enriched refs), economy (simulation + modifiers), price-snapshots (periodic price recording).
 - `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation, events, refuel, price-history, shipyard). Called by route handlers and future server components.
-- `lib/query/` — TanStack Query setup (client factory, query key factory, typed apiFetch helper)
-- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-game-world, use-universe, use-market, use-trade-history, use-events, use-price-history), mutation hooks (use-trade-mutation, use-navigate-mutation, use-refuel-mutation, use-purchase-ship-mutation), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state), notifications (use-event-history via provider)
-- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick, ship/[shipId]/navigate, ship/[shipId]/trade, ship/[shipId]/refuel, shipyard, systems, market, history, events, prices/[systemId])
+- `lib/api/` — API utilities: `parse-json.ts` (POST body parser), `rate-limit.ts` (sliding window), `dev-guard.ts` (dev-only route guard)
+- `lib/query/` — TanStack Query setup (client factory, query key factory, typed `apiFetch`/`apiMutate` helpers)
+- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-universe, use-market, use-trade-history, use-events, use-price-history), mutation hooks (use-trade-mutation, use-navigate-mutation, use-refuel-mutation, use-purchase-ship-mutation), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state), dev tools (use-dev-tools), notifications (use-event-history via provider)
+- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick-stream, ship/[shipId]/navigate, ship/[shipId]/trade, ship/[shipId]/refuel, shipyard, systems, market, history, events, prices/[systemId])
 - `app/(game)/` — Dashboard, map, ship/[shipId], system/[systemId] with tabbed sub-routes (overview, market, ships, shipyard) (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
 - `components/ui/` — Primitives (Button, Card, Badge, ProgressBar, PageContainer, StatRow)
 - `components/form/` — Form controls (TextInput, NumberInput, RangeInput, FormError)
 - `components/providers/` — Context providers (session-provider, query-provider, event-history-provider)
-- `components/fleet/`, `map/`, `trade/`, `dashboard/`, `events/`, `shipyard/` — Feature components
+- `components/fleet/`, `map/`, `trade/`, `dashboard/`, `events/`, `shipyard/`, `dev-tools/` — Feature components
 - `prisma/` — Schema and seed script
 
 ## Docs
@@ -54,11 +55,10 @@ Reference docs (how things work now):
 
 Design docs (plans and backlog):
 
-- `docs/design/economy-balance.md` — Economy balance proposals: per-tier price clamps, per-good equilibrium, volume/mass enforcement, government modifiers. Current metrics and success criteria.
 - `docs/design/event-catalog.md` — Implemented and planned event definitions (arcs, shocks, ideas)
 - `docs/design/simulation-enhancements.md` — Future mechanics requiring new engine capabilities
 - `docs/design/BACKLOG.md` — Prioritized backlog (sized, grouped by readiness). Delete items when shipped.
-- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system, economy-testing, simulator-metrics, goods-and-economy-types)
+- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system, economy-testing, simulator-metrics, goods-and-economy-types, economy-balance)
 
 ## Design Principles
 
@@ -87,6 +87,8 @@ Use existing components instead of inline markup. When a pattern appears twice, 
 - **ProgressBar** — Labeled bars with ARIA. Colors: `blue`, `amber`, `red`. Sizes: `sm`, `md`.
 - **Dialog** (`components/ui/dialog.tsx`) — Native `<dialog>` wrapper. Props: `open`, `onClose`, `modal` (default false), `initialFocus`. Non-modal uses `.show()` + manual Escape/focus; modal uses `showModal()` + browser-native focus trap. Companion `useDialog` hook for open/close state.
 - **SelectInput** (`components/form/select-input.tsx`) — Searchable dropdown (react-select). Props: `options`, `value`, `onChange`, `isSearchable` (default true). Sizes: `sm` (default), `md`. Dark-themed, portal menu.
+- **DataTable** (`components/ui/data-table.tsx`) — Generic sortable table. Props: `columns` (key, label, sortable, render), `data`, `onRowClick`, `rowClassName`.
+- **StatDisplay** (`components/ui/stat-display.tsx`) — Large-value stat with optional trend arrow and icon. Props: `label`, `value`, `trend` (up/down/neutral), `icon`.
 - **Card** / **Badge** / **StatList+StatRow** — Layout and data display primitives.
 
 ## Git Workflow

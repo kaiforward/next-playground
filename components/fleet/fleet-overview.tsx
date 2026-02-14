@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { ShipState, RegionInfo } from "@/lib/types/game";
 import { ShipCard } from "./ship-card";
 
@@ -11,8 +12,8 @@ interface FleetOverviewProps {
 }
 
 export function FleetOverview({ ships, currentTick, regions, playerCredits }: FleetOverviewProps) {
-  const docked = ships.filter((s) => s.status === "docked").length;
-  const inTransit = ships.filter((s) => s.status === "in_transit").length;
+  const docked = useMemo(() => ships.filter((s) => s.status === "docked").length, [ships]);
+  const inTransit = useMemo(() => ships.filter((s) => s.status === "in_transit").length, [ships]);
 
   return (
     <div>

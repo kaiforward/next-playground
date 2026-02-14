@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position } from "@xyflow/react";
-import type { NodeProps } from "@xyflow/react";
+import type { Node, NodeProps } from "@xyflow/react";
 import { tv } from "tailwind-variants";
 import type { RegionIdentity } from "@/lib/types/game";
 
@@ -60,9 +60,8 @@ const pulseRing = tv({
   },
 });
 
-export function RegionNode({ data }: NodeProps) {
-  const nodeData = data as RegionNodeData;
-  const { label, identity, systemCount, shipCount, navigationState } = nodeData;
+export function RegionNode({ data }: NodeProps<Node<RegionNodeData>>) {
+  const { label, identity, systemCount, shipCount, navigationState } = data;
   const hasShips = shipCount > 0;
   // Hide pulse ring during navigation mode to avoid visual noise
   const showPulse = hasShips && !navigationState;

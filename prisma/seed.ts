@@ -13,7 +13,7 @@ import {
   GOVERNMENT_TYPE_WEIGHTS,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
-import type { EconomyType } from "@/lib/types/game";
+import { toEconomyType } from "@/lib/types/guards";
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL ?? "file:./dev.db",
@@ -127,7 +127,7 @@ async function main() {
 
     // Create market entries for each good
     const stationId = created.station!.id;
-    const econ = sys.economyType as EconomyType;
+    const econ = toEconomyType(sys.economyType);
     const produces = getProducedGoods(econ);
     const consumes = getConsumedGoods(econ);
 

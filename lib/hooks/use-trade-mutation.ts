@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/keys";
+import { apiMutate } from "@/lib/query/fetcher";
 import type { ShipTradeResult } from "@/lib/types/api";
 import type { MarketEntry, TradeType } from "@/lib/types/game";
 
@@ -27,16 +28,7 @@ export function useTradeMutation({
   return useMutation({
     mutationFn: async (request: TradeRequest) => {
       if (!shipId || !stationId) throw new Error("Missing shipId or stationId");
-
-      const res = await fetch(`/api/game/ship/${shipId}/trade`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...request, stationId }),
-      });
-      const json = await res.json();
-
-      if (json.error) throw new Error(json.error);
-      return json.data as ShipTradeResult;
+      return apiMutate<ShipTradeResult>(`/api/game/ship/${shipId}/trade`, { ...request, stationId });
     },
     onSuccess: (data) => {
       // Instant UI update: patch the market cache with the updated entry

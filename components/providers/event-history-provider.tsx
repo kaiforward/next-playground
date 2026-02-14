@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -29,6 +30,12 @@ interface RawNotification {
   message: string;
   type: string;
   refs?: Partial<Record<string, EntityRef>>;
+}
+
+function isRawNotification(evt: unknown): evt is RawNotification {
+  if (typeof evt !== "object" || evt === null) return false;
+  const obj = evt as Record<string, unknown>;
+  return typeof obj.message === "string";
 }
 
 function normalize(raw: RawNotification): GameNotification {
@@ -60,9 +67,8 @@ export function EventHistoryProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     return subscribeToEvent("eventNotifications", (events: unknown[]) => {
       for (const evt of events) {
-        const raw = evt as RawNotification;
-        if (raw.message) {
-          pushNotification(normalize(raw));
+        if (isRawNotification(evt)) {
+          pushNotification(normalize(evt));
         }
       }
     });
@@ -72,9 +78,8 @@ export function EventHistoryProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     return subscribeToEvent("gameNotifications", (events: unknown[]) => {
       for (const evt of events) {
-        const raw = evt as RawNotification;
-        if (raw.message) {
-          pushNotification(normalize(raw));
+        if (isRawNotification(evt)) {
+          pushNotification(normalize(evt));
         }
       }
     });
@@ -87,7 +92,10 @@ export function EventHistoryProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  const value: EventHistoryContextValue = { notifications, subscribe };
+  const value = useMemo<EventHistoryContextValue>(
+    () => ({ notifications, subscribe }),
+    [notifications, subscribe],
+  );
 
   return (
     <EventHistoryContext.Provider value={value}>

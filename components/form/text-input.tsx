@@ -25,7 +25,7 @@ const textInputVariants = tv({
     },
   },
   defaultVariants: {
-    size: "md",
+    size: "sm",
   },
 });
 

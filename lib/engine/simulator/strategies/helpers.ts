@@ -10,7 +10,6 @@ import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { HAZARD_CONSTANTS, LEGALITY_CONSTANTS } from "@/lib/engine/danger";
 import { GOODS } from "@/lib/constants/goods";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
-import type { GovernmentType } from "@/lib/types/game";
 import type { SimWorld, SimShip, SimMarketEntry } from "../types";
 
 /** Get the current price for a market entry. */
@@ -151,7 +150,7 @@ export function getRiskMultiplier(
     ? world.regions.find((r) => r.id === targetSystem.regionId)
     : undefined;
   const govDef = targetRegion
-    ? GOVERNMENT_TYPES[targetRegion.governmentType as GovernmentType]
+    ? GOVERNMENT_TYPES[targetRegion.governmentType]
     : undefined;
 
   const danger = dangerLevel ?? 0;

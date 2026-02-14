@@ -16,7 +16,6 @@ import {
 } from "@/lib/constants/universe-gen";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
-import type { EconomyType } from "@/lib/types/game";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -73,7 +72,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
 
   // Build systems
   const systems: SimSystem[] = universe.systems.map((s, i) => {
-    const econ = s.economyType as EconomyType;
+    const econ = s.economyType;
     return {
       id: `system-${i}`,
       name: s.name,
