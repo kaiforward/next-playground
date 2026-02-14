@@ -1,8 +1,10 @@
 import type { TickProcessor, TickProcessorResult, TxClient } from "../types";
 import { simulateEconomyTick, type EconomySimParams } from "@/lib/engine/tick";
 import {
-  ECONOMY_PRODUCTION,
-  ECONOMY_CONSUMPTION,
+  getProducedGoods,
+  getConsumedGoods,
+  getProductionRate,
+  getConsumptionRate,
 } from "@/lib/constants/universe";
 import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
@@ -123,8 +125,11 @@ export const economyProcessor: TickProcessor = {
         demand: m.demand,
         basePrice: m.good.basePrice,
         economyType: econ,
-        produces: ECONOMY_PRODUCTION[econ] ?? [],
-        consumes: ECONOMY_CONSUMPTION[econ] ?? [],
+        produces: getProducedGoods(econ),
+        consumes: getConsumedGoods(econ),
+        productionRate: getProductionRate(econ, goodKey),
+        consumptionRate: getConsumptionRate(econ, goodKey),
+        volatility: GOODS[goodKey]?.volatility,
         ...(agg && {
           supplyTargetShift: agg.supplyTargetShift,
           demandTargetShift: agg.demandTargetShift,

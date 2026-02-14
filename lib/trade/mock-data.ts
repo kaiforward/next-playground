@@ -5,7 +5,7 @@ export const MOCK_MARKET: MarketEntry[] = [
   { goodId: "ore", goodName: "Ore", basePrice: 30, currentPrice: 35, supply: 45, demand: 80 },
   { goodId: "fuel", goodName: "Fuel", basePrice: 40, currentPrice: 42, supply: 50, demand: 55 },
   { goodId: "electronics", goodName: "Electronics", basePrice: 80, currentPrice: 95, supply: 30, demand: 70 },
-  { goodId: "ship_parts", goodName: "Ship Parts", basePrice: 100, currentPrice: 88, supply: 65, demand: 40 },
+  { goodId: "machinery", goodName: "Machinery", basePrice: 100, currentPrice: 88, supply: 65, demand: 40 },
   { goodId: "luxuries", goodName: "Luxuries", basePrice: 150, currentPrice: 200, supply: 15, demand: 90 },
 ];
 

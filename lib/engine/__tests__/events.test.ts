@@ -340,7 +340,7 @@ describe("selectEventToSpawn", () => {
   };
 
   const systems: SystemSnapshot[] = [
-    { id: "sys-1", economyType: "mining", regionId: "reg-1" },
+    { id: "sys-1", economyType: "extraction", regionId: "reg-1" },
     { id: "sys-2", economyType: "agricultural", regionId: "reg-1" },
     { id: "sys-3", economyType: "core", regionId: "reg-2" },
   ];

@@ -36,7 +36,7 @@ export const MOCK_UNIVERSE: UniverseData = {
     {
       id: "kepler",
       name: "Kepler",
-      economyType: "mining",
+      economyType: "extraction",
       x: 250,
       y: 150,
       description:
@@ -69,7 +69,7 @@ export const MOCK_UNIVERSE: UniverseData = {
     {
       id: "proxima",
       name: "Proxima",
-      economyType: "mining",
+      economyType: "extraction",
       x: 700,
       y: 350,
       description: "A remote but mineral-rich frontier outpost.",

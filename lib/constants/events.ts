@@ -79,8 +79,8 @@ export const MODIFIER_CAPS = {
 const war: EventDefinition = {
   type: "war",
   name: "War",
-  description: "Military conflict erupts, disrupting production and spiking demand for fuel and ship parts.",
-  targetFilter: { economyTypes: ["industrial", "tech", "mining", "core"] },
+  description: "Military conflict erupts, disrupting production and spiking demand for fuel and machinery.",
+  targetFilter: { economyTypes: ["industrial", "tech", "extraction", "core"] },
   cooldown: 100,
   maxActive: 3,
   weight: 10,
@@ -89,10 +89,10 @@ const war: EventDefinition = {
       name: "tensions",
       displayName: "Tensions Rising",
       durationRange: [30, 60],
-      notification: "Tensions are rising at {systemName}. Fuel and ship parts demand increasing.",
+      notification: "Tensions are rising at {systemName}. Fuel and machinery demand increasing.",
       modifiers: [
         { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 20 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ship_parts", parameter: "demand_target", value: 30 },
+        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 30 },
       ],
     },
     {
@@ -102,7 +102,7 @@ const war: EventDefinition = {
       notification: "Conflict escalates at {systemName}. Production declining.",
       modifiers: [
         { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 50 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ship_parts", parameter: "demand_target", value: 50 },
+        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 50 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.7 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
       ],
@@ -114,7 +114,7 @@ const war: EventDefinition = {
       notification: "War rages at {systemName}! Heavy production disruption.",
       modifiers: [
         { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 80 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ship_parts", parameter: "demand_target", value: 60 },
+        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 60 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.4 },
         { domain: "economy", type: "reversion_dampening", target: "system", goodId: null, parameter: "reversion_rate", value: 0.5 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.15 },
@@ -176,7 +176,7 @@ const plague: EventDefinition = {
       notification: "The plague spreads at {systemName}. Medical supplies desperately needed.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.2 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "electronics", parameter: "demand_target", value: 40 },
+        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 40 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.03 },
       ],
       spread: [
@@ -195,7 +195,7 @@ const plague: EventDefinition = {
       notification: "The plague at {systemName} is being contained.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.5 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "electronics", parameter: "demand_target", value: 20 },
+        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 20 },
       ],
     },
     {
@@ -237,7 +237,7 @@ const tradeFestival: EventDefinition = {
 const conflictSpillover: EventDefinition = {
   type: "conflict_spillover",
   name: "Conflict Spillover",
-  description: "Nearby conflict disrupts trade routes, increasing demand for fuel and ship parts.",
+  description: "Nearby conflict disrupts trade routes, increasing demand for fuel and machinery.",
   cooldown: 80,
   maxActive: 5,
   weight: 0, // Never spawned randomly — only via spread
@@ -246,10 +246,10 @@ const conflictSpillover: EventDefinition = {
       name: "spillover",
       displayName: "Conflict Spillover",
       durationRange: [40, 80],
-      notification: "Conflict spills over to {systemName}. Fuel and parts demand rising.",
+      notification: "Conflict spills over to {systemName}. Fuel and machinery demand rising.",
       modifiers: [
         { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 25 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ship_parts", parameter: "demand_target", value: 20 },
+        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 20 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.85 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
       ],
@@ -273,7 +273,7 @@ const plagueRisk: EventDefinition = {
       notification: "Plague risk at {systemName}. Food production threatened.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.7 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "electronics", parameter: "demand_target", value: 15 },
+        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 15 },
       ],
     },
   ],

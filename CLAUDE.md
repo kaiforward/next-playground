@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (263 tests, engine + API)
+- `npx vitest run` — Run unit tests (265 tests, engine + API)
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). Outputs summary table, goods breakdown, route diversity, market health, event impact, idle stats.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). New simulator features go here only — don't expand the CLI flags.
 - `npx prisma db seed` — Seed database
@@ -25,7 +25,7 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 - `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, events, danger, refuel, snapshot, shipyard). Zero DB dependency.
 - `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
 - `lib/types/` — Shared types (`game.ts`, `api.ts`)
-- `lib/constants/` — Goods, universe, economy, event, rate-limit, fuel, snapshot, and ship type definitions
+- `lib/constants/` — Goods (12), universe (6 economy types, per-good rates), economy, government (4 types), event, rate-limit, fuel, snapshot, and ship type definitions
 - `lib/tick/` — Tick engine, processor pipeline, registry. Processors: ship-arrivals (docking + danger + gameNotifications), events (lifecycle + spread + enriched refs), economy (simulation + modifiers), price-snapshots (periodic price recording).
 - `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation, events, refuel, price-history, shipyard). Called by route handlers and future server components.
 - `lib/query/` — TanStack Query setup (client factory, query key factory, typed apiFetch helper)
@@ -54,12 +54,11 @@ Reference docs (how things work now):
 
 Design docs (plans and backlog):
 
-- `docs/design/economy-balance.md` — Data-driven economy improvements (goods balance, universe utilization, luxury rework)
-- `docs/design/goods-and-economy-types.md` — Scale discussion: how many goods/economy types, browser game research, open questions
+- `docs/design/economy-balance.md` — Economy balance proposals: per-tier price clamps, per-good equilibrium, volume/mass enforcement, government modifiers. Current metrics and success criteria.
 - `docs/design/event-catalog.md` — Implemented and planned event definitions (arcs, shocks, ideas)
 - `docs/design/simulation-enhancements.md` — Future mechanics requiring new engine capabilities
 - `docs/design/BACKLOG.md` — Prioritized backlog (sized, grouped by readiness). Delete items when shipped.
-- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system, economy-testing, simulator-metrics)
+- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system, economy-testing, simulator-metrics, goods-and-economy-types)
 
 ## Design Principles
 

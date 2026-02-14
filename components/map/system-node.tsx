@@ -28,7 +28,8 @@ const systemNode = tv({
   variants: {
     economyType: {
       agricultural: "bg-green-900/60 border-green-500 text-green-100",
-      mining: "bg-amber-900/60 border-amber-500 text-amber-100",
+      extraction: "bg-amber-900/60 border-amber-500 text-amber-100",
+      refinery: "bg-cyan-900/60 border-cyan-500 text-cyan-100",
       industrial: "bg-slate-700/60 border-slate-400 text-slate-100",
       tech: "bg-blue-900/60 border-blue-500 text-blue-100",
       core: "bg-purple-900/60 border-purple-500 text-purple-100",
@@ -48,7 +49,8 @@ const economyLabel = tv({
   variants: {
     economyType: {
       agricultural: "text-green-300",
-      mining: "text-amber-300",
+      extraction: "text-amber-300",
+      refinery: "text-cyan-300",
       industrial: "text-slate-300",
       tech: "text-blue-300",
       core: "text-purple-300",
@@ -61,7 +63,8 @@ const pulseRing = tv({
   variants: {
     economyType: {
       agricultural: "border-green-400",
-      mining: "border-amber-400",
+      extraction: "border-amber-400",
+      refinery: "border-cyan-400",
       industrial: "border-slate-300",
       tech: "border-blue-400",
       core: "border-purple-400",

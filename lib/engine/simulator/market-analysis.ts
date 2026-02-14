@@ -93,10 +93,10 @@ function computeEquilibriumDrift(
     // Determine equilibrium target based on produce/consume relationship
     let eqSupply: number;
     let eqDemand: number;
-    if (sys.produces.includes(m.goodId)) {
+    if (m.goodId in sys.produces) {
       eqSupply = constants.equilibrium.produces.supply;
       eqDemand = constants.equilibrium.produces.demand;
-    } else if (sys.consumes.includes(m.goodId)) {
+    } else if (m.goodId in sys.consumes) {
       eqSupply = constants.equilibrium.consumes.supply;
       eqDemand = constants.equilibrium.consumes.demand;
     } else {

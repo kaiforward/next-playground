@@ -12,6 +12,7 @@ import {
   REGION_IDENTITIES,
   REGION_NAME_PREFIXES,
   ECONOMY_TYPE_WEIGHTS,
+  GOVERNMENT_TYPE_WEIGHTS,
 } from "@/lib/constants/universe-gen";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
@@ -59,6 +60,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     REGION_IDENTITIES,
     REGION_NAME_PREFIXES,
     ECONOMY_TYPE_WEIGHTS,
+    GOVERNMENT_TYPE_WEIGHTS,
   );
 
   // Build regions
@@ -66,6 +68,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     id: `region-${i}`,
     name: r.name,
     identity: r.identity,
+    governmentType: r.governmentType,
   }));
 
   // Build systems
@@ -76,8 +79,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       name: s.name,
       economyType: econ,
       regionId: `region-${s.regionIndex}`,
-      produces: ECONOMY_PRODUCTION[econ] ?? [],
-      consumes: ECONOMY_CONSUMPTION[econ] ?? [],
+      produces: ECONOMY_PRODUCTION[econ] ?? {},
+      consumes: ECONOMY_CONSUMPTION[econ] ?? {},
     };
   });
 
@@ -94,8 +97,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
 
   for (const sys of systems) {
     for (const [goodKey, goodDef] of goodEntries) {
-      const isProduced = sys.produces.includes(goodKey);
-      const isConsumed = sys.consumes.includes(goodKey);
+      const isProduced = goodKey in sys.produces;
+      const isConsumed = goodKey in sys.consumes;
       const target = isProduced
         ? constants.equilibrium.produces
         : isConsumed

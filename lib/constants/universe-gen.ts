@@ -1,4 +1,4 @@
-import type { EconomyType, RegionIdentity } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
 
 /** Tuneable universe generation parameters. */
 export const UNIVERSE_GEN = {
@@ -38,11 +38,20 @@ export const REGION_NAME_PREFIXES: Record<RegionIdentity, string[]> = {
 };
 
 /** Economy type distribution weights per region identity.
- *  Order: [mining, agricultural, industrial, tech, core] */
+ *  Order: [extraction, agricultural, refinery, industrial, tech, core] */
 export const ECONOMY_TYPE_WEIGHTS: Record<RegionIdentity, Record<EconomyType, number>> = {
-  resource_rich: { mining: 40, agricultural: 20, industrial: 20, tech: 10, core: 10 },
-  agricultural: { mining: 15, agricultural: 45, industrial: 15, tech: 15, core: 10 },
-  industrial: { mining: 20, agricultural: 10, industrial: 40, tech: 20, core: 10 },
-  tech: { mining: 10, agricultural: 10, industrial: 20, tech: 45, core: 15 },
-  trade_hub: { mining: 15, agricultural: 15, industrial: 20, tech: 15, core: 35 },
+  resource_rich: { extraction: 30, agricultural: 15, refinery: 15, industrial: 15, tech: 10, core: 15 },
+  agricultural:  { extraction: 10, agricultural: 35, refinery: 10, industrial: 15, tech: 15, core: 15 },
+  industrial:    { extraction: 10, agricultural: 10, refinery: 20, industrial: 30, tech: 15, core: 15 },
+  tech:          { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 35, core: 20 },
+  trade_hub:     { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 15, core: 40 },
+};
+
+/** Government type distribution weights per region identity. */
+export const GOVERNMENT_TYPE_WEIGHTS: Record<RegionIdentity, Record<GovernmentType, number>> = {
+  resource_rich: { frontier: 40, corporate: 30, federation: 20, authoritarian: 10 },
+  tech:          { corporate: 40, federation: 30, authoritarian: 20, frontier: 10 },
+  industrial:    { corporate: 30, authoritarian: 30, federation: 25, frontier: 15 },
+  agricultural:  { federation: 40, frontier: 25, corporate: 20, authoritarian: 15 },
+  trade_hub:     { corporate: 35, federation: 35, frontier: 20, authoritarian: 10 },
 };

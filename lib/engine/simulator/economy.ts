@@ -367,8 +367,11 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       demand: m.demand,
       basePrice: m.basePrice,
       economyType: sys.economyType,
-      produces: sys.produces,
-      consumes: sys.consumes,
+      produces: Object.keys(sys.produces),
+      consumes: Object.keys(sys.consumes),
+      productionRate: sys.produces[m.goodId],
+      consumptionRate: sys.consumes[m.goodId],
+      volatility: constants.goods[m.goodId]?.volatility,
       ...(agg && {
         supplyTargetShift: agg.supplyTargetShift,
         demandTargetShift: agg.demandTargetShift,

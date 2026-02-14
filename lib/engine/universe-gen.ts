@@ -3,7 +3,7 @@
  * Deterministic given a seed value via mulberry32 PRNG.
  */
 
-import type { EconomyType, RegionIdentity } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
 
 // ── Output types ────────────────────────────────────────────────
 
@@ -11,6 +11,7 @@ export interface GeneratedRegion {
   index: number;
   name: string;
   identity: RegionIdentity;
+  governmentType: GovernmentType;
   x: number;
   y: number;
 }
@@ -142,6 +143,7 @@ export function generateRegions(
   params: GenParams,
   identities: RegionIdentity[],
   namePrefixes: Record<RegionIdentity, string[]>,
+  governmentWeights?: Record<RegionIdentity, Record<GovernmentType, number>>,
 ): GeneratedRegion[] {
   const { regionCount, mapSize, regionMinDistance, maxPlacementAttempts } = params;
   const padding = mapSize * 0.15;
@@ -172,7 +174,10 @@ export function generateRegions(
       }
       usedNames.add(name);
 
-      regions.push({ index: i, name, identity, x, y });
+      const governmentType: GovernmentType = governmentWeights
+        ? weightedPick(rng, governmentWeights[identity])
+        : "federation";
+      regions.push({ index: i, name, identity, governmentType, x, y });
       placed = true;
       break;
     }
@@ -193,7 +198,10 @@ export function generateRegions(
       }
       usedNames.add(name);
 
-      regions.push({ index: i, name, identity, x, y });
+      const governmentType: GovernmentType = governmentWeights
+        ? weightedPick(rng, governmentWeights[identity])
+        : "federation";
+      regions.push({ index: i, name, identity, governmentType, x, y });
     }
   }
 
@@ -540,10 +548,11 @@ export function generateUniverse(
   identities: RegionIdentity[],
   namePrefixes: Record<RegionIdentity, string[]>,
   economyWeights: Record<RegionIdentity, Record<EconomyType, number>>,
+  governmentWeights?: Record<RegionIdentity, Record<GovernmentType, number>>,
 ): GeneratedUniverse {
   const rng = mulberry32(params.seed);
 
-  const regions = generateRegions(rng, params, identities, namePrefixes);
+  const regions = generateRegions(rng, params, identities, namePrefixes, governmentWeights);
   const rawSystems = generateSystems(rng, regions, params, economyWeights);
   const { connections, systems } = generateConnections(rng, rawSystems, regions, params);
   const startingSystemIndex = selectStartingSystem(systems, regions);

@@ -37,7 +37,7 @@ function makeEntry(overrides: Partial<MarketTickEntry> = {}): MarketTickEntry {
     supply: 60,
     demand: 60,
     basePrice: 30,
-    economyType: "mining",
+    economyType: "extraction",
     produces: [],
     consumes: [],
     ...overrides,

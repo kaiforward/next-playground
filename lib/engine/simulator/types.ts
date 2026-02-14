@@ -14,6 +14,7 @@ export interface SimRegion {
   id: string;
   name: string;
   identity: RegionIdentity;
+  governmentType: string;
 }
 
 export interface SimSystem {
@@ -21,10 +22,10 @@ export interface SimSystem {
   name: string;
   economyType: EconomyType;
   regionId: string;
-  /** Goods this economy type produces. */
-  produces: string[];
-  /** Goods this economy type consumes. */
-  consumes: string[];
+  /** Goods this economy type produces, keyed by goodId → rate. */
+  produces: Record<string, number>;
+  /** Goods this economy type consumes, keyed by goodId → rate. */
+  consumes: Record<string, number>;
 }
 
 export interface SimConnection {

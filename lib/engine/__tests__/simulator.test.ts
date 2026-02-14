@@ -32,7 +32,7 @@ describe("Simulator", () => {
       expect(world.regions.length).toBeGreaterThan(0);
       expect(world.systems.length).toBeGreaterThan(0);
       expect(world.connections.length).toBeGreaterThan(0);
-      expect(world.markets.length).toBe(world.systems.length * 6); // 6 goods per system
+      expect(world.markets.length).toBe(world.systems.length * 12); // 12 goods per system
       expect(world.players).toHaveLength(1);
       expect(world.ships).toHaveLength(1);
       expect(world.tick).toBe(0);
@@ -158,7 +158,7 @@ describe("Simulator", () => {
       expect(world.events).toHaveLength(0);
     });
 
-    it("injects a war at a mining system via economyType target", () => {
+    it("injects a war at an extraction system via economyType target", () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -166,7 +166,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx({
         disableRandomEvents: true,
         eventInjections: [
-          { tick: 10, target: { economyType: "mining" }, eventType: "war" },
+          { tick: 10, target: { economyType: "extraction" }, eventType: "war" },
         ],
       });
 
@@ -178,9 +178,9 @@ describe("Simulator", () => {
       expect(world.events).toHaveLength(1);
       expect(world.events[0].type).toBe("war");
 
-      // Verify it landed on a mining system
+      // Verify it landed on an extraction system
       const targetSystem = world.systems.find((s) => s.id === world.events[0].systemId);
-      expect(targetSystem?.economyType).toBe("mining");
+      expect(targetSystem?.economyType).toBe("extraction");
     });
 
     it("injects with custom severity", () => {
@@ -191,7 +191,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx({
         disableRandomEvents: true,
         eventInjections: [
-          { tick: 5, target: { economyType: "mining" }, eventType: "war", severity: 2.0 },
+          { tick: 5, target: { economyType: "extraction" }, eventType: "war", severity: 2.0 },
         ],
       });
 

@@ -36,7 +36,7 @@ export interface SimConstants {
     minMultiplier: number;
     maxMultiplier: number;
   };
-  goods: Record<string, { basePrice: number }>;
+  goods: Record<string, { basePrice: number; tier: number; volume: number; mass: number; volatility: number; hazard: string }>;
   fuel: {
     refuelCostPerUnit: number;
   };
@@ -88,9 +88,9 @@ export type SimConstantOverrides = {
 // ── Resolution ───────────────────────────────────────────────────
 
 function buildDefaults(): SimConstants {
-  const goods: Record<string, { basePrice: number }> = {};
+  const goods: Record<string, { basePrice: number; tier: number; volume: number; mass: number; volatility: number; hazard: string }> = {};
   for (const [key, def] of Object.entries(GOODS)) {
-    goods[key] = { basePrice: def.basePrice };
+    goods[key] = { basePrice: def.basePrice, tier: def.tier, volume: def.volume, mass: def.mass, volatility: def.volatility, hazard: def.hazard };
   }
 
   const ships: Record<string, { fuel: number; cargo: number; price: number }> = {};

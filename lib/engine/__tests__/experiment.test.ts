@@ -37,7 +37,7 @@ describe("ExperimentConfig", () => {
           inject: [
             {
               tick: 50,
-              target: { economyType: "mining" },
+              target: { economyType: "extraction" },
               type: "war",
               severity: 1.5,
             },
@@ -106,7 +106,7 @@ describe("ExperimentConfig", () => {
         events: {
           disableRandom: true,
           inject: [
-            { tick: 50, target: { economyType: "mining" }, type: "war", severity: 2.0 },
+            { tick: 50, target: { economyType: "extraction" }, type: "war", severity: 2.0 },
           ],
         },
       });

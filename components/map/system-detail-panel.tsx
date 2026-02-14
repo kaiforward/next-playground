@@ -29,7 +29,8 @@ const economyBadge = tv({
   variants: {
     economyType: {
       agricultural: "bg-green-900/80 text-green-300 ring-1 ring-green-500/40",
-      mining: "bg-amber-900/80 text-amber-300 ring-1 ring-amber-500/40",
+      extraction: "bg-amber-900/80 text-amber-300 ring-1 ring-amber-500/40",
+      refinery: "bg-cyan-900/80 text-cyan-300 ring-1 ring-cyan-500/40",
       industrial: "bg-slate-700/80 text-slate-300 ring-1 ring-slate-400/40",
       tech: "bg-blue-900/80 text-blue-300 ring-1 ring-blue-500/40",
       core: "bg-purple-900/80 text-purple-300 ring-1 ring-purple-500/40",
