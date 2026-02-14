@@ -38,6 +38,22 @@ describe("SimConstants", () => {
       }
     });
 
+    it("goods price clamps match GOODS", () => {
+      const c = resolveConstants();
+      for (const [key, def] of Object.entries(GOODS)) {
+        expect(c.goods[key].priceFloor).toBe(def.priceFloor);
+        expect(c.goods[key].priceCeiling).toBe(def.priceCeiling);
+      }
+    });
+
+    it("goods equilibrium targets match GOODS", () => {
+      const c = resolveConstants();
+      for (const [key, def] of Object.entries(GOODS)) {
+        expect(c.goods[key].equilibrium.produces).toEqual(def.equilibrium.produces);
+        expect(c.goods[key].equilibrium.consumes).toEqual(def.equilibrium.consumes);
+      }
+    });
+
     it("fuel matches REFUEL_COST_PER_UNIT", () => {
       const c = resolveConstants();
       expect(c.fuel.refuelCostPerUnit).toBe(REFUEL_COST_PER_UNIT);

@@ -8,7 +8,7 @@ import { processors, sortProcessors } from "@/lib/tick/registry";
 import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
-import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
+import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { calculatePrice } from "@/lib/engine/pricing";
@@ -256,7 +256,7 @@ export async function getEconomySnapshot(): Promise<ServiceResult<{ systems: Eco
       goodName: m.good.name,
       supply: m.supply,
       demand: m.demand,
-      price: calculatePrice(m.good.basePrice, m.supply, m.demand),
+      price: calculatePrice(m.good.basePrice, m.supply, m.demand, m.good.priceFloor, m.good.priceCeiling),
     })),
   }));
 
@@ -289,15 +289,16 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
     for (const m of markets) {
       const econ = m.station.system.economyType as EconomyType;
       const goodKey = goodKeyByName.get(m.good.name) ?? m.good.name;
-      const produces = ECONOMY_PRODUCTION[econ] ?? [];
-      const consumes = ECONOMY_CONSUMPTION[econ] ?? [];
+      const produces = getProducedGoods(econ);
+      const consumes = getConsumedGoods(econ);
 
       const isProduced = produces.includes(goodKey);
       const isConsumed = consumes.includes(goodKey);
+      const goodEq = GOODS[goodKey]?.equilibrium;
       const target = isProduced
-        ? EQUILIBRIUM_TARGETS.produces
+        ? (goodEq?.produces ?? EQUILIBRIUM_TARGETS.produces)
         : isConsumed
-          ? EQUILIBRIUM_TARGETS.consumes
+          ? (goodEq?.consumes ?? EQUILIBRIUM_TARGETS.consumes)
           : EQUILIBRIUM_TARGETS.neutral;
 
       await tx.stationMarket.update({

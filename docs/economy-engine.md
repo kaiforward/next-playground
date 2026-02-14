@@ -127,11 +127,14 @@ processShipArrivals(ships, currentTick) → arrivedShipIds
 
 - **Mean-reverting drift:** supply/demand pull toward equilibrium targets (producers: high supply/low demand, consumers: inverse, neutral: balanced)
 - Reversion rate: 5% of gap per tick + random noise (±3 units)
-- Production effect: producers gain supply (+3/tick), slightly reduce demand
-- Consumption effect: consumers deplete supply (-2/tick), generate demand
+- **Per-good rates:** `MarketTickEntry` accepts optional `productionRate`, `consumptionRate`, and `volatility` fields. When present, these override the global `params.productionRate`/`params.consumptionRate`. Volatility scales the noise amplitude (`noiseAmplitude * volatility`).
+- Production effect: producers gain supply (+rate/tick), slightly reduce demand. Default rate in `lib/constants/economy.ts`, per-good overrides from `lib/constants/universe.ts` (`ECONOMY_PRODUCTION`).
+- Consumption effect: consumers deplete supply (-rate/tick), generate demand. Per-good overrides from `ECONOMY_CONSUMPTION`.
+- 12 goods across 3 tiers (tier 0: water, food, ore, textiles; tier 1: fuel, metals, chemicals, medicine; tier 2: electronics, machinery, weapons, luxuries). Defined in `lib/constants/goods.ts` with basePrice, volume, mass, volatility, and hazard.
+- 6 economy types: agricultural, extraction, refinery, industrial, tech, core. Each has per-good production and consumption rates in `lib/constants/universe.ts`.
 - All values clamped to `[5, 200]`
 - Accepts optional RNG function for deterministic testing
-- Constants in `lib/constants/economy.ts` (reversion rate, noise, production/consumption rates, equilibrium targets)
+- Constants in `lib/constants/economy.ts` (reversion rate, noise, fallback production/consumption rates, equilibrium targets)
 - `processShipArrivals` returns ship IDs where `arrivalTick <= currentTick`
 
 ## API Routes
@@ -175,7 +178,7 @@ Each tick:
 **Processors** (`lib/tick/processors/`):
 - `ship-arrivals` — Every tick. Transitions arrived ships from in_transit → docked. Queries navigation modifiers at destination, rolls for cargo loss via `aggregateDangerLevel`/`rollCargoLoss`, updates cargo in DB. Emits per-player `shipArrived` and `cargoLost` events.
 - `events` — Every tick. Manages event lifecycle: spawns new events (weighted random), advances phases, swaps modifiers, executes spread rules, applies shocks, expires completed events. Emits global `eventNotifications`.
-- `economy` — Every tick, round-robin by region. Processes one region's markets per tick (~150 entries). Reads active `EventModifier` rows (domain: "economy") and applies equilibrium shifts, rate multipliers, and reversion dampening. Emits global `economyTick` events.
+- `economy` — Every tick, round-robin by region. Processes one region's markets per tick (~150 entries). Reads active `EventModifier` rows (domain: "economy") and applies equilibrium shifts, rate multipliers, and reversion dampening. Passes per-good production/consumption rates and volatility from `lib/constants/universe.ts` and `lib/constants/goods.ts`. Emits global `economyTick` events.
 - `price-snapshots` — Every 20 ticks, depends on `economy`. Fetches all 1,200 market rows, computes current prices via `buildPriceEntry()`, appends to each system's rolling JSON history (capped at 50 entries). Emits global `priceSnapshot` event.
 
 **Registry** (`lib/tick/registry.ts`): All processors are registered in a single array. `sortProcessors()` filters by frequency/offset and topologically sorts by `dependsOn`. Adding a new game system = one processor file + one registry line.
@@ -186,7 +189,7 @@ See `docs/design/archive/tick-engine-redesign.md` for the original architecture 
 
 ## Tests
 
-217 unit tests across 13 files in `lib/engine/__tests__/` and `lib/api/__tests__/`:
+265 unit tests across 15 files in `lib/engine/__tests__/` and `lib/api/__tests__/`:
 
 - `pricing.test.ts` — 7 tests (equal s/d, high demand, high supply, clamping, zero supply)
 - `trade.test.ts` — 11 tests (buy/sell success, credit/cargo/supply validation, edge cases, fleet trade docked guard)

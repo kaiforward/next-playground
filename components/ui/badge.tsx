@@ -12,6 +12,7 @@ const badgeVariants = tv({
       purple: "bg-purple-500/20 text-purple-300",
       slate: "bg-slate-500/20 text-slate-300",
       red: "bg-red-500/20 text-red-300",
+      cyan: "bg-cyan-500/20 text-cyan-300",
     },
   },
   defaultVariants: {

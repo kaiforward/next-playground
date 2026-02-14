@@ -18,14 +18,14 @@ All models are defined in `prisma/schema.prisma`. The database uses SQLite with 
 | Model | Purpose | Key Relations |
 |---|---|---|
 | `GameWorld` | Tick state singleton | Tracks currentTick, tickRate, lastTickAt |
-| `Region` | Group of ~25 systems | Has many StarSystems. Identity: resource_rich, agricultural, industrial, tech, trade_hub |
+| `Region` | Group of ~25 systems | Has many StarSystems. Identity: resource_rich, agricultural, industrial, tech, trade_hub. Has `governmentType` (federation, corporate, authoritarian, frontier) |
 | `Player` | Game profile | 1:1 with User, has many Ships |
 | `Ship` | Player's vessel | Belongs to Player, belongs to StarSystem (current + destination), has many CargoItems. Has `shipType` field (default "shuttle") for ship type definitions |
 | `CargoItem` | Goods in cargo hold | Belongs to Ship + Good, unique per ship+good |
 | `StarSystem` | A location in the universe | Belongs to Region, has Station, has Ships, has connections. `isGateway` marks inter-region connection points |
 | `SystemConnection` | Jump lane between systems | From/To StarSystem, has fuelCost. Gateway connections have higher fuel cost |
 | `Station` | Trading post in a system | 1:1 with StarSystem, has markets |
-| `Good` | Tradeable commodity definition | Reference table |
+| `Good` | Tradeable commodity definition | Reference table. Fields: name, description, basePrice, tier (0/1/2), volume, mass, volatility, hazard (none/low/high) |
 | `StationMarket` | Supply/demand per good per station | Belongs to Station + Good |
 | `TradeHistory` | Record of completed trades | Belongs to Station + Good |
 | `PriceHistory` | Rolling price snapshots per system | 1:1 with StarSystem (unique systemId). JSON `entries` column: `{ tick, prices: Record<goodId, price> }[]`, capped at 50 entries |
@@ -46,10 +46,11 @@ Key design decisions:
 
 ## Constants
 
-- `lib/constants/goods.ts` — 6 goods with name, basePrice, category
-- `lib/constants/universe.ts` — Economy production/consumption rules per economy type
-- `lib/constants/economy.ts` — Simulation constants (reversion rate, noise, production/consumption rates, equilibrium targets)
-- `lib/constants/universe-gen.ts` — Universe generation parameters (region count, systems per region, distances, fuel costs)
+- `lib/constants/goods.ts` — 12 goods with name, description, basePrice, tier, volume, mass, volatility, hazard
+- `lib/constants/universe.ts` — Per-good production/consumption rates per economy type (`Record<EconomyType, Record<string, number>>`), with helper functions (`getProducedGoods`, `getConsumedGoods`, `getProductionRate`, `getConsumptionRate`)
+- `lib/constants/economy.ts` — Simulation constants (reversion rate, noise, fallback production/consumption rates, equilibrium targets)
+- `lib/constants/universe-gen.ts` — Universe generation parameters (region count, systems per region, distances, fuel costs, economy type weights, government type weights)
+- `lib/constants/government.ts` — Government type definitions (federation, corporate, authoritarian, frontier) with modifiers (data-only, not yet wired into processors)
 - `lib/constants/events.ts` — Event definitions (war, plague, trade_festival, conflict_spillover, plague_risk), spawn/cap constants, modifier caps
 - `lib/constants/fuel.ts` — Base fuel price for refueling
 - `lib/constants/snapshot.ts` — Snapshot interval (20 ticks) and max entries (50)
@@ -58,13 +59,13 @@ Key design decisions:
 ## Seed Script
 
 `prisma/seed.ts` uses procedural generation (`lib/engine/universe-gen.ts`) to populate:
-- ~8 regions with economic identities (resource_rich, agricultural, industrial, tech, trade_hub)
-- ~200 star systems (~25 per region) with economy types weighted by region identity
-- ~1,200 market entries (6 goods × ~200 stations) with supply/demand based on economy type
+- ~8 regions with economic identities (resource_rich, agricultural, industrial, tech, trade_hub) and government types (federation, corporate, authoritarian, frontier)
+- ~200 star systems (~25 per region) with 6 economy types (agricultural, extraction, refinery, industrial, tech, core) weighted by region identity
+- ~2,400 market entries (12 goods × ~200 stations) with supply/demand based on economy type and per-good rates
 - Intra-region connections (MST + extra edges) and inter-region gateway connections
 - 1-3 gateway systems per region for inter-region travel
 - 200 PriceHistory rows (one per system, initially empty JSON arrays)
-- 6 goods, 1 GameWorld singleton (tick 0, 5000ms tick rate)
+- 12 goods (3 tiers: raw → refined → advanced), 1 GameWorld singleton (tick 0, 5000ms tick rate)
 
 Generation is deterministic given a seed value (`UNIVERSE_GEN.SEED`). Run with: `npx prisma db seed`
 

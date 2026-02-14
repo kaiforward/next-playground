@@ -36,7 +36,17 @@ export interface SimConstants {
     minMultiplier: number;
     maxMultiplier: number;
   };
-  goods: Record<string, { basePrice: number }>;
+  goods: Record<string, {
+    basePrice: number;
+    tier: number;
+    volume: number;
+    mass: number;
+    volatility: number;
+    hazard: string;
+    priceFloor: number;
+    priceCeiling: number;
+    equilibrium: { produces: { supply: number; demand: number }; consumes: { supply: number; demand: number } };
+  }>;
   fuel: {
     refuelCostPerUnit: number;
   };
@@ -88,9 +98,19 @@ export type SimConstantOverrides = {
 // ── Resolution ───────────────────────────────────────────────────
 
 function buildDefaults(): SimConstants {
-  const goods: Record<string, { basePrice: number }> = {};
+  const goods: SimConstants["goods"] = {};
   for (const [key, def] of Object.entries(GOODS)) {
-    goods[key] = { basePrice: def.basePrice };
+    goods[key] = {
+      basePrice: def.basePrice,
+      tier: def.tier,
+      volume: def.volume,
+      mass: def.mass,
+      volatility: def.volatility,
+      hazard: def.hazard,
+      priceFloor: def.priceFloor,
+      priceCeiling: def.priceCeiling,
+      equilibrium: { produces: { ...def.equilibrium.produces }, consumes: { ...def.equilibrium.consumes } },
+    };
   }
 
   const ships: Record<string, { fuel: number; cargo: number; price: number }> = {};

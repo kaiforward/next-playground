@@ -4,10 +4,11 @@ import type { EVENT_DEFINITIONS } from "./events";
 /** Mapping from economy type to Badge color prop. */
 export const ECONOMY_BADGE_COLOR: Record<
   EconomyType,
-  "green" | "amber" | "blue" | "purple" | "slate"
+  "green" | "amber" | "blue" | "purple" | "slate" | "red" | "cyan"
 > = {
   agricultural: "green",
-  mining: "amber",
+  extraction: "amber",
+  refinery: "cyan",
   industrial: "slate",
   tech: "blue",
   core: "purple",

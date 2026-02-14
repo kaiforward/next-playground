@@ -33,7 +33,7 @@ export default function SystemLayout({
   ];
 
   return (
-    <PageContainer size="md">
+    <PageContainer size="lg">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <Link

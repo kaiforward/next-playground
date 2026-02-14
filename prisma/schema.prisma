@@ -72,13 +72,14 @@ model GameWorld {
 }
 
 model Region {
-  id       String       @id @default(cuid())
-  name     String       @unique
-  identity String
-  x        Float
-  y        Float
-  systems  StarSystem[]
-  events   GameEvent[]
+  id             String       @id @default(cuid())
+  name           String       @unique
+  identity       String
+  governmentType String       @default("federation")
+  x              Float
+  y              Float
+  systems        StarSystem[]
+  events         GameEvent[]
 }
 
 model Player {
@@ -173,10 +174,17 @@ model Station {
 }
 
 model Good {
-  id        String @id @default(cuid())
-  name      String @unique
-  basePrice Float
-  category  String
+  id           String @id @default(cuid())
+  name         String @unique
+  description  String @default("")
+  basePrice    Float
+  tier         Int    @default(0)
+  volume       Int    @default(1)
+  mass         Float  @default(1.0)
+  volatility   Float  @default(1.0)
+  hazard       String @default("none")
+  priceFloor   Float  @default(0.2)
+  priceCeiling Float  @default(5.0)
 
   cargoItems CargoItem[]
   markets    StationMarket[]

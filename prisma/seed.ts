@@ -2,13 +2,15 @@ import "dotenv/config";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { GOODS } from "@/lib/constants/goods";
-import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
+import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
 import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
+import type { GoodEquilibrium } from "@/lib/constants/goods";
 import {
   UNIVERSE_GEN,
   REGION_IDENTITIES,
   REGION_NAME_PREFIXES,
   ECONOMY_TYPE_WEIGHTS,
+  GOVERNMENT_TYPE_WEIGHTS,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import type { EconomyType } from "@/lib/types/game";
@@ -41,6 +43,7 @@ async function main() {
     REGION_IDENTITIES,
     REGION_NAME_PREFIXES,
     ECONOMY_TYPE_WEIGHTS,
+    GOVERNMENT_TYPE_WEIGHTS,
   );
 
   console.log(
@@ -65,7 +68,18 @@ async function main() {
   const goodRecords: Record<string, { id: string }> = {};
   for (const [key, def] of Object.entries(GOODS)) {
     const good = await prisma.good.create({
-      data: { name: def.name, basePrice: def.basePrice, category: def.category },
+      data: {
+        name: def.name,
+        description: def.description,
+        basePrice: def.basePrice,
+        tier: def.tier,
+        volume: def.volume,
+        mass: def.mass,
+        volatility: def.volatility,
+        hazard: def.hazard,
+        priceFloor: def.priceFloor,
+        priceCeiling: def.priceCeiling,
+      },
     });
     goodRecords[key] = good;
   }
@@ -78,6 +92,7 @@ async function main() {
       data: {
         name: region.name,
         identity: region.identity,
+        governmentType: region.governmentType,
         x: region.x,
         y: region.y,
       },
@@ -112,17 +127,19 @@ async function main() {
 
     // Create market entries for each good
     const stationId = created.station!.id;
-    const produces = ECONOMY_PRODUCTION[sys.economyType as EconomyType] ?? [];
-    const consumes = ECONOMY_CONSUMPTION[sys.economyType as EconomyType] ?? [];
+    const econ = sys.economyType as EconomyType;
+    const produces = getProducedGoods(econ);
+    const consumes = getConsumedGoods(econ);
 
     for (const [goodKey, goodRec] of Object.entries(goodRecords)) {
       const isProduced = produces.includes(goodKey);
       const isConsumed = consumes.includes(goodKey);
+      const goodEq = GOODS[goodKey]?.equilibrium;
 
       const target = isProduced
-        ? EQUILIBRIUM_TARGETS.produces
+        ? (goodEq?.produces ?? EQUILIBRIUM_TARGETS.produces)
         : isConsumed
-          ? EQUILIBRIUM_TARGETS.consumes
+          ? (goodEq?.consumes ?? EQUILIBRIUM_TARGETS.consumes)
           : EQUILIBRIUM_TARGETS.neutral;
 
       await prisma.stationMarket.create({

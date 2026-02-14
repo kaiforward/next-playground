@@ -2,7 +2,8 @@
 
 export type EconomyType =
   | "agricultural"
-  | "mining"
+  | "extraction"
+  | "refinery"
   | "industrial"
   | "tech"
   | "core";
@@ -14,6 +15,16 @@ export type RegionIdentity =
   | "tech"
   | "trade_hub";
 
+export type GovernmentType =
+  | "federation"
+  | "corporate"
+  | "authoritarian"
+  | "frontier";
+
+export type GoodTier = 0 | 1 | 2;
+
+export type Hazard = "none" | "low" | "high";
+
 export interface RegionInfo {
   id: string;
   name: string;
@@ -21,12 +32,6 @@ export interface RegionInfo {
   x: number;
   y: number;
 }
-
-export type GoodCategory =
-  | "raw"
-  | "manufactured"
-  | "consumable"
-  | "luxury";
 
 export type TradeType = "buy" | "sell";
 
@@ -96,7 +101,7 @@ export interface GoodInfo {
   id: string;
   name: string;
   basePrice: number;
-  category: GoodCategory;
+  tier: GoodTier;
 }
 
 export interface MarketEntry {

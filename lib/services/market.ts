@@ -22,7 +22,7 @@ export async function getMarket(
     where: { stationId: station.id },
     include: {
       good: {
-        select: { id: true, name: true, basePrice: true },
+        select: { id: true, name: true, basePrice: true, priceFloor: true, priceCeiling: true },
       },
     },
   });
@@ -31,7 +31,7 @@ export async function getMarket(
     goodId: m.good.id,
     goodName: m.good.name,
     basePrice: m.good.basePrice,
-    currentPrice: calculatePrice(m.good.basePrice, m.supply, m.demand),
+    currentPrice: calculatePrice(m.good.basePrice, m.supply, m.demand, m.good.priceFloor, m.good.priceCeiling),
     supply: m.supply,
     demand: m.demand,
   }));

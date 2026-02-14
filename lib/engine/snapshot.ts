@@ -6,6 +6,8 @@ export interface MarketInput {
   supply: number;
   demand: number;
   basePrice: number;
+  priceFloor?: number;
+  priceCeiling?: number;
 }
 
 export interface PriceHistoryEntry {
@@ -36,7 +38,7 @@ export function buildPriceEntry(
   for (const [systemId, systemMarkets] of bySystem) {
     const prices: Record<string, number> = {};
     for (const m of systemMarkets) {
-      prices[m.goodId] = calculatePrice(m.basePrice, m.supply, m.demand);
+      prices[m.goodId] = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
     }
     result.set(systemId, { tick, prices });
   }

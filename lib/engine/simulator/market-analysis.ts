@@ -20,7 +20,7 @@ export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
     goodId: m.goodId,
     supply: m.supply,
     demand: m.demand,
-    price: calculatePrice(m.basePrice, m.supply, m.demand),
+    price: calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling),
   }));
 }
 
@@ -48,7 +48,7 @@ function computePriceDispersion(
   // Group prices by good
   const pricesByGood = new Map<string, number[]>();
   for (const m of world.markets) {
-    const price = calculatePrice(m.basePrice, m.supply, m.demand);
+    const price = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
     let prices = pricesByGood.get(m.goodId);
     if (!prices) {
       prices = [];
@@ -91,14 +91,17 @@ function computeEquilibriumDrift(
     if (!sys) continue;
 
     // Determine equilibrium target based on produce/consume relationship
+    const goodEq = constants.goods[m.goodId]?.equilibrium;
     let eqSupply: number;
     let eqDemand: number;
-    if (sys.produces.includes(m.goodId)) {
-      eqSupply = constants.equilibrium.produces.supply;
-      eqDemand = constants.equilibrium.produces.demand;
-    } else if (sys.consumes.includes(m.goodId)) {
-      eqSupply = constants.equilibrium.consumes.supply;
-      eqDemand = constants.equilibrium.consumes.demand;
+    if (m.goodId in sys.produces) {
+      const target = goodEq?.produces ?? constants.equilibrium.produces;
+      eqSupply = target.supply;
+      eqDemand = target.demand;
+    } else if (m.goodId in sys.consumes) {
+      const target = goodEq?.consumes ?? constants.equilibrium.consumes;
+      eqSupply = target.supply;
+      eqDemand = target.demand;
     } else {
       eqSupply = constants.equilibrium.neutral.supply;
       eqDemand = constants.equilibrium.neutral.demand;

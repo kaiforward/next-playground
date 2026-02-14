@@ -18,8 +18,9 @@ import {
   REGION_IDENTITIES,
   REGION_NAME_PREFIXES,
   ECONOMY_TYPE_WEIGHTS,
+  GOVERNMENT_TYPE_WEIGHTS,
 } from "@/lib/constants/universe-gen";
-import type { EconomyType, RegionIdentity } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -179,6 +180,25 @@ describe("generateRegions", () => {
       expect(regions[i].identity).toBe(REGION_IDENTITIES[i % REGION_IDENTITIES.length]);
     }
   });
+
+  it("assigns a valid government type when weights are provided", () => {
+    const params = defaultParams();
+    const rng = mulberry32(params.seed);
+    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES, GOVERNMENT_TYPE_WEIGHTS);
+    const validGovTypes: GovernmentType[] = ["federation", "corporate", "authoritarian", "frontier"];
+    for (const r of regions) {
+      expect(validGovTypes).toContain(r.governmentType);
+    }
+  });
+
+  it("defaults government type to federation when no weights provided", () => {
+    const params = defaultParams();
+    const rng = mulberry32(params.seed);
+    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
+    for (const r of regions) {
+      expect(r.governmentType).toBe("federation");
+    }
+  });
 });
 
 // ── System generation ───────────────────────────────────────────
@@ -211,12 +231,12 @@ describe("generateSystems", () => {
 
   it("distributes economy types according to region identity weights", () => {
     const { regions, systems } = makeRegionsAndSystems();
-    // Check that a resource_rich region has mostly mining systems
+    // Check that a resource_rich region has mostly extraction systems
     const resourceRegion = regions.find((r) => r.identity === "resource_rich")!;
     const resourceSystems = systems.filter((s) => s.regionIndex === resourceRegion.index);
-    const miningCount = resourceSystems.filter((s) => s.economyType === "mining").length;
-    // With 40% weight over 25 systems, expect at least 5 mining
-    expect(miningCount).toBeGreaterThanOrEqual(3);
+    const extractionCount = resourceSystems.filter((s) => s.economyType === "extraction").length;
+    // With 30% weight over 25 systems, expect at least 3 extraction
+    expect(extractionCount).toBeGreaterThanOrEqual(3);
   });
 
   it("assigns unique global indices", () => {
