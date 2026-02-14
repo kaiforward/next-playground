@@ -67,7 +67,34 @@ function rpad(str: string, width: number): string {
 }
 
 function formatTable(results: SimResults): string {
-  const { summaries, marketHealth, eventImpacts, elapsedMs } = results;
+  const { summaries, marketHealth, eventImpacts, regionOverview, elapsedMs } = results;
+
+  const lines: string[] = [];
+
+  // Region Overview
+  if (regionOverview.length > 0) {
+    lines.push("Region Overview:");
+
+    const roHeaders = ["Region", "Identity", "Government", "Systems"];
+    const roWidths = [16, 16, 16, 8];
+
+    lines.push(roHeaders.map((h, i) => pad(h, roWidths[i])).join(" | "));
+    lines.push(roWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    for (const r of regionOverview) {
+      const row = [
+        pad(r.name, roWidths[0]),
+        pad(r.identity, roWidths[1]),
+        pad(r.governmentType, roWidths[2]),
+        rpad(String(r.systemCount), roWidths[3]),
+      ];
+      lines.push(row.join(" | "));
+    }
+
+    lines.push("");
+  }
+
+  // Summary table
   const headers = [
     "Strategy",
     "Final Credits",
@@ -81,8 +108,6 @@ function formatTable(results: SimResults): string {
     "Idle %",
   ];
   const widths = [12, 14, 8, 10, 12, 12, 11, 12, 6, 7];
-
-  const lines: string[] = [];
 
   // Header
   lines.push(headers.map((h, i) => pad(h, widths[i])).join(" | "));
@@ -224,6 +249,34 @@ function formatTable(results: SimResults): string {
   } else {
     lines.push("");
     lines.push("Event Impact: no events occurred during simulation");
+  }
+
+  // Government trade — sells by destination government type
+  const allGovTypes = [
+    ...new Set(summaries.flatMap((s) => s.governmentSellBreakdown.map((g) => g.governmentType))),
+  ].sort();
+
+  if (allGovTypes.length > 0) {
+    lines.push("");
+    lines.push("Government Trade (sells by destination):");
+
+    const gtWidths = [12, ...allGovTypes.map(() => 18)];
+    const gtHeaders = ["Strategy", ...allGovTypes];
+
+    lines.push(gtHeaders.map((h, i) => pad(h, gtWidths[i])).join(" | "));
+    lines.push(gtWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    for (const s of summaries) {
+      const totalSold = s.governmentSellBreakdown.reduce((sum, g) => sum + g.totalSold, 0);
+      const govMap = new Map(s.governmentSellBreakdown.map((g) => [g.governmentType, g]));
+      const cells = allGovTypes.map((gov) => {
+        const entry = govMap.get(gov);
+        if (!entry || totalSold === 0) return rpad("-", 18);
+        const pct = ((entry.totalSold / totalSold) * 100).toFixed(1);
+        return rpad(`${entry.totalSold} (${pct}%)`, 18);
+      });
+      lines.push([pad(s.strategy, 12), ...cells].join(" | "));
+    }
   }
 
   return lines.join("\n");

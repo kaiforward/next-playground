@@ -3,8 +3,14 @@ import type { GovernmentType } from "@/lib/types/game";
 export interface GovernmentDefinition {
   name: string;
   description: string;
-  /** Good IDs that cannot be freely traded in this government type's regions. */
-  tradeRestrictions: string[];
+  /** Good IDs subject to import duty at arrival. */
+  taxed: string[];
+  /** Good IDs that are illegal — full confiscation if caught. */
+  contraband: string[];
+  /** Fraction of taxed goods seized as import duty (e.g. 0.12 = 12%). */
+  taxRate: number;
+  /** Multiplier on base inspection chance for contraband (0 = no inspections). */
+  inspectionModifier: number;
   /** Multiplier on per-good volatility. < 1 dampens swings, > 1 amplifies them. */
   volatilityModifier: number;
   /** Additive danger baseline for transit in this government type's regions. */
@@ -39,7 +45,10 @@ export const GOVERNMENT_TYPES: Record<GovernmentType, GovernmentDefinition> = {
   federation: {
     name: "Federation",
     description: "Democratic, regulated, stable. Rule of law and consumer protections.",
-    tradeRestrictions: ["weapons"],
+    taxed: ["chemicals"],
+    contraband: ["weapons"],
+    taxRate: 0.12,
+    inspectionModifier: 1.2,
     volatilityModifier: 0.8,
     dangerBaseline: 0.0,
     equilibriumSpreadPct: -10,
@@ -49,7 +58,10 @@ export const GOVERNMENT_TYPES: Record<GovernmentType, GovernmentDefinition> = {
   corporate: {
     name: "Corporate",
     description: "Profit-driven, competitive, efficient. Megacorp governance.",
-    tradeRestrictions: [],
+    taxed: [],
+    contraband: [],
+    taxRate: 0.10,
+    inspectionModifier: 0.8,
     volatilityModifier: 0.9,
     dangerBaseline: 0.02,
     equilibriumSpreadPct: -5,
@@ -59,7 +71,10 @@ export const GOVERNMENT_TYPES: Record<GovernmentType, GovernmentDefinition> = {
   authoritarian: {
     name: "Authoritarian",
     description: "Military governance, controlled markets, strong security.",
-    tradeRestrictions: ["weapons", "chemicals"],
+    taxed: [],
+    contraband: ["weapons", "chemicals"],
+    taxRate: 0.15,
+    inspectionModifier: 1.5,
     volatilityModifier: 0.7,
     dangerBaseline: 0.0,
     equilibriumSpreadPct: -15,
@@ -69,7 +84,10 @@ export const GOVERNMENT_TYPES: Record<GovernmentType, GovernmentDefinition> = {
   frontier: {
     name: "Frontier",
     description: "Lawless, dangerous, unregulated. No central authority.",
-    tradeRestrictions: [],
+    taxed: [],
+    contraband: [],
+    taxRate: 0.0,
+    inspectionModifier: 0.0,
     volatilityModifier: 1.5,
     dangerBaseline: 0.1,
     equilibriumSpreadPct: 20,

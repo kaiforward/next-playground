@@ -84,6 +84,7 @@ export function executeBotTick(
       sold: cargo.quantity,
       buyCost: 0,
       sellRevenue: revenue,
+      sellGovernmentType: ctx.systemToGov.get(ship.systemId),
     });
   }
 

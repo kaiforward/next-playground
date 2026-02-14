@@ -7,6 +7,10 @@ import { findReachableSystems, type ReachableSystem } from "@/lib/engine/pathfin
 import { findReachableSystemsCached } from "../pathfinding-cache";
 import type { SimAdjacencyList } from "../pathfinding-cache";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
+import { HAZARD_CONSTANTS, LEGALITY_CONSTANTS } from "@/lib/engine/danger";
+import { GOODS } from "@/lib/constants/goods";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import type { GovernmentType } from "@/lib/types/game";
 import type { SimWorld, SimShip, SimMarketEntry } from "../types";
 
 /** Get the current price for a market entry. */
@@ -127,4 +131,59 @@ export function findOpportunities(
   }
 
   return opportunities;
+}
+
+/**
+ * Estimate survival fraction for a good arriving at a target system.
+ * Returns 0–1 where 1 = no expected losses, 0 = total expected loss.
+ *
+ * survival = (1 - hazardExpectedLoss) × (1 - taxRate) × (1 - contrabandExpectedLoss)
+ */
+export function getRiskMultiplier(
+  goodId: string,
+  targetSystemId: string,
+  world: SimWorld,
+  dangerLevel?: number,
+): number {
+  const goodDef = GOODS[goodId];
+  const targetSystem = world.systems.find((s) => s.id === targetSystemId);
+  const targetRegion = targetSystem
+    ? world.regions.find((r) => r.id === targetSystem.regionId)
+    : undefined;
+  const govDef = targetRegion
+    ? GOVERNMENT_TYPES[targetRegion.governmentType as GovernmentType]
+    : undefined;
+
+  const danger = dangerLevel ?? 0;
+
+  // Hazard expected loss
+  let hazardExpectedLoss = 0;
+  if (goodDef && goodDef.hazard !== "none") {
+    const baseChance = goodDef.hazard === "high"
+      ? HAZARD_CONSTANTS.HIGH_BASE_CHANCE
+      : HAZARD_CONSTANTS.LOW_BASE_CHANCE;
+    const effectiveChance = baseChance + danger * HAZARD_CONSTANTS.DANGER_SCALING;
+    const minLoss = goodDef.hazard === "high"
+      ? HAZARD_CONSTANTS.HIGH_MIN_LOSS
+      : HAZARD_CONSTANTS.LOW_MIN_LOSS;
+    const maxLoss = goodDef.hazard === "high"
+      ? HAZARD_CONSTANTS.HIGH_MAX_LOSS
+      : HAZARD_CONSTANTS.LOW_MAX_LOSS;
+    const avgLoss = (minLoss + maxLoss) / 2;
+    hazardExpectedLoss = effectiveChance * avgLoss;
+  }
+
+  // Tax rate at destination
+  let taxRate = 0;
+  if (govDef && govDef.taxRate > 0 && govDef.taxed.includes(goodId)) {
+    taxRate = govDef.taxRate;
+  }
+
+  // Contraband expected loss (full confiscation × catch probability)
+  let contrabandExpectedLoss = 0;
+  if (govDef && govDef.inspectionModifier > 0 && govDef.contraband.includes(goodId)) {
+    contrabandExpectedLoss = LEGALITY_CONSTANTS.BASE_INSPECTION_CHANCE * govDef.inspectionModifier;
+  }
+
+  return (1 - hazardExpectedLoss) * (1 - taxRate) * (1 - contrabandExpectedLoss);
 }

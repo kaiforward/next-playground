@@ -181,19 +181,91 @@ Ship with 120 cargo slots:
 
 **Verify:** Simulator: Frontier regions should show higher price StdDev. Corporate regions should show luxuries demand at non-core systems. Route diversity should increase as different regions offer different risk/reward.
 
-### Proposal 6: Hazard affects danger
+### Proposal 6: Hazard incidents on arrival
 
 **Problems addressed:** Goods differentiation, risk/reward
 
-**Current state:** Hazard data stored on goods. Danger system only reads event modifiers.
+**Current state:** Hazard data stored on goods (`"none"`, `"low"`, `"high"`). Danger system only reads event modifiers. Non-hazardous and hazardous goods are treated identically.
 
-**Change:** When calculating cargo loss on arrival, add a hazard bonus to the danger level based on carried cargo: `low` hazard adds +0.02, `high` adds +0.05 per cargo unit (capped). Carrying weapons through a war zone compounds with event danger.
+**Change:** A new, separate check on ship arrival — independent of the existing event-based danger system. For each hazardous cargo stack on the arriving ship, roll for a hazard incident. Non-hazardous goods (`hazard: "none"`) are never affected by this system.
+
+**Hazard levels:**
+
+| Hazard | Incident chance (per stack) | Loss mode | Example |
+|--------|---------------------------|-----------|---------|
+| `none` | 0% | N/A | Water, food, electronics — zero risk |
+| `low` | 3% base | **Leak** — lose 10-25% of that good only | Fuel leak, chemical spill |
+| `high` | 6% base | **Catastrophic** — lose 50-100% of that good only | Weapons detonation, munitions cook-off |
+
+Incident chance compounds with existing danger level: `effectiveChance = baseChance + (dangerLevel × 0.5)`. In a war zone with 0.2 danger, weapons incident chance rises from 6% to 16%. This means hazardous cargo is safe in peaceful space but very risky in conflict zones.
+
+**Bot behaviour:**
+- Simple bots (random, nearest): percentage-based avoidance — skip hazardous goods X% of the time.
+- Smart bots (greedy, optimal): expected value calculation. `expectedProfit = profit × (1 - incidentChance × avgLossFraction)`. Only carry hazardous goods when the margin justifies the risk.
 
 **Files to modify:**
-- `lib/engine/danger.ts` — `aggregateDangerLevel()` accepts cargo hazard input
-- `lib/tick/processors/ship-arrivals.ts` — Passes cargo hazard to danger calculation
+- `lib/engine/danger.ts` — New `rollHazardIncidents()` function, separate from existing `rollCargoLoss()`
+- `lib/tick/processors/ship-arrivals.ts` — Call hazard check after existing danger check
+- `lib/engine/simulator/bot.ts` — Smart bots discount hazardous goods by expected loss
 
-**Verify:** Simulator: weapons/chemicals/fuel traders should show measurable cargo loss rate increase vs. non-hazardous traders.
+**Verify:** Simulator: weapons/chemicals/fuel traders should show measurable cargo loss. Weapons should be the riskiest good to carry through war zones.
+
+### Proposal 8: Trade legality and inspections
+
+**Problems addressed:** Government types inert (#3), risk/reward differentiation
+
+**Current state:** `tradeRestrictions: string[]` defined on government types but never enforced. Federation restricts weapons, authoritarian restricts weapons + chemicals.
+
+**Change:** Replace `tradeRestrictions` with two arrays: `taxed` and `contraband`. Anything not in either list is legal (no need for explicit "legal" designation). Two distinct mechanics on ship arrival:
+
+**Taxed goods — deterministic import duty:**
+
+On arrival at a system whose government taxes a good, a fixed percentage of that good's cargo is seized as import duty. No RNG, no inspection — it always happens. Players can see tax rates upfront and factor them into route planning.
+
+- Base tax rate: ~10-15% of the taxed good's quantity, seized on arrival
+- Government modifier scales the rate (authoritarian takes more, corporate takes less)
+- Players can choose to sell elsewhere to avoid the tax, creating route decisions
+
+**Contraband goods — RNG inspection:**
+
+On arrival, an inspection roll determines if contraband is detected. If caught, **full confiscation** of that good.
+
+| Level | Mechanic | Penalty | Player experience |
+|-------|----------|---------|-------------------|
+| Legal | Nothing | None | Normal trade |
+| Taxed | Deterministic % cargo seized on arrival | Known, predictable cost | Factor into route math |
+| Contraband | RNG inspection roll | Full confiscation if caught | High risk / high reward gamble |
+
+**Inspection chance** scales with government enforcement capability:
+- Authoritarian: 1.5× multiplier (strong enforcement)
+- Federation: 1.2× multiplier (moderate enforcement)
+- Corporate: 0.8× multiplier (lax enforcement)
+- Frontier: 0× (no inspections — everything is legal regardless)
+
+**Government legality table:**
+
+| Government | Taxed | Contraband |
+|------------|-------|------------|
+| Federation | chemicals | weapons |
+| Authoritarian | — | weapons, chemicals |
+| Corporate | — | — |
+| Frontier | — | — |
+
+Future government types will expand the variety of taxed/contraband combinations to create more regional differentiation.
+
+**Bot behaviour:**
+- Simple bots (random, nearest): percentage-based skip of restricted goods in regulated regions.
+- Smart bots (greedy, optimal): expected value calculation. For taxed goods, subtract the known tax from profit. For contraband, discount by `catchChance × cargoValue`. Only trade restricted goods when the margin still justifies it.
+
+**Both mechanics resolve automatically on arrival** — no player interaction needed for MVP. Players receive game notifications ("5 units of chemicals seized as import duty", "Weapons confiscated by federation authorities"). Future: bribe option, player interaction for inspection events, multi-ship police event management screen.
+
+**Files to modify:**
+- `lib/constants/government.ts` — Replace `tradeRestrictions` with `taxed` and `contraband` arrays, add `inspectionChance` and `taxRate` fields
+- `lib/engine/danger.ts` — New `rollInspection()` and `applyImportDuty()` functions
+- `lib/tick/processors/ship-arrivals.ts` — Tax + inspection checks on arrival
+- `lib/engine/simulator/bot.ts` — Smart bots factor legality into route evaluation
+
+**Verify:** Simulator: weapons trading should decrease in federation/authoritarian regions. Smart bots should smuggle when margins justify risk. Frontier should become a weapons trading hub.
 
 ---
 
@@ -206,8 +278,9 @@ Ship with 120 cargo slots:
 | 3 | Volume on cargo | **Rejected** | See reasoning below. |
 | 4 | Mass on fuel | **Rejected** | See reasoning below. |
 | 5 | Government modifier enforcement | **Done** | Volatility, equilibrium spread, consumption boosts wired into economy processor + simulator. Danger baseline wired into ship-arrivals. |
-| 6 | Hazard on danger | Pending | |
+| 6 | Hazard incidents on arrival | Pending | Separate system from event danger. Per-stack incident rolls for hazardous cargo only. |
 | 7 | Tier 0 base price compression + consumption web enrichment | **Done** | See details below. |
+| 8 | Trade legality and inspections | Pending | Replace `tradeRestrictions` with `taxed`/`contraband` arrays. Deterministic import duty for taxed goods, RNG inspection for contraband. |
 
 ### Why Proposals 3+4 were rejected
 
@@ -259,7 +332,7 @@ core:       food(3), textiles(2), electronics(2), medicine(2),
 
 ## Next Steps
 
-**Next pass:** Proposal 6 (Hazard on danger). Small, independent, low-risk.
+**Next pass:** Proposals 6 + 8 (Hazard incidents + trade legality). Both fire on ship arrival, share the same processor touchpoint. Implement together then move to event content expansion.
 
 ---
 

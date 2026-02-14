@@ -14,6 +14,7 @@ function defaultCtx(overrides?: Partial<SimRunContext>): SimRunContext {
     disableRandomEvents: false,
     eventInjections: [],
     adjacencyList: new Map(),
+    systemToGov: new Map(),
     ...overrides,
   };
 }

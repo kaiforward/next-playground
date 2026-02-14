@@ -132,6 +132,8 @@ export interface SimRunContext {
   eventInjections: EventInjection[];
   /** Pre-built adjacency list for simulator pathfinding (avoids rebuilding per call). */
   adjacencyList: SimAdjacencyList;
+  /** Map from systemId → governmentType for sell tracking. */
+  systemToGov: Map<string, string>;
 }
 
 // ── Metrics ─────────────────────────────────────────────────────
@@ -146,6 +148,8 @@ export interface GoodTradeRecord {
   buyCost: number;
   /** Credits earned selling. */
   sellRevenue: number;
+  /** Government type of the system where a sell occurred. */
+  sellGovernmentType?: string;
 }
 
 export interface TickMetrics {
@@ -201,6 +205,14 @@ export interface PlayerSummary {
   idleRate: number;
   /** Earning rate per tick as a rolling window (window size = 50 ticks). */
   earningRateCurve: number[];
+  /** Breakdown of sell trades by destination government type. */
+  governmentSellBreakdown: GovernmentSellEntry[];
+}
+
+export interface GovernmentSellEntry {
+  governmentType: string;
+  totalSold: number;
+  totalRevenue: number;
 }
 
 // ── Market health ───────────────────────────────────────────────
@@ -265,8 +277,17 @@ export interface SimResults {
   marketHealth: MarketHealthSummary;
   /** Impact measurement for each event that occurred. */
   eventImpacts: EventImpact[];
+  /** Region overview for understanding the generated universe. */
+  regionOverview: RegionOverviewEntry[];
   /** Optional label for experiment tracking. */
   label?: string;
   /** Total wall-clock time in ms. */
   elapsedMs: number;
+}
+
+export interface RegionOverviewEntry {
+  name: string;
+  identity: string;
+  governmentType: string;
+  systemCount: number;
 }

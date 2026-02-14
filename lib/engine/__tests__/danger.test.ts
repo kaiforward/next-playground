@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   aggregateDangerLevel,
   rollCargoLoss,
+  rollHazardIncidents,
+  applyImportDuty,
+  rollContrabandInspection,
   DANGER_CONSTANTS,
+  HAZARD_CONSTANTS,
+  LEGALITY_CONSTANTS,
 } from "../danger";
 import type { ModifierRow } from "../events";
 
@@ -207,5 +212,271 @@ describe("rollCargoLoss", () => {
     expect(result).toEqual([
       { goodId: "fuel", lost: 1, remaining: 2 },
     ]);
+  });
+});
+
+// ── rollHazardIncidents ─────────────────────────────────────────
+
+describe("rollHazardIncidents", () => {
+  it("returns [] for all hazard: none cargo", () => {
+    const cargo = [
+      { goodId: "food", quantity: 100, hazard: "none" as const },
+      { goodId: "ore", quantity: 50, hazard: "none" as const },
+    ];
+    expect(rollHazardIncidents(cargo, 0.3, () => 0)).toEqual([]);
+  });
+
+  it("returns [] when all rng rolls >= effective chance", () => {
+    const cargo = [
+      { goodId: "fuel", quantity: 100, hazard: "low" as const },
+      { goodId: "weapons", quantity: 50, hazard: "high" as const },
+    ];
+    // At danger 0: low effective = 0.03, high effective = 0.06
+    // rng = 0.99 → always >= effective chance
+    expect(rollHazardIncidents(cargo, 0, () => 0.99)).toEqual([]);
+  });
+
+  it("low hazard: loss is 10-25% of that good only", () => {
+    let call = 0;
+    const rng = () => {
+      call++;
+      if (call === 1) return 0; // incident roll for fuel (passes)
+      if (call === 2) return 0.5; // loss fraction: 0.10 + 0.5 * 0.15 = 0.175
+      return 0.99; // skip everything else
+    };
+    const cargo = [
+      { goodId: "fuel", quantity: 100, hazard: "low" as const },
+      { goodId: "food", quantity: 50, hazard: "none" as const },
+    ];
+    const result = rollHazardIncidents(cargo, 0, rng);
+    // ceil(100 * 0.175) = 18
+    expect(result).toEqual([
+      { goodId: "fuel", hazard: "low", lost: 18, remaining: 82 },
+    ]);
+  });
+
+  it("high hazard: loss is 50-100% of that good only", () => {
+    let call = 0;
+    const rng = () => {
+      call++;
+      if (call === 1) return 0; // incident roll for weapons (passes)
+      if (call === 2) return 0.5; // loss fraction: 0.50 + 0.5 * 0.50 = 0.75
+      return 0.99;
+    };
+    const cargo = [
+      { goodId: "weapons", quantity: 40, hazard: "high" as const },
+    ];
+    const result = rollHazardIncidents(cargo, 0, rng);
+    // ceil(40 * 0.75) = 30
+    expect(result).toEqual([
+      { goodId: "weapons", hazard: "high", lost: 30, remaining: 10 },
+    ]);
+  });
+
+  it("non-hazardous goods in same hold are never affected", () => {
+    const cargo = [
+      { goodId: "food", quantity: 100, hazard: "none" as const },
+      { goodId: "fuel", quantity: 50, hazard: "low" as const },
+      { goodId: "ore", quantity: 200, hazard: "none" as const },
+    ];
+    // rng always triggers incidents
+    const result = rollHazardIncidents(cargo, 0, () => 0);
+    // Only fuel should appear
+    expect(result).toHaveLength(1);
+    expect(result[0].goodId).toBe("fuel");
+  });
+
+  it("danger level compounds: higher danger = higher effective chance", () => {
+    const cargo = [{ goodId: "fuel", quantity: 100, hazard: "low" as const }];
+    // At danger 0: effective = 0.03, at danger 0.5: effective = 0.03 + 0.5*0.5 = 0.28
+    // rng = 0.10 → at danger 0 this passes (0.10 >= 0.03), so incident
+    // Actually 0.10 < 0.03 is false... let me rethink
+    // rng = 0.05 → at danger 0: 0.05 >= 0.03 → no incident
+    // rng = 0.05 → at danger 0.5: 0.05 >= 0.28 → no... 0.05 < 0.28 → incident!
+    let call = 0;
+    const rngNoIncident = () => {
+      call++;
+      return 0.05; // 0.05 >= 0.03 → no incident at danger 0
+    };
+    expect(rollHazardIncidents(cargo, 0, rngNoIncident)).toEqual([]);
+
+    call = 0;
+    const rngWithDanger = () => {
+      call++;
+      if (call === 1) return 0.05; // 0.05 < 0.28 → incident at danger 0.5
+      return 0; // min loss
+    };
+    const result = rollHazardIncidents(
+      [{ goodId: "fuel", quantity: 100, hazard: "low" as const }],
+      0.5,
+      rngWithDanger,
+    );
+    expect(result.length).toBe(1);
+    expect(result[0].goodId).toBe("fuel");
+  });
+
+  it("at danger 0, base chance still applies (3%/6%)", () => {
+    // low hazard base = 0.03 → rng 0.02 < 0.03 triggers
+    let call = 0;
+    const rng = () => {
+      call++;
+      if (call === 1) return 0.02;
+      return 0;
+    };
+    const cargo = [{ goodId: "fuel", quantity: 100, hazard: "low" as const }];
+    const result = rollHazardIncidents(cargo, 0, rng);
+    expect(result.length).toBe(1);
+  });
+
+  it("caps lost at quantity", () => {
+    let call = 0;
+    const rng = () => {
+      call++;
+      if (call === 1) return 0; // incident
+      return 1; // max loss (100% for high)
+    };
+    const cargo = [{ goodId: "weapons", quantity: 5, hazard: "high" as const }];
+    const result = rollHazardIncidents(cargo, 0, rng);
+    expect(result).toEqual([
+      { goodId: "weapons", hazard: "high", lost: 5, remaining: 0 },
+    ]);
+  });
+});
+
+// ── applyImportDuty ─────────────────────────────────────────────
+
+describe("applyImportDuty", () => {
+  it("returns [] when taxedGoods is empty", () => {
+    const cargo = [{ goodId: "fuel", quantity: 100 }];
+    expect(applyImportDuty(cargo, [], 0.12)).toEqual([]);
+  });
+
+  it("returns [] when taxRate is 0", () => {
+    const cargo = [{ goodId: "chemicals", quantity: 100 }];
+    expect(applyImportDuty(cargo, ["chemicals"], 0)).toEqual([]);
+  });
+
+  it("returns [] when taxRate is negative", () => {
+    const cargo = [{ goodId: "chemicals", quantity: 100 }];
+    expect(applyImportDuty(cargo, ["chemicals"], -0.1)).toEqual([]);
+  });
+
+  it("seizes Math.ceil(quantity × taxRate) of matching goods", () => {
+    const cargo = [{ goodId: "chemicals", quantity: 100 }];
+    const result = applyImportDuty(cargo, ["chemicals"], 0.12);
+    // ceil(100 * 0.12) = 12
+    expect(result).toEqual([
+      { goodId: "chemicals", seized: 12, remaining: 88 },
+    ]);
+  });
+
+  it("non-taxed goods are untouched", () => {
+    const cargo = [
+      { goodId: "chemicals", quantity: 100 },
+      { goodId: "food", quantity: 50 },
+      { goodId: "weapons", quantity: 30 },
+    ];
+    const result = applyImportDuty(cargo, ["chemicals"], 0.12);
+    expect(result).toHaveLength(1);
+    expect(result[0].goodId).toBe("chemicals");
+  });
+
+  it("caps seized at quantity", () => {
+    const cargo = [{ goodId: "chemicals", quantity: 1 }];
+    // ceil(1 * 0.12) = 1, capped at 1
+    const result = applyImportDuty(cargo, ["chemicals"], 0.12);
+    expect(result).toEqual([
+      { goodId: "chemicals", seized: 1, remaining: 0 },
+    ]);
+  });
+
+  it("handles multiple taxed goods", () => {
+    const cargo = [
+      { goodId: "chemicals", quantity: 100 },
+      { goodId: "fuel", quantity: 80 },
+    ];
+    const result = applyImportDuty(cargo, ["chemicals", "fuel"], 0.15);
+    expect(result).toHaveLength(2);
+    // ceil(100 * 0.15) = 15, ceil(80 * 0.15) = 12
+    expect(result).toEqual([
+      { goodId: "chemicals", seized: 15, remaining: 85 },
+      { goodId: "fuel", seized: 12, remaining: 68 },
+    ]);
+  });
+});
+
+// ── rollContrabandInspection ────────────────────────────────────
+
+describe("rollContrabandInspection", () => {
+  it("returns [] when inspectionModifier is 0 (frontier)", () => {
+    const cargo = [{ goodId: "weapons", quantity: 50 }];
+    expect(rollContrabandInspection(cargo, ["weapons"], 0, () => 0)).toEqual([]);
+  });
+
+  it("returns [] when contrabandGoods is empty", () => {
+    const cargo = [{ goodId: "weapons", quantity: 50 }];
+    expect(rollContrabandInspection(cargo, [], 1.0, () => 0)).toEqual([]);
+  });
+
+  it("full confiscation on detection", () => {
+    const cargo = [{ goodId: "weapons", quantity: 50 }];
+    // inspectionChance = 0.25 * 1.2 = 0.3, rng = 0 < 0.3 → caught
+    const result = rollContrabandInspection(cargo, ["weapons"], 1.2, () => 0);
+    expect(result).toEqual([
+      { goodId: "weapons", seized: 50 },
+    ]);
+  });
+
+  it("returns [] when rng >= inspection chance (not caught)", () => {
+    const cargo = [{ goodId: "weapons", quantity: 50 }];
+    // inspectionChance = 0.25 * 1.2 = 0.3, rng = 0.5 >= 0.3 → not caught
+    expect(rollContrabandInspection(cargo, ["weapons"], 1.2, () => 0.5)).toEqual([]);
+  });
+
+  it("non-contraband goods are unaffected", () => {
+    const cargo = [
+      { goodId: "weapons", quantity: 50 },
+      { goodId: "food", quantity: 100 },
+      { goodId: "fuel", quantity: 80 },
+    ];
+    const result = rollContrabandInspection(cargo, ["weapons"], 1.5, () => 0);
+    expect(result).toHaveLength(1);
+    expect(result[0].goodId).toBe("weapons");
+  });
+
+  it("modifier scales chance correctly", () => {
+    const cargo = [{ goodId: "weapons", quantity: 50 }];
+    // modifier 0.8 → chance = 0.25 * 0.8 = 0.20
+    // rng = 0.19 < 0.20 → caught
+    expect(
+      rollContrabandInspection(cargo, ["weapons"], 0.8, () => 0.19),
+    ).toHaveLength(1);
+    // rng = 0.21 >= 0.20 → not caught
+    expect(
+      rollContrabandInspection(cargo, ["weapons"], 0.8, () => 0.21),
+    ).toEqual([]);
+  });
+
+  it("inspects multiple contraband goods independently", () => {
+    let call = 0;
+    const rng = () => {
+      call++;
+      if (call === 1) return 0; // weapons caught
+      return 0.99; // chemicals not caught
+    };
+    const cargo = [
+      { goodId: "weapons", quantity: 30 },
+      { goodId: "chemicals", quantity: 40 },
+    ];
+    // inspectionChance = 0.25 * 1.5 = 0.375
+    const result = rollContrabandInspection(cargo, ["weapons", "chemicals"], 1.5, rng);
+    expect(result).toEqual([
+      { goodId: "weapons", seized: 30 },
+    ]);
+  });
+
+  it("returns [] when inspectionModifier is negative", () => {
+    const cargo = [{ goodId: "weapons", quantity: 50 }];
+    expect(rollContrabandInspection(cargo, ["weapons"], -0.5, () => 0)).toEqual([]);
   });
 });
