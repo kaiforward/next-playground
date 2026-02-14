@@ -27,7 +27,7 @@ export const GOODS: Record<string, GoodDefinition> = {
   water: {
     name: "Water",
     description: "The most basic resource. Every settlement needs water.",
-    basePrice: 10,
+    basePrice: 25,
     tier: 0,
     volume: 2,
     mass: 2.0,
@@ -43,7 +43,7 @@ export const GOODS: Record<string, GoodDefinition> = {
   food: {
     name: "Food",
     description: "Agricultural produce, livestock, and organics.",
-    basePrice: 15,
+    basePrice: 30,
     tier: 0,
     volume: 1,
     mass: 1.0,
@@ -59,7 +59,7 @@ export const GOODS: Record<string, GoodDefinition> = {
   ore: {
     name: "Ore",
     description: "Raw minerals and unrefined metals from asteroids and planetary mines.",
-    basePrice: 20,
+    basePrice: 35,
     tier: 0,
     volume: 2,
     mass: 2.5,
@@ -75,7 +75,7 @@ export const GOODS: Record<string, GoodDefinition> = {
   textiles: {
     name: "Textiles",
     description: "Fibers, fabrics, and synthetic materials.",
-    basePrice: 25,
+    basePrice: 35,
     tier: 0,
     volume: 1,
     mass: 0.5,

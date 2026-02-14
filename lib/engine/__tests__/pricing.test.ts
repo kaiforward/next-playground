@@ -58,11 +58,11 @@ describe("calculatePrice", () => {
     });
 
     it("tier 0 goods have wider range than tier 2", () => {
-      // Tier 0 clamps: 0.1x - 8.0x (water/food/ore/textiles)
-      const tier0Low = calculatePrice(10, 200, 1, 0.1, 8.0);
-      expect(tier0Low).toBe(1); // 0.1 * 10
-      const tier0High = calculatePrice(10, 1, 200, 0.1, 8.0);
-      expect(tier0High).toBe(80); // 8.0 * 10
+      // Tier 0 clamps: 0.1x - 8.0x (water base 25, food 30, ore/textiles 35)
+      const tier0Low = calculatePrice(25, 200, 1, 0.1, 8.0);
+      expect(tier0Low).toBe(3); // 0.1 * 25 rounded
+      const tier0High = calculatePrice(25, 1, 200, 0.1, 8.0);
+      expect(tier0High).toBe(200); // 8.0 * 25
 
       // Tier 2 clamps: 0.2x - 4.0x (electronics/machinery/weapons)
       const tier2Low = calculatePrice(100, 200, 1, 0.2, 4.0);

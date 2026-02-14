@@ -6,18 +6,20 @@ Concrete changes to make more goods worth trading, spread player activity across
 
 The 12-good / 6-economy-type expansion shipped per-good production/consumption rates, per-good volatility, and luxury consumers. Measured via simulator (seed 42, 500 ticks, all strategies):
 
-| Metric | Old (6 goods) | Current (12 goods) | Target |
-|--------|---------------|-------------------|--------|
-| Goods >5% profit (greedy) | 2 of 6 | 4 of 12 | 6+ of 12 |
-| Goods >5% profit (optimal) | 1 of 6 | 2 of 12 | 6+ of 12 |
-| Unique systems (greedy) | 10 (5%) | 27 (13.5%) | 30+ (15%) |
-| Unique systems (optimal) | 14 (7%) | 7 (3.5%) | 25+ (12.5%) |
-| Top system visits (optimal) | 188 (75%) | 194 (78%) | <80 (32%) |
-| Tier 0 goods traded (any strategy) | 0% | 0% (smart bots) | >10% combined |
+| Metric | Old (6 goods) | 12 goods | Post-rebalance | Target |
+|--------|---------------|----------|----------------|--------|
+| Goods >5% profit (greedy) | 2 of 6 | 4 of 12 | 4 of 12 | 6+ of 12 |
+| Goods >5% profit (optimal) | 1 of 6 | 2 of 12 | 4 of 12 | 5+ of 12 |
+| Goods >5% profit (nearest) | — | — | 6 of 12 | 6+ of 12 |
+| Unique systems (greedy) | 10 (5%) | 27 (13.5%) | 8 (4%) | 30+ (15%) |
+| Unique systems (optimal) | 14 (7%) | 7 (3.5%) | 18 (9%) | 25+ (12.5%) |
+| Top system visits (optimal) | 188 (75%) | 194 (78%) | 97 (39%) | <80 (32%) |
+| Tier 0 goods >5% (any smart) | 0% | 0% | ore 6.5% (greedy), textiles 6.1% (nearest) | >5% |
+| Max single-good share (optimal) | — | 84.6% | 53.7% | <40% |
 
-**What improved:** Greedy diversified to 4 profitable goods (machinery, weapons, luxuries, electronics). Greedy exploration doubled. Luxury stagnation solved.
+**What improved (post-rebalance):** Ore reached 6.5% for greedy — first tier 0 good above 5% for a smart strategy. Textiles hit 6.1% for nearest. Optimal luxuries share dropped from 84.6% to 53.7%. Optimal unique systems nearly tripled (7→18). Optimal top system visits halved (194→97). All strategies trade 10+ goods.
 
-**What didn't improve:** Tier 0 goods (water, food, ore, textiles) are still never traded by smart strategies. Optimal found a luxuries loop and farms it harder than the old ship_parts loop. Route monotony for optimal is *worse*.
+**What still needs work:** Greedy exploration regressed (27→8 systems) — likely concentrated on profitable ore/chemical routes. Optimal still above 40% single-good target. More progress may require route diversity mechanics (hazard, fuel cost variation) rather than further price tuning.
 
 ---
 
@@ -205,6 +207,7 @@ Ship with 120 cargo slots:
 | 4 | Mass on fuel | **Rejected** | See reasoning below. |
 | 5 | Government modifier enforcement | **Done** | Volatility, equilibrium spread, consumption boosts wired into economy processor + simulator. Danger baseline wired into ship-arrivals. |
 | 6 | Hazard on danger | Pending | |
+| 7 | Tier 0 base price compression + consumption web enrichment | **Done** | See details below. |
 
 ### Why Proposals 3+4 were rejected
 
@@ -220,6 +223,38 @@ Elite Dangerous (a major reference) doesn't enforce volume or mass on cargo eith
 
 **Decision:** Keep `volume` and `mass` as data fields on goods (in Prisma + constants) for future use if a compelling mechanic emerges, but don't enforce them in trade or navigation calculations. The per-tier price clamps and per-good equilibrium targets from Proposals 1+2 are the primary levers for goods balance.
 
+### Proposal 7: Tier 0 base price compression + consumption web enrichment
+
+**Problems addressed:** Tier 0 worthless (#1), route monotony (#2)
+
+**Root cause:** The 15× base price gap between water (10) and luxuries (150) structurally limits tier 0 max profit. Water's max profit was 79 CR/unit vs luxuries' 652 CR/unit — an 8.3× gap that no equilibrium tuning can bridge. Additionally, tier 0 goods had very few consumer types, limiting natural demand.
+
+**Change 1 — Raise tier 0 base prices:**
+
+| Good | Old base | New base | Rationale |
+|------|----------|----------|-----------|
+| water | 10 | 25 | Still a commodity, but 6× vs luxuries not 15× |
+| food | 15 | 30 | Same tier, slight premium |
+| ore | 20 | 35 | Raw material, same range as fuel |
+| textiles | 25 | 35 | Processed raw, same range as fuel |
+
+Price spread compressed from 15× to ~4.3×. New max profit gap vs luxuries: 2.3–3.3× (competitive on shorter routes).
+
+**Change 2 — Enrich the consumption web:**
+
+Water and food become universal necessities (5 of 6 economy types consume each). Ore gains industrial as a second consumer. Textiles gain industrial as a third consumer.
+
+```
+refinery:   ore(4), water(3), food(1)                                  ← +food(1)
+industrial: metals(3), electronics(2), chemicals(2), fuel(2),
+            water(2), food(2), ore(2), textiles(1)                     ← +water(2), +food(2), +ore(2), +textiles(1)
+tech:       metals(2), chemicals(2), luxuries(1), water(1), food(2)    ← +water(1), +food(2)
+core:       food(3), textiles(2), electronics(2), medicine(2),
+            weapons(1), water(2)                                       ← +water(2)
+```
+
+**Results:** See updated metrics below. Ore reached 6.5% of greedy profit (first tier 0 good above 5%). Optimal luxuries share dropped from 84.6% to 53.7%. Optimal unique systems nearly tripled from 7 to 18.
+
 ---
 
 ## Next Steps
@@ -232,15 +267,15 @@ Elite Dangerous (a major reference) doesn't enforce volume or mass on cargo eith
 
 Measured via simulator (seed 42, 500 ticks, all strategies):
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| Goods >5% profit share (greedy) | 4 of 12 | 6+ of 12 |
-| Goods >5% profit share (optimal) | 2 of 12 | 5+ of 12 |
-| Any tier 0 good >5% (greedy) | No | Yes |
-| Unique systems (optimal) | 7 (3.5%) | 20+ (10%) |
-| Top system visits (optimal) | 194 | <100 |
-| Max single-good profit share (optimal) | 84.6% | <40% |
-| Frontier price StdDev vs Federation | Same | >1.3x ratio |
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| Goods >5% profit share (greedy) | 4 of 12 | 6+ of 12 | Partial |
+| Goods >5% profit share (optimal) | 4 of 12 | 5+ of 12 | Close |
+| Any tier 0 good >5% (greedy) | ore 6.5% | Yes | **Met** |
+| Unique systems (optimal) | 18 (9%) | 20+ (10%) | Close |
+| Top system visits (optimal) | 97 | <100 | **Met** |
+| Max single-good profit share (optimal) | 53.7% | <40% | Partial |
+| Frontier price StdDev vs Federation | — | >1.3x ratio | Untested |
 
 ---
 

@@ -20,10 +20,10 @@ export const ECONOMY_PRODUCTION: Record<EconomyType, Record<string, number>> = {
 export const ECONOMY_CONSUMPTION: Record<EconomyType, Record<string, number>> = {
   agricultural: { water: 4, machinery: 1, chemicals: 3, medicine: 1 },
   extraction:   { food: 3, fuel: 3, machinery: 1, textiles: 2 },
-  refinery:     { ore: 4, water: 3 },
-  industrial:   { metals: 3, electronics: 2, chemicals: 2, fuel: 2 },
-  tech:         { metals: 2, chemicals: 2, luxuries: 1 },
-  core:         { food: 3, textiles: 2, electronics: 2, medicine: 2, weapons: 1 },
+  refinery:     { ore: 4, water: 3, food: 1 },
+  industrial:   { metals: 3, electronics: 2, chemicals: 2, fuel: 2, water: 2, food: 2, ore: 2, textiles: 1 },
+  tech:         { metals: 2, chemicals: 2, luxuries: 1, water: 1, food: 2 },
+  core:         { food: 3, textiles: 2, electronics: 2, medicine: 2, weapons: 1, water: 2 },
 };
 
 // ── Helper functions ─────────────────────────────────────────────
