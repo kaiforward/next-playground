@@ -11,6 +11,8 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
 - `npx vitest run` — Run unit tests (217 tests, engine + API)
+- `npm run simulate` — Run economy simulator (quick-run, all strategies)
+- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). New simulator features go here only — don't expand the CLI flags.
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 
@@ -48,13 +50,14 @@ Reference docs (how things work now):
 - `docs/star-map.md` — React Flow map, custom nodes, data flow
 - `docs/trading-ui.md` — Market table, trade forms, charts, dashboard components
 - `docs/rate-limiting.md` — Rate-limit tiers, sliding window store, route integration
+- `docs/dev-tools.md` — Dev tools UI/API, economy simulator, bot strategies, tuning workflow
 
 Design docs (plans and backlog):
 
 - `docs/design/event-catalog.md` — Implemented and planned event definitions (arcs, shocks, ideas)
 - `docs/design/simulation-enhancements.md` — Future mechanics requiring new engine capabilities
 - `docs/design/BACKLOG.md` — Prioritized backlog (sized, grouped by readiness). Delete items when shipped.
-- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system)
+- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system, economy-testing)
 
 ## Design Principles
 
@@ -72,7 +75,7 @@ Design docs (plans and backlog):
 - API responses use `ApiResponse<T>` format: `{ data?: T, error?: string }`.
 - Services layer (`lib/services/`) holds all DB/business logic. Route handlers are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions.
 - Client data fetching uses TanStack Query hooks (`lib/hooks/`). Query keys are centralized in `lib/query/keys.ts`. Ship arrival invalidation is centralized in `useTickInvalidation` — pages do not subscribe to arrivals individually.
-- Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput` from `components/form/`, never raw `<input>`.
+- Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput`/`SelectInput` from `components/form/`, never raw `<input>` or `<select>`.
 
 ## UI Components
 
@@ -82,6 +85,7 @@ Use existing components instead of inline markup. When a pattern appears twice, 
 - **PageContainer** — All page wrappers. Sizes: `sm` (3xl), `md` (4xl), `lg` (7xl, default).
 - **ProgressBar** — Labeled bars with ARIA. Colors: `blue`, `amber`, `red`. Sizes: `sm`, `md`.
 - **Dialog** (`components/ui/dialog.tsx`) — Native `<dialog>` wrapper. Props: `open`, `onClose`, `modal` (default false), `initialFocus`. Non-modal uses `.show()` + manual Escape/focus; modal uses `showModal()` + browser-native focus trap. Companion `useDialog` hook for open/close state.
+- **SelectInput** (`components/form/select-input.tsx`) — Searchable dropdown (react-select). Props: `options`, `value`, `onChange`, `isSearchable` (default true). Sizes: `sm` (default), `md`. Dark-themed, portal menu.
 - **Card** / **Badge** / **StatList+StatRow** — Layout and data display primitives.
 
 ## Git Workflow

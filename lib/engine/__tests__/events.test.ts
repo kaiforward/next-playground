@@ -12,7 +12,9 @@ import {
   type NeighborSnapshot,
   type ModifierRow,
 } from "../events";
-import type { EventDefinition, EventPhaseDefinition, ModifierCaps, SpreadRule } from "@/lib/constants/events";
+import { MODIFIER_CAPS, type EventDefinition, type EventPhaseDefinition, type SpreadRule } from "@/lib/constants/events";
+
+type ModifierCaps = typeof MODIFIER_CAPS;
 
 // ── Helpers ─────────────────────────────────────────────────────
 
