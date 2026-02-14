@@ -5,6 +5,8 @@
 
 import { simulateEconomyTick, type MarketTickEntry, type EconomySimParams } from "@/lib/engine/tick";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
+import type { GovernmentType } from "@/lib/types/game";
 import {
   checkPhaseTransition,
   buildModifiersForPhase,
@@ -353,6 +355,9 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
 
   const modifierCaps = constants.events.modifierCaps;
 
+  // Look up government modifiers for this region
+  const govDef = GOVERNMENT_TYPES[targetRegion.governmentType as GovernmentType];
+
   // Build tick entries
   const tickEntries: MarketTickEntry[] = regionMarkets.map((m) => {
     const sys = world.systems.find((s) => s.id === m.systemId)!;
@@ -362,6 +367,32 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       : undefined;
 
     const goodConst = constants.goods[m.goodId];
+
+    // Government: scale volatility
+    const baseVolatility = goodConst?.volatility ?? 1;
+    const volatility = govDef
+      ? baseVolatility * govDef.volatilityModifier
+      : baseVolatility;
+
+    // Government: adjust equilibrium spread
+    let equilibriumProduces = goodConst?.equilibrium.produces;
+    let equilibriumConsumes = goodConst?.equilibrium.consumes;
+    if (govDef && govDef.equilibriumSpreadPct !== 0) {
+      if (equilibriumProduces) {
+        equilibriumProduces = adjustEquilibriumSpread(equilibriumProduces, govDef.equilibriumSpreadPct);
+      }
+      if (equilibriumConsumes) {
+        equilibriumConsumes = adjustEquilibriumSpread(equilibriumConsumes, govDef.equilibriumSpreadPct);
+      }
+    }
+
+    // Government: boost consumption
+    const baseConsumption = sys.consumes[m.goodId];
+    const govBoost = govDef?.consumptionBoosts[m.goodId] ?? 0;
+    const consumptionRate = baseConsumption != null
+      ? baseConsumption + govBoost
+      : govBoost > 0 ? govBoost : undefined;
+
     return {
       goodId: m.goodId,
       supply: m.supply,
@@ -371,10 +402,10 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       produces: Object.keys(sys.produces),
       consumes: Object.keys(sys.consumes),
       productionRate: sys.produces[m.goodId],
-      consumptionRate: sys.consumes[m.goodId],
-      volatility: goodConst?.volatility,
-      equilibriumProduces: goodConst?.equilibrium.produces,
-      equilibriumConsumes: goodConst?.equilibrium.consumes,
+      consumptionRate,
+      volatility,
+      equilibriumProduces,
+      equilibriumConsumes,
       ...(agg && {
         supplyTargetShift: agg.supplyTargetShift,
         demandTargetShift: agg.demandTargetShift,

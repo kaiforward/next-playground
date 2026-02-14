@@ -8,11 +8,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
-- **[S] Per-tier price clamps** — Widen price clamp range for cheap goods, tighten for expensive goods. Tier 0 goods are currently untradeable because absolute profit can't compete. See [economy-balance.md](./economy-balance.md) Proposal 1.
-- **[S-M] Per-good equilibrium targets** — Replace flat produces/consumes/neutral targets with per-good values. Wider spreads for cheap goods, tighter for expensive. See [economy-balance.md](./economy-balance.md) Proposal 2.
-- **[S-M] Volume affects cargo capacity** — Bulky goods (water, ore, machinery at vol 2) consume 2 cargo slots. Creates "profit per slot" tradeoff. Data already in DB. See [economy-balance.md](./economy-balance.md) Proposal 3.
-- **[M] Mass affects fuel cost** — Heavy cargo multiplies fuel burn. Creates short-haul vs long-haul goods distinction. Data already in DB. See [economy-balance.md](./economy-balance.md) Proposal 4.
-- **[M] Government modifier enforcement** — Wire existing government type data into economy processor (volatility, equilibrium spreads, consumption boosts) and ship-arrivals (danger baseline). See [economy-balance.md](./economy-balance.md) Proposal 5.
 - **[S] Hazard affects danger** — Carrying hazardous cargo (weapons, chemicals, fuel) increases danger rolls on arrival. See [economy-balance.md](./economy-balance.md) Proposal 6.
 - **[M] Event content expansion** — 4 fully designed event definitions ready to add: Mining Boom, Supply Shortage, Pirate Raid, Solar Storm. See [event-catalog.md](./event-catalog.md) "Ready to Implement" section.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.

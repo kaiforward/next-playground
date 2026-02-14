@@ -10,7 +10,8 @@ import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy"
 import { GOODS } from "@/lib/constants/goods";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
-import type { EconomyType } from "@/lib/types/game";
+import type { EconomyType, GovernmentType } from "@/lib/types/game";
+import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 
 /** Reverse lookup: Good.name → GOODS key (e.g. "Food" → "food"). */
 const goodNameToKey = new Map(
@@ -57,7 +58,7 @@ export const economyProcessor: TickProcessor = {
   async process(ctx): Promise<TickProcessorResult> {
     // Get all regions to determine round-robin target
     const regions = await ctx.tx.region.findMany({
-      select: { id: true, name: true },
+      select: { id: true, name: true, governmentType: true },
       orderBy: { name: "asc" },
     });
 
@@ -110,6 +111,9 @@ export const economyProcessor: TickProcessor = {
       }
     }
 
+    // Look up government modifiers for this region
+    const govDef = GOVERNMENT_TYPES[targetRegion.governmentType as GovernmentType];
+
     // Build tick entries for the simulation engine
     const tickEntries = markets.map((m) => {
       const econ = m.station.system.economyType as EconomyType;
@@ -120,6 +124,32 @@ export const economyProcessor: TickProcessor = {
         : undefined;
 
       const goodDef = GOODS[goodKey];
+
+      // Government: scale volatility
+      const baseVolatility = goodDef?.volatility ?? 1;
+      const volatility = govDef
+        ? baseVolatility * govDef.volatilityModifier
+        : baseVolatility;
+
+      // Government: adjust equilibrium spread
+      let equilibriumProduces = goodDef?.equilibrium.produces;
+      let equilibriumConsumes = goodDef?.equilibrium.consumes;
+      if (govDef && govDef.equilibriumSpreadPct !== 0) {
+        if (equilibriumProduces) {
+          equilibriumProduces = adjustEquilibriumSpread(equilibriumProduces, govDef.equilibriumSpreadPct);
+        }
+        if (equilibriumConsumes) {
+          equilibriumConsumes = adjustEquilibriumSpread(equilibriumConsumes, govDef.equilibriumSpreadPct);
+        }
+      }
+
+      // Government: boost consumption
+      const baseConsumption = getConsumptionRate(econ, goodKey);
+      const govBoost = govDef?.consumptionBoosts[goodKey] ?? 0;
+      const consumptionRate = baseConsumption != null
+        ? baseConsumption + govBoost
+        : govBoost > 0 ? govBoost : undefined;
+
       return {
         goodId: goodKey,
         supply: m.supply,
@@ -129,10 +159,10 @@ export const economyProcessor: TickProcessor = {
         produces: getProducedGoods(econ),
         consumes: getConsumedGoods(econ),
         productionRate: getProductionRate(econ, goodKey),
-        consumptionRate: getConsumptionRate(econ, goodKey),
-        volatility: goodDef?.volatility,
-        equilibriumProduces: goodDef?.equilibrium.produces,
-        equilibriumConsumes: goodDef?.equilibrium.consumes,
+        consumptionRate,
+        volatility,
+        equilibriumProduces,
+        equilibriumConsumes,
         ...(agg && {
           supplyTargetShift: agg.supplyTargetShift,
           demandTargetShift: agg.demandTargetShift,

@@ -1,5 +1,7 @@
-import { aggregateDangerLevel, rollCargoLoss, type CargoLossEntry } from "@/lib/engine/danger";
+import { aggregateDangerLevel, DANGER_CONSTANTS, rollCargoLoss, type CargoLossEntry } from "@/lib/engine/danger";
 import type { ModifierRow } from "@/lib/engine/events";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import type { GovernmentType } from "@/lib/types/game";
 import type { TickProcessor, TickProcessorResult } from "../types";
 
 interface ArrivedShip {
@@ -27,7 +29,7 @@ export const shipArrivalsProcessor: TickProcessor = {
         destinationSystemId: true,
         playerId: true,
         cargo: { select: { id: true, goodId: true, quantity: true } },
-        destination: { select: { name: true } },
+        destination: { select: { name: true, region: { select: { governmentType: true } } } },
       },
     });
 
@@ -90,9 +92,14 @@ export const shipArrivalsProcessor: TickProcessor = {
         },
       });
 
-      // Check danger at destination
+      // Check danger at destination (event modifiers + government baseline)
       const systemMods = modsBySystem.get(ship.destinationSystemId) ?? [];
-      const danger = aggregateDangerLevel(systemMods);
+      const govType = ship.destination?.region?.governmentType as GovernmentType | undefined;
+      const govBaseline = govType ? (GOVERNMENT_TYPES[govType]?.dangerBaseline ?? 0) : 0;
+      const danger = Math.min(
+        aggregateDangerLevel(systemMods) + govBaseline,
+        DANGER_CONSTANTS.MAX_DANGER,
+      );
       let cargoLost: CargoLossEntry[] | undefined;
 
       if (danger > 0 && ship.cargo.length > 0) {

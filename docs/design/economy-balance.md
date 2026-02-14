@@ -195,24 +195,36 @@ Ship with 120 cargo slots:
 
 ---
 
-## Implementation Order
+## Implementation Status
 
-| # | Proposal | Effort | Impact | Dependencies |
-|---|----------|--------|--------|--------------|
-| 1 | Per-tier price clamps | S | High | None |
-| 2 | Per-good equilibrium targets | S-M | High | None |
-| 3 | Volume on cargo | S-M | Medium | None |
-| 4 | Mass on fuel | M | Medium | Proposal 3 (both change trade economics; implement together) |
-| 5 | Government modifier enforcement | M | Medium-High | None |
-| 6 | Hazard on danger | S | Low-Medium | None |
+| # | Proposal | Status | Notes |
+|---|----------|--------|-------|
+| 1 | Per-tier price clamps | **Done** | Per-good `priceFloor`/`priceCeiling` on all 12 goods. Tier 0 gets wider range (0.1–8.0×), tier 2 gets tighter (0.2–4.0×). |
+| 2 | Per-good equilibrium targets | **Done** | Per-good `equilibrium` on all 12 goods. Tier 0 has wide supply/demand ratios (up to 6.0×), tier 2 tight (1.6–2.7×). |
+| 3 | Volume on cargo | **Rejected** | See reasoning below. |
+| 4 | Mass on fuel | **Rejected** | See reasoning below. |
+| 5 | Government modifier enforcement | **Done** | Volatility, equilibrium spread, consumption boosts wired into economy processor + simulator. Danger baseline wired into ship-arrivals. |
+| 6 | Hazard on danger | Pending | |
 
-**Recommended first pass:** Proposals 1 + 2 together. These are pure constants/config changes — no engine mechanics, no schema changes. They directly address the tier 0 worthlessness and optimal loop abuse. Validate with simulator before and after.
+### Why Proposals 3+4 were rejected
 
-**Second pass:** Proposals 3 + 4 together. Volume and mass are the physical goods properties that create distinct playstyles (bulk hauler vs long-distance runner). Requires engine changes but the data is already in the DB.
+Volume enforcement was implemented and tested via simulator. Results showed that **volume-2 goods (water, ore, machinery) became completely untraded** by all smart strategies. The per-space profit penalty from volume=2 cannot be compensated by any reasonable equilibrium or price-clamp tuning because the base price gap between tiers is 7–15×.
 
-**Third pass:** Proposal 5. Government enforcement creates regional differentiation — the same economy type plays differently across regions. This makes the universe feel varied and rewards exploration.
+Napkin math for best-case producing→consuming routes:
+- **Water** (vol 2, base 10, ceiling 8×): ~40 CR/space
+- **Luxuries** (vol 1, base 150, ceiling 4.5×): ~600 CR/space
 
-**Anytime:** Proposal 6. Small, independent, low-risk.
+That's a 15× gap. Wider equilibrium spreads help directionally but can't close it. Adding mass on top would compound the problem — heavy goods get penalized on BOTH cargo capacity AND fuel cost, with no compensating advantage.
+
+Elite Dangerous (a major reference) doesn't enforce volume or mass on cargo either — goods differentiation comes from price dynamics, legality, rarity, and route geography rather than physical properties.
+
+**Decision:** Keep `volume` and `mass` as data fields on goods (in Prisma + constants) for future use if a compelling mechanic emerges, but don't enforce them in trade or navigation calculations. The per-tier price clamps and per-good equilibrium targets from Proposals 1+2 are the primary levers for goods balance.
+
+---
+
+## Next Steps
+
+**Next pass:** Proposal 6 (Hazard on danger). Small, independent, low-risk.
 
 ---
 
@@ -235,7 +247,6 @@ Measured via simulator (seed 42, 500 ticks, all strategies):
 ## Notes
 
 - Proposals 1-2 are **constants/config changes** — no new processors, no schema changes, no new game mechanics.
-- Proposals 3-4 are **small engine changes** — modify validation/calculation functions that already exist.
 - Proposal 5 is **wiring existing data** into existing processors.
 - Every change is testable via the simulator. Run `npm run simulate` before and after each proposal.
 - The real game and simulator share the same engine code, so simulator results directly predict in-game behavior.

@@ -4,7 +4,8 @@ import { simulateWorldTick } from "../simulator/economy";
 import { runSimulation } from "../simulator/runner";
 import { DEFAULT_SIM_CONSTANTS } from "../simulator/constants";
 import { mulberry32 } from "../universe-gen";
-import type { SimConfig, SimRunContext } from "../simulator/types";
+import { calculatePrice } from "../pricing";
+import type { SimConfig, SimRunContext, SimWorld } from "../simulator/types";
 
 /** Build a default SimRunContext for tests. */
 function defaultCtx(overrides?: Partial<SimRunContext>): SimRunContext {
@@ -339,6 +340,91 @@ describe("Simulator", () => {
 
       const results = runSimulation(config, {}, "test-label");
       expect(results.label).toBe("test-label");
+    });
+
+    it("frontier regions have higher price volatility than federation", () => {
+      const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
+      let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
+      const rng = mulberry32(42);
+      const ctx = defaultCtx({ disableRandomEvents: true });
+
+      // Run 100 ticks to let prices diverge
+      for (let i = 0; i < 100; i++) {
+        world = simulateWorldTick(world, rng, ctx);
+      }
+
+      // Classify systems by government type
+      const govBySystem = new Map<string, string>();
+      for (const sys of world.systems) {
+        const region = world.regions.find((r) => r.id === sys.regionId);
+        if (region) govBySystem.set(sys.id, region.governmentType);
+      }
+
+      // Compute price for each market and group by government type
+      const pricesByGov = new Map<string, number[]>();
+      for (const m of world.markets) {
+        const gov = govBySystem.get(m.systemId);
+        if (!gov) continue;
+        const price = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
+        const ratio = price / m.basePrice;
+        const existing = pricesByGov.get(gov) ?? [];
+        existing.push(ratio);
+        pricesByGov.set(gov, existing);
+      }
+
+      function stdDev(values: number[]): number {
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+        const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
+        return Math.sqrt(variance);
+      }
+
+      const frontierStdDev = stdDev(pricesByGov.get("frontier") ?? []);
+      const federationStdDev = stdDev(pricesByGov.get("federation") ?? []);
+
+      // Frontier volatilityModifier is 1.5, federation is 0.8 — expect noticeable difference
+      // There may not always be both gov types in a random seed, so only assert if both exist
+      if (pricesByGov.has("frontier") && pricesByGov.has("federation")) {
+        expect(frontierStdDev).toBeGreaterThan(federationStdDev);
+      }
+    });
+
+    it("government consumption boosts affect demand", () => {
+      const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
+      let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
+      const rng = mulberry32(42);
+      const ctx = defaultCtx({ disableRandomEvents: true });
+
+      // Run 50 ticks so consumption boosts shift demand
+      for (let i = 0; i < 50; i++) {
+        world = simulateWorldTick(world, rng, ctx);
+      }
+
+      // Federation has consumptionBoosts: { medicine: 1 }
+      // Find medicine demand in federation vs non-federation systems
+      const govBySystem = new Map<string, string>();
+      for (const sys of world.systems) {
+        const region = world.regions.find((r) => r.id === sys.regionId);
+        if (region) govBySystem.set(sys.id, region.governmentType);
+      }
+
+      const fedMedicineDemand: number[] = [];
+      const otherMedicineDemand: number[] = [];
+      for (const m of world.markets) {
+        if (m.goodId !== "medicine") continue;
+        const gov = govBySystem.get(m.systemId);
+        if (gov === "federation") {
+          fedMedicineDemand.push(m.demand);
+        } else if (gov && gov !== "federation") {
+          otherMedicineDemand.push(m.demand);
+        }
+      }
+
+      // Only assert if we have data for both groups
+      if (fedMedicineDemand.length > 0 && otherMedicineDemand.length > 0) {
+        const fedAvg = fedMedicineDemand.reduce((a, b) => a + b, 0) / fedMedicineDemand.length;
+        const otherAvg = otherMedicineDemand.reduce((a, b) => a + b, 0) / otherMedicineDemand.length;
+        expect(fedAvg).toBeGreaterThan(otherAvg);
+      }
     });
 
     it("greedy outperforms random over 200 ticks", () => {
