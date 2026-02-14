@@ -18,6 +18,7 @@ import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemNode, type NavigationNodeState } from "@/components/map/system-node";
 import { RegionNode } from "@/components/map/region-node";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
+import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import {
@@ -610,15 +611,17 @@ export function StarMap({
 
       {/* Back to regions button (system view only) */}
       {viewLevel.level === "system" && (
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={handleBackToRegions}
-          className="absolute top-4 left-4 z-50 flex items-center gap-2 rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-gray-800/90 transition-colors shadow-lg"
+          className="absolute top-4 left-4 z-50 gap-2 rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur py-2 text-sm text-white/70 hover:bg-gray-800/90 shadow-lg"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
           </svg>
           {activeRegion?.name ?? "Regions"}
-        </button>
+        </Button>
       )}
 
       {/* Region view hint (only when not navigating) */}
@@ -640,12 +643,14 @@ export function StarMap({
             <span className="text-sm text-white">
               Select a destination for <span className="font-semibold text-cyan-300">{mode.ship.name}</span>
             </span>
-            <button
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={navigation.cancel}
-              className="ml-2 text-xs text-gray-400 hover:text-white transition-colors"
+              className="ml-2"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

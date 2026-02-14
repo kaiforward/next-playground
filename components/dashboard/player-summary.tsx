@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { FleetState } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { StatDisplay } from "@/components/ui/stat-display";
@@ -10,8 +11,8 @@ interface PlayerSummaryProps {
 }
 
 export function PlayerSummary({ fleet }: PlayerSummaryProps) {
-  const docked = fleet.ships.filter((s) => s.status === "docked").length;
-  const inTransit = fleet.ships.filter((s) => s.status === "in_transit").length;
+  const docked = useMemo(() => fleet.ships.filter((s) => s.status === "docked").length, [fleet.ships]);
+  const inTransit = useMemo(() => fleet.ships.filter((s) => s.status === "in_transit").length, [fleet.ships]);
 
   return (
     <Card variant="bordered" padding="md">

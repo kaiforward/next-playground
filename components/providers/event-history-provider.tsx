@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -91,7 +92,10 @@ export function EventHistoryProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  const value: EventHistoryContextValue = { notifications, subscribe };
+  const value = useMemo<EventHistoryContextValue>(
+    () => ({ notifications, subscribe }),
+    [notifications, subscribe],
+  );
 
   return (
     <EventHistoryContext.Provider value={value}>

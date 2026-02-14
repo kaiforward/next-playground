@@ -2,11 +2,8 @@
 
 import type { MarketEntry } from "@/lib/types/game";
 import { getPriceTrendPct } from "@/lib/utils/market";
+import { formatCredits } from "@/lib/utils/format";
 import { DataTable, type Column } from "@/components/ui/data-table";
-
-function formatCredits(value: number): string {
-  return `${value.toLocaleString()} CR`;
-}
 
 interface MarketTableProps {
   entries: MarketEntry[];
