@@ -10,9 +10,9 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (217 tests, engine + API)
-- `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42)
-- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). Custom parameters (ticks, strategies, seed, bots) go through YAML only.
+- `npx vitest run` — Run unit tests (263 tests, engine + API)
+- `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). Outputs summary table, goods breakdown, route diversity, market health, event impact, idle stats.
+- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). New simulator features go here only — don't expand the CLI flags.
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 
@@ -54,10 +54,11 @@ Reference docs (how things work now):
 
 Design docs (plans and backlog):
 
+- `docs/design/economy-balance.md` — Data-driven economy improvements (goods balance, universe utilization, luxury rework)
 - `docs/design/event-catalog.md` — Implemented and planned event definitions (arcs, shocks, ideas)
 - `docs/design/simulation-enhancements.md` — Future mechanics requiring new engine capabilities
 - `docs/design/BACKLOG.md` — Prioritized backlog (sized, grouped by readiness). Delete items when shipped.
-- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system, economy-testing)
+- `docs/design/archive/` — Completed designs (economy-sim, tick-engine-redesign, event-system, economy-testing, simulator-metrics)
 
 ## Design Principles
 

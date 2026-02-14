@@ -128,6 +128,8 @@ export interface ExperimentResult {
   constants: SimResults["constants"];
   overrides: SimResults["overrides"];
   summaries: SimResults["summaries"];
+  marketHealth: SimResults["marketHealth"];
+  eventImpacts: SimResults["eventImpacts"];
   elapsedMs: number;
 }
 
@@ -142,6 +144,8 @@ export function buildExperimentResult(results: SimResults): ExperimentResult {
     constants: results.constants,
     overrides: results.overrides,
     summaries: results.summaries,
+    marketHealth: results.marketHealth,
+    eventImpacts: results.eventImpacts,
     elapsedMs: results.elapsedMs,
   };
 }

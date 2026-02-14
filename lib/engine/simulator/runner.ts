@@ -9,8 +9,14 @@ import { executeBotTick } from "./bot";
 import { computeSummary } from "./metrics";
 import { resolveConstants } from "./constants";
 import { buildSimAdjacencyList } from "./pathfinding-cache";
+import { takeMarketSnapshot, computeMarketHealth, SNAPSHOT_INTERVAL } from "./market-analysis";
+import {
+  trackEventLifecycles,
+  flushActiveEvents,
+  computeEventImpacts,
+} from "./event-analysis";
 import { STRATEGIES } from "./strategies";
-import type { SimConfig, SimResults, SimRunContext, TickMetrics } from "./types";
+import type { SimConfig, SimResults, SimRunContext, TickMetrics, MarketSnapshot, EventLifecycle } from "./types";
 import type { SimConstantOverrides } from "./constants";
 import type { TradeStrategy } from "./strategies/types";
 
@@ -59,6 +65,13 @@ export function runSimulation(
     metricsMap.set(player.id, []);
   }
 
+  // Market snapshots (sampled periodically)
+  const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
+
+  // Event lifecycle tracking
+  const activeEventTracker = new Map<string, { type: string; systemId: string; severity: number; startTick: number; sourceEventId: string | null }>();
+  const completedEvents: EventLifecycle[] = [];
+
   // Main loop
   for (let t = 0; t < config.tickCount; t++) {
     // 1. Simulate world tick (ship arrivals → events → economy)
@@ -73,19 +86,51 @@ export function runSimulation(
       world = result.world;
       metricsMap.get(player.id)!.push(result.metrics);
     }
+
+    // 3. Sample market state at regular intervals
+    if (world.tick % SNAPSHOT_INTERVAL === 0) {
+      marketSnapshots.push({ tick: world.tick, markets: takeMarketSnapshot(world) });
+    }
+
+    // 4. Track event lifecycles (detect new + expired events)
+    completedEvents.push(...trackEventLifecycles(world, activeEventTracker));
+  }
+
+  // Flush any events still active at simulation end
+  completedEvents.push(...flushActiveEvents(activeEventTracker, world.tick));
+
+  // Always capture the final tick if not already sampled
+  if (marketSnapshots.length === 0 || marketSnapshots[marketSnapshots.length - 1].tick !== world.tick) {
+    marketSnapshots.push({ tick: world.tick, markets: takeMarketSnapshot(world) });
   }
 
   // Compute summaries
+  const totalSystems = world.systems.length;
+  const systemNames = new Map(world.systems.map((s) => [s.id, s.name]));
   const summaries = world.players.map((player) => {
     const metrics = metricsMap.get(player.id)!;
-    return computeSummary(player, metrics);
+    return computeSummary(player, metrics, totalSystems, systemNames);
   });
+
+  // Compute market health from final state
+  const marketHealth = computeMarketHealth(world, constants);
+
+  // Compute event impact
+  const eventImpacts = computeEventImpacts(
+    completedEvents,
+    metricsMap,
+    marketSnapshots,
+    systemNames,
+  );
 
   return {
     config,
     constants,
     overrides: overrides ?? {},
     summaries,
+    marketSnapshots,
+    marketHealth,
+    eventImpacts,
     label,
     elapsedMs: performance.now() - start,
   };

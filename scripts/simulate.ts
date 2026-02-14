@@ -22,7 +22,7 @@ import {
   buildExperimentResult,
 } from "../lib/engine/simulator/experiment";
 import { STRATEGY_NAMES } from "../lib/engine/simulator/strategies";
-import type { SimConfig, BotConfig, PlayerSummary } from "../lib/engine/simulator/types";
+import type { SimConfig, BotConfig, PlayerSummary, SimResults } from "../lib/engine/simulator/types";
 
 // ── Argument parsing ────────────────────────────────────────────
 
@@ -66,7 +66,8 @@ function rpad(str: string, width: number): string {
   return str.padStart(width);
 }
 
-function formatTable(summaries: PlayerSummary[], elapsedMs: number): string {
+function formatTable(results: SimResults): string {
+  const { summaries, marketHealth, eventImpacts, elapsedMs } = results;
   const headers = [
     "Strategy",
     "Final Credits",
@@ -76,8 +77,10 @@ function formatTable(summaries: PlayerSummary[], elapsedMs: number): string {
     "Freighter @",
     "Fuel Spent",
     "Profit/Fuel",
+    "Idle",
+    "Idle %",
   ];
-  const widths = [12, 14, 8, 10, 12, 12, 11, 12];
+  const widths = [12, 14, 8, 10, 12, 12, 11, 12, 6, 7];
 
   const lines: string[] = [];
 
@@ -96,12 +99,132 @@ function formatTable(summaries: PlayerSummary[], elapsedMs: number): string {
       rpad(s.freighterTick !== null ? `tick ${s.freighterTick}` : "never", widths[5]),
       rpad(s.totalFuelSpent.toLocaleString(), widths[6]),
       rpad(s.profitPerFuel.toFixed(1), widths[7]),
+      rpad(String(s.idleTicks), widths[8]),
+      rpad((s.idleRate * 100).toFixed(1) + "%", widths[9]),
     ];
     lines.push(row.join(" | "));
   }
 
   lines.push("");
   lines.push(`Simulation completed in ${elapsedMs.toFixed(0)}ms`);
+
+  // Goods breakdown per strategy
+  for (const s of summaries) {
+    if (s.goodBreakdown.length === 0) continue;
+
+    const totalProfit = s.goodBreakdown.reduce((sum, g) => sum + Math.max(0, g.netProfit), 0);
+
+    lines.push("");
+    lines.push(`Goods Breakdown (${s.strategy}):`);
+
+    const gHeaders = ["Good", "Bought", "Sold", "Spent", "Revenue", "Net Profit", "% of Profit"];
+    const gWidths = [12, 8, 8, 12, 12, 12, 12];
+
+    lines.push(gHeaders.map((h, i) => pad(h, gWidths[i])).join(" | "));
+    lines.push(gWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    for (const g of s.goodBreakdown) {
+      const pctOfProfit = totalProfit > 0 ? (Math.max(0, g.netProfit) / totalProfit) * 100 : 0;
+      const row = [
+        pad(g.goodId, gWidths[0]),
+        rpad(g.totalQuantityBought.toLocaleString(), gWidths[1]),
+        rpad(g.totalQuantitySold.toLocaleString(), gWidths[2]),
+        rpad(g.totalSpent.toLocaleString(), gWidths[3]),
+        rpad(g.totalRevenue.toLocaleString(), gWidths[4]),
+        rpad(g.netProfit.toLocaleString(), gWidths[5]),
+        rpad(pctOfProfit.toFixed(1) + "%", gWidths[6]),
+      ];
+      lines.push(row.join(" | "));
+    }
+  }
+
+  // Route diversity
+  lines.push("");
+  lines.push("Route Diversity:");
+
+  const rHeaders = ["Strategy", "Unique", "Exploration", "Top 3 Systems (visits)"];
+  const rWidths = [12, 8, 12, 50];
+
+  lines.push(rHeaders.map((h, i) => pad(h, rWidths[i])).join(" | "));
+  lines.push(rWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+  for (const s of summaries) {
+    const topStr = s.topSystems.length > 0
+      ? s.topSystems.slice(0, 3).map((t) => `${t.systemName} (${t.visits})`).join(", ")
+      : "none";
+    const row = [
+      pad(s.strategy, rWidths[0]),
+      rpad(String(s.uniqueSystemsVisited), rWidths[1]),
+      rpad((s.explorationRate * 100).toFixed(1) + "%", rWidths[2]),
+      pad(topStr, rWidths[3]),
+    ];
+    lines.push(row.join(" | "));
+  }
+
+  // Market health summary
+  if (marketHealth) {
+    lines.push("");
+    lines.push("Market Health (end of simulation):");
+
+    const dHeaders = ["Good", "Price StdDev", "Supply Drift", "Demand Drift"];
+    const dWidths = [12, 13, 13, 13];
+
+    lines.push(dHeaders.map((h, i) => pad(h, dWidths[i])).join(" | "));
+    lines.push(dWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    // Merge dispersion and drift by goodId
+    const dispMap = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d]));
+    const driftMap = new Map(marketHealth.equilibriumDrift.map((d) => [d.goodId, d]));
+    const allGoods = [...new Set([
+      ...marketHealth.priceDispersion.map((d) => d.goodId),
+      ...marketHealth.equilibriumDrift.map((d) => d.goodId),
+    ])];
+
+    // Sort by price dispersion descending
+    allGoods.sort((a, b) => (dispMap.get(b)?.avgStdDev ?? 0) - (dispMap.get(a)?.avgStdDev ?? 0));
+
+    for (const goodId of allGoods) {
+      const disp = dispMap.get(goodId);
+      const drift = driftMap.get(goodId);
+      const row = [
+        pad(goodId, dWidths[0]),
+        rpad(disp ? disp.avgStdDev.toFixed(1) : "-", dWidths[1]),
+        rpad(drift ? (drift.avgSupplyDrift >= 0 ? "+" : "") + drift.avgSupplyDrift.toFixed(1) : "-", dWidths[2]),
+        rpad(drift ? (drift.avgDemandDrift >= 0 ? "+" : "") + drift.avgDemandDrift.toFixed(1) : "-", dWidths[3]),
+      ];
+      lines.push(row.join(" | "));
+    }
+  }
+
+  // Event impact
+  if (eventImpacts.length > 0) {
+    lines.push("");
+    lines.push("Event Impact:");
+
+    const eHeaders = ["Type", "System", "Ticks", "Sev", "Earning Rate (before → during)", "Price Impact"];
+    const eWidths = [18, 16, 12, 5, 34, 13];
+
+    lines.push(eHeaders.map((h, i) => pad(h, eWidths[i])).join(" | "));
+    lines.push(eWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    for (const e of eventImpacts) {
+      const sign = e.earningRateChangePct >= 0 ? "+" : "";
+      const rateStr = `${e.preEventEarningRate.toFixed(0)} → ${e.duringEventEarningRate.toFixed(0)} (${sign}${e.earningRateChangePct.toFixed(1)}%)`;
+      const priceSign = e.priceImpactPct >= 0 ? "+" : "";
+      const row = [
+        pad(e.eventType, eWidths[0]),
+        pad(e.systemName.length > eWidths[1] ? e.systemName.slice(0, eWidths[1] - 2) + ".." : e.systemName, eWidths[1]),
+        pad(`${e.startTick}-${e.endTick}`, eWidths[2]),
+        rpad(e.severity.toFixed(1), eWidths[3]),
+        pad(rateStr, eWidths[4]),
+        rpad(`${priceSign}${e.priceImpactPct.toFixed(1)}%`, eWidths[5]),
+      ];
+      lines.push(row.join(" | "));
+    }
+  } else {
+    lines.push("");
+    lines.push("Event Impact: no events occurred during simulation");
+  }
 
   return lines.join("\n");
 }
@@ -143,7 +266,7 @@ function runExperiment(configPath: string, jsonOutput: boolean): void {
   if (jsonOutput) {
     console.log(JSON.stringify(results, null, 2));
   } else {
-    console.log(formatTable(results.summaries, results.elapsedMs));
+    console.log(formatTable(results));
   }
 
   // Save result to experiments/ directory
@@ -218,6 +341,6 @@ if (args.config) {
   if (args.json) {
     console.log(JSON.stringify(results, null, 2));
   } else {
-    console.log(formatTable(results.summaries, results.elapsedMs));
+    console.log(formatTable(results));
   }
 }

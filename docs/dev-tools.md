@@ -96,13 +96,20 @@ npm run simulate -- --help
 
 ### Output
 
+Main summary table:
 ```
-Strategy     | Final Credits  | Trades | Cr/Tick  | Avg Profit | Freighter @ | Fuel Spent | Profit/Fuel
-random       |             14 |      5 |     -0.1 |      -97.2 |       never |       88.5 |        -5.5
-greedy       |      408,679   |     95 |   8173.6 |     4297.7 |      tick 5 |       88.2 |      4629.0
+Strategy     | Final Credits  | Trades | Cr/Tick  | Avg Profit | Freighter @ | Fuel Spent | Profit/Fuel | Idle | Idle %
+random       |         16,150 |     45 |     32.3 |      376.8 |    tick 273 |      727.5 |        23.3 |    1 |   4.2%
+greedy       |      5,884,539 |    985 |  11769.0 |     5975.3 |      tick 6 |      816.5 |      7208.4 |    0 |   0.0%
 ```
 
-"Freighter @" is the first tick where credits reached 5,000 — a proxy for early-game progression speed.
+Additional sections follow the main table:
+- **Goods Breakdown** — per-strategy table of buy/sell/revenue/profit per good
+- **Route Diversity** — unique systems visited, exploration %, top 3 systems
+- **Market Health** — price standard deviation, supply/demand drift per good
+- **Event Impact** — earning rate before/during each event, price impact %
+
+"Freighter @" is the first tick where credits reached 5,000 — a proxy for early-game progression speed. "Idle %" is fraction of docked ticks with no profitable trade found.
 
 ### Bot Strategies
 
@@ -127,14 +134,16 @@ Market impact: selling adds supply + reduces demand, buying removes supply + add
 
 ```
 lib/engine/simulator/
-  types.ts              — SimWorld, SimConfig, SimResults, TickMetrics, PlayerSummary, SimRunContext
+  types.ts              — SimWorld, SimConfig, SimResults, TickMetrics, PlayerSummary, metrics types
   constants.ts          — SimConstants, resolveConstants(), DEFAULT_SIM_CONSTANTS
   experiment.ts         — ExperimentConfigSchema (Zod), YAML→SimConfig conversion, result serialization
   world.ts              — createSimWorld() using generateUniverse()
   economy.ts            — simulateWorldTick() (arrivals → events → economy)
   bot.ts                — executeBotTick() (refuel → sell → evaluate → buy → navigate)
-  metrics.ts            — recordTickMetrics(), computeSummary()
-  runner.ts             — runSimulation() orchestrator
+  metrics.ts            — recordTickMetrics(), computeSummary() (goods, route, idle, earning rate)
+  market-analysis.ts    — Market snapshots, price dispersion, equilibrium drift
+  event-analysis.ts     — Event lifecycle tracking, earning rate + price impact measurement
+  runner.ts             — runSimulation() orchestrator (snapshots, lifecycle tracking, post-sim analysis)
   pathfinding-cache.ts  — Pre-built adjacency list + cached Dijkstra (sim-internal, avoids per-call rebuild)
   strategies/
     types.ts            — TradeStrategy interface, TradeDecision type
@@ -203,7 +212,7 @@ npm run simulate -- --config experiments/examples/war-on-mining.yaml
 npm run simulate -- --config experiments/examples/baseline.yaml --json
 ```
 
-When `--config` is used, the YAML file controls all simulation parameters. Other flags (`--ticks`, `--strategies`) are ignored. Results are auto-saved to `experiments/<slug>-<timestamp>.json`.
+When `--config` is used, the YAML file controls all simulation parameters. Results are auto-saved to `experiments/<slug>-<timestamp>.json`.
 
 ### Result JSON Structure
 

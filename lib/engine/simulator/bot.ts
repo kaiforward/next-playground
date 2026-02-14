@@ -7,7 +7,7 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { hopDuration } from "@/lib/engine/travel";
 import { findShortestPathCached } from "./pathfinding-cache";
 import type { TradeStrategy } from "./strategies/types";
-import type { SimWorld, SimPlayer, SimShip, SimMarketEntry, SimRunContext, TickMetrics } from "./types";
+import type { SimWorld, SimPlayer, SimShip, SimMarketEntry, SimRunContext, TickMetrics, GoodTradeRecord } from "./types";
 import { recordTickMetrics } from "./metrics";
 
 interface BotTickResult {
@@ -33,12 +33,13 @@ export function executeBotTick(
   let tradeCount = 0;
   let tradeProfitSum = 0;
   let fuelSpent = 0;
+  const goodsTraded: GoodTradeRecord[] = [];
 
   // Skip if not docked
   if (ship.status !== "docked") {
     return {
       world,
-      metrics: recordTickMetrics(player, world.tick, 0, 0, 0),
+      metrics: recordTickMetrics(player, world.tick, 0, 0, 0, [], null, false),
     };
   }
 
@@ -77,6 +78,13 @@ export function executeBotTick(
 
     tradeCount++;
     tradeProfitSum += revenue; // Revenue counts as profit for sell leg
+    goodsTraded.push({
+      goodId: cargo.goodId,
+      bought: 0,
+      sold: cargo.quantity,
+      buyCost: 0,
+      sellRevenue: revenue,
+    });
   }
 
   // Clear cargo after selling
@@ -91,6 +99,7 @@ export function executeBotTick(
   };
 
   const decision = strategy.evaluate(player, ship, worldForEval, adjacencyList);
+  const idle = decision === null;
 
   if (decision) {
     // 4. Buy goods
@@ -126,6 +135,13 @@ export function executeBotTick(
 
         tradeCount++;
         tradeProfitSum -= totalCost; // Subtract buy cost
+        goodsTraded.push({
+          goodId: decision.buyGoodId,
+          bought: decision.buyQuantity,
+          sold: 0,
+          buyCost: totalCost,
+          sellRevenue: 0,
+        });
       }
     }
 
@@ -154,6 +170,6 @@ export function executeBotTick(
 
   return {
     world: updatedWorld,
-    metrics: recordTickMetrics(player, world.tick, tradeCount, tradeProfitSum, fuelSpent),
+    metrics: recordTickMetrics(player, world.tick, tradeCount, tradeProfitSum, fuelSpent, goodsTraded, ship.systemId, idle),
   };
 }
