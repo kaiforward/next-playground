@@ -89,7 +89,7 @@ export function EventToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div role="status" aria-live="polite" className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2">
+    <div role="status" aria-live="polite" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col-reverse items-center gap-2">
       {toasts.map((toast) => (
         <div key={toast.id} className={toastAccent({ color: toast.accentColor })}>
           <div>{toast.message}</div>

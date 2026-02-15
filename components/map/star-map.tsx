@@ -151,6 +151,10 @@ export function StarMap({
 
   const [viewLevel, setViewLevel] = useState<MapViewLevel>(initialState.viewLevel);
   const [selectedSystem, setSelectedSystem] = useState<StarSystemInfo | null>(initialState.selectedSystem);
+  // Hide map until initial setCenter completes to avoid fitView → snap flash
+  const [mapReady, setMapReady] = useState(
+    !initialSelectedSystemId || !initialState.selectedSystem,
+  );
 
   // ── All connections as ConnectionInfo (for cross-region nav) ────
   const allConnections = useMemo((): ConnectionInfo[] =>
@@ -584,19 +588,32 @@ export function StarMap({
     setMapSessionState({ regionId });
   }, []);
 
+  // Skip the fitView prop when we need to center on a specific system.
+  // This avoids a race between fitView (fits all nodes) and setCenter
+  // (focuses one system) — no setTimeout needed.
+  const needsInitialCenter = Boolean(
+    initialSelectedSystemId && initialState.selectedSystem,
+  );
+
   const handleInit = useCallback((instance: ReactFlowInstance) => {
     rfInstance.current = instance;
-  }, []);
+
+    if (initialSelectedSystemId && initialState.selectedSystem) {
+      const { x, y } = initialState.selectedSystem;
+      instance.setCenter(x, y, { zoom: 1.2, duration: 0 });
+      setMapReady(true);
+    }
+  }, [initialSelectedSystemId, initialState.selectedSystem]);
 
   return (
-    <div className="relative h-full w-full">
+    <div className={`relative h-full w-full ${mapReady ? "opacity-100" : "opacity-0"}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
         onInit={handleInit}
-        fitView
+        fitView={!needsInitialCenter}
         fitViewOptions={{ padding: 0.3 }}
         minZoom={0.3}
         maxZoom={2}

@@ -26,13 +26,49 @@ export const tradeMissionsProcessor: TickProcessor = {
   dependsOn: ["events", "economy"],
 
   async process(ctx): Promise<TickProcessorResult> {
-    // 1. Expire unclaimed missions past deadline
+    // 1a. Expire unclaimed missions past deadline
     const expired = await ctx.tx.tradeMission.deleteMany({
       where: {
         deadlineTick: { lte: ctx.tick },
         playerId: null,
       },
     });
+
+    // 1b. Expire accepted missions past deadline — notify players
+    const expiredAccepted = await ctx.tx.tradeMission.findMany({
+      where: {
+        deadlineTick: { lte: ctx.tick },
+        playerId: { not: null },
+      },
+      select: {
+        id: true,
+        playerId: true,
+        quantity: true,
+        good: { select: { name: true } },
+        destination: { select: { name: true } },
+      },
+    });
+
+    const playerEvents = new Map<string, Record<string, unknown[]>>();
+
+    if (expiredAccepted.length > 0) {
+      await ctx.tx.tradeMission.deleteMany({
+        where: { id: { in: expiredAccepted.map((m) => m.id) } },
+      });
+
+      for (const m of expiredAccepted) {
+        const playerId = m.playerId!;
+        const existing = playerEvents.get(playerId) ?? {};
+        const notifications = existing["gameNotifications"] ?? [];
+        notifications.push({
+          message: `Mission expired: deliver ${m.quantity} ${m.good.name} to ${m.destination.name}`,
+          type: "mission_expired",
+          refs: {},
+        });
+        existing["gameNotifications"] = notifications;
+        playerEvents.set(playerId, existing);
+      }
+    }
 
     // 2. Fetch connections and compute hop distances
     const connections = await ctx.tx.systemConnection.findMany({
@@ -96,11 +132,12 @@ export const tradeMissionsProcessor: TickProcessor = {
     const allCandidates = [...economyCandidates, ...eventCandidates];
 
     if (allCandidates.length === 0) {
-      if (expired.count > 0) {
-        console.log(`[trade-missions] Expired ${expired.count} unclaimed mission(s), generated 0`);
+      if (expired.count > 0 || expiredAccepted.length > 0) {
+        console.log(`[trade-missions] Expired ${expired.count} unclaimed + ${expiredAccepted.length} accepted mission(s), generated 0`);
       }
       return {
         globalEvents: { missionsUpdated: [{ count: 0, expired: expired.count }] },
+        playerEvents: playerEvents.size > 0 ? playerEvents : undefined,
       };
     }
 
@@ -167,7 +204,7 @@ export const tradeMissionsProcessor: TickProcessor = {
     }
 
     console.log(
-      `[trade-missions] Expired ${expired.count}, generated ${toCreate.length} mission(s)` +
+      `[trade-missions] Expired ${expired.count} unclaimed + ${expiredAccepted.length} accepted, generated ${toCreate.length} mission(s)` +
       ` (${economyCandidates.length} economy, ${eventCandidates.length} event candidates)`,
     );
 
@@ -175,6 +212,7 @@ export const tradeMissionsProcessor: TickProcessor = {
       globalEvents: {
         missionsUpdated: [{ count: toCreate.length, expired: expired.count }],
       },
+      playerEvents: playerEvents.size > 0 ? playerEvents : undefined,
     };
   },
 };

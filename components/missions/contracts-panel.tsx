@@ -107,7 +107,7 @@ function AvailableContracts({
                         <span className="text-white/40">Here</span>
                       ) : (
                         <Link
-                          href={`/map?systemId=${m.destinationId}`}
+                          href={`/system/${m.destinationId}/contracts`}
                           className="text-indigo-300 hover:text-indigo-200 transition-colors"
                         >
                           {m.destinationName}
@@ -252,7 +252,7 @@ function ActiveMissions({
                     </td>
                     <td className="px-4 py-3">
                       <Link
-                        href={`/map?systemId=${m.destinationId}`}
+                        href={`/system/${m.destinationId}/contracts`}
                         className="text-indigo-300 hover:text-indigo-200 transition-colors"
                       >
                         {m.destinationName}

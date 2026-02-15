@@ -74,7 +74,7 @@ export function MissionsTab() {
                 <span>
                   Deliver to{" "}
                   <Link
-                    href={`/map?systemId=${m.destinationId}`}
+                    href={`/system/${m.destinationId}/contracts`}
                     className="text-indigo-300 hover:text-indigo-200 transition-colors"
                   >
                     {m.destinationName}
