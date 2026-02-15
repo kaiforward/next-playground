@@ -10,17 +10,17 @@ These events are live in `lib/constants/events.ts`.
 
 ### War
 
-Target: Industrial, tech, mining, core systems. Multi-phase arc with spread.
+Target: Industrial, tech, extraction, core systems. Multi-phase arc with spread.
 
 | Phase | Duration | Economy Modifiers | Navigation | Spread |
 |-------|----------|-------------------|------------|--------|
-| **Tensions** | 30-60 | Fuel demand +20, ship_parts demand +30 | — | — |
-| **Escalation** | 20-40 | Fuel demand +50, ship_parts +50, production x0.7 | Danger 0.05 | — |
-| **Active Conflict** | 80-150 | Fuel demand +80, ship_parts +60, production x0.4, reversion x0.5 | Danger 0.15 | conflict_spillover |
+| **Tensions** | 30-60 | Fuel demand +20, machinery demand +30 | — | — |
+| **Escalation** | 20-40 | Fuel demand +50, machinery +50, production x0.7 | Danger 0.05 | — |
+| **Active Conflict** | 80-150 | Fuel demand +80, machinery +60, production x0.4, reversion x0.5 | Danger 0.15 | conflict_spillover |
 | **Aftermath** | 50-100 | Electronics demand +50, food +40, production x0.7 | Danger 0.03 | — |
 | **Recovery** | 40-80 | Lingering demand shifts at 30% | — | — |
 
-Player opportunity: Stockpile ship_parts during tensions, sell during active conflict. Deliver food/electronics during aftermath.
+Player opportunity: Stockpile machinery during tensions, sell during active conflict. Deliver food/electronics during aftermath.
 
 ### Plague / Blight
 
@@ -29,15 +29,15 @@ Target: Agricultural systems. Multi-phase arc with spread.
 | Phase | Duration | Economy Modifiers | Navigation | Spread |
 |-------|----------|-------------------|------------|--------|
 | **Outbreak** | 20-40 | Food production x0.3, food supply shock -30 | — | — |
-| **Spreading** | 40-80 | Food production x0.2, electronics demand +40 | Danger 0.03 | plague_risk |
-| **Containment** | 30-60 | Food production x0.5, electronics demand +20 | — | — |
+| **Spreading** | 40-80 | Food production x0.2, medicine demand +40 | Danger 0.03 | plague_risk |
+| **Containment** | 30-60 | Food production x0.5, medicine demand +20 | — | — |
 | **Recovery** | 40-60 | Food production x0.8, reversion x0.6 | — | — |
 
-Player opportunity: Rush food imports. Sell electronics (medical equipment). Secondary profit at neighbouring agricultural systems.
+Player opportunity: Rush food imports. Sell medicine. Secondary profit at neighbouring agricultural systems.
 
 ### Trade Festival
 
-Target: Core systems. Single-phase event.
+Target: Core systems. Single-phase event. Weight 8, cooldown 120.
 
 | Phase | Duration | Economy Modifiers |
 |-------|----------|-------------------|
@@ -45,55 +45,43 @@ Target: Core systems. Single-phase event.
 
 Player opportunity: Sell luxuries and food at premium prices.
 
-### Conflict Spillover (child event)
+### Mining Boom
 
-Spawned by War spread. Reduced severity.
-
-### Plague Risk (child event)
-
-Spawned by Plague spread at neighbouring agricultural systems. Reduced severity.
-
-## Ready to Implement
-
-These are fully designed and use only existing modifier types.
-
-### Mining Boom / Gold Rush
-
-Target: Mining systems. Multi-phase arc with regional spread.
+Target: Extraction systems. Multi-phase arc with spread. Weight 8, cooldown 120.
 
 | Phase | Duration | Economy Modifiers | Spread |
 |-------|----------|-------------------|--------|
-| **Discovery** | 20-30 | Ore supply target +60, ore production x1.5 | — |
+| **Discovery** | 20-30 | Ore supply +60, ore production x1.5 | — |
 | **Boom** | 60-100 | Ore supply +80, ore production x2.0, food demand +30, luxury demand +40 | ore_glut in region |
 | **Peak** | 40-60 | Ore production x1.8, food demand +50 | — |
-| **Depletion** | 60-100 | Ore production x0.6, ore supply target -20 | — |
+| **Depletion** | 60-100 | Ore production x0.6, ore supply -20 | — |
 
 Player opportunity: Buy cheap ore during boom, sell to industrial systems. Sell food/luxuries to booming system. After depletion, the system is worse off — avoid buying ore there.
 
 ### Supply Shortage
 
-Target: Any system. Single-phase shock event.
+Target: Any system. Single-phase shock event. Weight 10, cooldown 60.
 
 | Phase | Duration | Economy Modifiers |
 |-------|----------|-------------------|
-| **Shortage** | 30-60 | Random good: supply shock -40, demand target +40, reversion x0.7 |
+| **Shortage** | 30-60 | All supply -25, all demand +25, reversion x0.7, food/fuel supply shock -20 |
 
-Player opportunity: Deliver the scarce good for premium prices.
+Player opportunity: Deliver goods (especially food and fuel) for premium prices.
 
 ### Pirate Raid
 
-Target: Systems near gateways. Two-phase arc.
+Target: Any system. Two-phase arc. Weight 8, cooldown 80.
 
 | Phase | Duration | Economy Modifiers | Navigation |
 |-------|----------|-------------------|------------|
-| **Raiding** | 40-80 | All supply target -10% | Danger 0.10-0.20 |
-| **Crackdown** | 20-40 | Ship_parts demand +20 | Danger 0.03 |
+| **Raiding** | 40-80 | All supply -15, weapons demand +30 | Danger 0.15 |
+| **Crackdown** | 20-40 | Machinery demand +25 | Danger 0.03 |
 
-Player opportunity: Avoid the system during raiding (or risk cargo loss for discounted goods). Supply ship_parts during crackdown.
+Player opportunity: Avoid the system during raiding (or risk cargo loss for discounted goods). Supply machinery during crackdown.
 
 ### Solar Storm
 
-Target: Any system. Short, intense two-phase event.
+Target: Any system. Short, intense two-phase event. Weight 6, cooldown 40.
 
 | Phase | Duration | Economy Modifiers | Navigation |
 |-------|----------|-------------------|------------|
@@ -101,6 +89,18 @@ Target: Any system. Short, intense two-phase event.
 | **Clearing** | 10-20 | Production x0.6, reversion x0.5 | — |
 
 Player opportunity: Avoid during storm, rush in during clearing to buy goods at disrupted prices before reversion kicks in.
+
+### Conflict Spillover (child event)
+
+Spawned by War spread. Reduced severity (0.3x).
+
+### Plague Risk (child event)
+
+Spawned by Plague spread at neighbouring agricultural systems. Reduced severity (0.3x).
+
+### Ore Glut (child event)
+
+Spawned by Mining Boom spread. Reduced severity (0.4x). Ore supply surplus depresses local prices.
 
 ## Ideas
 
@@ -124,21 +124,13 @@ A system undergoes major infrastructure upgrades. Production drops to near-zero 
 
 Phases: Planning (mild demand shifts) → Construction (production x0.2, electronics/ore demand surge) → Commissioning → Enhanced Operations (production x2.0, slowly declining).
 
-### Asteroid Discovery
-
-Target: Mining systems. Multi-phase arc.
-
-A new asteroid field is found. Ore floods the market, crashing local prices but creating a surge in ship_parts production at downstream industrial systems.
-
-Phases: Discovery (ore supply shock +50) → Rush (ore production x2.5, food/luxury demand from immigration) → Thinning (ore production x1.2) → Exhaustion (ore production x0.5, short-lived bust).
-
 ### Revolution
 
 Target: Core or industrial systems. Multi-phase arc with spread.
 
 Political upheaval halts production, spikes danger, and drives demand for food and electronics (communications). Neighbouring systems see refugee-driven demand (food, luxuries). Long arc with heavy economic disruption.
 
-Phases: Unrest (production x0.7, danger 0.05) → Uprising (production x0.1, danger 0.20, spread: unrest at neighbours) → Martial Law (danger 0.15, ship_parts demand surge) → Stabilisation → Recovery.
+Phases: Unrest (production x0.7, danger 0.05) → Uprising (production x0.1, danger 0.20, spread: unrest at neighbours) → Martial Law (danger 0.15, machinery demand surge) → Stabilisation → Recovery.
 
 ### Migration Wave
 

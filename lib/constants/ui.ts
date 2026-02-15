@@ -24,6 +24,11 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   trade_festival: "purple",
   conflict_spillover: "red",
   plague_risk: "amber",
+  mining_boom: "green",
+  ore_glut: "green",
+  supply_shortage: "amber",
+  pirate_raid: "red",
+  solar_storm: "blue",
 };
 
 /** Mapping from notification type to toast/badge accent color. */
@@ -36,6 +41,11 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   trade_festival: "purple",
   conflict_spillover: "red",
   plague_risk: "amber",
+  mining_boom: "green",
+  ore_glut: "green",
+  supply_shortage: "amber",
+  pirate_raid: "red",
+  solar_storm: "blue",
   ship_arrived: "blue",
   cargo_lost: "red",
   hazard_incident: "amber",

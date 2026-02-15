@@ -88,15 +88,18 @@ export function runSimulation(
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
 
   // Event lifecycle tracking
-  const activeEventTracker = new Map<string, { type: string; systemId: string; severity: number; startTick: number; sourceEventId: string | null }>();
+  const activeEventTracker = new Map<string, { type: string; systemId: string; severity: number; startTick: number; sourceEventId: string | null; startPrices: { goodId: string; price: number }[] }>();
   const completedEvents: EventLifecycle[] = [];
 
   // Main loop
   for (let t = 0; t < config.tickCount; t++) {
-    // 1. Simulate world tick (ship arrivals → events → economy)
+    // 1. Save pre-tick markets (simulateWorldTick returns a new object)
+    const preTickMarkets = world.markets;
+
+    // 2. Simulate world tick (ship arrivals → events → economy)
     world = simulateWorldTick(world, rng, ctx);
 
-    // 2. Execute bot ticks (deterministic order by ID)
+    // 3. Execute bot ticks (deterministic order by ID)
     const sortedPlayers = [...world.players].sort((a, b) => a.id.localeCompare(b.id));
 
     for (const player of sortedPlayers) {
@@ -106,17 +109,17 @@ export function runSimulation(
       metricsMap.get(player.id)!.push(result.metrics);
     }
 
-    // 3. Sample market state at regular intervals
+    // 4. Sample market state at regular intervals
     if (world.tick % SNAPSHOT_INTERVAL === 0) {
       marketSnapshots.push({ tick: world.tick, markets: takeMarketSnapshot(world) });
     }
 
-    // 4. Track event lifecycles (detect new + expired events)
-    completedEvents.push(...trackEventLifecycles(world, activeEventTracker));
+    // 5. Track event lifecycles (detect new + expired events)
+    completedEvents.push(...trackEventLifecycles(world, activeEventTracker, preTickMarkets));
   }
 
   // Flush any events still active at simulation end
-  completedEvents.push(...flushActiveEvents(activeEventTracker, world.tick));
+  completedEvents.push(...flushActiveEvents(activeEventTracker, world.tick, world.markets));
 
   // Always capture the final tick if not already sampled
   if (marketSnapshots.length === 0 || marketSnapshots[marketSnapshots.length - 1].tick !== world.tick) {
@@ -138,7 +141,6 @@ export function runSimulation(
   const eventImpacts = computeEventImpacts(
     completedEvents,
     metricsMap,
-    marketSnapshots,
     systemNames,
   );
 
