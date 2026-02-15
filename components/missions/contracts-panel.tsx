@@ -7,6 +7,7 @@ import { useAcceptMission, useDeliverMission, useAbandonMission } from "@/lib/ho
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { formatCredits } from "@/lib/utils/format";
 
 interface ContractsPanelProps {
@@ -278,19 +279,20 @@ function ActiveMissions({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {canDeliver && eligibleShips.length > 1 && (
-                          <select
-                            className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white"
-                            value={selectedShipId ?? ""}
-                            onChange={(e) =>
-                              setSelectedShips((prev) => ({ ...prev, [m.id]: e.target.value }))
-                            }
-                          >
-                            {eligibleShips.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="w-36">
+                            <SelectInput
+                              size="sm"
+                              options={eligibleShips.map((s): SelectOption => ({
+                                value: s.id,
+                                label: s.name,
+                              }))}
+                              value={selectedShipId ?? ""}
+                              onChange={(value) =>
+                                setSelectedShips((prev) => ({ ...prev, [m.id]: value }))
+                              }
+                              isSearchable={false}
+                            />
+                          </div>
                         )}
                         {eligibleShips.length > 0 && selectedShipId && (
                           <Button
