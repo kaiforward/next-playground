@@ -8,7 +8,7 @@ export const MISSION_CONSTANTS = {
   QUANTITY_RANGE: [20, 60] as const,
   REWARD_PER_UNIT: 3,
   REWARD_DISTANCE_MULT: 1.25,    // compounding per hop
-  REWARD_TIER_MULT: { 0: 1.0, 1: 1.8, 2: 2.5 } as Record<number, number>,
+  REWARD_TIER_MULT: { 0: 1.0, 1: 4.0, 2: 12.0 } as Record<number, number>,
   REWARD_EVENT_MULT: 1.5,
   REWARD_MIN: 50,
   MAX_EXPORT_DISTANCE: 3,        // hops

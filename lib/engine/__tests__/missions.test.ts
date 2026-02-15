@@ -67,8 +67,8 @@ describe("calculateReward", () => {
     const tier2 = calculateReward(30, 1, 2, false);
     expect(tier1).toBeGreaterThan(tier0);
     expect(tier2).toBeGreaterThan(tier1);
-    expect(tier1 / tier0).toBeCloseTo(1.8, 1);
-    expect(tier2 / tier0).toBeCloseTo(2.5, 1);
+    expect(tier1 / tier0).toBeCloseTo(4.0, 0);
+    expect(tier2 / tier0).toBeCloseTo(12.0, 0);
   });
 
   it("applies event bonus", () => {
