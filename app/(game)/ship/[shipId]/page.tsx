@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
+import { usePlayerMissions } from "@/lib/hooks/use-player-missions";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
 import { PageContainer } from "@/components/ui/page-container";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export default function ShipDetailPage({
   const { fleet, loading } = useFleet();
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
+  const { missions } = usePlayerMissions();
 
   // ?from=system-{id} → back to system page; fallback to dashboard
   const from = searchParams.get("from");
@@ -57,7 +59,21 @@ export default function ShipDetailPage({
         <h1 className="text-2xl font-bold">Ship Details</h1>
       </div>
 
-      <ShipDetailPanel ship={ship} currentTick={currentTick} regions={universeData?.regions} playerCredits={fleet.credits} />
+      <ShipDetailPanel
+        ship={ship}
+        currentTick={currentTick}
+        regions={universeData?.regions}
+        playerCredits={fleet.credits}
+        deliverableMissions={
+          ship.status === "docked"
+            ? missions.filter((m) => {
+                if (m.destinationId !== ship.systemId) return false;
+                const cargoItem = ship.cargo.find((c) => c.goodId === m.goodId);
+                return (cargoItem?.quantity ?? 0) >= m.quantity;
+              })
+            : undefined
+        }
+      />
     </PageContainer>
   );
 }

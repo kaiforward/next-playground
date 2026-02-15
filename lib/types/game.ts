@@ -146,6 +146,28 @@ export interface ActiveEvent {
   severity: number;
 }
 
+// ── Trade mission types ─────────────────────────────────────────
+
+export interface TradeMissionInfo {
+  id: string;
+  systemId: string;
+  systemName: string;
+  destinationId: string;
+  destinationName: string;
+  goodId: string;
+  goodName: string;
+  quantity: number;
+  reward: number;
+  deadlineTick: number;
+  ticksRemaining: number;
+  hops: number;
+  isImport: boolean;
+  isExport: boolean;
+  eventId: string | null;
+  playerId: string | null;
+  acceptedAtTick: number | null;
+}
+
 // ── Price history types ─────────────────────────────────────────
 
 export interface PriceSnapshotPoint {

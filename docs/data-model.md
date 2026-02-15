@@ -29,8 +29,9 @@ All models are defined in `prisma/schema.prisma`. The database uses SQLite with 
 | `StationMarket` | Supply/demand per good per station | Belongs to Station + Good |
 | `TradeHistory` | Record of completed trades | Belongs to Station + Good |
 | `PriceHistory` | Rolling price snapshots per system | 1:1 with StarSystem (unique systemId). JSON `entries` column: `{ tick, prices: Record<goodId, price> }[]`, capped at 50 entries |
-| `GameEvent` | Active world event instance | Belongs to StarSystem + Region, has many EventModifiers. Tracks type, phase, severity, duration, spread source |
+| `GameEvent` | Active world event instance | Belongs to StarSystem + Region, has many EventModifiers + TradeMissions. Tracks type, phase, severity, duration, spread source |
 | `EventModifier` | Active modifier from an event | Belongs to GameEvent. domain (economy/navigation), type, target (system/region), parameter, value |
+| `TradeMission` | Delivery contract | Belongs to StarSystem (board + destination), Good, optional GameEvent (cascade delete), optional Player (null = available). Tracks quantity, reward, deadline, penalty fields (future factions) |
 
 Key design decisions:
 - Ships own location (`systemId`) instead of players. Players can have multiple ships (1:N).
@@ -51,7 +52,8 @@ Key design decisions:
 - `lib/constants/economy.ts` — Simulation constants (reversion rate, noise, fallback production/consumption rates, equilibrium targets)
 - `lib/constants/universe-gen.ts` — Universe generation parameters (region count, systems per region, distances, fuel costs, economy type weights, government type weights)
 - `lib/constants/government.ts` — Government type definitions (federation, corporate, authoritarian, frontier) with modifiers (data-only, not yet wired into processors)
-- `lib/constants/events.ts` — Event definitions (war, plague, trade_festival, conflict_spillover, plague_risk), spawn/cap constants, modifier caps
+- `lib/constants/events.ts` — Event definitions (war, plague, trade_festival, conflict_spillover, plague_risk, etc.), spawn/cap constants, modifier caps, event→mission goods mapping
+- `lib/constants/missions.ts` — Mission generation constants (caps, thresholds, reward formula params, deadline, quantity range)
 - `lib/constants/fuel.ts` — Base fuel price for refueling
 - `lib/constants/snapshot.ts` — Snapshot interval (20 ticks) and max entries (50)
 - `lib/constants/ships.ts` — Ship type definitions (shuttle, freighter), purchasable types filter
@@ -76,4 +78,4 @@ Generation is deterministic given a seed value (`UNIVERSE_GEN.SEED`). Run with: 
 - `app/(game)/dashboard/page.tsx` — Command Center (fleet overview)
 - `app/(game)/map/page.tsx` — Fleet-aware star map
 - `app/(game)/ship/[shipId]/page.tsx` — Ship detail view with contextual back navigation
-- `app/(game)/system/[systemId]/` — Tabbed system hub (overview, market, ships, shipyard) with shared layout
+- `app/(game)/system/[systemId]/` — Tabbed system hub (overview, market, ships, shipyard, contracts) with shared layout

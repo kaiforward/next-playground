@@ -194,6 +194,66 @@ export function findReachableSystems(
   return result;
 }
 
+// ── All-pairs hop distances (BFS) ──────────────────────────────
+
+/**
+ * BFS hop-count from every system to every other system.
+ * Returns Map<origin, Map<dest, hops>>. ~40 systems × BFS = trivial cost.
+ */
+export function computeAllHopDistances(
+  connections: ConnectionInfo[],
+): Map<string, Map<string, number>> {
+  // Build bidirectional adjacency list (connections are directed, but we need both directions)
+  const adj = new Map<string, string[]>();
+  const allSystems = new Set<string>();
+
+  for (const c of connections) {
+    allSystems.add(c.fromSystemId);
+    allSystems.add(c.toSystemId);
+
+    let neighborsFrom = adj.get(c.fromSystemId);
+    if (!neighborsFrom) {
+      neighborsFrom = [];
+      adj.set(c.fromSystemId, neighborsFrom);
+    }
+    neighborsFrom.push(c.toSystemId);
+
+    // Also add reverse direction for undirected hop counting
+    let neighborsTo = adj.get(c.toSystemId);
+    if (!neighborsTo) {
+      neighborsTo = [];
+      adj.set(c.toSystemId, neighborsTo);
+    }
+    neighborsTo.push(c.fromSystemId);
+  }
+
+  const result = new Map<string, Map<string, number>>();
+
+  for (const origin of allSystems) {
+    const distances = new Map<string, number>();
+    distances.set(origin, 0);
+    const queue: string[] = [origin];
+    let head = 0;
+
+    while (head < queue.length) {
+      const current = queue[head++];
+      const currentDist = distances.get(current)!;
+      const neighbors = adj.get(current) ?? [];
+
+      for (const neighbor of neighbors) {
+        if (!distances.has(neighbor)) {
+          distances.set(neighbor, currentDist + 1);
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    result.set(origin, distances);
+  }
+
+  return result;
+}
+
 // ── Linear route validation (server-side) ──────────────────────
 
 /**

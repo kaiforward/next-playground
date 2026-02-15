@@ -8,4 +8,7 @@ export const queryKeys = {
   events: ["events"] as const,
   priceHistory: (systemId: string) => ["priceHistory", systemId] as const,
   devEconomy: ["devEconomy"] as const,
+  missionsAll: ["missions"] as const,
+  systemMissions: (systemId: string) => ["missions", systemId] as const,
+  playerMissions: ["missions", "player"] as const,
 };

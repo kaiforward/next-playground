@@ -450,6 +450,18 @@ const solarStorm: EventDefinition = {
   ],
 };
 
+// ── Event → mission theme mapping ──────────────────────────────
+
+export const EVENT_MISSION_GOODS: Record<string, { goods: string[]; isImport: boolean }> = {
+  war:             { goods: ["weapons", "fuel", "machinery"], isImport: true },
+  plague:          { goods: ["medicine", "food"],             isImport: true },
+  trade_festival:  { goods: ["luxuries", "food"],             isImport: true },
+  mining_boom:     { goods: ["machinery", "food"],            isImport: true },
+  supply_shortage: { goods: ["food", "fuel", "medicine"],     isImport: true },
+  pirate_raid:     { goods: ["weapons", "machinery"],         isImport: true },
+  solar_storm:     { goods: ["electronics", "fuel"],          isImport: true },
+};
+
 /** All registered event definitions, keyed by type. */
 export const EVENT_DEFINITIONS: Record<string, EventDefinition> = {
   war,

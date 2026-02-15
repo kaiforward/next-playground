@@ -9,6 +9,7 @@ import type {
   TradeType,
   ActiveEvent,
   SystemPriceHistory,
+  TradeMissionInfo,
 } from "./game";
 
 // ── Responses ────────────────────────────────────────────────────
@@ -87,6 +88,24 @@ export interface ShipPurchaseResult {
   creditSpent: number;
 }
 export type ShipPurchaseResponse = ApiResponse<ShipPurchaseResult>;
+
+// ── Mission types ───────────────────────────────────────────────
+
+export interface SystemMissionsData { available: TradeMissionInfo[]; active: TradeMissionInfo[] }
+export type SystemMissionsResponse = ApiResponse<SystemMissionsData>;
+
+export interface AcceptMissionRequest { missionId: string }
+export interface AcceptMissionResult { mission: TradeMissionInfo; activeCount: number }
+export type AcceptMissionResponse = ApiResponse<AcceptMissionResult>;
+
+export interface DeliverMissionRequest { missionId: string; shipId: string }
+export interface DeliverMissionResult { mission: TradeMissionInfo; creditEarned: number; newBalance: number }
+export type DeliverMissionResponse = ApiResponse<DeliverMissionResult>;
+
+export interface AbandonMissionRequest { missionId: string }
+export type AbandonMissionResponse = ApiResponse<{ missionId: string }>;
+
+// ── Auth types ──────────────────────────────────────────────────
 
 export interface RegisterRequest {
   name: string;
