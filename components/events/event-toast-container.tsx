@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { tv } from "tailwind-variants";
 import { useEventHistory } from "@/components/providers/event-history-provider";
+import { NotificationEntityLinks } from "@/components/events/notification-entity-links";
 import { NOTIFICATION_BADGE_COLOR } from "@/lib/constants/ui";
 import type { GameNotification, EntityRef } from "@/lib/types/game";
 
@@ -94,7 +94,7 @@ export function EventToastContainer() {
         <div key={toast.id} className={toastAccent({ color: toast.accentColor })}>
           <div>{toast.message}</div>
           {/* Entity links */}
-          <EntityLinks refs={toast.refs} />
+          <NotificationEntityLinks refs={toast.refs} />
           <button
             onClick={() => dismissToast(toast.id)}
             className="absolute top-1.5 right-1.5 text-gray-500 hover:text-white transition-colors p-0.5"
@@ -110,39 +110,3 @@ export function EventToastContainer() {
   );
 }
 
-/** Renders clickable links for entity refs (system, ship). */
-function EntityLinks({ refs }: { refs: Partial<Record<string, EntityRef>> }) {
-  const links: React.ReactNode[] = [];
-
-  if (refs.system) {
-    links.push(
-      <Link
-        key="system"
-        href={`/system/${refs.system.id}`}
-        className="text-blue-400 hover:text-blue-300 transition-colors"
-      >
-        {refs.system.label}
-      </Link>,
-    );
-  }
-
-  if (refs.ship) {
-    links.push(
-      <Link
-        key="ship"
-        href={`/ship/${refs.ship.id}`}
-        className="text-cyan-400 hover:text-cyan-300 transition-colors"
-      >
-        {refs.ship.label}
-      </Link>,
-    );
-  }
-
-  if (links.length === 0) return null;
-
-  return (
-    <div className="flex gap-2 mt-1 text-xs">
-      {links}
-    </div>
-  );
-}

@@ -15,7 +15,8 @@ import "@xyflow/react/dist/style.css";
 
 import type { UniverseData, StarSystemInfo, ShipState, RegionInfo, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
-import { SystemNode, type NavigationNodeState } from "@/components/map/system-node";
+import { SystemNode, type NavigationNodeState, type SystemEventInfo } from "@/components/map/system-node";
+import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 import { RegionNode } from "@/components/map/region-node";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { Button } from "@/components/ui/button";
@@ -261,16 +262,21 @@ export function StarMap({
     [selectedSystem, ships],
   );
 
-  // ── Events per system (deduplicated event types) ───────────────
+  // ── Events per system (deduplicated, with color + priority) ────
   const eventsPerSystem = useMemo(() => {
-    const map = new Map<string, string[]>();
+    const map = new Map<string, SystemEventInfo[]>();
     for (const event of events) {
       if (!event.systemId) continue;
       const existing = map.get(event.systemId);
+      const info: SystemEventInfo = {
+        type: event.type,
+        color: EVENT_TYPE_BADGE_COLOR[event.type] ?? "slate",
+        priority: EVENT_TYPE_DANGER_PRIORITY[event.type] ?? 0,
+      };
       if (existing) {
-        if (!existing.includes(event.type)) existing.push(event.type);
+        if (!existing.some((e) => e.type === event.type)) existing.push(info);
       } else {
-        map.set(event.systemId, [event.type]);
+        map.set(event.systemId, [info]);
       }
     }
     return map;
@@ -412,7 +418,7 @@ export function StarMap({
         shipCount: shipsAtSystem[system.id] ?? 0,
         isGateway: system.isGateway,
         navigationState: nodeNavigationStates.get(system.id),
-        activeEventTypes: eventsPerSystem.get(system.id),
+        activeEvents: eventsPerSystem.get(system.id),
       },
     }));
   }, [

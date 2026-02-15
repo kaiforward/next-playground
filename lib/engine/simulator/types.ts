@@ -234,6 +234,12 @@ export interface MarketHealthSummary {
 
 // ── Event impact ────────────────────────────────────────────────
 
+/** Price snapshot for a single good at event boundary. */
+export interface EventBoundaryPrice {
+  goodId: string;
+  price: number;
+}
+
 /** Lifecycle record for an event (tracked during simulation). */
 export interface EventLifecycle {
   id: string;
@@ -243,6 +249,18 @@ export interface EventLifecycle {
   startTick: number;
   endTick: number;
   sourceEventId: string | null;
+  /** Prices at the event's system when the event started. */
+  startPrices: EventBoundaryPrice[];
+  /** Prices at the event's system when the event ended. */
+  endPrices: EventBoundaryPrice[];
+}
+
+/** Per-good price change during an event. */
+export interface GoodPriceChange {
+  goodId: string;
+  priceBefore: number;
+  priceAfter: number;
+  changePct: number;
 }
 
 export interface EventImpact {
@@ -254,14 +272,18 @@ export interface EventImpact {
   startTick: number;
   endTick: number;
   duration: number;
-  /** Average bot earning rate (credits/tick) in the N ticks before the event. */
-  preEventEarningRate: number;
-  /** Average bot earning rate during the event. */
-  duringEventEarningRate: number;
-  /** Earning rate change as a percentage. */
-  earningRateChangePct: number;
-  /** Average price change at the affected system (across all goods). */
-  priceImpactPct: number;
+  /** null for root events, event type string for child/spread events. */
+  parentEventType: string | null;
+  /** Per-good price changes between event start and end. */
+  goodPriceChanges: GoodPriceChange[];
+  /** Base-price-weighted average price change across all goods (%). */
+  weightedPriceImpactPct: number;
+  /** Number of bot-ticks at this system during the event. */
+  botVisitsDuring: number;
+  /** Number of trades executed at this system during the event. */
+  tradeCountDuring: number;
+  /** Total profit earned at this system during the event. */
+  tradeProfitDuring: number;
 }
 
 // ── Results ─────────────────────────────────────────────────────

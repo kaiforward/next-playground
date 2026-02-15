@@ -226,23 +226,40 @@ function formatTable(results: SimResults): string {
     lines.push("");
     lines.push("Event Impact:");
 
-    const eHeaders = ["Type", "System", "Ticks", "Sev", "Earning Rate (before → during)", "Price Impact"];
-    const eWidths = [18, 16, 12, 5, 34, 13];
+    const eHeaders = ["Type", "System", "Ticks", "Sev", "Price Δ", "Top Movers", "Trades", "Profit"];
+    const eWidths = [20, 16, 12, 5, 9, 30, 7, 10];
 
     lines.push(eHeaders.map((h, i) => pad(h, eWidths[i])).join(" | "));
     lines.push(eWidths.map((w) => "-".repeat(w)).join("-+-"));
 
     for (const e of eventImpacts) {
-      const sign = e.earningRateChangePct >= 0 ? "+" : "";
-      const rateStr = `${e.preEventEarningRate.toFixed(0)} → ${e.duringEventEarningRate.toFixed(0)} (${sign}${e.earningRateChangePct.toFixed(1)}%)`;
-      const priceSign = e.priceImpactPct >= 0 ? "+" : "";
+      const isChild = e.parentEventType !== null;
+      const typeLabel = isChild ? `  └ ${e.eventType}` : e.eventType;
+      const priceSign = e.weightedPriceImpactPct >= 0 ? "+" : "";
+
+      // Top 2 movers by absolute change
+      const topMovers = [...e.goodPriceChanges]
+        .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct))
+        .slice(0, 2)
+        .map((g) => {
+          const s = g.changePct >= 0 ? "+" : "";
+          return `${g.goodId} ${s}${g.changePct.toFixed(0)}%`;
+        })
+        .join(", ");
+
+      const truncName = e.systemName.length > eWidths[1]
+        ? e.systemName.slice(0, eWidths[1] - 2) + ".."
+        : e.systemName;
+
       const row = [
-        pad(e.eventType, eWidths[0]),
-        pad(e.systemName.length > eWidths[1] ? e.systemName.slice(0, eWidths[1] - 2) + ".." : e.systemName, eWidths[1]),
+        pad(typeLabel, eWidths[0]),
+        pad(truncName, eWidths[1]),
         pad(`${e.startTick}-${e.endTick}`, eWidths[2]),
         rpad(e.severity.toFixed(1), eWidths[3]),
-        pad(rateStr, eWidths[4]),
-        rpad(`${priceSign}${e.priceImpactPct.toFixed(1)}%`, eWidths[5]),
+        rpad(`${priceSign}${e.weightedPriceImpactPct.toFixed(1)}%`, eWidths[4]),
+        pad(topMovers || "-", eWidths[5]),
+        rpad(e.tradeCountDuring.toLocaleString(), eWidths[6]),
+        rpad(e.tradeProfitDuring.toLocaleString(), eWidths[7]),
       ];
       lines.push(row.join(" | "));
     }

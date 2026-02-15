@@ -1,19 +1,47 @@
 /**
  * Event impact analysis — post-simulation computation.
  *
- * Tracks event lifecycles during the simulation, then computes impact
- * by comparing earning rates and prices before/during each event.
+ * Tracks event lifecycles during the simulation (capturing market prices
+ * at event boundaries), then computes per-good price impact and
+ * system-local bot activity for each event.
  */
 
 import { calculatePrice } from "@/lib/engine/pricing";
 import type {
   SimWorld,
-  SimEvent,
+  SimMarketEntry,
   EventLifecycle,
+  EventBoundaryPrice,
   EventImpact,
+  GoodPriceChange,
   TickMetrics,
-  MarketSnapshot,
 } from "./types";
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+/** Snapshot current prices at a system from a markets array. */
+function snapshotPrices(
+  markets: SimMarketEntry[],
+  systemId: string,
+): EventBoundaryPrice[] {
+  return markets
+    .filter((m) => m.systemId === systemId)
+    .map((m) => ({
+      goodId: m.goodId,
+      price: calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling),
+    }));
+}
+
+// ── Active event record (internal) ──────────────────────────────
+
+interface ActiveEventRecord {
+  type: string;
+  systemId: string;
+  severity: number;
+  startTick: number;
+  sourceEventId: string | null;
+  startPrices: EventBoundaryPrice[];
+}
 
 // ── Lifecycle tracking ──────────────────────────────────────────
 
@@ -21,10 +49,14 @@ import type {
  * Track event lifecycles by diffing world.events each tick.
  * Call once per tick in the runner loop. Returns lifecycle records
  * for events that expired this tick.
+ *
+ * @param preTickMarkets - the markets array from BEFORE the current tick
+ *   (used to capture start prices for newly-detected events)
  */
 export function trackEventLifecycles(
   world: SimWorld,
-  activeEvents: Map<string, { type: string; systemId: string; severity: number; startTick: number; sourceEventId: string | null }>,
+  activeEvents: Map<string, ActiveEventRecord>,
+  preTickMarkets: SimMarketEntry[],
 ): EventLifecycle[] {
   const completed: EventLifecycle[] = [];
   const currentIds = new Set(world.events.map((e) => e.id));
@@ -38,6 +70,7 @@ export function trackEventLifecycles(
         severity: event.severity,
         startTick: event.startTick,
         sourceEventId: event.sourceEventId,
+        startPrices: snapshotPrices(preTickMarkets, event.systemId),
       });
     }
   }
@@ -53,6 +86,8 @@ export function trackEventLifecycles(
         startTick: info.startTick,
         endTick: world.tick,
         sourceEventId: info.sourceEventId,
+        startPrices: info.startPrices,
+        endPrices: snapshotPrices(world.markets, info.systemId),
       });
       activeEvents.delete(id);
     }
@@ -65,8 +100,9 @@ export function trackEventLifecycles(
  * Flush any still-active events at simulation end.
  */
 export function flushActiveEvents(
-  activeEvents: Map<string, { type: string; systemId: string; severity: number; startTick: number; sourceEventId: string | null }>,
+  activeEvents: Map<string, ActiveEventRecord>,
   endTick: number,
+  finalMarkets: SimMarketEntry[],
 ): EventLifecycle[] {
   const remaining: EventLifecycle[] = [];
   for (const [id, info] of activeEvents) {
@@ -78,6 +114,8 @@ export function flushActiveEvents(
       startTick: info.startTick,
       endTick: endTick,
       sourceEventId: info.sourceEventId,
+      startPrices: info.startPrices,
+      endPrices: snapshotPrices(finalMarkets, info.systemId),
     });
   }
   activeEvents.clear();
@@ -87,73 +125,49 @@ export function flushActiveEvents(
 // ── Impact computation ──────────────────────────────────────────
 
 /**
- * Compute impact metrics for all completed events.
+ * Compute impact metrics for all completed events (including child events).
  *
- * - Earning rate: average credits/tick across all players for the window
- *   before the event vs. during the event.
- * - Price impact: compare average prices at the event's system from the
- *   nearest market snapshot before vs. during the event.
+ * - Per-good price changes from lifecycle boundary prices
+ * - Base-price-weighted average price change
+ * - System-local bot activity (visits, trades, profit) during the event
  */
 export function computeEventImpacts(
   events: EventLifecycle[],
   allMetrics: Map<string, TickMetrics[]>,
-  marketSnapshots: { tick: number; markets: MarketSnapshot[] }[],
   systemNames: Map<string, string>,
 ): EventImpact[] {
-  // Skip child/spread events — they're secondary effects, not primary
-  const primaryEvents = events.filter((e) => e.sourceEventId === null);
-  if (primaryEvents.length === 0) return [];
+  if (events.length === 0) return [];
 
-  // Build a flat earning-rate-per-tick array (sum across all players)
-  const playerMetrics = [...allMetrics.values()];
-  if (playerMetrics.length === 0) return [];
-
-  const tickCount = playerMetrics[0].length;
-  const earningPerTick: number[] = new Array(tickCount).fill(0);
-  for (const metrics of playerMetrics) {
-    for (let i = 0; i < metrics.length; i++) {
-      earningPerTick[i] += metrics[i].tradeProfitSum;
-    }
-  }
-  // Average across players
-  const playerCount = playerMetrics.length;
-  for (let i = 0; i < earningPerTick.length; i++) {
-    earningPerTick[i] /= playerCount;
-  }
+  // Build a lookup from event id → type for resolving parent types
+  const eventTypeById = new Map(events.map((e) => [e.id, e.type]));
 
   const impacts: EventImpact[] = [];
 
-  for (const event of primaryEvents) {
+  for (const event of events) {
     const duration = event.endTick - event.startTick;
     if (duration <= 0) continue;
 
-    // Earning rate during event (tick indices are 0-based, ticks are 1-based)
-    const duringStart = Math.max(0, event.startTick - 1);
-    const duringEnd = Math.min(tickCount, event.endTick - 1);
-    const duringSlice = earningPerTick.slice(duringStart, duringEnd);
-    const duringEventEarningRate = duringSlice.length > 0
-      ? duringSlice.reduce((a, b) => a + b, 0) / duringSlice.length
-      : 0;
+    // Per-good price changes from boundary snapshots
+    const goodPriceChanges = computeGoodPriceChanges(
+      event.startPrices,
+      event.endPrices,
+    );
 
-    // Earning rate before event (same-length window before startTick)
-    const preStart = Math.max(0, duringStart - duration);
-    const preEnd = duringStart;
-    const preSlice = earningPerTick.slice(preStart, preEnd);
-    const preEventEarningRate = preSlice.length > 0
-      ? preSlice.reduce((a, b) => a + b, 0) / preSlice.length
-      : 0;
+    // Base-price-weighted average
+    const weightedPriceImpactPct = computeWeightedPriceImpact(goodPriceChanges);
 
-    const earningRateChangePct = preEventEarningRate !== 0
-      ? ((duringEventEarningRate - preEventEarningRate) / Math.abs(preEventEarningRate)) * 100
-      : 0;
-
-    // Price impact: compare nearest snapshot before event to nearest during event
-    const priceImpactPct = computePriceImpact(
+    // System-local bot activity during event window
+    const { botVisits, tradeCount, tradeProfit } = computeSystemActivity(
       event.systemId,
       event.startTick,
       event.endTick,
-      marketSnapshots,
+      allMetrics,
     );
+
+    // Resolve parent event type (null for root events)
+    const parentEventType = event.sourceEventId
+      ? (eventTypeById.get(event.sourceEventId) ?? null)
+      : null;
 
     impacts.push({
       eventId: event.id,
@@ -164,62 +178,173 @@ export function computeEventImpacts(
       startTick: event.startTick,
       endTick: event.endTick,
       duration,
-      preEventEarningRate,
-      duringEventEarningRate,
-      earningRateChangePct,
-      priceImpactPct,
+      parentEventType,
+      goodPriceChanges,
+      weightedPriceImpactPct,
+      botVisitsDuring: botVisits,
+      tradeCountDuring: tradeCount,
+      tradeProfitDuring: tradeProfit,
     });
   }
 
-  // Sort by absolute earning rate change (most impactful first)
-  return impacts.sort(
-    (a, b) => Math.abs(b.earningRateChangePct) - Math.abs(a.earningRateChangePct),
-  );
+  // Sort: root events by abs(weightedPriceImpactPct) desc,
+  // child events grouped after their parent by same sort
+  return sortImpactsWithChildren(impacts);
 }
 
 /**
- * Compute average price change at a system between pre-event and during-event snapshots.
+ * Compute per-good price changes between start and end boundary snapshots.
  */
-function computePriceImpact(
+function computeGoodPriceChanges(
+  startPrices: EventBoundaryPrice[],
+  endPrices: EventBoundaryPrice[],
+): GoodPriceChange[] {
+  const endMap = new Map(endPrices.map((p) => [p.goodId, p.price]));
+  const changes: GoodPriceChange[] = [];
+
+  for (const start of startPrices) {
+    const endPrice = endMap.get(start.goodId);
+    if (endPrice === undefined) continue;
+
+    const changePct = start.price !== 0
+      ? ((endPrice - start.price) / start.price) * 100
+      : 0;
+
+    changes.push({
+      goodId: start.goodId,
+      priceBefore: start.price,
+      priceAfter: endPrice,
+      changePct,
+    });
+  }
+
+  return changes;
+}
+
+/**
+ * Compute base-price-weighted average price change.
+ * Weights each good's change by its basePrice so that expensive goods
+ * contribute proportionally more to the aggregate.
+ */
+function computeWeightedPriceImpact(changes: GoodPriceChange[]): number {
+  if (changes.length === 0) return 0;
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const c of changes) {
+    // Use priceBefore as weight (approximates basePrice × multiplier)
+    const weight = c.priceBefore;
+    weightedSum += c.changePct * weight;
+    totalWeight += weight;
+  }
+
+  return totalWeight > 0 ? weightedSum / totalWeight : 0;
+}
+
+/**
+ * Count bot activity at a specific system during an event window.
+ */
+function computeSystemActivity(
   systemId: string,
   startTick: number,
   endTick: number,
-  snapshots: { tick: number; markets: MarketSnapshot[] }[],
-): number {
-  if (snapshots.length < 2) return 0;
+  allMetrics: Map<string, TickMetrics[]>,
+): { botVisits: number; tradeCount: number; tradeProfit: number } {
+  let botVisits = 0;
+  let tradeCount = 0;
+  let tradeProfit = 0;
 
-  // Find nearest snapshot before or at startTick
-  let preSnap: { tick: number; markets: MarketSnapshot[] } | null = null;
-  for (const snap of snapshots) {
-    if (snap.tick <= startTick) preSnap = snap;
-    else break;
-  }
+  for (const metrics of allMetrics.values()) {
+    // Tick indices are 0-based, ticks are 1-based
+    const iStart = Math.max(0, startTick - 1);
+    const iEnd = Math.min(metrics.length, endTick - 1);
 
-  // Find nearest snapshot during the event
-  const midTick = Math.floor((startTick + endTick) / 2);
-  let duringSnap: { tick: number; markets: MarketSnapshot[] } | null = null;
-  let bestDist = Infinity;
-  for (const snap of snapshots) {
-    if (snap.tick >= startTick && snap.tick <= endTick) {
-      const dist = Math.abs(snap.tick - midTick);
-      if (dist < bestDist) {
-        duringSnap = snap;
-        bestDist = dist;
+    for (let i = iStart; i < iEnd; i++) {
+      const m = metrics[i];
+      if (m.systemVisited === systemId) {
+        botVisits++;
+        tradeCount += m.tradeCount;
+        tradeProfit += m.tradeProfitSum;
       }
     }
   }
 
-  if (!preSnap || !duringSnap || preSnap === duringSnap) return 0;
+  return { botVisits, tradeCount, tradeProfit };
+}
 
-  // Compare average prices for this system
-  const prePrices = preSnap.markets.filter((m) => m.systemId === systemId);
-  const duringPrices = duringSnap.markets.filter((m) => m.systemId === systemId);
+/**
+ * Sort impacts: root events by abs(weightedPriceImpactPct) desc,
+ * child events grouped immediately after their parent by same sort.
+ */
+function sortImpactsWithChildren(impacts: EventImpact[]): EventImpact[] {
+  const roots = impacts.filter((e) => e.parentEventType === null);
+  const children = impacts.filter((e) => e.parentEventType !== null);
 
-  if (prePrices.length === 0 || duringPrices.length === 0) return 0;
+  // Sort roots by absolute weighted price impact
+  roots.sort((a, b) => Math.abs(b.weightedPriceImpactPct) - Math.abs(a.weightedPriceImpactPct));
 
-  const preAvg = prePrices.reduce((sum, m) => sum + m.price, 0) / prePrices.length;
-  const duringAvg = duringPrices.reduce((sum, m) => sum + m.price, 0) / duringPrices.length;
+  // Group children by parent event id
+  const childrenByParent = new Map<string, EventImpact[]>();
+  for (const child of children) {
+    // Find parent: the root event whose id matches child's sourceEventId from the lifecycle
+    // We need to find the parent by looking at the original event's sourceEventId
+    // Since parentEventType is derived from sourceEventId, we need to match by event relationship
+    // The child's eventId's sourceEventId maps to a parent event
+    // But we only have parentEventType — find the root event at the same or nearby system
+    // Actually, we stored sourceEventId in lifecycle, but EventImpact doesn't have it.
+    // We'll just group orphan children at the end, sorted by impact.
+    const parentId = findParentEventId(child, roots);
+    if (parentId) {
+      const list = childrenByParent.get(parentId) ?? [];
+      list.push(child);
+      childrenByParent.set(parentId, list);
+    } else {
+      // Orphan child — append at end
+      const list = childrenByParent.get("__orphan__") ?? [];
+      list.push(child);
+      childrenByParent.set("__orphan__", list);
+    }
+  }
 
-  if (preAvg === 0) return 0;
-  return ((duringAvg - preAvg) / preAvg) * 100;
+  // Sort each child group
+  for (const group of childrenByParent.values()) {
+    group.sort((a, b) => Math.abs(b.weightedPriceImpactPct) - Math.abs(a.weightedPriceImpactPct));
+  }
+
+  // Interleave: root, then its children
+  const result: EventImpact[] = [];
+  for (const root of roots) {
+    result.push(root);
+    const kids = childrenByParent.get(root.eventId);
+    if (kids) result.push(...kids);
+  }
+
+  // Append orphan children
+  const orphans = childrenByParent.get("__orphan__");
+  if (orphans) result.push(...orphans);
+
+  return result;
+}
+
+/**
+ * Find the most likely parent root event for a child event.
+ * Match by: parentEventType matches root's eventType AND overlapping tick ranges.
+ */
+function findParentEventId(child: EventImpact, roots: EventImpact[]): string | null {
+  // Find roots whose type matches the child's parentEventType
+  // and whose tick range overlaps with the child's
+  const candidates = roots.filter((r) =>
+    r.eventType === child.parentEventType &&
+    r.startTick <= child.startTick &&
+    r.endTick >= child.startTick,
+  );
+
+  if (candidates.length === 0) return null;
+
+  // If multiple, pick the one with the closest start tick
+  candidates.sort((a, b) =>
+    Math.abs(a.startTick - child.startTick) - Math.abs(b.startTick - child.startTick),
+  );
+  return candidates[0].eventId;
 }
