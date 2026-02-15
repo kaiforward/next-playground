@@ -99,7 +99,7 @@ export interface AcceptMissionResult { mission: TradeMissionInfo; activeCount: n
 export type AcceptMissionResponse = ApiResponse<AcceptMissionResult>;
 
 export interface DeliverMissionRequest { missionId: string; shipId: string }
-export interface DeliverMissionResult { mission: TradeMissionInfo; creditEarned: number; newBalance: number }
+export interface DeliverMissionResult { mission: TradeMissionInfo; goodsValue: number; reward: number; creditEarned: number; newBalance: number }
 export type DeliverMissionResponse = ApiResponse<DeliverMissionResult>;
 
 export interface AbandonMissionRequest { missionId: string }

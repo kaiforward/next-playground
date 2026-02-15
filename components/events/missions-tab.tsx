@@ -67,7 +67,7 @@ export function MissionsTab() {
                   )}
                 </div>
                 <span className="text-sm font-medium text-green-400">
-                  {formatCredits(m.reward)}
+                  ~{formatCredits(m.estimatedGoodsValue + m.reward)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs text-white/40">
@@ -86,6 +86,9 @@ export function MissionsTab() {
                 <span className={m.ticksRemaining < 50 ? "text-amber-400" : ""}>
                   {m.ticksRemaining} ticks left
                 </span>
+              </div>
+              <div className="text-xs text-white/30 mt-0.5">
+                {formatCredits(m.estimatedGoodsValue)} sale + {formatCredits(m.reward)} bonus
               </div>
               <div className="flex items-center gap-2 mt-2">
                 {eligibleShip && (

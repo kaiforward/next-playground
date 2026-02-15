@@ -40,7 +40,7 @@ export function ActiveMissionsCard() {
                     {m.goodName} x{m.quantity}
                   </span>
                   <span className="text-sm text-green-400">
-                    {formatCredits(m.reward)}
+                    ~{formatCredits(m.estimatedGoodsValue + m.reward)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-white/40">

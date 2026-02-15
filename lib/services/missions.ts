@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import { computeAllHopDistances } from "@/lib/engine/pathfinding";
+import { calculatePrice } from "@/lib/engine/pricing";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";
 import type { TradeMissionInfo } from "@/lib/types/game";
 import type {
@@ -41,14 +42,20 @@ type MissionRow = {
   good: { name: string };
 };
 
+/** Price lookup: destSystemId → goodId → current unit price. */
+type PriceLookup = Map<string, Map<string, number>>;
+
 /** Serialize a DB mission row to the client-facing type. */
 function serializeMission(
   row: MissionRow,
   tick: number,
   hopDistances: Map<string, Map<string, number>>,
+  priceLookup: PriceLookup,
 ): TradeMissionInfo {
   const hops = hopDistances.get(row.systemId)?.get(row.destinationId) ?? 0;
   const isImport = row.systemId === row.destinationId;
+  const unitPrice = priceLookup.get(row.destinationId)?.get(row.goodId) ?? 0;
+  const estimatedGoodsValue = unitPrice * row.quantity;
 
   return {
     id: row.id,
@@ -60,6 +67,7 @@ function serializeMission(
     goodName: row.good.name,
     quantity: row.quantity,
     reward: row.reward,
+    estimatedGoodsValue,
     deadlineTick: row.deadlineTick,
     ticksRemaining: Math.max(0, row.deadlineTick - tick),
     hops,
@@ -76,6 +84,42 @@ const missionInclude = {
   destination: { select: { name: true } },
   good: { select: { name: true } },
 } as const;
+
+/** Build a price lookup for all destination systems referenced by missions. */
+async function buildPriceLookup(
+  missions: Array<{ destinationId: string; goodId: string }>,
+): Promise<PriceLookup> {
+  const lookup: PriceLookup = new Map();
+  if (missions.length === 0) return lookup;
+
+  // Collect unique destination system IDs
+  const destIds = [...new Set(missions.map((m) => m.destinationId))];
+
+  // Fetch all market entries at those stations in one query
+  const markets = await prisma.stationMarket.findMany({
+    where: { station: { systemId: { in: destIds } } },
+    include: { good: true, station: { select: { systemId: true } } },
+  });
+
+  for (const entry of markets) {
+    const systemId = entry.station.systemId;
+    let goodMap = lookup.get(systemId);
+    if (!goodMap) {
+      goodMap = new Map();
+      lookup.set(systemId, goodMap);
+    }
+    const price = calculatePrice(
+      entry.good.basePrice,
+      entry.supply,
+      entry.demand,
+      entry.good.priceFloor,
+      entry.good.priceCeiling,
+    );
+    goodMap.set(entry.goodId, price);
+  }
+
+  return lookup;
+}
 
 // ── Read functions ──────────────────────────────────────────────
 
@@ -101,9 +145,12 @@ export async function getSystemMissions(
     }),
   ]);
 
+  const allMissions = [...available, ...active];
+  const priceLookup = await buildPriceLookup(allMissions);
+
   return {
-    available: available.map((m) => serializeMission(m, tick, hopDistances)),
-    active: active.map((m) => serializeMission(m, tick, hopDistances)),
+    available: available.map((m) => serializeMission(m, tick, hopDistances, priceLookup)),
+    active: active.map((m) => serializeMission(m, tick, hopDistances, priceLookup)),
   };
 }
 
@@ -118,7 +165,9 @@ export async function getPlayerMissions(
     include: missionInclude,
   });
 
-  return missions.map((m) => serializeMission(m, tick, hopDistances));
+  const priceLookup = await buildPriceLookup(missions);
+
+  return missions.map((m) => serializeMission(m, tick, hopDistances, priceLookup));
 }
 
 // ── Mutation functions ──────────────────────────────────────────
@@ -196,12 +245,13 @@ export async function acceptMission(
   }
 
   const hopDistances = await loadHopDistances();
+  const priceLookup = await buildPriceLookup([updated]);
   const newActiveCount = activeCount + 1;
 
   return {
     ok: true,
     data: {
-      mission: serializeMission(updated, tick, hopDistances),
+      mission: serializeMission(updated, tick, hopDistances, priceLookup),
       activeCount: newActiveCount,
     },
   };
@@ -260,7 +310,38 @@ export async function deliverMission(
     return { ok: false, error: validation.error, status: 400 };
   }
 
-  // Transaction: re-read cargo (TOCTOU), decrement cargo, credit player, delete mission
+  // Look up the destination station market to calculate sell price
+  const station = await prisma.station.findUnique({
+    where: { systemId: mission.destinationId },
+  });
+
+  if (!station) {
+    return { ok: false, error: "Destination station not found.", status: 500 };
+  }
+
+  const marketEntry = await prisma.stationMarket.findUnique({
+    where: { stationId_goodId: { stationId: station.id, goodId: mission.goodId } },
+    include: { good: true },
+  });
+
+  if (!marketEntry) {
+    return { ok: false, error: "Good not available at destination market.", status: 500 };
+  }
+
+  const unitPrice = calculatePrice(
+    marketEntry.good.basePrice,
+    marketEntry.supply,
+    marketEntry.demand,
+    marketEntry.good.priceFloor,
+    marketEntry.good.priceCeiling,
+  );
+  const goodsValue = unitPrice * mission.quantity;
+  const totalCredit = goodsValue + mission.reward;
+
+  // Demand impact: 10% of traded quantity (matches normal sell trades)
+  const demandDelta = -Math.round(mission.quantity * 0.1);
+
+  // Transaction: re-read cargo (TOCTOU), decrement cargo, update market, credit player, delete mission
   const result = await prisma.$transaction(async (tx) => {
     // Re-read cargo
     const freshCargo = cargoItem
@@ -282,10 +363,34 @@ export async function deliverMission(
       });
     }
 
-    // Credit player
+    // Update market supply/demand (sell adds supply, reduces demand)
+    const freshMarket = await tx.stationMarket.findUnique({
+      where: { id: marketEntry.id },
+    });
+    await tx.stationMarket.update({
+      where: { id: marketEntry.id },
+      data: {
+        supply: Math.max(0, (freshMarket?.supply ?? 0) + mission.quantity),
+        demand: Math.max(0, (freshMarket?.demand ?? 0) + demandDelta),
+      },
+    });
+
+    // Credit player: goods sale value + mission reward
     const updatedPlayer = await tx.player.update({
       where: { id: playerId },
-      data: { credits: { increment: mission.reward } },
+      data: { credits: { increment: totalCredit } },
+    });
+
+    // Record trade history
+    await tx.tradeHistory.create({
+      data: {
+        stationId: station.id,
+        goodId: mission.goodId,
+        price: unitPrice,
+        quantity: mission.quantity,
+        type: "sell",
+        playerId,
+      },
     });
 
     // Delete the mission
@@ -304,12 +409,15 @@ export async function deliverMission(
   }
 
   const hopDistances = await loadHopDistances();
+  const priceLookup = await buildPriceLookup([mission]);
 
   return {
     ok: true,
     data: {
-      mission: serializeMission(mission, tick, hopDistances),
-      creditEarned: mission.reward,
+      mission: serializeMission(mission, tick, hopDistances, priceLookup),
+      goodsValue,
+      reward: mission.reward,
+      creditEarned: totalCredit,
       newBalance: result.newBalance,
     },
   };

@@ -84,7 +84,7 @@ function AvailableContracts({
                   <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Type</th>
                   <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Cargo</th>
                   <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Destination</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Reward</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Payout</th>
                   <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Time Left</th>
                   <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider"></th>
                 </tr>
@@ -118,8 +118,13 @@ function AvailableContracts({
                         </Link>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-green-400 font-medium">
-                      {formatCredits(m.reward)}
+                    <td className="px-4 py-3">
+                      <div className="text-green-400 font-medium">
+                        ~{formatCredits(m.estimatedGoodsValue + m.reward)}
+                      </div>
+                      <div className="text-xs text-white/30">
+                        {formatCredits(m.estimatedGoodsValue)} sale + {formatCredits(m.reward)} bonus
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-white/60">
                       {m.ticksRemaining} ticks
@@ -217,7 +222,7 @@ function ActiveMissions({
               <tr className="border-b border-white/10">
                 <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Cargo</th>
                 <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Destination</th>
-                <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Reward</th>
+                <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Payout</th>
                 <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Time Left</th>
                 <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider"></th>
               </tr>
@@ -259,8 +264,13 @@ function ActiveMissions({
                         )}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-green-400 font-medium">
-                      {formatCredits(m.reward)}
+                    <td className="px-4 py-3">
+                      <div className="text-green-400 font-medium">
+                        ~{formatCredits(m.estimatedGoodsValue + m.reward)}
+                      </div>
+                      <div className="text-xs text-white/30">
+                        {formatCredits(m.estimatedGoodsValue)} sale + {formatCredits(m.reward)} bonus
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {isExpired ? (

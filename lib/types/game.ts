@@ -158,6 +158,7 @@ export interface TradeMissionInfo {
   goodName: string;
   quantity: number;
   reward: number;
+  estimatedGoodsValue: number;
   deadlineTick: number;
   ticksRemaining: number;
   hops: number;
