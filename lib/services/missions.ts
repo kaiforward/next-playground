@@ -190,13 +190,6 @@ export async function acceptMission(
     return { ok: false, error: "Mission not found.", status: 404 };
   }
 
-  // Get player's docked ship system IDs
-  const dockedShips = await prisma.ship.findMany({
-    where: { playerId, status: "docked" },
-    select: { systemId: true },
-  });
-  const dockedSystemIds = dockedShips.map((s) => s.systemId);
-
   // Count active missions
   const activeCount = await prisma.tradeMission.count({
     where: { playerId },
@@ -204,8 +197,6 @@ export async function acceptMission(
 
   const validation = validateAccept(
     mission.playerId,
-    dockedSystemIds,
-    mission.systemId,
     activeCount,
   );
 

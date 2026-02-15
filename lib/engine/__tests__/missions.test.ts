@@ -235,24 +235,18 @@ describe("selectEventCandidates", () => {
 
 describe("validateAccept", () => {
   it("succeeds with valid inputs", () => {
-    const result = validateAccept(null, ["sys-a", "sys-b"], "sys-a", 3);
+    const result = validateAccept(null, 3);
     expect(result.ok).toBe(true);
   });
 
   it("rejects already-claimed mission", () => {
-    const result = validateAccept("player-1", ["sys-a"], "sys-a", 3);
+    const result = validateAccept("player-1", 3);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("already accepted");
   });
 
-  it("rejects when player has no ship docked at station", () => {
-    const result = validateAccept(null, ["sys-b"], "sys-a", 3);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("docked");
-  });
-
   it("rejects when at mission cap", () => {
-    const result = validateAccept(null, ["sys-a"], "sys-a", MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER);
+    const result = validateAccept(null, MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("more than");
   });

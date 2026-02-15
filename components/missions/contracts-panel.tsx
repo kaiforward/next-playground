@@ -55,10 +55,6 @@ function AvailableContracts({
   const acceptMutation = useAcceptMission();
   const [error, setError] = useState<string | null>(null);
 
-  const hasDockedShipHere = fleet?.ships.some(
-    (s) => s.status === "docked" && s.systemId === systemId,
-  ) ?? false;
-
   return (
     <Card variant="bordered" padding="md">
       <CardHeader
@@ -133,7 +129,7 @@ function AvailableContracts({
                       <Button
                         variant="primary"
                         size="sm"
-                        disabled={!hasDockedShipHere || acceptMutation.isPending}
+                        disabled={acceptMutation.isPending}
                         onClick={async () => {
                           setError(null);
                           try {

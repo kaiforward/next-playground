@@ -202,21 +202,14 @@ export type AcceptValidation =
 /**
  * Validate that a player can accept a mission.
  * - Mission must not already be accepted
- * - Player must have a ship docked at the mission's board station
  * - Player must be under the active mission cap
  */
 export function validateAccept(
   missionPlayerId: string | null,
-  playerDockedSystemIds: string[],
-  missionSystemId: string,
   activeCount: number,
 ): AcceptValidation {
   if (missionPlayerId !== null) {
     return { ok: false, error: "Mission already accepted." };
-  }
-
-  if (!playerDockedSystemIds.includes(missionSystemId)) {
-    return { ok: false, error: "You must have a ship docked at this station to accept the mission." };
   }
 
   if (activeCount >= MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER) {
