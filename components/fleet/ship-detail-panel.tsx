@@ -1,6 +1,6 @@
 "use client";
 
-import type { ShipState, RegionInfo } from "@/lib/types/game";
+import type { ShipState, RegionInfo, TradeMissionInfo } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,15 +11,17 @@ import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
 import { useDialog } from "@/components/ui/dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
+import { DeliverableMissionsCard } from "@/components/missions/deliverable-missions-card";
 
 interface ShipDetailPanelProps {
   ship: ShipState;
   currentTick: number;
   regions?: RegionInfo[];
   playerCredits?: number;
+  deliverableMissions?: TradeMissionInfo[];
 }
 
-export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: ShipDetailPanelProps) {
+export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, deliverableMissions }: ShipDetailPanelProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
@@ -132,6 +134,11 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: S
             Navigate
           </Button>
         </div>
+      )}
+
+      {/* Deliverable missions */}
+      {isDocked && deliverableMissions && deliverableMissions.length > 0 && (
+        <DeliverableMissionsCard missions={deliverableMissions} ship={ship} />
       )}
 
       {/* Refuel dialog */}

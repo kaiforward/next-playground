@@ -51,6 +51,7 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   hazard_incident: "amber",
   import_duty: "slate",
   contraband_seized: "red",
+  mission_expired: "amber",
 };
 
 /**

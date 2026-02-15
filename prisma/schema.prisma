@@ -90,7 +90,8 @@ model Player {
   updatedAt DateTime @updatedAt
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ships Ship[]
+  ships         Ship[]
+  tradeMissions TradeMission[]
 }
 
 model Ship {
@@ -139,14 +140,16 @@ model StarSystem {
   regionId    String
   isGateway   Boolean @default(false)
 
-  region          Region             @relation(fields: [regionId], references: [id])
-  station         Station?
-  ships           Ship[]             @relation("ShipCurrentSystem")
-  incomingShips   Ship[]             @relation("ShipDestination")
-  connectionsFrom SystemConnection[] @relation("FromSystem")
-  connectionsTo   SystemConnection[] @relation("ToSystem")
-  events          GameEvent[]
-  priceHistory    PriceHistory?
+  region            Region             @relation(fields: [regionId], references: [id])
+  station           Station?
+  ships             Ship[]             @relation("ShipCurrentSystem")
+  incomingShips     Ship[]             @relation("ShipDestination")
+  connectionsFrom   SystemConnection[] @relation("FromSystem")
+  connectionsTo     SystemConnection[] @relation("ToSystem")
+  events            GameEvent[]
+  priceHistory      PriceHistory?
+  missionsPosted    TradeMission[]     @relation("MissionBoard")
+  missionsTargeting TradeMission[]     @relation("MissionDest")
 
   @@index([regionId])
 }
@@ -186,9 +189,10 @@ model Good {
   priceFloor   Float  @default(0.2)
   priceCeiling Float  @default(5.0)
 
-  cargoItems CargoItem[]
-  markets    StationMarket[]
-  trades     TradeHistory[]
+  cargoItems    CargoItem[]
+  markets       StationMarket[]
+  trades        TradeHistory[]
+  tradeMissions TradeMission[]
 }
 
 model StationMarket {
@@ -244,11 +248,12 @@ model GameEvent {
   sourceEventId  String?                       // Parent event (for spread events)
   metadata       String  @default("{}")        // JSON: event-specific data
 
-  system       StarSystem?    @relation(fields: [systemId], references: [id])
-  region       Region?        @relation(fields: [regionId], references: [id])
-  sourceEvent  GameEvent?     @relation("EventSpread", fields: [sourceEventId], references: [id])
-  spreadEvents GameEvent[]    @relation("EventSpread")
-  modifiers    EventModifier[]
+  system        StarSystem?    @relation(fields: [systemId], references: [id])
+  region        Region?        @relation(fields: [regionId], references: [id])
+  sourceEvent   GameEvent?     @relation("EventSpread", fields: [sourceEventId], references: [id])
+  spreadEvents  GameEvent[]    @relation("EventSpread")
+  modifiers     EventModifier[]
+  tradeMissions TradeMission[]
 
   @@index([type])
   @@index([systemId])
@@ -269,5 +274,35 @@ model EventModifier {
   event GameEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([domain, targetType, targetId])
+  @@index([eventId])
+}
+
+// ── Trade Missions ──────────────────────────────────────────────
+
+model TradeMission {
+  id             String   @id @default(cuid())
+  systemId       String                      // Board station (where mission appears)
+  destinationId  String                      // Delivery target
+  goodId         String
+  quantity       Int
+  reward         Int                         // Fixed CR payout
+  deadlineTick   Int                         // Available missions expire here
+  eventId        String?                     // Cascade-deletes with event
+  factionId      String?                     // Future: faction reputation
+  penaltyType    String   @default("none")   // Future: "credits" | "reputation"
+  penaltyValue   Int      @default(0)
+  playerId       String?                     // null = available, set = accepted
+  acceptedAtTick Int?
+  createdAtTick  Int
+
+  system      StarSystem @relation("MissionBoard", fields: [systemId], references: [id])
+  destination StarSystem @relation("MissionDest", fields: [destinationId], references: [id])
+  good        Good       @relation(fields: [goodId], references: [id])
+  event       GameEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player      Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([systemId, playerId])
+  @@index([playerId])
+  @@index([deadlineTick])
   @@index([eventId])
 }

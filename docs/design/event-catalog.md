@@ -2,6 +2,8 @@
 
 Event arcs and shocks that work with the existing event system. Each entry is a new `EventDefinition` — no engine or processor changes required. Add to `lib/constants/events.ts` and they just work.
 
+Events with entries in `EVENT_MISSION_GOODS` (also in `events.ts`) automatically generate trade missions for their themed goods. Currently mapped: war, plague, trade_festival, mining_boom, supply_shortage, pirate_raid, solar_storm. New events get missions by adding a mapping entry.
+
 For ideas that require new engine mechanics, see [simulation-enhancements.md](./simulation-enhancements.md).
 
 ## Implemented

@@ -118,6 +118,32 @@ validateShipPurchase({ shipType, playerCredits }) → { ok: true; data: { shipTy
 - Returns the full `ShipTypeDefinition` and total cost on success
 - Ship types defined in `lib/constants/ships.ts`: shuttle (100 fuel, 50 cargo, starter-only) and freighter (80 fuel, 120 cargo, 5,000 CR)
 
+### Missions (`lib/engine/missions.ts`)
+
+Pure functions for trade mission generation, reward calculation, and validation.
+
+```
+calculateReward(quantity, hops, goodTier, isEventLinked) → number
+selectEconomyCandidates(markets, hopDistances, goodTiers, tick, rng) → MissionCandidate[]
+selectEventCandidates(events, missionGoods, hopDistances, goodTiers, tick, rng) → MissionCandidate[]
+validateAccept(missionPlayerId, dockedSystemIds, missionSystemId, activeCount) → ok | error
+validateDelivery(missionPlayerId, playerId, shipSystemId, destId, cargoQty, quantity, deadline, tick) → ok | error
+```
+
+- `calculateReward`: `REWARD_PER_UNIT * quantity * 1.25^hops * tierMult * eventMult`, floor at REWARD_MIN (50)
+- `selectEconomyCandidates`: high-price (>2x base) → import missions, low-price (<0.5x base) → export missions with random destination 1-3 hops away, probability-gated
+- `selectEventCandidates`: maps event types to themed goods via `EVENT_MISSION_GOODS`, generates 1-3 missions per event with eventId for cascade expiry
+- `validateAccept`: checks mission unclaimed, player has docked ship at board station, under active cap (10)
+- `validateDelivery`: checks ownership, ship at destination, sufficient cargo, not expired
+
+### Pathfinding — All-pairs hop distances (`lib/engine/pathfinding.ts`)
+
+```
+computeAllHopDistances(connections) → Map<origin, Map<dest, hops>>
+```
+
+- BFS from each system, bidirectional adjacency. Used by mission generation and reward calculation.
+
 ### Economy Tick (`lib/engine/tick.ts`)
 
 ```
@@ -156,6 +182,10 @@ All routes return `ApiResponse<T>` format: `{ data?: T, error?: string }`.
 | `/api/game/ship/[shipId]/refuel` | POST | Refuel a docked ship (amount in body) |
 | `/api/game/prices/[systemId]` | GET | Price snapshot history for a system |
 | `/api/game/shipyard` | POST | Purchase a new ship at a system's shipyard |
+| `/api/game/missions` | GET | Available missions at a system (?systemId=X) or player's active missions |
+| `/api/game/missions/accept` | POST | Accept an available mission |
+| `/api/game/missions/deliver` | POST | Deliver cargo for an accepted mission |
+| `/api/game/missions/abandon` | POST | Abandon an accepted mission (returns to available pool) |
 
 ### Auth on API Routes
 
@@ -179,17 +209,18 @@ Each tick:
 - `ship-arrivals` — Every tick. Transitions arrived ships from in_transit → docked. Queries navigation modifiers at destination, rolls for cargo loss via `aggregateDangerLevel`/`rollCargoLoss`, updates cargo in DB. Emits per-player `shipArrived` and `cargoLost` events.
 - `events` — Every tick. Manages event lifecycle: spawns new events (weighted random), advances phases, swaps modifiers, executes spread rules, applies shocks, expires completed events. Emits global `eventNotifications`.
 - `economy` — Every tick, round-robin by region. Processes one region's markets per tick (~150 entries). Reads active `EventModifier` rows (domain: "economy") and applies equilibrium shifts, rate multipliers, and reversion dampening. Passes per-good production/consumption rates and volatility from `lib/constants/universe.ts` and `lib/constants/goods.ts`. Emits global `economyTick` events.
+- `trade-missions` — Every 5 ticks, depends on `events` + `economy`. Expires unclaimed missions past deadline, generates economy-based candidates (high/low price markets) and event-based candidates (themed goods from active events), caps per station, batch creates. Emits global `missionsUpdated` event.
 - `price-snapshots` — Every 20 ticks, depends on `economy`. Fetches all 1,200 market rows, computes current prices via `buildPriceEntry()`, appends to each system's rolling JSON history (capped at 50 entries). Emits global `priceSnapshot` event.
 
 **Registry** (`lib/tick/registry.ts`): All processors are registered in a single array. `sortProcessors()` filters by frequency/offset and topologically sorts by `dependsOn`. Adding a new game system = one processor file + one registry line.
 
-Clients connect to `GET /api/game/tick-stream` (Server-Sent Events) with per-player event filtering. The `useTick` hook wraps an `EventSource` connection with `subscribeToEvent(name, cb)` API. `useTickInvalidation` centralizes query invalidation: `shipArrived` → fleet+market, `economyTick` → market, `eventNotifications` → events, `cargoLost` → fleet, `priceSnapshot` → priceHistory.
+Clients connect to `GET /api/game/tick-stream` (Server-Sent Events) with per-player event filtering. The `useTick` hook wraps an `EventSource` connection with `subscribeToEvent(name, cb)` API. `useTickInvalidation` centralizes query invalidation: `shipArrived` → fleet+market, `economyTick` → market, `eventNotifications` → events, `cargoLost` → fleet, `priceSnapshot` → priceHistory, `missionsUpdated` → missions.
 
 See `docs/design/archive/tick-engine-redesign.md` for the original architecture design.
 
 ## Tests
 
-265 unit tests across 15 files in `lib/engine/__tests__/` and `lib/api/__tests__/`:
+323 unit tests across 18 files in `lib/engine/__tests__/` and `lib/api/__tests__/`:
 
 - `pricing.test.ts` — 7 tests (equal s/d, high demand, high supply, clamping, zero supply)
 - `trade.test.ts` — 11 tests (buy/sell success, credit/cargo/supply validation, edge cases, fleet trade docked guard)
@@ -203,6 +234,7 @@ See `docs/design/archive/tick-engine-redesign.md` for the original architecture 
 - `refuel.test.ts` — 9 tests (cost calculation, max refuel, edge cases)
 - `snapshot.test.ts` — 8 tests (price entry building, grouping, append/cap, immutability)
 - `shipyard.test.ts` — 5 tests (valid purchase, exact credits, unknown type, starter-only type, insufficient credits)
+- `missions.test.ts` — 23 tests (reward calculation, economy/event candidate generation, accept/deliver validation)
 - `rate-limit.test.ts` — 10 tests (sliding window store, tier enforcement)
 
 Run with: `npx vitest run`

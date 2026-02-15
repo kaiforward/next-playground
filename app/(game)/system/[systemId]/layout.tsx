@@ -31,6 +31,7 @@ export default function SystemLayout({
     { label: "Market", href: `${basePath}/market`, active: pathname.startsWith(`${basePath}/market`) },
     { label: "Ships", href: `${basePath}/ships`, active: pathname.startsWith(`${basePath}/ships`) },
     { label: "Shipyard", href: `${basePath}/shipyard`, active: pathname.startsWith(`${basePath}/shipyard`) },
+    { label: "Contracts", href: `${basePath}/contracts`, active: pathname.startsWith(`${basePath}/contracts`) },
   ];
 
   return (

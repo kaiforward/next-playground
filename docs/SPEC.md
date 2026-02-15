@@ -84,11 +84,26 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 - Event definitions are data-driven — adding a new event type requires no code changes
 - See `docs/design/event-catalog.md` for implemented and planned events
 
+#### 5d. Trade Missions
+
+- Auto-generated delivery contracts posted at stations based on market conditions and active events
+- **Import missions** (`systemId == destinationId`): "We need X, bring it here" — posted at the needy station when price is >2x base
+- **Export missions** (`systemId != destinationId`): "We have surplus X, deliver to Y" — posted at the source station when price is <0.5x base, destination 1-3 hops away
+- **Event-linked missions**: themed goods (e.g. war → weapons/fuel/machinery) with 1.5x reward bonus, cascade-deleted when the event expires
+- Reward formula: `REWARD_PER_UNIT * quantity * 1.25^hops * tierMult * eventMult`, floor at 50 CR
+- Max 10 active per player, max ~8 available per station
+- Mission lifecycle: generated every 5 ticks by tick processor → player accepts at board station → player delivers cargo at destination → credits awarded, mission deleted
+- Players can abandon accepted missions (returns to available pool)
+- Delivery is explicit: player clicks "Deliver" and selects which ship's cargo to use
+- Penalty fields exist in schema but aren't enforced until factions ship
+- UI: Contracts tab on system page (available + active tables), Active Missions card on dashboard, Missions tab in Activity panel, deliverable missions card on ship detail page
+- Destination names link to the star map for navigation
+
 #### 5c. Tick System
 
 - Game time advances via discrete ticks (GameWorld singleton)
 - Server-side **tick processor pipeline** (`lib/tick/`) runs on a 1s poll interval
-- Each tick: topologically sorted processors run sequentially (ship arrivals with danger checks, events lifecycle, economy simulation with modifiers, price snapshots every 20 ticks)
+- Each tick: topologically sorted processors run sequentially (ship arrivals with danger checks, events lifecycle, economy simulation with modifiers, trade mission generation/expiry every 5 ticks, price snapshots every 20 ticks)
 - Processors declare `frequency` (run every N ticks) and `offset` (phase stagger)
 - Economy uses round-robin regional processing (one region per tick across ~8 regions)
 - Clients connect via SSE (`GET /api/game/tick-stream`); `useTick` hook wraps EventSource
@@ -138,7 +153,7 @@ Good           (reference table: name, type, base price)
 - **More ship types:** Scouts (long range), fighters (combat), specialized haulers
 - **Ship upgrades:** Better engines, larger cargo holds, weapons
 - **Combat:** Pirates, system defence, player encounters
-- **Missions/quests:** Delivery contracts, bounty hunting, exploration
+- ~~**Missions/quests:**~~ Implemented — Trade mission system with auto-generated delivery contracts from market conditions and events
 - **Multiple stations per system:** Orbital stations, planet surfaces, asteroid outposts
 - **Crafting/manufacturing:** Convert resources into products at appropriate stations
 - **Player-to-player trading:** Direct trades or shared marketplace

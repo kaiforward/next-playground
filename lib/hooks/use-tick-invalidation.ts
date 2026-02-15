@@ -36,6 +36,10 @@ export function useTickInvalidation() {
       subscribeToEvent("priceSnapshot", () => {
         queryClient.invalidateQueries({ queryKey: ["priceHistory"] });
       }),
+      // Mission updates → refresh mission queries
+      subscribeToEvent("missionsUpdated", () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.missionsAll });
+      }),
     ];
 
     return () => unsubs.forEach((unsub) => unsub());

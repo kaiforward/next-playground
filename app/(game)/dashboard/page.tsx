@@ -5,6 +5,7 @@ import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { PlayerSummary } from "@/components/dashboard/player-summary";
 import { FleetOverview } from "@/components/fleet/fleet-overview";
+import { ActiveMissionsCard } from "@/components/missions/active-missions-card";
 import { PageContainer } from "@/components/ui/page-container";
 
 export default function DashboardPage() {
@@ -30,6 +31,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
         <PlayerSummary fleet={fleet} />
+        <ActiveMissionsCard />
       </div>
 
       <FleetOverview ships={fleet.ships} currentTick={currentTick} regions={universeData?.regions} playerCredits={fleet.credits} />

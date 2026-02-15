@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (300 tests, engine + API)
+- `npx vitest run` — Run unit tests (323 tests, engine + API)
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). Outputs summary table, goods breakdown, route diversity, market health, event impact, idle stats.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). New simulator features go here only — don't expand the CLI flags.
 - `npx prisma db seed` — Seed database
@@ -22,22 +22,22 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 
 ## Project Structure
 
-- `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, events, danger, refuel, snapshot, shipyard). Zero DB dependency.
+- `lib/engine/` — Pure game logic (pricing, trade, navigation, pathfinding, tick, events, danger, refuel, snapshot, shipyard, missions). Zero DB dependency.
 - `lib/auth/` — NextAuth config, helpers, password hashing, ship serialization
 - `lib/types/` — Shared types (`game.ts`, `api.ts`) and runtime type guards (`guards.ts`) for Prisma boundary validation
-- `lib/constants/` — Goods (12), universe (6 economy types, per-good rates), economy, government (4 types), event, rate-limit, fuel, snapshot, and ship type definitions
-- `lib/tick/` — Tick engine, processor pipeline, registry. Processors: ship-arrivals (docking + danger + gameNotifications), events (lifecycle + spread + enriched refs), economy (simulation + modifiers), price-snapshots (periodic price recording).
-- `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation, events, refuel, price-history, shipyard). Called by route handlers and future server components.
+- `lib/constants/` — Goods (12), universe (6 economy types, per-good rates), economy, government (4 types), event, missions, rate-limit, fuel, snapshot, and ship type definitions
+- `lib/tick/` — Tick engine, processor pipeline, registry. Processors: ship-arrivals (docking + danger + gameNotifications), events (lifecycle + spread + enriched refs), economy (simulation + modifiers), trade-missions (generation + expiry), price-snapshots (periodic price recording).
+- `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation, events, refuel, price-history, shipyard, missions). Called by route handlers and future server components.
 - `lib/api/` — API utilities: `parse-json.ts` (POST body parser), `rate-limit.ts` (sliding window), `dev-guard.ts` (dev-only route guard)
 - `lib/query/` — TanStack Query setup (client factory, query key factory, typed `apiFetch`/`apiMutate` helpers)
-- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-universe, use-market, use-trade-history, use-events, use-price-history), mutation hooks (use-trade-mutation, use-navigate-mutation, use-refuel-mutation, use-purchase-ship-mutation), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state), dev tools (use-dev-tools), notifications (use-event-history via provider)
-- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick-stream, ship/[shipId]/navigate, ship/[shipId]/trade, ship/[shipId]/refuel, shipyard, systems, market, history, events, prices/[systemId])
-- `app/(game)/` — Dashboard, map, ship/[shipId], system/[systemId] with tabbed sub-routes (overview, market, ships, shipyard) (auth-protected via layout)
+- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-universe, use-market, use-trade-history, use-events, use-price-history, use-system-missions, use-player-missions), mutation hooks (use-trade-mutation, use-navigate-mutation, use-refuel-mutation, use-purchase-ship-mutation, use-mission-mutations), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state), dev tools (use-dev-tools), notifications (use-event-history via provider)
+- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick-stream, ship/[shipId]/navigate, ship/[shipId]/trade, ship/[shipId]/refuel, shipyard, systems, market, history, events, prices/[systemId], missions, missions/accept, missions/deliver, missions/abandon)
+- `app/(game)/` — Dashboard, map, ship/[shipId], system/[systemId] with tabbed sub-routes (overview, market, ships, shipyard, contracts) (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
 - `components/ui/` — Primitives (Button, Card, Badge, ProgressBar, PageContainer, StatRow)
 - `components/form/` — Form controls (TextInput, NumberInput, RangeInput, FormError)
 - `components/providers/` — Context providers (session-provider, query-provider, event-history-provider)
-- `components/fleet/`, `map/`, `trade/`, `dashboard/`, `events/`, `shipyard/`, `dev-tools/` — Feature components
+- `components/fleet/`, `map/`, `trade/`, `dashboard/`, `events/`, `missions/`, `shipyard/`, `dev-tools/` — Feature components
 - `prisma/` — Schema and seed script
 
 ## Docs

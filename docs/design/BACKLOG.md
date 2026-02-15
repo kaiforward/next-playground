@@ -33,6 +33,6 @@ Direction is clear, approach needs a design doc before implementation.
 Blocked on prerequisites or very large scope.
 
 - **[XL] PostgreSQL migration** — Swap Prisma adapter from better-sqlite3 to pg. Enables parallel transactions, per-processor idempotency tracking, batch writes, and region-level parallelism. See `docs/design/archive/tick-engine-redesign.md` Step 5.
-- **[L] NPC agents (Tier 2)** — Distinct gameplay NPCs with decision trees, missions, rivals. Separate from Tier 1 statistical pressure. Design doc needed.
+- **[L] NPC agents (Tier 2)** — Distinct gameplay NPCs with decision trees, rivals. Separate from Tier 1 statistical pressure. Trade missions now exist as auto-generated contracts — NPC agents could accept/complete missions too. Design doc needed.
 - **[M] Events processor query optimization** — Re-fetches all events 3x per tick; fine on SQLite, problematic on PostgreSQL. Options: in-memory event store, sub-processors, or in-memory bookkeeping. Blocked on PostgreSQL migration.
 - **[M] Batch writes** — Economy processor uses individual Prisma updates inside a transaction. Batch SQL deferred to PostgreSQL migration.

@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useFleet } from "@/lib/hooks/use-fleet";
+import { formatCredits } from "@/lib/utils/format";
 import { TickDisplay } from "@/components/fleet/tick-display";
 import { useDialog } from "@/components/ui/dialog";
-import { EventPanel } from "@/components/events/event-panel";
+import { ActivityPanel } from "@/components/events/activity-panel";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Command Center" },
@@ -20,6 +22,7 @@ interface GameNavProps {
 export default function GameNav({ userEmail, currentTick }: GameNavProps) {
   const pathname = usePathname();
   const historyDialog = useDialog();
+  const { fleet } = useFleet();
 
   return (
     <>
@@ -30,6 +33,11 @@ export default function GameNav({ userEmail, currentTick }: GameNavProps) {
               Stellar Trader
             </Link>
             <TickDisplay currentTick={currentTick} />
+            {fleet && (
+              <span className="text-sm font-medium text-green-400">
+                {formatCredits(fleet.credits)}
+              </span>
+            )}
           </div>
           <nav className="flex items-center gap-6">
             {NAV_ITEMS.map((item) => (
@@ -70,7 +78,7 @@ export default function GameNav({ userEmail, currentTick }: GameNavProps) {
         </div>
       </header>
 
-      <EventPanel open={historyDialog.open} onClose={historyDialog.onClose} />
+      <ActivityPanel open={historyDialog.open} onClose={historyDialog.onClose} />
     </>
   );
 }

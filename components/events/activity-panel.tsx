@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { EconomyEventsTab } from "@/components/events/economy-events-tab";
 import { ShipLogTab } from "@/components/events/ship-log-tab";
+import { MissionsTab } from "@/components/events/missions-tab";
 import { useEvents } from "@/lib/hooks/use-events";
+import { usePlayerMissions } from "@/lib/hooks/use-player-missions";
 import { useEventHistory } from "@/components/providers/event-history-provider";
 
-interface EventPanelProps {
+interface ActivityPanelProps {
   open: boolean;
   onClose: () => void;
 }
@@ -27,14 +29,16 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "economy", label: "Economy" },
+  { id: "missions", label: "Missions" },
   { id: "ship_log", label: "Ship Log" },
 ];
 
-export function EventPanel({ open, onClose }: EventPanelProps) {
+export function ActivityPanel({ open, onClose }: ActivityPanelProps) {
   const [activeTab, setActiveTab] = useState("economy");
 
   // Counts for tab labels
   const { events } = useEvents();
+  const { missions } = usePlayerMissions();
   const { notifications } = useEventHistory();
   const shipCount = useMemo(
     () => notifications.filter((n) => SHIP_EVENT_TYPES.has(n.type)).length,
@@ -43,6 +47,7 @@ export function EventPanel({ open, onClose }: EventPanelProps) {
 
   function getCount(tabId: string): number {
     if (tabId === "economy") return events.length;
+    if (tabId === "missions") return missions.length;
     if (tabId === "ship_log") return shipCount;
     return 0;
   }
@@ -52,16 +57,16 @@ export function EventPanel({ open, onClose }: EventPanelProps) {
       open={open}
       onClose={onClose}
       modal
-      className="backdrop:bg-black/60 bg-transparent fixed top-1/2 left-8 -translate-y-1/2"
+      className="backdrop:bg-black/60 bg-transparent fixed top-16 left-8"
     >
-      <div className="w-[480px] max-w-[calc(100vw-2rem)] max-h-[70vh] flex flex-col rounded-xl border border-white/10 bg-gray-900 shadow-2xl">
+      <div className="w-[480px] max-w-[calc(100vw-2rem)] h-[70vh] flex flex-col rounded-xl border border-white/10 bg-gray-900 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <h2 className="text-sm font-bold text-white">Events</h2>
+          <h2 className="text-sm font-bold text-white">Activity</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-white transition-colors p-0.5"
-            aria-label="Close event panel"
+            aria-label="Close activity panel"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
               <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
@@ -98,6 +103,7 @@ export function EventPanel({ open, onClose }: EventPanelProps) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto min-h-0">
           {activeTab === "economy" && <EconomyEventsTab />}
+          {activeTab === "missions" && <MissionsTab />}
           {activeTab === "ship_log" && <ShipLogTab />}
         </div>
       </div>
