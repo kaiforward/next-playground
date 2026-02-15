@@ -10,17 +10,11 @@ import { Button } from "@/components/ui/button";
 import { formatCredits } from "@/lib/utils/format";
 
 export function MissionsTab() {
-  const { missions, loading } = usePlayerMissions();
+  const { missions } = usePlayerMissions();
   const { fleet } = useFleet();
   const deliverMutation = useDeliverMission();
   const abandonMutation = useAbandonMission();
   const [error, setError] = useState<string | null>(null);
-
-  if (loading) {
-    return (
-      <div className="p-4 text-center text-white/30 text-sm">Loading missions...</div>
-    );
-  }
 
   if (missions.length === 0) {
     return (
@@ -44,7 +38,7 @@ export function MissionsTab() {
       <ul className="divide-y divide-white/5">
         {missions.map((m) => {
           // Find ships docked at destination with enough of the right cargo
-          const eligibleShip = fleet?.ships.find((s) => {
+          const eligibleShip = fleet.ships.find((s) => {
             if (s.status !== "docked" || s.systemId !== m.destinationId) return false;
             const cargoItem = s.cargo.find((c) => c.goodId === m.goodId);
             return (cargoItem?.quantity ?? 0) >= m.quantity;

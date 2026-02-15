@@ -9,14 +9,18 @@ import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
 import { useEvents } from "@/lib/hooks/use-events";
 import { Button } from "@/components/ui/button";
+import { QueryBoundary } from "@/components/ui/query-boundary";
+import { LoadingFallback } from "@/components/ui/loading-fallback";
 
-export default function MapPage() {
-  const searchParams = useSearchParams();
-  const initialShipId = searchParams.get("shipId") ?? undefined;
-  const initialSystemId = searchParams.get("systemId") ?? undefined;
-
-  const { data, loading: universeLoading } = useUniverse();
-  const { fleet, loading: fleetLoading } = useFleet();
+function MapContent({
+  initialShipId,
+  initialSystemId,
+}: {
+  initialShipId?: string;
+  initialSystemId?: string;
+}) {
+  const { data } = useUniverse();
+  const { fleet } = useFleet();
   const { currentTick } = useTickContext();
   const { mutateAsync: navigateAsync } = useNavigateMutation();
   const { events } = useEvents();
@@ -33,17 +37,6 @@ export default function MapPage() {
     },
     [navigateAsync],
   );
-
-  if (universeLoading || fleetLoading || !data || !fleet) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-60px)] w-full">
-        <div className="text-center space-y-3">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          <p className="text-sm text-gray-400">Loading star map...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="h-[calc(100vh-60px)] w-full relative">
@@ -63,5 +56,27 @@ export default function MapPage() {
         events={events}
       />
     </div>
+  );
+}
+
+export default function MapPage() {
+  const searchParams = useSearchParams();
+  const initialShipId = searchParams.get("shipId") ?? undefined;
+  const initialSystemId = searchParams.get("systemId") ?? undefined;
+
+  return (
+    <QueryBoundary
+      loadingFallback={
+        <LoadingFallback
+          message="Loading star map..."
+          className="h-[calc(100vh-60px)]"
+        />
+      }
+    >
+      <MapContent
+        initialShipId={initialShipId}
+        initialSystemId={initialSystemId}
+      />
+    </QueryBoundary>
   );
 }

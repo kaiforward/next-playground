@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -14,6 +15,15 @@ const NAV_ITEMS = [
   { href: "/map", label: "Star Map" },
 ];
 
+function NavCredits() {
+  const { fleet } = useFleet();
+  return (
+    <span className="text-sm font-medium text-green-400">
+      {formatCredits(fleet.credits)}
+    </span>
+  );
+}
+
 interface GameNavProps {
   userEmail: string | null;
   currentTick: number;
@@ -22,7 +32,6 @@ interface GameNavProps {
 export default function GameNav({ userEmail, currentTick }: GameNavProps) {
   const pathname = usePathname();
   const historyDialog = useDialog();
-  const { fleet } = useFleet();
 
   return (
     <>
@@ -33,11 +42,9 @@ export default function GameNav({ userEmail, currentTick }: GameNavProps) {
               Stellar Trader
             </Link>
             <TickDisplay currentTick={currentTick} />
-            {fleet && (
-              <span className="text-sm font-medium text-green-400">
-                {formatCredits(fleet.credits)}
-              </span>
-            )}
+            <Suspense fallback={<span className="text-sm font-medium text-white/30">---</span>}>
+              <NavCredits />
+            </Suspense>
           </div>
           <nav className="flex items-center gap-6">
             {NAV_ITEMS.map((item) => (

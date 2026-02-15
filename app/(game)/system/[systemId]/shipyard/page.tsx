@@ -3,6 +3,18 @@
 import { use } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { ShipyardPanel } from "@/components/shipyard/shipyard-panel";
+import { QueryBoundary } from "@/components/ui/query-boundary";
+
+function ShipyardContent({ systemId }: { systemId: string }) {
+  const { fleet } = useFleet();
+
+  return (
+    <ShipyardPanel
+      systemId={systemId}
+      playerCredits={fleet.credits}
+    />
+  );
+}
 
 export default function ShipyardPage({
   params,
@@ -10,16 +22,10 @@ export default function ShipyardPage({
   params: Promise<{ systemId: string }>;
 }) {
   const { systemId } = use(params);
-  const { fleet, loading } = useFleet();
-
-  if (loading) {
-    return <p className="text-white/50">Loading...</p>;
-  }
 
   return (
-    <ShipyardPanel
-      systemId={systemId}
-      playerCredits={fleet?.credits ?? 0}
-    />
+    <QueryBoundary>
+      <ShipyardContent systemId={systemId} />
+    </QueryBoundary>
   );
 }

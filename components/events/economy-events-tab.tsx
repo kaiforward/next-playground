@@ -7,21 +7,13 @@ import { useEvents } from "@/lib/hooks/use-events";
 import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 
 export function EconomyEventsTab() {
-  const { events, loading } = useEvents();
+  const { events } = useEvents();
 
   const sorted = [...events].sort((a, b) => {
     const pa = EVENT_TYPE_DANGER_PRIORITY[a.type] ?? 0;
     const pb = EVENT_TYPE_DANGER_PRIORITY[b.type] ?? 0;
     return pb - pa;
   });
-
-  if (loading) {
-    return (
-      <div className="px-4 py-8 text-center text-sm text-white/40">
-        Loading events...
-      </div>
-    );
-  }
 
   if (sorted.length === 0) {
     return (

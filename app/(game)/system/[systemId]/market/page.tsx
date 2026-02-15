@@ -12,19 +12,15 @@ import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
 import { FormError } from "@/components/form/form-error";
 import { SelectInput } from "@/components/form/select-input";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 import type { TradeType } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
 
-export default function SystemMarketPage({
-  params,
-}: {
-  params: Promise<{ systemId: string }>;
-}) {
-  const { systemId } = use(params);
+function MarketContent({ systemId }: { systemId: string }) {
   const searchParams = useSearchParams();
 
-  const { fleet, loading: fleetLoading } = useFleet();
-  const { market, stationId, loading: marketLoading } = useMarket(systemId);
+  const { fleet } = useFleet();
+  const { market, stationId } = useMarket(systemId);
   const { history } = usePriceHistory(systemId);
 
   // Ship selector — initialized from ?shipId search param
@@ -41,7 +37,7 @@ export default function SystemMarketPage({
 
   // Ships docked at this system
   const shipsHere = useMemo(
-    () => fleet?.ships.filter((s) => s.status === "docked" && s.systemId === systemId) ?? [],
+    () => fleet.ships.filter((s) => s.status === "docked" && s.systemId === systemId),
     [fleet, systemId],
   );
 
@@ -92,10 +88,6 @@ export default function SystemMarketPage({
     [tradeAsync],
   );
 
-  if (fleetLoading || marketLoading) {
-    return <p className="text-white/60">Loading market data...</p>;
-  }
-
   return (
     <>
       {/* Ship selector — only shown when ships are docked here */}
@@ -136,7 +128,7 @@ export default function SystemMarketPage({
           </div>
         </div>
 
-        {selectedShip && selectedGood && fleet && (
+        {selectedShip && selectedGood && (
           <TradeForm
             good={selectedGood}
             playerCredits={fleet.credits}
@@ -161,5 +153,19 @@ export default function SystemMarketPage({
         <SupplyDemandChart entries={market} />
       </div>
     </>
+  );
+}
+
+export default function SystemMarketPage({
+  params,
+}: {
+  params: Promise<{ systemId: string }>;
+}) {
+  const { systemId } = use(params);
+
+  return (
+    <QueryBoundary>
+      <MarketContent systemId={systemId} />
+    </QueryBoundary>
   );
 }

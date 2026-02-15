@@ -10,7 +10,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build
-- `npx vitest run` — Run unit tests (323 tests, engine + API)
+- `npx vitest run` — Run unit tests (322 tests, engine + API)
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). Outputs summary table, goods breakdown, route diversity, market health, event impact, idle stats.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves result to `experiments/`). New simulator features go here only — don't expand the CLI flags.
 - `npx prisma db seed` — Seed database
@@ -18,7 +18,7 @@ Browser-based multiplayer space trading game. Players navigate star systems, tra
 
 ## Tech Stack
 
-Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, SQLite via better-sqlite3, Prisma 7 (driver adapter required), NextAuth v5 (JWT/Credentials), TanStack Query v5, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
+Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, SQLite via better-sqlite3, Prisma 7 (driver adapter required), NextAuth v5 (JWT/Credentials), TanStack Query v5 (Suspense mode), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
 
 ## Project Structure
 
@@ -30,7 +30,7 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 - `lib/services/` — Server-side business logic (fleet, world, universe, market, trade, navigation, events, refuel, price-history, shipyard, missions). Called by route handlers and future server components.
 - `lib/api/` — API utilities: `parse-json.ts` (POST body parser), `rate-limit.ts` (sliding window), `dev-guard.ts` (dev-only route guard)
 - `lib/query/` — TanStack Query setup (client factory, query key factory, typed `apiFetch`/`apiMutate` helpers)
-- `lib/hooks/` — Client hooks: TanStack Query read hooks (use-fleet, use-universe, use-market, use-trade-history, use-events, use-price-history, use-system-missions, use-player-missions), mutation hooks (use-trade-mutation, use-navigate-mutation, use-refuel-mutation, use-purchase-ship-mutation, use-mission-mutations), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state), dev tools (use-dev-tools), notifications (use-event-history via provider)
+- `lib/hooks/` — Client hooks: TanStack Query read hooks via `useSuspenseQuery` (use-fleet, use-universe, use-market, use-events, use-price-history, use-system-missions, use-player-missions), mutation hooks (use-trade-mutation, use-navigate-mutation, use-refuel-mutation, use-purchase-ship-mutation, use-mission-mutations), SSE (use-tick, use-tick-context, use-tick-invalidation), map state (use-navigation-state), dev tools (use-dev-tools), notifications (use-event-history via provider)
 - `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json (fleet, world, tick-stream, ship/[shipId]/navigate, ship/[shipId]/trade, ship/[shipId]/refuel, shipyard, systems, market, history, events, prices/[systemId], missions, missions/accept, missions/deliver, missions/abandon)
 - `app/(game)/` — Dashboard, map, ship/[shipId], system/[systemId] with tabbed sub-routes (overview, market, ships, shipyard, contracts) (auth-protected via layout)
 - `app/(auth)/` — Login, register pages
@@ -75,7 +75,7 @@ Design docs (plans and backlog):
 - Tailwind v4 theme is in `globals.css` (`@theme inline {}`), no tailwind.config.js.
 - API responses use `ApiResponse<T>` format: `{ data?: T, error?: string }`.
 - Services layer (`lib/services/`) holds all DB/business logic. Route handlers are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions.
-- Client data fetching uses TanStack Query hooks (`lib/hooks/`). Query keys are centralized in `lib/query/keys.ts`. Ship arrival invalidation is centralized in `useTickInvalidation` — pages do not subscribe to arrivals individually.
+- Client data fetching uses TanStack Query hooks (`lib/hooks/`) with `useSuspenseQuery`. Pages/components wrap data-fetching sections in `QueryBoundary` instead of inline loading/error checks. Query keys are centralized in `lib/query/keys.ts`. Ship arrival invalidation is centralized in `useTickInvalidation` — pages do not subscribe to arrivals individually.
 - Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput`/`SelectInput` from `components/form/`, never raw `<input>` or `<select>`.
 
 ## UI Components
@@ -89,6 +89,9 @@ Use existing components instead of inline markup. When a pattern appears twice, 
 - **SelectInput** (`components/form/select-input.tsx`) — Searchable dropdown (react-select). Props: `options`, `value`, `onChange`, `isSearchable` (default true). Sizes: `sm` (default), `md`. Dark-themed, portal menu.
 - **DataTable** (`components/ui/data-table.tsx`) — Generic sortable table. Props: `columns` (key, label, sortable, render), `data`, `onRowClick`, `rowClassName`.
 - **StatDisplay** (`components/ui/stat-display.tsx`) — Large-value stat with optional trend arrow and icon. Props: `label`, `value`, `trend` (up/down/neutral), `icon`.
+- **QueryBoundary** (`components/ui/query-boundary.tsx`) — Composes `QueryErrorResetBoundary` + `ErrorBoundary` + `Suspense`. Wrap data-fetching sections to get automatic loading spinners and error-with-retry UI. Props: `loadingFallback?`, `errorFallback?`.
+- **LoadingFallback** (`components/ui/loading-fallback.tsx`) — Centered spinner + message. Props: `message?`, `className?`.
+- **ErrorFallback** (`components/ui/error-fallback.tsx`) — Error message + "Try again" button. Props: `error`, `onRetry`.
 - **Card** / **Badge** / **StatList+StatRow** — Layout and data display primitives.
 
 ## Git Workflow

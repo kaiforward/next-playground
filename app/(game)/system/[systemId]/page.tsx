@@ -8,16 +8,12 @@ import { useEvents } from "@/lib/hooks/use-events";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { Button } from "@/components/ui/button";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 import { getPriceTrendPct } from "@/lib/utils/market";
 
-export default function SystemOverviewPage({
-  params,
-}: {
-  params: Promise<{ systemId: string }>;
-}) {
-  const { systemId } = use(params);
-  const { fleet, loading: fleetLoading } = useFleet();
-  const { market, loading: marketLoading } = useMarket(systemId);
+function SystemOverviewContent({ systemId }: { systemId: string }) {
+  const { fleet } = useFleet();
+  const { market } = useMarket(systemId);
   const { events } = useEvents();
 
   const systemEvents = useMemo(
@@ -29,10 +25,6 @@ export default function SystemOverviewPage({
     () => [...market].sort((a, b) => b.currentPrice - a.currentPrice).slice(0, 6),
     [market],
   );
-
-  if (fleetLoading || !fleet) {
-    return <p className="text-white/60">Loading...</p>;
-  }
 
   const shipsHere = fleet.ships.filter(
     (s) => s.status === "docked" && s.systemId === systemId
@@ -84,9 +76,7 @@ export default function SystemOverviewPage({
         <Card variant="bordered" padding="md">
           <CardHeader title="Market" subtitle="Top goods by price" />
           <CardContent>
-            {marketLoading ? (
-              <p className="text-sm text-white/30 py-4 text-center">Loading market...</p>
-            ) : market.length === 0 ? (
+            {market.length === 0 ? (
               <p className="text-sm text-white/30 py-4 text-center">No market data.</p>
             ) : (
               <ul className="space-y-2">
@@ -124,5 +114,19 @@ export default function SystemOverviewPage({
         </Card>
       </div>
     </>
+  );
+}
+
+export default function SystemOverviewPage({
+  params,
+}: {
+  params: Promise<{ systemId: string }>;
+}) {
+  const { systemId } = use(params);
+
+  return (
+    <QueryBoundary>
+      <SystemOverviewContent systemId={systemId} />
+    </QueryBoundary>
   );
 }
