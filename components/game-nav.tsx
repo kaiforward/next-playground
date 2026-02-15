@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { TickDisplay } from "@/components/fleet/tick-display";
 import { useDialog } from "@/components/ui/dialog";
-import { EventHistoryDialog } from "@/components/events/event-history-dialog";
+import { EventPanel } from "@/components/events/event-panel";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Command Center" },
@@ -70,7 +70,7 @@ export default function GameNav({ userEmail, currentTick }: GameNavProps) {
         </div>
       </header>
 
-      <EventHistoryDialog open={historyDialog.open} onClose={historyDialog.onClose} />
+      <EventPanel open={historyDialog.open} onClose={historyDialog.onClose} />
     </>
   );
 }

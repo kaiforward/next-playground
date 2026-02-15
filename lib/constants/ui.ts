@@ -53,6 +53,43 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   contraband_seized: "red",
 };
 
+/**
+ * Danger priority per event type — higher = more dangerous.
+ * Used to pick the "dominant" event for border/glow when multiple events affect one system.
+ */
+export const EVENT_TYPE_DANGER_PRIORITY: Record<
+  keyof typeof EVENT_DEFINITIONS,
+  number
+> = {
+  trade_festival: 1,
+  mining_boom: 2,
+  ore_glut: 3,
+  plague_risk: 4,
+  supply_shortage: 5,
+  conflict_spillover: 6,
+  plague: 7,
+  pirate_raid: 8,
+  solar_storm: 9,
+  war: 10,
+};
+
+/** Icon key per event type, consumed by EventIcon component. */
+export const EVENT_TYPE_ICON: Record<
+  keyof typeof EVENT_DEFINITIONS,
+  string
+> = {
+  war: "sword",
+  plague: "virus",
+  trade_festival: "sparkles",
+  conflict_spillover: "explosion",
+  plague_risk: "biohazard",
+  mining_boom: "pickaxe",
+  ore_glut: "cubes",
+  supply_shortage: "package-x",
+  pirate_raid: "skull",
+  solar_storm: "bolt",
+};
+
 /** Mapping from region identity to Badge color prop. */
 export const REGION_IDENTITY_BADGE_COLOR: Record<
   RegionIdentity,
