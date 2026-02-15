@@ -56,12 +56,15 @@ Custom React Flow node using `tailwind-variants` for economy-type colour coding:
 | Economy | Colour |
 |---|---|
 | Agricultural | Green |
-| Mining | Amber |
+| Extraction | Amber |
+| Refinery | Cyan |
 | Industrial | Slate |
 | Tech | Blue |
 | Core | Purple |
 
 Shows system name, economy type label, and a pulsing ring animation when the player has ships there.
+
+**Event markers** — When a system has active events, the node shows: (1) border colour override + glow shadow from the highest-priority event, and (2) up to 3 icon badge circles at the bottom-right, each containing an `EventIcon` SVG for that event type. Event colour overrides are suppressed during navigation mode (navigation state takes priority). Priority is defined in `EVENT_TYPE_DANGER_PRIORITY` (1=trade_festival … 10=war).
 
 **Navigation state variants** — applied during navigation mode:
 

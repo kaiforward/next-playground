@@ -80,7 +80,7 @@ Travel → Discover → Trade → Profit → Upgrade → Repeat
 - Each phase applies modifiers to the economy (equilibrium shifts, rate multipliers, reversion dampening) and/or navigation (danger levels)
 - Events can spread to neighbouring systems (e.g. war spawns conflict_spillover, plague spawns plague_risk)
 - Navigation danger: ships arriving at systems with active danger modifiers risk cargo loss (20-40% per item)
-- Player visibility: SSE notifications on event spawn/phase change, event indicators on star map, events section on system detail page
+- Player visibility: SSE notifications on event spawn/phase change, map nodes show colored border/glow + icon badges for active events, tabbed event panel (Economy / Ship Log) accessible from nav bar bell icon, events section on system detail page
 - Event definitions are data-driven — adding a new event type requires no code changes
 - See `docs/design/event-catalog.md` for implemented and planned events
 

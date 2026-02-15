@@ -338,4 +338,4 @@ All phases complete. Archived from `docs/design/`.
 - **Phase 2: Events Processor** — `lib/tick/processors/events.ts`, lifecycle management, 3 starter events (war, plague, trade_festival).
 - **Phase 3: Shocks + Spread** — Shock application at phase transitions, regional spread rules, conflict_spillover + plague_risk child events.
 - **Phase 4: Navigation Integration** — `lib/engine/danger.ts`, danger modifiers on events, ship-arrivals processor rolls for cargo loss.
-- **Phase 5: Player Visibility** — SSE notifications, map event dots, system detail events section, events API/hook.
+- **Phase 5: Player Visibility** — SSE notifications, map event icon badges + border/glow, tabbed event panel (Economy / Ship Log), system detail events section, events API/hook.
