@@ -8,11 +8,21 @@ import { formatCredits } from "@/lib/utils/format";
 import { TickDisplay } from "@/components/fleet/tick-display";
 import { useDialog } from "@/components/ui/dialog";
 import { ActivityPanel } from "@/components/events/activity-panel";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Command Center" },
   { href: "/map", label: "Star Map" },
 ];
+
+function NavCredits() {
+  const { fleet } = useFleet();
+  return (
+    <span className="text-sm font-medium text-green-400">
+      {formatCredits(fleet.credits)}
+    </span>
+  );
+}
 
 interface GameNavProps {
   userEmail: string | null;
@@ -22,7 +32,6 @@ interface GameNavProps {
 export default function GameNav({ userEmail, currentTick }: GameNavProps) {
   const pathname = usePathname();
   const historyDialog = useDialog();
-  const { fleet } = useFleet();
 
   return (
     <>
@@ -33,11 +42,9 @@ export default function GameNav({ userEmail, currentTick }: GameNavProps) {
               Stellar Trader
             </Link>
             <TickDisplay currentTick={currentTick} />
-            {fleet && (
-              <span className="text-sm font-medium text-green-400">
-                {formatCredits(fleet.credits)}
-              </span>
-            )}
+            <QueryBoundary loadingFallback={<span className="text-sm font-medium text-white/30">---</span>}>
+              <NavCredits />
+            </QueryBoundary>
           </div>
           <nav className="flex items-center gap-6">
             {NAV_ITEMS.map((item) => (

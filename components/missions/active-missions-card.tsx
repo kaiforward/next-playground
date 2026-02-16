@@ -7,18 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCredits } from "@/lib/utils/format";
 
 export function ActiveMissionsCard() {
-  const { missions, loading } = usePlayerMissions();
-
-  if (loading) {
-    return (
-      <Card variant="bordered" padding="md">
-        <CardHeader title="Active Missions" />
-        <CardContent>
-          <p className="text-white/30 text-sm">Loading...</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const { missions } = usePlayerMissions();
 
   return (
     <Card variant="bordered" padding="md">

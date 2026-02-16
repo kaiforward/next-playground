@@ -5,20 +5,12 @@ import { useSystemMissions } from "@/lib/hooks/use-system-missions";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { ContractsPanel } from "@/components/missions/contracts-panel";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 
-export default function ContractsPage({
-  params,
-}: {
-  params: Promise<{ systemId: string }>;
-}) {
-  const { systemId } = use(params);
-  const { available, active, loading } = useSystemMissions(systemId);
+function ContractsContent({ systemId }: { systemId: string }) {
+  const { available, active } = useSystemMissions(systemId);
   const { fleet } = useFleet();
   const { currentTick } = useTickContext();
-
-  if (loading) {
-    return <p className="text-white/60">Loading contracts...</p>;
-  }
 
   return (
     <ContractsPanel
@@ -28,5 +20,19 @@ export default function ContractsPage({
       fleet={fleet}
       currentTick={currentTick}
     />
+  );
+}
+
+export default function ContractsPage({
+  params,
+}: {
+  params: Promise<{ systemId: string }>;
+}) {
+  const { systemId } = use(params);
+
+  return (
+    <QueryBoundary>
+      <ContractsContent systemId={systemId} />
+    </QueryBoundary>
   );
 }

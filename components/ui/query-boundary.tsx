@@ -1,0 +1,51 @@
+"use client";
+
+import { type ReactNode, Suspense, useState, useEffect } from "react";
+import { QueryErrorResetBoundary } from "@tanstack/react-query";
+import { ErrorBoundary } from "react-error-boundary";
+import { LoadingFallback } from "@/components/ui/loading-fallback";
+import { ErrorFallback } from "@/components/ui/error-fallback";
+
+interface QueryBoundaryProps {
+  children: ReactNode;
+  loadingFallback?: ReactNode;
+  errorFallback?: (props: { error: Error; retry: () => void }) => ReactNode;
+}
+
+export function QueryBoundary({
+  children,
+  loadingFallback,
+  errorFallback,
+}: QueryBoundaryProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  const fallback = loadingFallback ?? <LoadingFallback />;
+
+  // SSR + initial hydration: render the loading fallback only.
+  // Children contain useSuspenseQuery hooks that can't fetch on the server.
+  // After hydration the effect fires, children mount, and queries run in the browser.
+  if (!mounted) return <>{fallback}</>;
+
+  return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          onReset={reset}
+          fallbackRender={({ error, resetErrorBoundary }) => {
+            const err = error instanceof Error ? error : new Error(String(error));
+            return errorFallback ? (
+              errorFallback({ error: err, retry: resetErrorBoundary })
+            ) : (
+              <ErrorFallback error={err} onRetry={resetErrorBoundary} />
+            );
+          }}
+        >
+          <Suspense fallback={fallback}>
+            {children}
+          </Suspense>
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
+  );
+}

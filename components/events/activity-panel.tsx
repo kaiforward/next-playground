@@ -8,6 +8,7 @@ import { MissionsTab } from "@/components/events/missions-tab";
 import { useEvents } from "@/lib/hooks/use-events";
 import { usePlayerMissions } from "@/lib/hooks/use-player-missions";
 import { useEventHistory } from "@/components/providers/event-history-provider";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 
 interface ActivityPanelProps {
   open: boolean;
@@ -33,7 +34,7 @@ const TABS: TabDef[] = [
   { id: "ship_log", label: "Ship Log" },
 ];
 
-export function ActivityPanel({ open, onClose }: ActivityPanelProps) {
+function ActivityPanelContent({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState("economy");
 
   // Counts for tab labels
@@ -53,60 +54,70 @@ export function ActivityPanel({ open, onClose }: ActivityPanelProps) {
   }
 
   return (
+    <div className="w-[480px] max-w-[calc(100vw-2rem)] h-[70vh] flex flex-col rounded-xl border border-white/10 bg-gray-900 shadow-2xl">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+        <h2 className="text-sm font-bold text-white">Activity</h2>
+        <button
+          onClick={onClose}
+          className="text-gray-500 hover:text-white transition-colors p-0.5"
+          aria-label="Close activity panel"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex border-b border-white/10 px-4">
+        {TABS.map((tab) => {
+          const count = getCount(tab.id);
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                isActive
+                  ? "text-white border-indigo-400"
+                  : "text-white/50 border-transparent hover:text-white/70"
+              }`}
+            >
+              {tab.label}
+              {count > 0 && (
+                <span className={`ml-1.5 text-xs ${isActive ? "text-indigo-300" : "text-white/30"}`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {activeTab === "economy" && <EconomyEventsTab />}
+        {activeTab === "missions" && <MissionsTab />}
+        {activeTab === "ship_log" && <ShipLogTab />}
+      </div>
+    </div>
+  );
+}
+
+export function ActivityPanel({ open, onClose }: ActivityPanelProps) {
+  return (
     <Dialog
       open={open}
       onClose={onClose}
       modal
       className="backdrop:bg-black/60 bg-transparent fixed top-16 left-8"
     >
-      <div className="w-[480px] max-w-[calc(100vw-2rem)] h-[70vh] flex flex-col rounded-xl border border-white/10 bg-gray-900 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <h2 className="text-sm font-bold text-white">Activity</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors p-0.5"
-            aria-label="Close activity panel"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex border-b border-white/10 px-4">
-          {TABS.map((tab) => {
-            const count = getCount(tab.id);
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                  isActive
-                    ? "text-white border-indigo-400"
-                    : "text-white/50 border-transparent hover:text-white/70"
-                }`}
-              >
-                {tab.label}
-                {count > 0 && (
-                  <span className={`ml-1.5 text-xs ${isActive ? "text-indigo-300" : "text-white/30"}`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {activeTab === "economy" && <EconomyEventsTab />}
-          {activeTab === "missions" && <MissionsTab />}
-          {activeTab === "ship_log" && <ShipLogTab />}
-        </div>
-      </div>
+      {open && (
+        <QueryBoundary>
+          <ActivityPanelContent onClose={onClose} />
+        </QueryBoundary>
+      )}
     </Dialog>
   );
 }
