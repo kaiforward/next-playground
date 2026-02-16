@@ -1,6 +1,5 @@
 "use client";
 
-import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -9,6 +8,7 @@ import { formatCredits } from "@/lib/utils/format";
 import { TickDisplay } from "@/components/fleet/tick-display";
 import { useDialog } from "@/components/ui/dialog";
 import { ActivityPanel } from "@/components/events/activity-panel";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Command Center" },
@@ -42,9 +42,9 @@ export default function GameNav({ userEmail, currentTick }: GameNavProps) {
               Stellar Trader
             </Link>
             <TickDisplay currentTick={currentTick} />
-            <Suspense fallback={<span className="text-sm font-medium text-white/30">---</span>}>
+            <QueryBoundary loadingFallback={<span className="text-sm font-medium text-white/30">---</span>}>
               <NavCredits />
-            </Suspense>
+            </QueryBoundary>
           </div>
           <nav className="flex items-center gap-6">
             {NAV_ITEMS.map((item) => (

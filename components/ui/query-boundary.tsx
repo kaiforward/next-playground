@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, Suspense } from "react";
+import { type ReactNode, Suspense, useState, useEffect } from "react";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import { LoadingFallback } from "@/components/ui/loading-fallback";
@@ -17,6 +17,16 @@ export function QueryBoundary({
   loadingFallback,
   errorFallback,
 }: QueryBoundaryProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  const fallback = loadingFallback ?? <LoadingFallback />;
+
+  // SSR + initial hydration: render the loading fallback only.
+  // Children contain useSuspenseQuery hooks that can't fetch on the server.
+  // After hydration the effect fires, children mount, and queries run in the browser.
+  if (!mounted) return <>{fallback}</>;
+
   return (
     <QueryErrorResetBoundary>
       {({ reset }) => (
@@ -31,7 +41,7 @@ export function QueryBoundary({
             );
           }}
         >
-          <Suspense fallback={loadingFallback ?? <LoadingFallback />}>
+          <Suspense fallback={fallback}>
             {children}
           </Suspense>
         </ErrorBoundary>
