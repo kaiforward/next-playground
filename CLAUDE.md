@@ -82,17 +82,10 @@ Design docs (plans and backlog):
 
 Use existing components instead of inline markup. When a pattern appears twice, extract it.
 
-- **Button** (`components/ui/button.tsx`) — All clickable actions. Variants: `primary`, `action`, `ghost`, `pill`, `dismiss`. Colors: `blue`, `green`, `red`, `indigo`, `cyan`. Supports `href` for link-as-button.
-- **PageContainer** — All page wrappers. Sizes: `sm` (3xl), `md` (4xl), `lg` (7xl, default).
-- **ProgressBar** — Labeled bars with ARIA. Colors: `blue`, `amber`, `red`. Sizes: `sm`, `md`.
-- **Dialog** (`components/ui/dialog.tsx`) — Native `<dialog>` wrapper. Props: `open`, `onClose`, `modal` (default false), `initialFocus`. Non-modal uses `.show()` + manual Escape/focus; modal uses `showModal()` + browser-native focus trap. Companion `useDialog` hook for open/close state.
-- **SelectInput** (`components/form/select-input.tsx`) — Searchable dropdown (react-select). Props: `options`, `value`, `onChange`, `isSearchable` (default true). Sizes: `sm` (default), `md`. Dark-themed, portal menu.
-- **DataTable** (`components/ui/data-table.tsx`) — Generic sortable table. Props: `columns` (key, label, sortable, render), `data`, `onRowClick`, `rowClassName`.
-- **StatDisplay** (`components/ui/stat-display.tsx`) — Large-value stat with optional trend arrow and icon. Props: `label`, `value`, `trend` (up/down/neutral), `icon`.
-- **QueryBoundary** (`components/ui/query-boundary.tsx`) — Composes `QueryErrorResetBoundary` + `ErrorBoundary` + `Suspense`. Wrap data-fetching sections to get automatic loading spinners and error-with-retry UI. Props: `loadingFallback?`, `errorFallback?`.
-- **LoadingFallback** (`components/ui/loading-fallback.tsx`) — Centered spinner + message. Props: `message?`, `className?`.
-- **ErrorFallback** (`components/ui/error-fallback.tsx`) — Error message + "Try again" button. Props: `error`, `onRetry`.
-- **Card** / **Badge** / **StatList+StatRow** — Layout and data display primitives.
+- `components/ui/` — Layout and action primitives (Button, Card, Badge, PageContainer, ProgressBar, StatDisplay, DataTable, StatList, LoadingFallback, ErrorFallback). Read the file for props/variants.
+- `components/form/` — Form controls (TextInput, NumberInput, RangeInput, SelectInput, FormError). Never use raw `<input>` or `<select>`.
+- **QueryBoundary** (`components/ui/query-boundary.tsx`) — Wraps data-fetching sections. Uses a mounted guard to defer children past SSR hydration so `useSuspenseQuery` only fires in the browser. Composes Suspense + ErrorBoundary + QueryErrorResetBoundary.
+- **Dialog** (`components/ui/dialog.tsx`) — Native `<dialog>` wrapper. Non-modal uses `.show()` + manual Escape/focus; modal uses `showModal()` + browser-native focus trap. Companion `useDialog` hook.
 
 ## Git Workflow
 
