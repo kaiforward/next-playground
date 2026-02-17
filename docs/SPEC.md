@@ -66,19 +66,19 @@ flowchart TD
     TE -- "orchestrates (sequential)" --> TM
     TE -- "orchestrates (sequential)" --> PS
 
-    EV -- "modifiers: equilibrium shifts,\nrate multipliers, reversion" --> EC
+    EV -- "modifiers: equilibrium shifts,<br/>rate multipliers, reversion" --> EC
     EV -- "danger modifiers" --> NF
     EV -- "themed missions + bonus rewards" --> TM
 
-    EC -- "price extremes trigger\nmission generation" --> TM
+    EC -- "price extremes trigger<br/>mission generation" --> TM
     EC -- "current prices" --> PS
 
-    GOV -- "volatility, eq. spread,\nconsumption boosts" --> EC
-    GOV -- "taxes, contraband,\ndanger baseline" --> NF
+    GOV -- "volatility, eq. spread,<br/>consumption boosts" --> EC
+    GOV -- "taxes, contraband,<br/>danger baseline" --> NF
 
-    SA -- "cargo danger pipeline\n(hazard, duty, contraband, loss)" --> NF
+    SA -- "cargo danger pipeline<br/>(hazard, duty, contraband, loss)" --> NF
 
-    NF -- "trade at destination\n(buy/sell affects supply/demand)" --> EC
+    NF -- "trade at destination<br/>(buy/sell affects supply/demand)" --> EC
 ```
 
 Key interactions:
