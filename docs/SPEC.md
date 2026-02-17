@@ -49,38 +49,46 @@ User registration and login via NextAuth (JWT/Credentials). Each user has one pl
 
 How the active systems connect and affect each other:
 
-```
-                    ┌─────────────┐
-                    │  Tick Engine │  Orchestrates all systems
-                    └──────┬──────┘
-                           │ runs processors sequentially
-           ┌───────────────┼───────────────┐
-           ▼               ▼               ▼
-    ┌─────────────┐  ┌──────────┐   ┌──────────────┐
-    │Ship Arrivals│  │  Events  │   │   Economy    │
-    │  (danger)   │  │(lifecycle│   │  (markets)   │
-    └──────┬──────┘  └────┬─────┘   └──────┬───────┘
-           │              │ modifiers       │ prices
-           │              ▼                 ▼
-           │         ┌─────────────────────────┐
-           │         │    Trade Missions        │
-           │         │ (generated from prices   │
-           │         │  and event themes)       │
-           │         └─────────────────────────┘
-           │
-           ▼
-    ┌─────────────┐
-    │  Navigation │  Fuel, travel time, cargo danger
-    │   & Fleet   │  (danger from events + government)
-    └─────────────┘
+```mermaid
+flowchart TD
+    TE[Tick Engine]
+    SA[Ship Arrivals]
+    EV[Events]
+    EC[Economy]
+    TM[Trade Missions]
+    NF[Navigation & Fleet]
+    GOV[Government Types]
+    PS[Price Snapshots]
+
+    TE -- "orchestrates (sequential)" --> SA
+    TE -- "orchestrates (sequential)" --> EV
+    TE -- "orchestrates (sequential)" --> EC
+    TE -- "orchestrates (sequential)" --> TM
+    TE -- "orchestrates (sequential)" --> PS
+
+    EV -- "modifiers: equilibrium shifts,\nrate multipliers, reversion" --> EC
+    EV -- "danger modifiers" --> NF
+    EV -- "themed missions + bonus rewards" --> TM
+
+    EC -- "price extremes trigger\nmission generation" --> TM
+    EC -- "current prices" --> PS
+
+    GOV -- "volatility, eq. spread,\nconsumption boosts" --> EC
+    GOV -- "taxes, contraband,\ndanger baseline" --> NF
+
+    SA -- "cargo danger pipeline\n(hazard, duty, contraband, loss)" --> NF
+
+    NF -- "trade at destination\n(buy/sell affects supply/demand)" --> EC
 ```
 
 Key interactions:
-- **Events → Economy**: Event modifiers shift market equilibrium, multiply production/consumption, dampen reversion
-- **Economy → Trade Missions**: Price extremes trigger mission generation; event themes create bonus missions
-- **Events → Navigation**: Danger modifiers increase cargo loss risk on arrival
-- **Government → Everything**: Government type affects market volatility, equilibrium spread, taxes, contraband, danger baseline
-- **Tick Engine → All**: Orchestrates processor execution order and event delivery to clients
+- **Events → Economy**: Event modifiers shift market equilibrium, multiply production/consumption rates, dampen price reversion
+- **Events → Navigation**: Danger modifiers increase cargo loss risk on ship arrival
+- **Events → Trade Missions**: Active events generate themed delivery contracts with bonus rewards
+- **Economy → Trade Missions**: Price extremes (>2x or <0.5x base) trigger mission generation
+- **Government → Economy**: Volatility scaling, equilibrium spread adjustment, consumption boosts
+- **Government → Navigation**: Tax rates, contraband lists, inspection modifiers, danger baseline
+- **Tick Engine → All**: Orchestrates processor execution order and broadcasts results via SSE
 
 ---
 
