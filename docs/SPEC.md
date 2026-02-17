@@ -100,10 +100,22 @@ Designed but not yet implemented. Each has a design doc with full mechanics.
 Named factions controlling territory, waging wars, and driving player engagement. 6 initial major factions with distinct government types and political doctrines. Inter-faction relations drift toward conflict. Wars resolve through multi-round battles with weighted random outcomes. Players contribute through tiered involvement (economic support, strategic actions, direct operations). Territory changes hands through control score mechanics. Alliance system with size-based capacity limits.
 
 ### Player Progression — [detailed spec](./design/planned/player-progression.md)
-Ship upgrades, region unlocking, credit sinks beyond trading, and the early/mid/late game arc. Stub — needs full design.
+Three-phase game arc: early game (manual trading, exploration, in-system missions), mid game (fleet expansion, minor facilities, faction alignment, early automation), late game (production empire, advanced automation, faction power broker). Progression transforms gameplay from hands-on piloting to fleet management to strategic oversight. Faction reputation gates ship access, mission quality, and war contribution tiers.
 
 ### System Enrichment — [detailed spec](./design/planned/system-enrichment.md)
-Facilities, system traits, and strategic value that make individual systems unique and worth fighting over. Stub — needs full design.
+System traits (physical properties like asteroid belts, habitable worlds, precursor ruins) determine economy type through affinity scoring. Traits have quality tiers (1–3) that modify production rates. Region themes weight trait generation for coherence. 16 faction facilities across 5 categories (ship & fleet, trade & economy, military & defence, research & production, social & governance) are trait-gated and tier-scaled. Facilities are strategic war targets — captured, damaged, or destroyed during conflicts.
+
+### Ship Roster — [detailed spec](./design/planned/ship-roster.md)
+12 ship classes across 3 size categories (small, medium, large) with 5 roles (trade, combat, scout, stealth, support). Size is the foundation stat — determines baseline evasion, stealth, cargo, and hull. 10 core stats per ship, with a derived combat power rating for large-scale faction battles. Faction-exclusive variants at tier-3 shipyards gated by Champion reputation. Fleet composition, escort mechanics, and operating costs create meaningful fleet management decisions.
+
+### Ship Upgrades — [detailed spec](./design/planned/ship-upgrades.md)
+Modular upgrade system with typed slots (engine, cargo, defence, systems). 2–5 slots per ship scaling with size. Upgrades personalise ships and gate gameplay mechanics — automation modules, smuggling compartments, scanner arrays. Installed at drydocks, with better modules at higher tiers. Stub — needs full design.
+
+### Player Facilities — [detailed spec](./design/planned/player-facilities.md)
+Player-owned base building at galactic scale. Production facilities (mining, refining, manufacturing) and infrastructure facilities (trade posts, warehouses, fuel stations). Economy-tied personal investments with a unified build system. Minor facilities mid game, major facilities late game. Assets at risk during territory changes. Stub — needs full design.
+
+### In-System Gameplay — [detailed spec](./design/planned/in-system-gameplay.md)
+Second major gameplay space alongside the universe map. Story content, missions, and activities within docked systems. Trait-driven mission flavour. Available from the start as immediate engaging content. Mix of singleplayer and multiplayer objectives. Stub — needs full design.
 
 ### Multiplayer Infrastructure — [detailed spec](./design/planned/multiplayer-infrastructure.md)
 Player-to-player trading, alliances/guilds, communication, and coordination mechanics. Stub — needs full design.
