@@ -2,7 +2,7 @@
 
 Ideas that require new engine capabilities — new processor logic, new phase behaviors, or new system interactions. Each section describes the mechanic and why it can't be done with the current event definition system alone.
 
-For event definitions that work with the existing system (no code changes), see [event-catalog.md](./event-catalog.md).
+For event definitions that work with the existing system (no code changes), see [event-catalog.md](../active/event-catalog.md).
 
 ## Event System Enhancements
 

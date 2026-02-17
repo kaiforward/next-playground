@@ -20,9 +20,9 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
-- **[L] Supply chain dependencies** — Production recipes where goods require inputs (e.g. ore + electronics → machinery). Disruptions cascade through chains. See [simulation-enhancements.md](./simulation-enhancements.md) "Supply Chain Dependencies".
-- **[M] Cyclical demand / seasonal events** — Deterministic time-based event spawns (harvest festivals, trade summits) that interact with random events. See [simulation-enhancements.md](./simulation-enhancements.md) "Seasonal Cycles".
-- **[M] NPC trade pressure (Tier 1)** — Statistical trade flows that smooth price extremes via modifiers. Should only land after event system provides enough disruption. See [simulation-enhancements.md](./simulation-enhancements.md) "NPC Trade Pressure".
+- **[L] Supply chain dependencies** — Production recipes where goods require inputs (e.g. ore + electronics → machinery). Disruptions cascade through chains. See [simulation-enhancements.md](./planned/simulation-enhancements.md) "Supply Chain Dependencies".
+- **[M] Cyclical demand / seasonal events** — Deterministic time-based event spawns (harvest festivals, trade summits) that interact with random events. See [simulation-enhancements.md](./planned/simulation-enhancements.md) "Seasonal Cycles".
+- **[M] NPC trade pressure (Tier 1)** — Statistical trade flows that smooth price extremes via modifiers. Should only land after event system provides enough disruption. See [simulation-enhancements.md](./planned/simulation-enhancements.md) "NPC Trade Pressure".
 - **[M] Inter-region trade flows** — Goods flowing between regions via gateways based on regional surplus/deficit. Creates visible trade volume and regional price gradients. Depends on economy work to determine flow mechanics.
 - **[M] Reversion rate tuning** — Current 5% base reversion may be too aggressive. Slower reversion means player trades leave a bigger, longer-lasting mark. Per-good rates now in place — see simulator metrics for balance data.
 
