@@ -131,15 +131,22 @@ export function StarMap({
     }
   }, [view.viewLevel]);
 
+  // ── Destructure stable references for callback deps ──────────
+  const {
+    viewLevel, selectedSystem, drillIntoRegion, selectSystem,
+    closeSystem, setMapReady, initialSelectedSystem,
+  } = view;
+  const { activeRegionSystems, regionNavigationStates } = graph;
+
   // ── Click handlers ────────────────────────────────────────────
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
       // Region view — click drills into that region
-      if (view.viewLevel.level === "region") {
-        if (isNavigationActive && graph.regionNavigationStates.get(node.id) === "unreachable") {
+      if (viewLevel.level === "region") {
+        if (isNavigationActive && regionNavigationStates.get(node.id) === "unreachable") {
           return;
         }
-        view.drillIntoRegion(node.id);
+        drillIntoRegion(node.id);
         return;
       }
 
@@ -152,7 +159,7 @@ export function StarMap({
           navigation.cancel();
           return;
         }
-        const system = graph.activeRegionSystems.find((s) => s.id === node.id);
+        const system = activeRegionSystems.find((s) => s.id === node.id);
         if (system) {
           navigation.selectDestination(system);
         }
@@ -162,31 +169,31 @@ export function StarMap({
       if (mode.phase === "route_preview") return;
 
       // Default mode — open system detail panel
-      const system = graph.activeRegionSystems.find((s) => s.id === node.id);
+      const system = activeRegionSystems.find((s) => s.id === node.id);
       if (system) {
-        view.selectSystem(system);
+        selectSystem(system);
       }
     },
-    [view, graph.activeRegionSystems, graph.regionNavigationStates, mode, navigation, isNavigationActive],
+    [viewLevel, drillIntoRegion, selectSystem, activeRegionSystems, regionNavigationStates, mode, navigation, isNavigationActive],
   );
 
   const handleSelectShipForNavigation = useCallback(
     (ship: ShipState) => {
-      view.closeSystem();
+      closeSystem();
       navigation.selectShip(ship);
     },
-    [view, navigation],
+    [closeSystem, navigation],
   );
 
   const handleInit = useCallback((instance: ReactFlowInstance) => {
     rfInstance.current = instance;
 
-    if (view.initialSelectedSystem) {
-      const { x, y } = view.initialSelectedSystem;
+    if (initialSelectedSystem) {
+      const { x, y } = initialSelectedSystem;
       instance.setCenter(x, y, { zoom: 1.2, duration: 0 });
-      view.setMapReady();
+      setMapReady();
     }
-  }, [view.initialSelectedSystem, view.setMapReady]);
+  }, [initialSelectedSystem, setMapReady]);
 
   return (
     <div className={`relative h-full w-full ${view.mapReady ? "opacity-100" : "opacity-0"}`}>
@@ -216,7 +223,7 @@ export function StarMap({
       </ReactFlow>
 
       {/* Back to regions button (system view only) */}
-      {view.viewLevel.level === "system" && (
+      {viewLevel.level === "system" && (
         <Button
           variant="ghost"
           size="sm"
@@ -231,7 +238,7 @@ export function StarMap({
       )}
 
       {/* Region view hint (only when not navigating) */}
-      {view.viewLevel.level === "region" && !isNavigationActive && (
+      {viewLevel.level === "region" && !isNavigationActive && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
             <span className="text-sm text-white/60">
@@ -276,9 +283,9 @@ export function StarMap({
       )}
 
       {/* Detail panel overlay (hidden during navigation mode, system view only) */}
-      {view.viewLevel.level === "system" && !isNavigationActive && (
+      {viewLevel.level === "system" && !isNavigationActive && (
         <SystemDetailPanel
-          system={view.selectedSystem}
+          system={selectedSystem}
           shipsHere={graph.shipsAtSelected}
           currentTick={currentTick}
           regionName={graph.selectedRegionName}
@@ -286,7 +293,7 @@ export function StarMap({
           activeEvents={graph.eventsAtSelected}
           onSelectShipForNavigation={handleSelectShipForNavigation}
           onJumpToRegion={view.jumpToRegion}
-          onClose={view.closeSystem}
+          onClose={closeSystem}
         />
       )}
     </div>

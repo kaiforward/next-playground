@@ -170,7 +170,7 @@ export function useMapGraph({
       }
     }
     return states;
-  }, [isNavigationActive, mode, systemRegionMap, universe.regions, universe.systems]);
+  }, [mode, systemRegionMap, universe.regions, universe.systems]);
 
   // ── Navigation state per node (system view only) ──────────────
   const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
@@ -368,15 +368,17 @@ export function useMapGraph({
   }, [selectedSystem, universe.connections, systemRegionMap, regionMap]);
 
   // ── Active region info for back button ────────────────────────
-  const activeRegion: RegionInfo | undefined =
-    viewLevel.level === "system"
-      ? regionMap.get(viewLevel.regionId)
-      : undefined;
+  const activeRegion = useMemo(
+    (): RegionInfo | undefined =>
+      viewLevel.level === "system" ? regionMap.get(viewLevel.regionId) : undefined,
+    [viewLevel, regionMap],
+  );
 
   // ── Selected system region name ───────────────────────────────
-  const selectedRegionName = selectedSystem
-    ? regionMap.get(selectedSystem.regionId)?.name
-    : undefined;
+  const selectedRegionName = useMemo(
+    () => (selectedSystem ? regionMap.get(selectedSystem.regionId)?.name : undefined),
+    [selectedSystem, regionMap],
+  );
 
   return {
     nodes,
