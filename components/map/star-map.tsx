@@ -1,33 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
-  type Node,
-  type Edge,
   type NodeMouseHandler,
   type ReactFlowInstance,
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import type { UniverseData, StarSystemInfo, ShipState, RegionInfo, ActiveEvent } from "@/lib/types/game";
+import type { UniverseData, ShipState, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
-import { SystemNode, type NavigationNodeState, type SystemEventInfo } from "@/components/map/system-node";
-import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
+import { SystemNode } from "@/components/map/system-node";
 import { RegionNode } from "@/components/map/region-node";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
-import {
-  buildSystemRegionMap,
-  getIntraRegionConnections,
-  getInterRegionConnections,
-  getGatewayTargetRegions,
-} from "@/lib/utils/region";
+import { useMapViewState } from "@/lib/hooks/use-map-view-state";
+import { useMapGraph } from "@/lib/hooks/use-map-graph";
+import { buildSystemRegionMap } from "@/lib/utils/region";
 
 interface StarMapProps {
   universe: UniverseData;
@@ -39,50 +33,12 @@ interface StarMapProps {
   events?: ActiveEvent[];
 }
 
-// ── Session storage helpers ─────────────────────────────────────────
-const SESSION_KEY = "stellarTrader:mapState";
-
-interface MapSessionState {
-  regionId?: string;
-  selectedSystemId?: string;
-}
-
-function getMapSessionState(): MapSessionState | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as MapSessionState) : null;
-  } catch {
-    return null;
-  }
-}
-
-function setMapSessionState(state: MapSessionState | null): void {
-  try {
-    if (state) {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
-    } else {
-      sessionStorage.removeItem(SESSION_KEY);
-    }
-  } catch {
-    // SSR or storage full — ignore
-  }
-}
-
-type MapViewLevel =
-  | { level: "region" }
-  | { level: "system"; regionId: string };
-
 // IMPORTANT: nodeTypes must be defined outside the component to prevent
 // infinite re-renders. React Flow compares this by reference.
 const nodeTypes = {
   systemNode: SystemNode,
   regionNode: RegionNode,
 };
-
-const EDGE_COLOR = "rgba(148, 163, 184, 0.4)";
-const EDGE_DIM = "rgba(148, 163, 184, 0.12)";
-const EDGE_ROUTE = "rgba(99, 179, 237, 0.9)";
-const EDGE_REGION = "rgba(148, 163, 184, 0.5)";
 
 export function StarMap({
   universe,
@@ -95,7 +51,7 @@ export function StarMap({
 }: StarMapProps) {
   const rfInstance = useRef<ReactFlowInstance | null>(null);
 
-  // ── Region map (stable memo) ────────────────────────────────────
+  // ── Foundation memos (stable across renders) ──────────────────
   const systemRegionMap = useMemo(
     () => buildSystemRegionMap(universe.systems),
     [universe.systems],
@@ -106,87 +62,27 @@ export function StarMap({
     [universe.regions],
   );
 
-  // ── Mount priority chain: query param > session storage > ship fallback ─
-  const initialState = useMemo((): { viewLevel: MapViewLevel; selectedSystem: StarSystemInfo | null } => {
-    // 1. Query param — highest priority
-    if (initialSelectedSystemId) {
-      const system = universe.systems.find((s) => s.id === initialSelectedSystemId);
-      if (system) {
-        return {
-          viewLevel: { level: "system", regionId: system.regionId },
-          selectedSystem: system,
-        };
-      }
-    }
-
-    // 2. Session storage — middle priority
-    const session = getMapSessionState();
-    if (session?.regionId) {
-      const region = universe.regions.find((r) => r.id === session.regionId);
-      if (region) {
-        const selectedSystem = session.selectedSystemId
-          ? universe.systems.find((s) => s.id === session.selectedSystemId) ?? null
-          : null;
-        return {
-          viewLevel: { level: "system", regionId: session.regionId },
-          selectedSystem,
-        };
-      }
-    }
-
-    // 3. Ship-based fallback — lowest priority
-    const dockedShip = initialSelectedShipId
-      ? ships.find((s) => s.id === initialSelectedShipId && s.status === "docked")
-      : ships.find((s) => s.status === "docked");
-
-    if (dockedShip) {
-      const regionId = systemRegionMap.get(dockedShip.systemId);
-      if (regionId) return { viewLevel: { level: "system", regionId }, selectedSystem: null };
-    }
-
-    return { viewLevel: { level: "region" }, selectedSystem: null };
-    // Only compute on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const [viewLevel, setViewLevel] = useState<MapViewLevel>(initialState.viewLevel);
-  const [selectedSystem, setSelectedSystem] = useState<StarSystemInfo | null>(initialState.selectedSystem);
-  // Hide map until initial setCenter completes to avoid fitView → snap flash
-  const [mapReady, setMapReady] = useState(
-    !initialSelectedSystemId || !initialState.selectedSystem,
-  );
-
-  // ── All connections as ConnectionInfo (for cross-region nav) ────
-  const allConnections = useMemo((): ConnectionInfo[] =>
-    universe.connections.map((c) => ({
-      fromSystemId: c.fromSystemId,
-      toSystemId: c.toSystemId,
-      fuelCost: c.fuelCost,
-    })),
+  // ── All connections (needed by both navigation and graph hooks) ─
+  const allConnections = useMemo(
+    (): ConnectionInfo[] =>
+      universe.connections.map((c) => ({
+        fromSystemId: c.fromSystemId,
+        toSystemId: c.toSystemId,
+        fuelCost: c.fuelCost,
+      })),
     [universe.connections],
   );
 
-  // ── Intra-region connections for system view ────────────────────
-  const activeRegionConnections = useMemo((): ConnectionInfo[] => {
-    if (viewLevel.level !== "system") return [];
-    return getIntraRegionConnections(
-      viewLevel.regionId,
-      universe.connections,
-      systemRegionMap,
-    ).map((c) => ({
-      fromSystemId: c.fromSystemId,
-      toSystemId: c.toSystemId,
-      fuelCost: c.fuelCost,
-    }));
-  }, [viewLevel, universe.connections, systemRegionMap]);
+  // ── View state (level, selection, session persistence) ────────
+  const view = useMapViewState({
+    universe,
+    ships,
+    systemRegionMap,
+    initialSelectedShipId,
+    initialSelectedSystemId,
+  });
 
-  // ── Active region systems ───────────────────────────────────────
-  const activeRegionSystems = useMemo((): StarSystemInfo[] => {
-    if (viewLevel.level !== "system") return [];
-    return universe.systems.filter((s) => s.regionId === viewLevel.regionId);
-  }, [viewLevel, universe.systems]);
-
-  // ── Navigation hook — uses all connections for cross-region ─────
+  // ── Navigation state ──────────────────────────────────────────
   const navigation = useNavigationState({
     connections: allConnections,
     systems: universe.systems,
@@ -196,10 +92,23 @@ export function StarMap({
   const { mode } = navigation;
   const isNavigationActive = mode.phase !== "default";
 
-  // Auto-select ship from URL query param on mount
+  // ── Derived graph data (nodes, edges, detail panel) ───────────
+  const graph = useMapGraph({
+    universe,
+    ships,
+    events,
+    viewLevel: view.viewLevel,
+    selectedSystem: view.selectedSystem,
+    navigationMode: mode,
+    isNavigationActive,
+    systemRegionMap,
+    regionMap,
+  });
+
+  // ── Auto-select ship from URL query param on mount ────────────
   useEffect(() => {
     if (!initialSelectedShipId) return;
-    if (viewLevel.level !== "system") return;
+    if (view.viewLevel.level !== "system") return;
     const ship = ships.find(
       (s) => s.id === initialSelectedShipId && s.status === "docked",
     );
@@ -210,326 +119,27 @@ export function StarMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSelectedShipId]);
 
-  // ── fitView on view level transitions ───────────────────────────
-  const prevViewLevelRef = useRef(viewLevel);
+  // ── fitView on view level transitions ─────────────────────────
+  const prevViewLevelRef = useRef(view.viewLevel);
   useEffect(() => {
-    if (prevViewLevelRef.current !== viewLevel) {
-      prevViewLevelRef.current = viewLevel;
-      // Short delay to let React Flow render new nodes before fitting
+    if (prevViewLevelRef.current !== view.viewLevel) {
+      prevViewLevelRef.current = view.viewLevel;
       const timer = setTimeout(() => {
         rfInstance.current?.fitView({ padding: 0.3, duration: 300 });
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [viewLevel]);
+  }, [view.viewLevel]);
 
-  // ── Compute ship counts per system (docked ships only) ──────────
-  const shipsAtSystem = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const ship of ships) {
-      if (ship.status === "docked") {
-        map[ship.systemId] = (map[ship.systemId] ?? 0) + 1;
-      }
-    }
-    return map;
-  }, [ships]);
-
-  // ── Ships per region ────────────────────────────────────────────
-  const shipsPerRegion = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const ship of ships) {
-      if (ship.status === "docked") {
-        const regionId = systemRegionMap.get(ship.systemId);
-        if (regionId) {
-          map[regionId] = (map[regionId] ?? 0) + 1;
-        }
-      }
-    }
-    return map;
-  }, [ships, systemRegionMap]);
-
-  // ── Systems per region ──────────────────────────────────────────
-  const systemsPerRegion = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const s of universe.systems) {
-      map[s.regionId] = (map[s.regionId] ?? 0) + 1;
-    }
-    return map;
-  }, [universe.systems]);
-
-  // Ships docked at the selected system
-  const shipsAtSelected = useMemo(
-    () =>
-      selectedSystem
-        ? ships.filter((s) => s.status === "docked" && s.systemId === selectedSystem.id)
-        : [],
-    [selectedSystem, ships],
-  );
-
-  // ── Events per system (deduplicated, with color + priority) ────
-  const eventsPerSystem = useMemo(() => {
-    const map = new Map<string, SystemEventInfo[]>();
-    for (const event of events) {
-      if (!event.systemId) continue;
-      const existing = map.get(event.systemId);
-      const info: SystemEventInfo = {
-        type: event.type,
-        color: EVENT_TYPE_BADGE_COLOR[event.type] ?? "slate",
-        priority: EVENT_TYPE_DANGER_PRIORITY[event.type] ?? 0,
-      };
-      if (existing) {
-        if (!existing.some((e) => e.type === event.type)) existing.push(info);
-      } else {
-        map.set(event.systemId, [info]);
-      }
-    }
-    return map;
-  }, [events]);
-
-  // ── Events at selected system ─────────────────────────────────
-  const eventsAtSelected = useMemo(
-    () =>
-      selectedSystem
-        ? events.filter((e) => e.systemId === selectedSystem.id)
-        : [],
-    [selectedSystem, events],
-  );
-
-  // ── Navigation state per region (region view during nav) ────────
-  const regionNavigationStates = useMemo((): Map<string, "origin" | "reachable" | "unreachable"> => {
-    const states = new Map<string, "origin" | "reachable" | "unreachable">();
-    if (mode.phase === "default") return states;
-    const { ship, reachable } = mode;
-
-    const shipRegionId = systemRegionMap.get(ship.systemId);
-
-    for (const region of universe.regions) {
-      if (region.id === shipRegionId) {
-        states.set(region.id, "origin");
-      } else {
-        // A region is reachable if any system in it is reachable
-        const hasReachable = universe.systems.some(
-          (s) => s.regionId === region.id && reachable.has(s.id),
-        );
-        states.set(region.id, hasReachable ? "reachable" : "unreachable");
-      }
-    }
-    return states;
-  }, [isNavigationActive, mode, systemRegionMap, universe.regions, universe.systems]);
-
-  // ── Navigation state per node (system view only) ────────────────
-  const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
-    const states = new Map<string, NavigationNodeState>();
-    if (viewLevel.level !== "system") return states;
-
-    if (mode.phase === "ship_selected") {
-      const originId = mode.ship.systemId;
-      for (const system of activeRegionSystems) {
-        if (system.id === originId) {
-          states.set(system.id, "origin");
-        } else if (mode.reachable.has(system.id)) {
-          states.set(system.id, "reachable");
-        } else {
-          states.set(system.id, "unreachable");
-        }
-      }
-    } else if (mode.phase === "route_preview") {
-      const originId = mode.ship.systemId;
-      const destId = mode.destination.id;
-      const routeSet = new Set(mode.route.path);
-
-      for (const system of activeRegionSystems) {
-        if (system.id === originId) {
-          states.set(system.id, "origin");
-        } else if (system.id === destId) {
-          states.set(system.id, "destination");
-        } else if (routeSet.has(system.id)) {
-          states.set(system.id, "route_hop");
-        } else if (mode.reachable.has(system.id)) {
-          states.set(system.id, "reachable");
-        } else {
-          states.set(system.id, "unreachable");
-        }
-      }
-    }
-
-    return states;
-  }, [mode, activeRegionSystems, viewLevel]);
-
-  // Route edges set (for highlighting)
-  const routeEdgeSet = useMemo((): Set<string> => {
-    if (mode.phase !== "route_preview") return new Set();
-    const set = new Set<string>();
-    for (let i = 0; i < mode.route.path.length - 1; i++) {
-      const key = [mode.route.path[i], mode.route.path[i + 1]].sort().join("--");
-      set.add(key);
-    }
-    return set;
-  }, [mode]);
-
-  // ── Inter-region edges (for region view) ────────────────────────
-  const interRegionEdges = useMemo((): Edge[] => {
-    const crossConns = getInterRegionConnections(universe.connections, systemRegionMap);
-    const seen = new Set<string>();
-    const edges: Edge[] = [];
-
-    for (const c of crossConns) {
-      const rFrom = systemRegionMap.get(c.fromSystemId)!;
-      const rTo = systemRegionMap.get(c.toSystemId)!;
-      const pairKey = [rFrom, rTo].sort().join("--");
-      if (seen.has(pairKey)) continue;
-      seen.add(pairKey);
-
-      edges.push({
-        id: `region-${pairKey}`,
-        source: rFrom,
-        target: rTo,
-        style: {
-          stroke: EDGE_REGION,
-          strokeWidth: 3,
-          strokeDasharray: "8 4",
-        },
-      });
-    }
-    return edges;
-  }, [universe.connections, systemRegionMap]);
-
-  // ── Nodes & edges based on view level ───────────────────────────
-  const nodes: Node[] = useMemo(() => {
-    if (viewLevel.level === "region") {
-      return universe.regions.map((region) => ({
-        id: region.id,
-        type: "regionNode",
-        position: { x: region.x, y: region.y },
-        data: {
-          label: region.name,
-          identity: region.identity,
-          systemCount: systemsPerRegion[region.id] ?? 0,
-          shipCount: shipsPerRegion[region.id] ?? 0,
-          navigationState: regionNavigationStates.get(region.id),
-        },
-      }));
-    }
-
-    // System view — only systems in active region
-    return activeRegionSystems.map((system) => ({
-      id: system.id,
-      type: "systemNode",
-      position: { x: system.x, y: system.y },
-      data: {
-        label: system.name,
-        economyType: system.economyType,
-        shipCount: shipsAtSystem[system.id] ?? 0,
-        isGateway: system.isGateway,
-        navigationState: nodeNavigationStates.get(system.id),
-        activeEvents: eventsPerSystem.get(system.id),
-      },
-    }));
-  }, [
-    viewLevel,
-    universe.regions,
-    activeRegionSystems,
-    systemsPerRegion,
-    shipsPerRegion,
-    shipsAtSystem,
-    nodeNavigationStates,
-    eventsPerSystem,
-    regionNavigationStates,
-  ]);
-
-  const edges: Edge[] = useMemo(() => {
-    if (viewLevel.level === "region") return interRegionEdges;
-
-    // System view — intra-region connections
-    const regionConns = getIntraRegionConnections(
-      viewLevel.regionId,
-      universe.connections,
-      systemRegionMap,
-    );
-    const seen = new Set<string>();
-    const dedupedEdges: Edge[] = [];
-
-    for (const conn of regionConns) {
-      const pairKey = [conn.fromSystemId, conn.toSystemId].sort().join("--");
-      if (seen.has(pairKey)) continue;
-      seen.add(pairKey);
-
-      const isRouteEdge = routeEdgeSet.has(pairKey);
-      const isNavActive = isNavigationActive;
-
-      dedupedEdges.push({
-        id: conn.id,
-        source: conn.fromSystemId,
-        target: conn.toSystemId,
-        style: {
-          stroke: isRouteEdge ? EDGE_ROUTE : isNavActive ? EDGE_DIM : EDGE_COLOR,
-          strokeWidth: isRouteEdge ? 2.5 : 1.5,
-          strokeDasharray: isRouteEdge ? undefined : "6 4",
-        },
-        animated: isRouteEdge,
-        label: `${conn.fuelCost} fuel`,
-        labelStyle: {
-          fill: isRouteEdge
-            ? "rgba(99, 179, 237, 0.9)"
-            : "rgba(148, 163, 184, 0.6)",
-          fontSize: 10,
-          fontWeight: isRouteEdge ? 600 : 500,
-        },
-        labelBgStyle: {
-          fill: "rgba(15, 23, 42, 0.8)",
-          fillOpacity: 0.8,
-        },
-        labelBgPadding: [4, 2] as [number, number],
-        labelBgBorderRadius: 4,
-      });
-    }
-
-    return dedupedEdges;
-  }, [
-    viewLevel,
-    universe.connections,
-    systemRegionMap,
-    interRegionEdges,
-    routeEdgeSet,
-    isNavigationActive,
-  ]);
-
-  // ── Gateway target regions for detail panel ─────────────────────
-  const selectedGatewayTargets = useMemo(() => {
-    if (!selectedSystem?.isGateway) return [];
-    const targetRegionIds = getGatewayTargetRegions(
-      selectedSystem.id,
-      universe.connections,
-      systemRegionMap,
-    );
-    return targetRegionIds
-      .map((rid) => {
-        const region = regionMap.get(rid);
-        return region ? { regionId: rid, regionName: region.name } : null;
-      })
-      .filter((t): t is { regionId: string; regionName: string } => t !== null);
-  }, [selectedSystem, universe.connections, systemRegionMap, regionMap]);
-
-  // ── Active region info for back button ──────────────────────────
-  const activeRegion: RegionInfo | undefined =
-    viewLevel.level === "system" ? regionMap.get(viewLevel.regionId) : undefined;
-
-  // ── Selected system region name ─────────────────────────────────
-  const selectedRegionName = selectedSystem
-    ? regionMap.get(selectedSystem.regionId)?.name
-    : undefined;
-
-  // ── Click handlers ──────────────────────────────────────────────
+  // ── Click handlers ────────────────────────────────────────────
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
       // Region view — click drills into that region
-      if (viewLevel.level === "region") {
-        // Block clicking unreachable regions during navigation
-        if (isNavigationActive && regionNavigationStates.get(node.id) === "unreachable") {
+      if (view.viewLevel.level === "region") {
+        if (isNavigationActive && graph.regionNavigationStates.get(node.id) === "unreachable") {
           return;
         }
-        setViewLevel({ level: "system", regionId: node.id });
-        setMapSessionState({ regionId: node.id });
+        view.drillIntoRegion(node.id);
         return;
       }
 
@@ -542,7 +152,7 @@ export function StarMap({
           navigation.cancel();
           return;
         }
-        const system = activeRegionSystems.find((s) => s.id === node.id);
+        const system = graph.activeRegionSystems.find((s) => s.id === node.id);
         if (system) {
           navigation.selectDestination(system);
         }
@@ -552,68 +162,41 @@ export function StarMap({
       if (mode.phase === "route_preview") return;
 
       // Default mode — open system detail panel
-      const system = activeRegionSystems.find((s) => s.id === node.id);
+      const system = graph.activeRegionSystems.find((s) => s.id === node.id);
       if (system) {
-        setSelectedSystem(system);
-        setMapSessionState({ regionId: viewLevel.regionId, selectedSystemId: system.id });
+        view.selectSystem(system);
       }
     },
-    [viewLevel, activeRegionSystems, mode, navigation, isNavigationActive, regionNavigationStates],
+    [view, graph.activeRegionSystems, graph.regionNavigationStates, mode, navigation, isNavigationActive],
   );
-
-  const handleClose = useCallback(() => {
-    setSelectedSystem(null);
-    if (viewLevel.level === "system") {
-      setMapSessionState({ regionId: viewLevel.regionId });
-    }
-  }, [viewLevel]);
 
   const handleSelectShipForNavigation = useCallback(
     (ship: ShipState) => {
-      setSelectedSystem(null);
+      view.closeSystem();
       navigation.selectShip(ship);
     },
-    [navigation],
-  );
-
-  const handleBackToRegions = useCallback(() => {
-    setSelectedSystem(null);
-    setViewLevel({ level: "region" });
-    setMapSessionState(null);
-  }, []);
-
-  const handleJumpToRegion = useCallback((regionId: string) => {
-    setSelectedSystem(null);
-    setViewLevel({ level: "system", regionId });
-    setMapSessionState({ regionId });
-  }, []);
-
-  // Skip the fitView prop when we need to center on a specific system.
-  // This avoids a race between fitView (fits all nodes) and setCenter
-  // (focuses one system) — no setTimeout needed.
-  const needsInitialCenter = Boolean(
-    initialSelectedSystemId && initialState.selectedSystem,
+    [view, navigation],
   );
 
   const handleInit = useCallback((instance: ReactFlowInstance) => {
     rfInstance.current = instance;
 
-    if (initialSelectedSystemId && initialState.selectedSystem) {
-      const { x, y } = initialState.selectedSystem;
+    if (view.initialSelectedSystem) {
+      const { x, y } = view.initialSelectedSystem;
       instance.setCenter(x, y, { zoom: 1.2, duration: 0 });
-      setMapReady(true);
+      view.setMapReady();
     }
-  }, [initialSelectedSystemId, initialState.selectedSystem]);
+  }, [view.initialSelectedSystem, view.setMapReady]);
 
   return (
-    <div className={`relative h-full w-full ${mapReady ? "opacity-100" : "opacity-0"}`}>
+    <div className={`relative h-full w-full ${view.mapReady ? "opacity-100" : "opacity-0"}`}>
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={graph.nodes}
+        edges={graph.edges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
         onInit={handleInit}
-        fitView={!needsInitialCenter}
+        fitView={!view.needsInitialCenter}
         fitViewOptions={{ padding: 0.3 }}
         minZoom={0.3}
         maxZoom={2}
@@ -633,22 +216,22 @@ export function StarMap({
       </ReactFlow>
 
       {/* Back to regions button (system view only) */}
-      {viewLevel.level === "system" && (
+      {view.viewLevel.level === "system" && (
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleBackToRegions}
+          onClick={view.backToRegions}
           className="absolute top-4 left-4 z-50 gap-2 rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur py-2 text-sm text-white/70 hover:bg-gray-800/90 shadow-lg"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
           </svg>
-          {activeRegion?.name ?? "Regions"}
+          {graph.activeRegion?.name ?? "Regions"}
         </Button>
       )}
 
       {/* Region view hint (only when not navigating) */}
-      {viewLevel.level === "region" && !isNavigationActive && (
+      {view.viewLevel.level === "region" && !isNavigationActive && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
             <span className="text-sm text-white/60">
@@ -693,17 +276,17 @@ export function StarMap({
       )}
 
       {/* Detail panel overlay (hidden during navigation mode, system view only) */}
-      {viewLevel.level === "system" && !isNavigationActive && (
+      {view.viewLevel.level === "system" && !isNavigationActive && (
         <SystemDetailPanel
-          system={selectedSystem}
-          shipsHere={shipsAtSelected}
+          system={view.selectedSystem}
+          shipsHere={graph.shipsAtSelected}
           currentTick={currentTick}
-          regionName={selectedRegionName}
-          gatewayTargetRegions={selectedGatewayTargets}
-          activeEvents={eventsAtSelected}
+          regionName={graph.selectedRegionName}
+          gatewayTargetRegions={graph.selectedGatewayTargets}
+          activeEvents={graph.eventsAtSelected}
           onSelectShipForNavigation={handleSelectShipForNavigation}
-          onJumpToRegion={handleJumpToRegion}
-          onClose={handleClose}
+          onJumpToRegion={view.jumpToRegion}
+          onClose={view.closeSystem}
         />
       )}
     </div>
