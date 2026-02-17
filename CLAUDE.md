@@ -2,6 +2,8 @@
 
 Browser-based multiplayer space trading game.
 
+**Important**: Read `docs/SPEC.md` at the start of every session to understand the full game, all active systems, and how they interact. The SPEC is the functional source of truth — this file is the code reference.
+
 ## Skills
 
 - `/bootstrap` — Run environment checks (node, deps, database, env, outdated packages, build)
@@ -19,6 +21,8 @@ Browser-based multiplayer space trading game.
 ## Tech Stack
 
 Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, SQLite via better-sqlite3, Prisma 7 (driver adapter), NextAuth v5 (JWT/Credentials), TanStack Query v5 (Suspense mode), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
+
+**Prisma 7 gotcha**: Seed command lives in `prisma.config.ts` under `migrations.seed`, not in `package.json`. Command: `npx tsx --tsconfig tsconfig.json prisma/seed.ts`.
 
 ## Project Structure
 
@@ -38,9 +42,13 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 
 ## Docs
 
-Reference: `docs/SPEC.md`, `docs/data-model.md`, `docs/auth.md`, `docs/economy-engine.md`, `docs/star-map.md`, `docs/trading-ui.md`, `docs/rate-limiting.md`, `docs/dev-tools.md`
+Functional spec: `docs/SPEC.md` — master game spec with system interaction map. Read this first.
 
-Design: `docs/design/BACKLOG.md` (delete items when shipped), `docs/design/event-catalog.md`, `docs/design/simulation-enhancements.md`, `docs/design/archive/` (completed designs)
+Design docs:
+- `docs/design/active/` — Implemented systems (economy, events, trading, navigation, universe, tick-engine, event-catalog)
+- `docs/design/planned/` — Designed but not yet built (faction-system, player-progression, system-enrichment, multiplayer-infrastructure, simulation-enhancements)
+- `docs/design/archive/` — Historical design docs (may be outdated)
+- `docs/design/BACKLOG.md` — Actionable work items (delete when shipped)
 
 ## Design Principles
 
