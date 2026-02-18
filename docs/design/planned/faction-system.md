@@ -160,10 +160,9 @@ Alliances are formal mutual defense pacts between factions. They provide real be
 This creates natural balancing pressure: as a faction grows, it loses allies. Success makes you powerful but isolated. A cluster of allied minor factions can collectively match a major power, enabling the David vs Goliath stories.
 
 #### Alliance Effects
-- Mutual defense: if one ally is attacked, the other is expected to join (or break the alliance at reputation cost)
+- Mutual defense: if one ally is attacked, the other is expected to join as a co-defender (or break the alliance at reputation cost). See [war-system.md §11](./war-system.md) for co-defender contributions, exhaustion rates, and withdrawal conditions
 - Shared trade bonuses between allied faction territories
 - Positive relation drift while alliance is active
-- Coordinated war efforts: allied factions share war exhaustion burden
 
 #### Alliance Conditions
 - Alliances are not permanent. They can break if:
@@ -232,7 +231,9 @@ Specific percentage values per tier are tuning numbers for implementation.
 Full war and conflict mechanics are covered in the dedicated **[War System](./war-system.md)** spec. Brief summary:
 
 - **Border conflicts** (ambient): Event-system-driven tension at faction borders when relations are unfriendly (-25 to -74). Localized danger/trade disruption, no battles or player involvement. Accelerate relation deterioration toward war.
-- **Faction wars** (interactive): Full wars with dedicated processors, battle mechanics, player contributions (ships, credits, manpower), territory capture, and war exhaustion. Operates through its own system, not the event system.
+- **Faction wars** (interactive): Full wars with two dedicated processors — war processor (strategic: declarations, exhaustion, ceasefire) and battle processor (tactical: fleet battles, sieges). Two-stage conquest model: fleet battles establish space superiority, sieges capture systems. Assault capacity limits simultaneous sieges. Conquest limits prevent faction destruction in a single war.
+- **Economy effects**: War modifiers feed into the existing economy processor — production penalties, war goods demand spikes, volatility increases. Attacker pays economy-wide; defender only on the front line.
+- **Alliance in war**: Co-defenders contribute military output at reduced exhaustion cost. Can withdraw if overextended. See alliance mechanics §2.1 and [war-system.md §11](./war-system.md).
 
 **Replaces**: The random War event in the current event catalog will be removed when the faction/war system is implemented. Border conflicts absorb its role as the source of war-themed economy/danger modifiers.
 
