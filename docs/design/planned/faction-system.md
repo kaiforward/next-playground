@@ -43,6 +43,18 @@ Status determines:
 - War capacity (how many fronts a faction can sustain)
 - Player mission availability and rewards
 
+### Military Output (Derived)
+
+Military output is the faction's per-tick capacity for projecting military force. It's the resource that the [War System](./war-system.md) consumes for fleet battles, sieges, and multi-front wars. Not stored directly — derived each tick from faction state:
+
+- **Territory size**: More systems = more production capacity. The primary driver.
+- **Economic output**: Systems with higher population (see [Production §2](./production.md)) and better production traits contribute more. An industrial hub with tier-3 lagrange stations contributes more military output than a marginal frontier system.
+- **Government modifier**: Militarist governments have higher military output per system. Corporate governments have lower (they invest in trade, not fleets).
+- **War disruption**: Systems in active war zones have reduced economic output, which reduces their military contribution. Prolonged wars degrade a faction's total military output.
+- **Player contributions**: Player-produced tier 3 military assets (see [Production Roster §5](./production-roster.md)) add to faction military output. This is how player production meaningfully affects wars.
+
+The exact formula is an implementation detail, but the principle is: military output scales with territory quality, not just territory size. A faction with 30 well-developed systems can match one with 50 marginal frontier systems.
+
 ### Doctrine Types
 
 Doctrine defines how a faction behaves toward other factions. Each faction has one primary doctrine.
@@ -84,7 +96,18 @@ Two factions can share a government type and still be bitter enemies. A federati
 | Militarist | War economy, resource-hungry, mobilized | Starving for raw materials and weapons. Great during wartime, mediocre during peace | Moderate — strategic goods controlled |
 | Theocratic | Ideological, community-driven, insular | Pays premium for basic/cheap goods. But heavy restrictions on "immoral" goods — limited selection | Heavy — narcotics, weapons, luxury goods banned |
 
-Specific economic modifiers per type (volatility, production rates, equilibrium targets, danger) to be defined during implementation. Current modifiers for federation/corporate/authoritarian/frontier are a starting point.
+Economic modifiers per government type. The first four are implemented (see [Economy](../active/economy.md) for exact values). The last four use the same modifier axes — specific numbers to be defined during implementation.
+
+| Government | Volatility | Eq. Spread | Danger | Contraband | Consumption bias | Design intent |
+|---|---|---|---|---|---|---|
+| Federation | 0.8x (stable) | -10% (tight) | None | Weapons | Balanced across goods | Safe, regulated, reliable profits |
+| Corporate | 0.9x | -5% | 0.02 | None | Slight luxury/trade bias | Best margins, slightly volatile |
+| Authoritarian | 0.7x (very stable) | -15% (very tight) | None | Weapons, Chemicals | State-directed, controlled | Safest, most restricted, predictable demand |
+| Frontier | 1.5x (chaotic) | +20% (wide) | 0.10 | None | Uneven, erratic | Highest profit, highest risk, no rules |
+| Cooperative | 0.7x (stable) | -10% (tight) | Low | Luxury goods | Even across goods, luxury depressed | Stable, predictable, low-margin — the boring safe option |
+| Technocratic | 1.0x | Wide for tier 2, narrow for tier 0 | Low | None | High tech/electronics, low raw materials | Premium advanced goods market, poor basics market |
+| Militarist | 1.3x (volatile) | +10% (wide) | 0.05 | Strategic goods (context-dependent) | High military-tagged + raw materials | Hungry war economy — volatile, resource-starved, great for arms dealers |
+| Theocratic | 0.8x (stable) | Narrow for basics, wide for restricted | 0.03 | Weapons, Luxuries, Chemicals | High basic goods (food, textiles, medicine), low luxury/restricted | Pays premium for necessities, vice banned |
 
 ---
 

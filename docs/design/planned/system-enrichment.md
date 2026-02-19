@@ -342,24 +342,38 @@ Facilities are high-value targets in wars. Their presence affects battle mechani
 **During war:**
 - Naval bases and defence platforms provide direct battle modifiers for the defending faction
 - Intelligence outposts provide the intelligence modifier
-- Facilities in contested systems can be damaged by prolonged fighting — each battle in the system has a chance of degrading a facility's tier
-- Damaged facilities provide reduced bonuses (tier 2 → tier 1 level service)
+- Facilities in contested systems can be damaged by prolonged fighting — each battle in the system has a chance of degrading a facility's tier (per-battle roll, probability scales with battle intensity)
+- Tier degradation is stepwise: tier 3 → tier 2 → tier 1 → destroyed. Each step is a separate roll — a single battle rarely destroys a facility outright, but prolonged sieges grind them down
+- Damaged facilities provide reduced bonuses at the degraded tier level (a tier 2 → tier 1 shipyard still functions, but sells fewer ship classes and repairs more slowly)
 
 **After conquest:**
 - Intact facilities transfer to the conquering faction immediately
-- Damaged facilities need rebuilding (time + faction resources to restore tier)
+- Damaged facilities need rebuilding (time + faction resources to restore tier). Rebuilding time and cost scale with tier gap — restoring a destroyed facility to tier 3 takes much longer than repairing tier 2 → tier 3
 - The conquering faction's government type may change which facilities are *active* — an authoritarian faction capturing a system with a black market might shut it down; a frontier faction might embrace it
 
 **Strategic implications:**
 - Quick, decisive wars preserve infrastructure — long sieges degrade it. Factions have incentive to win fast
 - A faction might deliberately target an enemy's tier-3 shipyard to cripple fleet production, even if they can't hold the system permanently
-- Rebuilding damaged facilities is a post-war credit sink that delays recovery
+- Rebuilding damaged facilities is a post-war credit sink that delays economic recovery of conquered territory
+- Combined with population decline during prolonged war (see [Production §2.4](./production.md)), extended conflicts genuinely degrade a region's economic value — winning a ruined territory may not be worth the cost
 
 ---
 
 ## 6. Strategic Value
 
-Strategic value is not a stored property — it emerges naturally from the systems described above. A system with tier-3 extraction traits, a shipyard, and a gateway position is worth fighting over without any explicit "value" score. The faction system's war mechanics operate on this emergent worth — traits create economic output, facilities create gameplay destinations, and location creates chokepoints. No system needs to be told it's important; it becomes important through what it has and where it sits.
+Strategic value is not a stored property — it emerges naturally from the systems described above. No system needs an explicit "value" score; it becomes important through what it has and where it sits.
+
+**Value dimensions** (each independently makes a system worth controlling or contesting):
+
+| Dimension | What creates it | Example |
+|---|---|---|
+| **Economic output** | High-quality production traits, rare resources | Tier-3 asteroid belt = massive ore production. Radioactive deposits = bottleneck for reactor cores |
+| **Infrastructure** | High-tier faction facilities (shipyards, naval bases) | Tier-3 shipyard = capital ship access. Only a handful exist per faction |
+| **Population** | High population from habitable/established traits | High population = deep market, high consumption, strong absorption capacity (see [Production §2](./production.md)) |
+| **Location** | Chokepoint position, border system, trade route junction | Gateway between two faction territories. Single-connection bottleneck on a major trade route |
+| **Unique traits** | Rare phenomena (exotic matter, precursor ruins, subspace rift) | Only 2–3 subspace rifts in the galaxy. Precursor ruins attract research and cultural value |
+
+The faction system's war mechanics operate on this emergent worth — the war AI evaluates potential targets by aggregating these dimensions (trait quality, facility tiers, connection count, population) without the player or the design needing to assign explicit scores. A system with tier-3 extraction traits, a shipyard, and a gateway position is worth fighting over because every dimension says so.
 
 ---
 

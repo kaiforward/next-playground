@@ -59,7 +59,7 @@ The player has enough credits and experience to start thinking beyond individual
 ### Unlocks
 
 - **Fleet expansion**: Purchase additional ships across expanding ship classes. More specialisation becomes available — dedicated trade ships, scout/exploration ships, ships suited to different cargo types. See [Ship Roster](./ship-roster.md)
-- **Minor player facilities**: First facility purchases. Mining operations, trade posts, small warehouses. These are personal investments tied to system economy — a mining operation in an extraction system, a trade post in a core system. Passive income that supplements active trading. See [Player Facilities](./player-facilities.md)
+- **Minor player facilities**: First facility purchases — both infrastructure (trade posts, fuel depots, repair bays, warehouses, customs brokerages, security offices) and production (mining operations, gas harvesters, homesteads, refineries, factories, bioprocessors). These are personal investments tied to system economy and traits. Passive income via auto-sell supplements active trading. See [Player Facilities](./player-facilities.md) for the build system, [Production Roster](./production-roster.md) for the full 21-type facility catalog
 - **Faction reputation tiers**: Reaching Trusted (+25) and eventually Champion (+75) with chosen factions unlocks:
   - Better prices at faction systems
   - Higher-paying, more complex missions
@@ -84,7 +84,7 @@ The player commands a trade empire. Multiple automated fleets, production facili
 
 ### Unlocks
 
-- **Major player facilities**: Larger, more expensive facilities — refineries, manufacturing plants, logistics hubs. These produce goods at scale, including war materials. Output feeds directly into faction war efforts and the broader economy. See [Player Facilities](./player-facilities.md)
+- **Major player facilities**: Upgraded facilities with higher output and deeper supply chains — major shipyards, tech labs, arms factories, artisan workshops. Vertical integration becomes viable: mine ore, refine metals, manufacture components, build ship frames. Output feeds into the market (bounded by absorption capacity) and can be donated to faction war efforts. See [Production](./production.md) for the economic model, [Production Roster](./production-roster.md) for chains and facility details
 - **Advanced automation**: Upgraded AI behaviours for automated ships. Optimal routing (computationally expensive — see §5). Players manage fleet strategy rather than individual ships — assign trade regions, specify resource types, let ships execute
 - **Capital ships**: Large, expensive, specialised vessels gated by faction reputation (Champion tier) and high-tier shipyard access. See [Ship Roster](./ship-roster.md)
 - **War contributions (Tier 2 & 3)**: Strategic and direct action missions — blockade running, intelligence gathering, sabotage. High risk, high reward, significant reputation consequences with enemy factions
@@ -94,7 +94,7 @@ The player commands a trade empire. Multiple automated fleets, production facili
 
 - Expand facility network across multiple systems and regions
 - Automate most trading — player focuses on which regions and goods to target, not individual trades
-- Heavy faction investment — supplying wars, funding generals (academy contributions), building production for war materials
+- Heavy faction investment — supplying wars, donating market goods for reputation, building military production facilities (naval foundries, military fabricators) for direct war contribution
 - Manage assets across faction borders — hedging risk with neutral reputation in some factions while going all-in on others
 - React to political shifts — wars, territory changes, faction collapses — by repositioning facilities and fleets
 
@@ -127,23 +127,28 @@ Purchased at drydocks (see [System Enrichment §5.3](./system-enrichment.md)). E
 
 ## 6. Player Facilities
 
-Player-owned facilities are personal investments — separate from faction facilities (see [System Enrichment §5](./system-enrichment.md)). They generate passive income, produce goods, and represent the player's economic footprint in the galaxy.
+Player-owned facilities are personal investments — separate from faction facilities (see [System Enrichment §5](./system-enrichment.md)). They generate passive income, produce goods, and represent the player's economic footprint in the galaxy. 21 facility types total: 14 production + 7 infrastructure.
 
 ### Key Design Rules
 
-- **Economy-tied**: Players can only build facilities that match the system's economy type. No extraction operations in agricultural systems. The system's traits determine what's viable
-- **Multiple players per system**: Many players can own facilities in the same system. Player facilities don't affect system-level production data — they're personal income streams, not world-state modifications
-- **Assets at risk**: Player facilities are the "assets" referenced in [Faction System §4.8](./faction-system.md). When territory changes hands, facilities may be taxed, fined, or seized based on the player's reputation with the conquering faction
-- **Progression-gated**: Minor facilities available mid game, major facilities late game. Gated by credits, faction reputation, and possibly facility-specific prerequisites
+- **Economy-tied**: Players can only build facilities that match the system's economy type and traits. A mining operation requires an Extraction economy with asteroid belt or similar traits. A shipyard requires an Industrial economy with lagrange stations. See [Production Roster §9](./production-roster.md) for the full placement matrix
+- **Multiple players per system**: Many players can own facilities in the same system. Player production output affects market prices but is bounded by the system's absorption capacity (population × trait quality) — see [Production §1](./production.md)
+- **Assets at risk**: Player facilities are subject to standing tax based on faction reputation, and seizure during wars if the player was directly involved (producing tier 3 military assets for the losing side). See [Player Facilities §4](./player-facilities.md)
+- **Progression-gated**: Minor facilities available mid game, major facilities late game. Tier 3 military production is major-only and requires Trusted or Champion reputation
 
-### Facility Tiers
+### Facility Categories
 
-| Tier | Phase | Examples | Purpose |
+| Category | Count | Examples | Phase |
 |---|---|---|---|
-| **Minor** | Mid game | Mining operation, trade post, small warehouse | Entry-level investment. Low cost, low passive income. Learn the system |
-| **Major** | Late game | Refinery, manufacturing plant, logistics hub | Significant investment. Higher output, produces goods that feed into faction war efforts and the wider economy |
+| **Infrastructure** | 7 | Trade post, fuel depot, repair bay, warehouse, customs brokerage, security office, smuggler's den | Minor → Major (some minor-only) |
+| **Tier 0–2 Production** | 12 | Mining operation, gas harvester, homestead, refinery, factory, tech lab, shipyard, artisan workshop | Minor → Major |
+| **Tier 3 Military** | 2 | Naval foundry, military fabricator | Major only, reputation-gated |
 
-Detailed facility types, costs, output rates, and upgrade paths are defined in [Player Facilities](./player-facilities.md).
+### Income Hierarchy
+
+Production income fits within a broader hierarchy where active play always beats passive income. Auto-sell covers costs plus modest profit. Manual trading of your own production earns 2–3x more. Vertical integration (owning the full input chain) offers the best margins. See [Production §8](./production.md) for the full hierarchy and design guardrails.
+
+Detailed build system (construction, upgrades, costs, limits, asset risk) in [Player Facilities](./player-facilities.md). Goods catalog, production chains, and facility roster in [Production Roster](./production-roster.md).
 
 ---
 
@@ -176,7 +181,7 @@ Every phase needs meaningful ways to spend credits. Without sinks, experienced p
 |---|---|---|
 | **Early** | Ships (second ship purchase), fuel, trade mission deposits, basic ship repairs | Hundreds to low thousands |
 | **Mid** | Fleet expansion (3–6 ships), ship upgrades at drydocks, minor player facilities, automation modules (per-ship), Tier 1 war contributions | Thousands to tens of thousands |
-| **Late** | Capital ships, major player facilities, advanced automation modules, Tier 2/3 war contributions, faction general training (academy), facility upgrades and expansion | Tens of thousands to hundreds of thousands |
+| **Late** | Capital ships, major facility upgrades, advanced automation modules, Tier 2/3 war contributions, military production facilities (naval foundry, military fabricator), vertical integration across systems | Tens of thousands to hundreds of thousands |
 
 The key is that each phase's sinks are *investments* — they generate returns (better ships earn more, facilities produce income, automation frees time). Spending feels good because it makes the player more capable, not just poorer.
 
@@ -205,5 +210,7 @@ In-system gameplay is a major system that requires its own detailed design. This
 - **[Missions](./missions.md)** — universe/region-level mission framework (trade, operational, war contributions)
 - **[System Enrichment](./system-enrichment.md)** — faction facilities (shipyards, drydocks, academies), system traits
 - **[Ship Roster](./ship-roster.md)** — ship classes, roles, upgrade paths, faction-exclusive vessels
-- **[Player Facilities](./player-facilities.md)** — player facility types, output rates, upgrade paths, war material production
+- **[Player Facilities](./player-facilities.md)** — universal build system (construction, upgrades, costs, limits, asset risk)
+- **[Production](./production.md)** — production architecture (market impact, population, income hierarchy)
+- **[Production Roster](./production-roster.md)** — 26 goods, production chains, 14 production facility types
 - **[In-System Gameplay](./in-system-gameplay.md)** — in-system missions, story content, trait-driven gameplay
