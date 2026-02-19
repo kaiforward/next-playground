@@ -94,22 +94,7 @@ Key interactions:
 
 ## Planned Systems
 
-Designed but not yet implemented. Each has a design doc with full mechanics.
-
-### Faction System — [detailed spec](./design/planned/faction-system.md)
-Named factions controlling territory, waging wars, and driving player engagement. 6 initial major factions with distinct government types and political doctrines. Inter-faction relations drift toward conflict. Wars resolve through multi-round battles with weighted random outcomes. Players contribute through tiered involvement (economic support, strategic actions, direct operations). Territory changes hands through control score mechanics. Alliance system with size-based capacity limits.
-
-### Player Progression — [detailed spec](./design/planned/player-progression.md)
-Ship upgrades, region unlocking, credit sinks beyond trading, and the early/mid/late game arc. Stub — needs full design.
-
-### System Enrichment — [detailed spec](./design/planned/system-enrichment.md)
-Facilities, system traits, and strategic value that make individual systems unique and worth fighting over. Stub — needs full design.
-
-### Multiplayer Infrastructure — [detailed spec](./design/planned/multiplayer-infrastructure.md)
-Player-to-player trading, alliances/guilds, communication, and coordination mechanics. Stub — needs full design.
-
-### Simulation Enhancements — [detailed spec](./design/planned/simulation-enhancements.md)
-Supply chain dependencies, seasonal cycles, NPC trade pressure, inter-region trade flows. Planned economy improvements.
+Future systems are designed in `docs/design/planned/`. Each doc is a self-contained spec for a system that layers over the active implementation. See `docs/design/MIGRATION-NOTES.md` for the implementation roadmap and what changes in the active systems when each planned system ships.
 
 ---
 
