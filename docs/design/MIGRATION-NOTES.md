@@ -69,7 +69,7 @@ Late-game systems that give players a stake in the world. Require factions (asse
 
 | System | What it does | Depends on |
 |---|---|---|
-| [Player Facilities](./planned/player-facilities.md) | Player-owned production and infrastructure, passive income, asset risk | Layers 0–2 (traits, economy types, faction territory) |
+| [Player Facilities](./planned/player-facilities.md), [Production](./planned/production.md), [Production Roster](./planned/production-roster.md) | Player-owned facilities (21 types: 14 production + 7 infrastructure), passive income, asset risk, 26-good economy with production chains | Layers 0–2 (traits, economy types, faction territory) |
 | Ship Automation (in [Player Progression](./planned/player-progression.md) §5) | Automated trade execution for player ships, tiered strategies | Layer 1 (ship roster), Layer 2 (faction space) |
 
 ### Layer 5 — Social & Polish
@@ -126,6 +126,21 @@ Specific items where a planned system replaces or modifies an active implementat
 **Planned** (faction-system.md §7): 1,000-2,000 systems across faction territories.
 
 **Key deltas**: Region count increases significantly. Cascading impacts on tick engine (round-robin processing frequency), map rendering (60+ regions), connection generation (scaling MST), and seed generation time.
+
+---
+
+### 6. Goods Expansion: 12 → 26, Production System
+
+**Active** (economy.md): 12 goods across 3 tiers. NPC production/consumption rates defined per economy type. Supply/demand range 5–200.
+
+**Planned** (production-roster.md, production.md): 26 market goods across 3 tiers + non-market tier 3 military assets. 14 new goods with production chains, NPC rates, and player production facilities. Supply/demand range increases to thousands. Population added as a system stat derived from traits.
+
+**Key deltas**:
+- Economy type rate tables expand from 12 to 26 goods. Every good needs at least an incidental rate at every economy type — no exclusion matrix, availability is rate-driven.
+- Supply/demand range increases significantly (5–200 → thousands) to provide granularity for player production as a bounded fraction of total activity.
+- Population becomes a new system-level stat, derived from traits at world generation. Affects market absorption capacity, consumption scaling, and several other systems.
+- New tick processors: player facility operating costs, construction/upgrade timers, production cycle (recipe execution, input sourcing, output routing, market impact). See [Production §7](./planned/production.md) and [Player Facilities §7](./planned/player-facilities.md).
+- Government restrictions on military-tagged goods (from navigation-changes.md §4) become the only hard market exclusion.
 
 ---
 
