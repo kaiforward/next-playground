@@ -57,27 +57,24 @@ This is the existing trade mission system, extended with new generation sources.
 
 ### 2.2 Operational Missions
 
-"Go to X, spend time, succeed or fail." Player sends a ship to a target system. The ship is committed for a duration (locked, similar to travel). Outcome is determined by ship stats, system danger, and context — not by cargo.
+"Go to X, spend time, effect applied." Player sends a ship to a target system. The ship is committed for a duration (locked, similar to travel). The ship's stats determine which missions it can accept, and its presence at the target system produces the effect.
 
-These are new and require design work for the outcome mechanics. The interaction model is the same as delivery missions from the player's perspective: accept at a mission board, send a ship, wait for resolution.
+These are **peacetime faction missions** — ongoing activities that factions need done regardless of war state. During active wars, some operational missions transform into or are replaced by war contributions (see [war-system.md §8](./war-system.md)). The integration between wartime missions and the battle system is designed alongside the war system implementation, not here.
 
-| Subtype | Source | Ship stats that matter | Description |
-|---|---|---|---|
-| **Patrol** | Naval base | Firepower, hull, speed | Patrol border systems to reduce danger. Outcome based on combat capability vs system danger level |
-| **Escort** | Naval base, war state | Firepower, hull | Protect NPC trade convoys through dangerous space. Similar to player convoy escort but as a mission |
-| **Intelligence** | Intelligence outpost | Stealth, sensors, evasion | Gather information at nearby enemy systems. Stealth determines detection risk. Feeds into war battle modifiers |
-| **Diplomacy** | Embassy | None (ship is transport) | Ferry diplomatic envoys between faction systems. Generates positive relation drift. Low risk, reputation-focused |
-| **Sabotage** | Intelligence outpost, war state | Stealth, evasion | Disrupt enemy infrastructure. High risk — detection means large reputation penalty with target faction. Tier 3 war contribution |
-| **Survey** | Research station | Sensors, speed | Survey systems for data. Feeds into exploration/discovery mechanics. Scout ships excel |
+| Subtype | Source | Stat gate | Duration | Effect |
+|---|---|---|---|---|
+| **Patrol** | Naval base | Firepower, hull | Medium (10–20 ticks) | Reduces danger modifier at target system while ship is deployed. Higher firepower = greater danger reduction |
+| **Intelligence** | Intelligence outpost | Stealth, sensors | Medium (10–20 ticks) | Gathers data on rival faction systems. Detection risk based on stealth vs system security. Builds faction reputation and feeds strategic information |
+| **Diplomacy** | Embassy | None (ship is transport) | Short (5–10 ticks) | Ferries envoys between faction systems. Generates positive inter-faction relation drift. Low risk, reputation-focused |
+| **Survey** | Research station | Sensors, speed | Short (5–10 ticks) | Scouts systems for data — resource surveys, anomaly detection, trait discovery. Feeds into exploration mechanics |
 
-**Outcome mechanics**: Needs further discussion. The general pattern is:
-- Ship travels to target system and is locked for a mission duration (N ticks)
-- On completion, a weighted roll determines success/failure based on relevant ship stats vs difficulty
-- Success: reward paid, mission effect applied (danger reduced, intelligence gained, etc.)
-- Failure: reduced or no reward, possible ship damage, possible reputation consequences
-- Some missions have detection risk (intelligence, sabotage) — failure means the enemy faction knows
+**Interaction model**: Same as delivery missions from the player's perspective — accept at a mission board, assign a ship, wait for resolution. The difference is that the outcome comes from the ship's presence and stats rather than cargo delivery.
 
-**Duration**: Operational missions take longer than deliveries. The ship is committed and unavailable for the mission duration, making ship allocation a strategic decision.
+**Stat gating**: Ship stats set a minimum threshold for acceptance, not a success roll. A ship below the firepower threshold can't take a patrol mission. Above the threshold, better stats improve the effect magnitude (more danger reduction, less detection risk) but don't determine pass/fail.
+
+**Duration**: Operational missions take longer than deliveries. The ship is committed and unavailable for the mission duration, making ship allocation a strategic decision — assigning your best combat ship to a patrol means it's not available for trade runs.
+
+**Wartime escalation**: Escort and sabotage are wartime activities that belong to the war contribution system (see [war-system.md §8](./war-system.md)). Patrol and intelligence missions may gain wartime variants with higher stakes and rewards, but the mechanics for that integration are designed with the war system, not here.
 
 ---
 
@@ -89,9 +86,9 @@ What generates missions and where they appear. This ties together all the facili
 |---|---|---|---|
 | **Market conditions** | Trade (import/export) | Price thresholds (existing) | [trading.md](../active/trading.md) |
 | **Active events** | Event-linked deliveries | Event with themed goods (existing) | [trading.md](../active/trading.md) |
-| **Active faction war** | War logistics, escort, sabotage, intelligence | War status + contested systems | [war-system.md](./war-system.md) §6 |
-| **Naval base** | Patrol, escort, military logistics | Facility presence + faction state | [system-enrichment.md](./system-enrichment.md) §5 |
-| **Intelligence outpost** | Intelligence, sabotage | Facility presence + war/tension state | [system-enrichment.md](./system-enrichment.md) §5 |
+| **Active faction war** | War logistics deliveries, war contributions (escort, sabotage, intelligence — see [war-system.md §8](./war-system.md)) | War status + contested systems | [war-system.md](./war-system.md) |
+| **Naval base** | Patrol | Facility presence + faction state | [system-enrichment.md](./system-enrichment.md) §5 |
+| **Intelligence outpost** | Intelligence | Facility presence + faction state | [system-enrichment.md](./system-enrichment.md) §5 |
 | **Embassy** | Diplomacy | Facility presence + inter-faction relations | [system-enrichment.md](./system-enrichment.md) §5 |
 | **Black market** | Smuggling | Facility presence | [system-enrichment.md](./system-enrichment.md) §5 |
 | **Research station** | Survey, data trading | Facility presence | [system-enrichment.md](./system-enrichment.md) §5 |
@@ -107,8 +104,8 @@ Mission availability scales with faction reputation, creating a natural progress
 | Standing | Available missions |
 |---|---|
 | **Neutral** (0 to +24) | Trade missions (market-generated), event-linked missions, courier missions, basic patrol |
-| **Trusted** (+25 to +74) | All neutral missions + faction-specific deliveries, war logistics (Tier 1), escort, survey, diplomacy, smuggling (at black markets) |
-| **Champion** (+75 to +100) | All trusted missions + intelligence, sabotage (Tier 2 & 3 war contributions), exclusive high-reward variants |
+| **Trusted** (+25 to +74) | All neutral missions + faction-specific deliveries, war logistics (Tier 1), intelligence, survey, diplomacy, smuggling (at black markets) |
+| **Champion** (+75 to +100) | All trusted missions + Tier 2 & 3 war contributions (see [war-system.md §8](./war-system.md)), exclusive high-reward variants |
 
 Missions from enemy factions (reputation below -25) are unavailable — they won't offer you work. Trade missions generated by market conditions have no faction gate — anyone can trade.
 
@@ -125,9 +122,8 @@ All missions pay credits. Faction-sourced missions also pay reputation. War miss
 | **Courier** | Low fixed reward | Small faction reputation gain | Good for early-game rep building |
 | **War logistics** | 2.0x reward formula + goods sale value | Moderate faction reputation gain | War contribution tracked |
 | **Smuggling** | 2.5x reward formula + goods sale value | Small faction reputation gain (with issuing faction) | Risk of contraband inspection |
-| **Patrol / Escort** | Fixed reward scaled by danger level | Moderate faction reputation gain | Ship may take damage |
-| **Intelligence** | Fixed reward | Good faction reputation gain | War contribution tracked. Detection risk |
-| **Sabotage** | Large fixed reward | Large faction reputation gain | War contribution tracked. Guaranteed enemy reputation loss |
+| **Patrol** | Fixed reward scaled by danger level | Moderate faction reputation gain | Ship committed for duration. Effect scales with ship stats |
+| **Intelligence** | Fixed reward | Good faction reputation gain | Detection risk. Wartime variant feeds into war battle modifiers |
 | **Diplomacy** | Low fixed reward | Moderate reputation with both factions involved | Generates inter-faction relation drift |
 | **Survey** | Fixed reward + data value | Small faction reputation gain | Exploration/discovery feed |
 
@@ -135,9 +131,10 @@ All missions pay credits. Faction-sourced missions also pay reputation. War miss
 
 ## 6. Implementation Notes
 
-- **Model design is TBD**: Whether delivery and operational missions share one DB model or use separate models is an implementation decision. The existing `TradeMission` model covers delivery missions well. Operational missions may need additional fields (committed ship, duration, outcome roll, stat requirements).
+- **Model design is TBD**: Whether delivery and operational missions share one DB model or use separate models is an implementation decision. The existing `TradeMission` model covers delivery missions well. Operational missions need additional fields (committed ship, duration, stat thresholds, effect magnitude).
 - **Tick processor**: Mission generation likely extends the existing `trade-missions` processor or adds a parallel `faction-missions` processor. Frequency and dependency order TBD.
-- **UI**: All universe/region-level missions appear on the system's mission board (existing UI pattern). Operational missions need a way to show required ship stats and estimated success chance.
+- **UI**: All universe/region-level missions appear on the system's mission board (existing UI pattern). Operational missions need to show required ship stats and expected effect magnitude.
+- **War integration**: The boundary between peacetime operational missions and wartime contributions ([war-system.md §8](./war-system.md)) is an implementation design point. The simplest approach: wartime disables peacetime patrol/intelligence generation at affected systems and replaces them with war contribution variants sourced from the war system.
 
 ---
 
