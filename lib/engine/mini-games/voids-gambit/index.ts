@@ -23,6 +23,8 @@ export type {
   ActionResult,
 } from "./types";
 
+export type { WagerLimits } from "./constants";
+
 // Constants
 export {
   SUITS,
@@ -37,6 +39,8 @@ export {
   NPC_NAMES,
   NPC_FLAVOR,
   NPC_DIFFICULTY,
+  NPC_WAGER_LIMITS,
+  MEMORY_RECALL,
   NPC_DIALOGUE,
   NPC_DECLARE_DELAY,
   NPC_CALL_DELAY,
@@ -69,4 +73,4 @@ export { calculateScore, determineWinner } from "./scoring";
 
 // AI
 export { chooseDeclaration, chooseCallDecision } from "./ai";
-export type { AiDeclaration } from "./ai";
+export type { AiDeclaration, CallDecision, CallReason } from "./ai";

@@ -3,14 +3,12 @@
 import { tv } from "tailwind-variants";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import type {
   GameResult,
   NpcIdentity,
   ResolvedCardDetail,
 } from "@/lib/engine/mini-games/voids-gambit";
-import { SUIT_LABELS } from "@/lib/engine/mini-games/voids-gambit";
-import { getSuitBadgeColor } from "./suit-styles";
+import { SuitBadge } from "./suit-badge";
 
 // ── Variants ──────────────────────────────────────────────────────
 
@@ -173,8 +171,8 @@ function ScoreColumn({
 
       {/* Card breakdown table */}
       <div className="space-y-1.5">
-        {breakdown.cardDetails.map((detail, i) => (
-          <CardRow key={i} detail={detail} />
+        {breakdown.cardDetails.map((detail) => (
+          <CardRow key={detail.round} detail={detail} />
         ))}
       </div>
 
@@ -203,14 +201,11 @@ function ScoreColumn({
 
 function CardRow({ detail }: { detail: ResolvedCardDetail }) {
   const { declaration, honest, caught, scoredValue, round } = detail;
-  const badgeColor = getSuitBadgeColor(declaration.suit);
 
   return (
     <div className={cardRowVariants({ caught })}>
       <span className="text-white/30 w-5 text-center">{round}</span>
-      <Badge color={badgeColor} className="text-[10px] px-1.5 py-0">
-        {SUIT_LABELS[declaration.suit]}
-      </Badge>
+      <SuitBadge suit={declaration.suit} className="text-[10px] px-1.5 py-0" />
       <span className={cardValueVariants({ caught })}>
         {declaration.value}
       </span>

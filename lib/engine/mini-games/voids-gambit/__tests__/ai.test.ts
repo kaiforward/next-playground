@@ -186,7 +186,7 @@ describe("chooseCallDecision", () => {
         },
       };
 
-      if (chooseCallDecision(state)) callCount++;
+      if (chooseCallDecision(state).shouldCall) callCount++;
     }
 
     expect(callCount).toBeGreaterThan(trials * 0.8);
@@ -198,10 +198,74 @@ describe("chooseCallDecision", () => {
 
     for (let i = 0; i < trials; i++) {
       const state = setupCallPhase("cautious_trader", 4, i + 1);
-      if (chooseCallDecision(state)) callCount++;
+      if (chooseCallDecision(state).shouldCall) callCount++;
     }
 
     // Base rate 0.15 — should call less than ~30% of the time for moderate values
     expect(callCount).toBeLessThan(trials * 0.4);
+  });
+
+  it("station regular calls when player declares a card the NPC already played", () => {
+    let memoryCallCount = 0;
+    const trials = 50;
+
+    for (let i = 0; i < trials; i++) {
+      let state = setupCallPhase("station_regular", 4, i + 1);
+      const demand = state.currentDemand!;
+
+      // Inject a manifest entry showing the NPC already played the exact card
+      const fakeEntry = {
+        card: { id: 700, type: "standard" as const, suit: demand, value: 4 },
+        declaration: { suit: demand, value: 4 },
+        round: 0, // previous round
+        revealed: false,
+        caught: false,
+        calledBy: null,
+      };
+      state = {
+        ...state,
+        npc: {
+          ...state.npc,
+          manifest: [fakeEntry, ...state.npc.manifest],
+        },
+      };
+
+      const decision = chooseCallDecision(state);
+      if (decision.shouldCall && decision.reason === "memory") {
+        memoryCallCount++;
+      }
+    }
+
+    // Station Regular has 0.95 memory recall — should catch most of these
+    expect(memoryCallCount).toBeGreaterThan(trials * 0.7);
+  });
+
+  it("returns reason 'memory' when calling based on revealed cards", () => {
+    let state = setupCallPhase("sharp_smuggler", 3, 42);
+    const demand = state.currentDemand!;
+
+    // Inject a revealed card in the player's previous manifest matching the declaration
+    const revealedEntry = {
+      card: { id: 800, type: "standard" as const, suit: demand, value: 3 },
+      declaration: { suit: demand, value: 3 },
+      round: 0,
+      revealed: true,
+      caught: true,
+      calledBy: "npc" as const,
+    };
+    state = {
+      ...state,
+      player: {
+        ...state.player,
+        manifest: [revealedEntry, ...state.player.manifest],
+      },
+    };
+
+    const decision = chooseCallDecision(state);
+    // sharp_smuggler has 0.85 memory recall, and the rng is deterministic
+    // so with seed 42, the NPC should remember and call
+    if (decision.shouldCall) {
+      expect(decision.reason).toBe("memory");
+    }
   });
 });

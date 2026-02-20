@@ -6,6 +6,7 @@ import type { NpcArchetype } from "@/lib/engine/mini-games/voids-gambit";
 import {
   NPC_FLAVOR,
   NPC_DIFFICULTY,
+  NPC_WAGER_LIMITS,
 } from "@/lib/engine/mini-games/voids-gambit";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,9 +52,17 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
   const [selected, setSelected] = useState<NpcArchetype | null>(null);
   const [wager, setWager] = useState(50);
 
+  const limits = selected ? NPC_WAGER_LIMITS[selected] : null;
+
+  const handleSelect = (key: NpcArchetype) => {
+    setSelected(key);
+    // Reset wager to the new opponent's default
+    setWager(NPC_WAGER_LIMITS[key].default);
+  };
+
   const handleStart = () => {
-    if (!selected) return;
-    onStart(selected, Math.max(10, Math.min(500, wager)));
+    if (!selected || !limits) return;
+    onStart(selected, Math.max(limits.min, Math.min(limits.max, wager)));
   };
 
   return (
@@ -70,12 +79,14 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
         {ARCHETYPES.map(({ key, label, badgeColor }) => {
           const isSelected = selected === key;
           const difficulty = NPC_DIFFICULTY[key];
+          const wagerLimits = NPC_WAGER_LIMITS[key];
 
           return (
             <button
               key={key}
-              onClick={() => setSelected(key)}
+              onClick={() => handleSelect(key)}
               className="text-left"
+              aria-pressed={isSelected}
             >
               <Card
                 variant="bordered"
@@ -94,6 +105,9 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
                 <p className="text-sm text-white/40 mt-3">
                   {NPC_FLAVOR[key]}
                 </p>
+                <p className="text-xs text-white/25 mt-1">
+                  Wager: {wagerLimits.min}–{wagerLimits.max} CR
+                </p>
               </Card>
             </button>
           );
@@ -104,13 +118,15 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
       <div className="flex items-end justify-center gap-5">
         <div className="w-40">
           <NumberInput
+            id="cantina-wager"
             label="Wager (CR)"
             size="md"
             value={wager}
             onChange={(e) => setWager(Number(e.target.value))}
-            min={10}
-            max={500}
-            step={10}
+            min={limits?.min ?? 10}
+            max={limits?.max ?? 500}
+            step={limits?.step ?? 10}
+            disabled={!selected}
           />
         </div>
         <Button

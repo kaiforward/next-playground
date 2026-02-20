@@ -67,6 +67,16 @@ export const MAX_INFLATION: Record<NpcArchetype, number> = {
 // per detected player lie (within the current game).
 export const REGULAR_CALL_ADAPT = 0.1;
 
+// NPC memory: probability of checking manifest/revealed cards for duplicates.
+// When triggered, the NPC catches provable lies (duplicate cards) with certainty.
+// Cautious trader doesn't think to check. Others scale with experience.
+export const MEMORY_RECALL: Record<NpcArchetype, number> = {
+  cautious_trader: 0,
+  frontier_gambler: 0.5,
+  sharp_smuggler: 0.85,
+  station_regular: 0.95,
+};
+
 // ── NPC identity ────────────────────────────────────────────────
 
 export const NPC_NAMES: Record<NpcArchetype, string[]> = {
@@ -109,6 +119,20 @@ export const NPC_DIFFICULTY: Record<NpcArchetype, NpcDifficulty> = {
   sharp_smuggler: 2,
 };
 
+export interface WagerLimits {
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+}
+
+export const NPC_WAGER_LIMITS: Record<NpcArchetype, WagerLimits> = {
+  cautious_trader:  { min: 10,  max: 200,  step: 10, default: 50 },
+  sharp_smuggler:   { min: 25,  max: 500,  step: 25, default: 100 },
+  station_regular:  { min: 50,  max: 1000, step: 50, default: 200 },
+  frontier_gambler: { min: 10,  max: 750,  step: 25, default: 100 },
+};
+
 // ── NPC dialogue ────────────────────────────────────────────────
 
 export interface NpcDialogueSet {
@@ -117,6 +141,7 @@ export interface NpcDialogueSet {
   declareHigh: string[];
   callSuccess: string[];
   callFail: string[];
+  callMemory: string[];
   calledAndCaught: string[];
   calledAndHonest: string[];
   pass: string[];
@@ -147,6 +172,9 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
     callFail: [
       "Well... my mistake. Sorry about that.",
       "I should have trusted you.",
+    ],
+    callMemory: [
+      "Wait... didn't I see that card already?",
     ],
     calledAndCaught: [
       "Fair enough. You got me.",
@@ -197,6 +225,10 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
       "Worth a shot.",
       "Eh, cost of doing business.",
     ],
+    callMemory: [
+      "Hold on... I've seen that card before.",
+      "That card's already on the table, friend.",
+    ],
     calledAndCaught: [
       "You win some, you lose some.",
       "Can't blame me for trying.",
@@ -245,6 +277,11 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
       "Hmm. Adjusting my read on you.",
       "Well played. You're less predictable than I thought.",
     ],
+    callMemory: [
+      "I remember that card. You played it rounds ago.",
+      "I've been keeping track. That one's already been played.",
+      "Nice try, but I don't forget a card.",
+    ],
     calledAndCaught: [
       "You're sharp. I'll adapt.",
       "Noted. Won't make that mistake twice.",
@@ -292,6 +329,10 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
     callFail: [
       "Hmm. You're more careful than I thought.",
       "Fair enough. Won't happen again.",
+    ],
+    callMemory: [
+      "That card's been played. I count every one.",
+      "I remember exactly what's hit this table. That's a duplicate.",
     ],
     calledAndCaught: [
       "Calculated risk. Didn't pay off this time.",

@@ -143,7 +143,6 @@ export function useVoidsGambit(): UseVoidsGambit {
     if (!game) return;
 
     const phase = game.phase;
-    const archetype = game.config.npcArchetype;
 
     let delay: number | null = null;
     let action: (() => void) | null = null;
@@ -172,11 +171,8 @@ export function useVoidsGambit(): UseVoidsGambit {
             const result = declare(prev, ai.cardId, ai.declaration);
             if (!result.ok) return prev;
 
-            // Set dialogue based on declared value
-            const isHigh = ai.declaration.value >= 5;
-            const key = isHigh ? "declareHigh" : "declare";
-            setNpcDialogue(pickDialogue(archetype, key));
-
+            const key = ai.declaration.value >= 5 ? "declareHigh" : "declare";
+            setNpcDialogue(pickDialogue(prev.config.npcArchetype, key));
             return result.state;
           });
         };
@@ -187,27 +183,29 @@ export function useVoidsGambit(): UseVoidsGambit {
         action = () => {
           setGame((prev) => {
             if (!prev || prev.phase !== "npc_call") return prev;
-            const shouldCall = chooseCallDecision(prev);
+            const decision = chooseCallDecision(prev);
 
-            if (shouldCall) {
+            if (decision.shouldCall) {
               const result = callOpponent(prev);
               if (!result.ok) return prev;
 
-              // Check the log to determine if call was successful
-              const lastLog =
-                result.state.log[result.state.log.length - 1];
-              if (lastLog.type === "call_success") {
-                setNpcDialogue(pickDialogue(archetype, "callSuccess"));
+              // Pick dialogue based on why the NPC called
+              let dialogueKey: keyof typeof NPC_DIALOGUE[typeof prev.config.npcArchetype];
+              if (decision.reason === "memory") {
+                dialogueKey = "callMemory";
               } else {
-                setNpcDialogue(pickDialogue(archetype, "callFail"));
+                const lastLog =
+                  result.state.log[result.state.log.length - 1];
+                dialogueKey =
+                  lastLog.type === "call_success" ? "callSuccess" : "callFail";
               }
-
+              setNpcDialogue(pickDialogue(prev.config.npcArchetype, dialogueKey));
               return result.state;
             }
 
             const result = passCall(prev);
             if (!result.ok) return prev;
-            setNpcDialogue(pickDialogue(archetype, "pass"));
+            setNpcDialogue(pickDialogue(prev.config.npcArchetype, "pass"));
             return result.state;
           });
         };
@@ -226,7 +224,7 @@ export function useVoidsGambit(): UseVoidsGambit {
           setGame((prev) => {
             if (!prev) return prev;
             const revealed = advancePhase(prev);
-            setNpcDialogue(pickDialogue(archetype, "reveal"));
+            setNpcDialogue(pickDialogue(prev.config.npcArchetype, "reveal"));
             return revealed;
           });
         };
@@ -239,11 +237,12 @@ export function useVoidsGambit(): UseVoidsGambit {
       }
       case "complete": {
         setIsProcessing(false);
-        // Set win/loss dialogue
         if (game.result) {
           const key =
             game.result.winner === "npc" ? "winning" : "losing";
-          setNpcDialogue(pickDialogue(archetype, key));
+          setNpcDialogue(
+            pickDialogue(game.config.npcArchetype, key),
+          );
         }
         return;
       }

@@ -15,6 +15,7 @@ import {
   CALL_RATE,
   MAX_INFLATION,
   REGULAR_CALL_ADAPT,
+  MEMORY_RECALL,
 } from "./constants";
 
 // ── Declaration ─────────────────────────────────────────────────
@@ -119,8 +120,15 @@ function chooseVoidValue(
 
 // ── Call decision ───────────────────────────────────────────────
 
+export type CallReason = "pass" | "hunch" | "card_counting" | "memory";
+
+export interface CallDecision {
+  shouldCall: boolean;
+  reason: CallReason;
+}
+
 /** Decide whether the NPC should call the player's declaration this round. */
-export function chooseCallDecision(state: GameState): boolean {
+export function chooseCallDecision(state: GameState): CallDecision {
   const { config, player, npc } = state;
   const { rng, npcArchetype } = config;
 
@@ -128,7 +136,7 @@ export function chooseCallDecision(state: GameState): boolean {
   const playerEntry = player.manifest.find(
     (e) => e.round === state.round && !e.caught,
   );
-  if (!playerEntry) return false;
+  if (!playerEntry) return { shouldCall: false, reason: "pass" };
 
   const declaredValue = playerEntry.declaration.value;
   const declaredSuit = playerEntry.declaration.suit;
@@ -143,7 +151,18 @@ export function chooseCallDecision(state: GameState): boolean {
 
   if (holdsExactCard) {
     // NPC knows for certain this is a lie — almost always call
-    return rng() < 0.95;
+    if (rng() < 0.95) return { shouldCall: true, reason: "card_counting" };
+  }
+
+  // Memory check: does the NPC recall a duplicate from played/revealed cards?
+  // Gated by MEMORY_RECALL — harder NPCs check more reliably.
+  const memoryChance = MEMORY_RECALL[npcArchetype];
+  if (memoryChance > 0 && rng() < memoryChance) {
+    const isDuplicate = isKnownDuplicate(state, declaredSuit, declaredValue);
+    if (isDuplicate) {
+      // NPC remembers seeing this card — certain call
+      return { shouldCall: true, reason: "memory" };
+    }
   }
 
   // Base call rate from archetype
@@ -169,10 +188,53 @@ export function chooseCallDecision(state: GameState): boolean {
     callProbability += 0.15;
   }
 
-  return rng() < Math.max(0, Math.min(callProbability, 0.9));
+  const calls = rng() < Math.max(0, Math.min(callProbability, 0.9));
+  return { shouldCall: calls, reason: calls ? "hunch" : "pass" };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Check if the declared card is provably a duplicate.
+ * The NPC "knows" about:
+ * 1. Their own manifest — they remember what cards they actually played.
+ * 2. Revealed cards — cards exposed through successful calls are public info.
+ *
+ * Note: only checks the *actual* card (entry.card), not the declaration,
+ * since the NPC doesn't know the truth behind unrevealed opponent cards.
+ */
+function isKnownDuplicate(
+  state: GameState,
+  suit: string,
+  value: number,
+): boolean {
+  // NPC's own played cards (they always know their own real cards)
+  for (const entry of state.npc.manifest) {
+    if (
+      entry.card.type === "standard" &&
+      entry.card.suit === suit &&
+      entry.card.value === value
+    ) {
+      return true;
+    }
+  }
+
+  // Revealed cards from either manifest (public knowledge from calls)
+  for (const entry of state.player.manifest) {
+    if (
+      entry.revealed &&
+      entry.card.type === "standard" &&
+      entry.card.suit === suit &&
+      entry.card.value === value
+    ) {
+      return true;
+    }
+  }
+  // NPC manifest revealed cards are also public, but we already
+  // checked all NPC manifest cards above (NPC knows their own).
+
+  return false;
+}
 
 /** Count how many times a player's lies have been caught. */
 function countCaughtLies(manifest: ManifestEntry[]): number {

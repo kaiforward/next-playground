@@ -12,7 +12,7 @@ import {
   getDeclaredTotal,
 } from "@/lib/engine/mini-games/voids-gambit";
 import type { UseVoidsGambit } from "@/lib/hooks/use-voids-gambit";
-import { getSuitBadgeColor } from "./suit-styles";
+import { SuitBadge } from "./suit-badge";
 import { DifficultyDots } from "./difficulty-dots";
 import { ManifestRow } from "./manifest-row";
 import { PlayerHand } from "./player-hand";
@@ -73,7 +73,7 @@ export function GameTable({ vg }: GameTableProps) {
     if (game?.phase === "complete") {
       scoringDialog.onOpen();
     }
-  }, [game?.phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [game?.phase, scoringDialog.onOpen]);
 
   if (!game || !npcIdentity) return null;
 
@@ -129,9 +129,7 @@ export function GameTable({ vg }: GameTableProps) {
           {currentDemand && (
             <div className="flex items-center gap-2">
               <span className="text-sm text-white/40">Demand:</span>
-              <Badge color={getSuitBadgeColor(currentDemand)}>
-                {SUIT_LABELS[currentDemand]}
-              </Badge>
+              <SuitBadge suit={currentDemand} />
             </div>
           )}
         </div>
@@ -143,12 +141,7 @@ export function GameTable({ vg }: GameTableProps) {
               History:
             </span>
             {demandHistory.map((suit, i) => (
-              <Badge
-                key={i}
-                color={getSuitBadgeColor(suit)}
-              >
-                {SUIT_LABELS[suit]}
-              </Badge>
+              <SuitBadge key={`demand-${i}`} suit={suit} />
             ))}
           </div>
         )}

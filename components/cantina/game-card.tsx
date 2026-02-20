@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { tv } from "tailwind-variants";
+import { tv, type VariantProps } from "tailwind-variants";
 import type { Card, Declaration } from "@/lib/engine/mini-games/voids-gambit";
-import { SUIT_LABELS, SUIT_COLORS } from "@/lib/engine/mini-games/voids-gambit";
-import { SUIT_BG, SUIT_TEXT } from "./suit-styles";
+import { SUIT_LABELS } from "@/lib/engine/mini-games/voids-gambit";
+import { suitTheme } from "./suit-styles";
 
 // ── Variants ─────────────────────────────────────────────────────
 
@@ -82,14 +82,16 @@ const declaredBadgeTextVariants = tv({
 
 // ── Props ────────────────────────────────────────────────────────
 
+type GameCardVariants = VariantProps<typeof gameCardVariants>;
+
 interface GameCardProps {
   card?: Card;
   face: "up" | "down";
   declaration?: Declaration;
-  size?: "sm" | "md";
-  isSelected?: boolean;
-  isSelectable?: boolean;
-  isCaught?: boolean;
+  size?: GameCardVariants["size"];
+  isSelected?: GameCardVariants["selected"];
+  isSelectable?: GameCardVariants["selectable"];
+  isCaught?: GameCardVariants["caught"];
   onClick?: () => void;
 }
 
@@ -135,26 +137,24 @@ export function GameCard({
     );
   }
 
-  // Standard card (face up)
+  // Standard card (face up) — suit is guaranteed (void/face-down handled above)
   const suit = card?.suit;
-  const colorKey = suit ? SUIT_COLORS[suit] : "slate";
-  const bgClass = SUIT_BG[colorKey] ?? "bg-white/10 border-white/20";
-  const textClass = SUIT_TEXT[colorKey] ?? "text-white/60";
+  if (!suit) return null;
+
+  const theme = suitTheme({ suit });
 
   const showDeclared =
     declaration &&
     (card?.suit !== declaration.suit || card?.value !== declaration.value);
 
   return (
-    <CardShell {...shellProps} bgClassName={bgClass}>
-      <span className={cardValueVariants({ size, className: textClass })}>
+    <CardShell {...shellProps} bgClassName={theme.card()}>
+      <span className={cardValueVariants({ size, className: theme.text() })}>
         {card?.value}
       </span>
-      {suit && (
-        <span className={cardSuitVariants({ size, className: textClass })}>
-          {SUIT_LABELS[suit]}
-        </span>
-      )}
+      <span className={cardSuitVariants({ size, className: theme.text() })}>
+        {SUIT_LABELS[suit]}
+      </span>
       {showDeclared && (
         <DeclaredAsBadge declaration={declaration} size={size} />
       )}
@@ -166,10 +166,10 @@ export function GameCard({
 // ── Internal shell ───────────────────────────────────────────────
 
 interface CardShellProps {
-  size: "sm" | "md";
-  isSelectable: boolean;
-  isSelected: boolean;
-  isCaught: boolean;
+  size: GameCardVariants["size"];
+  isSelectable: GameCardVariants["selectable"];
+  isSelected: GameCardVariants["selected"];
+  isCaught: GameCardVariants["caught"];
   onClick?: () => void;
   bgClassName: string;
   children: ReactNode;
@@ -185,7 +185,9 @@ function CardShell({
   children,
 }: CardShellProps) {
   return (
-    <div
+    <button
+      type="button"
+      disabled={!isSelectable}
       className={gameCardVariants({
         size,
         selectable: isSelectable,
@@ -194,11 +196,9 @@ function CardShell({
         className: bgClassName,
       })}
       onClick={isSelectable ? onClick : undefined}
-      role={isSelectable ? "button" : undefined}
-      tabIndex={isSelectable ? 0 : undefined}
     >
       {children}
-    </div>
+    </button>
   );
 }
 
@@ -211,8 +211,7 @@ function DeclarationOverlay({
   declaration: Declaration;
   isCaught: boolean;
 }) {
-  const colorKey = SUIT_COLORS[declaration.suit];
-  const textClass = SUIT_TEXT[colorKey] ?? "text-white/60";
+  const textClass = suitTheme({ suit: declaration.suit }).text();
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -233,8 +232,7 @@ function DeclaredAsBadge({
   declaration: Declaration;
   size: "sm" | "md";
 }) {
-  const colorKey = SUIT_COLORS[declaration.suit];
-  const textClass = SUIT_TEXT[colorKey] ?? "text-white/60";
+  const textClass = suitTheme({ suit: declaration.suit }).text();
 
   return (
     <div className={declaredBadgeVariants({ size })}>

@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import { tv } from "tailwind-variants";
 import type { Card, Declaration, Suit } from "@/lib/engine/mini-games/voids-gambit";
-import { SUIT_LABELS, VALUES_PER_SUIT } from "@/lib/engine/mini-games/voids-gambit";
-import { Badge } from "@/components/ui/badge";
+import { VALUES_PER_SUIT } from "@/lib/engine/mini-games/voids-gambit";
 import { Button } from "@/components/ui/button";
-import { getSuitBadgeColor } from "./suit-styles";
+import { SuitBadge } from "./suit-badge";
 import { GameCard } from "./game-card";
 
 // ── Variants ──────────────────────────────────────────────────────
@@ -42,12 +41,10 @@ export function PlayerHand({
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
   const [selectedValue, setSelectedValue] = useState<number | null>(null);
 
-  // Reset selection when phase becomes active
+  // Reset selection on phase transitions
   useEffect(() => {
-    if (isActive) {
-      setSelectedCardId(null);
-      setSelectedValue(null);
-    }
+    setSelectedCardId(null);
+    setSelectedValue(null);
   }, [isActive]);
 
   const handleCardClick = (cardId: number) => {
@@ -62,8 +59,6 @@ export function PlayerHand({
     setSelectedCardId(null);
     setSelectedValue(null);
   };
-
-  const badgeColor = currentDemand ? getSuitBadgeColor(currentDemand) : undefined;
 
   return (
     <div className="space-y-4">
@@ -87,7 +82,7 @@ export function PlayerHand({
         <div className="flex flex-col items-center gap-3 pt-2">
           <div className="flex items-center gap-2 text-sm text-white/50">
             <span>Declare as</span>
-            <Badge color={badgeColor}>{SUIT_LABELS[currentDemand]}</Badge>
+            <SuitBadge suit={currentDemand} />
           </div>
 
           {/* Value picker */}
