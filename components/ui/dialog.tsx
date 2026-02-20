@@ -96,10 +96,18 @@ export function Dialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [modal, open, onClose]);
 
+  // Non-modal needs m-0 + inset-auto for manual positioning.
+  // Modal should NOT set these — showModal() centers via UA styles
+  // (position: fixed; inset: 0; margin: auto) and overriding them
+  // breaks centering.
+  const baseClasses = modal
+    ? "m-auto max-h-none max-w-none border-none p-0 backdrop:bg-black/60"
+    : "m-0 max-h-none max-w-none border-none p-0 inset-auto";
+
   return (
     <dialog
       ref={dialogRef}
-      className={`m-0 max-h-none max-w-none border-none p-0 inset-auto ${className ?? ""}`}
+      className={`${baseClasses} ${className ?? ""}`}
       {...props}
     >
       {children}

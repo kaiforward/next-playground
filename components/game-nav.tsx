@@ -13,6 +13,7 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Command Center" },
   { href: "/map", label: "Star Map" },
+  { href: "/cantina", label: "Cantina" },
 ];
 
 function NavCredits() {
