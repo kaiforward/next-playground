@@ -109,7 +109,15 @@ export function useVoidsGambit(): UseVoidsGambit {
     setGame((prev) => {
       if (!prev || prev.phase !== "player_call") return prev;
       const result = callOpponent(prev);
-      return result.ok ? result.state : prev;
+      if (!result.ok) return prev;
+
+      // NPC reacts to being called
+      const lastLog = result.state.log[result.state.log.length - 1];
+      const dialogueKey =
+        lastLog.type === "call_success" ? "calledAndCaught" : "calledAndHonest";
+      setNpcDialogue(pickDialogue(prev.config.npcArchetype, dialogueKey));
+
+      return result.state;
     });
   }, []);
 
@@ -239,7 +247,11 @@ export function useVoidsGambit(): UseVoidsGambit {
         setIsProcessing(false);
         if (game.result) {
           const key =
-            game.result.winner === "npc" ? "winning" : "losing";
+            game.result.winner === "npc"
+              ? "winning"
+              : game.result.winner === "tie"
+                ? "tie"
+                : "losing";
           setNpcDialogue(
             pickDialogue(game.config.npcArchetype, key),
           );

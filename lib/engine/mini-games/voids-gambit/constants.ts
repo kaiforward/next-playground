@@ -147,6 +147,7 @@ export interface NpcDialogueSet {
   pass: string[];
   winning: string[];
   losing: string[];
+  tie: string[];
   reveal: string[];
 }
 
@@ -195,6 +196,10 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
     losing: [
       "Well played. Maybe I should take more risks.",
       "Can't win them all playing it safe.",
+    ],
+    tie: [
+      "A fair game. Even split.",
+      "Can't complain about an honest draw.",
     ],
     reveal: [
       "Let's see what we've got.",
@@ -249,6 +254,10 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
       "The cards will turn. They always do.",
       "Next game. Double or nothing?",
     ],
+    tie: [
+      "A draw? Where's the fun in that?",
+      "Even money. Boring. Let's go again.",
+    ],
     reveal: [
       "Here we go — moment of truth!",
       "Flip 'em!",
@@ -302,6 +311,10 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
       "You've got a good poker face. I'll remember that.",
       "Alright, you got me. This time.",
     ],
+    tie: [
+      "Even. That doesn't happen often.",
+      "A draw. I'll take it as a learning experience.",
+    ],
     reveal: [
       "Let's see who read whom.",
       "The reveal. My favorite part.",
@@ -353,6 +366,10 @@ export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
     losing: [
       "Well played. I underestimated you.",
       "Next time, I won't hold back.",
+    ],
+    tie: [
+      "Dead even. I'll take the rematch.",
+      "A draw. Sharper next time.",
     ],
     reveal: [
       "Let's see what you were hiding.",

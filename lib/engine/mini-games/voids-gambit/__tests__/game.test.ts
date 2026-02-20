@@ -172,13 +172,16 @@ describe("full game flow", () => {
         state = result.state;
       }
 
-      // Call window — both pass
-      expect(state.phase).toBe("player_call");
+      // Call window — both pass (call order mirrors declaration order)
+      const firstCall = state.firstPlayer === "player" ? "player_call" : "npc_call";
+      const secondCall = state.firstPlayer === "player" ? "npc_call" : "player_call";
+
+      expect(state.phase).toBe(firstCall);
       let passResult = passCall(state);
       if (!passResult.ok) throw new Error(passResult.error);
       state = passResult.state;
 
-      expect(state.phase).toBe("npc_call");
+      expect(state.phase).toBe(secondCall);
       passResult = passCall(state);
       if (!passResult.ok) throw new Error(passResult.error);
       state = passResult.state;

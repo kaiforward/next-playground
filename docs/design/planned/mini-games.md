@@ -73,7 +73,7 @@ All cards are played face-down. There is no face-up option. Your declaration mus
 The second player sees the first player's declaration before making their own. This gives the second player information — and pressure. If the first player declared Tech 7, do you also declare high and risk looking suspicious? Or play conservative and fall behind?
 
 #### Call Phase
-After both players have declared, there is a **call window**. Either player may challenge the other's declaration by calling cheat.
+After both players have declared, there is a **call window**. The first player (who declared first this round) calls first, then the other player. Call order mirrors declaration order and alternates each round.
 
 - **Calls target only the card played this round** — previous rounds' cards are locked in and cannot be challenged. If you don't call it now, it's safe forever. This creates the urgency of the call window
 - Each player may call the other once per round
@@ -225,7 +225,7 @@ NPC opponents have distinct playstyles, providing variety and escalating challen
 | **Cautious Trader** | Declares honestly. Low-value inflation at most. Only calls obviously suspicious declarations (7s when they hold high cards of that suit). The beginner opponent | Low | Very low | Core/federation cantinas |
 | **Frontier Gambler** | Inflates aggressively — declares 5–7 regardless of real card. Rarely calls — too confident in their own bluffs to worry about yours. Volatile — easy to beat with smart calling, dangerous if left unchecked | Very low | Very high | Frontier cantinas |
 | **Sharp Smuggler** | Moderate inflation with strategic calling. Counts cards and calls when the math is good. Subtle — lies close to the truth (real 3 declared as 5, not 7). Hard to read because declarations are always plausible | Medium (calculated) | Medium (subtle) | Black market locations |
-| **Station Regular** | Balanced. Adapts to the player's behaviour within and across games. If the player lies often, increases calling. If the player calls often, plays more honestly to punish wrong calls. The meta opponent | Adaptive | Adaptive | Any cantina — recurring NPC |
+| **Station Regular** | Balanced. Adapts to the player's behaviour within a game — increases calling when the player is caught lying. Cross-game adaptation (tracking patterns across multiple games) is a future enhancement. The meta opponent | Adaptive | Adaptive | Any cantina — recurring NPC |
 
 NPC dialogue during play adds personality:
 - Cautious Trader: "Raw Materials 4. Straight and honest." / "Hmm... I'll let that one go."
@@ -235,11 +235,16 @@ NPC dialogue during play adds personality:
 
 ### 1.11 Stakes & Play Locations
 
-| Tier | Buy-in | Where | Opponents available | Notes |
+Wager limits are set per opponent archetype, reflecting their personality and risk tolerance:
+
+| Opponent | Wager range | Default | Step | Notes |
 |---|---|---|---|---|
-| **Casual** | 10–50 CR | Any cantina | Cautious Trader, Frontier Gambler | Relaxed atmosphere. Good for learning. The default experience |
-| **Standard** | 100–500 CR | Trade hub cantinas, busier stations | All archetypes up to Station Regular | More competitive. Stakes matter but won't break the bank |
-| **High stakes** | 1,000–5,000 CR | Specific locations, back rooms accessed through NPC dialogue (reputation-gated) | The Shark + special NPCs | Invitation-only. Atmosphere shifts — quieter, more intense. Unique prizes in addition to credits |
+| **Cautious Trader** | 10–200 CR | 50 CR | 10 | Low stakes. Good for learning |
+| **Frontier Gambler** | 10–750 CR | 100 CR | 25 | Wide range — casual or aggressive |
+| **Sharp Smuggler** | 25–500 CR | 100 CR | 25 | Moderate stakes, calculated play |
+| **Station Regular** | 50–1,000 CR | 200 CR | 50 | Higher floor — Kaz doesn't play cheap |
+
+Future location-based gating (e.g., high-stakes back rooms, reputation requirements) will layer on top of per-opponent limits when the in-system location system ships.
 
 Stakes are always opt-in. No mission or progression element requires playing Void's Gambit. It's pure optional entertainment with an earning potential.
 
@@ -348,13 +353,13 @@ Mini-game rewards are primarily credits (wagered in the game), but extended enga
 
 Phase 1 ships Void's Gambit only:
 - Core rules (§1.2 through §1.7)
-- 3 NPC opponent archetypes: Cautious Trader, Frontier Gambler, Station Regular
-- Casual and Standard stake tiers
+- 4 NPC opponent archetypes: Cautious Trader, Frontier Gambler, Sharp Smuggler, Station Regular
+- Per-opponent wager limits (see §1.11)
 - NPC dialogue during play (personality-driven commentary)
 - Basic win/loss tracking per NPC
 
 Phase 1 does NOT include:
-- High-stakes tier or The Shark NPC
+- Location-gated stakes or The Shark NPC
 - Contraband special mechanics
 - Card variants or deck customization
 - Tournament events

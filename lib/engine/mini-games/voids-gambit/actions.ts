@@ -40,15 +40,20 @@ function getNextPhaseAfterDeclare(
   actor: LogActor,
 ): GamePhase {
   // After first declaration → other player declares.
-  // After second declaration → player call window.
+  // After second declaration → first player's call window (mirrors declaration order).
   if (state.firstPlayer === "player") {
     return actor === "player" ? "npc_declare" : "player_call";
   }
-  return actor === "npc" ? "player_declare" : "player_call";
+  return actor === "npc" ? "player_declare" : "npc_call";
 }
 
-function getNextPhaseAfterCall(phase: GamePhase): GamePhase {
-  return phase === "player_call" ? "npc_call" : "round_end";
+function getNextPhaseAfterCall(state: GameState): GamePhase {
+  // After first caller → other player's call window.
+  // After second caller → round end.
+  if (state.firstPlayer === "player") {
+    return state.phase === "player_call" ? "npc_call" : "round_end";
+  }
+  return state.phase === "npc_call" ? "player_call" : "round_end";
 }
 
 // ── Declare ─────────────────────────────────────────────────────
@@ -151,7 +156,7 @@ export function callOpponent(state: GameState): ActionResult {
 
   const entry = targetState.manifest[entryIndex];
   const honest = isHonestDeclaration(entry);
-  const nextPhase = getNextPhaseAfterCall(state.phase);
+  const nextPhase = getNextPhaseAfterCall(state);
 
   if (honest) {
     // Wrong call: card stays and is revealed, caller takes -3
@@ -233,7 +238,7 @@ export function passCall(state: GameState): ActionResult {
   }
 
   const actor: LogActor = isPlayerPhase ? "player" : "npc";
-  const nextPhase = getNextPhaseAfterCall(state.phase);
+  const nextPhase = getNextPhaseAfterCall(state);
 
   return {
     ok: true,

@@ -245,12 +245,13 @@ function countCaughtLies(manifest: ManifestEntry[]): number {
 function countKnownSuitCards(state: GameState, suit: string): number {
   let count = 0;
 
-  // Revealed cards in both manifests
+  // Revealed-but-not-caught cards in manifests (from failed calls — card stays in play).
+  // Caught cards are already in the discard pile, so skip them to avoid double-counting.
   for (const entry of state.player.manifest) {
-    if (entry.revealed && entry.card.suit === suit) count++;
+    if (entry.revealed && !entry.caught && entry.card.suit === suit) count++;
   }
   for (const entry of state.npc.manifest) {
-    if (entry.revealed && entry.card.suit === suit) count++;
+    if (entry.revealed && !entry.caught && entry.card.suit === suit) count++;
   }
 
   // Discard pile
