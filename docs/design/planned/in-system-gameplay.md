@@ -345,9 +345,9 @@ Phase 1 delivers a focused, polished slice of in-system gameplay. Enough to demo
 - Missions sourced from NPC dialogue and the job board
 
 **Mini-game:**
-- Void's Gambit at cantinas (see [Mini-Games §1](./mini-games.md))
-- 2–3 NPC opponent archetypes with distinct playstyles
-- Casual and standard stake tiers
+- Void's Gambit at cantinas (see [Mini-Games §1](./mini-games.md)) — **prototype fully built** (engine, AI, UI at `/cantina`). Needs integration into the Explore tab
+- All 4 NPC opponent archetypes with distinct playstyles and dialogue
+- Per-opponent wager limits with credit validation
 
 **Rewards:**
 - Credits and faction reputation from missions
@@ -368,15 +368,145 @@ Phase 1 delivers a focused, polished slice of in-system gameplay. Enough to demo
 
 ### 8.3 Content Architecture
 
-Locations, NPCs, and missions are **data-driven** — defined in constant files (like goods and events today), not hardcoded in components. New content is added by writing data, not code.
+Two layers: **templates** (constants, like goods and events today) and **state** (DB records, like active events and trade missions). Templates define what *can* exist. State tracks what's happening for a specific player. Adding content means adding template entries to constants files — a content task, not an engineering task.
 
-**Locations** define a name, description (varying by trait quality tier), trait requirement (or none for universal locations), and which NPCs are present.
+#### Location Templates
 
-**NPCs** define a name, title, personality descriptor (guides writing tone), type (fixture/specialist/wanderer/visitor), visit-count-aware greetings, and a dialogue tree of branching nodes. Each dialogue node has text and a set of player response options, some gated by reputation, previous interactions, or other conditions.
+Each location template defines:
 
-**In-system missions** define a title, description, category, source location and NPC, tick duration (zero for instant missions), a sequence of stages with branching player choices, and rewards (credits, reputation, items).
+| Field | Description |
+|---|---|
+| id | Unique string identifier |
+| name | Display name — may vary by quality tier ("Cramped Mining Shack" at marginal vs "Sprawling Excavation Complex" at exceptional) |
+| description | Flavor text per quality tier (marginal / solid / exceptional). Three variants per location |
+| category | universal, planetary, orbital, resource, anomaly, infrastructure |
+| traitRequirement | Which system trait generates this location, or none for universal locations |
+| npcs | Which NPC template IDs are present at this location |
+| activities | Available activity types: dialogue, missions, mini-game |
 
-This mirrors how goods, events, and economy types are defined today — a constants file that the engine reads. Adding a new mission or NPC is a content task, not an engineering task.
+Location instances are **derived at runtime** from system traits — not stored in the DB. Given a system's traits and quality tiers, the engine deterministically computes which locations exist. This matches how economy type is derived from traits in system-enrichment.md.
+
+Phase 1 location templates (~7):
+- Universal (3): Docking Bay, Station Cantina, Market Terminal
+- Trait-generated (4): Settlement (habitable world), Prospecting Field (asteroid belt), Excavation Site (precursor ruins), Station Concourse (lagrange stations)
+
+#### NPC Templates
+
+Each NPC template defines:
+
+| Field | Description |
+|---|---|
+| id | Unique string identifier |
+| name | Display name. Fixtures have fixed names per location; the wanderer has one name galaxy-wide |
+| title | Role descriptor ("Station Bartender", "Mining Foreman", "Archaeologist") |
+| type | fixture, specialist, wanderer |
+| personality | Tone guide for dialogue writing: terse, chatty, formal, suspicious, etc. |
+| locationId | Which location template this NPC appears at |
+| greetings | Visit-count-aware greeting text: first visit, repeat (2–5 visits), frequent (6+) |
+| dialogue | Set of dialogue topics (see below) |
+| functions | What this NPC offers: mission_giver, info_broker, mini_game_opponent, lore_source |
+
+**Dialogue model** (Phase 1 — deliberately simple): Each NPC has a set of **topics** rather than a deep branching tree. Each topic has a name, NPC text, and a list of player responses. Each response has label text, an optional gate (faction reputation threshold, visit count), and an outcome — either more NPC text (one-level reply) or an action (offer mission, reveal intel, start mini-game). This covers Phase 1 needs without building a full dialogue engine. Phase 2 adds deeper multi-level branching and conditional state tracking.
+
+Phase 1 NPC roster (~15 templates):
+- Docking Bay (2): Dockmaster (ship status, departure), Customs Officer (contraband hints)
+- Station Cantina (2 + mini-game opponents): Bartender (rumors, intel, mission hooks), plus Void's Gambit opponents from existing archetypes
+- Market Terminal (1): Trade Clerk (market tips, price trend commentary)
+- Per trait location (4): Archaeologist (ruins), Mining Foreman (prospecting), Settlement Administrator (settlement), Station Manager (concourse) — each is a specialist with location-specific dialogue and missions
+- Wanderer (1): A traveling character who appears at one random system and moves periodically. Offers rotating dialogue and occasional intel. Seeds future questlines but in Phase 1 is a standalone encounter
+
+#### In-System Mission Templates
+
+Each mission template defines:
+
+| Field | Description |
+|---|---|
+| id | Unique string identifier |
+| title | Display name |
+| description | Briefing text shown when offered |
+| category | From §4.3: exploration, archaeology, salvage, social, investigation, hazardous |
+| locationId | Which location offers this mission |
+| npcId | Which NPC gives this mission (or none for job board missions) |
+| tickDuration | 0 for instant, 1–5 for short |
+| stages | Ordered list of mission stages with player choices and outcomes |
+| rewards | Credits (fixed or range), faction reputation (faction ID + amount), intel text |
+| cooldown | Minimum ticks before this mission can be offered again at the same system |
+
+**Mission stage model**: Each stage has narrative text describing the situation and a list of player choices. Each choice has label text, an outcome type (success, failure, partial), follow-up narrative text, and reward modifiers. Instant missions have a single stage — the choices directly determine the outcome. Short-duration missions have 2–3 stages: the first stage accepts the mission and commits the ship, intermediate stages may offer choices when checked on, and the final stage resolves when the duration elapses.
+
+Phase 1 target: 5–8 templates per trait location type, ~25 total. Roughly 60% instant (dialogue choices with immediate outcomes) and 40% short-duration (1–5 tick commitment with resolution).
+
+### 8.4 Phase 1 Data Model
+
+Only player-specific state that changes over time needs DB records. Everything else is derived from constants and system traits.
+
+| Model | Purpose | Key fields |
+|---|---|---|
+| **InSystemMission** | Tracks a player's active or completed in-system mission | playerId, shipId (null for instant), missionTemplateId, systemId, status (active / completed / failed / abandoned), currentStage, startTick, completionTick, choices (which options the player picked at each stage), rewardsGranted |
+| **NpcVisit** | Tracks visit count per player per NPC at a system | playerId, npcTemplateId, systemId, visitCount, lastVisitTick |
+
+**What doesn't need DB records in Phase 1:**
+- Locations — deterministically derived from system traits at runtime
+- NPC definitions — constants files
+- Mission definitions — constants files
+- Location discovery state — all locations visible in Phase 1 (discovery gating is Phase 2)
+- NPC familiarity beyond visit count — Phase 2
+
+The `InSystemMission` model is structurally similar to `TradeMission` but differs in key ways: no destination system (everything happens locally), has branching stage state tracking choices, and links to a committed ship for timed missions. These could share a base pattern or be separate models — an implementation decision.
+
+### 8.5 Void's Gambit Integration
+
+The mini-game prototype is fully implemented as a standalone client-side experience at `/cantina`. The engine, AI, all 4 NPC archetypes, dialogue, and game UI are complete and tested. Phase 1 integration moves this into the in-system location framework.
+
+**What stays the same:**
+- The entire engine (`lib/engine/mini-games/voids-gambit/`) — pure functions, no changes needed
+- The game UI components (game table, player hand, manifest rows, scoring dialog, card rendering)
+- The game state hook (state management, NPC turn sequencing with delays, dialogue selection)
+
+**What changes:**
+- The standalone `/cantina` route is removed. Void's Gambit is accessed through the cantina location within a system's Explore tab
+- The lobby becomes system-aware: which NPC archetypes are available may vary by system traits and government type (Phase 1 can start with all 4 available everywhere, then narrow later)
+- **Credit transfer**: winning wagers are credited to the player's balance via an API mutation. The engine already computes `potWinnings` — a new mutation route debits the loser's wager and credits winnings. Losing deducts the wager
+- **Wager validation**: the lobby caps the max wager at the player's current balance. "Sit Down" is disabled if the player can't afford the minimum wager
+- **Win/loss tracking**: game results are persisted per player per NPC archetype, extending NpcVisit or a dedicated record. Enables future dialogue variations ("You still owe me from last time")
+
+**Build sequence**: The Explore tab framework and location rendering ship first. Then Void's Gambit components are re-mounted inside the cantina location — the engine and game UI are essentially drag-and-drop. Only the lobby wrapper (system-aware archetype filtering, balance validation) and credit mutation need new work.
+
+### 8.6 Ship Commitment for Timed Missions
+
+Short-duration missions (1–5 ticks) commit a player's docked ship for the duration. The ship cannot travel or accept another timed mission while committed. This reuses the same conceptual pattern as ship travel — the ship has a busy state with a completion tick.
+
+**Mechanism**: When a player accepts a timed mission, the `InSystemMission` record stores the ship ID and the completion tick (current tick + mission duration). The ship is considered "on mission" until that tick passes. Mission completion is checked when the player interacts (views the mission, visits the location) — the tick engine does not need a dedicated processor for this. The mission simply becomes resolvable after enough ticks have passed, and the player completes it through the UI.
+
+**Instant missions** do not commit a ship. The player can do multiple instant missions in a row while docked.
+
+**Ship selection**: If the player has multiple ships docked at the same system, they choose which ship to commit. Only docked, idle ships are eligible.
+
+**Interruption**: The player can abandon a timed mission early, freeing the ship immediately. Abandoning forfeits rewards and may affect NPC greeting text on next visit.
+
+### 8.7 Phase 1 Implementation Sequence
+
+Suggested build order, each step building on the previous:
+
+1. **Location constants and derivation engine** — constants file with location and NPC templates. Pure functions that derive locations from a system's traits. No DB, no UI. Testable with Vitest.
+2. **Explore tab shell** — new tab on the system page. Renders the location list derived from the current system's traits. Clicking a location shows its description and present NPCs. The framework for everything below.
+3. **NPC dialogue** — clicking an NPC opens the dialogue UI. Topic list, responses, gate checks (reputation). NpcVisit model and tracking for greeting variation.
+4. **Instant missions** — mission template constants, mission acceptance through NPC dialogue or job board, single-stage missions with choices and immediate resolution. InSystemMission model, credit and reputation rewards.
+5. **Timed missions** — ship commitment, multi-stage missions, completion check after tick duration. Extends InSystemMission with ship and timing fields.
+6. **Void's Gambit integration** — move from standalone route into cantina location. Credit transfer mutation. Wager validation against player balance. Win/loss tracking.
+7. **Content pass** — write the actual location descriptions, NPC dialogue, and mission templates for all Phase 1 locations. This is content authoring — adding data to constants files, not engineering work.
+
+Steps 1–3 establish the framework. Steps 4–5 add mission gameplay. Step 6 wires in the existing mini-game. Step 7 is pure content creation.
+
+### 8.8 Layer Dependencies
+
+Phase 1 is positioned in Layer 3 (depends on Layer 0 traits and Layer 2 factions). However, much of Phase 1 can be built against the **current** system model with minimal stubs:
+
+- **Locations** depend on system traits (Layer 0). If traits aren't shipped yet, Phase 1 can use the current economy type as a rough location selector — an agricultural system gets settlement-style locations, an extraction system gets mining locations. This is a pragmatic bridge, not the final design.
+- **Reputation gating** depends on factions (Layer 2). Phase 1 dialogue gates can check against the current government type or simply skip reputation gates until factions ship.
+- **Void's Gambit** has no layer dependencies — it works today. Integration into the Explore tab only requires the tab shell (step 2 above).
+
+This means the Explore tab framework, dialogue system, and mini-game integration can be built early, even before Layers 0–2 are fully complete. Trait-driven location variety and faction-gated content are wired in as those layers ship.
 
 ---
 
@@ -412,12 +542,15 @@ Mission flow within the in-system interface:
 
 ### 9.4 Mini-Game UI
 
-Void's Gambit needs its own game board interface:
-- Card display (player hand, player manifest, opponent manifest)
-- Clear indication of face-up vs face-down cards
-- Turn actions (play face-up, play face-down + declare, inspect)
-- Score tracking and pot display
-- NPC opponent dialogue during play (trash talk, reactions to good/bad plays)
+Void's Gambit game board interface — **already built** in the prototype:
+- Card display (player hand, player manifest, NPC manifest) with face-up/face-down states
+- Declaration UI with suit badge and value selector
+- Call/pass decision prompt with NPC dialogue reactions
+- Demand deck tracking and round indicator
+- Scoring dialog with per-card breakdown at game end
+- NPC personality-driven dialogue throughout play
+
+The existing UI components mount directly inside the cantina location view. The lobby (NPC selection, wager input) becomes a sub-view of the cantina location rather than a standalone page.
 
 ---
 

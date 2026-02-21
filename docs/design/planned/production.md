@@ -4,7 +4,7 @@ Production facilities and the mechanics of player-driven goods production. Cover
 
 **Design principle**: Production facilities use the universal build system from [Player Facilities](./player-facilities.md) — construction, upgrades, operating costs, limits, and asset risk are inherited. This document only defines what makes production facilities unique: what they produce and how that production interacts with the game world.
 
-**Depends on**: [Player Facilities](./player-facilities.md) (build system), [Economy](../active/economy.md) (market integration), [System Enrichment](./system-enrichment.md) (traits, economy types, population), [Simulation Enhancements](./simulation-enhancements.md) (supply chain dependencies), [Faction System](./faction-system.md) (war material demand)
+**Depends on**: [Player Facilities](./player-facilities.md) (build system), [Economy](../active/economy.md) (market integration), [System Enrichment](./system-enrichment.md) (traits, economy types, population), [Faction System](./faction-system.md) (war material demand)
 
 ---
 
@@ -311,7 +311,7 @@ See also [Production Roster §10](./production-roster.md) for per-good tuning (p
 - **[Player Facilities](./player-facilities.md)** — universal build system (construction, upgrades, costs, limits, asset risk)
 - **[Economy](../active/economy.md)** — market simulation, supply/demand, production/consumption rates
 - **[System Enrichment](./system-enrichment.md)** — system traits, economy types, trait quality tiers, faction facilities
-- **[Simulation Enhancements](./simulation-enhancements.md)** — supply chain dependencies, NPC trade pressure
+- **[Simulation Enhancements](../archive/simulation-enhancements.md)** — supply chain dependencies, NPC trade pressure (archived — supply chain mechanics now covered in this doc)
 - **[Faction System](./faction-system.md)** — war material demand, faction economy effects, reputation
 - **[War System](./war-system.md)** — war material consumption, front-line demand spikes
 - **[Player Progression](./player-progression.md)** — production facilities as mid/late game content, ship automation
