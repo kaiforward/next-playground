@@ -229,7 +229,7 @@ See [event-catalog.md](../event-catalog.md) for implemented and planned event de
 
 ## Future Enhancements
 
-See [simulation-enhancements.md](../simulation-enhancements.md) for ideas requiring new engine mechanics.
+See [simulation-enhancements.md](./simulation-enhancements.md) for ideas requiring new engine mechanics.
 
 ## Data Model
 
