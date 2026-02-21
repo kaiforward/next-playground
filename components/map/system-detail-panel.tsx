@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import type { StarSystemInfo, ShipState, ActiveEvent } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
+import { TraitList } from "@/components/ui/trait-list";
 
 interface GatewayTarget {
   regionId: string;
@@ -138,6 +139,16 @@ export function SystemDetailPanel({
             <p className="text-sm text-gray-300 leading-relaxed">
               {system.description}
             </p>
+          </div>
+        )}
+
+        {/* System traits */}
+        {system.traits && system.traits.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+              Traits
+            </h3>
+            <TraitList traits={system.traits} variant="compact" />
           </div>
         )}
 

@@ -57,6 +57,18 @@ export default function SystemLayout({
       {regionInfo && (
         <p className="text-sm text-white/40 mb-1">
           Region: <span className="text-white/60">{regionInfo.name}</span>
+          <span className="text-white/30"> &middot; </span>
+          <span className="text-white/50 capitalize">
+            {regionInfo.identity.replace(/_/g, " ")}
+          </span>
+          {regionInfo.dominantEconomy && (
+            <>
+              <span className="text-white/30"> &middot; </span>
+              <span className="text-white/50 capitalize">
+                {regionInfo.dominantEconomy} economy
+              </span>
+            </>
+          )}
         </p>
       )}
 

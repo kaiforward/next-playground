@@ -3,13 +3,14 @@
 import { Handle, Position } from "@xyflow/react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { tv } from "tailwind-variants";
-import type { RegionTheme } from "@/lib/types/game";
+import type { EconomyType, RegionTheme } from "@/lib/types/game";
 
 export type RegionNavigationState = "origin" | "reachable" | "unreachable";
 
 export interface RegionNodeData {
   label: string;
   identity: RegionTheme;
+  dominantEconomy?: EconomyType;
   systemCount: number;
   shipCount: number;
   navigationState?: RegionNavigationState;
@@ -70,7 +71,7 @@ const pulseRing = tv({
 });
 
 export function RegionNode({ data }: NodeProps<Node<RegionNodeData>>) {
-  const { label, identity, systemCount, shipCount, navigationState } = data;
+  const { label, identity, dominantEconomy, systemCount, shipCount, navigationState } = data;
   const hasShips = shipCount > 0;
   // Hide pulse ring during navigation mode to avoid visual noise
   const showPulse = hasShips && !navigationState;
@@ -94,6 +95,9 @@ export function RegionNode({ data }: NodeProps<Node<RegionNodeData>>) {
         <div className="text-base font-bold leading-tight">{label}</div>
         <div className={identityLabel({ identity })}>
           {identity.replace(/_/g, " ")}
+          {dominantEconomy && (
+            <span className="text-white/40"> &middot; {dominantEconomy}</span>
+          )}
         </div>
         <div className="text-[11px] mt-1 text-white/50">
           {systemCount} system{systemCount !== 1 ? "s" : ""}

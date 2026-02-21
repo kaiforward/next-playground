@@ -82,6 +82,7 @@ export interface RegionInfo {
   id: string;
   name: string;
   identity: RegionTheme;
+  dominantEconomy?: EconomyType;
   x: number;
   y: number;
 }
@@ -126,6 +127,11 @@ export interface CargoItemState {
   quantity: number;
 }
 
+export interface SystemTraitInfo {
+  traitId: TraitId;
+  quality: QualityTier;
+}
+
 export interface StarSystemInfo {
   id: string;
   name: string;
@@ -135,6 +141,7 @@ export interface StarSystemInfo {
   description: string;
   regionId: string;
   isGateway: boolean;
+  traits?: SystemTraitInfo[];
 }
 
 export interface SystemConnectionInfo {

@@ -10,6 +10,10 @@ import type {
   ActiveEvent,
   SystemPriceHistory,
   TradeMissionInfo,
+  TraitId,
+  TraitCategory,
+  QualityTier,
+  SystemTraitInfo,
 } from "./game";
 
 // ── Responses ────────────────────────────────────────────────────
@@ -22,8 +26,20 @@ export interface ApiResponse<T> {
 export type FleetResponse = ApiResponse<FleetState>;
 export type GameWorldResponse = ApiResponse<GameWorldState>;
 export type UniverseResponse = ApiResponse<UniverseData>;
+/** Enriched trait data returned from system detail API. */
+export interface SystemTraitResponse {
+  traitId: TraitId;
+  quality: QualityTier;
+  name: string;
+  category: TraitCategory;
+  description: string;
+}
+
 export type SystemDetailResponse = ApiResponse<
-  StarSystemInfo & { station: { id: string; name: string } | null }
+  StarSystemInfo & {
+    station: { id: string; name: string } | null;
+    traits: SystemTraitResponse[];
+  }
 >;
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;

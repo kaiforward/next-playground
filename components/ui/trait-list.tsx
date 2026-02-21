@@ -1,0 +1,125 @@
+"use client";
+
+import { tv, type VariantProps } from "tailwind-variants";
+import type { SystemTraitInfo, QualityTier, TraitCategory } from "@/lib/types/game";
+import { TRAITS, QUALITY_TIERS } from "@/lib/constants/traits";
+
+// ── Quality stars ────────────────────────────────────────────────
+
+function QualityStars({ quality }: { quality: QualityTier }) {
+  return (
+    <span className="text-xs tracking-tight" aria-label={`Quality ${quality} of 3`}>
+      <span className="text-amber-400">{"★".repeat(quality)}</span>
+      <span className="text-white/20">{"☆".repeat(3 - quality)}</span>
+    </span>
+  );
+}
+
+// ── Category label ───────────────────────────────────────────────
+
+const CATEGORY_LABEL: Record<TraitCategory, string> = {
+  planetary: "Planetary",
+  orbital: "Orbital",
+  resource: "Resource",
+  phenomena: "Phenomena",
+  legacy: "Legacy",
+};
+
+const categoryBadge = tv({
+  base: "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+  variants: {
+    category: {
+      planetary: "bg-green-500/15 text-green-400",
+      orbital: "bg-blue-500/15 text-blue-400",
+      resource: "bg-amber-500/15 text-amber-400",
+      phenomena: "bg-purple-500/15 text-purple-400",
+      legacy: "bg-cyan-500/15 text-cyan-400",
+    },
+  },
+});
+
+// ── Trait list variants ──────────────────────────────────────────
+
+const traitListVariants = tv({
+  base: "space-y-2",
+  variants: {
+    variant: {
+      full: "",
+      compact: "",
+    },
+  },
+  defaultVariants: {
+    variant: "full",
+  },
+});
+
+type TraitListVariants = VariantProps<typeof traitListVariants>;
+
+interface TraitListProps extends TraitListVariants {
+  traits: SystemTraitInfo[];
+  className?: string;
+}
+
+/**
+ * Displays system traits with quality stars, names, and descriptions.
+ *
+ * - `full` variant: shows category badge, quality label, and full description
+ * - `compact` variant: one-line per trait — stars + name only
+ */
+export function TraitList({ traits, variant = "full", className }: TraitListProps) {
+  if (traits.length === 0) return null;
+
+  // Sort by quality descending, then alphabetical
+  const sorted = [...traits].sort(
+    (a, b) => b.quality - a.quality || a.traitId.localeCompare(b.traitId),
+  );
+
+  if (variant === "compact") {
+    return (
+      <ul className={`space-y-1 ${className ?? ""}`}>
+        {sorted.map((t) => {
+          const def = TRAITS[t.traitId];
+          return (
+            <li key={t.traitId} className="flex items-center gap-2">
+              <QualityStars quality={t.quality} />
+              <span className="text-sm text-white/80">{def.name}</span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  return (
+    <ul className={traitListVariants({ variant, className })}>
+      {sorted.map((t) => {
+        const def = TRAITS[t.traitId];
+        const tier = QUALITY_TIERS[t.quality];
+        return (
+          <li key={t.traitId} className="rounded-lg bg-white/5 px-3 py-2.5">
+            <div className="flex items-center gap-2 mb-1">
+              <QualityStars quality={t.quality} />
+              <span className="text-sm font-medium text-white">{def.name}</span>
+              <span className={categoryBadge({ category: def.category })}>
+                {CATEGORY_LABEL[def.category]}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-white/30">
+                {tier.label}
+              </span>
+              {def.negative && (
+                <span className="text-[10px] font-medium uppercase tracking-wider text-red-400/60">
+                  Hazardous
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-white/50 leading-relaxed">
+              {def.descriptions[t.quality]}
+            </p>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

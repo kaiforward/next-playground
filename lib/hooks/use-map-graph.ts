@@ -262,6 +262,7 @@ export function useMapGraph({
         data: {
           label: region.name,
           identity: region.identity,
+          dominantEconomy: region.dominantEconomy,
           systemCount: systemsPerRegion[region.id] ?? 0,
           shipCount: shipsPerRegion[region.id] ?? 0,
           navigationState: regionNavigationStates.get(region.id),
