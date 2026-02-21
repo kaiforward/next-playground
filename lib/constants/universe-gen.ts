@@ -44,23 +44,6 @@ export const REGION_NAME_PREFIXES: Record<RegionTheme, string[]> = {
   frontier_wilds: ["Expanse", "Drift", "Outreach", "Fringe"],
 };
 
-/**
- * Economy type distribution weights per region theme.
- *
- * Temporary — used by the current generation pipeline (weighted random economy
- * assignment). Replaced by trait-based economy derivation in Phase 2.
- */
-export const ECONOMY_TYPE_WEIGHTS: Record<RegionTheme, Record<EconomyType, number>> = {
-  garden_heartland: { extraction: 10, agricultural: 35, refinery: 10, industrial: 15, tech: 15, core: 15 },
-  mineral_frontier: { extraction: 30, agricultural: 15, refinery: 15, industrial: 15, tech: 10, core: 15 },
-  industrial_corridor: { extraction: 10, agricultural: 10, refinery: 20, industrial: 30, tech: 15, core: 15 },
-  research_cluster: { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 35, core: 20 },
-  energy_belt: { extraction: 15, agricultural: 10, refinery: 30, industrial: 15, tech: 15, core: 15 },
-  trade_nexus: { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 15, core: 40 },
-  contested_frontier: { extraction: 20, agricultural: 15, refinery: 15, industrial: 20, tech: 15, core: 15 },
-  frontier_wilds: { extraction: 30, agricultural: 15, refinery: 15, industrial: 15, tech: 15, core: 10 },
-};
-
 /** Government type distribution weights per region theme. */
 export const GOVERNMENT_TYPE_WEIGHTS: Record<RegionTheme, Record<GovernmentType, number>> = {
   garden_heartland: { federation: 40, corporate: 25, frontier: 20, authoritarian: 15 },

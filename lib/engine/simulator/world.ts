@@ -11,7 +11,6 @@ import {
   UNIVERSE_GEN,
   REGION_THEMES,
   REGION_NAME_PREFIXES,
-  ECONOMY_TYPE_WEIGHTS,
   GOVERNMENT_TYPE_WEIGHTS,
 } from "@/lib/constants/universe-gen";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
@@ -58,7 +57,6 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     params,
     REGION_THEMES,
     REGION_NAME_PREFIXES,
-    ECONOMY_TYPE_WEIGHTS,
     GOVERNMENT_TYPE_WEIGHTS,
   );
 

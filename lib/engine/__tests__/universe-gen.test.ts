@@ -17,10 +17,9 @@ import {
   UNIVERSE_GEN,
   REGION_THEMES,
   REGION_NAME_PREFIXES,
-  ECONOMY_TYPE_WEIGHTS,
   GOVERNMENT_TYPE_WEIGHTS,
 } from "@/lib/constants/universe-gen";
-import type { EconomyType, GovernmentType, RegionTheme } from "@/lib/types/game";
+import type { GovernmentType, RegionTheme } from "@/lib/types/game";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -209,7 +208,7 @@ describe("generateSystems", () => {
   function makeRegionsAndSystems() {
     const rng = mulberry32(params.seed);
     const regions = generateRegions(rng, params, REGION_THEMES, REGION_NAME_PREFIXES);
-    const systems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const systems = generateSystems(rng, regions, params);
     return { regions, systems };
   }
 
@@ -229,14 +228,21 @@ describe("generateSystems", () => {
     }
   });
 
-  it("distributes economy types according to region theme weights", () => {
+  it("derives economy types from traits, biased by region theme", () => {
     const { regions, systems } = makeRegionsAndSystems();
-    // Check that a mineral_frontier region has mostly extraction systems
+    // mineral_frontier theme should produce mostly extraction economies
     const mineralRegion = regions.find((r) => r.identity === "mineral_frontier")!;
     const mineralSystems = systems.filter((s) => s.regionIndex === mineralRegion.index);
     const extractionCount = mineralSystems.filter((s) => s.economyType === "extraction").length;
-    // With 30% weight over 25 systems, expect at least 3 extraction
+    // Trait-based derivation with extraction-heavy trait weights should produce at least a few
     expect(extractionCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it("every system has at least 1 trait", () => {
+    const { systems } = makeRegionsAndSystems();
+    for (const sys of systems) {
+      expect(sys.traits.length).toBeGreaterThanOrEqual(1);
+    }
   });
 
   it("assigns unique global indices", () => {
@@ -254,7 +260,7 @@ describe("generateConnections", () => {
   function makeFullUniverse() {
     const rng = mulberry32(params.seed);
     const regions = generateRegions(rng, params, REGION_THEMES, REGION_NAME_PREFIXES);
-    const rawSystems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const rawSystems = generateSystems(rng, regions, params);
     const result = generateConnections(rng, rawSystems, regions, params);
     return { regions, ...result };
   }
@@ -359,7 +365,7 @@ describe("selectStartingSystem", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
     const regions = generateRegions(rng, params, REGION_THEMES, REGION_NAME_PREFIXES);
-    const systems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const systems = generateSystems(rng, regions, params);
 
     const idx = selectStartingSystem(systems, regions);
     const startSys = systems[idx];
@@ -371,7 +377,7 @@ describe("selectStartingSystem", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
     const regions = generateRegions(rng, params, REGION_THEMES, REGION_NAME_PREFIXES);
-    const systems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const systems = generateSystems(rng, regions, params);
 
     const idx = selectStartingSystem(systems, regions);
     const startSys = systems[idx];
@@ -392,8 +398,8 @@ describe("selectStartingSystem", () => {
 describe("generateUniverse", () => {
   it("produces identical output for the same seed", () => {
     const params = defaultParams();
-    const u1 = generateUniverse(params, REGION_THEMES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
-    const u2 = generateUniverse(params, REGION_THEMES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
+    const u1 = generateUniverse(params, REGION_THEMES, REGION_NAME_PREFIXES);
+    const u2 = generateUniverse(params, REGION_THEMES, REGION_NAME_PREFIXES);
 
     expect(u1.regions).toEqual(u2.regions);
     expect(u1.systems).toEqual(u2.systems);
@@ -404,15 +410,15 @@ describe("generateUniverse", () => {
   it("produces different output for different seeds", () => {
     const p1 = { ...defaultParams(), seed: 42 };
     const p2 = { ...defaultParams(), seed: 99 };
-    const u1 = generateUniverse(p1, REGION_THEMES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
-    const u2 = generateUniverse(p2, REGION_THEMES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
+    const u1 = generateUniverse(p1, REGION_THEMES, REGION_NAME_PREFIXES);
+    const u2 = generateUniverse(p2, REGION_THEMES, REGION_NAME_PREFIXES);
 
     expect(u1.systems).not.toEqual(u2.systems);
   });
 
   it("generates the expected counts", () => {
     const params = defaultParams();
-    const u = generateUniverse(params, REGION_THEMES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
+    const u = generateUniverse(params, REGION_THEMES, REGION_NAME_PREFIXES);
 
     expect(u.regions).toHaveLength(params.regionCount);
     expect(u.systems).toHaveLength(params.regionCount * params.systemsPerRegion);

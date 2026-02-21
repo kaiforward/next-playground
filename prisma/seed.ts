@@ -9,7 +9,6 @@ import {
   UNIVERSE_GEN,
   REGION_THEMES,
   REGION_NAME_PREFIXES,
-  ECONOMY_TYPE_WEIGHTS,
   GOVERNMENT_TYPE_WEIGHTS,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
@@ -42,7 +41,6 @@ async function main() {
     params,
     REGION_THEMES,
     REGION_NAME_PREFIXES,
-    ECONOMY_TYPE_WEIGHTS,
     GOVERNMENT_TYPE_WEIGHTS,
   );
 

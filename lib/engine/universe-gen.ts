@@ -5,6 +5,8 @@
 
 import type { EconomyType, GovernmentType, RegionTheme } from "@/lib/types/game";
 import { ALL_GOVERNMENT_TYPES } from "@/lib/types/guards";
+import type { GeneratedTrait } from "./trait-gen";
+import { generateSystemTraits, deriveEconomyType, enforceCoherence } from "./trait-gen";
 
 // ── Output types ────────────────────────────────────────────────
 
@@ -21,6 +23,7 @@ export interface GeneratedSystem {
   index: number;
   name: string;
   economyType: EconomyType;
+  traits: GeneratedTrait[];
   x: number;
   y: number;
   regionIndex: number;
@@ -246,7 +249,6 @@ export function generateSystems(
   rng: RNG,
   regions: GeneratedRegion[],
   params: GenParams,
-  economyWeights: Record<RegionTheme, Record<EconomyType, number>>,
 ): GeneratedSystem[] {
   const { systemsPerRegion, systemScatterRadius, systemMinDistance, maxPlacementAttempts } = params;
   const systems: GeneratedSystem[] = [];
@@ -257,7 +259,8 @@ export function generateSystems(
     let localIndex = 0;
 
     for (let s = 0; s < systemsPerRegion; s++) {
-      const economyType = weightedPick(rng, economyWeights[region.identity]);
+      const traits = generateSystemTraits(rng, region.identity);
+      const economyType = deriveEconomyType(traits, region.identity);
 
       let placed = false;
       for (let attempt = 0; attempt < maxPlacementAttempts; attempt++) {
@@ -278,6 +281,7 @@ export function generateSystems(
           index: globalIndex,
           name: `${region.name}-${localIndex + 1}`,
           economyType,
+          traits,
           x,
           y,
           regionIndex: region.index,
@@ -299,6 +303,7 @@ export function generateSystems(
           index: globalIndex,
           name: `${region.name}-${localIndex + 1}`,
           economyType,
+          traits,
           x: region.x + Math.cos(angle) * r,
           y: region.y + Math.sin(angle) * r,
           regionIndex: region.index,
@@ -579,14 +584,18 @@ export function generateUniverse(
   params: GenParams,
   identities: RegionTheme[],
   namePrefixes: Record<RegionTheme, string[]>,
-  economyWeights: Record<RegionTheme, Record<EconomyType, number>>,
   governmentWeights?: Record<RegionTheme, Record<GovernmentType, number>>,
 ): GeneratedUniverse {
   const rng = mulberry32(params.seed);
 
   const regions = generateRegions(rng, params, identities, namePrefixes, governmentWeights);
-  const rawSystems = generateSystems(rng, regions, params, economyWeights);
+  const rawSystems = generateSystems(rng, regions, params);
   const { connections, systems } = generateConnections(rng, rawSystems, regions, params);
+
+  // Enforce region coherence (60% dominant economy, no monotonous regions)
+  const regionThemes = new Map(regions.map((r) => [r.index, r.identity]));
+  enforceCoherence(rng, systems, regionThemes);
+
   const startingSystemIndex = selectStartingSystem(systems, regions);
 
   return { regions, systems, connections, startingSystemIndex };

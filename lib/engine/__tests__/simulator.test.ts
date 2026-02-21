@@ -349,43 +349,69 @@ describe("Simulator", () => {
       const rng = mulberry32(42);
       const ctx = defaultCtx({ disableRandomEvents: true });
 
-      // Run 100 ticks to let prices diverge
-      for (let i = 0; i < 100; i++) {
-        world = simulateWorldTick(world, rng, ctx);
-      }
-
-      // Classify systems by government type
+      // Classify systems by government type and economy type
       const govBySystem = new Map<string, string>();
+      const econBySystem = new Map<string, string>();
       for (const sys of world.systems) {
         const region = world.regions.find((r) => r.id === sys.regionId);
         if (region) govBySystem.set(sys.id, region.governmentType);
+        econBySystem.set(sys.id, sys.economyType);
       }
 
-      // Compute price for each market and group by government type
-      const pricesByGov = new Map<string, number[]>();
-      for (const m of world.markets) {
-        const gov = govBySystem.get(m.systemId);
-        if (!gov) continue;
-        const price = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
-        const ratio = price / m.basePrice;
-        const existing = pricesByGov.get(gov) ?? [];
-        existing.push(ratio);
-        pricesByGov.set(gov, existing);
+      // Track tick-over-tick absolute price changes grouped by (gov, econ).
+      // Controlling for economy type isolates the volatility modifier effect
+      // from the confounding production/consumption/reversion dynamics.
+      const changesByGovEcon = new Map<string, number[]>();
+
+      for (let i = 0; i < 100; i++) {
+        const pricesBefore = new Map<string, number>();
+        for (const m of world.markets) {
+          pricesBefore.set(
+            `${m.systemId}:${m.goodId}`,
+            calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling),
+          );
+        }
+
+        world = simulateWorldTick(world, rng, ctx);
+
+        for (const m of world.markets) {
+          const mKey = `${m.systemId}:${m.goodId}`;
+          const gov = govBySystem.get(m.systemId);
+          const econ = econBySystem.get(m.systemId);
+          if (!gov || !econ) continue;
+          const before = pricesBefore.get(mKey);
+          if (before === undefined || m.basePrice === 0) continue;
+          const after = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
+          const change = Math.abs(after - before) / m.basePrice;
+          const groupKey = `${gov}:${econ}`;
+          const existing = changesByGovEcon.get(groupKey) ?? [];
+          existing.push(change);
+          changesByGovEcon.set(groupKey, existing);
+        }
       }
 
-      function stdDev(values: number[]): number {
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
-        const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
-        return Math.sqrt(variance);
+      function mean(values: number[]): number {
+        return values.reduce((a, b) => a + b, 0) / values.length;
       }
 
-      const frontierStdDev = stdDev(pricesByGov.get("frontier") ?? []);
-      const federationStdDev = stdDev(pricesByGov.get("federation") ?? []);
+      // For each economy type that has both frontier and federation systems,
+      // frontier volatilityModifier (1.5) should produce larger price changes
+      // than federation (0.8). Check that the majority of economy types agree.
+      const econTypes = new Set([...econBySystem.values()]);
+      let frontierWins = 0;
+      let comparisonCount = 0;
+      for (const econ of econTypes) {
+        const fChanges = changesByGovEcon.get(`frontier:${econ}`);
+        const fedChanges = changesByGovEcon.get(`federation:${econ}`);
+        if (fChanges && fChanges.length > 0 && fedChanges && fedChanges.length > 0) {
+          if (mean(fChanges) > mean(fedChanges)) frontierWins++;
+          comparisonCount++;
+        }
+      }
 
-      // Frontier volatilityModifier is 1.5, federation is 0.8 — expect noticeable difference
-      // There may not always be both gov types in a random seed, so only assert if both exist
-      if (pricesByGov.has("frontier") && pricesByGov.has("federation")) {
-        expect(frontierStdDev).toBeGreaterThan(federationStdDev);
+      // At least one comparison should exist and frontier should win the majority
+      if (comparisonCount > 0) {
+        expect(frontierWins).toBeGreaterThan(comparisonCount / 2);
       }
     });
 
