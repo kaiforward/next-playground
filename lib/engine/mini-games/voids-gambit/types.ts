@@ -5,14 +5,21 @@
 
 export type Suit = "raw_materials" | "refined_goods" | "tech" | "luxuries";
 
-export type CardType = "standard" | "void";
-
-export interface Card {
+export interface StandardCard {
   id: number;
-  type: CardType;
-  suit: Suit | null; // null for Void cards
-  value: number; // 1-7 for standard, 0 for Void
+  type: "standard";
+  suit: Suit;
+  value: number; // 1-7
 }
+
+export interface VoidCard {
+  id: number;
+  type: "void";
+  suit: null;
+  value: 0;
+}
+
+export type Card = StandardCard | VoidCard;
 
 // ── Declaration ─────────────────────────────────────────────────
 
@@ -70,13 +77,6 @@ export type GamePhase =
   | "round_end" // transition to next round
   | "final_reveal" // all cards revealed
   | "complete"; // game over
-
-// ── Actions ─────────────────────────────────────────────────────
-
-export type GameAction =
-  | { type: "declare"; cardId: number; declaration: Declaration }
-  | { type: "call" }
-  | { type: "pass" };
 
 // ── Game config ─────────────────────────────────────────────────
 
@@ -162,6 +162,31 @@ export interface GameState {
   firstPlayer: LogActor; // who declares first this round
   log: LogEntry[];
   result: GameResult | null;
+}
+
+// ── NPC presentation ────────────────────────────────────────────
+
+export interface WagerLimits {
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+}
+
+export interface NpcDialogueSet {
+  greeting: string[];
+  declare: string[];
+  declareHigh: string[];
+  callSuccess: string[];
+  callFail: string[];
+  callMemory: string[];
+  calledAndCaught: string[];
+  calledAndHonest: string[];
+  pass: string[];
+  winning: string[];
+  losing: string[];
+  tie: string[];
+  reveal: string[];
 }
 
 // ── Result type ─────────────────────────────────────────────────

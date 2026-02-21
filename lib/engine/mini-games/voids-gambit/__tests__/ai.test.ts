@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { chooseDeclaration, chooseCallDecision } from "../ai";
 import { createGame, startGame, advancePhase } from "../game";
 import { declare, passCall } from "../actions";
-import type { GameState, Card } from "../types";
+import type { GameState, Card, Suit } from "../types";
 import { VALUES_PER_SUIT } from "../constants";
 
 function seededRng(seed = 42) {
@@ -23,8 +23,9 @@ function setupNpcDeclarePhase(
     wager: 100,
     rng: seededRng(seed),
   });
-  let state = startGame(game);
-  state = advancePhase(state); // demand → player_declare (round 1)
+  const started = startGame(game);
+  if (!started.ok) throw new Error(started.error);
+  let state = advancePhase(started.state); // demand → player_declare (round 1)
 
   // Player declares first (round 1, player always goes first)
   const demand = state.currentDemand!;
@@ -103,7 +104,7 @@ describe("chooseDeclaration", () => {
 
     // Replace NPC hand with cards that don't match demand + one Void
     const voidCard: Card = { id: 500, type: "void", suit: null, value: 0 };
-    const otherSuit = demand === "tech" ? "luxuries" : "tech";
+    const otherSuit: Suit = demand === "tech" ? "luxuries" : "tech";
     const otherCards = [
       { id: 501, type: "standard" as const, suit: otherSuit, value: 3 },
       { id: 502, type: "standard" as const, suit: otherSuit, value: 5 },
@@ -136,8 +137,9 @@ describe("chooseCallDecision", () => {
       wager: 100,
       rng: seededRng(seed),
     });
-    let state = startGame(game);
-    state = advancePhase(state); // demand
+    const started = startGame(game);
+    if (!started.ok) throw new Error(started.error);
+    let state = advancePhase(started.state); // demand
 
     const demand = state.currentDemand!;
 

@@ -22,6 +22,13 @@ function makeGame(seed = 42): GameState {
   });
 }
 
+/** Start a game, unwrapping the ActionResult (throws on failure). */
+function start(seed = 42): GameState {
+  const result = startGame(makeGame(seed));
+  if (!result.ok) throw new Error(result.error);
+  return result.state;
+}
+
 describe("createGame", () => {
   it("creates a game in setup phase", () => {
     const state = makeGame();
@@ -34,7 +41,7 @@ describe("createGame", () => {
 
 describe("startGame", () => {
   it("deals hands and enters demand phase", () => {
-    const state = startGame(makeGame());
+    const state = start();
     expect(state.phase).toBe("demand");
     expect(state.round).toBe(1);
     expect(state.player.hand).toHaveLength(HAND_SIZE);
@@ -43,15 +50,16 @@ describe("startGame", () => {
     expect(state.demandDeck).toHaveLength(8); // demand deck untouched yet
   });
 
-  it("throws if game already started", () => {
-    const state = startGame(makeGame());
-    expect(() => startGame(state)).toThrow();
+  it("returns error if game already started", () => {
+    const state = start();
+    const result = startGame(state);
+    expect(result.ok).toBe(false);
   });
 });
 
 describe("advancePhase", () => {
   it("demand phase reveals suit and advances to first declare on round 1", () => {
-    const state = startGame(makeGame());
+    const state = start();
     expect(state.phase).toBe("demand");
 
     const advanced = advancePhase(state);
@@ -64,7 +72,7 @@ describe("advancePhase", () => {
 
   it("round 2+ demand phase goes to draw first", () => {
     // Simulate getting to round 2
-    let state = startGame(makeGame());
+    let state = start();
     state = advancePhase(state); // demand → first declare
 
     // Play through round 1
@@ -101,7 +109,7 @@ describe("advancePhase", () => {
   });
 
   it("first player alternates each round", () => {
-    let state = startGame(makeGame());
+    let state = start();
     expect(state.firstPlayer).toBe("player");
 
     // Advance to round_end and then round 2
@@ -128,7 +136,7 @@ describe("advancePhase", () => {
 
 describe("full game flow", () => {
   it("plays through 7 rounds and reaches completion", () => {
-    let state = startGame(makeGame(99));
+    let state = start(99);
 
     for (let round = 1; round <= MAX_ROUNDS; round++) {
       // Demand
@@ -207,7 +215,7 @@ describe("full game flow", () => {
 
 describe("getDeclaredTotal", () => {
   it("sums declared values of uncaught cards", () => {
-    let state = startGame(makeGame());
+    let state = start();
     state = advancePhase(state);
     const demand = state.currentDemand!;
 

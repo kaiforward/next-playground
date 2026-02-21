@@ -5,6 +5,7 @@ import type {
   GameState,
   ActionResult,
   Declaration,
+  Suit,
   LogActor,
   ManifestEntry,
   GamePhase,
@@ -15,7 +16,7 @@ import { SUITS, VALUES_PER_SUIT, WRONG_CALL_PENALTY } from "./constants";
 
 function isValidDeclaration(
   decl: Declaration,
-  demandedSuit: string,
+  demandedSuit: Suit,
 ): boolean {
   return (
     decl.suit === demandedSuit &&

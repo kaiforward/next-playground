@@ -20,7 +20,9 @@ function setupGame(seed = 42): GameState {
     rng: seededRng(seed),
   });
   // Start → demand phase
-  let state = startGame(game);
+  const result = startGame(game);
+  if (!result.ok) throw new Error(result.error);
+  let state = result.state;
   // Advance demand → draw/first declare
   state = advancePhase(state);
   // If round 1, demand goes straight to first declare (skip draw)

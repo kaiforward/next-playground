@@ -3,7 +3,8 @@
 // Types
 export type {
   Suit,
-  CardType,
+  StandardCard,
+  VoidCard,
   Card,
   Declaration,
   ManifestEntry,
@@ -12,7 +13,6 @@ export type {
   NpcDifficulty,
   NpcIdentity,
   GamePhase,
-  GameAction,
   GameConfig,
   LogActor,
   LogEntry,
@@ -21,9 +21,9 @@ export type {
   GameResult,
   GameState,
   ActionResult,
+  WagerLimits,
+  NpcDialogueSet,
 } from "./types";
-
-export type { WagerLimits } from "./constants";
 
 // Constants
 export {

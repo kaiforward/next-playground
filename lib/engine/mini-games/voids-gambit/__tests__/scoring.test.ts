@@ -1,19 +1,22 @@
 import { describe, it, expect } from "vitest";
 import { calculateScore, determineWinner } from "../scoring";
-import type { ManifestEntry, Card, GameState } from "../types";
+import type { ManifestEntry, Card, Suit, GameState } from "../types";
 
+function makeCard(id: number, suit: Suit, value: number): Card;
+function makeCard(id: number, suit: null, value: 0, type: "void"): Card;
 function makeCard(
   id: number,
-  suit: Card["suit"],
+  suit: Suit | null,
   value: number,
-  type: Card["type"] = "standard",
+  _type?: "standard" | "void",
 ): Card {
-  return { id, type, suit, value };
+  if (suit === null) return { id, type: "void", suit: null, value: 0 };
+  return { id, type: "standard", suit, value };
 }
 
 function makeEntry(
   card: Card,
-  declaredSuit: Card["suit"] & string,
+  declaredSuit: Suit,
   declaredValue: number,
   opts: Partial<ManifestEntry> = {},
 ): ManifestEntry {

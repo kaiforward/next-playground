@@ -84,11 +84,12 @@ export function useVoidsGambit(): UseVoidsGambit {
       };
 
       const created = createGame(config);
-      const started = startGame(created);
+      const result = startGame(created);
+      if (!result.ok) return;
 
       setNpcIdentity(identity);
       setNpcDialogue(pickDialogue(archetype, "greeting"));
-      setGame(started);
+      setGame(result.state);
       setIsProcessing(true);
     },
     [],

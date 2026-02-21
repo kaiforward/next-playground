@@ -3,6 +3,7 @@
 
 import type {
   GameState,
+  ActionResult,
   GameConfig,
   GamePhase,
   LogActor,
@@ -35,9 +36,9 @@ export function createGame(config: GameConfig): GameState {
 // ── Start game ──────────────────────────────────────────────────
 
 /** Shuffle decks, deal hands, advance to round 1 demand phase. */
-export function startGame(state: GameState): GameState {
+export function startGame(state: GameState): ActionResult {
   if (state.phase !== "setup") {
-    throw new Error("Game already started");
+    return { ok: false, error: "Game already started" };
   }
 
   const { rng } = state.config;
@@ -49,15 +50,18 @@ export function startGame(state: GameState): GameState {
   const remainingDeck = deck.slice(HAND_SIZE * 2);
 
   return {
-    ...state,
-    phase: "demand",
-    deck: remainingDeck,
-    demandDeck,
-    player: { ...state.player, hand: playerHand },
-    npc: { ...state.npc, hand: npcHand },
-    round: 1,
-    firstPlayer: "player",
-    log: [{ type: "round_start", round: 1 }],
+    ok: true,
+    state: {
+      ...state,
+      phase: "demand",
+      deck: remainingDeck,
+      demandDeck,
+      player: { ...state.player, hand: playerHand },
+      npc: { ...state.npc, hand: npcHand },
+      round: 1,
+      firstPlayer: "player",
+      log: [{ type: "round_start", round: 1 }],
+    },
   };
 }
 
@@ -86,6 +90,7 @@ export function advancePhase(state: GameState): GameState {
 // ── Phase handlers ──────────────────────────────────────────────
 
 function advanceDemand(state: GameState): GameState {
+  if (state.demandDeck.length === 0) return state;
   const [suit, ...remaining] = state.demandDeck;
 
   const newState: GameState = {

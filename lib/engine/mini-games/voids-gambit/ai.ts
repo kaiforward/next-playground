@@ -6,6 +6,7 @@ import type {
   GameState,
   Card,
   Declaration,
+  Suit,
   NpcArchetype,
   ManifestEntry,
 } from "./types";
@@ -16,6 +17,11 @@ import {
   MAX_INFLATION,
   REGULAR_CALL_ADAPT,
   MEMORY_RECALL,
+  CARD_COUNTING_CERTAINTY,
+  VALUE_SUSPICION_RATE,
+  SUIT_SCARCITY_THRESHOLD,
+  SUIT_SCARCITY_BONUS,
+  MAX_CALL_PROBABILITY,
 } from "./constants";
 
 // ── Declaration ─────────────────────────────────────────────────
@@ -72,9 +78,8 @@ export function chooseDeclaration(state: GameState): AiDeclaration {
   };
 }
 
-/** Pick a card from a list. Prefers higher values for aggressive archetypes. */
+/** Pick a random card from a list. */
 function pickCard(cards: Card[], rng: () => number): Card {
-  // Simple random selection — card choice strategy can be refined later
   return cards[Math.floor(rng() * cards.length)];
 }
 
@@ -115,6 +120,10 @@ function chooseVoidValue(
       return Math.floor(rng() * 3) + 3; // 3-5
     case "station_regular":
       return Math.floor(rng() * 4) + 3; // 3-6
+    default: {
+      const _exhaustive: never = archetype;
+      throw new Error(`Unknown archetype: ${_exhaustive}`);
+    }
   }
 }
 
@@ -151,7 +160,7 @@ export function chooseCallDecision(state: GameState): CallDecision {
 
   if (holdsExactCard) {
     // NPC knows for certain this is a lie — almost always call
-    if (rng() < 0.95) return { shouldCall: true, reason: "card_counting" };
+    if (rng() < CARD_COUNTING_CERTAINTY) return { shouldCall: true, reason: "card_counting" };
   }
 
   // Memory check: does the NPC recall a duplicate from played/revealed cards?
@@ -169,7 +178,7 @@ export function chooseCallDecision(state: GameState): CallDecision {
   let callProbability = CALL_RATE[npcArchetype];
 
   // Higher declarations are more suspicious
-  callProbability += (declaredValue - 4) * 0.04;
+  callProbability += (declaredValue - 4) * VALUE_SUSPICION_RATE;
 
   // Station Regular adapts: increase call rate if player has been caught lying
   if (npcArchetype === "station_regular") {
@@ -184,11 +193,11 @@ export function chooseCallDecision(state: GameState): CallDecision {
   ).length;
   const knownSuitCards = countKnownSuitCards(state, declaredSuit);
   // If many cards of the suit are accounted for, player is less likely to have it
-  if (npcSuitCount + knownSuitCards >= 5) {
-    callProbability += 0.15;
+  if (npcSuitCount + knownSuitCards >= SUIT_SCARCITY_THRESHOLD) {
+    callProbability += SUIT_SCARCITY_BONUS;
   }
 
-  const calls = rng() < Math.max(0, Math.min(callProbability, 0.9));
+  const calls = rng() < Math.max(0, Math.min(callProbability, MAX_CALL_PROBABILITY));
   return { shouldCall: calls, reason: calls ? "hunch" : "pass" };
 }
 
@@ -205,7 +214,7 @@ export function chooseCallDecision(state: GameState): CallDecision {
  */
 function isKnownDuplicate(
   state: GameState,
-  suit: string,
+  suit: Suit,
   value: number,
 ): boolean {
   // NPC's own played cards (they always know their own real cards)
@@ -242,7 +251,7 @@ function countCaughtLies(manifest: ManifestEntry[]): number {
 }
 
 /** Count cards of a suit visible in public information (revealed cards + discard). */
-function countKnownSuitCards(state: GameState, suit: string): number {
+function countKnownSuitCards(state: GameState, suit: Suit): number {
   let count = 0;
 
   // Revealed-but-not-caught cards in manifests (from failed calls — card stays in play).

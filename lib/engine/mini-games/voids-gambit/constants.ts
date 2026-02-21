@@ -1,10 +1,16 @@
 // Void's Gambit — Game constants, NPC profiles, AI weights, dialogue
 
-import type { Suit, NpcArchetype, NpcDifficulty } from "./types";
+import type {
+  Suit,
+  NpcArchetype,
+  NpcDifficulty,
+  WagerLimits,
+  NpcDialogueSet,
+} from "./types";
 
 // ── Deck configuration ──────────────────────────────────────────
 
-export const SUITS: Suit[] = [
+export const SUITS: readonly Suit[] = [
   "raw_materials",
   "refined_goods",
   "tech",
@@ -67,6 +73,21 @@ export const MAX_INFLATION: Record<NpcArchetype, number> = {
 // per detected player lie (within the current game).
 export const REGULAR_CALL_ADAPT = 0.1;
 
+// Card counting: probability of calling when NPC holds the exact declared card.
+export const CARD_COUNTING_CERTAINTY = 0.95;
+
+// Per-value-above-4 increase to call probability (e.g. declaring 7 adds +0.12).
+export const VALUE_SUSPICION_RATE = 0.04;
+
+// Number of known cards of a suit that triggers the scarcity bonus.
+export const SUIT_SCARCITY_THRESHOLD = 5;
+
+// Call probability bonus when suit scarcity is detected.
+export const SUIT_SCARCITY_BONUS = 0.15;
+
+// Upper cap on hunch-based call probability (prevents guaranteed calls).
+export const MAX_CALL_PROBABILITY = 0.9;
+
 // NPC memory: probability of checking manifest/revealed cards for duplicates.
 // When triggered, the NPC catches provable lies (duplicate cards) with certainty.
 // Cautious trader doesn't think to check. Others scale with experience.
@@ -119,13 +140,6 @@ export const NPC_DIFFICULTY: Record<NpcArchetype, NpcDifficulty> = {
   sharp_smuggler: 2,
 };
 
-export interface WagerLimits {
-  min: number;
-  max: number;
-  step: number;
-  default: number;
-}
-
 export const NPC_WAGER_LIMITS: Record<NpcArchetype, WagerLimits> = {
   cautious_trader:  { min: 10,  max: 200,  step: 10, default: 50 },
   sharp_smuggler:   { min: 25,  max: 500,  step: 25, default: 100 },
@@ -134,22 +148,6 @@ export const NPC_WAGER_LIMITS: Record<NpcArchetype, WagerLimits> = {
 };
 
 // ── NPC dialogue ────────────────────────────────────────────────
-
-export interface NpcDialogueSet {
-  greeting: string[];
-  declare: string[];
-  declareHigh: string[];
-  callSuccess: string[];
-  callFail: string[];
-  callMemory: string[];
-  calledAndCaught: string[];
-  calledAndHonest: string[];
-  pass: string[];
-  winning: string[];
-  losing: string[];
-  tie: string[];
-  reveal: string[];
-}
 
 export const NPC_DIALOGUE: Record<NpcArchetype, NpcDialogueSet> = {
   cautious_trader: {
