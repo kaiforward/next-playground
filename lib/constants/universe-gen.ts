@@ -1,4 +1,4 @@
-import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, RegionTheme, TraitId } from "@/lib/types/game";
 
 /** Tuneable universe generation parameters. */
 export const UNIVERSE_GEN = {
@@ -14,44 +14,160 @@ export const UNIVERSE_GEN = {
   INTRA_REGION_BASE_FUEL: 8,
   /** Max rejection sampling attempts before falling back to grid-jitter. */
   MAX_PLACEMENT_ATTEMPTS: 500,
+  /** Base trait weight for traits not explicitly listed in a theme. */
+  BASE_TRAIT_WEIGHT: 5,
+  /** Minimum region economy agreement for coherence (60%). */
+  COHERENCE_THRESHOLD: 0.6,
 } as const;
 
-/** Economic identity for each of the 8 regions (cycling through identities). */
-export const REGION_IDENTITIES: RegionIdentity[] = [
-  "trade_hub",
-  "resource_rich",
-  "industrial",
-  "tech",
-  "agricultural",
-  "trade_hub",
-  "resource_rich",
-  "industrial",
+/** Region themes — one per region, cycling when > 8 regions. */
+export const REGION_THEMES: RegionTheme[] = [
+  "trade_nexus",
+  "mineral_frontier",
+  "industrial_corridor",
+  "research_cluster",
+  "garden_heartland",
+  "energy_belt",
+  "contested_frontier",
+  "frontier_wilds",
 ];
 
-/** Thematic name prefixes per region identity. */
-export const REGION_NAME_PREFIXES: Record<RegionIdentity, string[]> = {
-  trade_hub: ["Nexus", "Haven", "Crossroads", "Confluence"],
-  resource_rich: ["Forge", "Quarry", "Vein", "Lode"],
-  industrial: ["Foundry", "Crucible", "Anvil", "Mill"],
-  tech: ["Circuit", "Cipher", "Vertex", "Prism"],
-  agricultural: ["Verdant", "Harvest", "Meadow", "Pastoral"],
+/** Thematic name prefixes per region theme. */
+export const REGION_NAME_PREFIXES: Record<RegionTheme, string[]> = {
+  garden_heartland: ["Eden", "Verdant", "Harvest", "Pastoral"],
+  mineral_frontier: ["Forge", "Quarry", "Vein", "Lode"],
+  industrial_corridor: ["Foundry", "Assembly", "Crucible", "Works"],
+  research_cluster: ["Prism", "Cipher", "Archive", "Axiom"],
+  energy_belt: ["Helios", "Corona", "Flare", "Dynamo"],
+  trade_nexus: ["Nexus", "Haven", "Crossroads", "Confluence"],
+  contested_frontier: ["Rift", "Breach", "Disputed", "Fracture"],
+  frontier_wilds: ["Expanse", "Drift", "Outreach", "Fringe"],
 };
 
-/** Economy type distribution weights per region identity.
- *  Order: [extraction, agricultural, refinery, industrial, tech, core] */
-export const ECONOMY_TYPE_WEIGHTS: Record<RegionIdentity, Record<EconomyType, number>> = {
-  resource_rich: { extraction: 30, agricultural: 15, refinery: 15, industrial: 15, tech: 10, core: 15 },
-  agricultural:  { extraction: 10, agricultural: 35, refinery: 10, industrial: 15, tech: 15, core: 15 },
-  industrial:    { extraction: 10, agricultural: 10, refinery: 20, industrial: 30, tech: 15, core: 15 },
-  tech:          { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 35, core: 20 },
-  trade_hub:     { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 15, core: 40 },
+/**
+ * Economy type distribution weights per region theme.
+ *
+ * Temporary — used by the current generation pipeline (weighted random economy
+ * assignment). Replaced by trait-based economy derivation in Phase 2.
+ */
+export const ECONOMY_TYPE_WEIGHTS: Record<RegionTheme, Record<EconomyType, number>> = {
+  garden_heartland: { extraction: 10, agricultural: 35, refinery: 10, industrial: 15, tech: 15, core: 15 },
+  mineral_frontier: { extraction: 30, agricultural: 15, refinery: 15, industrial: 15, tech: 10, core: 15 },
+  industrial_corridor: { extraction: 10, agricultural: 10, refinery: 20, industrial: 30, tech: 15, core: 15 },
+  research_cluster: { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 35, core: 20 },
+  energy_belt: { extraction: 15, agricultural: 10, refinery: 30, industrial: 15, tech: 15, core: 15 },
+  trade_nexus: { extraction: 10, agricultural: 10, refinery: 10, industrial: 15, tech: 15, core: 40 },
+  contested_frontier: { extraction: 20, agricultural: 15, refinery: 15, industrial: 20, tech: 15, core: 15 },
+  frontier_wilds: { extraction: 30, agricultural: 15, refinery: 15, industrial: 15, tech: 15, core: 10 },
 };
 
-/** Government type distribution weights per region identity. */
-export const GOVERNMENT_TYPE_WEIGHTS: Record<RegionIdentity, Record<GovernmentType, number>> = {
-  resource_rich: { frontier: 40, corporate: 30, federation: 20, authoritarian: 10 },
-  tech:          { corporate: 40, federation: 30, authoritarian: 20, frontier: 10 },
-  industrial:    { corporate: 30, authoritarian: 30, federation: 25, frontier: 15 },
-  agricultural:  { federation: 40, frontier: 25, corporate: 20, authoritarian: 15 },
-  trade_hub:     { corporate: 35, federation: 35, frontier: 20, authoritarian: 10 },
+/** Government type distribution weights per region theme. */
+export const GOVERNMENT_TYPE_WEIGHTS: Record<RegionTheme, Record<GovernmentType, number>> = {
+  garden_heartland: { federation: 40, corporate: 25, frontier: 20, authoritarian: 15 },
+  mineral_frontier: { frontier: 40, corporate: 30, federation: 20, authoritarian: 10 },
+  industrial_corridor: { corporate: 35, authoritarian: 30, federation: 25, frontier: 10 },
+  research_cluster: { corporate: 35, federation: 30, authoritarian: 20, frontier: 15 },
+  energy_belt: { corporate: 30, authoritarian: 30, federation: 25, frontier: 15 },
+  trade_nexus: { corporate: 35, federation: 35, authoritarian: 20, frontier: 10 },
+  contested_frontier: { frontier: 40, authoritarian: 25, corporate: 20, federation: 15 },
+  frontier_wilds: { frontier: 50, corporate: 20, federation: 20, authoritarian: 10 },
+};
+
+// ── Trait generation tables ───────────────────────────────────────
+//
+// Each theme lists elevated weights for its signature traits. Traits
+// not listed get UNIVERSE_GEN.BASE_TRAIT_WEIGHT. The design doc lists
+// 3-4 core traits per theme; we extend each with 1-3 additional
+// thematically coherent traits for variety.
+
+/** Per-theme elevated trait weights (unlisted traits use BASE_TRAIT_WEIGHT). */
+export const REGION_THEME_TRAIT_WEIGHTS: Record<RegionTheme, Partial<Record<TraitId, number>>> = {
+  garden_heartland: {
+    habitable_world: 30,
+    ocean_world: 25,
+    seed_vault: 20,
+    jungle_world: 20,
+    organic_compounds: 15,
+  },
+  mineral_frontier: {
+    asteroid_belt: 30,
+    gas_giant: 25,
+    mineral_rich_moons: 25,
+    heavy_metal_veins: 20,
+    ring_system: 15,
+    frozen_world: 15,
+  },
+  industrial_corridor: {
+    lagrange_stations: 30,
+    orbital_ring_remnant: 25,
+    heavy_metal_veins: 25,
+    desert_world: 15,
+    ancient_trade_route: 15,
+  },
+  research_cluster: {
+    precursor_ruins: 30,
+    gravitational_anomaly: 25,
+    exotic_matter_traces: 25,
+    crystalline_formations: 20,
+    tidally_locked_world: 15,
+    captured_rogue_body: 15,
+  },
+  energy_belt: {
+    binary_star: 30,
+    gas_giant: 25,
+    helium3_reserves: 25,
+    solar_flare_activity: 20,
+    volcanic_world: 15,
+  },
+  trade_nexus: {
+    ancient_trade_route: 30,
+    habitable_world: 25,
+    lagrange_stations: 25,
+    orbital_ring_remnant: 15,
+    organic_compounds: 10,
+  },
+  contested_frontier: {
+    // Mixed — no single trait dominates. Slightly elevated danger/resource traits.
+    dark_nebula: 20,
+    radioactive_deposits: 20,
+    volcanic_world: 20,
+    nebula_proximity: 15,
+    asteroid_belt: 15,
+    heavy_metal_veins: 15,
+  },
+  frontier_wilds: {
+    // Sparse traits (systems get fewer traits). Frontier/oddball mix.
+    frozen_world: 20,
+    nebula_proximity: 20,
+    ring_system: 15,
+    pulsar_proximity: 15,
+    captured_rogue_body: 15,
+  },
+};
+
+/** Trait count range per theme. Most themes 2-4; frontier_wilds 1-2 (sparse). */
+export const REGION_THEME_TRAIT_COUNT: Record<RegionTheme, { min: number; max: number }> = {
+  garden_heartland: { min: 2, max: 4 },
+  mineral_frontier: { min: 2, max: 4 },
+  industrial_corridor: { min: 2, max: 4 },
+  research_cluster: { min: 2, max: 4 },
+  energy_belt: { min: 2, max: 4 },
+  trade_nexus: { min: 2, max: 4 },
+  contested_frontier: { min: 2, max: 4 },
+  frontier_wilds: { min: 1, max: 2 },
+};
+
+/**
+ * Small tiebreaker bonus when a theme's natural economy matches the
+ * scoring result. Only matters for exact ties in affinity scoring.
+ */
+export const THEME_ECONOMY_TIEBREAKER: Record<RegionTheme, Partial<Record<EconomyType, number>>> = {
+  garden_heartland: { agricultural: 1 },
+  mineral_frontier: { extraction: 1 },
+  industrial_corridor: { industrial: 1 },
+  research_cluster: { tech: 1 },
+  energy_belt: { refinery: 1 },
+  trade_nexus: { core: 1 },
+  contested_frontier: {},
+  frontier_wilds: { extraction: 1 },
 };

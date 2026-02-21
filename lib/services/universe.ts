@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import type { UniverseData, StarSystemInfo } from "@/lib/types/game";
-import { toEconomyType, toRegionIdentity } from "@/lib/types/guards";
+import { toEconomyType, toRegionTheme } from "@/lib/types/guards";
 
 /**
  * Get all regions, star systems, and connections.
@@ -43,7 +43,7 @@ export async function getUniverse(): Promise<UniverseData> {
     regions: regions.map((r) => ({
       id: r.id,
       name: r.name,
-      identity: toRegionIdentity(r.identity),
+      identity: toRegionTheme(r.identity),
       x: r.x,
       y: r.y,
     })),

@@ -5,7 +5,7 @@ export const MOCK_UNIVERSE: UniverseData = {
     {
       id: "mock-region",
       name: "Mock Region",
-      identity: "trade_hub",
+      identity: "trade_nexus",
       x: 400,
       y: 300,
     },

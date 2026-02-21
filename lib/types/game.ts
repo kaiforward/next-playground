@@ -8,12 +8,65 @@ export type EconomyType =
   | "tech"
   | "core";
 
-export type RegionIdentity =
-  | "resource_rich"
-  | "agricultural"
-  | "industrial"
-  | "tech"
-  | "trade_hub";
+export type RegionTheme =
+  | "garden_heartland"
+  | "mineral_frontier"
+  | "industrial_corridor"
+  | "research_cluster"
+  | "energy_belt"
+  | "trade_nexus"
+  | "contested_frontier"
+  | "frontier_wilds";
+
+// ── System trait types ────────────────────────────────────────────
+
+export type TraitId =
+  // Planetary Bodies (7)
+  | "habitable_world"
+  | "ocean_world"
+  | "volcanic_world"
+  | "frozen_world"
+  | "tidally_locked_world"
+  | "desert_world"
+  | "jungle_world"
+  // Orbital Features (7)
+  | "asteroid_belt"
+  | "gas_giant"
+  | "mineral_rich_moons"
+  | "ring_system"
+  | "binary_star"
+  | "lagrange_stations"
+  | "captured_rogue_body"
+  // Resource Deposits (7)
+  | "rare_earth_deposits"
+  | "heavy_metal_veins"
+  | "organic_compounds"
+  | "crystalline_formations"
+  | "helium3_reserves"
+  | "exotic_matter_traces"
+  | "radioactive_deposits"
+  // Phenomena & Anomalies (7)
+  | "nebula_proximity"
+  | "solar_flare_activity"
+  | "gravitational_anomaly"
+  | "dark_nebula"
+  | "precursor_ruins"
+  | "subspace_rift"
+  | "pulsar_proximity"
+  // Infrastructure & Legacy (4)
+  | "ancient_trade_route"
+  | "generation_ship_wreckage"
+  | "orbital_ring_remnant"
+  | "seed_vault";
+
+export type TraitCategory =
+  | "planetary"
+  | "orbital"
+  | "resource"
+  | "phenomena"
+  | "legacy";
+
+export type QualityTier = 1 | 2 | 3;
 
 export type GovernmentType =
   | "federation"
@@ -28,7 +81,7 @@ export type Hazard = "none" | "low" | "high";
 export interface RegionInfo {
   id: string;
   name: string;
-  identity: RegionIdentity;
+  identity: RegionTheme;
   x: number;
   y: number;
 }

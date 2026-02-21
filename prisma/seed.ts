@@ -7,7 +7,7 @@ import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
 import type { GoodEquilibrium } from "@/lib/constants/goods";
 import {
   UNIVERSE_GEN,
-  REGION_IDENTITIES,
+  REGION_THEMES,
   REGION_NAME_PREFIXES,
   ECONOMY_TYPE_WEIGHTS,
   GOVERNMENT_TYPE_WEIGHTS,
@@ -40,7 +40,7 @@ async function main() {
 
   const universe = generateUniverse(
     params,
-    REGION_IDENTITIES,
+    REGION_THEMES,
     REGION_NAME_PREFIXES,
     ECONOMY_TYPE_WEIGHTS,
     GOVERNMENT_TYPE_WEIGHTS,

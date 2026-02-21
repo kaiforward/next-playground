@@ -3,7 +3,7 @@
  * Deterministic given a seed value via mulberry32 PRNG.
  */
 
-import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, RegionTheme } from "@/lib/types/game";
 import { ALL_GOVERNMENT_TYPES } from "@/lib/types/guards";
 
 // ── Output types ────────────────────────────────────────────────
@@ -11,7 +11,7 @@ import { ALL_GOVERNMENT_TYPES } from "@/lib/types/guards";
 export interface GeneratedRegion {
   index: number;
   name: string;
-  identity: RegionIdentity;
+  identity: RegionTheme;
   governmentType: GovernmentType;
   x: number;
   y: number;
@@ -142,9 +142,9 @@ export class UnionFind {
 export function generateRegions(
   rng: RNG,
   params: GenParams,
-  identities: RegionIdentity[],
-  namePrefixes: Record<RegionIdentity, string[]>,
-  governmentWeights?: Record<RegionIdentity, Record<GovernmentType, number>>,
+  identities: RegionTheme[],
+  namePrefixes: Record<RegionTheme, string[]>,
+  governmentWeights?: Record<RegionTheme, Record<GovernmentType, number>>,
 ): GeneratedRegion[] {
   const { regionCount, mapSize, regionMinDistance, maxPlacementAttempts } = params;
   const padding = mapSize * 0.15;
@@ -246,7 +246,7 @@ export function generateSystems(
   rng: RNG,
   regions: GeneratedRegion[],
   params: GenParams,
-  economyWeights: Record<RegionIdentity, Record<EconomyType, number>>,
+  economyWeights: Record<RegionTheme, Record<EconomyType, number>>,
 ): GeneratedSystem[] {
   const { systemsPerRegion, systemScatterRadius, systemMinDistance, maxPlacementAttempts } = params;
   const systems: GeneratedSystem[] = [];
@@ -538,8 +538,8 @@ export function selectStartingSystem(
   systems: GeneratedSystem[],
   regions: GeneratedRegion[],
 ): number {
-  // Find first trade_hub region
-  const tradeHub = regions.find((r) => r.identity === "trade_hub");
+  // Find first trade_nexus region
+  const tradeHub = regions.find((r) => r.identity === "trade_nexus");
   if (!tradeHub) {
     // Fallback: first region, closest to its center
     const region = regions[0];
@@ -577,10 +577,10 @@ export function selectStartingSystem(
 
 export function generateUniverse(
   params: GenParams,
-  identities: RegionIdentity[],
-  namePrefixes: Record<RegionIdentity, string[]>,
-  economyWeights: Record<RegionIdentity, Record<EconomyType, number>>,
-  governmentWeights?: Record<RegionIdentity, Record<GovernmentType, number>>,
+  identities: RegionTheme[],
+  namePrefixes: Record<RegionTheme, string[]>,
+  economyWeights: Record<RegionTheme, Record<EconomyType, number>>,
+  governmentWeights?: Record<RegionTheme, Record<GovernmentType, number>>,
 ): GeneratedUniverse {
   const rng = mulberry32(params.seed);
 

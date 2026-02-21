@@ -3,7 +3,7 @@
  * No DB dependency. All data is plain objects.
  */
 
-import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, RegionTheme } from "@/lib/types/game";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SimConstants, SimConstantOverrides } from "./constants";
 import type { SimAdjacencyList } from "./pathfinding-cache";
@@ -13,7 +13,7 @@ import type { SimAdjacencyList } from "./pathfinding-cache";
 export interface SimRegion {
   id: string;
   name: string;
-  identity: RegionIdentity;
+  identity: RegionTheme;
   governmentType: GovernmentType;
 }
 
