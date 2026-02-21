@@ -65,6 +65,26 @@ export function generateSystemTraits(
   return traits;
 }
 
+// ── Production bonus ────────────────────────────────────────────
+
+/**
+ * Compute the production bonus from a system's traits for a specific good.
+ * Returns a multiplier offset: effectiveRate = baseRate × (1 + bonus).
+ */
+export function computeTraitProductionBonus(
+  traits: GeneratedTrait[],
+  goodId: string,
+): number {
+  let bonus = 0;
+  for (const { traitId, quality } of traits) {
+    const def = TRAITS[traitId];
+    if (def.productionGoods.includes(goodId)) {
+      bonus += QUALITY_TIERS[quality].modifier;
+    }
+  }
+  return bonus;
+}
+
 // ── Economy derivation ──────────────────────────────────────────
 
 const ALL_ECONOMY_TYPES: EconomyType[] = [

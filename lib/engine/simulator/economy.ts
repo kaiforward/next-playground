@@ -7,6 +7,7 @@ import { simulateEconomyTick, type MarketTickEntry, type EconomySimParams } from
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
+import { computeTraitProductionBonus, type GeneratedTrait } from "@/lib/engine/trait-gen";
 import {
   aggregateDangerLevel,
   rollCargoLoss,
@@ -479,6 +480,13 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       ? baseConsumption + govBoost
       : govBoost > 0 ? govBoost : undefined;
 
+    // Trait production bonus: effectiveRate = baseRate × (1 + traitBonus)
+    const baseProductionRate = sys.produces[m.goodId];
+    const traitBonus = computeTraitProductionBonus(sys.traits as GeneratedTrait[], m.goodId);
+    const productionRate = baseProductionRate != null
+      ? baseProductionRate * (1 + traitBonus)
+      : undefined;
+
     return {
       goodId: m.goodId,
       supply: m.supply,
@@ -487,7 +495,7 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       economyType: sys.economyType,
       produces: Object.keys(sys.produces),
       consumes: Object.keys(sys.consumes),
-      productionRate: sys.produces[m.goodId],
+      productionRate,
       consumptionRate,
       volatility,
       equilibriumProduces,

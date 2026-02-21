@@ -26,6 +26,8 @@ export interface SimSystem {
   produces: Record<string, number>;
   /** Goods this economy type consumes, keyed by goodId → rate. */
   consumes: Record<string, number>;
+  /** System traits from generation (used for production modifiers). */
+  traits: { traitId: string; quality: number }[];
 }
 
 export interface SimConnection {
