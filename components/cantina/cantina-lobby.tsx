@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/form/number-input";
-import { DifficultyDots } from "./difficulty-dots";
+import { DifficultyDots } from "@/components/ui/difficulty-dots";
 
 // ── Variants ──────────────────────────────────────────────────────
 

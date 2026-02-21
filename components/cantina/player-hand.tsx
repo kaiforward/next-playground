@@ -5,7 +5,7 @@ import { tv } from "tailwind-variants";
 import type { Card, Declaration, Suit } from "@/lib/engine/mini-games/voids-gambit";
 import { VALUES_PER_SUIT } from "@/lib/engine/mini-games/voids-gambit";
 import { Button } from "@/components/ui/button";
-import { SuitBadge } from "./suit-badge";
+import { SuitBadge } from "@/components/ui/suit-badge";
 import { GameCard } from "./game-card";
 
 // ── Variants ──────────────────────────────────────────────────────

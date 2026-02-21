@@ -5,15 +5,19 @@ import { tv } from "tailwind-variants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDialog } from "@/components/ui/dialog";
+import type {
+  GameState,
+  NpcIdentity,
+  Declaration,
+} from "@/lib/engine/mini-games/voids-gambit";
 import {
   SUIT_LABELS,
   MAX_ROUNDS,
   getRoundEntry,
   getDeclaredTotal,
 } from "@/lib/engine/mini-games/voids-gambit";
-import type { UseVoidsGambit } from "@/lib/hooks/use-voids-gambit";
-import { SuitBadge } from "./suit-badge";
-import { DifficultyDots } from "./difficulty-dots";
+import { SuitBadge } from "@/components/ui/suit-badge";
+import { DifficultyDots } from "@/components/ui/difficulty-dots";
 import { ManifestRow } from "./manifest-row";
 import { PlayerHand } from "./player-hand";
 import { ScoringDialog } from "./scoring-dialog";
@@ -61,21 +65,36 @@ function getPhaseText(phase: string, isProcessing: boolean): string {
 // ── Component ───────────────────────────────────────────────────
 
 interface GameTableProps {
-  vg: UseVoidsGambit;
+  game: GameState;
+  npcIdentity: NpcIdentity;
+  npcDialogue: string | null;
+  isProcessing: boolean;
+  onDeclare: (cardId: number, declaration: Declaration) => void;
+  onCall: () => void;
+  onPass: () => void;
+  onPlayAgain: () => void;
+  onReturnToLobby: () => void;
 }
 
-export function GameTable({ vg }: GameTableProps) {
-  const { game, npcDialogue, npcIdentity, isProcessing } = vg;
+export function GameTable({
+  game,
+  npcIdentity,
+  npcDialogue,
+  isProcessing,
+  onDeclare,
+  onCall,
+  onPass,
+  onPlayAgain,
+  onReturnToLobby,
+}: GameTableProps) {
   const scoringDialog = useDialog(false);
 
   // Auto-open scoring dialog when game completes
   useEffect(() => {
-    if (game?.phase === "complete") {
+    if (game.phase === "complete") {
       scoringDialog.onOpen();
     }
-  }, [game?.phase, scoringDialog.onOpen]);
-
-  if (!game || !npcIdentity) return null;
+  }, [game.phase, scoringDialog.onOpen]);
 
   const {
     phase,
@@ -167,7 +186,7 @@ export function GameTable({ vg }: GameTableProps) {
           hand={player.hand}
           currentDemand={currentDemand}
           isActive={phase === "player_declare" && !isProcessing}
-          onDeclare={vg.declareCard}
+          onDeclare={onDeclare}
         />
 
         {/* Call/pass action area */}
@@ -187,14 +206,14 @@ export function GameTable({ vg }: GameTableProps) {
                 variant="action"
                 color="red"
                 size="lg"
-                onClick={vg.callOpponentAction}
+                onClick={onCall}
               >
                 Call Bluff
               </Button>
               <Button
                 variant="ghost"
                 size="lg"
-                onClick={vg.passCallAction}
+                onClick={onPass}
               >
                 Pass
               </Button>
@@ -226,11 +245,11 @@ export function GameTable({ vg }: GameTableProps) {
           npcDialogue={npcDialogue}
           onPlayAgain={() => {
             scoringDialog.onClose();
-            vg.playAgain();
+            onPlayAgain();
           }}
           onReturnToLobby={() => {
             scoringDialog.onClose();
-            vg.returnToLobby();
+            onReturnToLobby();
           }}
         />
       )}

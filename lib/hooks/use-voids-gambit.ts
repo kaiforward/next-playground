@@ -200,7 +200,7 @@ export function useVoidsGambit(): UseVoidsGambit {
 
               // Pick dialogue based on why the NPC called
               let dialogueKey: keyof typeof NPC_DIALOGUE[typeof prev.config.npcArchetype];
-              if (decision.reason === "memory") {
+              if (decision.reason === "memory" || decision.reason === "card_counting") {
                 dialogueKey = "callMemory";
               } else {
                 const lastLog =

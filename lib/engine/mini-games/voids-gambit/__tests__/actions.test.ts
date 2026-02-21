@@ -165,7 +165,7 @@ describe("callOpponent", () => {
     return state; // should be player_call phase
   }
 
-  it("catches a lie — card removed and liar penalized", () => {
+  it("catches a lie — card marked caught and liar penalized", () => {
     // NPC plays Raw 2 but declares it as demanded suit value 7
     let state = setupGame(123);
     const demand = state.currentDemand!;

@@ -8,7 +8,7 @@ import type {
   NpcIdentity,
   ResolvedCardDetail,
 } from "@/lib/engine/mini-games/voids-gambit";
-import { SuitBadge } from "./suit-badge";
+import { SuitBadge } from "@/components/ui/suit-badge";
 
 // ── Variants ──────────────────────────────────────────────────────
 
@@ -103,7 +103,7 @@ export function ScoringDialog({
     winner === "player"
       ? `+${potWinnings} CR`
       : winner === "npc"
-        ? `-${potWinnings} CR`
+        ? `-${potWinnings / 2} CR`
         : `${potWinnings} CR returned`;
 
   return (

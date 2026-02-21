@@ -6,15 +6,42 @@ import { CantinaLobby } from "@/components/cantina/cantina-lobby";
 import { GameTable } from "@/components/cantina/game-table";
 
 export default function CantinaPage() {
-  const vg = useVoidsGambit();
-
   return (
     <PageContainer size="lg">
-      {vg.game === null ? (
-        <CantinaLobby onStart={vg.startNewGame} />
-      ) : (
-        <GameTable vg={vg} />
-      )}
+      <CantinaContent />
     </PageContainer>
+  );
+}
+
+function CantinaContent() {
+  const {
+    game,
+    npcDialogue,
+    npcIdentity,
+    isProcessing,
+    startNewGame,
+    declareCard,
+    callOpponentAction,
+    passCallAction,
+    playAgain,
+    returnToLobby,
+  } = useVoidsGambit();
+
+  if (!game || !npcIdentity) {
+    return <CantinaLobby onStart={startNewGame} />;
+  }
+
+  return (
+    <GameTable
+      game={game}
+      npcIdentity={npcIdentity}
+      npcDialogue={npcDialogue}
+      isProcessing={isProcessing}
+      onDeclare={declareCard}
+      onCall={callOpponentAction}
+      onPass={passCallAction}
+      onPlayAgain={playAgain}
+      onReturnToLobby={returnToLobby}
+    />
   );
 }
