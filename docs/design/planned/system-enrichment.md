@@ -190,7 +190,7 @@ Region identity emerges bottom-up from its systems, but the generation process u
 
 3. **Derive economy per system**: Score trait affinities, assign economy type per §2.
 
-4. **Derive region economy label**: The region's displayed economy type = the most common economy type among its systems. This is a derived label, not a stored override. If a war changes enough system economies (via faction government bonuses), the region label could shift over time.
+4. **Derive region economy label**: The region's displayed economy type = the most common economy type among its systems, stored as `dominantEconomy` on the Region model. Computed at seed time. Re-derived when system economies change (e.g., faction conquest in Layer 2 — tracked in `MIGRATION-NOTES.md` §1).
 
 #### Coherence Guarantees
 
@@ -198,7 +198,7 @@ The generation must ensure:
 - At least 60% of systems in a region share the same economy type (so regions feel cohesive)
 - Every region has at least one system with a different economy type (so regions aren't monotonous)
 - Gateway systems can have any economy — their value is strategic position, not production
-- Homeworld systems are always core economy
+- Faction homeworld systems are always core economy (enforced when factions ship in Layer 2 — not relevant to initial generation, where the player starting system is selected *after* generation from existing core systems)
 
 #### Region Themes
 

@@ -165,6 +165,8 @@ Specific items where a planned system replaces or modifies an active implementat
 
 **Key deltas**: Government modifiers (volatility, equilibrium spread, tax, danger, contraband) move from per-region to per-system based on owning faction. Affects economy processing, danger pipeline, contraband inspection, and tax collection.
 
+**Region dominant economy re-derivation**: Layer 0 adds `Region.dominantEconomy` (stored, computed at seed time). When faction conquest changes a system's economy via government affinity nudge (system-enrichment.md §2.2), the owning region's `dominantEconomy` must be re-derived. Add this to the war/territory-change processor.
+
 ---
 
 ### 2. Economy Type Assignment: Top-Down → Trait-Derived
