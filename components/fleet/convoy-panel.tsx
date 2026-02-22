@@ -15,23 +15,30 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 interface ConvoyPanelProps {
   convoys: ConvoyState[];
   ships: ShipState[];
-  playerCredits: number;
+  /** When set, only shows convoys and ships at this system. Used on system pages. */
+  systemId?: string;
 }
 
-export function ConvoyPanel({ convoys, ships, playerCredits }: ConvoyPanelProps) {
-  return (
-    <div className="space-y-6">
-      {convoys.length === 0 && (
-        <p className="text-sm text-white/40 text-center py-4">
-          No active convoys. Select ships to form a convoy.
-        </p>
-      )}
+export function ConvoyPanel({ convoys, ships, systemId }: ConvoyPanelProps) {
+  const filteredConvoys = systemId
+    ? convoys.filter((c) => c.systemId === systemId)
+    : convoys;
 
-      {convoys.map((convoy) => (
+  const filteredShips = systemId
+    ? ships.filter((s) => s.systemId === systemId)
+    : ships;
+
+  const hasContent = filteredConvoys.length > 0 || filteredShips.filter((s) => s.status === "docked" && !s.convoyId && !s.disabled).length >= 2;
+
+  if (!hasContent) return null;
+
+  return (
+    <div className="space-y-4">
+      {filteredConvoys.map((convoy) => (
         <ConvoyCard key={convoy.id} convoy={convoy} />
       ))}
 
-      <CreateConvoySection ships={ships} />
+      <CreateConvoySection ships={filteredShips} systemId={systemId} />
     </div>
   );
 }
@@ -120,7 +127,7 @@ function ConvoyCard({ convoy }: { convoy: ConvoyState }) {
   );
 }
 
-function CreateConvoySection({ ships }: { ships: ShipState[] }) {
+function CreateConvoySection({ ships, systemId }: { ships: ShipState[]; systemId?: string }) {
   const [selectedShips, setSelectedShips] = useState<Set<string>>(new Set());
   const createMutation = useCreateConvoyMutation();
 
@@ -143,8 +150,8 @@ function CreateConvoySection({ ships }: { ships: ShipState[] }) {
     });
   };
 
-  // All selected ships must be at the same system
   const selectedArr = availableShips.filter((s) => selectedShips.has(s.id));
+  // When systemId is provided, all ships are already at the same system
   const systemIds = new Set(selectedArr.map((s) => s.systemId));
   const sameSystem = systemIds.size <= 1;
   const canCreate = selectedArr.length >= 2 && sameSystem;
@@ -156,7 +163,7 @@ function CreateConvoySection({ ships }: { ships: ShipState[] }) {
 
   return (
     <Card variant="bordered" padding="md">
-      <CardHeader title="Form Convoy" subtitle="Select 2+ ships at the same station" />
+      <CardHeader title="Form Convoy" subtitle={systemId ? "Select 2+ ships" : "Select 2+ ships at the same station"} />
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
           {availableShips.map((ship) => (
@@ -171,12 +178,14 @@ function CreateConvoySection({ ships }: { ships: ShipState[] }) {
                 className="accent-blue-500"
               />
               <span className="text-sm text-white flex-1">{ship.name}</span>
-              <span className="text-xs text-white/40">{ship.system.name}</span>
+              {!systemId && (
+                <span className="text-xs text-white/40">{ship.system.name}</span>
+              )}
             </label>
           ))}
         </div>
 
-        {selectedArr.length >= 2 && !sameSystem && (
+        {!systemId && selectedArr.length >= 2 && !sameSystem && (
           <p className="text-xs text-amber-400">Selected ships must be at the same station.</p>
         )}
 
