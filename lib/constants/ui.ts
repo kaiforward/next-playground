@@ -1,18 +1,4 @@
-import type { EconomyType } from "@/lib/types/game";
 import type { EVENT_DEFINITIONS } from "./events";
-
-/** Mapping from economy type to Badge color prop. */
-export const ECONOMY_BADGE_COLOR: Record<
-  EconomyType,
-  "green" | "amber" | "blue" | "purple" | "slate" | "red" | "cyan"
-> = {
-  agricultural: "green",
-  extraction: "amber",
-  refinery: "cyan",
-  industrial: "slate",
-  tech: "blue",
-  core: "purple",
-};
 
 /** Mapping from event type to Badge/dot color. */
 export const EVENT_TYPE_BADGE_COLOR: Record<

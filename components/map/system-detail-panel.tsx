@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { tv } from "tailwind-variants";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { EconomyBadge } from "@/components/ui/economy-badge";
 import type { StarSystemInfo, ShipState, ActiveEvent } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
@@ -24,20 +25,6 @@ interface SystemDetailPanelProps {
   onJumpToRegion?: (regionId: string) => void;
   onClose: () => void;
 }
-
-const economyBadge = tv({
-  base: "inline-block rounded-full px-3 py-0.5 text-xs font-semibold uppercase tracking-wider",
-  variants: {
-    economyType: {
-      agricultural: "bg-green-900/80 text-green-300 ring-1 ring-green-500/40",
-      extraction: "bg-amber-900/80 text-amber-300 ring-1 ring-amber-500/40",
-      refinery: "bg-cyan-900/80 text-cyan-300 ring-1 ring-cyan-500/40",
-      industrial: "bg-slate-700/80 text-slate-300 ring-1 ring-slate-400/40",
-      tech: "bg-blue-900/80 text-blue-300 ring-1 ring-blue-500/40",
-      core: "bg-purple-900/80 text-purple-300 ring-1 ring-purple-500/40",
-    },
-  },
-});
 
 export function SystemDetailPanel({
   system,
@@ -87,13 +74,9 @@ export function SystemDetailPanel({
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         {/* Economy badge + region + gateway */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className={economyBadge({ economyType: system.economyType })}>
-            {system.economyType}
-          </span>
+          <EconomyBadge economyType={system.economyType} />
           {system.isGateway && (
-            <span className="inline-block rounded-full px-3 py-0.5 text-xs font-semibold uppercase tracking-wider bg-amber-900/80 text-amber-300 ring-1 ring-amber-500/40">
-              Gateway
-            </span>
+            <Badge color="amber">Gateway</Badge>
           )}
         </div>
 

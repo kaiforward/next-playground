@@ -16,7 +16,7 @@ Enriches the physical universe that everything else builds on. No new gameplay s
 
 | System | What it does | Stands alone? |
 |---|---|---|
-| [System Enrichment](./planned/system-enrichment.md) §1–3 | Traits, quality tiers, trait-to-economy derivation, region themes | Yes — replaces current top-down economy assignment with bottom-up trait scoring. Current government/region model stays until factions ship |
+| ~~[System Enrichment](./planned/system-enrichment.md) §1–3~~ | Traits, quality tiers, trait-to-economy derivation | **Done** — traits drive economy derivation, 24 neutral regions (no themes), EconomyBadge component, neutral map nodes. Region themes removed entirely; randomness produces natural variety. |
 
 **Why first**: Every later system references traits — factions value them, ships dock at facilities built on them, missions are flavoured by them. Without traits, the rest of the planned systems have nothing to hang on.
 
@@ -169,16 +169,6 @@ Specific items where a planned system replaces or modifies an active implementat
 
 ---
 
-### 2. Economy Type Assignment: Top-Down → Trait-Derived
-
-**Active** (universe.md): Economy type is assigned per system, weighted by region identity. Top-down assignment at seed time.
-
-**Planned** (system-enrichment.md §2–3): Economy type is *derived* from system trait affinity scoring. Bottom-up derivation. Region themes weight trait generation but don't dictate economy. System enrichment §3 acknowledges this ("Current Model (Being Replaced)").
-
-**Key deltas**: Entire world generation pipeline changes. Region identity no longer determines system economies — traits do.
-
----
-
 ### 3. Ship Types: 2 → 12, Stats: 2 → 10
 
 **Active** (navigation.md): 2 ship types (Shuttle, Freighter) with 2 stats (fuel capacity, cargo capacity).
@@ -228,10 +218,3 @@ To be designed during implementation of each respective system.
 
 ---
 
-### 12. Region Identity Lists
-
-**Active** (universe.md): 5 region identities (Trade Hub, Resource Rich, Industrial, Tech, Agricultural).
-
-**Planned** (system-enrichment.md §3): 8 region themes (Garden heartland, Mineral frontier, Industrial corridor, Research cluster, Energy belt, Trade nexus, Contested frontier, Frontier wilds).
-
-**Confirmed**: The new 8-theme list replaces the old 5-identity list. This is intentional — system enrichment explicitly notes the current model is being replaced.

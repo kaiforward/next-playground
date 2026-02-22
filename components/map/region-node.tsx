@@ -4,6 +4,7 @@ import { Handle, Position } from "@xyflow/react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { tv } from "tailwind-variants";
 import type { EconomyType } from "@/lib/types/game";
+import { EconomyBadge } from "@/components/ui/economy-badge";
 
 export type RegionNavigationState = "origin" | "reachable" | "unreachable";
 
@@ -26,16 +27,6 @@ const regionNode = tv({
     },
   },
 });
-
-/** Economy type → Tailwind text color for the small economy label. */
-const ECONOMY_LABEL_COLOR: Record<EconomyType, string> = {
-  agricultural: "text-green-400",
-  extraction: "text-amber-400",
-  refinery: "text-cyan-400",
-  industrial: "text-slate-300",
-  tech: "text-blue-400",
-  core: "text-purple-400",
-};
 
 export function RegionNode({ data }: NodeProps<Node<RegionNodeData>>) {
   const { label, dominantEconomy, systemCount, shipCount, navigationState } = data;
@@ -61,9 +52,7 @@ export function RegionNode({ data }: NodeProps<Node<RegionNodeData>>) {
       <div className={regionNode({ navigationState })}>
         <div className="text-base font-bold leading-tight">{label}</div>
         {dominantEconomy && (
-          <div className={`text-[10px] font-semibold uppercase tracking-wider opacity-80 ${ECONOMY_LABEL_COLOR[dominantEconomy]}`}>
-            {dominantEconomy}
-          </div>
+          <EconomyBadge economyType={dominantEconomy} className="mt-1 text-[10px] px-2 py-0" />
         )}
         <div className="text-[11px] mt-1 text-white/50">
           {systemCount} system{systemCount !== 1 ? "s" : ""}
