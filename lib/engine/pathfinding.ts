@@ -43,16 +43,35 @@ function buildAdjacencyList(
   return adj;
 }
 
+/** Sum travel duration across a path using the adjacency list. */
+function sumTravelDuration(
+  path: string[],
+  adj: Map<string, { toSystemId: string; fuelCost: number }[]>,
+  shipSpeed?: number,
+): number {
+  let total = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const neighbors = adj.get(path[i]) ?? [];
+    const edge = neighbors.find((n) => n.toSystemId === path[i + 1]);
+    if (edge) {
+      total += hopDuration(edge.fuelCost, shipSpeed);
+    }
+  }
+  return total;
+}
+
 // ── Dijkstra — lowest-fuel path ────────────────────────────────
 
 /**
  * Find the lowest-fuel-cost path between two systems using Dijkstra.
  * Returns null if no path exists.
+ * Optional shipSpeed adjusts travel duration calculations.
  */
 export function findShortestPath(
   originId: string,
   destinationId: string,
   connections: ConnectionInfo[],
+  shipSpeed?: number,
 ): PathResult | null {
   if (originId === destinationId) return null;
 
@@ -106,16 +125,7 @@ export function findShortestPath(
   if (path[0] !== originId) return null; // Disconnected
 
   const totalFuelCost = dist.get(destinationId)!;
-
-  // Sum travel duration per hop
-  let totalTravelDuration = 0;
-  for (let i = 0; i < path.length - 1; i++) {
-    const neighbors = adj.get(path[i]) ?? [];
-    const edge = neighbors.find((n) => n.toSystemId === path[i + 1]);
-    if (edge) {
-      totalTravelDuration += hopDuration(edge.fuelCost);
-    }
-  }
+  const totalTravelDuration = sumTravelDuration(path, adj, shipSpeed);
 
   return { path, totalFuelCost, totalTravelDuration };
 }
@@ -125,11 +135,13 @@ export function findShortestPath(
 /**
  * Find all systems reachable from origin within the given fuel budget.
  * Returns a map of systemId → ReachableSystem (excludes origin).
+ * Optional shipSpeed adjusts travel duration calculations.
  */
 export function findReachableSystems(
   originId: string,
   currentFuel: number,
   connections: ConnectionInfo[],
+  shipSpeed?: number,
 ): Map<string, ReachableSystem> {
   const adj = buildAdjacencyList(connections);
   const result = new Map<string, ReachableSystem>();
@@ -172,22 +184,13 @@ export function findReachableSystems(
 
     // Reconstruct path
     const path: string[] = [];
-    let node: string | undefined = systemId;
-    while (node !== undefined) {
-      path.unshift(node);
-      node = prev.get(node);
+    let pnode: string | undefined = systemId;
+    while (pnode !== undefined) {
+      path.unshift(pnode);
+      pnode = prev.get(pnode);
     }
 
-    // Sum travel duration
-    let travelDuration = 0;
-    for (let i = 0; i < path.length - 1; i++) {
-      const neighbors = adj.get(path[i]) ?? [];
-      const edge = neighbors.find((n) => n.toSystemId === path[i + 1]);
-      if (edge) {
-        travelDuration += hopDuration(edge.fuelCost);
-      }
-    }
-
+    const travelDuration = sumTravelDuration(path, adj, shipSpeed);
     result.set(systemId, { systemId, fuelCost, travelDuration, path });
   }
 
@@ -259,11 +262,13 @@ export function computeAllHopDistances(
 /**
  * Validate a pre-computed route by walking each consecutive hop.
  * Checks that each pair is connected and total fuel is within budget.
+ * Optional shipSpeed adjusts travel duration calculations.
  */
 export function validateRoute(
   route: string[],
   connections: ConnectionInfo[],
   currentFuel: number,
+  shipSpeed?: number,
 ): RouteValidationResult {
   if (route.length < 2) {
     return { ok: false, error: "Route must have at least 2 systems." };
@@ -289,7 +294,7 @@ export function validateRoute(
     }
 
     totalFuelCost += edge.fuelCost;
-    totalTravelDuration += hopDuration(edge.fuelCost);
+    totalTravelDuration += hopDuration(edge.fuelCost, shipSpeed);
   }
 
   if (totalFuelCost > currentFuel) {

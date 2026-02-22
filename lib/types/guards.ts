@@ -13,8 +13,9 @@ import type {
   ShipStatus,
   TradeType,
   TraitId,
+  ConvoyStatus,
 } from "./game";
-import type { ShipTypeId } from "@/lib/constants/ships";
+import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -61,7 +62,25 @@ const TRADE_TYPES: ReadonlySet<string> = new Set<TradeType>([
 ]);
 
 const SHIP_TYPE_IDS: ReadonlySet<string> = new Set<ShipTypeId>([
-  "shuttle", "freighter",
+  "shuttle", "light_freighter", "interceptor", "scout_skiff",
+  "bulk_freighter", "corvette", "blockade_runner", "survey_vessel",
+  "heavy_freighter", "frigate", "stealth_transport", "command_vessel",
+]);
+
+const SHIP_SIZES: ReadonlySet<string> = new Set<ShipSize>([
+  "small", "medium", "large",
+]);
+
+const SHIP_ROLES: ReadonlySet<string> = new Set<ShipRole>([
+  "trade", "combat", "scout", "stealth", "support",
+]);
+
+const UPGRADE_SLOT_TYPES: ReadonlySet<string> = new Set<UpgradeSlotType>([
+  "engine", "cargo", "defence", "systems",
+]);
+
+const CONVOY_STATUSES: ReadonlySet<string> = new Set<ConvoyStatus>([
+  "docked", "in_transit",
 ]);
 
 // ── Validated converters ────────────────────────────────────────
@@ -112,9 +131,36 @@ export function isShipTypeId(value: string): value is ShipTypeId {
   return SHIP_TYPE_IDS.has(value);
 }
 
+export function toShipSize(value: string): ShipSize {
+  if (!SHIP_SIZES.has(value)) {
+    throw new Error(`Invalid ship size: "${value}"`);
+  }
+  return value as ShipSize;
+}
+
+export function toShipRole(value: string): ShipRole {
+  if (!SHIP_ROLES.has(value)) {
+    throw new Error(`Invalid ship role: "${value}"`);
+  }
+  return value as ShipRole;
+}
+
+export function toUpgradeSlotType(value: string): UpgradeSlotType {
+  if (!UPGRADE_SLOT_TYPES.has(value)) {
+    throw new Error(`Invalid upgrade slot type: "${value}"`);
+  }
+  return value as UpgradeSlotType;
+}
+
+export function toConvoyStatus(value: string): ConvoyStatus {
+  if (!CONVOY_STATUSES.has(value)) {
+    throw new Error(`Invalid convoy status: "${value}"`);
+  }
+  return value as ConvoyStatus;
+}
+
 // ── Constant arrays (avoids Object.keys() + as casts) ───────────
 
 export const ALL_GOVERNMENT_TYPES: readonly GovernmentType[] = [
   "federation", "corporate", "authoritarian", "frontier",
 ];
-

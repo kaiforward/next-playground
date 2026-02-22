@@ -1,5 +1,9 @@
 // Shared game types — no Prisma dependency, importable everywhere
 
+import type { ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
+
+export type { ShipSize, ShipRole, UpgradeSlotType };
+
 export type EconomyType =
   | "agricultural"
   | "extraction"
@@ -93,14 +97,36 @@ export type TradeType = "buy" | "sell";
 
 export type ShipStatus = "docked" | "in_transit";
 
+export interface UpgradeSlotState {
+  id: string;
+  slotType: UpgradeSlotType;
+  slotIndex: number;
+  moduleId: string | null;
+  moduleTier: number | null;
+}
+
 export interface ShipState {
   id: string;
   name: string;
   shipType: string;
+  size: ShipSize;
+  role: ShipRole;
   fuel: number;
   maxFuel: number;
   cargoMax: number;
+  speed: number;
+  hullMax: number;
+  hullCurrent: number;
+  shieldMax: number;
+  shieldCurrent: number;
+  firepower: number;
+  evasion: number;
+  stealth: number;
+  sensors: number;
+  crewCapacity: number;
+  disabled: boolean;
   cargo: CargoItemState[];
+  upgradeSlots: UpgradeSlotState[];
   status: ShipStatus;
   systemId: string;
   system: StarSystemInfo;
@@ -108,6 +134,25 @@ export interface ShipState {
   destinationSystem: StarSystemInfo | null;
   departureTick: number | null;
   arrivalTick: number | null;
+  convoyId: string | null;
+}
+
+export type ConvoyStatus = "docked" | "in_transit";
+
+export interface ConvoyState {
+  id: string;
+  playerId: string;
+  name: string | null;
+  systemId: string;
+  system: StarSystemInfo;
+  status: ConvoyStatus;
+  destinationSystemId: string | null;
+  destinationSystem: StarSystemInfo | null;
+  departureTick: number | null;
+  arrivalTick: number | null;
+  members: ShipState[];
+  combinedCargoMax: number;
+  combinedCargoUsed: number;
 }
 
 export interface FleetState {

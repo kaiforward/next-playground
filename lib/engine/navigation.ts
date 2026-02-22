@@ -62,6 +62,8 @@ import type { ShipStatus } from "../types/game";
 export interface FleetNavigationParams extends NavigationParams {
   shipStatus: ShipStatus;
   currentTick: number;
+  /** Ship speed for travel time calculation. Omit for legacy behavior. */
+  shipSpeed?: number;
 }
 
 export type FleetNavigationResult =
@@ -71,7 +73,7 @@ export type FleetNavigationResult =
 export function validateFleetNavigation(
   params: FleetNavigationParams,
 ): FleetNavigationResult {
-  const { shipStatus, currentTick, ...navParams } = params;
+  const { shipStatus, currentTick, shipSpeed, ...navParams } = params;
 
   if (shipStatus !== "docked") {
     return { ok: false, error: "Ship must be docked to navigate." };
@@ -82,7 +84,7 @@ export function validateFleetNavigation(
     return baseResult;
   }
 
-  const travelDuration = hopDuration(baseResult.fuelCost);
+  const travelDuration = hopDuration(baseResult.fuelCost, shipSpeed);
   const departureTick = currentTick;
   const arrivalTick = currentTick + travelDuration;
 
@@ -103,6 +105,8 @@ export interface FleetRouteNavigationParams {
   currentFuel: number;
   shipStatus: ShipStatus;
   currentTick: number;
+  /** Ship speed for travel time calculation. Omit for legacy behavior. */
+  shipSpeed?: number;
 }
 
 export type FleetRouteNavigationResult =
@@ -119,13 +123,13 @@ export type FleetRouteNavigationResult =
 export function validateFleetRouteNavigation(
   params: FleetRouteNavigationParams,
 ): FleetRouteNavigationResult {
-  const { route, connections, currentFuel, shipStatus, currentTick } = params;
+  const { route, connections, currentFuel, shipStatus, currentTick, shipSpeed } = params;
 
   if (shipStatus !== "docked") {
     return { ok: false, error: "Ship must be docked to navigate." };
   }
 
-  const routeResult = validateRoute(route, connections, currentFuel);
+  const routeResult = validateRoute(route, connections, currentFuel, shipSpeed);
   if (!routeResult.ok) {
     return { ok: false, error: routeResult.error };
   }
