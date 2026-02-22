@@ -119,7 +119,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
   const ships: SimShip[] = [];
   let nextId = 0;
 
-  const shuttleStats = constants.ships.shuttle ?? { fuel: 100, cargo: 50 };
+  const shuttleStats = constants.ships.shuttle ?? { fuel: 100, cargo: 50, speed: 5, hullMax: 40, shieldMax: 10, firepower: 2, evasion: 6, stealth: 3, price: 0 };
 
   for (const botCfg of config.bots) {
     for (let i = 0; i < botCfg.count; i++) {
@@ -141,6 +141,14 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         maxFuel: shuttleStats.fuel,
         cargo: [],
         cargoMax: shuttleStats.cargo,
+        speed: shuttleStats.speed,
+        hullMax: shuttleStats.hullMax,
+        hullCurrent: shuttleStats.hullMax,
+        shieldMax: shuttleStats.shieldMax,
+        firepower: shuttleStats.firepower,
+        evasion: shuttleStats.evasion,
+        stealth: shuttleStats.stealth,
+        disabled: false,
         status: "docked",
         systemId: startingSystemId,
         destinationSystemId: null,

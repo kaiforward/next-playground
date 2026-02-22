@@ -146,8 +146,8 @@ export function executeBotTick(
       }
     }
 
-    // 5. Navigate to target
-    const path = findShortestPathCached(ship.systemId, decision.targetSystemId, adjacencyList);
+    // 5. Navigate to target (using ship speed for travel duration)
+    const path = findShortestPathCached(ship.systemId, decision.targetSystemId, adjacencyList, ship.speed);
 
     if (path && path.totalFuelCost <= ship.fuel) {
       fuelSpent = path.totalFuelCost;
