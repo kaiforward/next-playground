@@ -11,6 +11,14 @@ import { useDialog } from "@/components/ui/dialog";
 import { RefuelDialog } from "./refuel-dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 
+const ROLE_COLORS: Record<string, "blue" | "red" | "cyan" | "purple" | "green"> = {
+  trade: "blue",
+  combat: "red",
+  scout: "cyan",
+  stealth: "purple",
+  support: "green",
+};
+
 interface ShipCardProps {
   ship: ShipState;
   currentTick: number;
@@ -27,24 +35,35 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
   const needsFuel = isDocked && ship.fuel < ship.maxFuel;
+  const hullPercent = ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100;
+  const isDamaged = ship.hullCurrent < ship.hullMax;
 
   const detailHref = backTo ? `/ship/${ship.id}?from=${backTo}` : `/ship/${ship.id}`;
   const refuelDialog = useDialog();
 
   return (
-    <Card variant="bordered" padding="sm">
+    <Card variant="bordered" padding="sm" className={ship.disabled ? "opacity-60" : undefined}>
       <CardContent className="space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <Link
-            href={detailHref}
-            className="text-sm font-bold text-white hover:text-blue-300 transition-colors"
-          >
-            {ship.name}
-          </Link>
-          <Badge color={isDocked ? "green" : "amber"}>
-            {isDocked ? "Docked" : "In Transit"}
-          </Badge>
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href={detailHref}
+              className="text-sm font-bold text-white hover:text-blue-300 transition-colors truncate"
+            >
+              {ship.name}
+            </Link>
+            <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>
+              {ship.role}
+            </Badge>
+          </div>
+          {ship.disabled ? (
+            <Badge color="red">Disabled</Badge>
+          ) : (
+            <Badge color={isDocked ? "green" : "amber"}>
+              {isDocked ? "Docked" : "In Transit"}
+            </Badge>
+          )}
         </div>
 
         {/* Location */}
@@ -76,17 +95,27 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
           color={cargoPercent > 80 ? "red" : "amber"}
         />
 
+        {/* Hull/Shield — only show when damaged or when hull < max */}
+        {(isDamaged || ship.disabled) && (
+          <ProgressBar
+            label="Hull"
+            value={ship.hullCurrent}
+            max={ship.hullMax}
+            color={hullPercent < 30 ? "red" : "green"}
+          />
+        )}
+
         {/* Actions */}
         <div className="flex gap-2 pt-1">
           <Button href={detailHref} variant="ghost" size="sm" className="flex-1 bg-white/5 text-white/60 hover:bg-white/10">
             Details
           </Button>
-          {isDocked && (
+          {isDocked && !ship.disabled && (
             <Button href={`/system/${ship.systemId}/market?shipId=${ship.id}`} variant="pill" color="indigo" size="sm" className="flex-1">
               Trade
             </Button>
           )}
-          {needsFuel && playerCredits != null && (
+          {needsFuel && !ship.disabled && playerCredits != null && (
             <Button variant="pill" color="cyan" size="sm" onClick={refuelDialog.onOpen}>
               Refuel
             </Button>
@@ -95,7 +124,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
       </CardContent>
 
       {/* Refuel dialog */}
-      {needsFuel && playerCredits != null && (
+      {needsFuel && !ship.disabled && playerCredits != null && (
         <RefuelDialog
           ship={ship}
           playerCredits={playerCredits}

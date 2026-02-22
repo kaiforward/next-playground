@@ -11,4 +11,5 @@ export const queryKeys = {
   missionsAll: ["missions"] as const,
   systemMissions: (systemId: string) => ["missions", systemId] as const,
   playerMissions: ["missions", "player"] as const,
+  convoys: ["convoys"] as const,
 };

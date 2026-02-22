@@ -61,7 +61,7 @@ export async function DELETE(
       return NextResponse.json<ConvoyMemberResponse>({ error: result.error }, { status: result.status });
     }
 
-    return NextResponse.json<ConvoyMemberResponse>({ data: result.data });
+    return NextResponse.json<ConvoyMemberResponse>({ data: result.data ?? undefined });
   } catch (error) {
     console.error("DELETE /api/game/convoy/[convoyId]/members error:", error);
     return NextResponse.json<ConvoyMemberResponse>({ error: "Failed to remove member." }, { status: 500 });
