@@ -5,16 +5,26 @@ import Link from "next/link";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useMarket } from "@/lib/hooks/use-market";
 import { useEvents } from "@/lib/hooks/use-events";
+import { useUniverse } from "@/lib/hooks/use-universe";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
+import { TraitList } from "@/components/ui/trait-list";
 import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { getPriceTrendPct } from "@/lib/utils/market";
+import { enrichTraits } from "@/lib/utils/traits";
 
 function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { fleet } = useFleet();
   const { market } = useMarket(systemId);
   const { events } = useEvents();
+  const { data: universeData } = useUniverse();
+
+  const systemInfo = universeData?.systems.find((s) => s.id === systemId);
+  const traits = useMemo(
+    () => enrichTraits(systemInfo?.traits ?? []),
+    [systemInfo?.traits],
+  );
 
   const systemEvents = useMemo(
     () => events.filter((e) => e.systemId === systemId),
@@ -36,6 +46,18 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
         <Card variant="bordered" padding="md" className="mb-6">
           <CardContent>
             <ActiveEventsSection events={systemEvents} />
+          </CardContent>
+        </Card>
+      )}
+
+      {traits.length > 0 && (
+        <Card variant="bordered" padding="md" className="mb-6">
+          <CardHeader
+            title="System Traits"
+            subtitle={`${traits.length} trait${traits.length !== 1 ? "s" : ""}`}
+          />
+          <CardContent>
+            <TraitList traits={traits} variant="full" />
           </CardContent>
         </Card>
       )}

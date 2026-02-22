@@ -53,7 +53,6 @@ export function runSimulation(
   }
   const regionOverview: RegionOverviewEntry[] = world.regions.map((r) => ({
     name: r.name,
-    identity: r.identity,
     governmentType: r.governmentType,
     systemCount: systemsPerRegion.get(r.id) ?? 0,
   }));

@@ -5,9 +5,9 @@ import { getCargoUsed } from "@/lib/utils/cargo";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EconomyBadge } from "@/components/ui/economy-badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatList, StatRow } from "@/components/ui/stat-row";
-import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
 import { useDialog } from "@/components/ui/dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
@@ -45,9 +45,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
             <StatRow label="Location">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-white">{ship.system.name}</span>
-                <Badge color={ECONOMY_BADGE_COLOR[ship.system.economyType]}>
-                  {ship.system.economyType}
-                </Badge>
+                <EconomyBadge economyType={ship.system.economyType} />
                 {regions && (
                   <span className="text-xs text-white/40">
                     {regions.find((r) => r.id === ship.system.regionId)?.name}

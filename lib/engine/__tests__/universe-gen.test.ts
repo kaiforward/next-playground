@@ -15,12 +15,9 @@ import {
 } from "../universe-gen";
 import {
   UNIVERSE_GEN,
-  REGION_IDENTITIES,
-  REGION_NAME_PREFIXES,
-  ECONOMY_TYPE_WEIGHTS,
-  GOVERNMENT_TYPE_WEIGHTS,
+  REGION_NAMES,
 } from "@/lib/constants/universe-gen";
-import type { EconomyType, GovernmentType, RegionIdentity } from "@/lib/types/game";
+import type { GovernmentType } from "@/lib/types/game";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -148,14 +145,14 @@ describe("generateRegions", () => {
   it("generates the correct number of regions", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
+    const regions = generateRegions(rng, params, REGION_NAMES);
     expect(regions).toHaveLength(params.regionCount);
   });
 
   it("places regions within map bounds", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
+    const regions = generateRegions(rng, params, REGION_NAMES);
     for (const r of regions) {
       expect(r.x).toBeGreaterThan(0);
       expect(r.x).toBeLessThan(params.mapSize);
@@ -167,37 +164,27 @@ describe("generateRegions", () => {
   it("assigns unique names to all regions", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
+    const regions = generateRegions(rng, params, REGION_NAMES);
     const names = regions.map((r) => r.name);
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("assigns identities from the provided array", () => {
+  it("assigns a valid government type to every region", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
-    for (let i = 0; i < regions.length; i++) {
-      expect(regions[i].identity).toBe(REGION_IDENTITIES[i % REGION_IDENTITIES.length]);
-    }
-  });
-
-  it("assigns a valid government type when weights are provided", () => {
-    const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES, GOVERNMENT_TYPE_WEIGHTS);
+    const regions = generateRegions(rng, params, REGION_NAMES);
     const validGovTypes: GovernmentType[] = ["federation", "corporate", "authoritarian", "frontier"];
     for (const r of regions) {
       expect(validGovTypes).toContain(r.governmentType);
     }
   });
 
-  it("defaults government type to federation when no weights provided", () => {
+  it("ensures all 4 government types are present", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
-    for (const r of regions) {
-      expect(r.governmentType).toBe("federation");
-    }
+    const regions = generateRegions(rng, params, REGION_NAMES);
+    const govTypes = new Set(regions.map((r) => r.governmentType));
+    expect(govTypes.size).toBe(4);
   });
 });
 
@@ -208,8 +195,8 @@ describe("generateSystems", () => {
 
   function makeRegionsAndSystems() {
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
-    const systems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const regions = generateRegions(rng, params, REGION_NAMES);
+    const systems = generateSystems(rng, regions, params);
     return { regions, systems };
   }
 
@@ -229,14 +216,26 @@ describe("generateSystems", () => {
     }
   });
 
-  it("distributes economy types according to region identity weights", () => {
-    const { regions, systems } = makeRegionsAndSystems();
-    // Check that a resource_rich region has mostly extraction systems
-    const resourceRegion = regions.find((r) => r.identity === "resource_rich")!;
-    const resourceSystems = systems.filter((s) => s.regionIndex === resourceRegion.index);
-    const extractionCount = resourceSystems.filter((s) => s.economyType === "extraction").length;
-    // With 30% weight over 25 systems, expect at least 3 extraction
-    expect(extractionCount).toBeGreaterThanOrEqual(3);
+  it("derives economy types from traits with no region theme bias", () => {
+    const { systems } = makeRegionsAndSystems();
+    // With uniform trait weights, all 6 economy types should appear across 600 systems
+    const econCounts = new Map<string, number>();
+    for (const sys of systems) {
+      econCounts.set(sys.economyType, (econCounts.get(sys.economyType) ?? 0) + 1);
+    }
+    // All 6 economy types should be present
+    expect(econCounts.size).toBe(6);
+    // No single type should dominate (>40% of all systems)
+    for (const [, count] of econCounts) {
+      expect(count / systems.length).toBeLessThan(0.4);
+    }
+  });
+
+  it("every system has at least 2 traits", () => {
+    const { systems } = makeRegionsAndSystems();
+    for (const sys of systems) {
+      expect(sys.traits.length).toBeGreaterThanOrEqual(2);
+    }
   });
 
   it("assigns unique global indices", () => {
@@ -253,8 +252,8 @@ describe("generateConnections", () => {
 
   function makeFullUniverse() {
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
-    const rawSystems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const regions = generateRegions(rng, params, REGION_NAMES);
+    const rawSystems = generateSystems(rng, regions, params);
     const result = generateConnections(rng, rawSystems, regions, params);
     return { regions, ...result };
   }
@@ -347,7 +346,6 @@ describe("generateConnections", () => {
         (s) => s.regionIndex === region.index && s.isGateway,
       );
       expect(gateways.length).toBeGreaterThanOrEqual(1);
-      // Central regions in MST may have more gateways; most have 1-3
     }
   });
 });
@@ -355,31 +353,44 @@ describe("generateConnections", () => {
 // ── Starting system ─────────────────────────────────────────────
 
 describe("selectStartingSystem", () => {
-  it("selects a system in a trade_hub region", () => {
+  it("selects a system in the region closest to map center", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
-    const systems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const regions = generateRegions(rng, params, REGION_NAMES);
+    const systems = generateSystems(rng, regions, params);
 
-    const idx = selectStartingSystem(systems, regions);
+    const idx = selectStartingSystem(systems, regions, params.mapSize);
     const startSys = systems[idx];
-    const region = regions.find((r) => r.index === startSys.regionIndex)!;
-    expect(region.identity).toBe("trade_hub");
+    const startRegion = regions.find((r) => r.index === startSys.regionIndex)!;
+
+    // Find the actual closest region to center
+    const center = params.mapSize / 2;
+    let closestRegion = regions[0];
+    let closestDist = distance(closestRegion.x, closestRegion.y, center, center);
+    for (const r of regions) {
+      const d = distance(r.x, r.y, center, center);
+      if (d < closestDist) {
+        closestRegion = r;
+        closestDist = d;
+      }
+    }
+
+    expect(startRegion.index).toBe(closestRegion.index);
   });
 
   it("prefers a core-type system when available", () => {
     const params = defaultParams();
     const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_IDENTITIES, REGION_NAME_PREFIXES);
-    const systems = generateSystems(rng, regions, params, ECONOMY_TYPE_WEIGHTS);
+    const regions = generateRegions(rng, params, REGION_NAMES);
+    const systems = generateSystems(rng, regions, params);
 
-    const idx = selectStartingSystem(systems, regions);
+    const idx = selectStartingSystem(systems, regions, params.mapSize);
     const startSys = systems[idx];
-    const region = regions.find((r) => r.index === startSys.regionIndex)!;
+    const startRegion = regions.find((r) => r.index === startSys.regionIndex)!;
 
     // Check if there are any core systems in this region — if so, the selected should be core
     const coreSystems = systems.filter(
-      (s) => s.regionIndex === region.index && s.economyType === "core",
+      (s) => s.regionIndex === startRegion.index && s.economyType === "core",
     );
     if (coreSystems.length > 0) {
       expect(startSys.economyType).toBe("core");
@@ -392,8 +403,8 @@ describe("selectStartingSystem", () => {
 describe("generateUniverse", () => {
   it("produces identical output for the same seed", () => {
     const params = defaultParams();
-    const u1 = generateUniverse(params, REGION_IDENTITIES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
-    const u2 = generateUniverse(params, REGION_IDENTITIES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
+    const u1 = generateUniverse(params, REGION_NAMES);
+    const u2 = generateUniverse(params, REGION_NAMES);
 
     expect(u1.regions).toEqual(u2.regions);
     expect(u1.systems).toEqual(u2.systems);
@@ -404,20 +415,20 @@ describe("generateUniverse", () => {
   it("produces different output for different seeds", () => {
     const p1 = { ...defaultParams(), seed: 42 };
     const p2 = { ...defaultParams(), seed: 99 };
-    const u1 = generateUniverse(p1, REGION_IDENTITIES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
-    const u2 = generateUniverse(p2, REGION_IDENTITIES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
+    const u1 = generateUniverse(p1, REGION_NAMES);
+    const u2 = generateUniverse(p2, REGION_NAMES);
 
     expect(u1.systems).not.toEqual(u2.systems);
   });
 
   it("generates the expected counts", () => {
     const params = defaultParams();
-    const u = generateUniverse(params, REGION_IDENTITIES, REGION_NAME_PREFIXES, ECONOMY_TYPE_WEIGHTS);
+    const u = generateUniverse(params, REGION_NAMES);
 
     expect(u.regions).toHaveLength(params.regionCount);
     expect(u.systems).toHaveLength(params.regionCount * params.systemsPerRegion);
-    // At minimum MST edges (bidirectional) per region: (25-1)*2*8 = 384
-    expect(u.connections.length).toBeGreaterThan(300);
+    // At minimum MST edges (bidirectional) per region: (25-1)*2*24 = 1152
+    expect(u.connections.length).toBeGreaterThan(1000);
     expect(u.startingSystemIndex).toBeGreaterThanOrEqual(0);
     expect(u.startingSystemIndex).toBeLessThan(u.systems.length);
   });

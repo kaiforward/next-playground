@@ -8,12 +8,68 @@ export type EconomyType =
   | "tech"
   | "core";
 
-export type RegionIdentity =
-  | "resource_rich"
-  | "agricultural"
-  | "industrial"
-  | "tech"
-  | "trade_hub";
+// ── System trait types ────────────────────────────────────────────
+
+export type TraitId =
+  // Planetary Bodies (12)
+  | "habitable_world"
+  | "ocean_world"
+  | "volcanic_world"
+  | "frozen_world"
+  | "tidally_locked_world"
+  | "desert_world"
+  | "jungle_world"
+  | "geothermal_vents"
+  | "hydrocarbon_seas"
+  | "fertile_lowlands"
+  | "coral_archipelago"
+  | "tectonic_forge"
+  // Orbital Features (8)
+  | "asteroid_belt"
+  | "gas_giant"
+  | "mineral_rich_moons"
+  | "ring_system"
+  | "binary_star"
+  | "lagrange_stations"
+  | "captured_rogue_body"
+  | "deep_space_beacon"
+  // Resource Deposits (9)
+  | "rare_earth_deposits"
+  | "heavy_metal_veins"
+  | "organic_compounds"
+  | "crystalline_formations"
+  | "helium3_reserves"
+  | "exotic_matter_traces"
+  | "radioactive_deposits"
+  | "superdense_core"
+  | "glacial_aquifer"
+  // Phenomena & Anomalies (9)
+  | "nebula_proximity"
+  | "solar_flare_activity"
+  | "gravitational_anomaly"
+  | "dark_nebula"
+  | "precursor_ruins"
+  | "subspace_rift"
+  | "pulsar_proximity"
+  | "ion_storm_corridor"
+  | "bioluminescent_ecosystem"
+  // Infrastructure & Legacy (7)
+  | "ancient_trade_route"
+  | "generation_ship_wreckage"
+  | "orbital_ring_remnant"
+  | "seed_vault"
+  | "colonial_capital"
+  | "free_port_declaration"
+  | "shipbreaking_yards";
+
+export type TraitCategory =
+  | "planetary"
+  | "orbital"
+  | "resource"
+  | "phenomena"
+  | "legacy";
+
+export type QualityTier = 1 | 2 | 3;
 
 export type GovernmentType =
   | "federation"
@@ -28,7 +84,7 @@ export type Hazard = "none" | "low" | "high";
 export interface RegionInfo {
   id: string;
   name: string;
-  identity: RegionIdentity;
+  dominantEconomy: EconomyType;
   x: number;
   y: number;
 }
@@ -73,6 +129,11 @@ export interface CargoItemState {
   quantity: number;
 }
 
+export interface SystemTraitInfo {
+  traitId: TraitId;
+  quality: QualityTier;
+}
+
 export interface StarSystemInfo {
   id: string;
   name: string;
@@ -82,6 +143,7 @@ export interface StarSystemInfo {
   description: string;
   regionId: string;
   isGateway: boolean;
+  traits?: SystemTraitInfo[];
 }
 
 export interface SystemConnectionInfo {

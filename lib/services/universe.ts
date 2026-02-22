@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import type { UniverseData, StarSystemInfo } from "@/lib/types/game";
-import { toEconomyType, toRegionIdentity } from "@/lib/types/guards";
+import { toEconomyType, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { TRAITS } from "@/lib/constants/traits";
 
 /**
  * Get all regions, star systems, and connections.
@@ -12,7 +13,7 @@ export async function getUniverse(): Promise<UniverseData> {
       select: {
         id: true,
         name: true,
-        identity: true,
+        dominantEconomy: true,
         x: true,
         y: true,
       },
@@ -27,6 +28,7 @@ export async function getUniverse(): Promise<UniverseData> {
         description: true,
         regionId: true,
         isGateway: true,
+        traits: { select: { traitId: true, quality: true } },
       },
     }),
     prisma.systemConnection.findMany({
@@ -43,7 +45,7 @@ export async function getUniverse(): Promise<UniverseData> {
     regions: regions.map((r) => ({
       id: r.id,
       name: r.name,
-      identity: toRegionIdentity(r.identity),
+      dominantEconomy: toEconomyType(r.dominantEconomy),
       x: r.x,
       y: r.y,
     })),
@@ -56,6 +58,10 @@ export async function getUniverse(): Promise<UniverseData> {
       description: s.description,
       regionId: s.regionId,
       isGateway: s.isGateway,
+      traits: s.traits.map((t) => ({
+        traitId: toTraitId(t.traitId),
+        quality: toQualityTier(t.quality),
+      })),
     })),
     connections: connections.map((c) => ({
       id: c.id,
@@ -72,13 +78,19 @@ export async function getUniverse(): Promise<UniverseData> {
  */
 export async function getSystemDetail(
   systemId: string,
-): Promise<StarSystemInfo & { station: { id: string; name: string } | null }> {
+): Promise<
+  StarSystemInfo & {
+    station: { id: string; name: string } | null;
+    traits: import("@/lib/types/api").SystemTraitResponse[];
+  }
+> {
   const system = await prisma.starSystem.findUnique({
     where: { id: systemId },
     include: {
       station: {
         select: { id: true, name: true },
       },
+      traits: { select: { traitId: true, quality: true } },
     },
   });
 
@@ -98,5 +110,17 @@ export async function getSystemDetail(
     station: system.station
       ? { id: system.station.id, name: system.station.name }
       : null,
+    traits: system.traits.map((t) => {
+      const traitId = toTraitId(t.traitId);
+      const quality = toQualityTier(t.quality);
+      const def = TRAITS[traitId];
+      return {
+        traitId,
+        quality,
+        name: def.name,
+        category: def.category,
+        description: def.descriptions[quality],
+      };
+    }),
   };
 }

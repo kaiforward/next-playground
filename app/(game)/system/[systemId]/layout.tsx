@@ -6,17 +6,17 @@ import { usePathname } from "next/navigation";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { BackLink } from "@/components/ui/back-link";
 import { Badge } from "@/components/ui/badge";
+import { EconomyBadge } from "@/components/ui/economy-badge";
 import { PageContainer } from "@/components/ui/page-container";
-import { ECONOMY_BADGE_COLOR } from "@/lib/constants/ui";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 
-export default function SystemLayout({
+function SystemLayoutContent({
+  systemId,
   children,
-  params,
 }: {
+  systemId: string;
   children: React.ReactNode;
-  params: Promise<{ systemId: string }>;
 }) {
-  const { systemId } = use(params);
   const { data: universeData } = useUniverse();
   const pathname = usePathname();
 
@@ -35,7 +35,7 @@ export default function SystemLayout({
   ];
 
   return (
-    <PageContainer size="lg">
+    <>
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <BackLink href={`/map?systemId=${systemId}`} />
@@ -44,9 +44,7 @@ export default function SystemLayout({
         </h1>
         {systemInfo && (
           <>
-            <Badge color={ECONOMY_BADGE_COLOR[systemInfo.economyType]}>
-              {systemInfo.economyType}
-            </Badge>
+            <EconomyBadge economyType={systemInfo.economyType} />
             {systemInfo.isGateway && (
               <Badge color="amber">Gateway</Badge>
             )}
@@ -57,6 +55,10 @@ export default function SystemLayout({
       {regionInfo && (
         <p className="text-sm text-white/40 mb-1">
           Region: <span className="text-white/60">{regionInfo.name}</span>
+          <span className="text-white/30"> &middot; </span>
+          <span className="text-white/50 capitalize">
+            {regionInfo.dominantEconomy} economy
+          </span>
         </p>
       )}
 
@@ -83,6 +85,26 @@ export default function SystemLayout({
 
       {/* Active tab content */}
       {children}
+    </>
+  );
+}
+
+export default function SystemLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ systemId: string }>;
+}) {
+  const { systemId } = use(params);
+
+  return (
+    <PageContainer size="lg">
+      <QueryBoundary>
+        <SystemLayoutContent systemId={systemId}>
+          {children}
+        </SystemLayoutContent>
+      </QueryBoundary>
     </PageContainer>
   );
 }

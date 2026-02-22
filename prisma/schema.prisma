@@ -72,14 +72,14 @@ model GameWorld {
 }
 
 model Region {
-  id             String       @id @default(cuid())
-  name           String       @unique
-  identity       String
-  governmentType String       @default("federation")
-  x              Float
-  y              Float
-  systems        StarSystem[]
-  events         GameEvent[]
+  id              String       @id @default(cuid())
+  name            String       @unique
+  governmentType  String       @default("federation")
+  dominantEconomy String       @default("extraction") // Most common economy type in the region
+  x               Float
+  y               Float
+  systems         StarSystem[]
+  events          GameEvent[]
 }
 
 model Player {
@@ -142,6 +142,7 @@ model StarSystem {
 
   region            Region             @relation(fields: [regionId], references: [id])
   station           Station?
+  traits            SystemTrait[]
   ships             Ship[]             @relation("ShipCurrentSystem")
   incomingShips     Ship[]             @relation("ShipDestination")
   connectionsFrom   SystemConnection[] @relation("FromSystem")
@@ -152,6 +153,18 @@ model StarSystem {
   missionsTargeting TradeMission[]     @relation("MissionDest")
 
   @@index([regionId])
+}
+
+model SystemTrait {
+  id       String @id @default(cuid())
+  systemId String
+  traitId  String // TraitId: asteroid_belt, habitable_world, etc.
+  quality  Int    // QualityTier: 1 (Marginal), 2 (Solid), 3 (Exceptional)
+
+  system StarSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
+
+  @@unique([systemId, traitId])
+  @@index([systemId])
 }
 
 model SystemConnection {

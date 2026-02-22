@@ -7,10 +7,7 @@ import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
 import type { GoodEquilibrium } from "@/lib/constants/goods";
 import {
   UNIVERSE_GEN,
-  REGION_IDENTITIES,
-  REGION_NAME_PREFIXES,
-  ECONOMY_TYPE_WEIGHTS,
-  GOVERNMENT_TYPE_WEIGHTS,
+  REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { toEconomyType } from "@/lib/types/guards";
@@ -38,26 +35,24 @@ async function main() {
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
   };
 
-  const universe = generateUniverse(
-    params,
-    REGION_IDENTITIES,
-    REGION_NAME_PREFIXES,
-    ECONOMY_TYPE_WEIGHTS,
-    GOVERNMENT_TYPE_WEIGHTS,
-  );
+  const universe = generateUniverse(params, REGION_NAMES);
 
   console.log(
     `  Generated: ${universe.regions.length} regions, ${universe.systems.length} systems, ${universe.connections.length} connections`,
   );
 
-  // ── Clear existing data ──
+  // ── Clear existing data (FK-safe order) ──
   await prisma.tradeHistory.deleteMany();
+  await prisma.tradeMission.deleteMany();
+  await prisma.eventModifier.deleteMany();
+  await prisma.gameEvent.deleteMany();
   await prisma.cargoItem.deleteMany();
   await prisma.stationMarket.deleteMany();
   await prisma.systemConnection.deleteMany();
   await prisma.ship.deleteMany();
   await prisma.player.deleteMany();
   await prisma.priceHistory.deleteMany();
+  await prisma.systemTrait.deleteMany();
   await prisma.station.deleteMany();
   await prisma.good.deleteMany();
   await prisma.starSystem.deleteMany();
@@ -91,7 +86,6 @@ async function main() {
     const created = await prisma.region.create({
       data: {
         name: region.name,
-        identity: region.identity,
         governmentType: region.governmentType,
         x: region.x,
         y: region.y,
@@ -119,6 +113,12 @@ async function main() {
         isGateway: sys.isGateway,
         station: {
           create: { name: stationName },
+        },
+        traits: {
+          create: sys.traits.map((t) => ({
+            traitId: t.traitId,
+            quality: t.quality,
+          })),
         },
       },
       include: { station: true },
@@ -152,9 +152,32 @@ async function main() {
       });
     }
   }
+  const totalTraits = universe.systems.reduce((sum, s) => sum + s.traits.length, 0);
   console.log(
-    `  Created ${universe.systems.length} star systems with stations and markets`,
+    `  Created ${universe.systems.length} star systems with stations, markets, and ${totalTraits} traits`,
   );
+
+  // ── Compute and store dominant economy per region ──
+  for (let ri = 0; ri < universe.regions.length; ri++) {
+    const regionSystems = universe.systems.filter((s) => s.regionIndex === ri);
+    const counts = new Map<string, number>();
+    for (const s of regionSystems) {
+      counts.set(s.economyType, (counts.get(s.economyType) ?? 0) + 1);
+    }
+    let dominant = "extraction";
+    let best = 0;
+    for (const [econ, count] of counts) {
+      if (count > best) {
+        dominant = econ;
+        best = count;
+      }
+    }
+    await prisma.region.update({
+      where: { id: regionIds[ri] },
+      data: { dominantEconomy: dominant },
+    });
+  }
+  console.log(`  Updated ${universe.regions.length} regions with dominant economy`);
 
   // ── Seed price history (one row per system) ──
   for (const sysId of systemIds) {

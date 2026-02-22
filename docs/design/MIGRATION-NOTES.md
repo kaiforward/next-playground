@@ -16,7 +16,7 @@ Enriches the physical universe that everything else builds on. No new gameplay s
 
 | System | What it does | Stands alone? |
 |---|---|---|
-| [System Enrichment](./planned/system-enrichment.md) §1–3 | Traits, quality tiers, trait-to-economy derivation, region themes | Yes — replaces current top-down economy assignment with bottom-up trait scoring. Current government/region model stays until factions ship |
+| ~~[System Enrichment](./planned/system-enrichment.md) §1–3~~ | Traits, quality tiers, trait-to-economy derivation | **Done** — traits drive economy derivation, 24 neutral regions (no themes), EconomyBadge component, neutral map nodes. Region themes removed entirely; randomness produces natural variety. |
 
 **Why first**: Every later system references traits — factions value them, ships dock at facilities built on them, missions are flavoured by them. Without traits, the rest of the planned systems have nothing to hang on.
 
@@ -97,14 +97,17 @@ Three natural pause points in the roadmap where extended testing and stabilizati
 **Testing approach**: Primarily simulator-driven. No new gameplay to test in the browser — the player experience should feel similar but richer.
 
 - Run generation experiments across many seeds. Verify trait distributions match the rarity targets (50% tier 1, 35% tier 2, 15% tier 3)
-- Verify region coherence guarantees: at least 60% economy type agreement within regions, no monotonous regions, gateways unconstrained
-- Verify economy type derivation produces reasonable distributions — no economy type should dominate or be absent globally
+- Verify economy type derivation produces reasonable distributions — no economy type should dominate or be absent globally. Target: each type within 10–20% share (ideal 16.7% for 6 types)
+- Verify every system has at least one strong-affinity trait (guaranteed by the first-roll mechanism, but validate across seeds)
 - Compare old vs new generation side by side. The new universe should feel more varied and interesting, not just different
 - Stress test at target scale (1,000–2,000 systems) even if factions aren't implemented yet — validate that generation time, MST connection building, and map rendering hold up
+- Validate trait production modifier impact on economy simulation — run 500-tick simulations and compare price distributions with/without trait modifiers
+
+**Note**: Region economy coherence is NOT validated. An earlier design enforced 60% economy type agreement within regions but this was removed — uniform trait distribution with balanced strong affinities produces naturally varied regions without enforcement, and factions (Layer 2) need resource diversity across territory for fairness.
 
 **Transition**: Clean cut. Old world generation is replaced wholesale by trait-based generation. Reseed the universe. No coexistence period.
 
-**Proceed when**: Trait distributions are validated, economy derivation produces coherent but varied regions, and generation scales to target system count without performance issues.
+**Proceed when**: Trait distributions are validated, economy derivation produces even type spread across seeds, and generation scales to target system count without performance issues.
 
 ### After Layers 1+2 — Systems Integration
 
@@ -165,15 +168,7 @@ Specific items where a planned system replaces or modifies an active implementat
 
 **Key deltas**: Government modifiers (volatility, equilibrium spread, tax, danger, contraband) move from per-region to per-system based on owning faction. Affects economy processing, danger pipeline, contraband inspection, and tax collection.
 
----
-
-### 2. Economy Type Assignment: Top-Down → Trait-Derived
-
-**Active** (universe.md): Economy type is assigned per system, weighted by region identity. Top-down assignment at seed time.
-
-**Planned** (system-enrichment.md §2–3): Economy type is *derived* from system trait affinity scoring. Bottom-up derivation. Region themes weight trait generation but don't dictate economy. System enrichment §3 acknowledges this ("Current Model (Being Replaced)").
-
-**Key deltas**: Entire world generation pipeline changes. Region identity no longer determines system economies — traits do.
+**Region dominant economy re-derivation**: Layer 0 adds `Region.dominantEconomy` (stored, computed at seed time). When faction conquest changes a system's economy via government affinity nudge (system-enrichment.md §2.2), the owning region's `dominantEconomy` must be re-derived. Add this to the war/territory-change processor.
 
 ---
 
@@ -226,10 +221,3 @@ To be designed during implementation of each respective system.
 
 ---
 
-### 12. Region Identity Lists
-
-**Active** (universe.md): 5 region identities (Trade Hub, Resource Rich, Industrial, Tech, Agricultural).
-
-**Planned** (system-enrichment.md §3): 8 region themes (Garden heartland, Mineral frontier, Industrial corridor, Research cluster, Energy belt, Trade nexus, Contested frontier, Frontier wilds).
-
-**Confirmed**: The new 8-theme list replaces the old 5-identity list. This is intentional — system enrichment explicitly notes the current model is being replaced.

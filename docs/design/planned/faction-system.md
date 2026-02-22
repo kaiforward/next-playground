@@ -6,7 +6,7 @@ Core political and territorial layer for multiplayer gameplay. Factions are name
 
 **Design principle**: Factions create the *demand* for player activity. Players don't just trade to get rich — they trade to fund wars, shift borders, and reshape the political map.
 
-**Scalability**: The system is designed to support many more factions and systems than the initial launch roster. The faction model, war mechanics, and territory systems must all scale cleanly. The initial 6 major factions and ~1,000-2,000 systems are a starting point — the architecture should support 15+ major factions and 5,000+ systems without redesign.
+**Scalability**: The system is designed to support many more factions and systems than the initial launch roster. The faction model, war mechanics, and territory systems must all scale cleanly. The initial 8 major factions and ~1,000-2,000 systems are a starting point — the architecture should support 15+ major factions and 5,000+ systems without redesign.
 
 ---
 
@@ -155,7 +155,7 @@ These push factions toward cooperation. Generally weaker than negative drivers �
 | Post-war recovery | Slow | After a war ends, relations slowly crawl back from -100. Very slow — takes many real-time days to reach "unfriendly" |
 | Player actions (friendly) | Aggregate | Players trading peacefully, completing cooperative missions, contributing to faction prosperity |
 
-**Example compound scenario**: Two minor factions (Cluster archetype) are neighbors with no shared border with each other's enemies. They have: distance (no friction), doctrine compatibility (both protectionist), common enemy (both threatened by the Ashvari Hegemony), and high trade volume. Combined drift: strongly positive. Natural alliance candidates.
+**Example compound scenario**: Two minor factions (Cluster archetype) are neighbors with no shared border with each other's enemies. They have: distance (no friction), doctrine compatibility (both protectionist), common enemy (both threatened by the Helix Ascendancy), and high trade volume. Combined drift: strongly positive. Natural alliance candidates.
 
 ### Relations Thresholds
 
@@ -297,28 +297,31 @@ With factions controlling all territory, new players spawn in faction space. The
 
 ## 6. Initial Faction Roster
 
-Starting roster of 6 major factions. This is the launch set — the system is built to support many more factions added over time. Minor factions TBD (see §Open Questions).
+Starting roster of 8 major factions — one per government type. This ensures every government's economic profile is represented among the major powers. The system is built to support many more factions added over time.
 
 | Faction | Government | Doctrine | Personality |
 |---|---|---|---|
-| Terran Sovereignty | Federation | Protectionist | Democratic superpower. Strong economy, overwhelming defensive response. "Don't tread on us" |
-| Kessari Dominion | Authoritarian | Expansionist | Military empire. Always pushing borders, always looking for a reason. Aggressive but overextends |
-| Meridian Compact | Corporate | Mercantile | Trade confederation. Richest faction. Fights with economics first, military second. Funds proxy wars |
-| Ashvari Hegemony | Authoritarian | Hegemonic | Ancient empire. Demands tribute and submission from smaller neighbors. Leaves equals alone — unless provoked |
-| Free Reaches | Frontier | Opportunistic | Loose alliance of frontier systems. Strikes when others are distracted. Unpredictable and hard to pin down |
-| Solari Collective | Federation | Expansionist | Idealist democracy that believes in "liberating" other systems. Good intentions, aggressive methods. Creates interesting moral tension |
+| Terran Sovereignty | Federation | Protectionist | Democratic superpower. Stable and prosperous, overwhelming defensive response. The galactic status quo — everyone else defines themselves relative to the Terrans |
+| Meridian Compact | Corporate | Mercantile | Trade confederation driven by profit above ideology. Richest faction. Fights with embargoes and proxy wars before committing their own fleets |
+| Kessari Dominion | Authoritarian | Expansionist | Centralized military empire. State-controlled economy funnels everything toward expansion. Aggressive and disciplined but chronically overextended |
+| Free Reaches | Frontier | Opportunistic | Loose alliance of lawless fringe systems held together by mutual distrust of centralized power. Strikes when neighbors are distracted, vanishes when confronted |
+| Arvani Communion | Theocratic | Protectionist | Insular faith-state built around ancient stellar prophecies. Peaceful and self-sufficient until sacred systems are threatened — then relentless. Heavy trade restrictions on "immoral" goods |
+| Helix Ascendancy | Technocratic | Hegemonic | Research-state that views technological superiority as a mandate to lead. Pressures weaker neighbors into client-state arrangements, sharing tech in exchange for resources and compliance |
+| Solari Collective | Cooperative | Expansionist | Worker-owned commune that believes all systems deserve liberation from exploitation. Genuinely idealistic, genuinely aggressive. Good intentions, uncomfortable methods |
+| Ironveil Pact | Militarist | Opportunistic | Permanent war economy where every citizen serves. Not expansionist by ideology — they simply watch for weakened neighbors and strike when the cost is low. Respected and feared in equal measure |
 
-### Natural Rivalries (Starting Relations)
+### Emergent Rivalries
 
-These emerge from doctrine + geography. Not exhaustive — just the obvious conflicts at game start:
+Rivalries are not hard-coded. They emerge naturally from the relation system (§2) based on doctrine incompatibility, government opposition, border friction, and geography. The roster is designed so that interesting conflicts arise organically:
 
-- **Kessari Dominion vs Terran Sovereignty**: The classic axis. Expansionist vs protectionist, authoritarian vs democratic. Guaranteed early conflict.
-- **Ashvari Hegemony vs minor factions**: The hegemony pressures smaller neighbors. Players aligned with minor factions naturally oppose them.
-- **Solari Collective vs Ashvari Hegemony**: Two expansionist-adjacent factions with opposing ideologies (liberation vs subjugation).
-- **Free Reaches vs everyone**: Opportunistic doctrine means they have no permanent allies, just targets of convenience.
-- **Meridian Compact**: The wildcard. They trade with everyone and fund whoever serves their interests. Kingmaker faction.
+- **Doctrine clashes**: Expansionist factions (Kessari, Solari) generate friction with Protectionist factions (Terran, Arvani) through border pressure. Hegemonic factions (Helix) create tension with any smaller neighbor.
+- **Government opposition**: Authoritarian vs Federation, Corporate vs Cooperative, Militarist vs Theocratic — persistent low-level ideological friction that compounds with other drivers.
+- **Opportunistic wildcards**: The Free Reaches and Ironveil Pact both strike weakened targets, making them unpredictable threats that keep other factions from fully committing to a single front.
+- **Economic competition**: Mercantile (Meridian) and Technocratic (Helix) factions compete for high-value trade, while Cooperative (Solari) and Corporate (Meridian) have fundamentally opposing economic models.
 
-All factions, rivalries, lore, and names are provisional. The roster will grow as the game scales.
+Starting relation scores will be seeded based on doctrine compatibility and government opposition modifiers, then geography (border length, proximity) drives them from there.
+
+All factions, lore, and names are provisional. The roster will grow as the game scales.
 
 ### 7.1 Minor Factions
 
@@ -362,7 +365,7 @@ New factions always spawn as minor. They inherit some traits from their parent f
 ### Target: 1,000-2,000 systems
 
 Based on faction count and territory needs:
-- 6-8 major factions × 80-150 systems each
+- 8 major factions × 80-150 systems each
 - 15-20 minor factions × 5-30 systems each
 - Neutral/contested border zones
 - Unclaimed frontier space

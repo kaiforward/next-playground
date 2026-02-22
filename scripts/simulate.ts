@@ -75,8 +75,8 @@ function formatTable(results: SimResults): string {
   if (regionOverview.length > 0) {
     lines.push("Region Overview:");
 
-    const roHeaders = ["Region", "Identity", "Government", "Systems"];
-    const roWidths = [16, 16, 16, 8];
+    const roHeaders = ["Region", "Government", "Systems"];
+    const roWidths = [16, 16, 8];
 
     lines.push(roHeaders.map((h, i) => pad(h, roWidths[i])).join(" | "));
     lines.push(roWidths.map((w) => "-".repeat(w)).join("-+-"));
@@ -84,9 +84,8 @@ function formatTable(results: SimResults): string {
     for (const r of regionOverview) {
       const row = [
         pad(r.name, roWidths[0]),
-        pad(r.identity, roWidths[1]),
-        pad(r.governmentType, roWidths[2]),
-        rpad(String(r.systemCount), roWidths[3]),
+        pad(r.governmentType, roWidths[1]),
+        rpad(String(r.systemCount), roWidths[2]),
       ];
       lines.push(row.join(" | "));
     }

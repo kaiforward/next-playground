@@ -23,10 +23,10 @@ Players move ships between star systems, buy goods where they're cheap (surplus)
 These systems are implemented and functional. Each has a detailed design doc.
 
 ### Universe & Map — [detailed spec](./design/active/universe.md)
-200 star systems across 8 regions. Systems are connected by jump lanes forming a navigable graph. Each system has an economy type (agricultural, extraction, refinery, industrial, tech, core) and belongs to a region with a government type. The map displays in two levels: region overview and system detail. Gateway systems serve as chokepoints for inter-region travel.
+600 star systems across 24 regions (25 per region). Systems are connected by jump lanes forming a navigable graph. Each system has 2–4 traits (physical properties like asteroid belts, habitable worlds, precursor ruins) with quality tiers (1–3). Economy type (agricultural, extraction, refinery, industrial, tech, core) is derived bottom-up from trait affinities, not assigned directly. Each region has a government type and a dominant economy label. The map displays in two levels: region overview (neutral slate palette, economy-coloured labels) and system detail. Gateway systems serve as chokepoints for inter-region travel.
 
 ### Economy — [detailed spec](./design/active/economy.md)
-12 goods in 3 tiers (raw, processed, advanced) traded at station markets. Prices emerge from supply/demand ratios. Markets drift toward equilibrium through mean reversion, modified by production/consumption flows, random noise, event modifiers, and government effects. Each economy type specializes in producing certain goods and consuming others, creating natural trade routes.
+12 goods in 3 tiers (raw, processed, advanced) traded at station markets. Prices emerge from supply/demand ratios. Markets drift toward equilibrium through mean reversion, modified by production/consumption flows, random noise, event modifiers, government effects, and system trait production bonuses. Each economy type specializes in producing certain goods and consuming others, creating natural trade routes. Trait quality scales production rates — a tier-3 asteroid belt system produces significantly more ore than a tier-1.
 
 ### Events — [detailed spec](./design/active/events.md)
 7 primary event types (war, plague, trade festival, mining boom, supply shortage, pirate raid, solar storm) plus 3 child events that spread from parents. Events spawn randomly, progress through multi-phase arcs, apply modifiers to markets and navigation danger, and spread to neighboring systems. Each phase has distinct economic and danger effects.
@@ -41,7 +41,7 @@ Players manage a fleet of ships (Shuttle for range, Freighter for cargo). Travel
 Game clock advancing every 5 seconds. 5 processors run sequentially: ship arrivals, events, economy, trade missions, price snapshots. Processors are topologically sorted by dependencies. Economy processes one region per tick (round-robin). Results are broadcast to clients via SSE with per-player event filtering.
 
 ### Auth & Players
-User registration and login via NextAuth (JWT/Credentials). Each user has one player profile with credits and a fleet of ships. New players spawn at a core-economy system in a trade hub region with a starter Shuttle.
+User registration and login via NextAuth (JWT/Credentials). Each user has one player profile with credits and a fleet of ships. New players spawn at a core-economy system in the region closest to the map center with a starter Shuttle.
 
 ---
 
@@ -58,6 +58,7 @@ flowchart TD
     TM[Trade Missions]
     NF[Navigation & Fleet]
     GOV[Government Types]
+    TR[System Traits]
     PS[Price Snapshots]
 
     TE -- "orchestrates (sequential)" --> SA
@@ -76,6 +77,9 @@ flowchart TD
     GOV -- "volatility, eq. spread,<br/>consumption boosts" --> EC
     GOV -- "taxes, contraband,<br/>danger baseline" --> NF
 
+    TR -- "production rate bonuses<br/>(quality-scaled)" --> EC
+    TR -- "economy type derivation<br/>(strong affinities)" --> EC
+
     SA -- "cargo danger pipeline<br/>(hazard, duty, contraband, loss)" --> NF
 
     NF -- "trade at destination<br/>(buy/sell affects supply/demand)" --> EC
@@ -88,6 +92,7 @@ Key interactions:
 - **Economy → Trade Missions**: Price extremes (>2x or <0.5x base) trigger mission generation
 - **Government → Economy**: Volatility scaling, equilibrium spread adjustment, consumption boosts
 - **Government → Navigation**: Tax rates, contraband lists, inspection modifiers, danger baseline
+- **System Traits → Economy**: Trait quality scales production rates per good. Economy type is derived from trait strong affinities at generation
 - **Tick Engine → All**: Orchestrates processor execution order and broadcasts results via SSE
 
 ---

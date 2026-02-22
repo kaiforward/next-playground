@@ -11,7 +11,8 @@ import { GOODS } from "@/lib/constants/goods";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
-import { toEconomyType, toGovernmentType } from "@/lib/types/guards";
+import { toEconomyType, toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
 
 /** Reverse lookup: Good.name → GOODS key (e.g. "Food" → "food"). */
 const goodNameToKey = new Map(
@@ -79,7 +80,7 @@ export const economyProcessor: TickProcessor = {
       },
       include: {
         good: true,
-        station: { include: { system: true } },
+        station: { include: { system: { include: { traits: true } } } },
       },
     });
 
@@ -150,6 +151,17 @@ export const economyProcessor: TickProcessor = {
         ? baseConsumption + govBoost
         : govBoost > 0 ? govBoost : undefined;
 
+      // Trait production bonus: effectiveRate = baseRate × (1 + traitBonus)
+      const systemTraits = m.station.system.traits.map((t) => ({
+        traitId: toTraitId(t.traitId),
+        quality: toQualityTier(t.quality),
+      }));
+      const baseProductionRate = getProductionRate(econ, goodKey);
+      const traitBonus = computeTraitProductionBonus(systemTraits, goodKey);
+      const productionRate = baseProductionRate != null
+        ? baseProductionRate * (1 + traitBonus)
+        : undefined;
+
       return {
         goodId: goodKey,
         supply: m.supply,
@@ -158,7 +170,7 @@ export const economyProcessor: TickProcessor = {
         economyType: econ,
         produces: getProducedGoods(econ),
         consumes: getConsumedGoods(econ),
-        productionRate: getProductionRate(econ, goodKey),
+        productionRate,
         consumptionRate,
         volatility,
         equilibriumProduces,
