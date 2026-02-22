@@ -97,14 +97,17 @@ Three natural pause points in the roadmap where extended testing and stabilizati
 **Testing approach**: Primarily simulator-driven. No new gameplay to test in the browser — the player experience should feel similar but richer.
 
 - Run generation experiments across many seeds. Verify trait distributions match the rarity targets (50% tier 1, 35% tier 2, 15% tier 3)
-- Verify region coherence guarantees: at least 60% economy type agreement within regions, no monotonous regions, gateways unconstrained
-- Verify economy type derivation produces reasonable distributions — no economy type should dominate or be absent globally
+- Verify economy type derivation produces reasonable distributions — no economy type should dominate or be absent globally. Target: each type within 10–20% share (ideal 16.7% for 6 types)
+- Verify every system has at least one strong-affinity trait (guaranteed by the first-roll mechanism, but validate across seeds)
 - Compare old vs new generation side by side. The new universe should feel more varied and interesting, not just different
 - Stress test at target scale (1,000–2,000 systems) even if factions aren't implemented yet — validate that generation time, MST connection building, and map rendering hold up
+- Validate trait production modifier impact on economy simulation — run 500-tick simulations and compare price distributions with/without trait modifiers
+
+**Note**: Region economy coherence is NOT validated. An earlier design enforced 60% economy type agreement within regions but this was removed — uniform trait distribution with balanced strong affinities produces naturally varied regions without enforcement, and factions (Layer 2) need resource diversity across territory for fairness.
 
 **Transition**: Clean cut. Old world generation is replaced wholesale by trait-based generation. Reseed the universe. No coexistence period.
 
-**Proceed when**: Trait distributions are validated, economy derivation produces coherent but varied regions, and generation scales to target system count without performance issues.
+**Proceed when**: Trait distributions are validated, economy derivation produces even type spread across seeds, and generation scales to target system count without performance issues.
 
 ### After Layers 1+2 — Systems Integration
 

@@ -1,43 +1,68 @@
 # Universe & Map
 
-The game world — star systems, regions, connections, and how players navigate the map.
+The game world — star systems, regions, connections, traits, and how players navigate the map.
 
 ---
 
 ## Universe Structure
 
 ### Scale
-- **200 systems** across 8 regions (25 systems per region)
-- **4000x4000** coordinate space
+- **600 systems** across 24 regions (25 systems per region)
+- **7000x7000** coordinate space (usable area ~4900² via Poisson-disc sampling with 800 minimum region distance)
 - Procedurally generated from a fixed seed (deterministic — same seed always produces the same universe)
 - Generated once at database seed, then immutable
 
 ### Regions
-8 regions, each a geographic cluster with a thematic identity:
 
-| Identity | Count | Economy Focus |
-|---|---|---|
-| Trade Hub | 2 | 40% core, balanced mix of all types |
-| Resource Rich | 2 | 30% extraction, balanced consumption |
-| Industrial | 2 | 30% industrial, 20% refinery |
-| Tech | 1 | 35% tech, 20% core |
-| Agricultural | 1 | 35% agricultural, balanced consumption |
+24 regions placed via Poisson-disc sampling. Each region is a geographic cluster with a neutral identity — names come from a flat pool of generic space names (Arcturus, Meridian, Vanguard, etc.), not themed by economy type.
 
-Each region has a government type (federation, corporate, authoritarian, or frontier) assigned with weighted randomness based on identity. The seed guarantees all 4 government types appear across the 8 regions.
+Each region has:
+- **Name**: From a pool of 28 generic space names, picked sequentially. Suffix `-N` on collision
+- **Government type**: One of 4 types (federation, corporate, authoritarian, frontier), assigned with uniform 25% distribution. Coverage guarantee ensures all 4 types appear
+- **Dominant economy**: The most common economy type among the region's systems, computed at seed time and stored on the Region model. Displayed as a subtitle on the map (e.g., "Arcturus — Extraction")
+
+### System Traits
+
+Every system has **2–4 traits** — permanent physical properties (stars, planets, moons, orbital features, resource deposits, anomalies) that define the system's character and economic potential. 42 traits across 5 categories: planetary, orbital, resource, phenomena, legacy.
+
+Each trait has:
+- **Quality tier** (1–3): Marginal, Solid, Exceptional. Rolled at generation with rarity weights: 50% tier 1, 35% tier 2, 15% tier 3
+- **Economy affinity**: Per-economy-type scores (0 = irrelevant, 1 = minor, 2 = strong). Only strong affinities (value 2) drive economy derivation
+- **Production goods**: Which goods the trait boosts production of. Quality tier scales the modifier magnitude (+15% at tier 1, +40% at tier 2, +80% at tier 3)
+
+**Trait generation**: The first trait is guaranteed to have at least one strong (value 2) economy affinity, ensuring every system has a clear economy signal. Remaining traits are drawn from the full pool with uniform weights. No duplicate traits on a system.
+
+**Strong affinity balance**: 42 traits distribute strong affinities evenly across 6 economy types (5–6 strong affinities each: tech 6, agricultural 6, extraction 5, industrial 5, refinery 5, core 5). This produces naturally even economy distributions without enforcement.
+
+### Economy Derivation
+
+Economy type is derived bottom-up from traits, not assigned directly:
+
+```
+For each economy type:
+  score = sum of (quality) for all system traits WHERE trait affinity for that type === 2
+
+Winner = economy type with highest score
+Tiebreaker = seeded random selection
+```
+
+Minor affinities (value 1) do not influence economy derivation — they affect production modifiers and serve as secondary connections. This keeps the economy signal clean.
 
 ### Systems
+
 Each system has:
 - **Name**: Region-based naming (e.g., "Nexus-1-7")
-- **Economy type**: One of 6 types, weighted by region identity
+- **Economy type**: One of 6 types (agricultural, extraction, refinery, industrial, tech, core), derived from trait affinities
+- **Traits**: 2–4 system traits with quality tiers
 - **Coordinates**: Fixed position within region scatter radius (875 units from center)
 - **Station**: Exactly one station with a market carrying all 12 goods
 - **Gateway flag**: 1-2 systems per region pair serve as inter-region connection points
 
 ### Connections
 - **Intra-region**: Minimum spanning tree ensures all systems in a region are connected, plus ~50% extra edges for route variety
-- **Inter-region**: MST on region centers (~7 edges) plus ~2 bonus edges, connecting via gateway systems
+- **Inter-region**: MST on region centers plus bonus edges, connecting via gateway systems
 - **All bidirectional**: Every connection works in both directions
-- **~270 bidirectional pairs** (~540 directed edges total)
+- **~1778 connections** at 600 systems
 - **Fuel cost**: Distance-scaled. Intra-region ~1-10 fuel per hop. Inter-region (gateway) 2.5x multiplier (~15-25 fuel)
 
 ---
@@ -47,16 +72,23 @@ Each system has:
 ### Dual-Level View
 
 **Region View (default)**:
-- 8 region nodes at their coordinates
-- Shows: region name, system count, docked ship count
+- 24 region nodes at their coordinates, neutral slate palette
+- Shows: region name, dominant economy (coloured EconomyBadge), system count, docked ship count
 - Inter-region connections shown as dashed lines
 - Click a region to drill into system view
 
 **System View (filtered to one region)**:
-- 25 systems displayed at their coordinates
-- Shows: system name, economy type (color), docked ship count, active event badges
+- 25 systems displayed at their coordinates, neutral node styling
+- Shows: system name, economy type (EconomyBadge), docked ship count, active event badges
 - Intra-region connections with fuel cost labels
 - Click a system for full detail page
+
+### Map Side Panel
+
+When a system is selected on the map, the side panel shows:
+- System name, economy type, region, government
+- Compact trait list (top trait with quality stars, trait count)
+- Docked ships and active events
 
 ### Navigation Mode
 When planning a route:
@@ -71,28 +103,38 @@ When planning a route:
 
 ---
 
+## System Detail Page
+
+When viewing a system, the detail page shows:
+- System name, economy type badge, region name, government type
+- **Traits section**: All traits with quality stars (★★☆ for quality 2), name, and quality-appropriate description
+- Market, Missions, and Activity tabs
+
+---
+
 ## Starting Position
 
-New players spawn at the closest core-economy system in a trade hub region — a neutral starting point with balanced trading opportunities.
+New players spawn at a core-economy system in the region closest to the map center — a neutral starting point with balanced trading opportunities. Selection: find the region closest to (mapSize/2, mapSize/2), pick core economy systems, choose the one closest to the region center. Fallback: closest system to region center regardless of economy.
 
 ---
 
 ## Planned Changes
 
-The current 200-system universe is a prototype. The faction system design targets 1,000-2,000 systems with region-based map rendering to handle the increased scale. Key changes:
+The current 600-system universe is a foundation. The faction system design targets 1,000-2,000 systems with region-based map rendering to handle the increased scale. Key changes:
 
-- **Region-first map**: Region view becomes the strategic overview, system view shows one region at a time
 - **Faction territory**: Systems will belong to factions, with colored territory visualization
+- **Government migration**: Government type moves from per-region to per-faction (see [faction-system.md](../planned/faction-system.md) §1)
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
-- **More regions**: Regions will increase to accommodate faction territory needs
-
-See [faction-system.md](../planned/faction-system.md) §8 for system scale details.
+- **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-enrichment.md](../planned/system-enrichment.md) §2.2)
+- **Facilities**: Faction-owned strategic infrastructure seeded at systems based on traits (see [system-enrichment.md](../planned/system-enrichment.md) §5)
+- **Scale increase**: More systems to accommodate faction territory needs (see [faction-system.md](../planned/faction-system.md) §7)
 
 ---
 
 ## System Interactions
 
-- **Economy**: Region government type determines market modifiers (volatility, equilibrium, taxes). Economy type determines production/consumption (see [economy.md](./economy.md))
+- **Traits → Economy**: Trait affinities determine economy type. Trait quality scales production rates per good via the economy processor (see [economy.md](./economy.md))
+- **Government → Economy**: Region government type determines market modifiers (volatility, equilibrium, taxes). See [economy.md](./economy.md)
 - **Navigation**: Connection graph defines travel routes and fuel costs. Gateway systems are strategic chokepoints (see [navigation.md](./navigation.md))
 - **Events**: Events spawn at specific systems based on economy type and affect neighboring systems via spread (see [events.md](./events.md))
-- **Faction system** (planned): Factions will control regions/systems, with government type tied to faction rather than region (see [faction-system.md](../planned/faction-system.md))
+- **Faction system** (planned): Factions will control systems, with government type tied to faction rather than region (see [faction-system.md](../planned/faction-system.md))
