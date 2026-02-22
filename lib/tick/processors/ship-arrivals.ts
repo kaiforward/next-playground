@@ -9,7 +9,10 @@ import {
   type HazardIncidentEntry,
   type ImportDutyEntry,
   type ContrabandSeizedEntry,
+  type ShipDangerModifiers,
 } from "@/lib/engine/danger";
+import { rollDamageOnArrival, computeEscortProtection, type DamageResult } from "@/lib/engine/damage";
+import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
@@ -26,6 +29,7 @@ interface ArrivedShip {
   importDuties?: ImportDutyEntry[];
   contrabandSeized?: ContrabandSeizedEntry[];
   cargoLost?: CargoLossEntry[];
+  damageResult?: DamageResult;
 }
 
 export const shipArrivalsProcessor: TickProcessor = {
@@ -43,8 +47,20 @@ export const shipArrivalsProcessor: TickProcessor = {
         name: true,
         destinationSystemId: true,
         playerId: true,
+        hullMax: true,
+        hullCurrent: true,
+        shieldMax: true,
+        shieldCurrent: true,
+        firepower: true,
+        evasion: true,
+        stealth: true,
         cargo: { select: { id: true, goodId: true, quantity: true } },
         destination: { select: { name: true, region: { select: { governmentType: true } } } },
+        upgradeSlots: {
+          where: { moduleId: { not: null } },
+          select: { moduleId: true, moduleTier: true, slotType: true },
+        },
+        convoyMember: { select: { convoyId: true } },
       },
     });
 
@@ -90,12 +106,42 @@ export const shipArrivalsProcessor: TickProcessor = {
       modsBySystem.set(mod.targetId, existing);
     }
 
+    // Group arriving ships by convoy for escort calculations
+    const convoyShips = new Map<string, typeof arrivingShips>();
+    for (const ship of arrivingShips) {
+      const convoyId = ship.convoyMember?.convoyId;
+      if (convoyId) {
+        const group = convoyShips.get(convoyId) ?? [];
+        group.push(ship);
+        convoyShips.set(convoyId, group);
+      }
+    }
+
     const arrived: ArrivedShip[] = [];
 
     for (const ship of arrivingShips) {
       if (!ship.destinationSystemId) continue;
 
-      // Dock the ship
+      // Compute upgrade bonuses from installed modules
+      const installedModules: InstalledModule[] = ship.upgradeSlots
+        .filter((s): s is typeof s & { moduleId: string; moduleTier: number } =>
+          s.moduleId !== null && s.moduleTier !== null)
+        .map((s) => ({ moduleId: s.moduleId, moduleTier: s.moduleTier, slotType: s.slotType }));
+      const bonuses = computeUpgradeBonuses(installedModules);
+
+      // Build ship danger modifiers from stats + upgrade bonuses
+      const shipMods: ShipDangerModifiers = {
+        hullStat: ship.hullMax,
+        armourBonus: bonuses.hullBonus,
+        reinforcedContainersBonus: bonuses.lossSeverityReduction,
+        stealthStat: ship.stealth,
+        hiddenCargoFraction: bonuses.hiddenCargoFraction,
+        evasionStat: ship.evasion,
+        manoeuvringBonus: bonuses.evasionBonus,
+        pointDefenceReduction: bonuses.cargoLossProbReduction,
+      };
+
+      // Dock the ship and regenerate shields
       await ctx.tx.ship.update({
         where: { id: ship.id },
         data: {
@@ -104,6 +150,7 @@ export const shipArrivalsProcessor: TickProcessor = {
           destinationSystemId: null,
           departureTick: null,
           arrivalTick: null,
+          shieldCurrent: ship.shieldMax, // shields regenerate on dock
         },
       });
 
@@ -131,7 +178,7 @@ export const shipArrivalsProcessor: TickProcessor = {
       let contrabandSeized: ContrabandSeizedEntry[] | undefined;
       let cargoLost: CargoLossEntry[] | undefined;
 
-      // ── Stage 1: Hazard incidents ──
+      // ── Stage 1: Hazard incidents (hull reduces severity) ──
       if (localCargo.length > 0) {
         const enriched = localCargo
           .filter((c) => c.quantity > 0)
@@ -141,7 +188,7 @@ export const shipArrivalsProcessor: TickProcessor = {
             hazard: (GOODS[c.goodId]?.hazard ?? "none") as "none" | "low" | "high",
           }));
 
-        const incidents = rollHazardIncidents(enriched, danger, Math.random);
+        const incidents = rollHazardIncidents(enriched, danger, Math.random, shipMods);
         if (incidents.length > 0) {
           for (const inc of incidents) {
             const item = localCargo.find((c) => c.goodId === inc.goodId);
@@ -167,28 +214,29 @@ export const shipArrivalsProcessor: TickProcessor = {
         }
       }
 
-      // ── Stage 3: Contraband inspection ──
+      // ── Stage 3: Contraband inspection (stealth reduces chance) ──
       if (govDef && govDef.contraband.length > 0 && govDef.inspectionModifier > 0) {
         const seized = rollContrabandInspection(
           localCargo.filter((c) => c.quantity > 0),
           govDef.contraband,
           govDef.inspectionModifier,
           Math.random,
+          shipMods,
         );
         if (seized.length > 0) {
           for (const s of seized) {
             const item = localCargo.find((c) => c.goodId === s.goodId);
-            if (item) item.quantity = 0;
+            if (item) item.quantity = Math.max(0, item.quantity - s.seized);
           }
           contrabandSeized = seized;
         }
       }
 
-      // ── Stage 4: Existing event-based danger (operates on reduced cargo) ──
+      // ── Stage 4: Event-based cargo loss (evasion reduces probability) ──
       if (danger > 0) {
         const remainingCargo = localCargo.filter((c) => c.quantity > 0);
         if (remainingCargo.length > 0) {
-          const losses = rollCargoLoss(danger, remainingCargo, Math.random);
+          const losses = rollCargoLoss(danger, remainingCargo, Math.random, shipMods);
           if (losses.length > 0) {
             for (const loss of losses) {
               const item = localCargo.find((c) => c.goodId === loss.goodId);
@@ -196,6 +244,60 @@ export const shipArrivalsProcessor: TickProcessor = {
             }
             cargoLost = losses;
           }
+        }
+      }
+
+      // ── Stage 5: Hull/shield damage ──
+      let damageResult: DamageResult | undefined;
+      if (danger > 0) {
+        // Compute escort protection if ship is in a convoy
+        const convoyId = ship.convoyMember?.convoyId;
+        let escort;
+        if (convoyId) {
+          const convoyGroup = convoyShips.get(convoyId) ?? [];
+          const escortShips = convoyGroup
+            .filter((s) => s.id !== ship.id)
+            .map((s) => ({ firepower: s.firepower, role: "combat" as string }));
+          // Only count ships with high firepower as combat escorts
+          const combatEscorts = escortShips.filter((s) => s.firepower >= 8);
+          if (combatEscorts.length > 0) {
+            escort = computeEscortProtection(combatEscorts);
+          }
+        }
+
+        const dmg = rollDamageOnArrival(
+          danger,
+          ship.shieldMax,
+          ship.shieldMax, // shields were regenerated on dock, but damage uses pre-dock state
+          ship.hullMax,
+          ship.hullCurrent,
+          Math.random,
+          escort,
+        );
+
+        if (dmg.shieldDamage > 0 || dmg.hullDamage > 0) {
+          damageResult = dmg;
+
+          // Apply damage to hull (shields already regenerated, so hull damage from shields is absorbed)
+          const newHull = Math.max(0, ship.hullCurrent - dmg.hullDamage);
+          const updateData: Record<string, unknown> = {
+            hullCurrent: newHull,
+            // Reduce regenerated shields by damage taken
+            shieldCurrent: Math.max(0, ship.shieldMax - dmg.shieldDamage),
+          };
+
+          if (dmg.disabled) {
+            updateData.disabled = true;
+            // Delete all cargo when disabled
+            await ctx.tx.cargoItem.deleteMany({ where: { shipId: ship.id } });
+            // Clear local cargo tracking
+            for (const item of localCargo) item.quantity = 0;
+          }
+
+          await ctx.tx.ship.update({
+            where: { id: ship.id },
+            data: updateData,
+          });
         }
       }
 
@@ -224,7 +326,44 @@ export const shipArrivalsProcessor: TickProcessor = {
         importDuties,
         contrabandSeized,
         cargoLost,
+        damageResult,
       });
+    }
+
+    // Update convoy status for any convoys that had arriving members
+    const convoyIds = [...new Set(
+      arrivingShips
+        .filter((s) => s.convoyMember?.convoyId)
+        .map((s) => s.convoyMember!.convoyId),
+    )];
+
+    for (const convoyId of convoyIds) {
+      // Check if all members have arrived (no members still in transit)
+      const inTransitCount = await ctx.tx.ship.count({
+        where: {
+          convoyMember: { convoyId },
+          status: "in_transit",
+        },
+      });
+
+      if (inTransitCount === 0) {
+        // All members arrived — update convoy to docked
+        const firstArrivedMember = arrived.find(
+          (a) => arrivingShips.find((s) => s.id === a.shipId)?.convoyMember?.convoyId === convoyId,
+        );
+        if (firstArrivedMember) {
+          await ctx.tx.convoy.update({
+            where: { id: convoyId },
+            data: {
+              status: "docked",
+              systemId: firstArrivedMember.systemId,
+              destinationSystemId: null,
+              departureTick: null,
+              arrivalTick: null,
+            },
+          });
+        }
+      }
     }
 
     // Group arrivals by player for scoped events
@@ -289,6 +428,25 @@ export const shipArrivalsProcessor: TickProcessor = {
           type: "cargo_lost",
           refs: { ship: shipRef, system: systemRef },
         });
+      }
+
+      if (a.damageResult && (a.damageResult.hullDamage > 0 || a.damageResult.shieldDamage > 0)) {
+        const parts: string[] = [];
+        if (a.damageResult.shieldDamage > 0) parts.push(`${a.damageResult.shieldDamage} shield`);
+        if (a.damageResult.hullDamage > 0) parts.push(`${a.damageResult.hullDamage} hull`);
+        notifications.push({
+          message: `${a.shipName} took ${parts.join(" + ")} damage near ${a.destName}`,
+          type: "ship_damaged",
+          refs: { ship: shipRef, system: systemRef },
+        });
+
+        if (a.damageResult.disabled) {
+          notifications.push({
+            message: `${a.shipName} was disabled! All cargo lost.`,
+            type: "ship_disabled",
+            refs: { ship: shipRef, system: systemRef },
+          });
+        }
       }
 
       existing["gameNotifications"] = notifications;
