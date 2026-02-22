@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
+import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
 
 type TradeResult =
@@ -184,11 +185,7 @@ export async function executeTrade(
   // Re-fetch the ship for response
   const freshShip = await prisma.ship.findUnique({
     where: { id: shipId },
-    include: {
-      cargo: { include: { good: true } },
-      system: true,
-      destination: true,
-    },
+    include: SHIP_INCLUDE,
   });
 
   if (!freshShip) {

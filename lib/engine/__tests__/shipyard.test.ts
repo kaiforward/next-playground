@@ -2,24 +2,24 @@ import { describe, it, expect } from "vitest";
 import { validateShipPurchase } from "../shipyard";
 
 describe("validateShipPurchase", () => {
-  it("accepts a valid freighter purchase", () => {
+  it("accepts a valid light_freighter purchase", () => {
     const result = validateShipPurchase({
-      shipType: "freighter",
+      shipType: "light_freighter",
       playerCredits: 10_000,
     });
     expect(result).toEqual({
       ok: true,
       data: {
-        shipTypeDef: expect.objectContaining({ id: "freighter", price: 5000 }),
-        totalCost: 5000,
+        shipTypeDef: expect.objectContaining({ id: "light_freighter", price: 3000 }),
+        totalCost: 3000,
       },
     });
   });
 
   it("accepts purchase with exact credits", () => {
     const result = validateShipPurchase({
-      shipType: "freighter",
-      playerCredits: 5000,
+      shipType: "light_freighter",
+      playerCredits: 3000,
     });
     expect(result.ok).toBe(true);
   });
@@ -48,12 +48,23 @@ describe("validateShipPurchase", () => {
 
   it("rejects when player cannot afford", () => {
     const result = validateShipPurchase({
-      shipType: "freighter",
-      playerCredits: 4999,
+      shipType: "light_freighter",
+      playerCredits: 2999,
     });
     expect(result).toEqual({
       ok: false,
-      error: "Not enough credits. Need 5000, have 4999.",
+      error: "Not enough credits. Need 3000, have 2999.",
     });
+  });
+
+  it("accepts expensive ship purchase", () => {
+    const result = validateShipPurchase({
+      shipType: "command_vessel",
+      playerCredits: 50_000,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.totalCost).toBe(50_000);
+    }
   });
 });

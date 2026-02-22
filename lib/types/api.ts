@@ -1,6 +1,7 @@
 import type {
   FleetState,
   ShipState,
+  ConvoyState,
   GameWorldState,
   UniverseData,
   StarSystemInfo,
@@ -120,6 +121,34 @@ export type DeliverMissionResponse = ApiResponse<DeliverMissionResult>;
 
 export interface AbandonMissionRequest { missionId: string }
 export type AbandonMissionResponse = ApiResponse<{ missionId: string }>;
+
+// ── Convoy types ────────────────────────────────────────────────
+
+export type ConvoyListResponse = ApiResponse<ConvoyState[]>;
+
+export interface CreateConvoyRequest { shipIds: string[]; name?: string }
+export interface CreateConvoyResult { convoy: ConvoyState }
+export type CreateConvoyResponse = ApiResponse<CreateConvoyResult>;
+
+export interface ConvoyMemberRequest { shipId: string }
+export type ConvoyMemberResponse = ApiResponse<ConvoyState>;
+
+export interface ConvoyNavigateRequest { route: string[] }
+export type ConvoyNavigateResponse = ApiResponse<{ convoy: ConvoyState; fuelUsed: number; travelDuration: number }>;
+
+// ── Upgrade types ───────────────────────────────────────────────
+
+export interface InstallUpgradeRequest { slotId: string; moduleId: string; tier?: number }
+export interface InstallUpgradeResult { ship: ShipState; creditSpent: number }
+export type InstallUpgradeResponse = ApiResponse<InstallUpgradeResult>;
+
+export interface RemoveUpgradeRequest { slotId: string }
+export type RemoveUpgradeResponse = ApiResponse<{ ship: ShipState }>;
+
+// ── Repair types ────────────────────────────────────────────────
+
+export interface RepairResult { ship: ShipState; creditSpent: number }
+export type RepairResponse = ApiResponse<RepairResult>;
 
 // ── Auth types ──────────────────────────────────────────────────
 

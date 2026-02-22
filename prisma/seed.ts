@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { toEconomyType } from "@/lib/types/guards";
+import { SHIP_TYPES } from "@/lib/constants/ships";
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL ?? "file:./dev.db",
@@ -47,9 +48,12 @@ async function main() {
   await prisma.eventModifier.deleteMany();
   await prisma.gameEvent.deleteMany();
   await prisma.cargoItem.deleteMany();
+  await prisma.convoyMember.deleteMany();
+  await prisma.shipUpgradeSlot.deleteMany();
   await prisma.stationMarket.deleteMany();
   await prisma.systemConnection.deleteMany();
   await prisma.ship.deleteMany();
+  await prisma.convoy.deleteMany();
   await prisma.player.deleteMany();
   await prisma.priceHistory.deleteMany();
   await prisma.systemTrait.deleteMany();

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { validateShipPurchase } from "@/lib/engine/shipyard";
+import { buildShipData, buildUpgradeSlots } from "@/lib/engine/ship-factory";
 import type { ShipPurchaseResult } from "@/lib/types/api";
 
 type PurchaseResult =
@@ -68,21 +69,22 @@ export async function purchaseShip(
       data: { credits: { increment: -totalCost } },
     });
 
+    const shipData = buildShipData(shipTypeDef, shipName);
+    const slotData = buildUpgradeSlots(shipTypeDef.slotLayout);
+
     return tx.ship.create({
       data: {
+        ...shipData,
         playerId,
-        name: shipName,
-        shipType,
-        fuel: shipTypeDef.fuel,
-        maxFuel: shipTypeDef.fuel,
-        cargoMax: shipTypeDef.cargo,
-        status: "docked",
         systemId,
+        upgradeSlots: { create: slotData },
       },
       include: {
         cargo: { include: { good: true } },
         system: true,
         destination: true,
+        upgradeSlots: true,
+        convoyMember: true,
       },
     });
   });
