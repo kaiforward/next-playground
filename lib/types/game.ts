@@ -8,20 +8,10 @@ export type EconomyType =
   | "tech"
   | "core";
 
-export type RegionTheme =
-  | "garden_heartland"
-  | "mineral_frontier"
-  | "industrial_corridor"
-  | "research_cluster"
-  | "energy_belt"
-  | "trade_nexus"
-  | "contested_frontier"
-  | "frontier_wilds";
-
 // ── System trait types ────────────────────────────────────────────
 
 export type TraitId =
-  // Planetary Bodies (7)
+  // Planetary Bodies (12)
   | "habitable_world"
   | "ocean_world"
   | "volcanic_world"
@@ -29,7 +19,12 @@ export type TraitId =
   | "tidally_locked_world"
   | "desert_world"
   | "jungle_world"
-  // Orbital Features (7)
+  | "geothermal_vents"
+  | "hydrocarbon_seas"
+  | "fertile_lowlands"
+  | "coral_archipelago"
+  | "tectonic_forge"
+  // Orbital Features (8)
   | "asteroid_belt"
   | "gas_giant"
   | "mineral_rich_moons"
@@ -37,7 +32,8 @@ export type TraitId =
   | "binary_star"
   | "lagrange_stations"
   | "captured_rogue_body"
-  // Resource Deposits (7)
+  | "deep_space_beacon"
+  // Resource Deposits (9)
   | "rare_earth_deposits"
   | "heavy_metal_veins"
   | "organic_compounds"
@@ -45,7 +41,9 @@ export type TraitId =
   | "helium3_reserves"
   | "exotic_matter_traces"
   | "radioactive_deposits"
-  // Phenomena & Anomalies (7)
+  | "superdense_core"
+  | "glacial_aquifer"
+  // Phenomena & Anomalies (9)
   | "nebula_proximity"
   | "solar_flare_activity"
   | "gravitational_anomaly"
@@ -53,11 +51,16 @@ export type TraitId =
   | "precursor_ruins"
   | "subspace_rift"
   | "pulsar_proximity"
-  // Infrastructure & Legacy (4)
+  | "ion_storm_corridor"
+  | "bioluminescent_ecosystem"
+  // Infrastructure & Legacy (7)
   | "ancient_trade_route"
   | "generation_ship_wreckage"
   | "orbital_ring_remnant"
-  | "seed_vault";
+  | "seed_vault"
+  | "colonial_capital"
+  | "free_port_declaration"
+  | "shipbreaking_yards";
 
 export type TraitCategory =
   | "planetary"
@@ -81,7 +84,6 @@ export type Hazard = "none" | "low" | "high";
 export interface RegionInfo {
   id: string;
   name: string;
-  identity: RegionTheme;
   dominantEconomy?: EconomyType;
   x: number;
   y: number;

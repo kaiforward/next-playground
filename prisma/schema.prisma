@@ -74,7 +74,6 @@ model GameWorld {
 model Region {
   id              String       @id @default(cuid())
   name            String       @unique
-  identity        String       // RegionTheme: garden_heartland, mineral_frontier, etc.
   governmentType  String       @default("federation")
   dominantEconomy String       @default("extraction") // Most common economy type in the region
   x               Float

@@ -1,4 +1,4 @@
-import type { EconomyType, RegionTheme } from "@/lib/types/game";
+import type { EconomyType } from "@/lib/types/game";
 import type { EVENT_DEFINITIONS } from "./events";
 
 /** Mapping from economy type to Badge color prop. */
@@ -91,17 +91,3 @@ export const EVENT_TYPE_ICON: Record<
   solar_storm: "bolt",
 };
 
-/** Mapping from region theme to Badge color prop. */
-export const REGION_THEME_BADGE_COLOR: Record<
-  RegionTheme,
-  "green" | "amber" | "blue" | "purple" | "slate" | "red" | "cyan"
-> = {
-  garden_heartland: "green",
-  mineral_frontier: "amber",
-  industrial_corridor: "slate",
-  research_cluster: "blue",
-  energy_belt: "cyan",
-  trade_nexus: "purple",
-  contested_frontier: "red",
-  frontier_wilds: "amber",
-};

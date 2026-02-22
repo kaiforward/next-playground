@@ -2,17 +2,13 @@ import { describe, it, expect } from "vitest";
 import {
   generateSystemTraits,
   deriveEconomyType,
-  enforceCoherence,
   computeTraitProductionBonus,
   type GeneratedTrait,
 } from "../trait-gen";
 import { mulberry32, type RNG } from "../universe-gen";
 import { ALL_TRAIT_IDS, TRAITS } from "@/lib/constants/traits";
-import {
-  REGION_THEME_TRAIT_COUNT,
-  UNIVERSE_GEN,
-} from "@/lib/constants/universe-gen";
-import type { EconomyType, QualityTier, RegionTheme, TraitId } from "@/lib/types/game";
+import { TRAIT_COUNT } from "@/lib/constants/universe-gen";
+import type { QualityTier, TraitId } from "@/lib/types/game";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -27,27 +23,20 @@ function makeTrait(traitId: TraitId, quality: QualityTier = 1): GeneratedTrait {
 // ── generateSystemTraits ────────────────────────────────────────
 
 describe("generateSystemTraits", () => {
-  it("returns traits within the theme's count range", () => {
+  it("returns traits within the uniform count range", () => {
     const rng = makeRng();
-    for (const theme of [
-      "garden_heartland",
-      "mineral_frontier",
-      "frontier_wilds",
-    ] as RegionTheme[]) {
-      const range = REGION_THEME_TRAIT_COUNT[theme];
-      // Generate 50 samples to cover the range
-      for (let i = 0; i < 50; i++) {
-        const traits = generateSystemTraits(rng, theme);
-        expect(traits.length).toBeGreaterThanOrEqual(range.min);
-        expect(traits.length).toBeLessThanOrEqual(range.max);
-      }
+    // Generate 50 samples to cover the range
+    for (let i = 0; i < 50; i++) {
+      const traits = generateSystemTraits(rng);
+      expect(traits.length).toBeGreaterThanOrEqual(TRAIT_COUNT.min);
+      expect(traits.length).toBeLessThanOrEqual(TRAIT_COUNT.max);
     }
   });
 
   it("produces unique trait IDs within a single system", () => {
     const rng = makeRng();
     for (let i = 0; i < 100; i++) {
-      const traits = generateSystemTraits(rng, "garden_heartland");
+      const traits = generateSystemTraits(rng);
       const ids = traits.map((t) => t.traitId);
       expect(new Set(ids).size).toBe(ids.length);
     }
@@ -57,7 +46,7 @@ describe("generateSystemTraits", () => {
     const rng = makeRng();
     const validIds = new Set(ALL_TRAIT_IDS);
     for (let i = 0; i < 100; i++) {
-      const traits = generateSystemTraits(rng, "research_cluster");
+      const traits = generateSystemTraits(rng);
       for (const t of traits) {
         expect(validIds.has(t.traitId)).toBe(true);
       }
@@ -67,7 +56,7 @@ describe("generateSystemTraits", () => {
   it("only produces valid quality tiers (1, 2, or 3)", () => {
     const rng = makeRng();
     for (let i = 0; i < 100; i++) {
-      const traits = generateSystemTraits(rng, "energy_belt");
+      const traits = generateSystemTraits(rng);
       for (const t of traits) {
         expect([1, 2, 3]).toContain(t.quality);
       }
@@ -75,31 +64,36 @@ describe("generateSystemTraits", () => {
   });
 
   it("is deterministic for the same seed", () => {
-    const traits1 = generateSystemTraits(makeRng(99), "trade_nexus");
-    const traits2 = generateSystemTraits(makeRng(99), "trade_nexus");
+    const traits1 = generateSystemTraits(makeRng(99));
+    const traits2 = generateSystemTraits(makeRng(99));
     expect(traits1).toEqual(traits2);
   });
 
-  it("biases toward theme-weighted traits", () => {
+  it("draws traits uniformly — no bias", () => {
     const rng = makeRng();
-    // mineral_frontier has elevated weights for asteroid_belt, gas_giant, mineral_rich_moons, etc.
-    const mineralTraitCounts = new Map<string, number>();
-    for (let i = 0; i < 200; i++) {
-      const traits = generateSystemTraits(rng, "mineral_frontier");
+    // Run many samples — trait frequency should be roughly uniform
+    const counts = new Map<string, number>();
+    for (let i = 0; i < 1000; i++) {
+      const traits = generateSystemTraits(rng);
       for (const t of traits) {
-        mineralTraitCounts.set(t.traitId, (mineralTraitCounts.get(t.traitId) ?? 0) + 1);
+        counts.set(t.traitId, (counts.get(t.traitId) ?? 0) + 1);
       }
     }
-    // asteroid_belt (weight 30) should appear much more than a random base-weight trait
-    const asteroidCount = mineralTraitCounts.get("asteroid_belt") ?? 0;
-    expect(asteroidCount).toBeGreaterThan(20);
+    // No single trait should dominate (>10% of all rolls)
+    const total = [...counts.values()].reduce((s, v) => s + v, 0);
+    for (const [, count] of counts) {
+      expect(count / total).toBeLessThan(0.1);
+    }
   });
 
-  it("frontier_wilds produces fewer traits (1-2)", () => {
+  it("first trait always has at least one strong (value 2) affinity", () => {
     const rng = makeRng();
-    for (let i = 0; i < 50; i++) {
-      const traits = generateSystemTraits(rng, "frontier_wilds");
-      expect(traits.length).toBeLessThanOrEqual(2);
+    for (let i = 0; i < 200; i++) {
+      const traits = generateSystemTraits(rng);
+      const firstTrait = traits[0];
+      const def = TRAITS[firstTrait.traitId];
+      const hasStrongAffinity = Object.values(def.economyAffinity).some((v) => v === 2);
+      expect(hasStrongAffinity).toBe(true);
     }
   });
 });
@@ -140,197 +134,79 @@ describe("computeTraitProductionBonus", () => {
 
 describe("deriveEconomyType", () => {
   it("derives agricultural for habitable_world + ocean_world", () => {
+    const rng = makeRng();
     const traits = [makeTrait("habitable_world", 2), makeTrait("ocean_world", 2)];
-    // habitable_world: agricultural 4, ocean_world: agricultural 3
-    // Expected: agricultural scores highest
-    expect(deriveEconomyType(traits, "garden_heartland")).toBe("agricultural");
+    // habitable_world: agricultural strong (2), ocean_world: agricultural strong (2)
+    expect(deriveEconomyType(traits, rng)).toBe("agricultural");
   });
 
-  it("derives extraction for asteroid_belt + mineral_rich_moons", () => {
-    const traits = [makeTrait("asteroid_belt", 2), makeTrait("mineral_rich_moons", 2)];
-    expect(deriveEconomyType(traits, "mineral_frontier")).toBe("extraction");
+  it("derives extraction for asteroid_belt + superdense_core", () => {
+    const rng = makeRng();
+    const traits = [makeTrait("asteroid_belt", 2), makeTrait("superdense_core", 2)];
+    expect(deriveEconomyType(traits, rng)).toBe("extraction");
   });
 
   it("derives tech for precursor_ruins + gravitational_anomaly", () => {
+    const rng = makeRng();
     const traits = [makeTrait("precursor_ruins", 2), makeTrait("gravitational_anomaly", 2)];
-    expect(deriveEconomyType(traits, "research_cluster")).toBe("tech");
+    expect(deriveEconomyType(traits, rng)).toBe("tech");
   });
 
   it("derives industrial for lagrange_stations + heavy_metal_veins", () => {
+    const rng = makeRng();
     const traits = [makeTrait("lagrange_stations", 2), makeTrait("heavy_metal_veins", 2)];
-    expect(deriveEconomyType(traits, "industrial_corridor")).toBe("industrial");
+    expect(deriveEconomyType(traits, rng)).toBe("industrial");
   });
 
-  it("derives core for ancient_trade_route + lagrange_stations", () => {
-    const traits = [makeTrait("ancient_trade_route", 2), makeTrait("lagrange_stations", 1)];
-    // ancient_trade_route: core 5, lagrange_stations: core 2
-    expect(deriveEconomyType(traits, "trade_nexus")).toBe("core");
-  });
-
-  it("derives refinery for gas_giant + helium3_reserves", () => {
-    const traits = [makeTrait("gas_giant", 2), makeTrait("helium3_reserves", 2)];
-    expect(deriveEconomyType(traits, "energy_belt")).toBe("refinery");
-  });
-
-  it("quality multiplies affinity scores", () => {
-    // habitable_world has agricultural: 4, core: 1
-    // At quality 1: agricultural = 4, core = 1
-    // At quality 3: agricultural = 12, core = 3
-    const q1 = deriveEconomyType([makeTrait("habitable_world", 1)], "frontier_wilds");
-    const q3 = deriveEconomyType([makeTrait("habitable_world", 3)], "frontier_wilds");
-    // Both should still be agricultural since relative ratios are preserved
-    expect(q1).toBe("agricultural");
-    expect(q3).toBe("agricultural");
-  });
-
-  it("tiebreaker favors theme-aligned economy", () => {
-    // Create a trait combo that could tie between two economies,
-    // then verify the theme tiebreaker resolves it
-    // desert_world: extraction 2, industrial 2 (equal)
-    // In industrial_corridor theme, industrial gets +1 tiebreaker
-    const traits = [makeTrait("desert_world", 1)];
-    expect(deriveEconomyType(traits, "industrial_corridor")).toBe("industrial");
-  });
-
-  it("falls back to extraction for empty trait list in neutral theme", () => {
-    // Empty traits → all scores 0, but contested_frontier has no tiebreaker
-    // Fallback: extraction (first in iteration order with score > -1)
-    const result = deriveEconomyType([], "contested_frontier");
-    // With all-zero scores and no tiebreaker, the first economy type
-    // with score > bestScore(-1) wins. Since scores are all 0, the first
-    // in ALL_ECONOMY_TYPES order wins: "agricultural"
-    expect(["agricultural", "extraction"]).toContain(result);
-  });
-});
-
-// ── enforceCoherence ────────────────────────────────────────────
-
-describe("enforceCoherence", () => {
-  function makeSystem(
-    index: number,
-    regionIndex: number,
-    economyType: EconomyType,
-    isGateway = false,
-  ) {
-    return {
-      index,
-      regionIndex,
-      economyType,
-      traits: [makeTrait("asteroid_belt", 1)],
-      isGateway,
-    };
-  }
-
-  it("returns 0 rerolls when region already meets coherence threshold", () => {
+  it("derives core for ancient_trade_route + deep_space_beacon", () => {
     const rng = makeRng();
-    // 5 systems, 4 extraction = 80% > 60% threshold
-    const systems = [
-      makeSystem(0, 0, "extraction"),
-      makeSystem(1, 0, "extraction"),
-      makeSystem(2, 0, "extraction"),
-      makeSystem(3, 0, "extraction"),
-      makeSystem(4, 0, "tech"),
-    ];
-    const themes = new Map([[0, "mineral_frontier" as RegionTheme]]);
-    const rerolls = enforceCoherence(rng, systems, themes);
-    expect(rerolls).toBe(0);
+    const traits = [makeTrait("ancient_trade_route", 2), makeTrait("deep_space_beacon", 1)];
+    // ancient_trade_route: core strong (2) → score 2
+    // deep_space_beacon: core strong (2) → score 1
+    // core total = 3, industrial minor (1) from ancient_trade_route not counted
+    expect(deriveEconomyType(traits, rng)).toBe("core");
   });
 
-  it("rerolls borderline systems to meet 60% threshold", () => {
+  it("derives refinery for binary_star + helium3_reserves", () => {
     const rng = makeRng();
-    // 10 systems, 4 extraction + 6 others = 40% < 60% threshold
-    const systems = [
-      makeSystem(0, 0, "extraction"),
-      makeSystem(1, 0, "extraction"),
-      makeSystem(2, 0, "extraction"),
-      makeSystem(3, 0, "extraction"),
-      makeSystem(4, 0, "tech"),
-      makeSystem(5, 0, "agricultural"),
-      makeSystem(6, 0, "industrial"),
-      makeSystem(7, 0, "core"),
-      makeSystem(8, 0, "refinery"),
-      makeSystem(9, 0, "agricultural"),
-    ];
-    const themes = new Map([[0, "mineral_frontier" as RegionTheme]]);
-    const rerolls = enforceCoherence(rng, systems, themes);
-    expect(rerolls).toBeGreaterThan(0);
+    const traits = [makeTrait("binary_star", 2), makeTrait("helium3_reserves", 2)];
+    expect(deriveEconomyType(traits, rng)).toBe("refinery");
   });
 
-  it("does not reroll gateway systems", () => {
+  it("ignores minor affinities for derivation", () => {
     const rng = makeRng();
-    // 5 systems, 2 extraction + 3 non-extraction. 2/5 = 40% < 60%.
-    // But 2 non-extraction are gateways — only 1 candidate for reroll.
-    const systems = [
-      makeSystem(0, 0, "extraction"),
-      makeSystem(1, 0, "extraction"),
-      makeSystem(2, 0, "tech", true),    // gateway — exempt
-      makeSystem(3, 0, "core", true),    // gateway — exempt
-      makeSystem(4, 0, "agricultural"),   // only reroll candidate
-    ];
-    const themes = new Map([[0, "mineral_frontier" as RegionTheme]]);
-    const before = systems[2].economyType;
-    enforceCoherence(rng, systems, themes);
-    // Gateways should keep their original economy
-    expect(systems[2].economyType).toBe(before);
-    expect(systems[3].economyType).toBe("core");
+    // mineral_rich_moons has extraction: 1, industrial: 1 — both minor
+    // No strong affinities, so should fallback
+    const traits = [makeTrait("mineral_rich_moons", 3)];
+    // Fallback to extraction for zero strong-affinity scores
+    expect(deriveEconomyType(traits, rng)).toBe("extraction");
   });
 
-  it("breaks monotonous regions (all same economy)", () => {
+  it("quality multiplies strong affinity scores", () => {
     const rng = makeRng();
-    // All 5 systems have the same economy
-    const systems = [
-      makeSystem(0, 0, "extraction"),
-      makeSystem(1, 0, "extraction"),
-      makeSystem(2, 0, "extraction"),
-      makeSystem(3, 0, "extraction"),
-      makeSystem(4, 0, "extraction"),
-    ];
-    const themes = new Map([[0, "mineral_frontier" as RegionTheme]]);
-    const rerolls = enforceCoherence(rng, systems, themes);
-    expect(rerolls).toBeGreaterThan(0);
-    // At least one system should now have a different economy
-    const economies = new Set(systems.map((s) => s.economyType));
-    expect(economies.size).toBeGreaterThan(1);
+    // habitable_world has agricultural: 2 (strong), core: 2 (strong)
+    // At quality 1: agri = 1, core = 1 — tie, resolved by RNG
+    // At quality 3: agri = 3, core = 3 — still a tie
+    // Both qualities should produce one of the two strong economies
+    const q1 = deriveEconomyType([makeTrait("habitable_world", 1)], makeRng(1));
+    const q3 = deriveEconomyType([makeTrait("habitable_world", 3)], makeRng(1));
+    expect(["agricultural", "core"]).toContain(q1);
+    expect(["agricultural", "core"]).toContain(q3);
   });
 
-  it("handles multiple regions independently", () => {
-    const rng = makeRng();
-    // Region 0: already coherent, Region 1: monotonous
-    const systems = [
-      makeSystem(0, 0, "extraction"),
-      makeSystem(1, 0, "extraction"),
-      makeSystem(2, 0, "tech"),
-      makeSystem(3, 1, "agricultural"),
-      makeSystem(4, 1, "agricultural"),
-      makeSystem(5, 1, "agricultural"),
-    ];
-    const themes = new Map<number, RegionTheme>([
-      [0, "mineral_frontier"],
-      [1, "garden_heartland"],
-    ]);
-    enforceCoherence(rng, systems, themes);
-    // Region 0 should be untouched (2/3 = 67% > 60%)
-    // Region 1 should have at least one non-agricultural after monotony fix
-    const r1Economies = new Set(
-      systems.filter((s) => s.regionIndex === 1).map((s) => s.economyType),
-    );
-    expect(r1Economies.size).toBeGreaterThan(1);
-  });
-
-  it("is deterministic for the same seed", () => {
-    function runCoherence(seed: number) {
-      const rng = mulberry32(seed);
-      const systems = [
-        makeSystem(0, 0, "extraction"),
-        makeSystem(1, 0, "extraction"),
-        makeSystem(2, 0, "extraction"),
-        makeSystem(3, 0, "extraction"),
-        makeSystem(4, 0, "extraction"),
-      ];
-      const themes = new Map([[0, "mineral_frontier" as RegionTheme]]);
-      enforceCoherence(rng, systems, themes);
-      return systems.map((s) => s.economyType);
+  it("breaks ties via seeded random", () => {
+    // habitable_world has agricultural: 2, core: 2 — exact tie
+    // Different seeds should produce different outcomes (probabilistically)
+    const results = new Set<string>();
+    for (let seed = 0; seed < 20; seed++) {
+      results.add(deriveEconomyType([makeTrait("habitable_world", 1)], makeRng(seed)));
     }
-    expect(runCoherence(42)).toEqual(runCoherence(42));
+    // Should see both agricultural and core across seeds
+    expect(results.size).toBeGreaterThan(1);
+  });
+
+  it("falls back to extraction for empty trait list", () => {
+    const rng = makeRng();
+    expect(deriveEconomyType([], rng)).toBe("extraction");
   });
 });

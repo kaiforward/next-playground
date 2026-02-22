@@ -10,7 +10,6 @@ import type {
   EconomyType,
   GovernmentType,
   QualityTier,
-  RegionTheme,
   ShipStatus,
   TradeType,
   TraitId,
@@ -27,31 +26,30 @@ const GOVERNMENT_TYPES: ReadonlySet<string> = new Set<GovernmentType>([
   "federation", "corporate", "authoritarian", "frontier",
 ]);
 
-const REGION_THEMES: ReadonlySet<string> = new Set<RegionTheme>([
-  "garden_heartland", "mineral_frontier", "industrial_corridor",
-  "research_cluster", "energy_belt", "trade_nexus",
-  "contested_frontier", "frontier_wilds",
-]);
-
 const QUALITY_TIERS: ReadonlySet<number> = new Set<QualityTier>([1, 2, 3]);
 
 const TRAIT_IDS: ReadonlySet<string> = new Set<TraitId>([
   // Planetary Bodies
   "habitable_world", "ocean_world", "volcanic_world", "frozen_world",
   "tidally_locked_world", "desert_world", "jungle_world",
+  "geothermal_vents", "hydrocarbon_seas", "fertile_lowlands",
+  "coral_archipelago", "tectonic_forge",
   // Orbital Features
   "asteroid_belt", "gas_giant", "mineral_rich_moons", "ring_system",
   "binary_star", "lagrange_stations", "captured_rogue_body",
+  "deep_space_beacon",
   // Resource Deposits
   "rare_earth_deposits", "heavy_metal_veins", "organic_compounds",
   "crystalline_formations", "helium3_reserves", "exotic_matter_traces",
-  "radioactive_deposits",
+  "radioactive_deposits", "superdense_core", "glacial_aquifer",
   // Phenomena & Anomalies
   "nebula_proximity", "solar_flare_activity", "gravitational_anomaly",
   "dark_nebula", "precursor_ruins", "subspace_rift", "pulsar_proximity",
+  "ion_storm_corridor", "bioluminescent_ecosystem",
   // Infrastructure & Legacy
   "ancient_trade_route", "generation_ship_wreckage", "orbital_ring_remnant",
-  "seed_vault",
+  "seed_vault", "colonial_capital", "free_port_declaration",
+  "shipbreaking_yards",
 ]);
 
 const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([
@@ -80,13 +78,6 @@ export function toGovernmentType(value: string): GovernmentType {
     throw new Error(`Invalid government type: "${value}"`);
   }
   return value as GovernmentType;
-}
-
-export function toRegionTheme(value: string): RegionTheme {
-  if (!REGION_THEMES.has(value)) {
-    throw new Error(`Invalid region theme: "${value}"`);
-  }
-  return value as RegionTheme;
 }
 
 export function toQualityTier(value: number): QualityTier {
@@ -127,8 +118,3 @@ export const ALL_GOVERNMENT_TYPES: readonly GovernmentType[] = [
   "federation", "corporate", "authoritarian", "frontier",
 ];
 
-export const ALL_REGION_THEMES: readonly RegionTheme[] = [
-  "garden_heartland", "mineral_frontier", "industrial_corridor",
-  "research_cluster", "energy_belt", "trade_nexus",
-  "contested_frontier", "frontier_wilds",
-];

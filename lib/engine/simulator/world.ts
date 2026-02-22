@@ -9,9 +9,7 @@ import {
 } from "@/lib/engine/universe-gen";
 import {
   UNIVERSE_GEN,
-  REGION_THEMES,
-  REGION_NAME_PREFIXES,
-  GOVERNMENT_TYPE_WEIGHTS,
+  REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
@@ -53,18 +51,12 @@ export function buildGenParams(seed: number, universe: SimConstants["universe"])
  */
 export function createSimWorld(config: SimConfig, constants: SimConstants): SimWorld {
   const params = buildGenParams(config.seed, constants.universe);
-  const universe = generateUniverse(
-    params,
-    REGION_THEMES,
-    REGION_NAME_PREFIXES,
-    GOVERNMENT_TYPE_WEIGHTS,
-  );
+  const universe = generateUniverse(params, REGION_NAMES);
 
   // Build regions
   const regions: SimRegion[] = universe.regions.map((r, i) => ({
     id: `region-${i}`,
     name: r.name,
-    identity: r.identity,
     governmentType: r.governmentType,
   }));
 

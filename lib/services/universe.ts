@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import type { UniverseData, StarSystemInfo } from "@/lib/types/game";
-import { toEconomyType, toRegionTheme, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { toEconomyType, toTraitId, toQualityTier } from "@/lib/types/guards";
 import { TRAITS } from "@/lib/constants/traits";
 
 /**
@@ -13,7 +13,6 @@ export async function getUniverse(): Promise<UniverseData> {
       select: {
         id: true,
         name: true,
-        identity: true,
         dominantEconomy: true,
         x: true,
         y: true,
@@ -46,7 +45,6 @@ export async function getUniverse(): Promise<UniverseData> {
     regions: regions.map((r) => ({
       id: r.id,
       name: r.name,
-      identity: toRegionTheme(r.identity),
       dominantEconomy: toEconomyType(r.dominantEconomy),
       x: r.x,
       y: r.y,

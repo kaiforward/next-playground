@@ -36,8 +36,10 @@ export const QUALITY_TIERS: Record<
 
 // ── Trait catalog ─────────────────────────────────────────────────
 //
-// 29 traits across 5 categories. Economy affinities and production
+// 42 traits across 5 categories. Economy affinities and production
 // goods match the design doc (system-enrichment.md §1.1).
+// Strong affinities (2) drive economy derivation; minor (1) are
+// flavour and production bonuses only.
 
 export const TRAITS: Record<TraitId, TraitDefinition> = {
   // ── Planetary Bodies ────────────────────────────────────────────
@@ -126,6 +128,66 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
       1: "A humid world with dense vegetation. Small bio-harvesting operations collect native plant compounds.",
       2: "A lush jungle world with extraordinary biodiversity. Pharmaceutical prospectors map new species every season.",
       3: "A biodiversity hotspot of galactic significance — its dense canopy harbours unique compounds that have revolutionised bio-engineering.",
+    },
+  },
+  geothermal_vents: {
+    id: "geothermal_vents",
+    name: "Geothermal Vents",
+    category: "planetary",
+    economyAffinity: { refinery: 2, extraction: 1 },
+    productionGoods: ["fuel", "chemicals"],
+    descriptions: {
+      1: "Minor geothermal vents produce modest heat for small-scale chemical processing operations.",
+      2: "Extensive geothermal networks drive industrial-scale fuel synthesis and chemical refinement.",
+      3: "Continent-spanning thermal networks of extraordinary output — natural energy powers refineries that process raw materials at unmatched efficiency.",
+    },
+  },
+  hydrocarbon_seas: {
+    id: "hydrocarbon_seas",
+    name: "Hydrocarbon Seas",
+    category: "planetary",
+    economyAffinity: { refinery: 2, extraction: 1 },
+    productionGoods: ["chemicals", "fuel"],
+    descriptions: {
+      1: "Small hydrocarbon lakes dot the surface, providing modest chemical feedstock for local processing.",
+      2: "Vast methane and ethane seas support industrial-scale chemical harvesting and refinery operations.",
+      3: "World-spanning seas of liquid hydrocarbons — an industrial chemist's paradise. The raw feedstock here supplies refineries across the region.",
+    },
+  },
+  fertile_lowlands: {
+    id: "fertile_lowlands",
+    name: "Fertile Lowlands",
+    category: "planetary",
+    economyAffinity: { agricultural: 2 },
+    productionGoods: ["food"],
+    descriptions: {
+      1: "Marginal cropland with unreliable rainfall. Subsistence farming sustains small local populations.",
+      2: "Expansive lowlands with rich soil and reliable growing seasons. Major agricultural operations feed neighbouring systems.",
+      3: "The breadbasket of the region — endless fertile plains with ideal growing conditions that produce food surplus on a staggering scale.",
+    },
+  },
+  coral_archipelago: {
+    id: "coral_archipelago",
+    name: "Coral Archipelago",
+    category: "planetary",
+    economyAffinity: { agricultural: 2, extraction: 1 },
+    productionGoods: ["food", "water"],
+    descriptions: {
+      1: "Shallow marine ecosystems support small-scale aquaculture and seafloor mineral harvesting.",
+      2: "A thriving archipelago with industrial aquaculture farms and mineral-rich shallow seas.",
+      3: "A vast coral archipelago teeming with marine life — massive aquaculture operations and seafloor extraction make this one of the most productive systems in the sector.",
+    },
+  },
+  tectonic_forge: {
+    id: "tectonic_forge",
+    name: "Tectonic Forge",
+    category: "planetary",
+    economyAffinity: { industrial: 2, extraction: 1 },
+    productionGoods: ["metals", "machinery"],
+    descriptions: {
+      1: "Modest tectonic activity creates natural pressure chambers. Limited underground mineral concentration.",
+      2: "Extreme geological forces compress and concentrate minerals underground. Raw material processing begins before human industry even touches it.",
+      3: "A world where tectonic forces create natural foundries — ore is pre-processed by geological pressure into forms that make industrial production astonishingly efficient.",
     },
   },
 
@@ -217,6 +279,18 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
       3: "A massive captured planetoid with truly alien composition — materials here defy standard classification and command premium prices.",
     },
   },
+  deep_space_beacon: {
+    id: "deep_space_beacon",
+    name: "Deep Space Beacon",
+    category: "orbital",
+    economyAffinity: { core: 2 },
+    productionGoods: [],
+    descriptions: {
+      1: "A small navigation relay at a stable orbital point. Provides basic communications and route data to passing ships.",
+      2: "A major navigation and communications hub drawing steady traffic. Systems around it benefit from being well-connected.",
+      3: "A galactic-class deep space beacon — a nexus of navigation, communications, and information exchange. Its presence makes this system a natural crossroads.",
+    },
+  },
 
   // ── Resource Deposits ──────────────────────────────────────────
 
@@ -305,6 +379,30 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
     },
     dangerModifier: 0.04,
     negative: true,
+  },
+  superdense_core: {
+    id: "superdense_core",
+    name: "Superdense Core",
+    category: "resource",
+    economyAffinity: { extraction: 2 },
+    productionGoods: ["ore", "metals"],
+    descriptions: {
+      1: "An unusually dense planetary core yields heavier-than-normal mineral deposits from deep mining operations.",
+      2: "An ultra-dense core with extreme mineral concentrations. Deep mining yields rare ores in quantities impossible on lighter bodies.",
+      3: "An extraordinarily dense planetary core — the mineral concentrations here are off the charts. Deep mining operations produce more raw material per tonne of rock than anywhere else in the sector.",
+    },
+  },
+  glacial_aquifer: {
+    id: "glacial_aquifer",
+    name: "Glacial Aquifer",
+    category: "resource",
+    economyAffinity: { extraction: 2 },
+    productionGoods: ["water", "chemicals"],
+    descriptions: {
+      1: "Modest underground frozen water reserves. Small-scale extraction supplements local supply.",
+      2: "Vast underground frozen water reserves locked in ancient geological formations. Industrial-scale water extraction is highly efficient.",
+      3: "Immense glacial aquifers spanning entire continents — an almost inexhaustible supply of water and dissolved chemical compounds. A critical resource hub.",
+    },
   },
 
   // ── Phenomena & Anomalies ──────────────────────────────────────
@@ -399,6 +497,32 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
       3: "An exceptionally close pulsar — its powerful, metronomic pulses enable unique radiation-hardened electronics that cannot be produced anywhere else.",
     },
   },
+  ion_storm_corridor: {
+    id: "ion_storm_corridor",
+    name: "Ion Storm Corridor",
+    category: "phenomena",
+    economyAffinity: { refinery: 2 },
+    productionGoods: ["chemicals"],
+    descriptions: {
+      1: "Occasional charged particle streams from stellar wind interactions. Minor energy harvesting is possible between surges.",
+      2: "A significant ion storm corridor where intense energy enables industrial-scale catalysis and chemical synthesis. Periodic surges disrupt operations.",
+      3: "A massive ion storm corridor — the intense charged particle streams power chemical synthesis on an extraordinary scale, but devastating surges can shut down the entire system.",
+    },
+    dangerModifier: 0.04,
+    negative: true,
+  },
+  bioluminescent_ecosystem: {
+    id: "bioluminescent_ecosystem",
+    name: "Bioluminescent Ecosystem",
+    category: "phenomena",
+    economyAffinity: { agricultural: 2, tech: 1 },
+    productionGoods: ["food", "medicine"],
+    descriptions: {
+      1: "Faint bioluminescent organisms in the local ecosystem produce minor quantities of useful organic compounds.",
+      2: "A thriving bioluminescent ecosystem yielding complex organic compounds with pharmaceutical and agricultural applications.",
+      3: "An extraordinary bioluminescent ecosystem — exotic biological systems producing unique biochemistry that has revolutionised both agriculture and pharmaceutical research.",
+    },
+  },
 
   // ── Infrastructure & Legacy ────────────────────────────────────
 
@@ -448,6 +572,42 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
       1: "A small biological archive from the colonisation era. Some preserved crop strains are still cultivated locally.",
       2: "A substantial seed vault with diverse genetic material. Unique crop strains boost agricultural output and pharmaceutical research.",
       3: "A comprehensive biological archive of extraordinary completeness — thousands of preserved species, crop strains, and genetic data that have transformed the region's agricultural and biotech industries.",
+    },
+  },
+  colonial_capital: {
+    id: "colonial_capital",
+    name: "Colonial Capital",
+    category: "legacy",
+    economyAffinity: { core: 2, industrial: 1 },
+    productionGoods: ["luxuries"],
+    descriptions: {
+      1: "Remnants of an early colonial administration. Some institutional infrastructure still functions, drawing minor trade.",
+      2: "A former colonial capital with established institutions and population density. Governance infrastructure attracts commerce and industry.",
+      3: "A grand colonial capital — centuries of continuous governance have built institutions, trade networks, and cultural significance that make this system a natural hub of civilisation.",
+    },
+  },
+  free_port_declaration: {
+    id: "free_port_declaration",
+    name: "Free Port Declaration",
+    category: "legacy",
+    economyAffinity: { core: 2 },
+    productionGoods: ["luxuries", "textiles"],
+    descriptions: {
+      1: "A minor historical trade concession. Tariff reductions attract a trickle of additional merchant traffic.",
+      2: "An established free port with meaningful tariff exemptions. Merchants prefer to route luxury goods through this system.",
+      3: "A galactic free trade landmark — centuries of open commerce have built an unrivalled marketplace. Merchants from every corner of the galaxy converge here.",
+    },
+  },
+  shipbreaking_yards: {
+    id: "shipbreaking_yards",
+    name: "Shipbreaking Yards",
+    category: "legacy",
+    economyAffinity: { industrial: 2, extraction: 1 },
+    productionGoods: ["metals", "weapons"],
+    descriptions: {
+      1: "A small orbital scrapyard where decommissioned shuttles are stripped for salvageable components.",
+      2: "Massive orbital scrapyards processing a steady stream of decommissioned vessels. Recycled metals and salvaged components feed local industry.",
+      3: "The largest shipbreaking operation in the sector — an industrial-scale recycling machine that transforms retired fleets into raw materials, recovered alloys, and repurposed weapons systems.",
     },
   },
 };

@@ -2,7 +2,7 @@
 
 Enriches the physical universe with traits, quality tiers, and bottom-up economy derivation. No new gameplay systems — richer world generation that creates the foundation every later layer builds on.
 
-**Design doc**: [system-enrichment.md](../planned/system-enrichment.md) §1–3 (trait catalog, affinity scoring, region themes)
+**Design doc**: [system-enrichment.md](../planned/system-enrichment.md) §1–2 (trait catalog, affinity scoring)
 
 **Transition**: Clean cut. Old world generation replaced wholesale. Reseed the universe.
 
@@ -11,12 +11,12 @@ Enriches the physical universe with traits, quality tiers, and bottom-up economy
 ## 1. Scope
 
 ### In scope
-- 29 system traits across 5 categories with quality tiers (1–3)
-- Trait-to-economy affinity scoring (replaces weighted random economy assignment)
-- 8 region themes replace 5 region identities
-- Coherence guarantees (60% economy agreement, no monotonous regions)
+- 42 system traits across 5 categories with quality tiers (1–3)
+- Strong-affinity-only economy derivation with guaranteed strong-affinity first roll
+- RegionTheme concept removed — 24 regions with flat name pool, neutral styling
+- Uniform trait count (2–4) for all systems, uniform government distribution (25% each)
 - Trait production modifiers on economy processing
-- UI: traits visible on system detail page, trait-influenced descriptions
+- UI: traits visible on system detail page, neutral region palette with economy-coloured labels
 - Simulator experiments to validate distributions
 
 ### Out of scope (later layers)
@@ -24,7 +24,7 @@ Enriches the physical universe with traits, quality tiers, and bottom-up economy
 - Faction influence on economy derivation (§2.2) — Layer 2
 - Trait-based danger modifiers — Layer 1+ (wired when ship stats ship)
 - Trait-gated event spawning (§4 events) — Layer 3
-- Core economy exception via graph connectivity (§2.3 connectivity rule) — deferred, trait+theme scoring handles core placement well enough for 200 systems
+- Core economy exception via graph connectivity (§2.3 connectivity rule) — deferred, trait scoring handles core placement well enough for 600 systems
 
 ---
 
@@ -50,9 +50,9 @@ model SystemTrait {
 ```prisma
 model Region {
   // existing fields unchanged
-  identity         String  // RegionTheme (was RegionIdentity) — "garden_heartland", "mineral_frontier", etc.
   dominantEconomy  String  // NEW — most common EconomyType among the region's systems. Computed at seed, re-derived in Layer 2 after conquest.
   // governmentType stays — government assignment still per-region until factions ship
+  // identity field REMOVED — RegionTheme concept deleted
 }
 ```
 
@@ -76,7 +76,7 @@ model StarSystem {
 
 ```typescript
 export type TraitId =
-  // Planetary Bodies (7)
+  // Planetary Bodies (12)
   | "habitable_world"
   | "ocean_world"
   | "volcanic_world"
@@ -84,7 +84,12 @@ export type TraitId =
   | "tidally_locked_world"
   | "desert_world"
   | "jungle_world"
-  // Orbital Features (7)
+  | "geothermal_vents"
+  | "hydrocarbon_seas"
+  | "fertile_lowlands"
+  | "coral_archipelago"
+  | "tectonic_forge"
+  // Orbital Features (8)
   | "asteroid_belt"
   | "gas_giant"
   | "mineral_rich_moons"
@@ -92,7 +97,8 @@ export type TraitId =
   | "binary_star"
   | "lagrange_stations"
   | "captured_rogue_body"
-  // Resource Deposits (7)
+  | "deep_space_beacon"
+  // Resource Deposits (9)
   | "rare_earth_deposits"
   | "heavy_metal_veins"
   | "organic_compounds"
@@ -100,7 +106,9 @@ export type TraitId =
   | "helium3_reserves"
   | "exotic_matter_traces"
   | "radioactive_deposits"
-  // Phenomena & Anomalies (7)
+  | "superdense_core"
+  | "glacial_aquifer"
+  // Phenomena & Anomalies (9)
   | "nebula_proximity"
   | "solar_flare_activity"
   | "gravitational_anomaly"
@@ -108,11 +116,16 @@ export type TraitId =
   | "precursor_ruins"
   | "subspace_rift"
   | "pulsar_proximity"
-  // Infrastructure & Legacy (4)
+  | "ion_storm_corridor"
+  | "bioluminescent_ecosystem"
+  // Infrastructure & Legacy (7)
   | "ancient_trade_route"
   | "generation_ship_wreckage"
   | "orbital_ring_remnant"
-  | "seed_vault";
+  | "seed_vault"
+  | "colonial_capital"
+  | "free_port_declaration"
+  | "shipbreaking_yards";
 
 export type TraitCategory =
   | "planetary"
@@ -123,29 +136,8 @@ export type TraitCategory =
 
 export type QualityTier = 1 | 2 | 3;
 
-export type RegionTheme =
-  | "garden_heartland"
-  | "mineral_frontier"
-  | "industrial_corridor"
-  | "research_cluster"
-  | "energy_belt"
-  | "trade_nexus"
-  | "contested_frontier"
-  | "frontier_wilds";
-```
-
-### Replaces in `lib/types/game.ts`
-
-```typescript
-// DELETE:
-export type RegionIdentity =
-  | "resource_rich"
-  | "agricultural"
-  | "industrial"
-  | "tech"
-  | "trade_hub";
-
-// All references to RegionIdentity become RegionTheme
+// RegionTheme type DELETED — themes removed entirely
+// RegionIdentity type DELETED — replaced by nothing
 ```
 
 ---
@@ -176,42 +168,57 @@ export interface TraitDefinition {
 
 **Economy affinity values** come directly from the design doc tables. Each trait has 0–3 economy types it's relevant to, scored 1 (minor) or 2 (strong). See [system-enrichment.md §1.1](../planned/system-enrichment.md) for the full catalog.
 
-**Compact reference table** (affinities only — descriptions in design doc):
+**Compact reference table** (affinities only — descriptions in design doc). Strong affinities (2) drive economy derivation per §2.1; minor affinities (1) are flavour/production only.
 
 | Trait | agri | extr | refi | indu | tech | core | Prod. goods |
 |---|---|---|---|---|---|---|---|
-| habitable_world | 2 | — | — | — | — | 2 | food |
-| ocean_world | 2 | 1 | — | — | — | — | food, water |
-| volcanic_world | — | 2 | 1 | — | — | — | ore, chemicals |
+| habitable_world | **2** | — | — | — | — | **2** | food |
+| ocean_world | **2** | 1 | — | — | — | — | food, water |
+| volcanic_world | — | **2** | 1 | — | — | — | ore, chemicals |
 | frozen_world | — | 1 | — | — | — | — | water |
 | tidally_locked_world | — | 1 | — | — | 1 | — | ore |
 | desert_world | — | 1 | — | 1 | — | — | ore |
 | jungle_world | 1 | — | — | — | 1 | — | food, chemicals |
-| asteroid_belt | — | 2 | — | — | — | — | ore, metals |
-| gas_giant | — | 2 | 1 | — | — | — | fuel |
+| geothermal_vents | — | 1 | **2** | — | — | — | fuel, chemicals |
+| hydrocarbon_seas | — | 1 | **2** | — | — | — | chemicals, fuel |
+| fertile_lowlands | **2** | — | — | — | — | — | food |
+| coral_archipelago | **2** | 1 | — | — | — | — | food, water |
+| tectonic_forge | — | 1 | — | **2** | — | — | metals, machinery |
+| asteroid_belt | — | **2** | — | — | — | — | ore, metals |
+| gas_giant | — | **2** | 1 | — | — | — | fuel |
 | mineral_rich_moons | — | 1 | — | 1 | — | — | ore |
 | ring_system | — | 1 | — | — | — | — | water |
-| binary_star | — | — | 2 | — | 1 | — | fuel, chemicals |
-| lagrange_stations | — | — | — | 2 | — | 1 | machinery |
+| binary_star | — | — | **2** | — | 1 | — | fuel, chemicals |
+| lagrange_stations | — | — | — | **2** | — | 1 | machinery |
 | captured_rogue_body | — | 1 | — | — | 1 | — | ore |
-| rare_earth_deposits | — | 1 | — | — | 2 | — | electronics |
-| heavy_metal_veins | — | 1 | — | 2 | — | — | metals, weapons |
+| deep_space_beacon | — | — | — | — | — | **2** | — |
+| rare_earth_deposits | — | 1 | — | — | **2** | — | electronics |
+| heavy_metal_veins | — | 1 | — | **2** | — | — | metals, weapons |
 | organic_compounds | 1 | — | 1 | — | — | — | chemicals, medicine |
-| crystalline_formations | — | 1 | — | — | 2 | — | electronics |
-| helium3_reserves | — | 1 | 2 | — | — | — | fuel |
-| exotic_matter_traces | — | — | — | — | 2 | — | electronics |
+| crystalline_formations | — | 1 | — | — | **2** | — | electronics |
+| helium3_reserves | — | 1 | **2** | — | — | — | fuel |
+| exotic_matter_traces | — | — | — | — | **2** | — | electronics |
 | radioactive_deposits | — | 1 | — | 1 | — | — | fuel, chemicals |
+| superdense_core | — | **2** | — | — | — | — | ore, metals |
+| glacial_aquifer | — | **2** | — | — | — | — | water, chemicals |
 | nebula_proximity | — | 1 | — | — | 1 | — | chemicals |
 | solar_flare_activity | — | — | 1 | — | — | — | fuel |
-| gravitational_anomaly | — | — | — | — | 2 | — | — |
+| gravitational_anomaly | — | — | — | — | **2** | — | — |
 | dark_nebula | — | — | — | — | — | — | — |
-| precursor_ruins | — | — | — | — | 2 | 1 | electronics |
-| subspace_rift | — | — | — | — | 2 | — | — |
+| precursor_ruins | — | — | — | — | **2** | 1 | electronics |
+| subspace_rift | — | — | — | — | **2** | — | — |
 | pulsar_proximity | — | — | — | 1 | 1 | — | electronics |
-| ancient_trade_route | — | — | — | 1 | — | 2 | luxuries |
+| ion_storm_corridor | — | — | **2** | — | — | — | chemicals |
+| bioluminescent_ecosystem | **2** | — | — | — | 1 | — | food, medicine |
+| ancient_trade_route | — | — | — | 1 | — | **2** | luxuries |
 | generation_ship_wreckage | — | 1 | — | 1 | — | — | metals |
-| orbital_ring_remnant | — | — | — | 2 | — | 1 | machinery |
-| seed_vault | 2 | — | — | — | 1 | — | food, textiles |
+| orbital_ring_remnant | — | — | — | **2** | — | 1 | machinery |
+| seed_vault | **2** | — | — | — | 1 | — | food, textiles |
+| colonial_capital | — | — | — | 1 | — | **2** | luxuries |
+| free_port_declaration | — | — | — | — | — | **2** | luxuries, textiles |
+| shipbreaking_yards | — | 1 | — | **2** | — | — | metals, weapons |
+
+**Strong affinity count per economy**: tech 6, agricultural 6, extraction 5, industrial 5, refinery 5, core 5. This balance ensures even economy distribution without enforcement.
 
 ### 4.2 Quality Tier Scaling
 
@@ -234,157 +241,46 @@ trait_modifier = QUALITY_TIERS[quality].modifier  (if good is in trait's product
 
 Example: Extraction system with asteroid_belt (quality 3) + mineral_rich_moons (quality 2). Ore production = base × (1 + 0.80 + 0.40) = base × 2.2. That's the "galactic powerhouse" the design doc describes.
 
-### 4.3 Region Themes — `lib/constants/universe-gen.ts`
+### 4.3 Universe Generation Config — `lib/constants/universe-gen.ts`
 
-Replaces `REGION_IDENTITIES`, `ECONOMY_TYPE_WEIGHTS`, and `REGION_NAME_PREFIXES`.
+RegionTheme removed. All theme-keyed exports deleted (`REGION_THEMES`, `REGION_NAME_PREFIXES`, `GOVERNMENT_TYPE_WEIGHTS`, `REGION_THEME_TRAIT_COUNT`). Replaced with:
 
-#### Theme assignment cycle
+#### Region count & map size
 
 ```typescript
-export const REGION_THEMES: RegionTheme[] = [
-  "trade_nexus",
-  "mineral_frontier",
-  "industrial_corridor",
-  "research_cluster",
-  "garden_heartland",
-  "energy_belt",
-  "contested_frontier",
-  "frontier_wilds",
+export const UNIVERSE_GEN = {
+  REGION_COUNT: 24,       // was 8
+  SYSTEMS_PER_REGION: 25, // unchanged — 24 × 25 = 600 total systems
+  MAP_SIZE: 7000,         // was 4000 — usable area ~4900² fits 24 regions at 800 min distance
+  // ...
+};
+```
+
+#### Flat name pool
+
+```typescript
+export const REGION_NAMES: string[] = [
+  "Arcturus", "Meridian", "Vanguard", "Horizon", "Zenith", "Solace",
+  "Pinnacle", "Tempest", "Bastion", "Frontier", "Aegis", "Nebula",
+  "Eclipse", "Sentinel", "Cascade", "Vertex", "Rift", "Threshold",
+  "Citadel", "Expanse", "Dominion", "Prism", "Crucible", "Nexus",
+  "Forge", "Drift", "Axiom", "Haven",
 ];
 ```
 
-Cycling assignment like current identities — 8 themes for 8 regions means each appears exactly once (at 200 systems). If scale increases, themes cycle.
+28 generic space names (24 + 4 extras for collision fallback). Picked sequentially from the pool; `-N` suffix on collision. Not economy-biased — narrative variety comes from traits.
 
-#### Theme → trait weights
-
-Each theme defines relative weights for every trait. Traits not listed get a small base weight (e.g., 5) so unusual rolls are possible. Themes make their signature traits 3–6× more likely.
-
-**Note**: The design doc lists 3–4 core traits per theme. The weight tables below extend each theme with 1–3 additional thematically coherent traits (e.g., `frozen_world` and `ring_system` in mineral_frontier). This fills out the probability space so systems within a theme have more variety while still feeling cohesive. All additions have relevant economy affinities for the theme.
+#### Uniform trait count
 
 ```typescript
-export const REGION_THEME_TRAIT_WEIGHTS: Record<RegionTheme, Partial<Record<TraitId, number>>> = {
-  garden_heartland: {
-    habitable_world: 30,
-    ocean_world: 25,
-    seed_vault: 20,
-    jungle_world: 20,
-    organic_compounds: 15,
-    // all others: base weight 5
-  },
-  mineral_frontier: {
-    asteroid_belt: 30,
-    gas_giant: 25,
-    mineral_rich_moons: 25,
-    heavy_metal_veins: 20,
-    ring_system: 15,
-    frozen_world: 15,
-    // all others: base weight 5
-  },
-  industrial_corridor: {
-    lagrange_stations: 30,
-    orbital_ring_remnant: 25,
-    heavy_metal_veins: 25,
-    desert_world: 15,
-    ancient_trade_route: 15,
-    // all others: base weight 5
-  },
-  research_cluster: {
-    precursor_ruins: 30,
-    gravitational_anomaly: 25,
-    exotic_matter_traces: 25,
-    crystalline_formations: 20,
-    tidally_locked_world: 15,
-    captured_rogue_body: 15,
-    // all others: base weight 5
-  },
-  energy_belt: {
-    binary_star: 30,
-    gas_giant: 25,
-    helium3_reserves: 25,
-    solar_flare_activity: 20,
-    volcanic_world: 15,
-    // all others: base weight 5
-  },
-  trade_nexus: {
-    ancient_trade_route: 30,
-    habitable_world: 25,
-    lagrange_stations: 25,
-    orbital_ring_remnant: 15,
-    organic_compounds: 10,
-    // all others: base weight 5
-  },
-  contested_frontier: {
-    // Mixed — no single trait dominates. Slightly elevated danger/resource traits.
-    dark_nebula: 20,
-    radioactive_deposits: 20,
-    volcanic_world: 20,
-    nebula_proximity: 15,
-    asteroid_belt: 15,
-    heavy_metal_veins: 15,
-    // all others: base weight 8 (higher base = more variety)
-  },
-  frontier_wilds: {
-    // Sparse traits (systems get fewer traits). Frontier/oddball mix.
-    frozen_world: 20,
-    nebula_proximity: 20,
-    ring_system: 15,
-    pulsar_proximity: 15,
-    captured_rogue_body: 15,
-    // all others: base weight 5
-  },
-};
+export const TRAIT_COUNT = { min: 2, max: 4 } as const;
 ```
 
-#### Theme → trait count
+All systems get 2–4 traits. No more sparse 1–2 frontier systems. Every system gets a clear economy signal from the guaranteed strong-affinity first roll.
 
-Systems don't all get the same number of traits. Theme influences count. The design doc allows 1–4 globally; we set min 2 for non-frontier themes because single-trait systems produce weak affinity signals (one trait often ties multiple economy types), leading to more coherence enforcement. Frontier wilds keeps min 1 per the design doc's explicit "1–2 per system" note.
+#### Uniform government distribution
 
-```typescript
-export const REGION_THEME_TRAIT_COUNT: Record<RegionTheme, { min: number; max: number }> = {
-  garden_heartland:     { min: 2, max: 4 },
-  mineral_frontier:     { min: 2, max: 4 },
-  industrial_corridor:  { min: 2, max: 4 },
-  research_cluster:     { min: 2, max: 4 },
-  energy_belt:          { min: 2, max: 4 },
-  trade_nexus:          { min: 2, max: 4 },
-  contested_frontier:   { min: 2, max: 4 },
-  frontier_wilds:       { min: 1, max: 2 },  // sparse — design doc says 1-2
-};
-```
-
-#### Theme → government type weights
-
-Government assignment stays per-region. Weights need updating for 8 themes.
-
-```typescript
-export const GOVERNMENT_TYPE_WEIGHTS: Record<RegionTheme, Record<GovernmentType, number>> = {
-  garden_heartland:     { federation: 40, corporate: 25, frontier: 20, authoritarian: 15 },
-  mineral_frontier:     { frontier: 40, corporate: 30, federation: 20, authoritarian: 10 },
-  industrial_corridor:  { corporate: 35, authoritarian: 30, federation: 25, frontier: 10 },
-  research_cluster:     { corporate: 35, federation: 30, authoritarian: 20, frontier: 15 },
-  energy_belt:          { corporate: 30, authoritarian: 30, federation: 25, frontier: 15 },
-  trade_nexus:          { corporate: 35, federation: 35, authoritarian: 20, frontier: 10 },
-  contested_frontier:   { frontier: 40, authoritarian: 25, corporate: 20, federation: 15 },
-  frontier_wilds:       { frontier: 50, corporate: 20, federation: 20, authoritarian: 10 },
-};
-```
-
-Same coverage guarantee as current: if any government type is missing after all 8 regions are assigned, swap a duplicate.
-
-#### Theme → name prefixes
-
-```typescript
-export const REGION_NAME_PREFIXES: Record<RegionTheme, string[]> = {
-  garden_heartland:     ["Eden", "Verdant", "Harvest", "Pastoral"],
-  mineral_frontier:     ["Forge", "Quarry", "Vein", "Lode"],
-  industrial_corridor:  ["Foundry", "Assembly", "Crucible", "Works"],
-  research_cluster:     ["Prism", "Cipher", "Archive", "Axiom"],
-  energy_belt:          ["Helios", "Corona", "Flare", "Dynamo"],
-  trade_nexus:          ["Nexus", "Haven", "Crossroads", "Confluence"],
-  contested_frontier:   ["Rift", "Breach", "Disputed", "Fracture"],
-  frontier_wilds:       ["Expanse", "Drift", "Outreach", "Fringe"],
-};
-```
+Government is now uniform 25% per type: `weightedPick(rng, { federation:1, corporate:1, authoritarian:1, frontier:1 })`. With 24 regions, all 4 types are virtually guaranteed. Simplified coverage check kept as safety net.
 
 ---
 
@@ -402,32 +298,40 @@ selectStartingSystem()  → trade_hub + core economy
 ### New flow
 
 ```
-generateRegions()       → 8 regions with theme + government     (modified)
-generateSystemTraits()  → 1-4 traits per system, quality tiers  (NEW)
-deriveEconomyTypes()    → affinity scoring from traits           (NEW, replaces weighted pick)
-enforceCoherence()      → 60% agreement, no monotony            (NEW)
+generateRegions()       → 24 regions with government (no theme)  (simplified)
+generateSystemTraits()  → 2-4 traits per system, quality tiers   (NEW, guaranteed strong-affinity first roll)
+deriveEconomyTypes()    → strong-affinity scoring from traits     (NEW, replaces weighted pick)
 generateConnections()   → unchanged
-selectStartingSystem()  → trade_nexus + core economy             (minor update)
+selectStartingSystem()  → centrality-based (closest to map center)(rewritten)
 ```
 
-### 5.1 `generateRegions()` — Modified
+**No coherence enforcement step.** Balanced strong affinity counts (5–6 per economy type) and the guaranteed strong-affinity first roll produce naturally varied regions without post-hoc correction.
 
-Minimal changes: `RegionIdentity` → `RegionTheme`, `REGION_IDENTITIES` → `REGION_THEMES`, weight tables updated. Placement algorithm unchanged.
+### 5.1 `generateRegions()` — Simplified
+
+Signature: `generateRegions(rng, params, names: string[])`. Names picked sequentially from flat pool. Government uniform 25% with coverage guarantee. No theme assignment.
 
 ### 5.2 `generateSystemTraits()` — New
 
 For each system in each region:
 
 ```
-1. Determine trait count: randInt(rng, theme.min, theme.max)
-2. Build weight table: start with base weight (5) for all 29 traits,
-   overlay theme-specific weights from REGION_THEME_TRAIT_WEIGHTS
-3. For each trait slot:
+1. Determine trait count: randInt(rng, TRAIT_COUNT.min, TRAIT_COUNT.max)
+2. Build uniform weight table: weight 1 for all 42 traits (no theme bias)
+3. FIRST TRAIT (guaranteed strong-affinity roll):
+   a. Filter to only traits with at least one strong (value 2) affinity
+   b. weightedPick(rng, filteredWeights) → traitId
+   c. Remove picked trait from weights (no duplicates)
+   d. Roll quality: weightedPick(rng, { 1: 50, 2: 35, 3: 15 })
+   e. Store { traitId, quality }
+4. REMAINING TRAITS (from full pool):
    a. weightedPick(rng, weights) → traitId
    b. Remove picked trait from weights (no duplicates)
    c. Roll quality: weightedPick(rng, { 1: 50, 2: 35, 3: 15 })
    d. Store { traitId, quality }
 ```
+
+The guaranteed strong-affinity first roll ensures every system has a clear economy signal. No system falls through to fallback logic.
 
 Output: `GeneratedTrait[]` per system.
 
@@ -447,62 +351,29 @@ export interface GeneratedSystem {
 
 ### 5.3 `deriveEconomyTypes()` — New
 
-For each system, score all 6 economy types against its traits:
+For each system, score all 6 economy types using **strong affinities only** (value 2):
 
 ```
 For each economyType:
-  score = sum of (traitAffinity[economyType] × quality) for all system traits
+  score = sum of (quality) for all system traits WHERE traitAffinity[economyType] === 2
 
 Winner = economyType with highest score
-Tiebreaker = region theme preference (optional small bonus table)
+Tiebreaker = seeded random selection (no theme bias)
 ```
 
-**Tiebreaker table** — small bonus when theme aligns with economy type:
+Minor affinities (value 1) are ignored for derivation. They still affect production modifiers and serve as flavour connections.
 
-```typescript
-export const THEME_ECONOMY_TIEBREAKER: Record<RegionTheme, Partial<Record<EconomyType, number>>> = {
-  garden_heartland:    { agricultural: 1 },
-  mineral_frontier:    { extraction: 1 },
-  industrial_corridor: { industrial: 1 },
-  research_cluster:    { tech: 1 },
-  energy_belt:         { refinery: 1 },
-  trade_nexus:         { core: 1 },
-  contested_frontier:  {},  // no preference — mixed
-  frontier_wilds:      { extraction: 1 },
-};
-```
+**Edge case — no strong affinity**: With the guaranteed strong-affinity first roll (§5.2), this should never occur. If it does (e.g., a system somehow has only `dark_nebula`), fallback to extraction.
 
-The tiebreaker only matters for exact ties. Trait affinity × quality dominates.
+### 5.4 `selectStartingSystem()` — Rewritten
 
-**Edge case — no affinity**: Systems with only "dark_nebula" (no economy affinity) or other zero-affinity combinations default to extraction (the baseline "just scraping by" economy).
-
-### 5.4 `enforceCoherence()` — New
-
-After all systems have derived economies, validate region coherence:
+Centrality-based selection (no theme dependency):
 
 ```
-For each region:
-  1. Count economy types across its systems
-  2. Find dominant economy (most common)
-  3. If dominant < 60% of systems:
-     → Re-roll traits for borderline systems (those where top-2 economy scores are close)
-     → Only re-roll up to the minimum needed to hit 60%
-     → Re-roll uses same theme weights, so results are still thematic
-  4. If all systems have the same economy (monotonous):
-     → Force one non-gateway system to a secondary economy
-     → Pick the system with the strongest secondary affinity
-  5. Gateway systems exempt — their economy is whatever traits give them
-```
-
-**Note on starting system**: No special protection needed during coherence enforcement. `selectStartingSystem()` runs *after* coherence and picks the best core system from the final results. Trade nexus theme weights virtually guarantee at least one core system exists.
-
-**Implementation note**: Coherence enforcement should be rare if trait weights are tuned well. Log when it fires so we can tune weights to minimize intervention.
-
-### 5.5 `selectStartingSystem()` — Minor update
-
-```
-Filter: region.theme === "trade_nexus" → system.economyType === "core"
-Fallback: any region → core economy → nearest region center
+1. Find region closest to map center (mapSize/2, mapSize/2)
+2. Within that region, find systems with core economy
+3. Pick the core system closest to the region center
+4. Fallback: if no core system, pick system closest to region center regardless of economy
 ```
 
 ---
@@ -528,7 +399,7 @@ const traitBonus = system.traits.reduce((sum, t) => {
 const effectiveRate = baseRate * (1 + traitBonus);
 ```
 
-**Data loading**: The economy processor already loads system data per-region. Add a join to include `SystemTrait` records. Since traits are immutable, they're excellent candidates for caching (but not required at 200 systems).
+**Data loading**: The economy processor already loads system data per-region. Add a join to include `SystemTrait` records. Since traits are immutable, they're excellent candidates for caching (but not required at 600 systems).
 
 ### Consumption — unchanged
 
@@ -621,11 +492,11 @@ Example: *"A dense, mineral-rich asteroid belt dominates this system, complement
 
 **Current**: Region identity shown as-is ("Trade Hub", "Resource Rich").
 
-**New**: Region theme displayed ("Trade Nexus", "Mineral Frontier", etc.).
+**New**: Region name displayed with neutral slate palette. Economy shown as small coloured label using `ECONOMY_LABEL_COLOR` lookup (derived from `ECONOMY_BADGE_COLOR` pattern).
 
 **Dominant economy label**: The most common economy type among a region's systems, stored as `dominantEconomy` on the Region model. Computed once at seed time.
 
-Displayed as a subtitle: *"Trade Nexus — Core Economy"*.
+Displayed as a subtitle: *"Arcturus — Core Economy"*.
 
 **Layer 2 note**: When faction conquest changes a system's economy (via government affinity nudge, see design doc §2.2), `Region.dominantEconomy` must be re-derived. This is tracked in `MIGRATION-NOTES.md` §1.
 
@@ -671,9 +542,9 @@ Traits are read-only, immutable, and always returned with system data. No separa
 
 ### Unit tests (Vitest)
 
-- **Trait generation**: Given a theme and RNG seed, produces expected trait distributions
-- **Affinity scoring**: Given specific traits, derives correct economy type
-- **Coherence enforcement**: Edge cases — all same economy, no clear winner, gateway exemptions
+- **Trait generation**: Given an RNG seed, produces expected trait distributions
+- **Guaranteed strong-affinity roll**: First trait always has at least one strong (value 2) affinity
+- **Affinity scoring**: Given specific traits, derives correct economy type using strong affinities only
 - **Production modifiers**: Verify trait bonuses apply correctly in economy processor math
 - **Quality distribution**: Over 1000 rolls, distribution matches 50/35/15 targets (±5%)
 
@@ -681,8 +552,9 @@ Traits are read-only, immutable, and always returned with system data. No separa
 
 - **Distribution validation**: Run generation across 20+ seeds. Verify:
   - Trait rarity: ~50% quality 1, ~35% quality 2, ~15% quality 3
-  - Economy type distribution: no type dominates or is absent globally
-  - Region coherence: every region hits 60% threshold, no monotonous regions
+  - Economy type distribution: no type dominates or is absent globally, reasonably even spread
+  - Every system has at least one strong-affinity trait
+  - No economy type accounts for >30% or <10% of systems (approximate targets for 6 types)
 - **Economy comparison**: Run 500-tick simulation on old vs new generation. Compare:
   - Price distributions, trade route profitability, mission generation rates
   - New generation should produce similar macro-economics but more local variety
@@ -701,30 +573,40 @@ Traits are read-only, immutable, and always returned with system data. No separa
 ### New files
 | File | Purpose |
 |---|---|
-| `lib/constants/traits.ts` | TraitDefinition, TRAITS record, QUALITY_TIERS |
-| `lib/engine/trait-gen.ts` | Pure functions: generateSystemTraits, deriveEconomyType, enforceCoherence |
+| `lib/constants/traits.ts` | TraitDefinition, TRAITS record (42 traits), QUALITY_TIERS |
+| `lib/engine/trait-gen.ts` | Pure functions: generateSystemTraits (with guaranteed strong roll), deriveEconomyType (strong-affinity-only) |
 | `components/ui/trait-list.tsx` | Trait display component (stars, name, description) |
+| `scripts/validate-distributions.ts` | Multi-seed distribution validation script |
 
 ### Modified files
 | File | What changes |
 |---|---|
-| `lib/types/game.ts` | Add TraitId, TraitCategory, QualityTier, RegionTheme. Remove RegionIdentity |
-| `lib/types/guards.ts` | Add toTraitId, toQualityTier, toRegionTheme guards. Update toRegionIdentity → toRegionTheme |
-| `lib/constants/universe-gen.ts` | REGION_THEMES replaces REGION_IDENTITIES. Theme weight tables replace identity weight tables. Name prefixes updated |
-| `lib/engine/universe-gen.ts` | generateRegions uses themes. generateSystems calls trait gen + economy derivation. GeneratedSystem gains traits |
+| `lib/types/game.ts` | Add TraitId, TraitCategory, QualityTier. Delete RegionTheme. Remove identity from RegionInfo |
+| `lib/types/guards.ts` | Add toTraitId, toQualityTier guards. Delete REGION_THEMES, toRegionTheme, ALL_REGION_THEMES |
+| `lib/constants/universe-gen.ts` | Delete 4 theme exports. Add REGION_NAMES (flat pool), TRAIT_COUNT. REGION_COUNT 8→24, MAP_SIZE 4000→7000 |
+| `lib/constants/ui.ts` | Delete REGION_THEME_BADGE_COLOR |
+| `lib/engine/trait-gen.ts` | Simplified `generateSystemTraits(rng)` — no theme param, uniform TRAIT_COUNT |
+| `lib/engine/universe-gen.ts` | Simplified signatures, centrality-based starting system, uniform government |
 | `lib/tick/processors/economy.ts` | Production rates modified by trait bonuses |
-| `lib/services/universe.ts` | System queries include traits |
+| `lib/services/universe.ts` | System queries include traits, remove identity from region select |
 | `lib/types/api.ts` | SystemTraitResponse type, system detail response includes traits |
-| `prisma/schema.prisma` | SystemTrait model, Region.identity type docs, StarSystem.traits relation |
+| `prisma/schema.prisma` | SystemTrait model, remove identity from Region, StarSystem.traits relation |
 | `prisma/seed.ts` | Write SystemTrait records, use new generation output |
-| `app/(game)/system/[systemId]/` | Show traits section |
-| `app/(game)/map/` | Tooltip updates, region label updates |
+| `components/map/region-node.tsx` | Neutral slate palette, economy-coloured label |
+| `lib/hooks/use-map-graph.ts` | Remove identity from node data |
+| `lib/engine/simulator/` | Remove identity from types, world, runner |
+| `scripts/simulate.ts` | Remove Identity column |
+| `scripts/validate-distributions.ts` | Update generateUniverse call, use region.name |
+| `app/(game)/system/[systemId]/` | Show traits section, remove identity display |
 
 ### Deleted / replaced
 | What | Why |
 |---|---|
-| `RegionIdentity` type | Replaced by `RegionTheme` |
-| `REGION_IDENTITIES` array | Replaced by `REGION_THEMES` |
+| `RegionTheme` type + guards | Themes removed entirely — regions are neutral |
+| `REGION_THEMES`, `REGION_NAME_PREFIXES` | Replaced by flat `REGION_NAMES` pool |
+| `GOVERNMENT_TYPE_WEIGHTS` | Uniform 25% distribution |
+| `REGION_THEME_TRAIT_COUNT` | Uniform `TRAIT_COUNT = { min: 2, max: 4 }` |
+| `REGION_THEME_BADGE_COLOR` | Neutral slate palette for all regions |
 | `ECONOMY_TYPE_WEIGHTS` table | Economy types now derived from traits, not picked from weights |
 
 ---
@@ -733,42 +615,66 @@ Traits are read-only, immutable, and always returned with system data. No separa
 
 Ordered steps. Each phase produces a testable artifact.
 
-### Phase 1: Constants & types
-- Define TraitId, TraitCategory, QualityTier, RegionTheme types
-- Build TRAITS constant with all 29 definitions
+### Phase 1: Constants & types ✅
+- Define TraitId, TraitCategory, QualityTier types
+- Build TRAITS constant with 29 initial definitions
 - Build QUALITY_TIERS constant
-- Add guards (toTraitId, toQualityTier, toRegionTheme)
-- **Test**: Type-check passes, guards work
+- Add guards (toTraitId, toQualityTier)
+- RegionIdentity → RegionTheme rename
 
-### Phase 2: Generation engine
+### Phase 2: Generation engine ✅
 - Implement generateSystemTraits() — trait rolling per system
-- Implement deriveEconomyType() — affinity scoring
-- Implement enforceCoherence() — region validation
+- Implement deriveEconomyType() — affinity scoring (all affinities)
+- Implement enforceCoherence() — region validation (60% threshold)
 - Update generateRegions() for themes
 - Wire into generateSystems() / generateUniverse()
-- **Test**: Vitest — distribution validation, economy derivation, coherence edge cases
 
-### Phase 3: Schema & seed
+### Phase 3: Schema & seed ✅
 - Add SystemTrait model to Prisma schema
-- Update Region.identity docs for themes
+- Update Region model for themes, add dominantEconomy
 - Update seed script to write traits
 - Run `prisma db push` + `prisma db seed`
-- **Test**: Seed completes, traits in DB, economy types derived correctly
 
-### Phase 4: Economy processor
-- Wire trait production modifiers into economy tick
+### Phase 4: Economy processor ✅
+- Wire trait production modifiers into economy tick (real + simulator)
 - Load traits in economy processor region query
-- **Test**: Simulator run — economy still healthy, trait-rich systems produce more
 
-### Phase 5: UI
-- Build trait display component
-- Add traits to system detail page
-- Update map tooltips and region labels
-- Generate system descriptions from traits
-- **Test**: Manual — browse map, check system pages, verify traits display correctly
+### Phase 5: UI ✅
+- Build TraitList component (full + compact variants, quality stars)
+- Add traits card to system detail page overview
+- Add compact traits to map system detail panel
+- Show dominant economy on region nodes
 
-### Phase 6: Validation & tuning
-- Run simulator experiments across multiple seeds
-- Compare old vs new economy distributions
-- Tune weights if distributions are off
+### Phase 6: Validation — revealed design issue ✅
+- Built multi-seed distribution validation script (`scripts/validate-distributions.ts`)
+- Validated across 25 seeds: quality tiers on target (49.5/35.3/15.2)
+- **Issue found**: 36% of regions fail 60% coherence threshold
+- Root cause: enforcing economy clustering via coherence is fighting the trait diversity that makes systems interesting
+- Decision: rework derivation to use strong affinities only, add 13 new traits for balance, remove coherence enforcement
+
+### Phase 7: Generation rework ✅
+- Add 13 new traits to `lib/constants/traits.ts` (42 total)
+- Add 13 new TraitIds to `lib/types/game.ts` + guards
+- Update `generateSystemTraits()` — guaranteed strong-affinity first roll
+- Update `deriveEconomyType()` — strong affinities only (value 2), seeded random tiebreaker
+- Remove `enforceCoherence()` from generation pipeline
+- Flatten theme weights (2–3× bias, not 6×)
+- Remove `THEME_ECONOMY_TIEBREAKER` table
+- Re-run validation — even economy spread (14.3–18.6%, ideal 16.7%)
+- 405 tests passing, build clean
+
+### Phase 8: Theme removal & 24-region expansion ✅
+- Delete `RegionTheme` type, guards, and all theme-keyed constants
+- Expand from 8 → 24 regions (600 systems), MAP_SIZE 4000 → 7000
+- Flat `REGION_NAMES` pool (28 generic space names)
+- Uniform trait count `{ min: 2, max: 4 }` for all systems
+- Uniform government distribution (25% each)
+- Centrality-based starting system (region closest to map center → core economy)
+- Neutral slate UI palette for region nodes, economy-coloured labels
+- Remove `identity` from Region schema, all types, services, simulator, scripts
+- Re-seed: 24 regions, 600 systems, 1778 connections, 1787 traits
+- 403 tests passing, build clean
+
+### Phase 9: Documentation & PR
+- Update implementation doc and design spec
 - **Done**: PR to main

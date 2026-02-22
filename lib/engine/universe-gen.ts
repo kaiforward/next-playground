@@ -3,17 +3,16 @@
  * Deterministic given a seed value via mulberry32 PRNG.
  */
 
-import type { EconomyType, GovernmentType, RegionTheme } from "@/lib/types/game";
+import type { EconomyType, GovernmentType } from "@/lib/types/game";
 import { ALL_GOVERNMENT_TYPES } from "@/lib/types/guards";
 import type { GeneratedTrait } from "./trait-gen";
-import { generateSystemTraits, deriveEconomyType, enforceCoherence } from "./trait-gen";
+import { generateSystemTraits, deriveEconomyType } from "./trait-gen";
 
 // ── Output types ────────────────────────────────────────────────
 
 export interface GeneratedRegion {
   index: number;
   name: string;
-  identity: RegionTheme;
   governmentType: GovernmentType;
   x: number;
   y: number;
@@ -145,19 +144,16 @@ export class UnionFind {
 export function generateRegions(
   rng: RNG,
   params: GenParams,
-  identities: RegionTheme[],
-  namePrefixes: Record<RegionTheme, string[]>,
-  governmentWeights?: Record<RegionTheme, Record<GovernmentType, number>>,
+  names: string[],
 ): GeneratedRegion[] {
   const { regionCount, mapSize, regionMinDistance, maxPlacementAttempts } = params;
   const padding = mapSize * 0.15;
   const regions: GeneratedRegion[] = [];
 
-  // Track used name prefixes to avoid duplicates
+  // Track used names to avoid duplicates
   const usedNames = new Set<string>();
 
   for (let i = 0; i < regionCount; i++) {
-    const identity = identities[i % identities.length];
     let placed = false;
 
     // Rejection sampling: try random positions until one fits
@@ -170,18 +166,21 @@ export function generateRegions(
       );
       if (tooClose) continue;
 
-      // Pick a unique name
-      const pool = namePrefixes[identity];
-      let name = pool[randInt(rng, 0, pool.length - 1)];
+      // Pick a name sequentially from the flat pool
+      let name = names[i % names.length];
       if (usedNames.has(name)) {
         name = `${name}-${i + 1}`;
       }
       usedNames.add(name);
 
-      const governmentType: GovernmentType = governmentWeights
-        ? weightedPick(rng, governmentWeights[identity])
-        : "federation";
-      regions.push({ index: i, name, identity, governmentType, x, y });
+      // Uniform government: 25% each
+      const governmentType = weightedPick(rng, {
+        federation: 1,
+        corporate: 1,
+        authoritarian: 1,
+        frontier: 1,
+      } as Record<GovernmentType, number>) as GovernmentType;
+      regions.push({ index: i, name, governmentType, x, y });
       placed = true;
       break;
     }
@@ -195,49 +194,44 @@ export function generateRegions(
       const x = padding + col * cellSize + cellSize / 2 + (rng() - 0.5) * cellSize * 0.3;
       const y = padding + row * cellSize + cellSize / 2 + (rng() - 0.5) * cellSize * 0.3;
 
-      const pool = namePrefixes[identity];
-      let name = pool[randInt(rng, 0, pool.length - 1)];
+      let name = names[i % names.length];
       if (usedNames.has(name)) {
         name = `${name}-${i + 1}`;
       }
       usedNames.add(name);
 
-      const governmentType: GovernmentType = governmentWeights
-        ? weightedPick(rng, governmentWeights[identity])
-        : "federation";
-      regions.push({ index: i, name, identity, governmentType, x, y });
+      const governmentType = weightedPick(rng, {
+        federation: 1,
+        corporate: 1,
+        authoritarian: 1,
+        frontier: 1,
+      } as Record<GovernmentType, number>) as GovernmentType;
+      regions.push({ index: i, name, governmentType, x, y });
     }
   }
 
   // Government coverage guarantee: ensure every government type appears at least once
-  if (governmentWeights) {
-    const allGovTypes = ALL_GOVERNMENT_TYPES;
-    const present = new Set(regions.map((r) => r.governmentType));
-    const missing = allGovTypes.filter((g) => !present.has(g));
+  const allGovTypes = ALL_GOVERNMENT_TYPES;
+  const present = new Set(regions.map((r) => r.governmentType));
+  const missing = allGovTypes.filter((g) => !present.has(g));
 
-    for (const missingGov of missing) {
-      // Count how many regions have each government type
-      const govCounts = new Map<string, number>();
-      for (const r of regions) {
-        govCounts.set(r.governmentType, (govCounts.get(r.governmentType) ?? 0) + 1);
-      }
-
-      // Only consider regions whose government type is duplicated (count > 1)
-      const candidates = regions.filter(
-        (r) => (govCounts.get(r.governmentType) ?? 0) > 1,
-      );
-
-      if (candidates.length === 0) continue; // safety: can't swap without duplicates
-
-      // Pick the candidate with the highest weight affinity for the missing type
-      candidates.sort((a, b) => {
-        const wA = governmentWeights[a.identity]?.[missingGov] ?? 0;
-        const wB = governmentWeights[b.identity]?.[missingGov] ?? 0;
-        return wB - wA;
-      });
-
-      candidates[0].governmentType = missingGov;
+  for (const missingGov of missing) {
+    // Count how many regions have each government type
+    const govCounts = new Map<string, number>();
+    for (const r of regions) {
+      govCounts.set(r.governmentType, (govCounts.get(r.governmentType) ?? 0) + 1);
     }
+
+    // Only consider regions whose government type is duplicated (count > 1)
+    const candidates = regions.filter(
+      (r) => (govCounts.get(r.governmentType) ?? 0) > 1,
+    );
+
+    if (candidates.length === 0) continue; // safety: can't swap without duplicates
+
+    // Pick a random candidate to swap
+    const swapIdx = Math.floor(rng() * candidates.length);
+    candidates[swapIdx].governmentType = missingGov;
   }
 
   return regions;
@@ -259,8 +253,8 @@ export function generateSystems(
     let localIndex = 0;
 
     for (let s = 0; s < systemsPerRegion; s++) {
-      const traits = generateSystemTraits(rng, region.identity);
-      const economyType = deriveEconomyType(traits, region.identity);
+      const traits = generateSystemTraits(rng);
+      const economyType = deriveEconomyType(traits, rng);
 
       let placed = false;
       for (let attempt = 0; attempt < maxPlacementAttempts; attempt++) {
@@ -542,34 +536,29 @@ export function generateConnections(
 export function selectStartingSystem(
   systems: GeneratedSystem[],
   regions: GeneratedRegion[],
+  mapSize: number,
 ): number {
-  // Find first trade_nexus region
-  const tradeHub = regions.find((r) => r.identity === "trade_nexus");
-  if (!tradeHub) {
-    // Fallback: first region, closest to its center
-    const region = regions[0];
-    const regionSystems = systems.filter((s) => s.regionIndex === region.index);
-    let best = regionSystems[0];
-    let bestDist = distance(best.x, best.y, region.x, region.y);
-    for (const sys of regionSystems) {
-      const d = distance(sys.x, sys.y, region.x, region.y);
-      if (d < bestDist) {
-        best = sys;
-        bestDist = d;
-      }
+  // Find region closest to map center
+  const center = mapSize / 2;
+  let centralRegion = regions[0];
+  let bestRegionDist = distance(centralRegion.x, centralRegion.y, center, center);
+  for (const r of regions) {
+    const d = distance(r.x, r.y, center, center);
+    if (d < bestRegionDist) {
+      centralRegion = r;
+      bestRegionDist = d;
     }
-    return best.index;
   }
 
-  // Find the core-type system closest to the trade_hub center
-  const hubSystems = systems.filter((s) => s.regionIndex === tradeHub.index);
-  const coreSystems = hubSystems.filter((s) => s.economyType === "core");
-  const candidates = coreSystems.length > 0 ? coreSystems : hubSystems;
+  // Within the central region, prefer core economy systems closest to region center
+  const regionSystems = systems.filter((s) => s.regionIndex === centralRegion.index);
+  const coreSystems = regionSystems.filter((s) => s.economyType === "core");
+  const candidates = coreSystems.length > 0 ? coreSystems : regionSystems;
 
   let best = candidates[0];
-  let bestDist = distance(best.x, best.y, tradeHub.x, tradeHub.y);
+  let bestDist = distance(best.x, best.y, centralRegion.x, centralRegion.y);
   for (const sys of candidates) {
-    const d = distance(sys.x, sys.y, tradeHub.x, tradeHub.y);
+    const d = distance(sys.x, sys.y, centralRegion.x, centralRegion.y);
     if (d < bestDist) {
       best = sys;
       bestDist = d;
@@ -582,21 +571,15 @@ export function selectStartingSystem(
 
 export function generateUniverse(
   params: GenParams,
-  identities: RegionTheme[],
-  namePrefixes: Record<RegionTheme, string[]>,
-  governmentWeights?: Record<RegionTheme, Record<GovernmentType, number>>,
+  names: string[],
 ): GeneratedUniverse {
   const rng = mulberry32(params.seed);
 
-  const regions = generateRegions(rng, params, identities, namePrefixes, governmentWeights);
+  const regions = generateRegions(rng, params, names);
   const rawSystems = generateSystems(rng, regions, params);
   const { connections, systems } = generateConnections(rng, rawSystems, regions, params);
 
-  // Enforce region coherence (60% dominant economy, no monotonous regions)
-  const regionThemes = new Map(regions.map((r) => [r.index, r.identity]));
-  enforceCoherence(rng, systems, regionThemes);
-
-  const startingSystemIndex = selectStartingSystem(systems, regions);
+  const startingSystemIndex = selectStartingSystem(systems, regions, params.mapSize);
 
   return { regions, systems, connections, startingSystemIndex };
 }

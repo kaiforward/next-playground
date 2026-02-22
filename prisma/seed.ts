@@ -7,9 +7,7 @@ import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
 import type { GoodEquilibrium } from "@/lib/constants/goods";
 import {
   UNIVERSE_GEN,
-  REGION_THEMES,
-  REGION_NAME_PREFIXES,
-  GOVERNMENT_TYPE_WEIGHTS,
+  REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { toEconomyType } from "@/lib/types/guards";
@@ -37,12 +35,7 @@ async function main() {
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
   };
 
-  const universe = generateUniverse(
-    params,
-    REGION_THEMES,
-    REGION_NAME_PREFIXES,
-    GOVERNMENT_TYPE_WEIGHTS,
-  );
+  const universe = generateUniverse(params, REGION_NAMES);
 
   console.log(
     `  Generated: ${universe.regions.length} regions, ${universe.systems.length} systems, ${universe.connections.length} connections`,
@@ -93,7 +86,6 @@ async function main() {
     const created = await prisma.region.create({
       data: {
         name: region.name,
-        identity: region.identity,
         governmentType: region.governmentType,
         x: region.x,
         y: region.y,
