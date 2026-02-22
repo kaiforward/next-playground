@@ -213,7 +213,7 @@ Strategic interest comes from **trait quality and scarcity** (rare tier-3 traits
 
 #### No Coherence Enforcement
 
-There is **no minimum percentage** for economy type distribution within a region. The generation relies on the balanced strong affinity pool (§2.1) and guaranteed strong-affinity first roll to produce naturally varied regions. With uniform trait weights and 42 traits balanced across 6 economy types (5–6 strong affinities each), economy spread is naturally even (~16% each ±3%).
+There is **no minimum percentage** for economy type distribution within a region. The generation relies on the balanced strong affinity pool (§2.1) and guaranteed strong-affinity first roll to produce naturally varied regions. With uniform trait weights and 45 traits balanced across 6 economy types (5–6 strong affinities each), economy spread is naturally even (~16% each ±3%).
 
 - Gateway systems can have any economy — their value is strategic position, not production
 - Faction homeworld systems are always core economy (enforced when factions ship in Layer 2 — not relevant to initial generation, where the player starting system is selected *after* generation from existing core systems)

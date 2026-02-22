@@ -10,7 +10,7 @@ export type RegionNavigationState = "origin" | "reachable" | "unreachable";
 
 export interface RegionNodeData {
   label: string;
-  dominantEconomy?: EconomyType;
+  dominantEconomy: EconomyType;
   systemCount: number;
   shipCount: number;
   navigationState?: RegionNavigationState;
@@ -51,9 +51,7 @@ export function RegionNode({ data }: NodeProps<Node<RegionNodeData>>) {
 
       <div className={regionNode({ navigationState })}>
         <div className="text-base font-bold leading-tight">{label}</div>
-        {dominantEconomy && (
-          <EconomyBadge economyType={dominantEconomy} className="mt-1 text-[10px] px-2 py-0" />
-        )}
+        <EconomyBadge economyType={dominantEconomy} className="mt-1 text-[10px] px-2 py-0" />
         <div className="text-[11px] mt-1 text-white/50">
           {systemCount} system{systemCount !== 1 ? "s" : ""}
         </div>

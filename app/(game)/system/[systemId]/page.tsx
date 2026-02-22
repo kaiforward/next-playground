@@ -12,6 +12,7 @@ import { TraitList } from "@/components/ui/trait-list";
 import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { getPriceTrendPct } from "@/lib/utils/market";
+import { enrichTraits } from "@/lib/utils/traits";
 
 function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { fleet } = useFleet();
@@ -20,7 +21,10 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { data: universeData } = useUniverse();
 
   const systemInfo = universeData?.systems.find((s) => s.id === systemId);
-  const traits = systemInfo?.traits ?? [];
+  const traits = useMemo(
+    () => enrichTraits(systemInfo?.traits ?? []),
+    [systemInfo?.traits],
+  );
 
   const systemEvents = useMemo(
     () => events.filter((e) => e.systemId === systemId),

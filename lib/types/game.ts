@@ -84,7 +84,7 @@ export type Hazard = "none" | "low" | "high";
 export interface RegionInfo {
   id: string;
   name: string;
-  dominantEconomy?: EconomyType;
+  dominantEconomy: EconomyType;
   x: number;
   y: number;
 }

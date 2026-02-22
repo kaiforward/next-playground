@@ -23,7 +23,7 @@ Each region has:
 
 ### System Traits
 
-Every system has **2–4 traits** — permanent physical properties (stars, planets, moons, orbital features, resource deposits, anomalies) that define the system's character and economic potential. 42 traits across 5 categories: planetary, orbital, resource, phenomena, legacy.
+Every system has **2–4 traits** — permanent physical properties (stars, planets, moons, orbital features, resource deposits, anomalies) that define the system's character and economic potential. 45 traits across 5 categories: planetary, orbital, resource, phenomena, legacy.
 
 Each trait has:
 - **Quality tier** (1–3): Marginal, Solid, Exceptional. Rolled at generation with rarity weights: 50% tier 1, 35% tier 2, 15% tier 3
@@ -32,7 +32,7 @@ Each trait has:
 
 **Trait generation**: The first trait is guaranteed to have at least one strong (value 2) economy affinity, ensuring every system has a clear economy signal. Remaining traits are drawn from the full pool with uniform weights. No duplicate traits on a system.
 
-**Strong affinity balance**: 42 traits distribute strong affinities evenly across 6 economy types (5–6 strong affinities each: tech 6, agricultural 6, extraction 5, industrial 5, refinery 5, core 5). This produces naturally even economy distributions without enforcement.
+**Strong affinity balance**: 45 traits distribute strong affinities evenly across 6 economy types (5–6 strong affinities each: tech 6, agricultural 6, extraction 5, industrial 5, refinery 5, core 5). This produces naturally even economy distributions without enforcement.
 
 ### Economy Derivation
 

@@ -36,7 +36,7 @@ export const QUALITY_TIERS: Record<
 
 // ── Trait catalog ─────────────────────────────────────────────────
 //
-// 42 traits across 5 categories. Economy affinities and production
+// 45 traits across 5 categories. Economy affinities and production
 // goods match the design doc (system-enrichment.md §1.1).
 // Strong affinities (2) drive economy derivation; minor (1) are
 // flavour and production bonuses only.

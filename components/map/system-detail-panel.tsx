@@ -8,6 +8,7 @@ import { EconomyBadge } from "@/components/ui/economy-badge";
 import type { StarSystemInfo, ShipState, ActiveEvent } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
+import { enrichTraits } from "@/lib/utils/traits";
 
 interface GatewayTarget {
   regionId: string;
@@ -131,7 +132,7 @@ export function SystemDetailPanel({
             <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
               Traits
             </h3>
-            <TraitList traits={system.traits} variant="compact" />
+            <TraitList traits={enrichTraits(system.traits)} variant="compact" />
           </div>
         )}
 

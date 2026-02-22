@@ -317,7 +317,7 @@ For each system in each region:
 
 ```
 1. Determine trait count: randInt(rng, TRAIT_COUNT.min, TRAIT_COUNT.max)
-2. Build uniform weight table: weight 1 for all 42 traits (no theme bias)
+2. Build uniform weight table: weight 1 for all 45 traits (no theme bias)
 3. FIRST TRAIT (guaranteed strong-affinity roll):
    a. Filter to only traits with at least one strong (value 2) affinity
    b. weightedPick(rng, filteredWeights) → traitId
@@ -573,7 +573,7 @@ Traits are read-only, immutable, and always returned with system data. No separa
 ### New files
 | File | Purpose |
 |---|---|
-| `lib/constants/traits.ts` | TraitDefinition, TRAITS record (42 traits), QUALITY_TIERS |
+| `lib/constants/traits.ts` | TraitDefinition, TRAITS record (45 traits), QUALITY_TIERS |
 | `lib/engine/trait-gen.ts` | Pure functions: generateSystemTraits (with guaranteed strong roll), deriveEconomyType (strong-affinity-only) |
 | `components/ui/trait-list.tsx` | Trait display component (stars, name, description) |
 | `scripts/validate-distributions.ts` | Multi-seed distribution validation script |
