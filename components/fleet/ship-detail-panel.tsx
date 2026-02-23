@@ -32,9 +32,11 @@ interface ShipDetailPanelProps {
   regions?: RegionInfo[];
   playerCredits?: number;
   deliverableMissions?: TradeMissionInfo[];
+  /** When the ship is in a convoy, display name and disable Navigate. */
+  convoyName?: string;
 }
 
-export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, deliverableMissions }: ShipDetailPanelProps) {
+export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, deliverableMissions, convoyName }: ShipDetailPanelProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
@@ -86,6 +88,12 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
                 </Badge>
               )}
             </StatRow>
+
+            {convoyName && (
+              <StatRow label="Convoy">
+                <span className="text-sm text-cyan-300">{convoyName}</span>
+              </StatRow>
+            )}
 
             <StatRow label="Location">
               <div className="flex flex-wrap items-center gap-2">
@@ -203,7 +211,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
 
       {/* Actions */}
       {isDocked && (
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           {!ship.disabled && (
             <>
               <Button
@@ -214,14 +222,26 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               >
                 Market
               </Button>
-              <Button
-                href={`/map?shipId=${ship.id}`}
-                variant="action"
-                color="indigo"
-                className="flex-1"
-              >
-                Navigate
-              </Button>
+              {convoyName ? (
+                <Button
+                  variant="action"
+                  color="indigo"
+                  className="flex-1 opacity-50 cursor-not-allowed"
+                  disabled
+                  title="Navigate via convoy"
+                >
+                  Navigate via convoy
+                </Button>
+              ) : (
+                <Button
+                  href={`/map?shipId=${ship.id}`}
+                  variant="action"
+                  color="indigo"
+                  className="flex-1"
+                >
+                  Navigate
+                </Button>
+              )}
             </>
           )}
           {needsFuel && !ship.disabled && playerCredits != null && (

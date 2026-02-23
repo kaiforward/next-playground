@@ -15,9 +15,10 @@ export function useTickInvalidation() {
 
   useEffect(() => {
     const unsubs = [
-      // Ship arrivals → refresh fleet and market data
+      // Ship arrivals → refresh fleet, convoys, and market data
       subscribeToEvent("shipArrived", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+        queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
         queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
       }),
       // Economy ticks → refresh market data

@@ -6,6 +6,7 @@ import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { usePlayerMissions } from "@/lib/hooks/use-player-missions";
+import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
 import { PageContainer } from "@/components/ui/page-container";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ function ShipDetailContent({ shipId }: { shipId: string }) {
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
   const { missions } = usePlayerMissions();
+  const { convoys } = useConvoys();
 
   // ?from=system-{id} → back to system page; fallback to dashboard
   const from = searchParams.get("from");
@@ -26,6 +28,9 @@ function ShipDetailContent({ shipId }: { shipId: string }) {
     : "/dashboard";
 
   const ship = fleet.ships.find((s) => s.id === shipId);
+  const shipConvoy = ship?.convoyId
+    ? convoys.find((c) => c.id === ship.convoyId)
+    : undefined;
 
   if (!ship) {
     return (
@@ -51,6 +56,7 @@ function ShipDetailContent({ shipId }: { shipId: string }) {
         currentTick={currentTick}
         regions={universeData.regions}
         playerCredits={fleet.credits}
+        convoyName={shipConvoy?.name ?? (shipConvoy ? "Convoy" : undefined)}
         deliverableMissions={
           ship.status === "docked"
             ? missions.filter((m) => {

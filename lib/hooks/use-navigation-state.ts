@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { ShipState, StarSystemInfo } from "@/lib/types/game";
+import type { StarSystemInfo } from "@/lib/types/game";
+import type { NavigableUnit } from "@/lib/types/navigable";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import {
   findReachableSystems,
@@ -15,13 +16,13 @@ import {
 export type NavigationMode =
   | { phase: "default" }
   | {
-      phase: "ship_selected";
-      ship: ShipState;
+      phase: "unit_selected";
+      unit: NavigableUnit;
       reachable: Map<string, ReachableSystem>;
     }
   | {
       phase: "route_preview";
-      ship: ShipState;
+      unit: NavigableUnit;
       destination: StarSystemInfo;
       route: PathResult;
       reachable: Map<string, ReachableSystem>;
@@ -31,42 +32,46 @@ interface UseNavigationStateOptions {
   connections: ConnectionInfo[];
   systems: StarSystemInfo[];
   onNavigateShip: (shipId: string, route: string[]) => Promise<void>;
+  onNavigateConvoy?: (convoyId: string, route: string[]) => Promise<void>;
 }
 
 export function useNavigationState({
   connections,
   systems,
   onNavigateShip,
+  onNavigateConvoy,
 }: UseNavigationStateOptions) {
   const [mode, setMode] = useState<NavigationMode>({ phase: "default" });
   const [isNavigating, setIsNavigating] = useState(false);
 
-  const selectShip = useCallback(
-    (ship: ShipState) => {
+  const selectUnit = useCallback(
+    (unit: NavigableUnit) => {
       const reachable = findReachableSystems(
-        ship.systemId,
-        ship.fuel,
+        unit.systemId,
+        unit.fuel,
         connections,
+        unit.speed,
       );
-      setMode({ phase: "ship_selected", ship, reachable });
+      setMode({ phase: "unit_selected", unit, reachable });
     },
     [connections],
   );
 
   const selectDestination = useCallback(
     (system: StarSystemInfo) => {
-      if (mode.phase !== "ship_selected") return;
+      if (mode.phase !== "unit_selected") return;
 
       const route = findShortestPath(
-        mode.ship.systemId,
+        mode.unit.systemId,
         system.id,
         connections,
+        mode.unit.speed,
       );
       if (!route) return;
 
       setMode({
         phase: "route_preview",
-        ship: mode.ship,
+        unit: mode.unit,
         destination: system,
         route,
         reachable: mode.reachable,
@@ -80,12 +85,16 @@ export function useNavigationState({
 
     setIsNavigating(true);
     try {
-      await onNavigateShip(mode.ship.id, mode.route.path);
+      if (mode.unit.kind === "convoy" && onNavigateConvoy) {
+        await onNavigateConvoy(mode.unit.id, mode.route.path);
+      } else if (mode.unit.kind === "ship") {
+        await onNavigateShip(mode.unit.id, mode.route.path);
+      }
       setMode({ phase: "default" });
     } finally {
       setIsNavigating(false);
     }
-  }, [mode, onNavigateShip]);
+  }, [mode, onNavigateShip, onNavigateConvoy]);
 
   const cancel = useCallback(() => {
     setMode({ phase: "default" });
@@ -93,7 +102,7 @@ export function useNavigationState({
 
   return {
     mode,
-    selectShip,
+    selectUnit,
     selectDestination,
     confirmNavigation,
     cancel,

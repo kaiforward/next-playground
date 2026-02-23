@@ -136,6 +136,17 @@ export type ConvoyMemberResponse = ApiResponse<ConvoyState>;
 export interface ConvoyNavigateRequest { route: string[] }
 export type ConvoyNavigateResponse = ApiResponse<{ convoy: ConvoyState; fuelUsed: number; travelDuration: number }>;
 
+// ── Convoy trade types ─────────────────────────────────────────
+
+export interface ConvoyTradeResult { updatedMarket: MarketEntry }
+export type ConvoyTradeResponse = ApiResponse<ConvoyTradeResult>;
+
+// ── Convoy repair types ────────────────────────────────────────
+
+export interface ConvoyRepairRequest { fraction: number }
+export interface ConvoyRepairResult { totalCost: number; totalHealed: number }
+export type ConvoyRepairResponse = ApiResponse<ConvoyRepairResult>;
+
 // ── Upgrade types ───────────────────────────────────────────────
 
 export interface InstallUpgradeRequest { slotId: string; moduleId: string; tier?: number }

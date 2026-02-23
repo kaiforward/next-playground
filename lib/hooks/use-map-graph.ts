@@ -6,6 +6,7 @@ import type {
   UniverseData,
   StarSystemInfo,
   ShipState,
+  ConvoyState,
   RegionInfo,
   ActiveEvent,
 } from "@/lib/types/game";
@@ -31,6 +32,7 @@ const EDGE_REGION = "rgba(148, 163, 184, 0.5)";
 interface UseMapGraphOptions {
   universe: UniverseData;
   ships: ShipState[];
+  convoys: ConvoyState[];
   events: ActiveEvent[];
   viewLevel: MapViewLevel;
   selectedSystem: StarSystemInfo | null;
@@ -47,6 +49,7 @@ export interface MapGraphData {
   activeRegionSystems: StarSystemInfo[];
   // Detail panel data
   shipsAtSelected: ShipState[];
+  convoysAtSelected: ConvoyState[];
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
@@ -60,6 +63,7 @@ export interface MapGraphData {
 export function useMapGraph({
   universe,
   ships,
+  convoys,
   events,
   viewLevel,
   selectedSystem,
@@ -108,15 +112,26 @@ export function useMapGraph({
     return map;
   }, [universe.systems]);
 
-  // ── Ships docked at selected system ───────────────────────────
+  // ── Solo ships docked at selected system (excludes convoy members) ──
   const shipsAtSelected = useMemo(
     () =>
       selectedSystem
         ? ships.filter(
-            (s) => s.status === "docked" && s.systemId === selectedSystem.id,
+            (s) => s.status === "docked" && s.systemId === selectedSystem.id && !s.convoyId,
           )
         : [],
     [selectedSystem, ships],
+  );
+
+  // ── Convoys docked at selected system ──────────────────────────
+  const convoysAtSelected = useMemo(
+    () =>
+      selectedSystem
+        ? convoys.filter(
+            (c) => c.status === "docked" && c.systemId === selectedSystem.id,
+          )
+        : [],
+    [selectedSystem, convoys],
   );
 
   // ── Events per system (deduplicated, with color + priority) ───
@@ -155,12 +170,12 @@ export function useMapGraph({
   > => {
     const states = new Map<string, "origin" | "reachable" | "unreachable">();
     if (mode.phase === "default") return states;
-    const { ship, reachable } = mode;
+    const { unit, reachable } = mode;
 
-    const shipRegionId = systemRegionMap.get(ship.systemId);
+    const unitRegionId = systemRegionMap.get(unit.systemId);
 
     for (const region of universe.regions) {
-      if (region.id === shipRegionId) {
+      if (region.id === unitRegionId) {
         states.set(region.id, "origin");
       } else {
         const hasReachable = universe.systems.some(
@@ -177,8 +192,8 @@ export function useMapGraph({
     const states = new Map<string, NavigationNodeState>();
     if (viewLevel.level !== "system") return states;
 
-    if (mode.phase === "ship_selected") {
-      const originId = mode.ship.systemId;
+    if (mode.phase === "unit_selected") {
+      const originId = mode.unit.systemId;
       for (const system of activeRegionSystems) {
         if (system.id === originId) {
           states.set(system.id, "origin");
@@ -189,7 +204,7 @@ export function useMapGraph({
         }
       }
     } else if (mode.phase === "route_preview") {
-      const originId = mode.ship.systemId;
+      const originId = mode.unit.systemId;
       const destId = mode.destination.id;
       const routeSet = new Set(mode.route.path);
 
@@ -385,6 +400,7 @@ export function useMapGraph({
     edges,
     activeRegionSystems,
     shipsAtSelected,
+    convoysAtSelected,
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,

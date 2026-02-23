@@ -30,6 +30,7 @@ function SystemLayoutContent({
     { label: "Overview", href: basePath, active: pathname === basePath },
     { label: "Market", href: `${basePath}/market`, active: pathname.startsWith(`${basePath}/market`) },
     { label: "Ships", href: `${basePath}/ships`, active: pathname.startsWith(`${basePath}/ships`) },
+    { label: "Convoys", href: `${basePath}/convoys`, active: pathname.startsWith(`${basePath}/convoys`) },
     { label: "Shipyard", href: `${basePath}/shipyard`, active: pathname.startsWith(`${basePath}/shipyard`) },
     { label: "Contracts", href: `${basePath}/contracts`, active: pathname.startsWith(`${basePath}/contracts`) },
   ];

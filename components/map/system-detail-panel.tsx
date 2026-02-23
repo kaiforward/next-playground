@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EconomyBadge } from "@/components/ui/economy-badge";
-import type { StarSystemInfo, ShipState, ActiveEvent } from "@/lib/types/game";
+import type { StarSystemInfo, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
+import type { NavigableUnit } from "@/lib/types/navigable";
+import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
 import { enrichTraits } from "@/lib/utils/traits";
@@ -18,11 +20,12 @@ interface GatewayTarget {
 interface SystemDetailPanelProps {
   system: StarSystemInfo | null;
   shipsHere: ShipState[];
+  convoysHere: ConvoyState[];
   currentTick: number;
   regionName?: string;
   gatewayTargetRegions?: GatewayTarget[];
   activeEvents?: ActiveEvent[];
-  onSelectShipForNavigation?: (ship: ShipState) => void;
+  onSelectUnitForNavigation?: (unit: NavigableUnit) => void;
   onJumpToRegion?: (regionId: string) => void;
   onClose: () => void;
 }
@@ -30,11 +33,12 @@ interface SystemDetailPanelProps {
 export function SystemDetailPanel({
   system,
   shipsHere,
+  convoysHere,
   currentTick,
   regionName,
   gatewayTargetRegions,
   activeEvents,
-  onSelectShipForNavigation,
+  onSelectUnitForNavigation,
   onJumpToRegion,
   onClose,
 }: SystemDetailPanelProps) {
@@ -139,52 +143,99 @@ export function SystemDetailPanel({
         {/* Active events */}
         {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
 
-        {/* Ships at this system */}
+        {/* Fleet at this system */}
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-            Your Ships Here
+            Your Fleet Here
           </h3>
-          {shipsHere.length === 0 ? (
+
+          {convoysHere.length === 0 && shipsHere.length === 0 ? (
             <p className="text-sm text-gray-500">No ships docked at this system.</p>
           ) : (
-            <ul className="space-y-2">
-              {shipsHere.map((ship) => (
-                <li
-                  key={ship.id}
-                  className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5"
-                >
-                  <div>
-                    <Link
-                      href={`/ship/${ship.id}?from=system-${system.id}`}
-                      className="text-sm font-medium text-white hover:text-blue-300 transition-colors"
+            <div className="space-y-3">
+              {/* Convoys */}
+              {convoysHere.length > 0 && (
+                <ul className="space-y-2">
+                  {convoysHere.map((convoy) => (
+                    <li
+                      key={convoy.id}
+                      className="py-2 px-3 rounded-lg bg-white/5"
                     >
-                      {ship.name}
-                    </Link>
-                    <div className="text-[10px] text-white/40">
-                      Fuel: {Math.round(ship.fuel)}/{ship.maxFuel}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {onSelectShipForNavigation && (
-                      <Button
-                        variant="pill"
-                        color="cyan"
-                        size="xs"
-                        onClick={() => onSelectShipForNavigation(ship)}
-                      >
-                        Navigate
-                      </Button>
-                    )}
-                    <Link
-                      href={`/system/${system.id}/market?shipId=${ship.id}`}
-                      className="text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-sm font-medium text-white">
+                            {convoy.name ?? "Convoy"}
+                          </span>
+                          <span className="text-[10px] text-white/40 ml-2">
+                            {convoy.members.length} ships
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {onSelectUnitForNavigation && (
+                            <Button
+                              variant="pill"
+                              color="cyan"
+                              size="xs"
+                              onClick={() => onSelectUnitForNavigation(convoyToNavigableUnit(convoy))}
+                            >
+                              Navigate
+                            </Button>
+                          )}
+                          <Link
+                            href={`/system/${system.id}/market?convoyId=${convoy.id}`}
+                            className="text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
+                          >
+                            Trade
+                          </Link>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Solo ships */}
+              {shipsHere.length > 0 && (
+                <ul className="space-y-2">
+                  {shipsHere.map((ship) => (
+                    <li
+                      key={ship.id}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5"
                     >
-                      Trade
-                    </Link>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <div>
+                        <Link
+                          href={`/ship/${ship.id}?from=system-${system.id}`}
+                          className="text-sm font-medium text-white hover:text-blue-300 transition-colors"
+                        >
+                          {ship.name}
+                        </Link>
+                        <div className="text-[10px] text-white/40">
+                          Fuel: {Math.round(ship.fuel)}/{ship.maxFuel}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {onSelectUnitForNavigation && (
+                          <Button
+                            variant="pill"
+                            color="cyan"
+                            size="xs"
+                            onClick={() => onSelectUnitForNavigation(shipToNavigableUnit(ship))}
+                          >
+                            Navigate
+                          </Button>
+                        )}
+                        <Link
+                          href={`/system/${system.id}/market?shipId=${ship.id}`}
+                          className="text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
+                        >
+                          Trade
+                        </Link>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </div>
 

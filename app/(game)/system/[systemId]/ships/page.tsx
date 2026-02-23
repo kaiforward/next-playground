@@ -16,7 +16,7 @@ function ShipsContent({ systemId }: { systemId: string }) {
   const { convoys } = useConvoys();
 
   const shipsHere = useMemo(
-    () => fleet.ships.filter((s) => s.status === "docked" && s.systemId === systemId),
+    () => fleet.ships.filter((s) => s.status === "docked" && s.systemId === systemId && !s.convoyId),
     [fleet, systemId],
   );
 

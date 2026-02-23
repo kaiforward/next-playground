@@ -127,7 +127,7 @@ function ConvoyCard({ convoy }: { convoy: ConvoyState }) {
   );
 }
 
-function CreateConvoySection({ ships, systemId }: { ships: ShipState[]; systemId?: string }) {
+export function CreateConvoySection({ ships, systemId }: { ships: ShipState[]; systemId?: string }) {
   const [selectedShips, setSelectedShips] = useState<Set<string>>(new Set());
   const createMutation = useCreateConvoyMutation();
 
