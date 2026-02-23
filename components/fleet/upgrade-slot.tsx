@@ -21,12 +21,13 @@ const SLOT_TYPE_COLORS: Record<string, "blue" | "amber" | "green" | "purple"> = 
 
 interface UpgradeSlotProps {
   slot: UpgradeSlotState;
-  onInstall: (slot: UpgradeSlotState) => void;
-  onRemove: (slotId: string) => void;
+  onInstall?: (slot: UpgradeSlotState) => void;
+  onRemove?: (slotId: string) => void;
   disabled?: boolean;
+  readOnly?: boolean;
 }
 
-export function UpgradeSlot({ slot, onInstall, onRemove, disabled }: UpgradeSlotProps) {
+export function UpgradeSlot({ slot, onInstall, onRemove, disabled, readOnly }: UpgradeSlotProps) {
   const mod = slot.moduleId ? MODULES[slot.moduleId as ModuleId] : null;
   const tierLabel = mod && slot.moduleTier ? mod.tiers.find((t) => t.tier === slot.moduleTier)?.label : null;
 
@@ -44,29 +45,31 @@ export function UpgradeSlot({ slot, onInstall, onRemove, disabled }: UpgradeSlot
           <span className="text-sm text-white/30 italic">Empty</span>
         )}
       </div>
-      <div className="flex gap-1 shrink-0 ml-2">
-        {mod ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-red-400 hover:text-red-300"
-            onClick={() => onRemove(slot.id)}
-            disabled={disabled}
-          >
-            Remove
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-blue-400 hover:text-blue-300"
-            onClick={() => onInstall(slot)}
-            disabled={disabled}
-          >
-            Install
-          </Button>
-        )}
-      </div>
+      {!readOnly && (
+        <div className="flex gap-1 shrink-0 ml-2">
+          {mod ? (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-red-400 hover:text-red-300"
+              onClick={() => onRemove?.(slot.id)}
+              disabled={disabled}
+            >
+              Remove
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-blue-400 hover:text-blue-300"
+              onClick={() => onInstall?.(slot)}
+              disabled={disabled}
+            >
+              Install
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

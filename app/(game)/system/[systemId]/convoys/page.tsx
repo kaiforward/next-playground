@@ -4,16 +4,31 @@ import { use, useMemo } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ConvoyDetailCard } from "@/components/fleet/convoy-detail-card";
-import { CreateConvoySection } from "@/components/fleet/convoy-panel";
+import { ConvoyShipDialog } from "@/components/fleet/convoy-ship-dialog";
+import { Button } from "@/components/ui/button";
+import { useDialog } from "@/components/ui/dialog";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
 function ConvoysContent({ systemId }: { systemId: string }) {
   const { fleet } = useFleet();
   const { convoys } = useConvoys();
+  const createDialog = useDialog();
 
   const convoysHere = useMemo(
     () => convoys.filter((c) => c.systemId === systemId),
     [convoys, systemId],
+  );
+
+  const availableShips = useMemo(
+    () =>
+      fleet.ships.filter(
+        (s) =>
+          s.systemId === systemId &&
+          s.status === "docked" &&
+          !s.convoyId &&
+          !s.disabled,
+      ),
+    [fleet.ships, systemId],
   );
 
   return (
@@ -30,15 +45,33 @@ function ConvoysContent({ systemId }: { systemId: string }) {
               key={convoy.id}
               convoy={convoy}
               playerCredits={fleet.credits}
+              ships={fleet.ships}
+              variant="summary"
             />
           ))}
         </div>
       )}
 
-      <CreateConvoySection
-        ships={fleet.ships}
-        systemId={systemId}
-      />
+      {availableShips.length >= 2 && (
+        <>
+          <Button
+            variant="action"
+            color="blue"
+            size="sm"
+            fullWidth
+            onClick={createDialog.onOpen}
+          >
+            Form New Convoy
+          </Button>
+
+          <ConvoyShipDialog
+            open={createDialog.open}
+            onClose={createDialog.onClose}
+            availableShips={availableShips}
+            mode="create"
+          />
+        </>
+      )}
     </div>
   );
 }

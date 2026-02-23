@@ -28,7 +28,7 @@ export function RepairDialog({ ship, playerCredits, open, onClose }: RepairDialo
   };
 
   return (
-    <Dialog open={open} onClose={onClose} modal className="bg-slate-900 rounded-xl p-6 w-80">
+    <Dialog open={open} onClose={onClose} modal size="sm">
       <h3 className="text-lg font-semibold text-white mb-4">Repair Ship</h3>
 
       <StatList className="mb-4">

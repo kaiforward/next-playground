@@ -4,7 +4,7 @@ import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { apiFetch, apiMutate, apiDelete } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
 import type { ConvoyState } from "@/lib/types/game";
-import type { CreateConvoyResult, ConvoyNavigateRequest, ConvoyRepairResult, ConvoyTradeResult, ShipTradeRequest } from "@/lib/types/api";
+import type { CreateConvoyResult, ConvoyNavigateRequest, ConvoyRepairResult, ConvoyRefuelResult, ConvoyTradeResult, ShipTradeRequest } from "@/lib/types/api";
 import type { MarketEntry, TradeType } from "@/lib/types/game";
 
 export function useConvoys() {
@@ -36,6 +36,20 @@ export function useDisbandConvoyMutation() {
   return useMutation({
     mutationFn: async (convoyId: string) => {
       return apiDelete<{ convoyId: string }>(`/api/game/convoy/${convoyId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
+      queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+    },
+  });
+}
+
+export function useAddMembersBatchMutation(convoyId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (shipIds: string[]) => {
+      return apiMutate<ConvoyState>(`/api/game/convoy/${convoyId}/members/batch`, { shipIds });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
@@ -123,6 +137,23 @@ export function useConvoyRepairMutation(convoyId: string) {
     mutationFn: async (fraction: number) => {
       return apiMutate<ConvoyRepairResult>(
         `/api/game/convoy/${convoyId}/repair`,
+        { fraction },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
+      queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+    },
+  });
+}
+
+export function useConvoyRefuelMutation(convoyId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (fraction: number) => {
+      return apiMutate<ConvoyRefuelResult>(
+        `/api/game/convoy/${convoyId}/refuel`,
         { fraction },
       );
     },

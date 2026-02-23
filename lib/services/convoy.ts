@@ -189,6 +189,76 @@ export async function addToConvoy(
   return { ok: true, data: result.data };
 }
 
+// ── Batch add ships to convoy ───────────────────────────────────
+
+export async function addMembersToConvoy(
+  playerId: string,
+  convoyId: string,
+  shipIds: string[],
+): Promise<ConvoyResult> {
+  if (!shipIds || shipIds.length < 1) {
+    return { ok: false, error: "At least one ship is required.", status: 400 };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const convoy = await tx.convoy.findUnique({
+      where: { id: convoyId },
+      select: { playerId: true, status: true, systemId: true },
+    });
+
+    if (!convoy || convoy.playerId !== playerId) {
+      return { ok: false as const, error: "Convoy not found.", status: 404 };
+    }
+
+    if (convoy.status !== "docked") {
+      return { ok: false as const, error: "Cannot modify a convoy in transit.", status: 400 };
+    }
+
+    const ships = await tx.ship.findMany({
+      where: { id: { in: shipIds }, playerId },
+      select: { id: true, status: true, systemId: true, disabled: true, convoyMember: true },
+    });
+
+    if (ships.length !== shipIds.length) {
+      return { ok: false as const, error: "One or more ships not found or not yours.", status: 404 };
+    }
+
+    const disabled = ships.find((s) => s.disabled);
+    if (disabled) {
+      return { ok: false as const, error: "Cannot add disabled ships to a convoy.", status: 400 };
+    }
+
+    const notDocked = ships.find((s) => s.status !== "docked");
+    if (notDocked) {
+      return { ok: false as const, error: "All ships must be docked.", status: 400 };
+    }
+
+    const wrongSystem = ships.find((s) => s.systemId !== convoy.systemId);
+    if (wrongSystem) {
+      return { ok: false as const, error: "All ships must be at the same system as the convoy.", status: 400 };
+    }
+
+    const inConvoy = ships.find((s) => s.convoyMember !== null);
+    if (inConvoy) {
+      return { ok: false as const, error: "One or more ships are already in a convoy.", status: 400 };
+    }
+
+    await tx.convoyMember.createMany({
+      data: shipIds.map((shipId) => ({ convoyId, shipId })),
+    });
+
+    const updated = await tx.convoy.findUnique({
+      where: { id: convoyId },
+      include: CONVOY_INCLUDE,
+    });
+
+    return { ok: true as const, data: serializeConvoy(updated!) };
+  });
+
+  if (!result.ok) return result;
+  return { ok: true, data: result.data };
+}
+
 // ── Remove ship from convoy ─────────────────────────────────────
 
 export async function removeFromConvoy(

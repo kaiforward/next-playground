@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { ShipState, RegionInfo, TradeMissionInfo, UpgradeSlotState } from "@/lib/types/game";
+import type { ShipState, RegionInfo, TradeMissionInfo } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
-import { useUpgradeMutations } from "@/lib/hooks/use-upgrade-mutations";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +13,6 @@ import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
 import { RepairDialog } from "./repair-dialog";
 import { UpgradeSlot } from "./upgrade-slot";
-import { UpgradeInstallDialog } from "./upgrade-install-dialog";
 import { DeliverableMissionsCard } from "@/components/missions/deliverable-missions-card";
 
 import { ROLE_COLORS } from "@/lib/constants/ships";
@@ -42,19 +39,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
 
   const refuelDialog = useDialog();
   const repairDialog = useDialog();
-  const [installSlot, setInstallSlot] = useState<UpgradeSlotState | null>(null);
-  const upgradeDialog = useDialog();
-  const { remove: removeUpgrade } = useUpgradeMutations(ship.id);
-
-  const handleInstallClick = (slot: UpgradeSlotState) => {
-    setInstallSlot(slot);
-    upgradeDialog.onOpen();
-  };
-
-  const handleInstallClose = () => {
-    setInstallSlot(null);
-    upgradeDialog.onClose();
-  };
 
   return (
     <div className="space-y-6">
@@ -155,24 +139,28 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
         </CardContent>
       </Card>
 
-      {/* Upgrade slots */}
+      {/* Upgrade slots (read-only) */}
       {ship.upgradeSlots.length > 0 && (
         <Card variant="bordered" padding="md">
           <CardHeader title="Upgrade Slots" subtitle={`${ship.upgradeSlots.filter((s) => s.moduleId).length} / ${ship.upgradeSlots.length} installed`} />
-          <CardContent>
+          <CardContent className="space-y-3">
             <div className="space-y-2">
               {ship.upgradeSlots.map((slot) => (
                 <UpgradeSlot
                   key={slot.id}
                   slot={slot}
-                  onInstall={handleInstallClick}
-                  onRemove={(slotId) => removeUpgrade.mutate(slotId)}
-                  disabled={!isDocked || ship.disabled || removeUpgrade.isPending}
+                  readOnly
                 />
               ))}
             </div>
-            {removeUpgrade.error && (
-              <p className="text-sm text-red-400 mt-2">{removeUpgrade.error.message}</p>
+            {isDocked && !ship.disabled && (
+              <Button
+                href={`/system/${ship.systemId}/shipyard/upgrades`}
+                variant="ghost"
+                size="sm"
+              >
+                Manage at Upgrade Bay &rarr;
+              </Button>
             )}
           </CardContent>
         </Card>
@@ -286,16 +274,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
         />
       )}
 
-      {/* Upgrade install dialog */}
-      {playerCredits != null && (
-        <UpgradeInstallDialog
-          shipId={ship.id}
-          slot={installSlot}
-          playerCredits={playerCredits}
-          open={upgradeDialog.open}
-          onClose={handleInstallClose}
-        />
-      )}
     </div>
   );
 }

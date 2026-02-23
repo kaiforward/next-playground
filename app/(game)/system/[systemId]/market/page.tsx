@@ -12,20 +12,16 @@ import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
 import { FormError } from "@/components/form/form-error";
-import { SelectInput } from "@/components/form/select-input";
+import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { QueryBoundary } from "@/components/ui/query-boundary";
-import type { TradeType, CargoItemState } from "@/lib/types/game";
+import type { TradeType } from "@/lib/types/game";
+import type { FleetUnitRef } from "@/lib/types/tradable";
+import { shipToTradableUnit, convoyToTradableUnit } from "@/lib/types/tradable";
 import { getCargoUsed } from "@/lib/utils/cargo";
+import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
 
-/**
- * Parsed selection from the unified ship/convoy dropdown.
- * Format: "ship:{id}" or "convoy:{id}" or "" for browse-only.
- */
-function parseSelection(value: string): { kind: "ship" | "convoy"; id: string } | null {
-  if (value.startsWith("ship:")) return { kind: "ship", id: value.slice(5) };
-  if (value.startsWith("convoy:")) return { kind: "convoy", id: value.slice(7) };
-  return null;
-}
+const fleetUnitRefKey = (ref: FleetUnitRef | null): string =>
+  ref ? `${ref.kind}:${ref.id}` : "";
 
 function MarketContent({ systemId }: { systemId: string }) {
   const searchParams = useSearchParams();
@@ -38,72 +34,39 @@ function MarketContent({ systemId }: { systemId: string }) {
   // Build initial selection from query params
   const initialShipId = searchParams.get("shipId");
   const initialConvoyId = searchParams.get("convoyId");
-  const initialSelection = initialShipId
-    ? `ship:${initialShipId}`
+  const initialRef: FleetUnitRef | null = initialShipId
+    ? { kind: "ship", id: initialShipId }
     : initialConvoyId
-      ? `convoy:${initialConvoyId}`
-      : "";
+      ? { kind: "convoy", id: initialConvoyId }
+      : null;
 
-  const [selectedValue, setSelectedValue] = useState(initialSelection);
+  const [selectedRef, setSelectedRef] = useState<FleetUnitRef | null>(initialRef);
   const [selectedGoodId, setSelectedGoodId] = useState<string | undefined>();
   const [tradeError, setTradeError] = useState<string | null>(null);
 
-  const selection = parseSelection(selectedValue);
-
   // Ships and convoys docked at this system
   const shipsHere = useMemo(
-    () => fleet.ships.filter((s) => s.status === "docked" && s.systemId === systemId && !s.convoyId),
+    () => getDockedShips(fleet.ships, systemId),
     [fleet, systemId],
   );
 
   const convoysHere = useMemo(
-    () => convoys.filter((c) => c.status === "docked" && c.systemId === systemId),
+    () => getDockedConvoys(convoys, systemId),
     [convoys, systemId],
   );
 
   // Resolve the selected trading unit's cargo info
   const tradingUnit = useMemo(() => {
-    if (!selection) return null;
+    if (!selectedRef) return null;
 
-    if (selection.kind === "ship") {
-      const ship = shipsHere.find((s) => s.id === selection.id);
-      if (!ship) return null;
-      return {
-        kind: "ship" as const,
-        id: ship.id,
-        name: ship.name,
-        cargoMax: ship.cargoMax,
-        cargo: ship.cargo,
-      };
+    if (selectedRef.kind === "ship") {
+      const ship = shipsHere.find((s) => s.id === selectedRef.id);
+      return ship ? shipToTradableUnit(ship) : null;
     }
 
-    const convoy = convoysHere.find((c) => c.id === selection.id);
-    if (!convoy) return null;
-
-    // Aggregate cargo across all member ships
-    const combinedCargo: CargoItemState[] = [];
-    const cargoMap = new Map<string, CargoItemState>();
-    for (const member of convoy.members) {
-      for (const item of member.cargo) {
-        const existing = cargoMap.get(item.goodId);
-        if (existing) {
-          existing.quantity += item.quantity;
-        } else {
-          const entry = { goodId: item.goodId, goodName: item.goodName, quantity: item.quantity };
-          cargoMap.set(item.goodId, entry);
-          combinedCargo.push(entry);
-        }
-      }
-    }
-
-    return {
-      kind: "convoy" as const,
-      id: convoy.id,
-      name: convoy.name ?? "Convoy",
-      cargoMax: convoy.combinedCargoMax,
-      cargo: combinedCargo,
-    };
-  }, [selection, shipsHere, convoysHere]);
+    const convoy = convoysHere.find((c) => c.id === selectedRef.id);
+    return convoy ? convoyToTradableUnit(convoy) : null;
+  }, [selectedRef, shipsHere, convoysHere]);
 
   // Mutation hooks (one for ships, one for convoys — only the active one fires)
   const shipTrade = useTradeMutation({
@@ -168,28 +131,17 @@ function MarketContent({ systemId }: { systemId: string }) {
   );
 
   // Build dropdown options
-  const dropdownOptions = useMemo(() => {
-    const options: { value: string; label: string }[] = [
-      { value: "", label: "Browse only" },
-    ];
-
-    for (const convoy of convoysHere) {
-      const name = convoy.name ?? "Convoy";
-      options.push({
-        value: `convoy:${convoy.id}`,
-        label: `${name} (${convoy.members.length} ships, ${convoy.combinedCargoMax} cargo)`,
-      });
-    }
-
-    for (const ship of shipsHere) {
-      options.push({
-        value: `ship:${ship.id}`,
-        label: `${ship.name} (${ship.cargoMax} cargo)`,
-      });
-    }
-
-    return options;
-  }, [shipsHere, convoysHere]);
+  const dropdownOptions = useMemo<SelectOption<FleetUnitRef | null>[]>(() => [
+    { value: null, label: "Browse only" },
+    ...convoysHere.map((c) => ({
+      value: { kind: "convoy" as const, id: c.id },
+      label: `${c.name ?? "Convoy"} (${c.members.length} ships, ${c.combinedCargoMax} cargo)`,
+    })),
+    ...shipsHere.map((s) => ({
+      value: { kind: "ship" as const, id: s.id },
+      label: `${s.name} (${s.cargoMax} cargo)`,
+    })),
+  ], [shipsHere, convoysHere]);
 
   const hasTraders = shipsHere.length > 0 || convoysHere.length > 0;
 
@@ -198,15 +150,16 @@ function MarketContent({ systemId }: { systemId: string }) {
       {/* Ship / convoy selector */}
       {hasTraders && (
         <div className="mb-6 max-w-sm">
-          <SelectInput
+          <SelectInput<FleetUnitRef | null>
             label="Trade with"
             size="md"
             options={dropdownOptions}
-            value={selectedValue}
-            onChange={(v) => {
-              setSelectedValue(v);
+            value={selectedRef}
+            onChange={(ref) => {
+              setSelectedRef(ref);
               setTradeError(null);
             }}
+            valueKey={fleetUnitRefKey}
             isSearchable={false}
           />
         </div>

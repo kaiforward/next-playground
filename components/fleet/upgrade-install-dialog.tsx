@@ -48,7 +48,7 @@ export function UpgradeInstallDialog({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} modal className="bg-slate-900 rounded-xl p-6 w-96 max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onClose={handleClose} modal size="sm" className="max-h-[80vh] overflow-y-auto">
       <h3 className="text-lg font-semibold text-white mb-1">Install Module</h3>
       <p className="text-xs text-white/40 mb-4 capitalize">{slot.slotType} slot</p>
 

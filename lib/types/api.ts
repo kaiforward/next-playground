@@ -131,6 +131,7 @@ export interface CreateConvoyResult { convoy: ConvoyState }
 export type CreateConvoyResponse = ApiResponse<CreateConvoyResult>;
 
 export interface ConvoyMemberRequest { shipId: string }
+export interface ConvoyBatchMemberRequest { shipIds: string[] }
 export type ConvoyMemberResponse = ApiResponse<ConvoyState>;
 
 export interface ConvoyNavigateRequest { route: string[] }
@@ -146,6 +147,12 @@ export type ConvoyTradeResponse = ApiResponse<ConvoyTradeResult>;
 export interface ConvoyRepairRequest { fraction: number }
 export interface ConvoyRepairResult { totalCost: number; totalHealed: number }
 export type ConvoyRepairResponse = ApiResponse<ConvoyRepairResult>;
+
+// ── Convoy refuel types ────────────────────────────────────────
+
+export interface ConvoyRefuelRequest { fraction: number }
+export interface ConvoyRefuelResult { totalCost: number; totalFueled: number }
+export type ConvoyRefuelResponse = ApiResponse<ConvoyRefuelResult>;
 
 // ── Upgrade types ───────────────────────────────────────────────
 

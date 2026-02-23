@@ -108,6 +108,11 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
               Trade
             </Button>
           )}
+          {isDocked && !ship.disabled && !ship.convoyId && (
+            <Button href={`/map?shipId=${ship.id}`} variant="action" color="indigo" size="sm">
+              Navigate
+            </Button>
+          )}
           {needsFuel && !ship.disabled && playerCredits != null && (
             <Button variant="pill" color="cyan" size="sm" onClick={refuelDialog.onOpen}>
               Refuel
