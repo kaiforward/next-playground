@@ -2,12 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import type { ShipState, StarSystemInfo } from "@/lib/types/game";
+import type { StarSystemInfo } from "@/lib/types/game";
+import type { NavigableUnit } from "@/lib/types/navigable";
 import type { PathResult } from "@/lib/engine/pathfinding";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
+import { hopDuration } from "@/lib/engine/travel";
 
 interface RoutePreviewPanelProps {
-  ship: ShipState;
+  unit: NavigableUnit;
   destination: StarSystemInfo;
   route: PathResult;
   connections: ConnectionInfo[];
@@ -30,7 +32,7 @@ function hopFuel(
 }
 
 export function RoutePreviewPanel({
-  ship,
+  unit,
   destination,
   route,
   connections,
@@ -42,7 +44,7 @@ export function RoutePreviewPanel({
   const systemNameMap = new Map(systems.map((s) => [s.id, s.name]));
   const getName = (id: string) => systemNameMap.get(id) ?? id;
 
-  // Build per-hop breakdown
+  // Build per-hop breakdown with speed-adjusted travel times
   const hops: { from: string; to: string; fuel: number; ticks: number }[] = [];
   for (let i = 0; i < route.path.length - 1; i++) {
     const fuel = hopFuel(route.path[i], route.path[i + 1], connections);
@@ -50,23 +52,27 @@ export function RoutePreviewPanel({
       from: route.path[i],
       to: route.path[i + 1],
       fuel,
-      ticks: Math.max(1, Math.ceil(fuel / 2)),
+      ticks: hopDuration(fuel, unit.speed),
     });
   }
+
+  const subtitle = unit.kind === "convoy"
+    ? `${unit.name} (${unit.convoy.members.length} ships)`
+    : unit.name;
 
   return (
     <Dialog
       open
       onClose={onCancel}
       className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[380px] max-w-[calc(100%-2rem)]"
-      aria-label={`Route preview: ${ship.name} to ${destination.name}`}
+      aria-label={`Route preview: ${unit.name} to ${destination.name}`}
     >
       <div className="rounded-xl border border-white/10 bg-gray-900/95 backdrop-blur shadow-2xl">
         {/* Header */}
         <div className="px-4 py-3 border-b border-white/10">
           <h3 className="text-sm font-bold text-white">Route Preview</h3>
           <p className="text-xs text-white/40 mt-0.5">
-            {ship.name} &rarr; {destination.name}
+            {subtitle} &rarr; {destination.name}
           </p>
         </div>
 
@@ -114,7 +120,7 @@ export function RoutePreviewPanel({
             <div className="text-sm font-semibold text-white">
               {route.totalFuelCost}
               <span className="text-white/30 font-normal">
-                {" "}/ {Math.round(ship.fuel)}
+                {" "}/ {Math.round(unit.fuel)}
               </span>
             </div>
           </div>

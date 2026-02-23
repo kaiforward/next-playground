@@ -21,6 +21,8 @@ const progressBarVariants = tv({
       blue: { fill: "bg-blue-500" },
       amber: { fill: "bg-amber-500" },
       red: { fill: "bg-red-500" },
+      green: { fill: "bg-green-500" },
+      purple: { fill: "bg-purple-500" },
     },
   },
   defaultVariants: {

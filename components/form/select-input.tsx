@@ -3,7 +3,7 @@
 import Select, { type StylesConfig } from "react-select";
 import { tv, type VariantProps } from "tailwind-variants";
 
-export type SelectOption = { value: string; label: string };
+export type SelectOption<T = string> = { value: T; label: string };
 
 const selectInputVariants = tv({
   slots: {
@@ -30,12 +30,14 @@ const selectInputVariants = tv({
 
 type SelectInputVariants = VariantProps<typeof selectInputVariants>;
 
-interface SelectInputProps extends SelectInputVariants {
+interface SelectInputProps<T = string> extends SelectInputVariants {
   label?: string;
   error?: string;
-  options: SelectOption[];
-  value: string;
-  onChange: (value: string) => void;
+  options: SelectOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  /** Convert value to string for react-select's internal comparison. Required for non-primitive value types. */
+  valueKey?: (value: T) => string;
   placeholder?: string;
   isSearchable?: boolean;
   id?: string;
@@ -120,19 +122,22 @@ const darkStyles: StylesConfig<SelectOption, false> = {
   }),
 };
 
-export function SelectInput({
+export function SelectInput<T = string>({
   label,
   error,
   options,
   value,
   onChange,
+  valueKey,
   placeholder = "Select...",
   isSearchable = true,
   size,
   id,
-}: SelectInputProps) {
+}: SelectInputProps<T>) {
+  const toKey = valueKey ?? ((v: T) => String(v));
+  const currentKey = toKey(value);
   const styles = selectInputVariants({ size });
-  const selected = options.find((o) => o.value === value) ?? null;
+  const selected = options.find((o) => toKey(o.value) === currentKey) ?? null;
 
   return (
     <div>
@@ -141,14 +146,17 @@ export function SelectInput({
           {label}
         </label>
       )}
-      <Select<SelectOption, false>
+      <Select<SelectOption<T>, false>
         inputId={id}
         options={options}
         value={selected}
-        onChange={(opt) => onChange(opt?.value ?? "")}
+        onChange={(opt) => {
+          if (opt) onChange(opt.value);
+        }}
+        getOptionValue={(o) => toKey(o.value)}
         placeholder={placeholder}
         isSearchable={isSearchable}
-        styles={darkStyles}
+        styles={darkStyles as unknown as StylesConfig<SelectOption<T>, false>}
         menuPortalTarget={typeof document !== "undefined" ? document.body : null}
       />
       {error && <p className={styles.error()}>{error}</p>}

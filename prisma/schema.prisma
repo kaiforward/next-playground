@@ -91,6 +91,7 @@ model Player {
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   ships         Ship[]
+  convoys       Convoy[]
   tradeMissions TradeMission[]
 }
 
@@ -102,6 +103,17 @@ model Ship {
   fuel                Float    @default(100)
   maxFuel             Float    @default(100)
   cargoMax            Int      @default(50)
+  speed               Int      @default(5)
+  hullMax             Int      @default(40)
+  hullCurrent         Int      @default(40)
+  shieldMax           Int      @default(10)
+  shieldCurrent       Int      @default(10)
+  firepower           Int      @default(2)
+  evasion             Int      @default(6)
+  stealth             Int      @default(3)
+  sensors             Int      @default(4)
+  crewCapacity        Int      @default(2)
+  disabled            Boolean  @default(false)
   status              String   @default("docked")
   systemId            String
   destinationSystemId String?
@@ -110,12 +122,57 @@ model Ship {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  system      StarSystem  @relation("ShipCurrentSystem", fields: [systemId], references: [id])
-  destination StarSystem? @relation("ShipDestination", fields: [destinationSystemId], references: [id])
-  cargo       CargoItem[]
+  player        Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  system        StarSystem       @relation("ShipCurrentSystem", fields: [systemId], references: [id])
+  destination   StarSystem?      @relation("ShipDestination", fields: [destinationSystemId], references: [id])
+  cargo         CargoItem[]
+  upgradeSlots  ShipUpgradeSlot[]
+  convoyMember  ConvoyMember?
 
   @@index([playerId])
+}
+
+model ShipUpgradeSlot {
+  id         String  @id @default(cuid())
+  shipId     String
+  slotType   String  // "engine" | "cargo" | "defence" | "systems"
+  slotIndex  Int     // 0-based index within slotType
+  moduleId   String? // null = empty slot
+  moduleTier Int?    // null = empty slot
+
+  ship Ship @relation(fields: [shipId], references: [id], onDelete: Cascade)
+
+  @@unique([shipId, slotType, slotIndex])
+  @@index([shipId])
+}
+
+model Convoy {
+  id                  String   @id @default(cuid())
+  playerId            String
+  name                String?
+  systemId            String
+  status              String   @default("docked") // "docked" | "in_transit"
+  destinationSystemId String?
+  departureTick       Int?
+  arrivalTick         Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  player      Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  system      StarSystem      @relation("ConvoyCurrentSystem", fields: [systemId], references: [id])
+  destination StarSystem?     @relation("ConvoyDestination", fields: [destinationSystemId], references: [id])
+  members     ConvoyMember[]
+
+  @@index([playerId])
+}
+
+model ConvoyMember {
+  id       String @id @default(cuid())
+  convoyId String
+  shipId   String @unique // a ship can only be in one convoy
+
+  convoy Convoy @relation(fields: [convoyId], references: [id], onDelete: Cascade)
+  ship   Ship   @relation(fields: [shipId], references: [id], onDelete: Cascade)
 }
 
 model CargoItem {
@@ -145,6 +202,8 @@ model StarSystem {
   traits            SystemTrait[]
   ships             Ship[]             @relation("ShipCurrentSystem")
   incomingShips     Ship[]             @relation("ShipDestination")
+  convoys           Convoy[]           @relation("ConvoyCurrentSystem")
+  incomingConvoys   Convoy[]           @relation("ConvoyDestination")
   connectionsFrom   SystemConnection[] @relation("FromSystem")
   connectionsTo     SystemConnection[] @relation("ToSystem")
   events            GameEvent[]

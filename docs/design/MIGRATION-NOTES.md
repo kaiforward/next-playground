@@ -22,19 +22,17 @@ Enriches the physical universe that everything else builds on. No new gameplay s
 
 **What changes**: World generation pipeline. Economy type assignment moves from top-down (region identity) to bottom-up (trait affinity scoring). Active docs affected: universe.md, economy.md (production modifiers gain trait quality multipliers).
 
-### Layer 1 — Fleet Expansion
+### Layer 1 — Fleet Expansion (**Done**)
 
-Expands what players fly and how travel works. Builds on enriched systems (shipyard/drydock tiers are trait-gated) but can be implemented with stub facility data if Layer 0 isn't fully complete.
+Expanded what players fly and how travel works.
 
-| System | What it does | Depends on |
+| System | What it does | Status |
 |---|---|---|
-| [Ship Roster](./planned/ship-roster.md) | 2 → 12 ship classes, 2 → 10 stats, size/role system, combat power | Layer 0 (shipyard tiers) |
-| [Ship Upgrades](./planned/ship-upgrades.md) | 12 modules (4 slot types), hybrid tier model, fixed slot layouts per ship class, faction-exclusive modules, cost/upkeep model | Ship Roster |
-| [Navigation Changes](./planned/navigation-changes.md) §1–3 | Convoys, speed-based travel, ship stats in danger pipeline | Ship Roster |
+| ~~Ship Roster~~ | 2 → 12 ship classes, 2 → 10 stats, size/role system | **Done** — 12 classes with full stat blocks, 3 sizes, 5 roles |
+| ~~Ship Upgrades~~ | 12 modules (4 slot types), hybrid tier model, fixed slot layouts | **Done** — tiered + capability modules, install/remove services + UI |
+| ~~Navigation Changes §1–3~~ | Convoys, speed-based travel, ship stats in danger pipeline | **Done** — convoy CRUD + navigate + trade + repair, speed formula, danger pipeline with diminishing returns, hull/shield damage |
 
-**Why second**: Ships are the player's primary asset. Expanding the roster creates the fleet composition decisions that make convoys, automation, and faction-gating meaningful. The danger pipeline gains depth from ship stats without requiring factions.
-
-**What changes**: Navigation.md ship section entirely replaced. Travel time becomes speed-dependent. Danger pipeline gains hull/stealth/evasion modifiers. Constants expand (ship definitions, upgrade definitions).
+**What shipped**: Navigation.md fully rewritten. 12 ship types, upgrade modules, convoys (CRUD, navigate, trade, repair), speed-based travel, 5-stage danger pipeline (added hull/shield damage stage), escort protection (all ships contribute firepower), NavigableUnit abstraction for unified ship/convoy navigation UX. Simulator updated. Facility gating and faction-exclusive ships deferred to Layer 2.
 
 ### Layer 2 — Political Layer
 
@@ -172,19 +170,15 @@ Specific items where a planned system replaces or modifies an active implementat
 
 ---
 
-### 3. Ship Types: 2 → 12, Stats: 2 → 10
+### ~~3. Ship Types: 2 → 12, Stats: 2 → 10~~ — **Resolved (Layer 1)**
 
-**Active** (navigation.md): 2 ship types (Shuttle, Freighter) with 2 stats (fuel capacity, cargo capacity).
-
-**Planned** (ship-roster.md): 12 ship classes with 10 stats. Ship stats modify the danger pipeline (ship-roster.md §4.3). Convoy mechanics added (navigation-changes.md §1). Speed stat replaces fixed travel time formula (navigation-changes.md §2).
-
-**Key deltas**: Navigation.md ship section entirely replaced. Danger pipeline gains ship stat modifiers. Travel time becomes speed-dependent. Convoy grouping added.
+Implemented. 12 ship classes with 10 stats, upgrade modules, convoys, speed-based travel, ship stats in danger pipeline. navigation.md fully rewritten.
 
 ---
 
 ### 5. Universe Scale: 200 → 1,000-2,000 Systems
 
-**Active** (universe.md): 200 systems, 8 regions, 25 per region.
+**Active** (universe.md): 600 systems, 24 regions, 25 per region.
 
 **Planned** (faction-system.md §7): 1,000-2,000 systems across faction territories.
 

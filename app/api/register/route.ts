@@ -5,6 +5,7 @@ import { registerSchema } from "@/lib/schemas/auth";
 import { rateLimit, getClientIp } from "@/lib/api/rate-limit";
 import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
 import { SHIP_TYPES } from "@/lib/constants/ships";
+import { buildShipData, buildUpgradeSlots } from "@/lib/engine/ship-factory";
 
 export async function POST(request: Request) {
   const limited = rateLimit({
@@ -64,6 +65,10 @@ export async function POST(request: Request) {
     }
 
     // Create user, player, and starter ship in a transaction
+    const shuttleDef = SHIP_TYPES.shuttle;
+    const shipData = buildShipData(shuttleDef, "Starter Ship");
+    const slotData = buildUpgradeSlots(shuttleDef.slotLayout);
+
     const user = await prisma.user.create({
       data: {
         name,
@@ -74,13 +79,9 @@ export async function POST(request: Request) {
             credits: 1000,
             ships: {
               create: {
-                name: "Starter Ship",
-                shipType: "shuttle",
-                fuel: SHIP_TYPES.shuttle.fuel,
-                maxFuel: SHIP_TYPES.shuttle.fuel,
-                cargoMax: SHIP_TYPES.shuttle.cargo,
+                ...shipData,
                 systemId: startingSystem.id,
-                status: "docked",
+                upgradeSlots: { create: slotData },
               },
             },
           },

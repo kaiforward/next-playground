@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { validateRefuel } from "@/lib/engine/refuel";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
+import { SHIP_INCLUDE } from "./fleet";
 import type { ShipRefuelResult } from "@/lib/types/api";
 
 type RefuelResult =
@@ -80,11 +81,7 @@ export async function executeRefuel(
     return tx.ship.update({
       where: { id: shipId },
       data: { fuel: { increment: fuelToAdd } },
-      include: {
-        cargo: { include: { good: true } },
-        system: true,
-        destination: true,
-      },
+      include: SHIP_INCLUDE,
     });
   });
 

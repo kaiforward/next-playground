@@ -1,21 +1,22 @@
 "use client";
 
 import { use, useMemo } from "react";
-import Link from "next/link";
 import { useFleet } from "@/lib/hooks/use-fleet";
+import { useConvoys } from "@/lib/hooks/use-convoy";
 import { useMarket } from "@/lib/hooks/use-market";
 import { useEvents } from "@/lib/hooks/use-events";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
-import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
+import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
 
 function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { fleet } = useFleet();
+  const { convoys } = useConvoys();
   const { market } = useMarket(systemId);
   const { events } = useEvents();
   const { data: universeData } = useUniverse();
@@ -36,9 +37,15 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     [market],
   );
 
-  const shipsHere = fleet.ships.filter(
-    (s) => s.status === "docked" && s.systemId === systemId
+  const soloShips = useMemo(
+    () => getDockedShips(fleet.ships, systemId),
+    [fleet.ships, systemId],
   );
+  const dockedConvoys = useMemo(
+    () => getDockedConvoys(convoys, systemId),
+    [convoys, systemId],
+  );
+  const totalShips = soloShips.length + dockedConvoys.reduce((sum, c) => sum + c.members.length, 0);
 
   return (
     <>
@@ -63,33 +70,27 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Ships docked */}
+        {/* Fleet docked */}
         <Card variant="bordered" padding="md">
-          <CardHeader title="Ships Docked" subtitle={`${shipsHere.length} ship${shipsHere.length !== 1 ? "s" : ""}`} />
+          <CardHeader title="Fleet Here" subtitle={`${totalShips} ship${totalShips !== 1 ? "s" : ""} docked`} />
           <CardContent>
-            {shipsHere.length === 0 ? (
+            {soloShips.length === 0 && dockedConvoys.length === 0 ? (
               <p className="text-sm text-white/30 py-4 text-center">
                 No ships docked at this system.
               </p>
             ) : (
-              <ul className="space-y-2">
-                {shipsHere.map((ship) => (
-                  <li
-                    key={ship.id}
-                    className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5"
-                  >
-                    <Link
-                      href={`/ship/${ship.id}?from=system-${systemId}`}
-                      className="text-sm font-medium text-white hover:text-blue-300 transition-colors"
-                    >
-                      {ship.name}
-                    </Link>
-                    <Button href={`/system/${systemId}/market?shipId=${ship.id}`} variant="pill" color="indigo" size="xs">
-                      Trade
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-1">
+                {soloShips.length > 0 && (
+                  <p className="text-sm text-white/70">
+                    {soloShips.length} solo {soloShips.length === 1 ? "ship" : "ships"}
+                  </p>
+                )}
+                {dockedConvoys.length > 0 && (
+                  <p className="text-sm text-white/70">
+                    {dockedConvoys.length} {dockedConvoys.length === 1 ? "convoy" : "convoys"} ({dockedConvoys.reduce((sum, c) => sum + c.members.length, 0)} ships)
+                  </p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

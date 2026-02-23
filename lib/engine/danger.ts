@@ -1,6 +1,9 @@
 /**
  * Pure danger engine — deterministic functions for navigation danger and cargo loss.
  * No DB or constant imports. All randomness injected via `rng` parameter.
+ *
+ * Ship stats and upgrade bonuses are optional — omitting them preserves
+ * the original behavior for backward compatibility.
  */
 
 import type { ModifierRow } from "./events";
@@ -38,6 +41,16 @@ export const LEGALITY_CONSTANTS = {
   BASE_INSPECTION_CHANCE: 0.25,
 } as const;
 
+/** Diminishing-returns K-values for stat reductions per stage. */
+export const STAT_K_VALUES = {
+  /** Hull stat K for hazard severity reduction. */
+  HULL_HAZARD: 100,
+  /** Stealth stat K for contraband inspection avoidance. */
+  STEALTH_CONTRABAND: 10,
+  /** Evasion stat K for cargo loss probability reduction. */
+  EVASION_CARGO_LOSS: 10,
+} as const;
+
 // ── Types ────────────────────────────────────────────────────────
 
 export interface CargoLossEntry {
@@ -64,6 +77,32 @@ export interface ContrabandSeizedEntry {
   seized: number;
 }
 
+/** Optional ship stat + upgrade bonus parameters for danger pipeline stages. */
+export interface ShipDangerModifiers {
+  // Stage 1 (hazard): hull reduces severity
+  hullStat?: number;
+  armourBonus?: number;
+  reinforcedContainersBonus?: number;
+  // Stage 3 (contraband): stealth reduces inspection
+  stealthStat?: number;
+  hiddenCargoFraction?: number;
+  // Stage 4 (cargo loss): evasion reduces probability
+  evasionStat?: number;
+  manoeuvringBonus?: number;
+  pointDefenceReduction?: number;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+/**
+ * Diminishing returns: reduction = stat / (stat + K).
+ * Returns 0 for stat <= 0.
+ */
+export function diminishingReturn(stat: number, k: number): number {
+  if (stat <= 0) return 0;
+  return stat / (stat + k);
+}
+
 // ── Functions ────────────────────────────────────────────────────
 
 /**
@@ -87,19 +126,38 @@ export function aggregateDangerLevel(
 /**
  * Given danger level and cargo, roll for cargo loss.
  *
- * - If danger <= 0 or no cargo, returns [].
- * - Rolls rng() — if >= danger, no loss (returns []).
- * - On loss: each cargo item loses 20-40% (Math.ceil), clamped to quantity.
+ * Ship stat modifiers:
+ * - evasionStat: diminishing reduction to loss probability
+ * - manoeuvringBonus: additive evasion for the reduction calc
+ * - pointDefenceReduction: flat reduction to loss probability
+ *
+ * Without modifiers: identical to original behavior.
  */
 export function rollCargoLoss(
   danger: number,
   cargo: { goodId: string; quantity: number }[],
   rng: () => number,
+  mods?: ShipDangerModifiers,
 ): CargoLossEntry[] {
   if (danger <= 0 || cargo.length === 0) return [];
 
+  // Apply evasion stat reduction to danger (probability of loss)
+  let effectiveDanger = danger;
+  if (mods) {
+    const totalEvasion = (mods.evasionStat ?? 0) + (mods.manoeuvringBonus ?? 0);
+    const evasionReduction = diminishingReturn(totalEvasion, STAT_K_VALUES.EVASION_CARGO_LOSS);
+    effectiveDanger *= (1 - evasionReduction);
+
+    // Point defence: flat probability reduction
+    if (mods.pointDefenceReduction && mods.pointDefenceReduction > 0) {
+      effectiveDanger *= (1 - mods.pointDefenceReduction);
+    }
+  }
+
+  if (effectiveDanger <= 0) return [];
+
   // Roll for whether loss occurs
-  if (rng() >= danger) return [];
+  if (rng() >= effectiveDanger) return [];
 
   // Loss occurs — determine fraction
   const { MIN_LOSS_FRACTION, MAX_LOSS_FRACTION } = DANGER_CONSTANTS;
@@ -123,13 +181,17 @@ export function rollCargoLoss(
 /**
  * Roll for hazard incidents on cargo at arrival.
  *
- * Each hazardous cargo stack rolls independently. Non-hazardous goods (hazard: "none")
- * are never affected. Danger level compounds with the base chance.
+ * Ship stat modifiers:
+ * - hullStat + armourBonus: diminishing reduction to loss severity
+ * - reinforcedContainersBonus: fractional reduction to loss severity
+ *
+ * Without modifiers: identical to original behavior.
  */
 export function rollHazardIncidents(
   cargo: { goodId: string; quantity: number; hazard: "none" | "low" | "high" }[],
   dangerLevel: number,
   rng: () => number,
+  mods?: ShipDangerModifiers,
 ): HazardIncidentEntry[] {
   const entries: HazardIncidentEntry[] = [];
 
@@ -144,12 +206,27 @@ export function rollHazardIncidents(
     if (rng() >= effectiveChance) continue;
 
     // Incident — determine loss fraction
-    const minLoss = item.hazard === "high"
+    let minLoss = item.hazard === "high"
       ? HAZARD_CONSTANTS.HIGH_MIN_LOSS
       : HAZARD_CONSTANTS.LOW_MIN_LOSS;
-    const maxLoss = item.hazard === "high"
+    let maxLoss = item.hazard === "high"
       ? HAZARD_CONSTANTS.HIGH_MAX_LOSS
       : HAZARD_CONSTANTS.LOW_MAX_LOSS;
+
+    // Apply hull stat severity reduction (diminishing returns)
+    if (mods) {
+      const totalHull = (mods.hullStat ?? 0) + (mods.armourBonus ?? 0);
+      const hullReduction = diminishingReturn(totalHull, STAT_K_VALUES.HULL_HAZARD);
+      minLoss *= (1 - hullReduction);
+      maxLoss *= (1 - hullReduction);
+
+      // Reinforced containers: additional severity reduction
+      if (mods.reinforcedContainersBonus && mods.reinforcedContainersBonus > 0) {
+        minLoss *= (1 - mods.reinforcedContainersBonus);
+        maxLoss *= (1 - mods.reinforcedContainersBonus);
+      }
+    }
+
     const lossFraction = minLoss + rng() * (maxLoss - minLoss);
     const lost = Math.min(Math.ceil(item.quantity * lossFraction), item.quantity);
 
@@ -200,29 +277,49 @@ export function applyImportDuty(
 /**
  * Roll for contraband inspection at arrival. Full confiscation on detection.
  *
- * inspectionChance = BASE_INSPECTION_CHANCE × inspectionModifier.
- * If modifier is 0, returns [] immediately (no inspections).
+ * Ship stat modifiers:
+ * - stealthStat: diminishing reduction to inspection chance
+ * - hiddenCargoFraction: fraction of cargo hidden from inspection
+ *
+ * Without modifiers: identical to original behavior.
  */
 export function rollContrabandInspection(
   cargo: { goodId: string; quantity: number }[],
   contrabandGoods: string[],
   inspectionModifier: number,
   rng: () => number,
+  mods?: ShipDangerModifiers,
 ): ContrabandSeizedEntry[] {
   if (inspectionModifier <= 0 || contrabandGoods.length === 0) return [];
 
   const contrabandSet = new Set(contrabandGoods);
-  const inspectionChance = LEGALITY_CONSTANTS.BASE_INSPECTION_CHANCE * inspectionModifier;
+
+  // Apply stealth reduction to inspection chance
+  let effectiveInspectionChance = LEGALITY_CONSTANTS.BASE_INSPECTION_CHANCE * inspectionModifier;
+  if (mods) {
+    const stealthReduction = diminishingReturn(
+      mods.stealthStat ?? 0,
+      STAT_K_VALUES.STEALTH_CONTRABAND,
+    );
+    effectiveInspectionChance *= (1 - stealthReduction);
+  }
+
   const entries: ContrabandSeizedEntry[] = [];
 
   for (const item of cargo) {
     if (!contrabandSet.has(item.goodId) || item.quantity <= 0) continue;
 
-    if (rng() < inspectionChance) {
-      entries.push({
-        goodId: item.goodId,
-        seized: item.quantity,
-      });
+    if (rng() < effectiveInspectionChance) {
+      // Determine how much is visible (not hidden)
+      const hiddenFrac = mods?.hiddenCargoFraction ?? 0;
+      const visibleQty = Math.ceil(item.quantity * (1 - hiddenFrac));
+
+      if (visibleQty > 0) {
+        entries.push({
+          goodId: item.goodId,
+          seized: visibleQty,
+        });
+      }
     }
   }
 

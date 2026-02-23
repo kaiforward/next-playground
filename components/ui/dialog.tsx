@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { tv, VariantProps } from "tailwind-variants";
 
 /* ------------------------------------------------------------------ */
 /*  useDialog — convenience hook for open/close state                  */
@@ -19,8 +20,32 @@ export function useDialog(initialOpen = false) {
 /*  Dialog — native <dialog> wrapper (modal + non-modal)               */
 /* ------------------------------------------------------------------ */
 
-interface DialogProps
-  extends Omit<React.DialogHTMLAttributes<HTMLDialogElement>, "open"> {
+const dialogStyles = tv({
+  base: "",
+  variants: {
+    modal: {
+      true: "m-auto max-h-none max-w-none border-none p-6 rounded-xl bg-gray-900 border border-white/10 shadow-2xl backdrop:bg-black/60",
+      false: "m-0 max-h-none max-w-none border-none p-0 inset-auto"
+    },
+    size: {
+      sm: "",
+      md: "",
+      lg: ""
+    }
+  },
+  defaultVariants: {
+    size: 'lg'
+  },
+  compoundVariants: [
+    { modal: true, size: 'sm', className: "w-[480px]" },
+    { modal: true, size: 'md', className: "w-[780px]" },
+    { modal: true, size: 'lg', className: "w-[960px]" },
+  ]
+})
+
+type DialogProps
+  = Omit<React.DialogHTMLAttributes<HTMLDialogElement>, "open"> & 
+  VariantProps<typeof dialogStyles> & {
   /** Whether the dialog is visible. */
   open: boolean;
   /** Called when the dialog should close (Escape, cancel, etc.). */
@@ -38,6 +63,7 @@ export function Dialog({
   open,
   onClose,
   modal = false,
+  size,
   initialFocus,
   children,
   className,
@@ -96,18 +122,10 @@ export function Dialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [modal, open, onClose]);
 
-  // Non-modal needs m-0 + inset-auto for manual positioning.
-  // Modal should NOT set these — showModal() centers via UA styles
-  // (position: fixed; inset: 0; margin: auto) and overriding them
-  // breaks centering.
-  const baseClasses = modal
-    ? "m-auto max-h-none max-w-none border-none p-0 backdrop:bg-black/60"
-    : "m-0 max-h-none max-w-none border-none p-0 inset-auto";
-
   return (
     <dialog
       ref={dialogRef}
-      className={`${baseClasses} ${className ?? ""}`}
+      className={dialogStyles({ className, modal, size })}
       {...props}
     >
       {children}

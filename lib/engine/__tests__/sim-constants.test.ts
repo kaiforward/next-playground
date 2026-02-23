@@ -73,6 +73,12 @@ describe("SimConstants", () => {
         expect(c.ships[key]).toEqual({
           fuel: def.fuel,
           cargo: def.cargo,
+          speed: def.speed,
+          hullMax: def.hullMax,
+          shieldMax: def.shieldMax,
+          firepower: def.firepower,
+          evasion: def.evasion,
+          stealth: def.stealth,
           price: def.price,
         });
       }

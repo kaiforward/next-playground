@@ -3,8 +3,10 @@
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
+import { useConvoys } from "@/lib/hooks/use-convoy";
 import { PlayerSummary } from "@/components/dashboard/player-summary";
 import { FleetOverview } from "@/components/fleet/fleet-overview";
+import { ConvoyStatus } from "@/components/fleet/convoy-status";
 import { ActiveMissionsCard } from "@/components/missions/active-missions-card";
 import { PageContainer } from "@/components/ui/page-container";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -13,6 +15,7 @@ function FleetSection() {
   const { fleet } = useFleet();
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
+  const { convoys } = useConvoys();
 
   return (
     <>
@@ -29,6 +32,10 @@ function FleetSection() {
         regions={universeData.regions}
         playerCredits={fleet.credits}
       />
+
+      <div className="mt-8">
+        <ConvoyStatus convoys={convoys} />
+      </div>
     </>
   );
 }

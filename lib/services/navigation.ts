@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { validateFleetRouteNavigation } from "@/lib/engine/navigation";
+import { SHIP_INCLUDE } from "./fleet";
 import type { ShipNavigateResult } from "@/lib/types/api";
 
 type NavigationResult =
@@ -9,7 +10,8 @@ type NavigationResult =
 
 /**
  * Execute multi-hop navigation for a ship.
- * Preserves full TOCTOU transaction guard from the original route handler.
+ * Uses ship speed for travel time calculation.
+ * Preserves full TOCTOU transaction guard.
  */
 export async function executeNavigation(
   playerId: string,
@@ -37,11 +39,19 @@ export async function executeNavigation(
 
   const ship = await prisma.ship.findUnique({
     where: { id: shipId },
-    select: { id: true, playerId: true, fuel: true, status: true, systemId: true },
+    select: { id: true, playerId: true, fuel: true, speed: true, status: true, systemId: true, disabled: true, convoyMember: { select: { convoyId: true } } },
   });
 
   if (!ship || ship.playerId !== playerId) {
     return { ok: false, error: "Ship not found or does not belong to you.", status: 404 };
+  }
+
+  if (ship.convoyMember) {
+    return { ok: false, error: "This ship is in a convoy. Navigate via the convoy instead.", status: 400 };
+  }
+
+  if (ship.disabled) {
+    return { ok: false, error: "Ship is disabled and cannot navigate. Repair it first.", status: 400 };
   }
 
   if (route[0] !== ship.systemId) {
@@ -67,6 +77,7 @@ export async function executeNavigation(
     currentFuel: ship.fuel,
     shipStatus: ship.status as "docked" | "in_transit",
     currentTick: world.currentTick,
+    shipSpeed: ship.speed,
   });
 
   if (!result.ok) {
@@ -77,10 +88,10 @@ export async function executeNavigation(
   const updatedShip = await prisma.$transaction(async (tx) => {
     const freshShip = await tx.ship.findUnique({
       where: { id: shipId },
-      select: { status: true, fuel: true },
+      select: { status: true, fuel: true, disabled: true },
     });
 
-    if (!freshShip || freshShip.status !== "docked" || freshShip.fuel < result.totalFuelCost) {
+    if (!freshShip || freshShip.status !== "docked" || freshShip.disabled || freshShip.fuel < result.totalFuelCost) {
       return null;
     }
 
@@ -93,11 +104,7 @@ export async function executeNavigation(
         departureTick: result.departureTick,
         arrivalTick: result.arrivalTick,
       },
-      include: {
-        cargo: { include: { good: true } },
-        system: true,
-        destination: true,
-      },
+      include: SHIP_INCLUDE,
     });
   });
 

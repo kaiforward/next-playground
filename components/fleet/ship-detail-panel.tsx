@@ -11,7 +11,11 @@ import { StatList, StatRow } from "@/components/ui/stat-row";
 import { useDialog } from "@/components/ui/dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
+import { RepairDialog } from "./repair-dialog";
+import { UpgradeSlot } from "./upgrade-slot";
 import { DeliverableMissionsCard } from "@/components/missions/deliverable-missions-card";
+
+import { ROLE_COLORS } from "@/lib/constants/ships";
 
 interface ShipDetailPanelProps {
   ship: ShipState;
@@ -19,28 +23,55 @@ interface ShipDetailPanelProps {
   regions?: RegionInfo[];
   playerCredits?: number;
   deliverableMissions?: TradeMissionInfo[];
+  /** When the ship is in a convoy, display name and disable Navigate. */
+  convoyName?: string;
 }
 
-export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, deliverableMissions }: ShipDetailPanelProps) {
+export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, deliverableMissions, convoyName }: ShipDetailPanelProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
   const needsFuel = isDocked && ship.fuel < ship.maxFuel;
+  const isDamaged = ship.hullCurrent < ship.hullMax;
+  const hullPercent = ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100;
+  const shieldPercent = ship.shieldMax > 0 ? (ship.shieldCurrent / ship.shieldMax) * 100 : 100;
+
   const refuelDialog = useDialog();
+  const repairDialog = useDialog();
 
   return (
     <div className="space-y-6">
       {/* Ship info card */}
       <Card variant="bordered" padding="md">
-        <CardHeader title={ship.name} subtitle="Ship Details" />
+        <CardHeader
+          title={ship.name}
+          subtitle={
+            <span className="inline-flex items-center gap-2">
+              <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>
+                {ship.role}
+              </Badge>
+              <span className="capitalize text-white/40">{ship.size}</span>
+            </span>
+          }
+        />
         <CardContent className="space-y-4">
           <StatList>
             <StatRow label="Status">
-              <Badge color={isDocked ? "green" : "amber"}>
-                {isDocked ? "Docked" : "In Transit"}
-              </Badge>
+              {ship.disabled ? (
+                <Badge color="red">Disabled</Badge>
+              ) : (
+                <Badge color={isDocked ? "green" : "amber"}>
+                  {isDocked ? "Docked" : "In Transit"}
+                </Badge>
+              )}
             </StatRow>
+
+            {convoyName && (
+              <StatRow label="Convoy">
+                <span className="text-sm text-cyan-300">{convoyName}</span>
+              </StatRow>
+            )}
 
             <StatRow label="Location">
               <div className="flex flex-wrap items-center gap-2">
@@ -74,8 +105,66 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
             color={cargoPercent > 80 ? "red" : "amber"}
             size="md"
           />
+          <ProgressBar
+            label="Hull"
+            value={ship.hullCurrent}
+            max={ship.hullMax}
+            color={hullPercent < 30 ? "red" : "green"}
+            size="md"
+          />
+          {ship.shieldMax > 0 && (
+            <ProgressBar
+              label="Shields"
+              value={ship.shieldCurrent}
+              max={ship.shieldMax}
+              color={shieldPercent < 30 ? "red" : "purple"}
+              size="md"
+            />
+          )}
         </CardContent>
       </Card>
+
+      {/* Ship stats card */}
+      <Card variant="bordered" padding="md">
+        <CardHeader title="Ship Stats" />
+        <CardContent>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+            <StatPair label="Speed" value={ship.speed} />
+            <StatPair label="Firepower" value={ship.firepower} />
+            <StatPair label="Evasion" value={ship.evasion} />
+            <StatPair label="Stealth" value={ship.stealth} />
+            <StatPair label="Sensors" value={ship.sensors} />
+            <StatPair label="Crew" value={ship.crewCapacity} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Upgrade slots (read-only) */}
+      {ship.upgradeSlots.length > 0 && (
+        <Card variant="bordered" padding="md">
+          <CardHeader title="Upgrade Slots" subtitle={`${ship.upgradeSlots.filter((s) => s.moduleId).length} / ${ship.upgradeSlots.length} installed`} />
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              {ship.upgradeSlots.map((slot) => (
+                <UpgradeSlot
+                  key={slot.id}
+                  slot={slot}
+                  readOnly
+                />
+              ))}
+            </div>
+            {isDocked && !ship.disabled && (
+              <Button
+                href={`/system/${ship.systemId}/shipyard/upgrades`}
+                variant="ghost"
+                size="sm"
+              >
+                Manage at Upgrade Bay &rarr;
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Cargo hold card */}
       <Card variant="bordered" padding="md">
@@ -104,16 +193,40 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
 
       {/* Actions */}
       {isDocked && (
-        <div className="flex gap-3">
-          <Button
-            href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
-            variant="action"
-            color="green"
-            className="flex-1"
-          >
-            Market
-          </Button>
-          {needsFuel && playerCredits != null && (
+        <div className="flex gap-3 flex-wrap">
+          {!ship.disabled && (
+            <>
+              <Button
+                href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
+                variant="action"
+                color="green"
+                className="flex-1"
+              >
+                Market
+              </Button>
+              {convoyName ? (
+                <Button
+                  variant="action"
+                  color="indigo"
+                  className="flex-1 opacity-50 cursor-not-allowed"
+                  disabled
+                  title="Navigate via convoy"
+                >
+                  Navigate via convoy
+                </Button>
+              ) : (
+                <Button
+                  href={`/map?shipId=${ship.id}`}
+                  variant="action"
+                  color="indigo"
+                  className="flex-1"
+                >
+                  Navigate
+                </Button>
+              )}
+            </>
+          )}
+          {needsFuel && !ship.disabled && playerCredits != null && (
             <Button
               variant="pill"
               color="cyan"
@@ -123,24 +236,26 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               Refuel
             </Button>
           )}
-          <Button
-            href={`/map?shipId=${ship.id}`}
-            variant="action"
-            color="indigo"
-            className="flex-1"
-          >
-            Navigate
-          </Button>
+          {isDamaged && playerCredits != null && (
+            <Button
+              variant="pill"
+              color="green"
+              size="md"
+              onClick={repairDialog.onOpen}
+            >
+              Repair
+            </Button>
+          )}
         </div>
       )}
 
       {/* Deliverable missions */}
-      {isDocked && deliverableMissions && deliverableMissions.length > 0 && (
+      {isDocked && !ship.disabled && deliverableMissions && deliverableMissions.length > 0 && (
         <DeliverableMissionsCard missions={deliverableMissions} ship={ship} />
       )}
 
       {/* Refuel dialog */}
-      {needsFuel && playerCredits != null && (
+      {needsFuel && !ship.disabled && playerCredits != null && (
         <RefuelDialog
           ship={ship}
           playerCredits={playerCredits}
@@ -148,6 +263,26 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
           onClose={refuelDialog.onClose}
         />
       )}
+
+      {/* Repair dialog */}
+      {isDamaged && playerCredits != null && (
+        <RepairDialog
+          ship={ship}
+          playerCredits={playerCredits}
+          open={repairDialog.open}
+          onClose={repairDialog.onClose}
+        />
+      )}
+
+    </div>
+  );
+}
+
+function StatPair({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex justify-between py-1">
+      <span className="text-sm text-white/50">{label}</span>
+      <span className="text-sm font-medium text-white">{value}</span>
     </div>
   );
 }

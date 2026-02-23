@@ -31,18 +31,36 @@ export function buildSimAdjacencyList(connections: SimConnection[]): SimAdjacenc
   return adj;
 }
 
+// ── Helpers ─────────────────────────────────────────────────────
+
+function sumTravelDuration(
+  path: string[],
+  adj: SimAdjacencyList,
+  shipSpeed?: number,
+): number {
+  let total = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const neighbors = adj.get(path[i]) ?? [];
+    const edge = neighbors.find((n) => n.toSystemId === path[i + 1]);
+    if (edge) {
+      total += hopDuration(edge.fuelCost, shipSpeed);
+    }
+  }
+  return total;
+}
+
 // ── Dijkstra — fuel-constrained reachability ────────────────────
 
 /**
  * Find all systems reachable from `originId` within `currentFuel`,
  * using a pre-built adjacency list.
- *
- * Same algorithm as `findReachableSystems` in `pathfinding.ts`.
+ * Optional shipSpeed adjusts travel duration calculations.
  */
 export function findReachableSystemsCached(
   originId: string,
   currentFuel: number,
   adj: SimAdjacencyList,
+  shipSpeed?: number,
 ): Map<string, ReachableSystem> {
   const result = new Map<string, ReachableSystem>();
 
@@ -88,15 +106,7 @@ export function findReachableSystemsCached(
       node = prev.get(node);
     }
 
-    let travelDuration = 0;
-    for (let i = 0; i < path.length - 1; i++) {
-      const neighbors = adj.get(path[i]) ?? [];
-      const edge = neighbors.find((n) => n.toSystemId === path[i + 1]);
-      if (edge) {
-        travelDuration += hopDuration(edge.fuelCost);
-      }
-    }
-
+    const travelDuration = sumTravelDuration(path, adj, shipSpeed);
     result.set(systemId, { systemId, fuelCost, travelDuration, path });
   }
 
@@ -107,14 +117,13 @@ export function findReachableSystemsCached(
 
 /**
  * Find the lowest-fuel-cost path between two systems using a pre-built
- * adjacency list.
- *
- * Same algorithm as `findShortestPath` in `pathfinding.ts`.
+ * adjacency list. Optional shipSpeed adjusts travel duration.
  */
 export function findShortestPathCached(
   originId: string,
   destinationId: string,
   adj: SimAdjacencyList,
+  shipSpeed?: number,
 ): PathResult | null {
   if (originId === destinationId) return null;
 
@@ -162,15 +171,7 @@ export function findShortestPathCached(
   if (path[0] !== originId) return null;
 
   const totalFuelCost = dist.get(destinationId)!;
-
-  let totalTravelDuration = 0;
-  for (let i = 0; i < path.length - 1; i++) {
-    const neighbors = adj.get(path[i]) ?? [];
-    const edge = neighbors.find((n) => n.toSystemId === path[i + 1]);
-    if (edge) {
-      totalTravelDuration += hopDuration(edge.fuelCost);
-    }
-  }
+  const totalTravelDuration = sumTravelDuration(path, adj, shipSpeed);
 
   return { path, totalFuelCost, totalTravelDuration };
 }

@@ -49,7 +49,7 @@ export function RefuelDialog({ ship, playerCredits, open, onClose }: RefuelDialo
       open={open}
       onClose={onClose}
       modal
-      className="backdrop:bg-black/60 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-fit w-full max-w-sm rounded-xl bg-gray-900 border border-white/10 shadow-2xl p-6"
+      size="sm"
     >
       <h2 className="text-lg font-bold text-white mb-1">Refuel {ship.name}</h2>
       <p className="text-xs text-white/40 mb-5">{REFUEL_COST_PER_UNIT} CR per unit</p>

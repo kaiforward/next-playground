@@ -66,6 +66,14 @@ export interface SimShip {
   maxFuel: number;
   cargo: SimCargoItem[];
   cargoMax: number;
+  speed: number;
+  hullMax: number;
+  hullCurrent: number;
+  shieldMax: number;
+  firepower: number;
+  evasion: number;
+  stealth: number;
+  disabled: boolean;
   status: "docked" | "in_transit";
   systemId: string;
   destinationSystemId: string | null;

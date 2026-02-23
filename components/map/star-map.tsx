@@ -11,7 +11,9 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import type { UniverseData, ShipState, ActiveEvent } from "@/lib/types/game";
+import type { UniverseData, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
+import type { NavigableUnit } from "@/lib/types/navigable";
+import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemNode } from "@/components/map/system-node";
 import { RegionNode } from "@/components/map/region-node";
@@ -26,9 +28,12 @@ import { buildSystemRegionMap } from "@/lib/utils/region";
 interface StarMapProps {
   universe: UniverseData;
   ships: ShipState[];
+  convoys: ConvoyState[];
   currentTick: number;
   onNavigateShip: (shipId: string, route: string[]) => Promise<void>;
+  onNavigateConvoy?: (convoyId: string, route: string[]) => Promise<void>;
   initialSelectedShipId?: string;
+  initialSelectedConvoyId?: string;
   initialSelectedSystemId?: string;
   events?: ActiveEvent[];
 }
@@ -43,9 +48,12 @@ const nodeTypes = {
 export function StarMap({
   universe,
   ships,
+  convoys,
   currentTick,
   onNavigateShip,
+  onNavigateConvoy,
   initialSelectedShipId,
+  initialSelectedConvoyId,
   initialSelectedSystemId,
   events = [],
 }: StarMapProps) {
@@ -79,7 +87,9 @@ export function StarMap({
     ships,
     systemRegionMap,
     initialSelectedShipId,
-    initialSelectedSystemId,
+    initialSelectedSystemId: initialSelectedSystemId ?? (initialSelectedConvoyId
+      ? convoys.find((c) => c.id === initialSelectedConvoyId)?.systemId
+      : undefined),
   });
 
   // ── Navigation state ──────────────────────────────────────────
@@ -87,6 +97,7 @@ export function StarMap({
     connections: allConnections,
     systems: universe.systems,
     onNavigateShip,
+    onNavigateConvoy,
   });
 
   const { mode } = navigation;
@@ -96,6 +107,7 @@ export function StarMap({
   const graph = useMapGraph({
     universe,
     ships,
+    convoys,
     events,
     viewLevel: view.viewLevel,
     selectedSystem: view.selectedSystem,
@@ -113,11 +125,25 @@ export function StarMap({
       (s) => s.id === initialSelectedShipId && s.status === "docked",
     );
     if (ship) {
-      navigation.selectShip(ship);
+      navigation.selectUnit(shipToNavigableUnit(ship));
     }
     // Only run on mount / when the prop changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSelectedShipId]);
+
+  // ── Auto-select convoy from URL query param on mount ──────────
+  useEffect(() => {
+    if (!initialSelectedConvoyId) return;
+    if (view.viewLevel.level !== "system") return;
+    const convoy = convoys.find(
+      (c) => c.id === initialSelectedConvoyId && c.status === "docked",
+    );
+    if (convoy) {
+      navigation.selectUnit(convoyToNavigableUnit(convoy));
+    }
+    // Only run on mount / when the prop changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSelectedConvoyId]);
 
   // ── fitView on view level transitions ─────────────────────────
   const prevViewLevelRef = useRef(view.viewLevel);
@@ -151,11 +177,11 @@ export function StarMap({
       }
 
       // System view — navigation logic
-      if (mode.phase === "ship_selected") {
-        if (!mode.reachable.has(node.id) && node.id !== mode.ship.systemId) {
+      if (mode.phase === "unit_selected") {
+        if (!mode.reachable.has(node.id) && node.id !== mode.unit.systemId) {
           return;
         }
-        if (node.id === mode.ship.systemId) {
+        if (node.id === mode.unit.systemId) {
           navigation.cancel();
           return;
         }
@@ -177,10 +203,10 @@ export function StarMap({
     [viewLevel, drillIntoRegion, selectSystem, activeRegionSystems, regionNavigationStates, mode, navigation, isNavigationActive],
   );
 
-  const handleSelectShipForNavigation = useCallback(
-    (ship: ShipState) => {
+  const handleSelectUnitForNavigation = useCallback(
+    (unit: NavigableUnit) => {
       closeSystem();
-      navigation.selectShip(ship);
+      navigation.selectUnit(unit);
     },
     [closeSystem, navigation],
   );
@@ -249,12 +275,15 @@ export function StarMap({
       )}
 
       {/* Navigation mode banner (shown on both region and system views) */}
-      {mode.phase === "ship_selected" && (
+      {mode.phase === "unit_selected" && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="flex items-center gap-3 rounded-lg border border-cyan-500/30 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
             <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
             <span className="text-sm text-white">
-              Select a destination for <span className="font-semibold text-cyan-300">{mode.ship.name}</span>
+              Select a destination for <span className="font-semibold text-cyan-300">{mode.unit.name}</span>
+              {mode.unit.kind === "convoy" && (
+                <span className="text-cyan-300/60 ml-1">({mode.unit.convoy.members.length} ships)</span>
+              )}
             </span>
             <Button
               variant="ghost"
@@ -271,7 +300,7 @@ export function StarMap({
       {/* Route preview panel */}
       {mode.phase === "route_preview" && (
         <RoutePreviewPanel
-          ship={mode.ship}
+          unit={mode.unit}
           destination={mode.destination}
           route={mode.route}
           connections={allConnections}
@@ -287,11 +316,12 @@ export function StarMap({
         <SystemDetailPanel
           system={selectedSystem}
           shipsHere={graph.shipsAtSelected}
+          convoysHere={graph.convoysAtSelected}
           currentTick={currentTick}
           regionName={graph.selectedRegionName}
           gatewayTargetRegions={graph.selectedGatewayTargets}
           activeEvents={graph.eventsAtSelected}
-          onSelectShipForNavigation={handleSelectShipForNavigation}
+          onSelectUnitForNavigation={handleSelectUnitForNavigation}
           onJumpToRegion={view.jumpToRegion}
           onClose={closeSystem}
         />

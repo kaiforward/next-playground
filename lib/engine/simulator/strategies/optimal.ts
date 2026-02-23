@@ -71,6 +71,7 @@ export function createOptimalStrategy(): TradeStrategy {
           leg1.targetSystemId,
           fuelAfterLeg1,
           adj,
+          ship.speed,
         );
 
         if (leg2Reachable.size === 0) continue;

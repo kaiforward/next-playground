@@ -61,7 +61,7 @@ export interface SimConstants {
       minReversionMult: number;
     };
   };
-  ships: Record<string, { fuel: number; cargo: number; price: number }>;
+  ships: Record<string, { fuel: number; cargo: number; speed: number; hullMax: number; shieldMax: number; firepower: number; evasion: number; stealth: number; price: number }>;
   universe: {
     regionCount: number;
     systemsPerRegion: number;
@@ -113,9 +113,19 @@ function buildDefaults(): SimConstants {
     };
   }
 
-  const ships: Record<string, { fuel: number; cargo: number; price: number }> = {};
+  const ships: SimConstants["ships"] = {};
   for (const [key, def] of Object.entries(SHIP_TYPES)) {
-    ships[key] = { fuel: def.fuel, cargo: def.cargo, price: def.price };
+    ships[key] = {
+      fuel: def.fuel,
+      cargo: def.cargo,
+      speed: def.speed,
+      hullMax: def.hullMax,
+      shieldMax: def.shieldMax,
+      firepower: def.firepower,
+      evasion: def.evasion,
+      stealth: def.stealth,
+      price: def.price,
+    };
   }
 
   return {

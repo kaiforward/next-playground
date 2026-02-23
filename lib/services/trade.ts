@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
+import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
 
 type TradeResult =
@@ -46,11 +47,16 @@ export async function executeTrade(
       systemId: true,
       cargoMax: true,
       cargo: true,
+      convoyMember: { select: { convoyId: true } },
     },
   });
 
   if (!ship || ship.playerId !== playerId) {
     return { ok: false, error: "Ship not found or does not belong to you.", status: 404 };
+  }
+
+  if (ship.convoyMember) {
+    return { ok: false, error: "This ship is in a convoy. Trade via the convoy instead.", status: 400 };
   }
 
   // Verify station is in the ship's current system
@@ -184,11 +190,7 @@ export async function executeTrade(
   // Re-fetch the ship for response
   const freshShip = await prisma.ship.findUnique({
     where: { id: shipId },
-    include: {
-      cargo: { include: { good: true } },
-      system: true,
-      destination: true,
-    },
+    include: SHIP_INCLUDE,
   });
 
   if (!freshShip) {
