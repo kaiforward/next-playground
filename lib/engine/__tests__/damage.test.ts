@@ -110,10 +110,10 @@ describe("calculateRepairCost", () => {
 });
 
 describe("computeEscortProtection", () => {
-  it("returns zero protection with no combat ships", () => {
+  it("returns zero protection with zero-firepower ships", () => {
     const result = computeEscortProtection([
-      { firepower: 5, role: "trade" },
-      { firepower: 3, role: "stealth" },
+      { firepower: 0 },
+      { firepower: 0 },
     ]);
     expect(result.damageChanceReduction).toBe(0);
     expect(result.damageSeverityReduction).toBe(0);
@@ -124,19 +124,19 @@ describe("computeEscortProtection", () => {
     expect(result.damageChanceReduction).toBe(0);
   });
 
-  it("single combat ship provides protection", () => {
+  it("single ship provides protection based on firepower", () => {
     const result = computeEscortProtection([
-      { firepower: 12, role: "combat" },
+      { firepower: 12 },
     ]);
     // 12 / (12 + 30) = 12/42 ≈ 0.286
     expect(result.damageChanceReduction).toBeCloseTo(12 / 42);
     expect(result.damageSeverityReduction).toBeCloseTo(12 / 42 * 0.5);
   });
 
-  it("multiple combat ships stack firepower", () => {
+  it("multiple ships stack firepower", () => {
     const result = computeEscortProtection([
-      { firepower: 12, role: "combat" },
-      { firepower: 18, role: "combat" },
+      { firepower: 12 },
+      { firepower: 18 },
     ]);
     // 30 / (30 + 30) = 0.5
     expect(result.damageChanceReduction).toBeCloseTo(0.5);
@@ -144,21 +144,23 @@ describe("computeEscortProtection", () => {
 
   it("caps at MAX_ESCORT_REDUCTION", () => {
     const result = computeEscortProtection([
-      { firepower: 100, role: "combat" },
-      { firepower: 100, role: "combat" },
+      { firepower: 100 },
+      { firepower: 100 },
     ]);
     // 200 / (200 + 30) ≈ 0.87 → capped at 0.70
     expect(result.damageChanceReduction).toBe(DAMAGE_CONSTANTS.MAX_ESCORT_REDUCTION);
   });
 
-  it("only combat role ships contribute", () => {
-    const result1 = computeEscortProtection([
-      { firepower: 12, role: "combat" },
-      { firepower: 50, role: "trade" },
+  it("all ships contribute regardless of firepower level", () => {
+    // Low-firepower trade ships still contribute a small amount
+    const withTrade = computeEscortProtection([
+      { firepower: 12 },
+      { firepower: 2 },
     ]);
-    const result2 = computeEscortProtection([
-      { firepower: 12, role: "combat" },
+    const withoutTrade = computeEscortProtection([
+      { firepower: 12 },
     ]);
-    expect(result1.damageChanceReduction).toBeCloseTo(result2.damageChanceReduction);
+    // 14/(14+30) > 12/(12+30) — trade ship adds a small bonus
+    expect(withTrade.damageChanceReduction).toBeGreaterThan(withoutTrade.damageChanceReduction);
   });
 });

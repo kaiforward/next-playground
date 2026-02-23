@@ -67,7 +67,7 @@ Define 12 standard modules across 4 slot types.
 - **Engine:** Fuel Optimiser (tiered, -fuel cost), Thruster Upgrade (tiered, +speed), Manoeuvring Thrusters (capability, +evasion in pipeline)
 - **Cargo:** Expanded Hold (tiered, +cargoMax), Reinforced Containers (tiered, -loss severity), Hidden Compartment (capability, conceals cargo %)
 - **Defence:** Armour Plating (tiered, +hull), Shield Booster (tiered, +shieldMax), Point Defence Array (capability, -event loss probability)
-- **Systems:** Scanner Array (tiered, +sensors), Automation Module (capability, placeholder), Repair Bay (capability, +hull regen rate while docked)
+- **Systems:** Scanner Array (tiered, +sensors), Automation Module (capability, placeholder), Repair Bay (capability, placeholder — hullRegenRate computed but not yet consumed)
 
 **Tiered modules:** Mk I / Mk II / Mk III with increasing stat bonuses and costs.
 
@@ -80,7 +80,7 @@ Define 12 standard modules across 4 slot types.
 Replace fixed `hopDuration` with speed-dependent travel. Backward compatible.
 
 **Modified files:**
-- `lib/engine/travel.ts` — `hopDuration(fuelCost, shipSpeed?, referenceSpeed?)`. No speed = current behavior. With speed: `max(1, ceil(baseTicks * (shipSpeed / referenceSpeed)))`. Reference speed = Shuttle's speed (preserves current travel times exactly).
+- `lib/engine/travel.ts` — `hopDuration(fuelCost, shipSpeed?, referenceSpeed?)`. No speed = current behavior. With speed: `max(1, ceil(baseTicks * (referenceSpeed / shipSpeed)))`. Reference speed = Shuttle's speed (preserves current travel times exactly).
 - `lib/engine/navigation.ts` — Thread `shipSpeed` through validation functions
 - `lib/engine/pathfinding.ts` — Thread `shipSpeed` through pathfinding
 
@@ -95,7 +95,7 @@ Expand danger pipeline functions to accept ship stats and upgrade bonuses.
 **Modified files:**
 - `lib/engine/danger.ts` — Each pipeline function gains optional ship stat and upgrade bonus params:
   - Stage 1 (hazard): `hullStat` reduces loss severity, `armourBonus` adds hull, `reinforcedContainersBonus` reduces severity
-  - Stage 3 (contraband): `stealthStat` reduces inspection chance, `stealthCoatingBonus` adds stealth, `hiddenCompartmentFraction` conceals cargo
+  - Stage 3 (contraband): `stealthStat` reduces inspection chance, `hiddenCargoFraction` conceals cargo from inspection
   - Stage 4 (cargo loss): `evasionStat` reduces loss probability, `manoeuvringBonus` adds evasion, `pointDefenceReduction` flat probability reduction
 
 **New files:**
@@ -114,8 +114,8 @@ Pure engine functions for the damage model.
 **New files:**
 - `lib/engine/damage.ts` — Pure functions:
   - `rollDamageOnArrival(dangerLevel, shieldMax, shieldCurrent, hullMax, hullCurrent, rng)` — % chance of damage based on danger level, returns `{ shieldDamage, hullDamage, disabled }`. Shields absorb first.
-  - `calculateRepairCost(hullMax, hullCurrent, shieldMax, shieldCurrent)` — Credit cost proportional to damage
-  - `computeEscortProtection(escortShips)` — Convoy combat ships reduce damage chance + severity. Diminishing returns with escort count.
+  - `calculateRepairCost(hullMax, hullCurrent)` — Hull repair cost at 10 CR/point. Shields regenerate free on dock.
+  - `computeEscortProtection(escortShips)` — All convoy ships contribute firepower to damage reduction. Diminishing returns formula.
 
 **Design:**
 - Damage chance scales with aggregated danger level (same danger score events already produce)
@@ -194,7 +194,7 @@ Wire ship stats, upgrade bonuses, and hull/shield damage into the live processor
 
 **For convoy arrivals:**
 - All convoy ships arrive together (same arrivalTick)
-- Compute escort protection from combat ships in convoy
+- Compute escort protection from all convoy member ships (firepower-weighted)
 - Apply danger reduction to all ships
 - Damage distributed across ships (divided roughly equally, randomized slightly)
 - Each ship's hull/shield tracked independently
@@ -223,6 +223,8 @@ Wire speed into navigation service. Add convoy travel.
 - `app/api/game/convoy/[convoyId]/route.ts` — DELETE (disband)
 - `app/api/game/convoy/[convoyId]/members/route.ts` — POST (add), DELETE (remove)
 - `app/api/game/convoy/[convoyId]/navigate/route.ts` — POST (move convoy)
+- `app/api/game/convoy/[convoyId]/trade/route.ts` — POST (convoy trade)
+- `app/api/game/convoy/[convoyId]/repair/route.ts` — POST (convoy repair)
 
 **Testable after:** Create convoy, navigate it, verify all ships arrive at same tick. Verify slowest-speed applies.
 
@@ -245,7 +247,9 @@ Expand shipyard. Add upgrade installation and repair.
 - `app/api/game/ship/[shipId]/repair/route.ts` — POST (repair)
 
 **Convoy trade integration:**
-- `lib/services/trade.ts` — When trading with a convoy, check combined cargo capacity. Distribute bought cargo across ships with space. Sell from any ship.
+- `lib/services/convoy-trade.ts` (separate file) — Combined cargo buy/sell for convoys. Distributes goods across member ships by available space on buy; pulls sequentially on sell. Individual ship trade (`trade.ts`) rejects convoy members.
+- `lib/services/convoy-repair.ts` — Fraction-based multi-ship repair. Per-ship heal = `ceil(damage × fraction)` at 10 CR/hull point.
+- `lib/engine/convoy-repair.ts` — Pure engine function for repair plan computation.
 
 **Testable after:** Purchase all 12 classes. Install/remove modules. Repair damaged ships. Convoy trade distributes cargo.
 

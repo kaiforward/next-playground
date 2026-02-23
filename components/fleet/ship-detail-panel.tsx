@@ -18,13 +18,7 @@ import { UpgradeSlot } from "./upgrade-slot";
 import { UpgradeInstallDialog } from "./upgrade-install-dialog";
 import { DeliverableMissionsCard } from "@/components/missions/deliverable-missions-card";
 
-const ROLE_COLORS: Record<string, "blue" | "red" | "cyan" | "purple" | "green"> = {
-  trade: "blue",
-  combat: "red",
-  scout: "cyan",
-  stealth: "purple",
-  support: "green",
-};
+import { ROLE_COLORS } from "@/lib/constants/ships";
 
 interface ShipDetailPanelProps {
   ship: ShipState;

@@ -86,8 +86,10 @@ export function StarMap({
     universe,
     ships,
     systemRegionMap,
-    initialSelectedShipId: initialSelectedShipId ?? initialSelectedConvoyId,
-    initialSelectedSystemId,
+    initialSelectedShipId,
+    initialSelectedSystemId: initialSelectedSystemId ?? (initialSelectedConvoyId
+      ? convoys.find((c) => c.id === initialSelectedConvoyId)?.systemId
+      : undefined),
   });
 
   // ── Navigation state ──────────────────────────────────────────

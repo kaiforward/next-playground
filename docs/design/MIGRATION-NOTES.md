@@ -30,9 +30,9 @@ Expanded what players fly and how travel works.
 |---|---|---|
 | ~~Ship Roster~~ | 2 → 12 ship classes, 2 → 10 stats, size/role system | **Done** — 12 classes with full stat blocks, 3 sizes, 5 roles |
 | ~~Ship Upgrades~~ | 12 modules (4 slot types), hybrid tier model, fixed slot layouts | **Done** — tiered + capability modules, install/remove services + UI |
-| ~~Navigation Changes §1–3~~ | Convoys, speed-based travel, ship stats in danger pipeline | **Done** — convoy CRUD + navigate, speed formula, danger pipeline with diminishing returns, hull/shield damage |
+| ~~Navigation Changes §1–3~~ | Convoys, speed-based travel, ship stats in danger pipeline | **Done** — convoy CRUD + navigate + trade + repair, speed formula, danger pipeline with diminishing returns, hull/shield damage |
 
-**What shipped**: Navigation.md fully rewritten. 12 ship types, upgrade modules, convoys, speed-based travel, 5-stage danger pipeline (added hull/shield damage stage), escort protection. Simulator updated. Facility gating and faction-exclusive ships deferred to Layer 2.
+**What shipped**: Navigation.md fully rewritten. 12 ship types, upgrade modules, convoys (CRUD, navigate, trade, repair), speed-based travel, 5-stage danger pipeline (added hull/shield damage stage), escort protection (all ships contribute firepower), NavigableUnit abstraction for unified ship/convoy navigation UX. Simulator updated. Facility gating and faction-exclusive ships deferred to Layer 2.
 
 ### Layer 2 — Political Layer
 
@@ -178,7 +178,7 @@ Implemented. 12 ship classes with 10 stats, upgrade modules, convoys, speed-base
 
 ### 5. Universe Scale: 200 → 1,000-2,000 Systems
 
-**Active** (universe.md): 200 systems, 8 regions, 25 per region.
+**Active** (universe.md): 600 systems, 24 regions, 25 per region.
 
 **Planned** (faction-system.md §7): 1,000-2,000 systems across faction territories.
 

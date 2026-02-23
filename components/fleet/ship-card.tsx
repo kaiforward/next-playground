@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ShipState, RegionInfo } from "@/lib/types/game";
 import { getCargoUsed } from "@/lib/utils/cargo";
+import { ROLE_COLORS } from "@/lib/constants/ships";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,14 +11,6 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { useDialog } from "@/components/ui/dialog";
 import { RefuelDialog } from "./refuel-dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
-
-const ROLE_COLORS: Record<string, "blue" | "red" | "cyan" | "purple" | "green"> = {
-  trade: "blue",
-  combat: "red",
-  scout: "cyan",
-  stealth: "purple",
-  support: "green",
-};
 
 interface ShipCardProps {
   ship: ShipState;

@@ -39,11 +39,15 @@ export async function executeNavigation(
 
   const ship = await prisma.ship.findUnique({
     where: { id: shipId },
-    select: { id: true, playerId: true, fuel: true, speed: true, status: true, systemId: true, disabled: true },
+    select: { id: true, playerId: true, fuel: true, speed: true, status: true, systemId: true, disabled: true, convoyMember: { select: { convoyId: true } } },
   });
 
   if (!ship || ship.playerId !== playerId) {
     return { ok: false, error: "Ship not found or does not belong to you.", status: 404 };
+  }
+
+  if (ship.convoyMember) {
+    return { ok: false, error: "This ship is in a convoy. Navigate via the convoy instead.", status: 400 };
   }
 
   if (ship.disabled) {

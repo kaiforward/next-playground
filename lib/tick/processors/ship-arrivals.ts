@@ -257,11 +257,9 @@ export const shipArrivalsProcessor: TickProcessor = {
           const convoyGroup = convoyShips.get(convoyId) ?? [];
           const escortShips = convoyGroup
             .filter((s) => s.id !== ship.id)
-            .map((s) => ({ firepower: s.firepower, role: "combat" as string }));
-          // Only count ships with high firepower as combat escorts
-          const combatEscorts = escortShips.filter((s) => s.firepower >= 8);
-          if (combatEscorts.length > 0) {
-            escort = computeEscortProtection(combatEscorts);
+            .map((s) => ({ firepower: s.firepower }));
+          if (escortShips.length > 0) {
+            escort = computeEscortProtection(escortShips);
           }
         }
 

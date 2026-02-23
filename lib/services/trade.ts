@@ -47,11 +47,16 @@ export async function executeTrade(
       systemId: true,
       cargoMax: true,
       cargo: true,
+      convoyMember: { select: { convoyId: true } },
     },
   });
 
   if (!ship || ship.playerId !== playerId) {
     return { ok: false, error: "Ship not found or does not belong to you.", status: 404 };
+  }
+
+  if (ship.convoyMember) {
+    return { ok: false, error: "This ship is in a convoy. Trade via the convoy instead.", status: 400 };
   }
 
   // Verify station is in the ship's current system

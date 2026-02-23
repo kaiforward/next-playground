@@ -10,13 +10,7 @@ import { Button } from "@/components/ui/button";
 const SIZE_ORDER: ShipSize[] = ["small", "medium", "large"];
 const SIZE_LABELS: Record<ShipSize, string> = { small: "Small", medium: "Medium", large: "Large" };
 
-const ROLE_COLORS: Record<string, "blue" | "red" | "cyan" | "purple" | "green"> = {
-  trade: "blue",
-  combat: "red",
-  scout: "cyan",
-  stealth: "purple",
-  support: "green",
-};
+import { ROLE_COLORS } from "@/lib/constants/ships";
 
 interface ShipyardPanelProps {
   systemId: string;

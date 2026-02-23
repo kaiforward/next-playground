@@ -110,21 +110,23 @@ export async function disbandConvoy(
   playerId: string,
   convoyId: string,
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const convoy = await prisma.convoy.findUnique({
-    where: { id: convoyId },
-    select: { playerId: true, status: true },
+  return prisma.$transaction(async (tx) => {
+    const convoy = await tx.convoy.findUnique({
+      where: { id: convoyId },
+      select: { playerId: true, status: true },
+    });
+
+    if (!convoy || convoy.playerId !== playerId) {
+      return { ok: false as const, error: "Convoy not found.", status: 404 };
+    }
+
+    if (convoy.status !== "docked") {
+      return { ok: false as const, error: "Cannot disband a convoy that is in transit.", status: 400 };
+    }
+
+    await tx.convoy.delete({ where: { id: convoyId } });
+    return { ok: true as const };
   });
-
-  if (!convoy || convoy.playerId !== playerId) {
-    return { ok: false, error: "Convoy not found.", status: 404 };
-  }
-
-  if (convoy.status !== "docked") {
-    return { ok: false, error: "Cannot disband a convoy that is in transit.", status: 400 };
-  }
-
-  await prisma.convoy.delete({ where: { id: convoyId } });
-  return { ok: true };
 }
 
 // ── Add ship to convoy ──────────────────────────────────────────

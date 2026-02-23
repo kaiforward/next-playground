@@ -45,7 +45,6 @@ export interface EscortProtection {
 
 export interface EscortShipInfo {
   firepower: number;
-  role: string;
 }
 
 // ── Functions ────────────────────────────────────────────────────
@@ -126,26 +125,25 @@ export function calculateRepairCost(
 }
 
 /**
- * Compute escort protection from combat ships in a convoy.
+ * Compute escort protection from convoy ships.
  *
- * - Sum firepower of all combat-role ships
+ * All ships contribute their firepower — combat ships naturally dominate
+ * because they have much higher firepower values (10-18 vs 1-3 for traders).
+ *
+ * - Sum firepower of all escort ships
  * - Diminishing returns: reduction = sumFP / (sumFP + K)
  * - Capped at MAX_ESCORT_REDUCTION
- *
- * Non-combat ships contribute nothing.
  */
 export function computeEscortProtection(
   escortShips: EscortShipInfo[],
 ): EscortProtection {
-  const combatFP = escortShips
-    .filter((s) => s.role === "combat")
-    .reduce((sum, s) => sum + s.firepower, 0);
+  const totalFP = escortShips.reduce((sum, s) => sum + s.firepower, 0);
 
-  if (combatFP <= 0) {
+  if (totalFP <= 0) {
     return { damageChanceReduction: 0, damageSeverityReduction: 0 };
   }
 
-  const rawReduction = combatFP / (combatFP + DAMAGE_CONSTANTS.ESCORT_K);
+  const rawReduction = totalFP / (totalFP + DAMAGE_CONSTANTS.ESCORT_K);
   const reduction = Math.min(rawReduction, DAMAGE_CONSTANTS.MAX_ESCORT_REDUCTION);
 
   return {

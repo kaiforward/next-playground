@@ -61,7 +61,15 @@ export function useConvoyMemberMutations(convoyId: string | null) {
   const removeMember = useMutation({
     mutationFn: async (shipId: string) => {
       if (!convoyId) throw new Error("Missing convoyId");
-      return apiDelete<ConvoyState>(`/api/game/convoy/${convoyId}/members`, { shipId });
+      const res = await fetch(`/api/game/convoy/${convoyId}/members`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipId }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      // Returns ConvoyState on normal remove, { disbanded: true } on auto-disband
+      return json;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.convoys });

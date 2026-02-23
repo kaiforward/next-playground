@@ -34,10 +34,10 @@ export function getReachable(
   adj?: SimAdjacencyList,
 ): Map<string, ReachableSystem> {
   if (adj) {
-    return findReachableSystemsCached(ship.systemId, ship.fuel, adj);
+    return findReachableSystemsCached(ship.systemId, ship.fuel, adj, ship.speed);
   }
   const connections: ConnectionInfo[] = world.connections;
-  return findReachableSystems(ship.systemId, ship.fuel, connections);
+  return findReachableSystems(ship.systemId, ship.fuel, connections, ship.speed);
 }
 
 /** Estimate sell revenue for a good at a target system. */

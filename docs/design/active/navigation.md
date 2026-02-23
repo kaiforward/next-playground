@@ -83,7 +83,7 @@ Available at any station while docked. Cost is 10 CR per hull point of damage. S
 | Engine | Fuel Optimiser (tiered), Thruster Upgrade (tiered), Manoeuvring Thrusters (capability) |
 | Cargo | Expanded Hold (tiered), Reinforced Containers (tiered), Hidden Compartment (capability) |
 | Defence | Armour Plating (tiered), Shield Booster (tiered), Point Defence Array (capability) |
-| Systems | Scanner Array (tiered), Automation Module (capability, placeholder), Repair Bay (capability) |
+| Systems | Scanner Array (tiered), Automation Module (capability, placeholder), Repair Bay (capability, placeholder — hullRegenRate not yet active) |
 
 ### Module Categories
 
@@ -120,14 +120,20 @@ Ships can be grouped into convoys for collective travel and trade.
 - Fuel deducted from each ship individually
 
 ### Escort Protection
-- Combat ships (high firepower) in the convoy reduce damage chance and severity for all members
+- All convoy members contribute their firepower — combat ships dominate because their firepower (10–18) far exceeds traders (1–3)
 - Protection scales with diminishing returns: `firepowerSum / (firepowerSum + 30)`, max 70% reduction
-- Damage distributed across member ships
+- Chance reduction at full value, severity reduction at half value
 
-### Convoy Cargo
-- DB stores cargo per ship
-- Trade operations see combined cargo capacity
-- Cargo distributed across ships with available space
+### Convoy Cargo & Trade
+- DB stores cargo per ship; trade operations see combined cargo capacity
+- Convoy trade uses a dedicated endpoint (`/api/game/convoy/[convoyId]/trade`) — individual ship trade is blocked for convoy members
+- Buy: goods distributed sequentially across member ships by available space
+- Sell: goods pulled sequentially from first ship with stock
+
+### Convoy Repair
+- Fraction-based bulk repair: repair 0–100% of damage across all members in one operation
+- Per-ship heal amount rounds up (generous to player): `ceil(damage × fraction)`
+- Cost: heal amount × 10 CR per hull point per ship
 
 ---
 
@@ -189,11 +195,11 @@ If the system has active danger from events or government baseline:
 
 ### Stage 5: Hull/Shield Damage
 After cargo processing, the ship may take structural damage:
-- Damage chance = danger level × 60% (at danger 1.0, 60% chance)
+- Damage chance = danger level × 60% (max base chance = 30% at the hard danger cap of 0.5)
 - Damage amount: 10-35% of combined hull+shield pool
 - Shields absorb first, remainder hits hull
 - Hull at 0 → ship disabled, all remaining cargo lost
-- **Ship modifiers**: Escort protection (convoy combat ships) reduces both chance and severity
+- **Ship modifiers**: Escort protection (all convoy members, firepower-weighted) reduces both chance and severity
 
 ### Danger Sources Summary
 | Source | Contribution |
@@ -219,7 +225,7 @@ After cargo processing, the ship may take structural damage:
 - **Gateway systems are chokepoints**: Inter-region travel requires passing through specific gateway systems with higher fuel costs
 - **Cargo risk scales with reward**: Frontier systems have the best prices but the highest danger. Authoritarian systems are safe but restrict profitable goods
 - **Ship choice matters**: 12 classes across 5 roles create meaningful fleet composition decisions. Trade ships haul more, combat ships escort, stealth ships avoid inspection
-- **Convoys reduce risk**: Grouping combat ships with trade ships reduces damage chance and severity, at the cost of traveling at the slowest ship's speed
+- **Convoys reduce risk**: All convoy members contribute firepower to escort protection (combat ships dominate), at the cost of traveling at the slowest ship's speed
 - **Upgrades specialize ships**: Module choices create build diversity within each ship class
 - **Hazard goods are a gamble**: Weapons are the most profitable tier 2 good but have high hazard AND are contraband in 2 of 4 government types
 

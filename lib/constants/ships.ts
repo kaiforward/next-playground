@@ -4,6 +4,15 @@ export type ShipSize = "small" | "medium" | "large";
 export type ShipRole = "trade" | "combat" | "scout" | "stealth" | "support";
 export type UpgradeSlotType = "engine" | "cargo" | "defence" | "systems";
 
+/** Badge color mapping for ship roles. Used across fleet UI components. */
+export const ROLE_COLORS: Record<ShipRole, "blue" | "red" | "cyan" | "purple" | "green"> = {
+  trade: "blue",
+  combat: "red",
+  scout: "cyan",
+  stealth: "purple",
+  support: "green",
+};
+
 export interface SlotLayout {
   engine: number;
   cargo: number;

@@ -206,7 +206,7 @@ export const MODULES: Record<ModuleId, ModuleDefinition> = {
   repair_bay: {
     id: "repair_bay",
     name: "Repair Bay",
-    description: "Passively repairs hull while docked at a station.",
+    description: "Hull repair module. No passive behavior yet — manual repair only.",
     slotType: "systems",
     category: "capability",
     stat: "hullRegenRate",
