@@ -42,20 +42,25 @@ export function Card({
 interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string;
   subtitle?: React.ReactNode;
+  action?: React.ReactNode;
 }
 
 export function CardHeader({
   title,
   subtitle,
+  action,
   className,
   ...props
 }: CardHeaderProps) {
   return (
-    <div className={`mb-4 ${className ?? ""}`} {...props}>
-      <h3 className="text-lg font-semibold text-white">{title}</h3>
-      {subtitle && (
-        <p className="mt-1 text-sm text-white/50">{subtitle}</p>
-      )}
+    <div className={`mb-4 flex items-start justify-between gap-3 ${className ?? ""}`} {...props}>
+      <div className="min-w-0">
+        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        {subtitle && (
+          <p className="mt-1 text-sm text-white/50">{subtitle}</p>
+        )}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }

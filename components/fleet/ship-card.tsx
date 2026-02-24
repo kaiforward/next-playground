@@ -9,7 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { useDialog } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { HiEllipsisVertical } from "react-icons/hi2";
 import { RefuelDialog } from "./refuel-dialog";
+import { RepairDialog } from "./repair-dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 
 interface ShipCardProps {
@@ -33,6 +41,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
 
   const detailHref = backTo ? `/ship/${ship.id}?from=${backTo}` : `/ship/${ship.id}`;
   const refuelDialog = useDialog();
+  const repairDialog = useDialog();
 
   return (
     <Card variant="bordered" padding="sm" className={ship.disabled ? "opacity-60" : undefined}>
@@ -50,13 +59,18 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
               {ship.role}
             </Badge>
           </div>
-          {ship.disabled ? (
-            <Badge color="red">Disabled</Badge>
-          ) : (
-            <Badge color={isDocked ? "green" : "amber"}>
-              {isDocked ? "Docked" : "In Transit"}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {ship.disabled ? (
+              <Badge color="red">Disabled</Badge>
+            ) : (
+              <Badge color={isDocked ? "green" : "amber"}>
+                {isDocked ? "Docked" : "In Transit"}
+              </Badge>
+            )}
+            <Button href={detailHref} variant="ghost" size="xs">
+              Details &rarr;
+            </Button>
+          </div>
         </div>
 
         {/* Location */}
@@ -99,26 +113,56 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
         )}
 
         {/* Actions */}
-        <div className="flex gap-2 pt-1">
-          <Button href={detailHref} variant="ghost" size="sm" className="flex-1 bg-white/5 text-white/60 hover:bg-white/10">
-            Details
-          </Button>
-          {isDocked && !ship.disabled && (
-            <Button href={`/system/${ship.systemId}/market?shipId=${ship.id}`} variant="pill" color="indigo" size="sm" className="flex-1">
-              Trade
-            </Button>
-          )}
-          {isDocked && !ship.disabled && !ship.convoyId && (
-            <Button href={`/map?shipId=${ship.id}`} variant="action" color="indigo" size="sm">
-              Navigate
-            </Button>
-          )}
-          {needsFuel && !ship.disabled && playerCredits != null && (
-            <Button variant="pill" color="cyan" size="sm" onClick={refuelDialog.onOpen}>
-              Refuel
-            </Button>
-          )}
-        </div>
+        {isDocked && (
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-2">
+              {!ship.disabled && (
+                <Button
+                  href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
+                  variant="action"
+                  color="green"
+                  size="sm"
+                >
+                  Trade
+                </Button>
+              )}
+              {!ship.disabled && !ship.convoyId && (
+                <Button
+                  href={`/map?shipId=${ship.id}`}
+                  variant="action"
+                  color="indigo"
+                  size="sm"
+                >
+                  Navigate
+                </Button>
+              )}
+            </div>
+
+            {/* Overflow menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="px-2">
+                  <span className="sr-only">More actions</span>
+                  <HiEllipsisVertical className="w-5 h-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!needsFuel || ship.disabled || playerCredits == null}
+                  onSelect={refuelDialog.onOpen}
+                >
+                  Refuel
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!isDamaged || ship.disabled || playerCredits == null}
+                  onSelect={repairDialog.onOpen}
+                >
+                  Repair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </CardContent>
 
       {/* Refuel dialog */}
@@ -128,6 +172,16 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
           playerCredits={playerCredits}
           open={refuelDialog.open}
           onClose={refuelDialog.onClose}
+        />
+      )}
+
+      {/* Repair dialog */}
+      {isDamaged && !ship.disabled && playerCredits != null && (
+        <RepairDialog
+          ship={ship}
+          playerCredits={playerCredits}
+          open={repairDialog.open}
+          onClose={repairDialog.onClose}
         />
       )}
     </Card>

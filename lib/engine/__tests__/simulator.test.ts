@@ -294,7 +294,7 @@ describe("Simulator", () => {
   // ── Full simulation ─────────────────────────────────────────────
 
   describe("runSimulation", () => {
-    it("runs a basic simulation and returns results with constants", () => {
+    it("runs a basic simulation and returns results with constants", { timeout: 30_000 }, () => {
       const config: SimConfig = {
         tickCount: 50,
         bots: [

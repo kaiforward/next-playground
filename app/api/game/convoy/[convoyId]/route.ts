@@ -25,7 +25,7 @@ export async function DELETE(
       return NextResponse.json<ApiResponse<null>>({ error: result.error }, { status: result.status });
     }
 
-    return NextResponse.json<ApiResponse<null>>({ data: null });
+    return NextResponse.json<ApiResponse<{ convoyId: string }>>({ data: { convoyId } });
   } catch (error) {
     console.error("DELETE /api/game/convoy/[convoyId] error:", error);
     return NextResponse.json<ApiResponse<null>>({ error: "Failed to disband convoy." }, { status: 500 });
