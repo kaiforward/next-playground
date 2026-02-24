@@ -12,4 +12,10 @@ export const queryKeys = {
   systemMissions: (systemId: string) => ["missions", systemId] as const,
   playerMissions: ["missions", "player"] as const,
   convoys: ["convoys"] as const,
+  // Operational missions & battles
+  opMissionsAll: ["opMissions"] as const,
+  systemAllMissions: (systemId: string) => ["opMissions", systemId] as const,
+  playerOpMissions: ["opMissions", "player"] as const,
+  battles: ["battles"] as const,
+  battleDetail: (battleId: string) => ["battles", battleId] as const,
 };

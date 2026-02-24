@@ -28,9 +28,11 @@ interface ShipCardProps {
   backTo?: string;
   /** Required for refuel dialog. */
   playerCredits?: number;
+  /** Whether this ship is currently in an active battle. */
+  inBattle?: boolean;
 }
 
-export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: ShipCardProps) {
+export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, inBattle }: ShipCardProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
@@ -62,6 +64,8 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
           <div className="flex items-center gap-2 shrink-0">
             {ship.disabled ? (
               <Badge color="red">Disabled</Badge>
+            ) : inBattle ? (
+              <Badge color="purple">In Battle</Badge>
             ) : (
               <Badge color={isDocked ? "green" : "amber"}>
                 {isDocked ? "Docked" : "In Transit"}

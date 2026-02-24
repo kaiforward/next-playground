@@ -15,13 +15,15 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Processor Pipeline
 
-5 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+7 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
 
 ```
 Ship Arrivals ──────────────────────────────────┐
+  └→ Battles (depends on: ship-arrivals) ───────┤
 Events ─────────────────────────────────────────┤
   └→ Economy (depends on: events) ──────────────┤
        └→ Trade Missions (depends on: events, economy)
+       └→ Op Missions (depends on: events, economy)
        └→ Price Snapshots (depends on: economy) ┘
 ```
 
@@ -29,10 +31,12 @@ Events ────────────────────────�
 
 | Processor | Frequency | Dependencies | What It Does |
 |---|---|---|---|
-| Ship Arrivals | Every tick | None | Lands ships that have reached their arrival tick. Runs 4-stage cargo danger pipeline (hazard, tax, contraband, loss). Notifies players of arrivals and losses |
+| Ship Arrivals | Every tick | None | Lands ships that have reached their arrival tick. Runs 4-stage cargo danger pipeline (hazard, tax, contraband, loss). Activates operational missions on arrival (bounty → battle creation, patrol/survey → commitment start). Notifies players of arrivals and losses |
+| Battles | Every tick | Ship Arrivals | Resolves active battle rounds (every 6 ticks). Updates strength/morale, checks for victory/defeat/retreat. Applies ship damage and credits rewards on resolution |
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
 | Economy | Every tick | Events | Simulates one region's markets per tick (round-robin). Applies event modifiers and government effects to supply/demand |
 | Trade Missions | Every 5 ticks | Events, Economy | Generates new missions from price extremes and active events. Expires unclaimed/overdue missions. Notifies players |
+| Op Missions | Every 5 ticks | Events, Economy | Generates patrol/survey/bounty missions from danger levels and traits. Expires unclaimed missions. Completes timed missions (patrol/survey). Fails missions with destroyed/disabled ships |
 | Price Snapshots | Every 20 ticks | Economy | Records current prices for all systems into rolling history (max 50 snapshots per system) |
 
 ### Execution Model
@@ -75,3 +79,5 @@ This means:
 - **Events**: Events processor manages lifecycle, must run before economy so modifiers are current (see [events.md](./events.md))
 - **Navigation**: Ship arrivals processor handles transit completion and cargo danger (see [navigation.md](./navigation.md))
 - **Trading**: Trade missions processor generates contracts from market state (see [trading.md](./trading.md))
+- **Combat**: Battles processor resolves pirate encounters from bounty missions (see [combat.md](./combat.md))
+- **Operational Missions**: Missions processor generates patrol/survey/bounty from danger levels and traits (see [combat.md](./combat.md))

@@ -11,6 +11,8 @@ import type {
   ActiveEvent,
   SystemPriceHistory,
   TradeMissionInfo,
+  MissionInfo,
+  BattleInfo,
   TraitId,
   TraitCategory,
   QualityTier,
@@ -121,6 +123,25 @@ export type DeliverMissionResponse = ApiResponse<DeliverMissionResult>;
 
 export interface AbandonMissionRequest { missionId: string }
 export type AbandonMissionResponse = ApiResponse<{ missionId: string }>;
+
+// ── Operational mission types ───────────────────────────────────
+
+export interface SystemAllMissionsData {
+  tradeMissions: { available: TradeMissionInfo[]; active: TradeMissionInfo[] };
+  opMissions: { available: MissionInfo[]; active: MissionInfo[] };
+}
+export type SystemAllMissionsResponse = ApiResponse<SystemAllMissionsData>;
+
+export interface AcceptOpMissionRequest { shipId: string }
+export interface AcceptOpMissionResult { mission: MissionInfo }
+export type AcceptOpMissionResponse = ApiResponse<AcceptOpMissionResult>;
+
+export type AbandonOpMissionResponse = ApiResponse<{ missionId: string }>;
+
+// ── Battle types ───────────────────────────────────────────────
+
+export type BattlesResponse = ApiResponse<BattleInfo[]>;
+export type BattleDetailResponse = ApiResponse<BattleInfo>;
 
 // ── Convoy types ────────────────────────────────────────────────
 

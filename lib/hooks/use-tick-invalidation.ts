@@ -42,6 +42,16 @@ export function useTickInvalidation() {
       subscribeToEvent("missionsUpdated", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.missionsAll });
       }),
+      // Operational mission updates → refresh op-mission queries
+      subscribeToEvent("opMissionsUpdated", () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.opMissionsAll });
+      }),
+      // Battle updates → refresh battle queries and fleet (ship damage)
+      subscribeToEvent("battlesUpdated", () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.battles });
+        queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+        queryClient.invalidateQueries({ queryKey: queryKeys.opMissionsAll });
+      }),
     ];
 
     return () => unsubs.forEach((unsub) => unsub());

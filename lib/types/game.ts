@@ -276,6 +276,73 @@ export interface TradeMissionInfo {
   acceptedAtTick: number | null;
 }
 
+// ── Operational mission types ────────────────────────────────────
+
+export type OpMissionStatus = "available" | "accepted" | "in_progress" | "completed" | "failed";
+
+export interface MissionInfo {
+  id: string;
+  type: string; // "patrol" | "survey" | "bounty"
+  systemId: string;
+  systemName: string;
+  targetSystemId: string;
+  targetSystemName: string;
+  reward: number;
+  deadlineTick: number;
+  ticksRemaining: number;
+  durationTicks: number | null;
+  enemyTier: string | null;
+  statRequirements: Record<string, number>;
+  status: OpMissionStatus;
+  playerId: string | null;
+  shipId: string | null;
+  acceptedAtTick: number | null;
+  startedAtTick: number | null;
+  completedAtTick: number | null;
+}
+
+// ── Battle types ────────────────────────────────────────────────
+
+export type BattleStatus =
+  | "active"
+  | "player_victory"
+  | "player_defeat"
+  | "player_retreat"
+  | "enemy_retreat";
+
+export interface BattleRoundResult {
+  round: number;
+  playerDamageDealt: number;
+  enemyDamageDealt: number;
+  playerStrengthAfter: number;
+  enemyStrengthAfter: number;
+  playerMoraleAfter: number;
+  enemyMoraleAfter: number;
+}
+
+export interface BattleInfo {
+  id: string;
+  type: string;
+  systemId: string;
+  systemName: string;
+  missionId: string | null;
+  shipId: string | null;
+  shipName: string | null;
+  status: BattleStatus;
+  playerStrength: number;
+  playerMorale: number;
+  playerMaxStrength: number;
+  enemyStrength: number;
+  enemyMorale: number;
+  enemyMaxStrength: number;
+  enemyType: string;
+  enemyTier: string;
+  roundsCompleted: number;
+  roundHistory: BattleRoundResult[];
+  createdAtTick: number;
+  resolvedAtTick: number | null;
+}
+
 // ── Price history types ─────────────────────────────────────────
 
 export interface PriceSnapshotPoint {
