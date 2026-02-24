@@ -58,6 +58,20 @@ export function useAddMembersBatchMutation(convoyId: string) {
   });
 }
 
+export function useRemoveMembersBatchMutation(convoyId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (shipIds: string[]) => {
+      return apiMutate<ConvoyState>(`/api/game/convoy/${convoyId}/members/batch-remove`, { shipIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
+      queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+    },
+  });
+}
+
 export function useConvoyMemberMutations(convoyId: string | null) {
   const queryClient = useQueryClient();
 

@@ -309,6 +309,63 @@ export async function removeFromConvoy(
   return { ok: true, data: result.data };
 }
 
+// ── Batch remove ships from convoy ───────────────────────────────
+
+export async function removeMembersFromConvoy(
+  playerId: string,
+  convoyId: string,
+  shipIds: string[],
+): Promise<ConvoyResult | { ok: true; data: null }> {
+  if (!shipIds || shipIds.length < 1) {
+    return { ok: false, error: "At least one ship is required.", status: 400 };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const convoy = await tx.convoy.findUnique({
+      where: { id: convoyId },
+      select: { playerId: true, status: true, _count: { select: { members: true } } },
+    });
+
+    if (!convoy || convoy.playerId !== playerId) {
+      return { ok: false as const, error: "Convoy not found.", status: 404 };
+    }
+
+    if (convoy.status !== "docked") {
+      return { ok: false as const, error: "Cannot modify a convoy in transit.", status: 400 };
+    }
+
+    // Verify all ships are actually members of this convoy
+    const members = await tx.convoyMember.findMany({
+      where: { convoyId, shipId: { in: shipIds } },
+    });
+
+    if (members.length !== shipIds.length) {
+      return { ok: false as const, error: "One or more ships are not in this convoy.", status: 400 };
+    }
+
+    const remainingCount = convoy._count.members - shipIds.length;
+    if (remainingCount < 2) {
+      // Auto-disband: remove all members and delete the convoy
+      await tx.convoy.delete({ where: { id: convoyId } });
+      return { ok: true as const, data: null };
+    }
+
+    await tx.convoyMember.deleteMany({
+      where: { convoyId, shipId: { in: shipIds } },
+    });
+
+    const updated = await tx.convoy.findUnique({
+      where: { id: convoyId },
+      include: CONVOY_INCLUDE,
+    });
+
+    return { ok: true as const, data: serializeConvoy(updated!) };
+  });
+
+  if (!result.ok) return result;
+  return { ok: true, data: result.data };
+}
+
 // ── Navigate convoy ─────────────────────────────────────────────
 
 export async function navigateConvoy(

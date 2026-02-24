@@ -1,16 +1,20 @@
 "use client";
 
 import type { ConvoyState, ShipState } from "@/lib/types/game";
-import {
-  useDisbandConvoyMutation,
-  useConvoyMemberMutations,
-} from "@/lib/hooks/use-convoy";
+import { useDisbandConvoyMutation } from "@/lib/hooks/use-convoy";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useDialog } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { ConvoyRepairSlider } from "./convoy-repair-slider";
 import { ConvoyRefuelSlider } from "./convoy-refuel-slider";
 import { ConvoyShipDialog } from "./convoy-ship-dialog";
@@ -26,10 +30,9 @@ interface ConvoyDetailCardProps {
 
 export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full" }: ConvoyDetailCardProps) {
   const disbandMutation = useDisbandConvoyMutation();
-  const { removeMember } = useConvoyMemberMutations(convoy.id);
   const repairDialog = useDialog();
   const refuelDialog = useDialog();
-  const addDialog = useDialog();
+  const manageDialog = useDialog();
   const isDocked = convoy.status === "docked";
 
   // Ships eligible to be added: docked, at same system, not in any convoy, not disabled
@@ -46,9 +49,10 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
   const minMaxFuel = members.length > 0 ? Math.min(...members.map((m) => m.maxFuel)) : 0;
   const hasDamage = members.some((m) => m.hullCurrent < m.hullMax);
   const needsFuel = members.some((m) => m.fuel < m.maxFuel);
+  const hasSecondaryActions = availableForAdd.length > 0 || hasDamage || needsFuel || isDocked;
 
   return (
-    <Card variant="bordered" padding="md">
+    <Card variant="bordered" padding="md" className="max-w-2xl">
       <CardHeader
         title={convoy.name ?? "Convoy"}
         subtitle={
@@ -58,6 +62,17 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
             </Badge>
             <span className="text-white/40">{convoy.system.name}</span>
           </span>
+        }
+        action={
+          variant === "summary" ? (
+            <Button
+              href={`/convoy/${convoy.id}`}
+              variant="ghost"
+              size="xs"
+            >
+              Details &rarr;
+            </Button>
+          ) : undefined
         }
       />
       <CardContent className="space-y-4">
@@ -105,23 +120,10 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
 
               return (
                 <div key={ship.id} className="py-2 px-3 rounded bg-white/5 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-white font-medium">{ship.name}</span>
-                      <Badge color="slate">{ship.role}</Badge>
-                      {ship.disabled && <Badge color="red">Disabled</Badge>}
-                    </div>
-                    {isDocked && (
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        className="text-red-400 hover:text-red-300"
-                        disabled={removeMember.isPending}
-                        onClick={() => removeMember.mutate(ship.id)}
-                      >
-                        Remove
-                      </Button>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-white font-medium">{ship.name}</span>
+                    <Badge color="slate">{ship.role}</Badge>
+                    {ship.disabled && <Badge color="red">Disabled</Badge>}
                   </div>
 
                   {/* Compact hull/shield bars */}
@@ -147,13 +149,9 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
           </div>
         )}
 
-        {removeMember.error && (
-          <p className="text-sm text-red-400">{removeMember.error.message}</p>
-        )}
-
         {/* Actions */}
         {isDocked && (
-          <div className="flex gap-2 pt-1 flex-wrap">
+          <div className="flex items-center gap-2 pt-1">
             <Button
               href={`/system/${convoy.systemId}/market?convoyId=${convoy.id}`}
               variant="action"
@@ -172,53 +170,40 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
             >
               Navigate
             </Button>
-            {availableForAdd.length > 0 && (
-              <Button
-                variant="pill"
-                color="blue"
-                size="sm"
-                onClick={addDialog.onOpen}
-              >
-                Add Ships
-              </Button>
-            )}
-            {hasDamage && (
-              <Button
-                variant="pill"
-                color="green"
-                size="sm"
-                onClick={repairDialog.onOpen}
-              >
-                Repair All
-              </Button>
-            )}
-            {needsFuel && (
-              <Button
-                variant="pill"
-                color="blue"
-                size="sm"
-                onClick={refuelDialog.onOpen}
-              >
-                Refuel
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-red-400 hover:text-red-300"
-              disabled={disbandMutation.isPending}
-              onClick={() => disbandMutation.mutate(convoy.id)}
-            >
-              {disbandMutation.isPending ? "Disbanding..." : "Disband"}
-            </Button>
-            {variant === "summary" && (
-              <Button
-                href={`/convoy/${convoy.id}`}
-                variant="ghost"
-                size="sm"
-              >
-                Details &rarr;
-              </Button>
+
+            {/* Overflow menu for secondary actions */}
+            {hasSecondaryActions && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="px-2">
+                    <span className="sr-only">More actions</span>
+                    &#x2026;
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={manageDialog.onOpen}>
+                    Manage Ships
+                  </DropdownMenuItem>
+                  {hasDamage && (
+                    <DropdownMenuItem onSelect={repairDialog.onOpen}>
+                      Repair All
+                    </DropdownMenuItem>
+                  )}
+                  {needsFuel && (
+                    <DropdownMenuItem onSelect={refuelDialog.onOpen}>
+                      Refuel
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    destructive
+                    disabled={disbandMutation.isPending}
+                    onSelect={() => disbandMutation.mutate(convoy.id)}
+                  >
+                    {disbandMutation.isPending ? "Disbanding..." : "Disband"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         )}
@@ -248,15 +233,16 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
         />
       )}
 
-      {/* Add ships dialog */}
-      {isDocked && availableForAdd.length > 0 && (
+      {/* Manage ships dialog */}
+      {isDocked && (
         <ConvoyShipDialog
-          open={addDialog.open}
-          onClose={addDialog.onClose}
+          open={manageDialog.open}
+          onClose={manageDialog.onClose}
           availableShips={availableForAdd}
-          mode="add"
+          mode="manage"
           convoyId={convoy.id}
           convoyName={convoy.name ?? "Convoy"}
+          members={members}
         />
       )}
     </Card>
