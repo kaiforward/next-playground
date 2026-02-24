@@ -22,7 +22,7 @@ Enriches the physical universe with traits, quality tiers, and bottom-up economy
 ### Out of scope (later layers)
 - Facilities (§5) — Layer 2
 - Faction influence on economy derivation (§2.2) — Layer 2
-- Trait-based danger modifiers — Layer 1+ (wired when ship stats ship)
+- ~~Trait-based danger modifiers~~ — **Done** (wired into ship-arrivals processor + simulator)
 - Trait-gated event spawning (§4 events) — Layer 3
 - Core economy exception via graph connectivity (§2.3 connectivity rule) — deferred, trait scoring handles core placement well enough for 600 systems
 
@@ -156,7 +156,7 @@ export interface TraitDefinition {
   economyAffinity: Partial<Record<EconomyType, 1 | 2>>;  // only non-zero entries
   productionGoods: string[];     // which goods this trait boosts production of
   descriptions: Record<QualityTier, string>;  // flavour text per quality tier
-  dangerModifier?: number;       // base danger adjustment (Layer 1+ — stored now, wired later)
+  dangerModifier?: number;       // base danger adjustment (wired into ship-arrivals + simulator)
   negative?: boolean;            // has downsides (volcanic, radioactive, etc.)
 }
 ```

@@ -94,6 +94,21 @@ export function computeTraitProductionBonus(
   return bonus;
 }
 
+/**
+ * Sum the danger modifiers from a system's traits.
+ * Positive values increase danger, negative values reduce it.
+ */
+export function computeTraitDanger(traits: GeneratedTrait[]): number {
+  let total = 0;
+  for (const { traitId } of traits) {
+    const def = TRAITS[traitId];
+    if (def.dangerModifier) {
+      total += def.dangerModifier;
+    }
+  }
+  return total;
+}
+
 // ── Economy derivation ──────────────────────────────────────────
 
 const ALL_ECONOMY_TYPES: EconomyType[] = [

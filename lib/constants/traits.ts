@@ -17,7 +17,7 @@ export interface TraitDefinition {
   productionGoods: string[];
   /** Flavour text per quality tier. */
   descriptions: Record<QualityTier, string>;
-  /** Base danger adjustment. Stored now, wired in Layer 1+. */
+  /** Base danger adjustment added to system danger level. Positive = more dangerous, negative = safer. */
   dangerModifier?: number;
   /** Trait has downsides (volcanic, radioactive, etc.). */
   negative?: boolean;
@@ -50,6 +50,7 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
     category: "planetary",
     economyAffinity: { agricultural: 2, core: 2 },
     productionGoods: ["food"],
+    dangerModifier: -0.03,
     descriptions: {
       1: "A marginal world with thin atmosphere and limited arable land. Settlements cling to sheltered valleys.",
       2: "A temperate world with reliable water cycles and established farmland across its major continents.",
@@ -261,6 +262,7 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
     category: "orbital",
     economyAffinity: { industrial: 2, core: 1 },
     productionGoods: ["machinery"],
+    dangerModifier: -0.03,
     descriptions: {
       1: "A handful of small platforms at the system's Lagrange points. Basic orbital manufacturing capabilities.",
       2: "Established station clusters at stable orbital points. Significant industrial output and growing commerce.",

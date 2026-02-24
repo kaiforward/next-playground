@@ -13,10 +13,11 @@ import {
 } from "@/lib/engine/danger";
 import { rollDamageOnArrival, computeEscortProtection, type DamageResult } from "@/lib/engine/damage";
 import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
+import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { toGovernmentType } from "@/lib/types/guards";
+import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 import type { TickProcessor, TickProcessorResult } from "../types";
 
 interface ArrivedShip {
@@ -55,7 +56,7 @@ export const shipArrivalsProcessor: TickProcessor = {
         evasion: true,
         stealth: true,
         cargo: { select: { id: true, goodId: true, quantity: true } },
-        destination: { select: { name: true, region: { select: { governmentType: true } } } },
+        destination: { select: { name: true, region: { select: { governmentType: true } }, traits: { select: { traitId: true, quality: true } } } },
         upgradeSlots: {
           where: { moduleId: { not: null } },
           select: { moduleId: true, moduleTier: true, slotType: true },
@@ -154,17 +155,22 @@ export const shipArrivalsProcessor: TickProcessor = {
         },
       });
 
-      // Compute danger at destination (event modifiers + government baseline)
+      // Compute danger at destination (event modifiers + government baseline + trait modifiers)
       const systemMods = modsBySystem.get(ship.destinationSystemId) ?? [];
       const govType = ship.destination?.region?.governmentType
         ? toGovernmentType(ship.destination.region.governmentType)
         : undefined;
       const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
       const govBaseline = govDef?.dangerBaseline ?? 0;
-      const danger = Math.min(
-        aggregateDangerLevel(systemMods) + govBaseline,
+      const destTraits = (ship.destination?.traits ?? []).map((t) => ({
+        traitId: toTraitId(t.traitId),
+        quality: toQualityTier(t.quality),
+      }));
+      const traitDanger = computeTraitDanger(destTraits);
+      const danger = Math.max(0, Math.min(
+        aggregateDangerLevel(systemMods) + govBaseline + traitDanger,
         DANGER_CONSTANTS.MAX_DANGER,
-      );
+      ));
 
       // Mutable local cargo tracking — each stage mutates quantities for the next
       const localCargo = ship.cargo.map((c) => ({
