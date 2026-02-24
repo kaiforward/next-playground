@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { HiEllipsisVertical } from "react-icons/hi2";
 import { ConvoyRepairSlider } from "./convoy-repair-slider";
 import { ConvoyRefuelSlider } from "./convoy-refuel-slider";
 import { ConvoyShipDialog } from "./convoy-ship-dialog";
@@ -49,7 +50,6 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
   const minMaxFuel = members.length > 0 ? Math.min(...members.map((m) => m.maxFuel)) : 0;
   const hasDamage = members.some((m) => m.hullCurrent < m.hullMax);
   const needsFuel = members.some((m) => m.fuel < m.maxFuel);
-  const hasSecondaryActions = availableForAdd.length > 0 || hasDamage || needsFuel || isDocked;
 
   return (
     <Card variant="bordered" padding="md" className="max-w-2xl">
@@ -151,60 +151,54 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
 
         {/* Actions */}
         {isDocked && (
-          <div className="flex items-center gap-2 pt-1">
-            <Button
-              href={`/system/${convoy.systemId}/market?convoyId=${convoy.id}`}
-              variant="action"
-              color="green"
-              size="sm"
-              className="flex-1"
-            >
-              Trade
-            </Button>
-            <Button
-              href={`/map?convoyId=${convoy.id}`}
-              variant="action"
-              color="indigo"
-              size="sm"
-              className="flex-1"
-            >
-              Navigate
-            </Button>
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-2">
+              <Button
+                href={`/system/${convoy.systemId}/market?convoyId=${convoy.id}`}
+                variant="action"
+                color="green"
+                size="sm"
+              >
+                Trade
+              </Button>
+              <Button
+                href={`/map?convoyId=${convoy.id}`}
+                variant="action"
+                color="indigo"
+                size="sm"
+              >
+                Navigate
+              </Button>
+            </div>
 
-            {/* Overflow menu for secondary actions */}
-            {hasSecondaryActions && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="px-2">
-                    <span className="sr-only">More actions</span>
-                    &#x2026;
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={manageDialog.onOpen}>
-                    Manage Ships
-                  </DropdownMenuItem>
-                  {hasDamage && (
-                    <DropdownMenuItem onSelect={repairDialog.onOpen}>
-                      Repair All
-                    </DropdownMenuItem>
-                  )}
-                  {needsFuel && (
-                    <DropdownMenuItem onSelect={refuelDialog.onOpen}>
-                      Refuel
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    destructive
-                    disabled={disbandMutation.isPending}
-                    onSelect={() => disbandMutation.mutate(convoy.id)}
-                  >
-                    {disbandMutation.isPending ? "Disbanding..." : "Disband"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            {/* Overflow menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="px-2">
+                  <span className="sr-only">More actions</span>
+                  <HiEllipsisVertical className="w-5 h-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={manageDialog.onOpen}>
+                  Manage Ships
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!hasDamage} onSelect={repairDialog.onOpen}>
+                  Repair All
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!needsFuel} onSelect={refuelDialog.onOpen}>
+                  Refuel
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  destructive
+                  disabled={disbandMutation.isPending}
+                  onSelect={() => disbandMutation.mutate(convoy.id)}
+                >
+                  {disbandMutation.isPending ? "Disbanding..." : "Disband"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
 
