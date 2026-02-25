@@ -432,8 +432,10 @@ model Battle {
   status          String   @default("active")   // active | player_victory | player_defeat | player_retreat | enemy_retreat
 
   // Player side
-  playerStrength  Float
-  playerMorale    Float
+  playerStrength        Float
+  playerMorale          Float
+  dangerLevel           Float?                    // Danger at battle creation for enemy scaling
+  initialPlayerStrength Float?                    // Player strength at battle start for damage calc
 
   // Enemy side
   enemyStrength   Float

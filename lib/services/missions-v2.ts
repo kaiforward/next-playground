@@ -1,11 +1,11 @@
 /**
- * Operational missions service — patrol, survey, bounty.
+ * Operational missions service — patrol, survey, bounty, salvage, recon.
  * Separate from trade missions (lib/services/missions.ts).
  */
 
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
-import { MISSION_TYPE_DEFS, type StatGateKey } from "@/lib/constants/missions";
+import { MISSION_TYPE_DEFS, OP_MISSION_CONSTANTS, type StatGateKey } from "@/lib/constants/missions";
 import { COMBAT_CONSTANTS, getEnemyTier } from "@/lib/constants/combat";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
@@ -222,6 +222,14 @@ export async function acceptMission(
     return { ok: false, error: "Mission is no longer available.", status: 409 };
   }
 
+  // Pre-tx cap check (fast path)
+  const activeCount = await prisma.mission.count({
+    where: { playerId, status: { in: ["accepted", "in_progress"] } },
+  });
+  if (activeCount >= OP_MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER) {
+    return { ok: false, error: `Cannot have more than ${OP_MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER} active operational missions.`, status: 400 };
+  }
+
   const tick = await getCurrentTick();
 
   // Transaction: TOCTOU guard
@@ -232,6 +240,14 @@ export async function acceptMission(
 
     if (!fresh || fresh.status !== "available") {
       throw new Error("MISSION_UNAVAILABLE");
+    }
+
+    // TOCTOU re-check cap inside transaction
+    const freshCount = await tx.mission.count({
+      where: { playerId, status: { in: ["accepted", "in_progress"] } },
+    });
+    if (freshCount >= OP_MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER) {
+      throw new Error("CAP_EXCEEDED");
     }
 
     const updated = await tx.mission.update({
@@ -249,11 +265,18 @@ export async function acceptMission(
     if (error instanceof Error && error.message === "MISSION_UNAVAILABLE") {
       return "UNAVAILABLE" as const;
     }
+    if (error instanceof Error && error.message === "CAP_EXCEEDED") {
+      return "CAP_EXCEEDED" as const;
+    }
     throw error;
   });
 
   if (txResult === "UNAVAILABLE") {
     return { ok: false, error: "Mission is no longer available.", status: 409 };
+  }
+
+  if (txResult === "CAP_EXCEEDED") {
+    return { ok: false, error: `Cannot have more than ${OP_MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER} active operational missions.`, status: 400 };
   }
 
   return {
@@ -302,94 +325,9 @@ export async function startMission(
     return { ok: false, error: "This mission does not belong to you.", status: 403 };
   }
 
-  // Validate ship
-  const ship = await prisma.ship.findUnique({
-    where: { id: shipId },
-    select: {
-      id: true,
-      playerId: true,
-      status: true,
-      systemId: true,
-      disabled: true,
-      firepower: true,
-      sensors: true,
-      hullMax: true,
-      hullCurrent: true,
-      shieldMax: true,
-      shieldCurrent: true,
-      stealth: true,
-      evasion: true,
-      convoyMember: { select: { convoyId: true } },
-    },
-  });
-
-  if (!ship || ship.playerId !== playerId) {
-    return { ok: false, error: "Ship not found or does not belong to you.", status: 404 };
-  }
-
-  if (ship.status !== "docked") {
-    return { ok: false, error: "Ship must be docked to start a mission.", status: 400 };
-  }
-
-  if (ship.disabled) {
-    return { ok: false, error: "Ship is disabled.", status: 400 };
-  }
-
-  if (ship.systemId !== mission.targetSystemId) {
-    return { ok: false, error: "Ship must be at the mission's target system.", status: 400 };
-  }
-
-  if (ship.convoyMember) {
-    return { ok: false, error: "Ship cannot start a mission while in a convoy.", status: 400 };
-  }
-
-  // Check stat gates
-  const statReqs = JSON.parse(mission.statRequirements) as Record<string, number>;
-  const shipStats: Record<StatGateKey, number> = {
-    firepower: ship.firepower,
-    sensors: ship.sensors,
-    hullMax: ship.hullMax,
-    stealth: ship.stealth,
-  };
-
-  for (const [stat, required] of Object.entries(statReqs)) {
-    const actual = shipStats[stat as StatGateKey] ?? 0;
-    if (actual < required) {
-      return {
-        ok: false,
-        error: `Ship does not meet requirement: ${stat} ${actual} < ${required}.`,
-        status: 400,
-      };
-    }
-  }
-
-  // Check if ship is already committed to another mission
-  const existingCommitment = await prisma.mission.findFirst({
-    where: {
-      shipId,
-      status: { in: ["accepted", "in_progress"] },
-    },
-  });
-
-  if (existingCommitment) {
-    return { ok: false, error: "Ship is already committed to another mission.", status: 400 };
-  }
-
-  // Check if ship is in battle
-  const existingBattle = await prisma.battle.findFirst({
-    where: {
-      shipId,
-      status: "active",
-    },
-  });
-
-  if (existingBattle) {
-    return { ok: false, error: "Ship is currently in battle.", status: 400 };
-  }
-
   const tick = await getCurrentTick();
 
-  // Transaction: TOCTOU guard
+  // Transaction: all ship validation + mission update inside for TOCTOU safety
   const txResult = await prisma.$transaction(async (tx) => {
     const fresh = await tx.mission.findUnique({
       where: { id: missionId },
@@ -397,6 +335,81 @@ export async function startMission(
 
     if (!fresh || fresh.status !== "accepted" || fresh.playerId !== playerId) {
       throw new Error("MISSION_UNAVAILABLE");
+    }
+
+    // Validate ship inside transaction
+    const freshShip = await tx.ship.findUnique({
+      where: { id: shipId },
+      select: {
+        id: true,
+        playerId: true,
+        status: true,
+        systemId: true,
+        disabled: true,
+        firepower: true,
+        sensors: true,
+        hullMax: true,
+        hullCurrent: true,
+        shieldMax: true,
+        shieldCurrent: true,
+        stealth: true,
+        evasion: true,
+        convoyMember: { select: { convoyId: true } },
+      },
+    });
+
+    if (!freshShip || freshShip.playerId !== playerId) {
+      throw new Error("SHIP_NOT_FOUND");
+    }
+    if (freshShip.status !== "docked") {
+      throw new Error("SHIP_NOT_DOCKED");
+    }
+    if (freshShip.disabled) {
+      throw new Error("SHIP_DISABLED");
+    }
+    if (freshShip.systemId !== mission.targetSystemId) {
+      throw new Error("SHIP_WRONG_SYSTEM");
+    }
+    if (freshShip.convoyMember) {
+      throw new Error("SHIP_IN_CONVOY");
+    }
+
+    // Check stat gates
+    const statReqs = JSON.parse(mission.statRequirements) as Record<string, number>;
+    const shipStatMap: Record<StatGateKey, number> = {
+      firepower: freshShip.firepower,
+      sensors: freshShip.sensors,
+      hullMax: freshShip.hullMax,
+      stealth: freshShip.stealth,
+    };
+
+    for (const [stat, required] of Object.entries(statReqs)) {
+      const actual = shipStatMap[stat as StatGateKey] ?? 0;
+      if (actual < required) {
+        throw new Error(`STAT_GATE:${stat} ${actual} < ${required}`);
+      }
+    }
+
+    // Check if ship is already committed to another mission
+    const existingCommitment = await tx.mission.findFirst({
+      where: {
+        shipId,
+        status: { in: ["accepted", "in_progress"] },
+      },
+    });
+    if (existingCommitment) {
+      throw new Error("SHIP_COMMITTED");
+    }
+
+    // Check if ship is in battle
+    const existingBattle = await tx.battle.findFirst({
+      where: {
+        shipId,
+        status: "active",
+      },
+    });
+    if (existingBattle) {
+      throw new Error("SHIP_IN_BATTLE");
     }
 
     const updated = await tx.mission.update({
@@ -444,7 +457,7 @@ export async function startMission(
         DANGER_CONSTANTS.MAX_DANGER,
       ));
 
-      const playerStats = derivePlayerCombatStats(ship);
+      const playerStats = derivePlayerCombatStats(freshShip);
       const enemyTier = mission.enemyTier
         ? (mission.enemyTier as "weak" | "moderate" | "strong")
         : getEnemyTier(danger);
@@ -459,6 +472,8 @@ export async function startMission(
           status: "active",
           playerStrength: playerStats.strength,
           playerMorale: playerStats.morale,
+          dangerLevel: danger,
+          initialPlayerStrength: playerStats.strength,
           enemyStrength: enemyStats.strength,
           enemyMorale: enemyStats.morale,
           enemyType: "pirates",
@@ -472,14 +487,38 @@ export async function startMission(
 
     return { mission: updated };
   }).catch((error) => {
-    if (error instanceof Error && error.message === "MISSION_UNAVAILABLE") {
-      return "UNAVAILABLE" as const;
+    if (error instanceof Error) {
+      const msg = error.message;
+      if (msg === "MISSION_UNAVAILABLE") return "MISSION_UNAVAILABLE" as const;
+      if (msg === "SHIP_NOT_FOUND") return "SHIP_NOT_FOUND" as const;
+      if (msg === "SHIP_NOT_DOCKED") return "SHIP_NOT_DOCKED" as const;
+      if (msg === "SHIP_DISABLED") return "SHIP_DISABLED" as const;
+      if (msg === "SHIP_WRONG_SYSTEM") return "SHIP_WRONG_SYSTEM" as const;
+      if (msg === "SHIP_IN_CONVOY") return "SHIP_IN_CONVOY" as const;
+      if (msg === "SHIP_COMMITTED") return "SHIP_COMMITTED" as const;
+      if (msg === "SHIP_IN_BATTLE") return "SHIP_IN_BATTLE" as const;
+      if (msg.startsWith("STAT_GATE:")) return msg as `STAT_GATE:${string}`;
     }
     throw error;
   });
 
-  if (txResult === "UNAVAILABLE") {
-    return { ok: false, error: "Mission is no longer available.", status: 409 };
+  if (typeof txResult === "string") {
+    const errorMap: Record<string, { error: string; status: number }> = {
+      MISSION_UNAVAILABLE: { error: "Mission is no longer available.", status: 409 },
+      SHIP_NOT_FOUND: { error: "Ship not found or does not belong to you.", status: 404 },
+      SHIP_NOT_DOCKED: { error: "Ship must be docked to start a mission.", status: 400 },
+      SHIP_DISABLED: { error: "Ship is disabled.", status: 400 },
+      SHIP_WRONG_SYSTEM: { error: "Ship must be at the mission's target system.", status: 400 },
+      SHIP_IN_CONVOY: { error: "Ship cannot start a mission while in a convoy.", status: 400 },
+      SHIP_COMMITTED: { error: "Ship is already committed to another mission.", status: 400 },
+      SHIP_IN_BATTLE: { error: "Ship is currently in battle.", status: 400 },
+    };
+    if (txResult.startsWith("STAT_GATE:")) {
+      return { ok: false, error: `Ship does not meet requirement: ${txResult.slice("STAT_GATE:".length)}.`, status: 400 };
+    }
+    const mapped = errorMap[txResult];
+    if (mapped) return { ok: false, ...mapped };
+    throw new Error(`Unexpected sentinel: ${txResult}`);
   }
 
   return {
@@ -516,20 +555,20 @@ export async function abandonMission(
     return { ok: false, error: "Cannot abandon a mission that is not active.", status: 400 };
   }
 
-  // If mission is in battle, can't abandon
-  if (mission.status === "in_progress") {
-    const battle = await prisma.battle.findFirst({
-      where: { missionId, status: "active" },
-    });
-    if (battle) {
-      return { ok: false, error: "Cannot abandon mission while in battle.", status: 400 };
-    }
-  }
-
-  await prisma.$transaction(async (tx) => {
+  const txResult = await prisma.$transaction(async (tx) => {
     const fresh = await tx.mission.findUnique({ where: { id: missionId } });
     if (!fresh || fresh.playerId !== playerId) {
-      throw new Error("MISSION_NOT_YOURS");
+      throw new Error("NOT_YOURS");
+    }
+
+    // Battle check inside transaction for TOCTOU safety
+    if (fresh.status === "in_progress") {
+      const battle = await tx.battle.findFirst({
+        where: { missionId, status: "active" },
+      });
+      if (battle) {
+        throw new Error("IN_BATTLE");
+      }
     }
 
     await tx.mission.update({
@@ -542,12 +581,25 @@ export async function abandonMission(
         startedAtTick: null,
       },
     });
+
+    return "OK" as const;
   }).catch((error) => {
-    if (error instanceof Error && error.message === "MISSION_NOT_YOURS") {
-      return;
+    if (error instanceof Error && error.message === "NOT_YOURS") {
+      return "NOT_YOURS" as const;
+    }
+    if (error instanceof Error && error.message === "IN_BATTLE") {
+      return "IN_BATTLE" as const;
     }
     throw error;
   });
+
+  if (txResult === "NOT_YOURS") {
+    return { ok: false, error: "This mission does not belong to you.", status: 403 };
+  }
+
+  if (txResult === "IN_BATTLE") {
+    return { ok: false, error: "Cannot abandon mission while in battle.", status: 400 };
+  }
 
   return { ok: true, data: { missionId } };
 }
@@ -569,6 +621,7 @@ export async function getActiveBattles(
   const battles = await prisma.battle.findMany({
     where: {
       shipId: { in: shipIds },
+      status: "active",
     },
     include: battleInclude,
     orderBy: { createdAtTick: "desc" },
@@ -579,13 +632,21 @@ export async function getActiveBattles(
 
 export async function getBattleDetail(
   battleId: string,
+  playerId: string,
 ): Promise<BattleInfo> {
   const battle = await prisma.battle.findUnique({
     where: { id: battleId },
-    include: battleInclude,
+    include: {
+      system: { select: { name: true } },
+      ship: { select: { name: true, hullMax: true, shieldMax: true, playerId: true } },
+    },
   });
 
   if (!battle) {
+    throw new ServiceError("Battle not found.", 404);
+  }
+
+  if (battle.ship?.playerId !== playerId) {
     throw new ServiceError("Battle not found.", 404);
   }
 

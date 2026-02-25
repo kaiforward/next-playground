@@ -104,6 +104,10 @@ export const OP_MISSION_CAP_PER_SYSTEM = 4;
 /** Deadline ticks for operational missions (ticks until expiry from board). */
 export const OP_MISSION_DEADLINE_TICKS = 200;
 
+export const OP_MISSION_CONSTANTS = {
+  MAX_ACTIVE_PER_PLAYER: 5,
+} as const;
+
 // ── Trade mission constants ─────────────────────────────────────
 
 export const MISSION_CONSTANTS = {

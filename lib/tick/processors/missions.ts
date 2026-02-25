@@ -4,7 +4,7 @@ import {
   type SystemSnapshot,
 } from "@/lib/engine/mission-gen";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
-import { aggregateDangerLevel } from "@/lib/engine/danger";
+import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { OP_MISSION_CAP_PER_SYSTEM } from "@/lib/constants/missions";
 import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
@@ -24,7 +24,7 @@ export const missionsProcessor: TickProcessor = {
       },
     });
 
-    // 2. Complete timed missions (patrol/survey) where commitment is done
+    // 2. Complete timed missions (patrol/survey/salvage/recon) where commitment is done
     const completedMissions = await ctx.tx.mission.findMany({
       where: {
         status: "in_progress",
@@ -160,7 +160,9 @@ export const missionsProcessor: TickProcessor = {
     // Compute danger levels for each system
     const dangerLevels = new Map<string, number>();
     for (const system of systems) {
-      const govType = toGovernmentType(system.region.governmentType);
+      const govType = system.region?.governmentType
+        ? toGovernmentType(system.region.governmentType)
+        : undefined;
       const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
       const govBaseline = govDef?.dangerBaseline ?? 0;
       const traitDanger = computeTraitDanger(
@@ -172,7 +174,7 @@ export const missionsProcessor: TickProcessor = {
       const systemMods = modsBySystem.get(system.id) ?? [];
       const danger = Math.max(0, Math.min(
         aggregateDangerLevel(systemMods) + govBaseline + traitDanger,
-        0.5,
+        DANGER_CONSTANTS.MAX_DANGER,
       ));
       dangerLevels.set(system.id, danger);
     }

@@ -7,6 +7,7 @@ import {
   type BattleOutcome,
   type RoundResult,
 } from "@/lib/engine/combat";
+import { COMBAT_CONSTANTS, ENEMY_TIERS } from "@/lib/constants/combat";
 
 export const battlesProcessor: TickProcessor = {
   name: "battles",
@@ -66,32 +67,10 @@ export const battlesProcessor: TickProcessor = {
         continue;
       }
 
-      // Build combat stats from current battle state
-      const player: CombatStats = {
-        strength: battle.playerStrength,
-        morale: battle.playerMorale,
-        // Reconstruct damage per round from ship stats
-        damagePerRound: battle.ship.hullMax > 0
-          ? (battle.playerStrength / (battle.ship.hullMax + battle.ship.shieldMax)) *
-            battle.ship.hullMax * 0.15
-          : 5,
-        damageReduction: 0.1,
-      };
-
-      // We need the initial player combat stats for damage calculation.
-      // Use firepower/evasion from the ship's combat stats instead of recalculating from strength.
-      // For now, store initial strength in roundHistory metadata.
-      // Actually, let's just use the ship's current stats to derive damage rates.
-      // The battle tracks strength/morale, but damage rates come from the ship.
-
-      // Re-derive player damage from what we stored at battle creation
-      // Parse round history to get initial stats
       const roundHistory: RoundResult[] = JSON.parse(battle.roundHistory);
 
       // Use ship stats to derive per-round damage (same as combat engine)
-      const { FIREPOWER_TO_DAMAGE, EVASION_K, MAX_EVASION_REDUCTION } = await import(
-        "@/lib/constants/combat"
-      ).then((m) => m.COMBAT_CONSTANTS);
+      const { FIREPOWER_TO_DAMAGE, EVASION_K, MAX_EVASION_REDUCTION } = COMBAT_CONSTANTS;
 
       // We need the ship's firepower/evasion. Since these aren't on the battle record,
       // fetch them from the ship.
@@ -114,9 +93,10 @@ export const battlesProcessor: TickProcessor = {
       };
 
       // Enemy stats from battle record — derive damage from tier
-      const { ENEMY_TIERS } = await import("@/lib/constants/combat");
       const tierDef = ENEMY_TIERS[battle.enemyTier as keyof typeof ENEMY_TIERS];
-      const dangerScale = 0.8; // Approximate — exact danger not stored, use moderate scale
+      const dangerScale = battle.dangerLevel != null
+        ? (0.6 + battle.dangerLevel * 0.8)
+        : 0.8;
 
       const enemyStats: CombatStats = {
         strength: battle.enemyStrength,
@@ -219,6 +199,8 @@ async function resolveBattle(
     mission: { id: string; reward: number; type: string } | null;
     system: { name: string };
     playerStrength: number;
+    dangerLevel: number | null;
+    initialPlayerStrength: number | null;
   },
   outcome: BattleOutcome,
   finalRound: RoundResult,
@@ -243,7 +225,7 @@ async function resolveBattle(
   if (!battle.ship) return;
 
   const playerId = battle.ship.playerId;
-  const initialStrength = battle.playerStrength;
+  const initialStrength = battle.initialPlayerStrength ?? battle.playerStrength;
 
   // Apply damage to ship
   const damage = calculateBattleDamage(

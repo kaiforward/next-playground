@@ -87,7 +87,7 @@ export function deriveEnemyCombatStats(
 ): CombatStats {
   const def = ENEMY_TIERS[tier];
 
-  // Scale by danger: 0.15 danger → 0.3× scaling, 0.5 → 1.0× scaling
+  // Scale by danger: 0 → 0.6×, 0.25 → 0.8×, 0.5 → 1.0× scaling
   // Normalized to [0..1] range based on max danger of 0.5
   const dangerScale = 0.6 + dangerLevel * 0.8;
 

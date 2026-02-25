@@ -18,7 +18,7 @@ export async function GET(
     }
 
     const { battleId } = await params;
-    const battle = await getBattleDetail(battleId);
+    const battle = await getBattleDetail(battleId, playerId);
     return NextResponse.json<BattleDetailResponse>({ data: battle });
   } catch (error) {
     if (error instanceof ServiceError) {

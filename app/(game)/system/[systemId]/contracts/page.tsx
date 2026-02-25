@@ -11,6 +11,14 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 
 type SubTab = "delivery" | "operations";
 
+function subTabClass(active: boolean) {
+  return `pb-1.5 text-sm font-medium border-b-2 transition-colors ${
+    active
+      ? "border-indigo-400 text-white"
+      : "border-transparent text-white/50 hover:text-white/70"
+  }`;
+}
+
 function ContractsContent({ systemId }: { systemId: string }) {
   const [subTab, setSubTab] = useState<SubTab>("delivery");
   const { available, active } = useSystemMissions(systemId);
@@ -23,11 +31,7 @@ function ContractsContent({ systemId }: { systemId: string }) {
       {/* Sub-tabs */}
       <div className="flex gap-4 mb-6">
         <button
-          className={`pb-1.5 text-sm font-medium border-b-2 transition-colors ${
-            subTab === "delivery"
-              ? "border-indigo-400 text-white"
-              : "border-transparent text-white/50 hover:text-white/70"
-          }`}
+          className={subTabClass(subTab === "delivery")}
           onClick={() => setSubTab("delivery")}
         >
           Delivery
@@ -36,11 +40,7 @@ function ContractsContent({ systemId }: { systemId: string }) {
           )}
         </button>
         <button
-          className={`pb-1.5 text-sm font-medium border-b-2 transition-colors ${
-            subTab === "operations"
-              ? "border-indigo-400 text-white"
-              : "border-transparent text-white/50 hover:text-white/70"
-          }`}
+          className={subTabClass(subTab === "operations")}
           onClick={() => setSubTab("operations")}
         >
           Operations
