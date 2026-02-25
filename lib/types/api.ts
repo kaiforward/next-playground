@@ -132,9 +132,12 @@ export interface SystemAllMissionsData {
 }
 export type SystemAllMissionsResponse = ApiResponse<SystemAllMissionsData>;
 
-export interface AcceptOpMissionRequest { shipId: string }
 export interface AcceptOpMissionResult { mission: MissionInfo }
 export type AcceptOpMissionResponse = ApiResponse<AcceptOpMissionResult>;
+
+export interface StartOpMissionRequest { shipId: string }
+export interface StartOpMissionResult { mission: MissionInfo }
+export type StartOpMissionResponse = ApiResponse<StartOpMissionResult>;
 
 export type AbandonOpMissionResponse = ApiResponse<{ missionId: string }>;
 

@@ -28,7 +28,7 @@ export const missionsProcessor: TickProcessor = {
     const completedMissions = await ctx.tx.mission.findMany({
       where: {
         status: "in_progress",
-        type: { in: ["patrol", "survey"] },
+        type: { in: ["patrol", "survey", "salvage", "recon"] },
         durationTicks: { not: null },
         startedAtTick: { not: null },
       },

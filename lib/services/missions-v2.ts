@@ -6,10 +6,17 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import { MISSION_TYPE_DEFS, type StatGateKey } from "@/lib/constants/missions";
+import { COMBAT_CONSTANTS, getEnemyTier } from "@/lib/constants/combat";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
+import { computeTraitDanger } from "@/lib/engine/trait-gen";
+import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
+import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 import type { MissionInfo, BattleInfo, BattleRoundResult, OpMissionStatus, BattleStatus } from "@/lib/types/game";
 import type {
   SystemAllMissionsData,
   AcceptOpMissionResult,
+  StartOpMissionResult,
 } from "@/lib/types/api";
 import * as tradeMissionService from "./missions";
 
@@ -200,7 +207,6 @@ type AcceptResult =
 export async function acceptMission(
   playerId: string,
   missionId: string,
-  shipId: string,
 ): Promise<AcceptResult> {
   // Pre-validate
   const mission = await prisma.mission.findUnique({
@@ -216,6 +222,86 @@ export async function acceptMission(
     return { ok: false, error: "Mission is no longer available.", status: 409 };
   }
 
+  const tick = await getCurrentTick();
+
+  // Transaction: TOCTOU guard
+  const txResult = await prisma.$transaction(async (tx) => {
+    const fresh = await tx.mission.findUnique({
+      where: { id: missionId },
+    });
+
+    if (!fresh || fresh.status !== "available") {
+      throw new Error("MISSION_UNAVAILABLE");
+    }
+
+    const updated = await tx.mission.update({
+      where: { id: missionId },
+      data: {
+        status: "accepted",
+        playerId,
+        acceptedAtTick: tick,
+      },
+      include: missionInclude,
+    });
+
+    return { mission: updated };
+  }).catch((error) => {
+    if (error instanceof Error && error.message === "MISSION_UNAVAILABLE") {
+      return "UNAVAILABLE" as const;
+    }
+    throw error;
+  });
+
+  if (txResult === "UNAVAILABLE") {
+    return { ok: false, error: "Mission is no longer available.", status: 409 };
+  }
+
+  return {
+    ok: true,
+    data: {
+      mission: serializeMission(txResult.mission, tick),
+    },
+  };
+}
+
+// ── Start mission ────────────────────────────────────────────────
+
+type StartResult =
+  | { ok: true; data: StartOpMissionResult }
+  | { ok: false; error: string; status: number };
+
+export async function startMission(
+  playerId: string,
+  missionId: string,
+  shipId: string,
+): Promise<StartResult> {
+  // Pre-validate mission
+  const mission = await prisma.mission.findUnique({
+    where: { id: missionId },
+    include: {
+      ...missionInclude,
+      targetSystem: {
+        select: {
+          name: true,
+          region: { select: { governmentType: true } },
+          traits: { select: { traitId: true, quality: true } },
+        },
+      },
+    },
+  });
+
+  if (!mission) {
+    return { ok: false, error: "Mission not found.", status: 404 };
+  }
+
+  if (mission.status !== "accepted") {
+    return { ok: false, error: "Mission must be accepted before starting.", status: 400 };
+  }
+
+  if (mission.playerId !== playerId) {
+    return { ok: false, error: "This mission does not belong to you.", status: 403 };
+  }
+
   // Validate ship
   const ship = await prisma.ship.findUnique({
     where: { id: shipId },
@@ -228,7 +314,12 @@ export async function acceptMission(
       firepower: true,
       sensors: true,
       hullMax: true,
+      hullCurrent: true,
+      shieldMax: true,
+      shieldCurrent: true,
       stealth: true,
+      evasion: true,
+      convoyMember: { select: { convoyId: true } },
     },
   });
 
@@ -237,15 +328,19 @@ export async function acceptMission(
   }
 
   if (ship.status !== "docked") {
-    return { ok: false, error: "Ship must be docked to accept missions.", status: 400 };
+    return { ok: false, error: "Ship must be docked to start a mission.", status: 400 };
   }
 
   if (ship.disabled) {
     return { ok: false, error: "Ship is disabled.", status: 400 };
   }
 
-  if (ship.systemId !== mission.systemId) {
-    return { ok: false, error: "Ship must be at the mission system.", status: 400 };
+  if (ship.systemId !== mission.targetSystemId) {
+    return { ok: false, error: "Ship must be at the mission's target system.", status: 400 };
+  }
+
+  if (ship.convoyMember) {
+    return { ok: false, error: "Ship cannot start a mission while in a convoy.", status: 400 };
   }
 
   // Check stat gates
@@ -300,20 +395,80 @@ export async function acceptMission(
       where: { id: missionId },
     });
 
-    if (!fresh || fresh.status !== "available") {
+    if (!fresh || fresh.status !== "accepted" || fresh.playerId !== playerId) {
       throw new Error("MISSION_UNAVAILABLE");
     }
 
     const updated = await tx.mission.update({
       where: { id: missionId },
       data: {
-        status: "accepted",
-        playerId,
+        status: "in_progress",
         shipId,
-        acceptedAtTick: tick,
+        startedAtTick: tick,
       },
       include: missionInclude,
     });
+
+    // For bounty missions, create a battle
+    if (mission.type === "bounty") {
+      // Compute danger at system for enemy scaling
+      const navModifiers = await tx.eventModifier.findMany({
+        where: {
+          domain: "navigation",
+          targetType: "system",
+          targetId: mission.targetSystemId,
+        },
+        select: {
+          targetId: true,
+          domain: true,
+          type: true,
+          targetType: true,
+          goodId: true,
+          parameter: true,
+          value: true,
+        },
+      });
+
+      const govType = mission.targetSystem?.region?.governmentType
+        ? toGovernmentType(mission.targetSystem.region.governmentType)
+        : undefined;
+      const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
+      const govBaseline = govDef?.dangerBaseline ?? 0;
+      const destTraits = (mission.targetSystem?.traits ?? []).map((t) => ({
+        traitId: toTraitId(t.traitId),
+        quality: toQualityTier(t.quality),
+      }));
+      const traitDanger = computeTraitDanger(destTraits);
+      const danger = Math.max(0, Math.min(
+        aggregateDangerLevel(navModifiers) + govBaseline + traitDanger,
+        DANGER_CONSTANTS.MAX_DANGER,
+      ));
+
+      const playerStats = derivePlayerCombatStats(ship);
+      const enemyTier = mission.enemyTier
+        ? (mission.enemyTier as "weak" | "moderate" | "strong")
+        : getEnemyTier(danger);
+      const enemyStats = deriveEnemyCombatStats(enemyTier, danger);
+
+      await tx.battle.create({
+        data: {
+          type: "pirate_encounter",
+          systemId: mission.targetSystemId,
+          missionId: mission.id,
+          shipId,
+          status: "active",
+          playerStrength: playerStats.strength,
+          playerMorale: playerStats.morale,
+          enemyStrength: enemyStats.strength,
+          enemyMorale: enemyStats.morale,
+          enemyType: "pirates",
+          enemyTier: enemyTier,
+          roundInterval: COMBAT_CONSTANTS.ROUND_INTERVAL,
+          nextRoundTick: tick + COMBAT_CONSTANTS.ROUND_INTERVAL,
+          createdAtTick: tick,
+        },
+      });
+    }
 
     return { mission: updated };
   }).catch((error) => {

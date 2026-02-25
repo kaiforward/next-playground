@@ -32,6 +32,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
+  const onMission = ship.activeMission?.status === "in_progress";
   const needsFuel = isDocked && ship.fuel < ship.maxFuel;
   const isDamaged = ship.hullCurrent < ship.hullMax;
   const hullPercent = ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100;
@@ -60,6 +61,8 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
             <StatRow label="Status">
               {ship.disabled ? (
                 <Badge color="red">Disabled</Badge>
+              ) : ship.activeMission?.status === "in_progress" ? (
+                <Badge color="cyan">On Mission</Badge>
               ) : (
                 <Badge color={isDocked ? "green" : "amber"}>
                   {isDocked ? "Docked" : "In Transit"}
@@ -194,7 +197,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
       {/* Actions */}
       {isDocked && (
         <div className="flex gap-3 flex-wrap">
-          {!ship.disabled && (
+          {!ship.disabled && !onMission && (
             <>
               <Button
                 href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
@@ -226,7 +229,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               )}
             </>
           )}
-          {needsFuel && !ship.disabled && playerCredits != null && (
+          {needsFuel && !ship.disabled && !onMission && playerCredits != null && (
             <Button
               variant="pill"
               color="cyan"
@@ -236,7 +239,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               Refuel
             </Button>
           )}
-          {isDamaged && playerCredits != null && (
+          {isDamaged && !onMission && playerCredits != null && (
             <Button
               variant="pill"
               color="green"

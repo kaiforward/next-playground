@@ -1,17 +1,13 @@
 "use client";
 
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import type { MarketEntry } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { ThemedBarChart } from "@/components/ui/themed-bar-chart";
+
+const BARS = [
+  { dataKey: "supply", name: "Supply", color: "#60a5fa" },
+  { dataKey: "demand", name: "Demand", color: "#f59e0b" },
+];
 
 interface SupplyDemandChartProps {
   entries: MarketEntry[];
@@ -32,47 +28,7 @@ export function SupplyDemandChart({ entries }: SupplyDemandChartProps) {
       />
       <CardContent>
         <div className="w-full h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={data}
-              margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis
-                dataKey="name"
-                stroke="#666"
-                tick={{ fill: "#999", fontSize: 12 }}
-              />
-              <YAxis
-                stroke="#666"
-                tick={{ fill: "#999", fontSize: 12 }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1a1a2e",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "8px",
-                  color: "#fff",
-                }}
-                labelStyle={{ color: "#999" }}
-              />
-              <Legend
-                wrapperStyle={{ color: "#999", paddingTop: "10px" }}
-              />
-              <Bar
-                dataKey="supply"
-                name="Supply"
-                fill="#60a5fa"
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar
-                dataKey="demand"
-                name="Demand"
-                fill="#f59e0b"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <ThemedBarChart data={data} bars={BARS} xAxisKey="name" />
         </div>
       </CardContent>
     </Card>

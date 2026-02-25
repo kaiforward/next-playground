@@ -3,6 +3,8 @@ import {
   selectPatrolCandidates,
   selectSurveyCandidates,
   selectBountyCandidates,
+  selectSalvageCandidates,
+  selectReconCandidates,
   generateOpMissionCandidates,
   type SystemSnapshot,
 } from "../mission-gen";
@@ -231,12 +233,186 @@ describe("selectBountyCandidates", () => {
   });
 });
 
+// ── selectSalvageCandidates ────────────────────────────────────
+
+describe("selectSalvageCandidates", () => {
+  it("generates salvage missions for systems with eligible traits", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "generation_ship_wreckage", quality: 2 }]),
+      makeSystem("b", [{ traitId: "habitable_world", quality: 3 }]),
+    ];
+
+    const candidates = selectSalvageCandidates(systems, 100, alwaysPass);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].type).toBe("salvage");
+    expect(candidates[0].systemId).toBe("a");
+  });
+
+  it("skips systems without eligible traits", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "asteroid_belt", quality: 2 }]),
+    ];
+
+    const candidates = selectSalvageCandidates(systems, 100, alwaysPass);
+    expect(candidates).toHaveLength(0);
+  });
+
+  it("higher trait quality gives higher reward", () => {
+    const systemLow = makeSystem("a", [{ traitId: "orbital_ring_remnant", quality: 1 }]);
+    const systemHigh = makeSystem("b", [{ traitId: "orbital_ring_remnant", quality: 3 }]);
+
+    const candidatesLow = selectSalvageCandidates([systemLow], 100, alwaysPass);
+    const candidatesHigh = selectSalvageCandidates([systemHigh], 100, alwaysPass);
+
+    expect(candidatesHigh[0].reward).toBeGreaterThan(candidatesLow[0].reward);
+  });
+
+  it("includes stealth stat gate", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "shipbreaking_yards", quality: 2 }]),
+    ];
+
+    const candidates = selectSalvageCandidates(systems, 100, alwaysPass);
+    expect(candidates[0].statRequirements).toEqual(
+      expect.objectContaining({ stealth: 4 }),
+    );
+  });
+
+  it("sets durationTicks within range", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "derelict_fleet", quality: 2 }]),
+    ];
+
+    const candidates = selectSalvageCandidates(systems, 100, alwaysPass);
+    const dur = candidates[0].durationTicks!;
+    const [min, max] = MISSION_TYPE_DEFS.salvage.durationTicks!;
+    expect(dur).toBeGreaterThanOrEqual(min);
+    expect(dur).toBeLessThanOrEqual(max);
+  });
+
+  it("no enemy tier for salvage missions", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "abandoned_station", quality: 2 }]),
+    ];
+
+    const candidates = selectSalvageCandidates(systems, 100, alwaysPass);
+    expect(candidates[0].enemyTier).toBeNull();
+  });
+
+  it("probability gating works (high rng skips generation)", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "generation_ship_wreckage", quality: 2 }]),
+    ];
+
+    const candidates = selectSalvageCandidates(systems, 100, alwaysFail);
+    expect(candidates).toHaveLength(0);
+  });
+});
+
+// ── selectReconCandidates ─────────────────────────────────────
+
+describe("selectReconCandidates", () => {
+  it("generates recon missions for systems with danger AND eligible traits", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "dark_nebula", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.15]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysPass);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].type).toBe("recon");
+    expect(candidates[0].systemId).toBe("a");
+  });
+
+  it("skips systems below danger threshold even with eligible traits", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "dark_nebula", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.05]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysPass);
+    expect(candidates).toHaveLength(0);
+  });
+
+  it("skips high-danger systems without eligible traits", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "asteroid_belt", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.3]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysPass);
+    expect(candidates).toHaveLength(0);
+  });
+
+  it("includes stealth stat gate", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "pirate_stronghold", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.2]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysPass);
+    expect(candidates[0].statRequirements).toEqual(
+      expect.objectContaining({ stealth: 5 }),
+    );
+  });
+
+  it("sets durationTicks within range", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "smuggler_haven", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.2]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysPass);
+    const dur = candidates[0].durationTicks!;
+    const [min, max] = MISSION_TYPE_DEFS.recon.durationTicks!;
+    expect(dur).toBeGreaterThanOrEqual(min);
+    expect(dur).toBeLessThanOrEqual(max);
+  });
+
+  it("higher danger gives higher reward", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "ancient_minefield", quality: 2 }]),
+      makeSystem("b", [{ traitId: "ancient_minefield", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.12], ["b", 0.4]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysPass);
+    const rewardA = candidates.find((c) => c.systemId === "a")!.reward;
+    const rewardB = candidates.find((c) => c.systemId === "b")!.reward;
+    expect(rewardB).toBeGreaterThan(rewardA);
+  });
+
+  it("no enemy tier for recon missions", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "nebula_proximity", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.2]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysPass);
+    expect(candidates[0].enemyTier).toBeNull();
+  });
+
+  it("probability gating works (high rng skips generation)", () => {
+    const systems = [
+      makeSystem("a", [{ traitId: "dark_nebula", quality: 2 }]),
+    ];
+    const danger = new Map([["a", 0.15]]);
+
+    const candidates = selectReconCandidates(systems, danger, 100, alwaysFail);
+    expect(candidates).toHaveLength(0);
+  });
+});
+
 // ── generateOpMissionCandidates ─────────────────────────────────
 
 describe("generateOpMissionCandidates", () => {
-  it("combines all three types", () => {
+  it("combines all five types", () => {
     const systems = [
-      makeSystem("a", [{ traitId: "precursor_ruins", quality: 2 }]),
+      makeSystem("a", [
+        { traitId: "precursor_ruins", quality: 2 },
+        { traitId: "generation_ship_wreckage", quality: 2 },
+        { traitId: "dark_nebula", quality: 2 },
+      ]),
     ];
     const danger = new Map([["a", 0.3]]);
 
@@ -246,6 +422,8 @@ describe("generateOpMissionCandidates", () => {
     expect(types.has("patrol")).toBe(true);
     expect(types.has("survey")).toBe(true);
     expect(types.has("bounty")).toBe(true);
+    expect(types.has("salvage")).toBe(true);
+    expect(types.has("recon")).toBe(true);
   });
 
   it("returns empty for safe system with no eligible traits", () => {

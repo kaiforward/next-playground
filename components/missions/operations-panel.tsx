@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { MissionInfo, FleetState } from "@/lib/types/game";
-import { useAcceptOpMission, useAbandonOpMission } from "@/lib/hooks/use-op-mission-mutations";
+import { useAcceptOpMission, useAbandonOpMission, useStartOpMission } from "@/lib/hooks/use-op-mission-mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { formatCredits } from "@/lib/utils/format";
-import { MISSION_TYPE_DEFS, type MissionType } from "@/lib/constants/missions";
+import { MISSION_TYPE_DEFS, type MissionType, type StatGateKey } from "@/lib/constants/missions";
 import { ENEMY_TIERS, type EnemyTier } from "@/lib/constants/combat";
 
 interface OperationsPanelProps {
@@ -20,10 +20,12 @@ interface OperationsPanelProps {
   currentTick: number;
 }
 
-const TYPE_COLORS: Record<string, "red" | "cyan" | "purple"> = {
+const TYPE_COLORS: Record<string, "red" | "cyan" | "purple" | "amber" | "green"> = {
   patrol: "red",
   survey: "cyan",
   bounty: "purple",
+  salvage: "amber",
+  recon: "green",
 };
 
 const TIER_COLORS: Record<string, "green" | "amber" | "red"> = {
@@ -41,14 +43,11 @@ export function OperationsPanel({
 }: OperationsPanelProps) {
   return (
     <div className="space-y-8">
-      <AvailableOperations
-        missions={available}
-        systemId={systemId}
-        fleet={fleet}
-      />
+      <AvailableOperations missions={available} />
       {active.length > 0 && (
         <ActiveOperations
           missions={active}
+          fleet={fleet}
           currentTick={currentTick}
         />
       )}
@@ -60,40 +59,11 @@ export function OperationsPanel({
 
 function AvailableOperations({
   missions,
-  systemId,
-  fleet,
 }: {
   missions: MissionInfo[];
-  systemId: string;
-  fleet: FleetState | null;
 }) {
   const acceptMutation = useAcceptOpMission();
   const [error, setError] = useState<string | null>(null);
-  const [selectedShips, setSelectedShips] = useState<Record<string, string>>({});
-
-  // Build eligible ships for each mission (docked at this system, meets stat gates)
-  const eligibleShipsMap = new Map<string, Array<{ id: string; name: string }>>();
-  if (fleet) {
-    for (const mission of missions) {
-      const eligible = fleet.ships.filter((ship) => {
-        if (ship.status !== "docked") return false;
-        if (ship.systemId !== systemId) return false;
-        if (ship.disabled) return false;
-        // Check stat gates
-        const stats: Record<string, number> = {
-          firepower: ship.firepower,
-          sensors: ship.sensors,
-          hullMax: ship.hullMax,
-          stealth: ship.stealth,
-        };
-        for (const [stat, required] of Object.entries(mission.statRequirements)) {
-          if ((stats[stat] ?? 0) < required) return false;
-        }
-        return true;
-      });
-      eligibleShipsMap.set(mission.id, eligible.map((s) => ({ id: s.id, name: s.name })));
-    }
-  }
 
   return (
     <Card variant="bordered" padding="md">
@@ -128,8 +98,6 @@ function AvailableOperations({
               <tbody>
                 {missions.map((m) => {
                   const typeDef = MISSION_TYPE_DEFS[m.type as MissionType];
-                  const eligible = eligibleShipsMap.get(m.id) ?? [];
-                  const selectedShipId = selectedShips[m.id] ?? eligible[0]?.id;
 
                   return (
                     <tr key={m.id} className="border-b border-white/5">
@@ -172,43 +140,21 @@ function AvailableOperations({
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {eligible.length > 1 && (
-                            <div className="w-36">
-                              <SelectInput
-                                size="sm"
-                                options={eligible.map((s): SelectOption => ({
-                                  value: s.id,
-                                  label: s.name,
-                                }))}
-                                value={selectedShipId ?? ""}
-                                onChange={(value) =>
-                                  setSelectedShips((prev) => ({ ...prev, [m.id]: value }))
-                                }
-                                isSearchable={false}
-                              />
-                            </div>
-                          )}
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            disabled={!selectedShipId || acceptMutation.isPending}
-                            onClick={async () => {
-                              if (!selectedShipId) return;
-                              setError(null);
-                              try {
-                                await acceptMutation.mutateAsync({
-                                  missionId: m.id,
-                                  shipId: selectedShipId,
-                                });
-                              } catch (e) {
-                                setError(e instanceof Error ? e.message : "Failed to accept");
-                              }
-                            }}
-                          >
-                            {eligible.length === 0 ? "No eligible ship" : "Accept"}
-                          </Button>
-                        </div>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={acceptMutation.isPending}
+                          onClick={async () => {
+                            setError(null);
+                            try {
+                              await acceptMutation.mutateAsync(m.id);
+                            } catch (e) {
+                              setError(e instanceof Error ? e.message : "Failed to accept");
+                            }
+                          }}
+                        >
+                          Accept
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -226,13 +172,17 @@ function AvailableOperations({
 
 function ActiveOperations({
   missions,
+  fleet,
   currentTick,
 }: {
   missions: MissionInfo[];
+  fleet: FleetState | null;
   currentTick: number;
 }) {
   const abandonMutation = useAbandonOpMission();
+  const startMutation = useStartOpMission();
   const [error, setError] = useState<string | null>(null);
+  const [selectedShips, setSelectedShips] = useState<Record<string, string>>({});
 
   return (
     <Card variant="bordered" padding="md">
@@ -269,10 +219,40 @@ function ActiveOperations({
                   const remaining = Math.max(0, m.durationTicks - elapsed);
                   progressText = `${remaining} ticks remaining`;
                 } else if (m.status === "accepted") {
-                  progressText = "Navigate to target";
+                  progressText = "Assign a ship to start";
                 } else if (m.status === "in_progress" && m.type === "bounty") {
                   progressText = "In battle";
                 }
+
+                // For accepted missions, build eligible ship list
+                const eligible: Array<{ id: string; name: string }> = [];
+                if (m.status === "accepted" && fleet) {
+                  const statReqs = m.statRequirements;
+                  for (const ship of fleet.ships) {
+                    if (ship.status !== "docked") continue;
+                    if (ship.systemId !== m.targetSystemId) continue;
+                    if (ship.disabled) continue;
+                    if (ship.convoyId) continue;
+                    if (ship.activeMission) continue;
+                    // Check stat gates
+                    const stats: Record<string, number> = {
+                      firepower: ship.firepower,
+                      sensors: ship.sensors,
+                      hullMax: ship.hullMax,
+                      stealth: ship.stealth,
+                    };
+                    let meets = true;
+                    for (const [stat, required] of Object.entries(statReqs)) {
+                      if ((stats[stat] ?? 0) < required) {
+                        meets = false;
+                        break;
+                      }
+                    }
+                    if (meets) eligible.push({ id: ship.id, name: ship.name });
+                  }
+                }
+
+                const selectedShipId = selectedShips[m.id] ?? eligible[0]?.id;
 
                 return (
                   <tr key={m.id} className="border-b border-white/5">
@@ -298,24 +278,74 @@ function ActiveOperations({
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {(m.status === "accepted" || (m.status === "in_progress" && m.type !== "bounty")) && (
-                        <Button
-                          variant="action"
-                          color="red"
-                          size="sm"
-                          disabled={abandonMutation.isPending}
-                          onClick={async () => {
-                            setError(null);
-                            try {
-                              await abandonMutation.mutateAsync(m.id);
-                            } catch (e) {
-                              setError(e instanceof Error ? e.message : "Failed to abandon");
-                            }
-                          }}
-                        >
-                          Abandon
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {/* Start button for accepted missions */}
+                        {m.status === "accepted" && (
+                          <>
+                            {eligible.length > 0 ? (
+                              <>
+                                {eligible.length > 1 && (
+                                  <div className="w-36">
+                                    <SelectInput
+                                      size="sm"
+                                      options={eligible.map((s): SelectOption => ({
+                                        value: s.id,
+                                        label: s.name,
+                                      }))}
+                                      value={selectedShipId ?? ""}
+                                      onChange={(value) =>
+                                        setSelectedShips((prev) => ({ ...prev, [m.id]: value }))
+                                      }
+                                      isSearchable={false}
+                                    />
+                                  </div>
+                                )}
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  disabled={!selectedShipId || startMutation.isPending}
+                                  onClick={async () => {
+                                    if (!selectedShipId) return;
+                                    setError(null);
+                                    try {
+                                      await startMutation.mutateAsync({
+                                        missionId: m.id,
+                                        shipId: selectedShipId,
+                                      });
+                                    } catch (e) {
+                                      setError(e instanceof Error ? e.message : "Failed to start");
+                                    }
+                                  }}
+                                >
+                                  Start
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-white/30">No ship at target</span>
+                            )}
+                          </>
+                        )}
+
+                        {/* Abandon button for accepted and non-bounty in_progress */}
+                        {(m.status === "accepted" || (m.status === "in_progress" && m.type !== "bounty")) && (
+                          <Button
+                            variant="action"
+                            color="red"
+                            size="sm"
+                            disabled={abandonMutation.isPending}
+                            onClick={async () => {
+                              setError(null);
+                              try {
+                                await abandonMutation.mutateAsync(m.id);
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : "Failed to abandon");
+                              }
+                            }}
+                          >
+                            Abandon
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

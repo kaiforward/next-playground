@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionPlayerId } from "@/lib/auth/get-player";
 import { acceptMission } from "@/lib/services/missions-v2";
-import { parseJsonBody } from "@/lib/api/parse-json";
 import { rateLimit } from "@/lib/api/rate-limit";
 import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
-import type { AcceptOpMissionRequest, AcceptOpMissionResponse } from "@/lib/types/api";
+import type { AcceptOpMissionResponse } from "@/lib/types/api";
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ missionId: string }> },
 ) {
   try {
@@ -27,15 +26,7 @@ export async function POST(
 
     const { missionId } = await params;
 
-    const body = await parseJsonBody<AcceptOpMissionRequest>(request);
-    if (!body?.shipId) {
-      return NextResponse.json<AcceptOpMissionResponse>(
-        { error: "Missing required field: shipId." },
-        { status: 400 },
-      );
-    }
-
-    const result = await acceptMission(playerId, missionId, body.shipId);
+    const result = await acceptMission(playerId, missionId);
 
     if (!result.ok) {
       return NextResponse.json<AcceptOpMissionResponse>(

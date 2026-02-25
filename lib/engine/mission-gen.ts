@@ -7,6 +7,8 @@ import {
   type MissionType,
   MISSION_TYPE_DEFS,
   SURVEY_ELIGIBLE_TRAITS,
+  SALVAGE_ELIGIBLE_TRAITS,
+  RECON_ELIGIBLE_TRAITS,
   OP_MISSION_DEADLINE_TICKS,
 } from "@/lib/constants/missions";
 import { getEnemyTier, type EnemyTier } from "@/lib/constants/combat";
@@ -177,6 +179,105 @@ export function selectBountyCandidates(
   return candidates;
 }
 
+// ── Salvage candidates ──────────────────────────────────────────
+
+/**
+ * Systems with salvage-eligible traits generate salvage missions.
+ * Trait quality affects reward. Follows survey pattern (trait-gated).
+ */
+export function selectSalvageCandidates(
+  systems: SystemSnapshot[],
+  tick: number,
+  rng: () => number,
+): OpMissionCandidate[] {
+  const def = MISSION_TYPE_DEFS.salvage;
+  const candidates: OpMissionCandidate[] = [];
+
+  const eligibleTraits = new Set<string>(SALVAGE_ELIGIBLE_TRAITS);
+
+  for (const system of systems) {
+    const salvageTraits = system.traits.filter((t) =>
+      eligibleTraits.has(t.traitId),
+    );
+    if (salvageTraits.length === 0) continue;
+
+    // Generation probability: 15% per eligible trait per cycle
+    if (rng() > 0.15 * salvageTraits.length) continue;
+
+    const [minDur, maxDur] = def.durationTicks!;
+    const durationTicks = minDur + Math.floor(rng() * (maxDur - minDur + 1));
+
+    // Reward scales with max trait quality
+    const maxQuality = Math.max(...salvageTraits.map((t) => t.quality));
+    const qualityFactor = (maxQuality - 1) / 2; // 1→0, 2→0.5, 3→1.0
+    const reward = interpolateReward(def.rewardRange, qualityFactor);
+
+    candidates.push({
+      type: "salvage",
+      systemId: system.id,
+      targetSystemId: system.id,
+      reward,
+      deadlineTick: tick + OP_MISSION_DEADLINE_TICKS,
+      durationTicks,
+      enemyTier: null,
+      statRequirements: { ...def.statGate },
+    });
+  }
+
+  return candidates;
+}
+
+// ── Recon candidates ────────────────────────────────────────────
+
+/**
+ * Dual-gated: systems must have BOTH danger > threshold AND a recon-eligible trait.
+ * Higher danger = higher reward.
+ */
+export function selectReconCandidates(
+  systems: SystemSnapshot[],
+  dangerLevels: Map<string, number>,
+  tick: number,
+  rng: () => number,
+): OpMissionCandidate[] {
+  const def = MISSION_TYPE_DEFS.recon;
+  const candidates: OpMissionCandidate[] = [];
+
+  const eligibleTraits = new Set<string>(RECON_ELIGIBLE_TRAITS);
+
+  for (const system of systems) {
+    const danger = dangerLevels.get(system.id) ?? 0;
+    if (danger < def.dangerThreshold) continue;
+
+    const reconTraits = system.traits.filter((t) =>
+      eligibleTraits.has(t.traitId),
+    );
+    if (reconTraits.length === 0) continue;
+
+    // Generation probability scales with danger * trait count
+    if (rng() > danger * 2 * reconTraits.length) continue;
+
+    const [minDur, maxDur] = def.durationTicks!;
+    const durationTicks = minDur + Math.floor(rng() * (maxDur - minDur + 1));
+
+    // Reward scales with danger (normalize to 0-1 factor)
+    const dangerFactor = Math.min(1, danger / 0.5);
+    const reward = interpolateReward(def.rewardRange, dangerFactor);
+
+    candidates.push({
+      type: "recon",
+      systemId: system.id,
+      targetSystemId: system.id,
+      reward,
+      deadlineTick: tick + OP_MISSION_DEADLINE_TICKS,
+      durationTicks,
+      enemyTier: null,
+      statRequirements: { ...def.statGate },
+    });
+  }
+
+  return candidates;
+}
+
 // ── Combined generation ─────────────────────────────────────────
 
 /**
@@ -192,5 +293,7 @@ export function generateOpMissionCandidates(
     ...selectPatrolCandidates(systems, dangerLevels, tick, rng),
     ...selectSurveyCandidates(systems, tick, rng),
     ...selectBountyCandidates(systems, dangerLevels, tick, rng),
+    ...selectSalvageCandidates(systems, tick, rng),
+    ...selectReconCandidates(systems, dangerLevels, tick, rng),
   ];
 }

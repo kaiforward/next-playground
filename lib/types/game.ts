@@ -47,7 +47,7 @@ export type TraitId =
   | "radioactive_deposits"
   | "superdense_core"
   | "glacial_aquifer"
-  // Phenomena & Anomalies (9)
+  // Phenomena & Anomalies (13)
   | "nebula_proximity"
   | "solar_flare_activity"
   | "gravitational_anomaly"
@@ -57,14 +57,21 @@ export type TraitId =
   | "pulsar_proximity"
   | "ion_storm_corridor"
   | "bioluminescent_ecosystem"
-  // Infrastructure & Legacy (7)
+  | "signal_anomaly"
+  | "xenobiology_preserve"
+  | "ancient_minefield"
+  | "pirate_stronghold"
+  // Infrastructure & Legacy (10)
   | "ancient_trade_route"
   | "generation_ship_wreckage"
   | "orbital_ring_remnant"
   | "seed_vault"
   | "colonial_capital"
   | "free_port_declaration"
-  | "shipbreaking_yards";
+  | "shipbreaking_yards"
+  | "derelict_fleet"
+  | "abandoned_station"
+  | "smuggler_haven";
 
 export type TraitCategory =
   | "planetary"
@@ -89,6 +96,7 @@ export interface RegionInfo {
   id: string;
   name: string;
   dominantEconomy: EconomyType;
+  governmentType?: GovernmentType;
   x: number;
   y: number;
 }
@@ -103,6 +111,12 @@ export interface UpgradeSlotState {
   slotIndex: number;
   moduleId: string | null;
   moduleTier: number | null;
+}
+
+export interface ShipActiveMission {
+  id: string;
+  type: string;
+  status: OpMissionStatus;
 }
 
 export interface ShipState {
@@ -135,6 +149,7 @@ export interface ShipState {
   departureTick: number | null;
   arrivalTick: number | null;
   convoyId: string | null;
+  activeMission: ShipActiveMission | null;
 }
 
 export type ConvoyStatus = "docked" | "in_transit";

@@ -47,10 +47,13 @@ const TRAIT_IDS: ReadonlySet<string> = new Set<TraitId>([
   "nebula_proximity", "solar_flare_activity", "gravitational_anomaly",
   "dark_nebula", "precursor_ruins", "subspace_rift", "pulsar_proximity",
   "ion_storm_corridor", "bioluminescent_ecosystem",
+  "signal_anomaly", "xenobiology_preserve", "ancient_minefield",
+  "pirate_stronghold",
   // Infrastructure & Legacy
   "ancient_trade_route", "generation_ship_wreckage", "orbital_ring_remnant",
   "seed_vault", "colonial_capital", "free_port_declaration",
-  "shipbreaking_yards",
+  "shipbreaking_yards", "derelict_fleet", "abandoned_station",
+  "smuggler_haven",
 ]);
 
 const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([

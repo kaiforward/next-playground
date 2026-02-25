@@ -9,10 +9,12 @@ import { formatCredits } from "@/lib/utils/format";
 import type { MissionInfo } from "@/lib/types/game";
 import { MISSION_TYPE_DEFS, type MissionType } from "@/lib/constants/missions";
 
-const TYPE_COLORS: Record<string, "red" | "cyan" | "purple"> = {
+const TYPE_COLORS: Record<string, "red" | "cyan" | "purple" | "amber" | "green"> = {
   patrol: "red",
   survey: "cyan",
   bounty: "purple",
+  salvage: "amber",
+  recon: "green",
 };
 
 export function ActiveMissionsCard() {
@@ -106,7 +108,7 @@ function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
           <Badge color="red">In Battle</Badge>
         )}
         <span className="ml-auto">
-          {m.status === "accepted" ? "Navigate to target" : m.status}
+          {m.status === "accepted" ? "Awaiting ship" : m.status}
         </span>
       </div>
     </li>

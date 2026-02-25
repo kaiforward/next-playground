@@ -104,12 +104,14 @@ function ShipTypeCard({
         <StatMini label="Firepower" value={def.firepower} />
         <StatMini label="Evasion" value={def.evasion} />
         <StatMini label="Stealth" value={def.stealth} />
+        <StatMini label="Sensors" value={def.sensors} />
+        <StatMini label="Crew" value={def.crewCapacity} />
       </div>
 
       <div className="flex items-center justify-between mb-3">
         <Badge color="amber">{formatCredits(def.price)}</Badge>
-        <span className="text-[10px] text-white/30">
-          {def.slotLayout.engine + def.slotLayout.cargo + def.slotLayout.defence + def.slotLayout.systems} slots
+        <span className="text-[10px] text-white/30 font-mono">
+          {def.slotLayout.engine}E {def.slotLayout.cargo}C {def.slotLayout.defence}D {def.slotLayout.systems}S
         </span>
       </div>
 

@@ -1,6 +1,6 @@
 // ── Operational mission types ─────────────────────────────────────
 
-export type MissionType = "patrol" | "survey" | "bounty";
+export type MissionType = "patrol" | "survey" | "bounty" | "salvage" | "recon";
 
 export type StatGateKey = "firepower" | "sensors" | "hullMax" | "stealth";
 
@@ -42,6 +42,22 @@ export const MISSION_TYPE_DEFS: Record<MissionType, MissionTypeDef> = {
     rewardRange: [300, 800],
     dangerThreshold: 0.20,
   },
+  salvage: {
+    name: "Salvage",
+    description: "Recover materials and data from derelict sites and abandoned infrastructure.",
+    statGate: { stealth: 4 },
+    durationTicks: [12, 20],
+    rewardRange: [200, 600],
+    dangerThreshold: 0, // trait-gated, not danger
+  },
+  recon: {
+    name: "Recon",
+    description: "Conduct stealth reconnaissance in a hostile area to gather intelligence.",
+    statGate: { stealth: 5 },
+    durationTicks: [8, 12],
+    rewardRange: [250, 550],
+    dangerThreshold: 0.10, // dual-gated: danger + traits
+  },
 };
 
 /** Traits that make a system eligible for survey missions. */
@@ -52,6 +68,34 @@ export const SURVEY_ELIGIBLE_TRAITS = [
   "dark_nebula",
   "subspace_rift",
   "bioluminescent_ecosystem",
+  "exotic_matter_traces",
+  "captured_rogue_body",
+  "crystalline_formations",
+  "nebula_proximity",
+  "pulsar_proximity",
+  "ion_storm_corridor",
+  "tidally_locked_world",
+  "signal_anomaly",
+  "xenobiology_preserve",
+] as const;
+
+/** Traits that make a system eligible for salvage missions. */
+export const SALVAGE_ELIGIBLE_TRAITS = [
+  "generation_ship_wreckage",
+  "orbital_ring_remnant",
+  "shipbreaking_yards",
+  "derelict_fleet",
+  "abandoned_station",
+] as const;
+
+/** Traits that make a system eligible for recon missions (also requires danger > threshold). */
+export const RECON_ELIGIBLE_TRAITS = [
+  "dark_nebula",
+  "nebula_proximity",
+  "ion_storm_corridor",
+  "smuggler_haven",
+  "ancient_minefield",
+  "pirate_stronghold",
 ] as const;
 
 /** Max available operational missions per system. */

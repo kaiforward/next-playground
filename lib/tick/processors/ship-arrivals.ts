@@ -14,13 +14,11 @@ import {
 import { rollDamageOnArrival, computeEscortProtection, type DamageResult } from "@/lib/engine/damage";
 import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
-import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
-import { COMBAT_CONSTANTS, getEnemyTier } from "@/lib/constants/combat";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
 import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
-import type { TickProcessor, TickProcessorResult, TxClient } from "../types";
+import type { TickProcessor, TickProcessorResult } from "../types";
 
 interface ArrivedShip {
   shipId: string;
@@ -459,136 +457,6 @@ export const shipArrivalsProcessor: TickProcessor = {
       playerEvents.set(a.playerId, existing);
     }
 
-    // ── Activate operational missions for arrived ships ──
-    await activateMissionsForArrivedShips(ctx.tx, ctx.tick, arrived, modsBySystem, playerEvents);
-
     return { playerEvents };
   },
 };
-
-// ── Mission activation on arrival ───────────────────────────────
-
-async function activateMissionsForArrivedShips(
-  tx: TxClient,
-  tick: number,
-  arrived: ArrivedShip[],
-  modsBySystem: Map<string, ModifierRow[]>,
-  playerEvents: Map<string, Record<string, unknown[]>>,
-): Promise<void> {
-  // For each arrived ship, check if it has accepted missions targeting this system
-  for (const arrival of arrived) {
-    const missions = await tx.mission.findMany({
-      where: {
-        shipId: arrival.shipId,
-        status: "accepted",
-        targetSystemId: arrival.systemId,
-      },
-      include: {
-        targetSystem: {
-          select: {
-            name: true,
-            region: { select: { governmentType: true } },
-            traits: { select: { traitId: true, quality: true } },
-          },
-        },
-      },
-    });
-
-    for (const mission of missions) {
-      if (mission.type === "bounty") {
-        // Create a battle for bounty missions
-        const ship = await tx.ship.findUnique({
-          where: { id: arrival.shipId },
-          select: {
-            hullMax: true,
-            hullCurrent: true,
-            shieldMax: true,
-            shieldCurrent: true,
-            firepower: true,
-            evasion: true,
-          },
-        });
-        if (!ship) continue;
-
-        // Compute danger at system for enemy scaling
-        const systemMods = modsBySystem.get(arrival.systemId) ?? [];
-        const govType = mission.targetSystem?.region?.governmentType
-          ? toGovernmentType(mission.targetSystem.region.governmentType)
-          : undefined;
-        const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
-        const govBaseline = govDef?.dangerBaseline ?? 0;
-        const destTraits = (mission.targetSystem?.traits ?? []).map((t) => ({
-          traitId: toTraitId(t.traitId),
-          quality: toQualityTier(t.quality),
-        }));
-        const traitDanger = computeTraitDanger(destTraits);
-        const danger = Math.max(0, Math.min(
-          aggregateDangerLevel(systemMods) + govBaseline + traitDanger,
-          DANGER_CONSTANTS.MAX_DANGER,
-        ));
-
-        const playerStats = derivePlayerCombatStats(ship);
-        const enemyTier = mission.enemyTier
-          ? (mission.enemyTier as "weak" | "moderate" | "strong")
-          : getEnemyTier(danger);
-        const enemyStats = deriveEnemyCombatStats(enemyTier, danger);
-
-        await tx.battle.create({
-          data: {
-            type: "pirate_encounter",
-            systemId: arrival.systemId,
-            missionId: mission.id,
-            shipId: arrival.shipId,
-            status: "active",
-            playerStrength: playerStats.strength,
-            playerMorale: playerStats.morale,
-            enemyStrength: enemyStats.strength,
-            enemyMorale: enemyStats.morale,
-            enemyType: "pirates",
-            enemyTier: enemyTier,
-            roundInterval: COMBAT_CONSTANTS.ROUND_INTERVAL,
-            nextRoundTick: tick + COMBAT_CONSTANTS.ROUND_INTERVAL,
-            createdAtTick: tick,
-          },
-        });
-
-        await tx.mission.update({
-          where: { id: mission.id },
-          data: { status: "in_progress", startedAtTick: tick },
-        });
-
-        const existing = playerEvents.get(arrival.playerId) ?? {};
-        const notifications = existing["gameNotifications"] ?? [];
-        notifications.push({
-          message: `Battle started! ${arrival.shipName} engaging pirates at ${arrival.destName}`,
-          type: "battle_started",
-          refs: {
-            ship: { id: arrival.shipId, label: arrival.shipName },
-            system: { id: arrival.systemId, label: arrival.destName },
-          },
-        });
-        existing["gameNotifications"] = notifications;
-        playerEvents.set(arrival.playerId, existing);
-      } else {
-        // Patrol/Survey: start the commitment timer
-        await tx.mission.update({
-          where: { id: mission.id },
-          data: { status: "in_progress", startedAtTick: tick },
-        });
-
-        const existing = playerEvents.get(arrival.playerId) ?? {};
-        const notifications = existing["gameNotifications"] ?? [];
-        notifications.push({
-          message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission started at ${arrival.destName}`,
-          type: "mission_started",
-          refs: {
-            ship: { id: arrival.shipId, label: arrival.shipName },
-            system: { id: arrival.systemId, label: arrival.destName },
-          },
-        });
-        existing["gameNotifications"] = notifications;
-        playerEvents.set(arrival.playerId, existing);
-      }
-    }
-  }
-}
