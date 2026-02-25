@@ -2,24 +2,25 @@
 
 import Select, { type StylesConfig } from "react-select";
 import { tv, type VariantProps } from "tailwind-variants";
+import { formSlots, formSizeVariants } from "./form-slots";
 
 export type SelectOption<T = string> = { value: T; label: string };
 
 const selectInputVariants = tv({
   slots: {
-    label: "block font-medium mb-1",
+    label: formSlots.label,
     container: "",
-    error: "mt-1 text-red-400",
+    error: formSlots.error,
   },
   variants: {
     size: {
       sm: {
-        label: "text-xs text-white/50 uppercase tracking-wider",
-        error: "text-xs",
+        label: formSizeVariants.sm.label,
+        error: formSizeVariants.sm.error,
       },
       md: {
-        label: "text-sm text-white/70 mb-1.5",
-        error: "text-xs",
+        label: formSizeVariants.md.label,
+        error: formSizeVariants.md.error,
       },
     },
   },
