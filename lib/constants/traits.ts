@@ -17,7 +17,7 @@ export interface TraitDefinition {
   productionGoods: string[];
   /** Flavour text per quality tier. */
   descriptions: Record<QualityTier, string>;
-  /** Base danger adjustment. Stored now, wired in Layer 1+. */
+  /** Base danger adjustment added to system danger level. Positive = more dangerous, negative = safer. */
   dangerModifier?: number;
   /** Trait has downsides (volcanic, radioactive, etc.). */
   negative?: boolean;
@@ -36,7 +36,7 @@ export const QUALITY_TIERS: Record<
 
 // ── Trait catalog ─────────────────────────────────────────────────
 //
-// 45 traits across 5 categories. Economy affinities and production
+// 52 traits across 5 categories. Economy affinities and production
 // goods match the design doc (system-enrichment.md §1.1).
 // Strong affinities (2) drive economy derivation; minor (1) are
 // flavour and production bonuses only.
@@ -50,6 +50,7 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
     category: "planetary",
     economyAffinity: { agricultural: 2, core: 2 },
     productionGoods: ["food"],
+    dangerModifier: -0.03,
     descriptions: {
       1: "A marginal world with thin atmosphere and limited arable land. Settlements cling to sheltered valleys.",
       2: "A temperate world with reliable water cycles and established farmland across its major continents.",
@@ -261,6 +262,7 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
     category: "orbital",
     economyAffinity: { industrial: 2, core: 1 },
     productionGoods: ["machinery"],
+    dangerModifier: -0.03,
     descriptions: {
       1: "A handful of small platforms at the system's Lagrange points. Basic orbital manufacturing capabilities.",
       2: "Established station clusters at stable orbital points. Significant industrial output and growing commerce.",
@@ -524,6 +526,59 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
     },
   },
 
+  signal_anomaly: {
+    id: "signal_anomaly",
+    name: "Signal Anomaly",
+    category: "phenomena",
+    economyAffinity: { tech: 1 },
+    productionGoods: [],
+    descriptions: {
+      1: "Faint, repeating signals of unknown origin detected on deep-space frequencies. Origin unclear.",
+      2: "A persistent signal anomaly broadcasting structured data patterns. Research teams maintain listening arrays to decode the transmissions.",
+      3: "An extraordinarily complex signal anomaly — layered, structured, and possibly artificial. The source remains unknown, drawing scientists and conspiracy theorists in equal measure.",
+    },
+  },
+  xenobiology_preserve: {
+    id: "xenobiology_preserve",
+    name: "Xenobiology Preserve",
+    category: "phenomena",
+    economyAffinity: { agricultural: 1, tech: 1 },
+    productionGoods: ["medicine"],
+    descriptions: {
+      1: "A small protected zone harbours a handful of non-terrestrial organisms. Sampling is tightly regulated.",
+      2: "A significant xenobiology preserve with diverse alien life forms. Controlled research yields pharmaceutical and agricultural breakthroughs.",
+      3: "A vast preserve teeming with alien ecosystems — the largest concentration of non-terrestrial life ever documented. Its biochemistry has revolutionised medicine and bio-engineering.",
+    },
+  },
+  ancient_minefield: {
+    id: "ancient_minefield",
+    name: "Ancient Minefield",
+    category: "phenomena",
+    economyAffinity: { tech: 1 },
+    productionGoods: [],
+    dangerModifier: 0.05,
+    negative: true,
+    descriptions: {
+      1: "Scattered dormant mines from a forgotten conflict drift through the outer system. Most shipping lanes are clear.",
+      2: "A dense field of ancient automated mines makes large portions of the system hazardous. Salvagers occasionally recover valuable ordnance.",
+      3: "A vast ancient minefield spanning the entire system — thousands of dormant weapons from a war lost to history. Navigation is perilous, but the intelligence locked within the mines is priceless.",
+    },
+  },
+  pirate_stronghold: {
+    id: "pirate_stronghold",
+    name: "Pirate Stronghold",
+    category: "phenomena",
+    economyAffinity: {},
+    productionGoods: [],
+    dangerModifier: 0.08,
+    negative: true,
+    descriptions: {
+      1: "A minor pirate enclave operates from a hidden base in the system's asteroid field. Patrols keep them contained.",
+      2: "An established pirate stronghold with fortified positions and a fleet of raiding vessels. Commerce is frequently disrupted.",
+      3: "A major pirate stronghold — a heavily fortified base of operations from which raiding fleets terrorise the surrounding systems. Only the brave or foolish linger here.",
+    },
+  },
+
   // ── Infrastructure & Legacy ────────────────────────────────────
 
   ancient_trade_route: {
@@ -608,6 +663,42 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
       1: "A small orbital scrapyard where decommissioned shuttles are stripped for salvageable components.",
       2: "Massive orbital scrapyards processing a steady stream of decommissioned vessels. Recycled metals and salvaged components feed local industry.",
       3: "The largest shipbreaking operation in the sector — an industrial-scale recycling machine that transforms retired fleets into raw materials, recovered alloys, and repurposed weapons systems.",
+    },
+  },
+  derelict_fleet: {
+    id: "derelict_fleet",
+    name: "Derelict Fleet",
+    category: "legacy",
+    economyAffinity: { extraction: 1, industrial: 1 },
+    productionGoods: ["metals"],
+    descriptions: {
+      1: "A handful of gutted hulks drift in a decaying orbit. Occasional salvage runs recover scrap metal.",
+      2: "A graveyard of warships from a forgotten campaign. Organised salvage teams strip the vessels for rare alloys and intact components.",
+      3: "An enormous derelict fleet — hundreds of warships suspended in silent formation. The salvage rights alone are worth a fortune, and rumours persist of sealed vaults deep within the flagships.",
+    },
+  },
+  abandoned_station: {
+    id: "abandoned_station",
+    name: "Abandoned Station",
+    category: "legacy",
+    economyAffinity: { industrial: 1, core: 1 },
+    productionGoods: ["machinery"],
+    descriptions: {
+      1: "A small decommissioned outpost with stripped systems. Little of value remains beyond structural materials.",
+      2: "A large abandoned station with partially functional infrastructure. Reclamation crews recover industrial equipment and data cores.",
+      3: "A massive abandoned megastation — entire decks remain sealed and unexplored. Its industrial systems, if restored, could anchor a new colonial hub.",
+    },
+  },
+  smuggler_haven: {
+    id: "smuggler_haven",
+    name: "Smuggler Haven",
+    category: "legacy",
+    economyAffinity: { core: 1 },
+    productionGoods: ["luxuries"],
+    descriptions: {
+      1: "A discreet refuelling point known to independent traders. Authorities turn a blind eye to minor infractions.",
+      2: "An established smuggler haven with hidden docking bays and a reputation for discretion. Contraband flows freely through its markets.",
+      3: "A legendary smuggler haven — a vast network of concealed berths, black markets, and information brokers. If it exists, it can be found here — for a price.",
     },
   },
 };

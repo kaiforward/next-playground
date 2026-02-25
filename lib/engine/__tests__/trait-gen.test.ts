@@ -3,6 +3,7 @@ import {
   generateSystemTraits,
   deriveEconomyType,
   computeTraitProductionBonus,
+  computeTraitDanger,
   type GeneratedTrait,
 } from "../trait-gen";
 import { mulberry32, type RNG } from "../universe-gen";
@@ -127,6 +128,39 @@ describe("computeTraitProductionBonus", () => {
 
   it("returns 0 for empty trait list", () => {
     expect(computeTraitProductionBonus([], "food")).toBe(0);
+  });
+});
+
+// ── computeTraitDanger ───────────────────────────────────────────
+
+describe("computeTraitDanger", () => {
+  it("returns 0 for traits with no danger modifier", () => {
+    const traits = [makeTrait("asteroid_belt", 3)];
+    expect(computeTraitDanger(traits)).toBe(0);
+  });
+
+  it("returns positive value for dangerous traits", () => {
+    const traits = [makeTrait("volcanic_world", 2)];
+    expect(computeTraitDanger(traits)).toBe(0.05);
+  });
+
+  it("returns negative value for safe traits", () => {
+    const traits = [makeTrait("habitable_world", 1)];
+    expect(computeTraitDanger(traits)).toBe(-0.03);
+  });
+
+  it("stacks multiple danger modifiers", () => {
+    const traits = [makeTrait("dark_nebula", 3), makeTrait("subspace_rift", 2)];
+    expect(computeTraitDanger(traits)).toBeCloseTo(0.14); // 0.06 + 0.08
+  });
+
+  it("positive and negative modifiers cancel out", () => {
+    const traits = [makeTrait("volcanic_world", 1), makeTrait("habitable_world", 2)];
+    expect(computeTraitDanger(traits)).toBeCloseTo(0.02); // 0.05 - 0.03
+  });
+
+  it("returns 0 for empty trait list", () => {
+    expect(computeTraitDanger([])).toBe(0);
   });
 });
 

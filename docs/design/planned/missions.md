@@ -2,7 +2,7 @@
 
 Framework for all universe and region-level missions — tasks that players accept and complete by sending ships to systems and interacting through the existing map UI. This covers the full range from trade deliveries to military patrols to diplomatic errands.
 
-**Existing implementation**: Trade missions (delivery contracts from market conditions and events) are live — see [trading.md](../active/trading.md) for the current `TradeMission` model, generation logic, and lifecycle. This spec extends that foundation.
+**Existing implementation**: Trade missions (delivery contracts from market conditions and events) are live — see [trading.md](../active/trading.md) for the current `TradeMission` model, generation logic, and lifecycle. Non-faction operational missions (patrol, survey, bounty) are also live — see [combat.md](../active/combat.md) for the combat engine and battle system. This spec covers the full vision including faction-gated variants that extend those foundations.
 
 **Out of scope**: In-system missions (story-driven, trait-flavoured content that takes place *within* a system's features — asteroid belts, planet surfaces, ruins) are a separate gameplay layer. See [in-system-gameplay.md](./in-system-gameplay.md).
 
@@ -59,20 +59,23 @@ This is the existing trade mission system, extended with new generation sources.
 
 "Go to X, spend time, effect applied." Player sends a ship to a target system. The ship is committed for a duration (locked, similar to travel). The ship's stats determine which missions it can accept, and its presence at the target system produces the effect.
 
-These are **peacetime faction missions** — ongoing activities that factions need done regardless of war state. During active wars, some operational missions transform into or are replaced by war contributions (see [war-system.md §8](./war-system.md)). The integration between wartime missions and the battle system is designed alongside the war system implementation, not here.
+**Partially implemented (Layer 1.5)**: Non-faction variants of patrol, survey, and bounty are live. These are generated from system danger levels and traits, without faction or facility requirements. See [combat.md](../active/combat.md) for the battle engine and mission generation details. The faction-gated variants described below extend this foundation in Layer 2.
 
-| Subtype | Source | Stat gate | Duration | Effect |
-|---|---|---|---|---|
-| **Patrol** | Naval base | Firepower, hull | Medium (10–20 ticks) | Reduces danger modifier at target system while ship is deployed. Higher firepower = greater danger reduction |
-| **Intelligence** | Intelligence outpost | Stealth, sensors | Medium (10–20 ticks) | Gathers data on rival faction systems. Detection risk based on stealth vs system security. Builds faction reputation and feeds strategic information |
-| **Diplomacy** | Embassy | None (ship is transport) | Short (5–10 ticks) | Ferries envoys between faction systems. Generates positive inter-faction relation drift. Low risk, reputation-focused |
-| **Survey** | Research station | Sensors, speed | Short (5–10 ticks) | Scouts systems for data — resource surveys, anomaly detection, trait discovery. Feeds into exploration mechanics |
+| Subtype | Source | Stat gate | Duration | Effect | Status |
+|---|---|---|---|---|---|
+| **Patrol** | Danger level (now) / Naval base (Layer 2) | Firepower ≥ 5 | 15–25 ticks | Reduces danger modifier at target system. Higher danger = higher reward | **Live** (non-faction) |
+| **Bounty** | Danger level (now) / Naval base (Layer 2) | Firepower ≥ 4, Hull ≥ 30 | Battle-driven | Tick-based combat vs pirate encounters. Enemy tier (weak/moderate/strong) scales with danger | **Live** (non-faction) |
+| **Survey** | System traits (now) / Research station (Layer 2) | Sensors ≥ 6 | 10–15 ticks | Scouts systems with eligible traits (precursor ruins, anomalies, etc.) | **Live** (non-faction) |
+| **Intelligence** | Intelligence outpost | Stealth, sensors | Medium (10–20 ticks) | Gathers data on rival faction systems. Detection risk based on stealth vs system security | Planned (Layer 2) |
+| **Diplomacy** | Embassy | None (ship is transport) | Short (5–10 ticks) | Ferries envoys between faction systems. Generates positive inter-faction relation drift | Planned (Layer 2) |
 
 **Interaction model**: Same as delivery missions from the player's perspective — accept at a mission board, assign a ship, wait for resolution. The difference is that the outcome comes from the ship's presence and stats rather than cargo delivery.
 
 **Stat gating**: Ship stats set a minimum threshold for acceptance, not a success roll. A ship below the firepower threshold can't take a patrol mission. Above the threshold, better stats improve the effect magnitude (more danger reduction, less detection risk) but don't determine pass/fail.
 
 **Duration**: Operational missions take longer than deliveries. The ship is committed and unavailable for the mission duration, making ship allocation a strategic decision — assigning your best combat ship to a patrol means it's not available for trade runs.
+
+**Bounty combat**: Bounty missions trigger a tick-based battle when the ship arrives at the target system. Battles resolve in rounds (every 6 ticks) with simultaneous damage, morale tracking, and variance. See [combat.md](../active/combat.md) for full engine details.
 
 **Wartime escalation**: Escort and sabotage are wartime activities that belong to the war contribution system (see [war-system.md §8](./war-system.md)). Patrol and intelligence missions may gain wartime variants with higher stakes and rewards, but the mechanics for that integration are designed with the war system, not here.
 
@@ -131,10 +134,11 @@ All missions pay credits. Faction-sourced missions also pay reputation. War miss
 
 ## 6. Implementation Notes
 
-- **Model design is TBD**: Whether delivery and operational missions share one DB model or use separate models is an implementation decision. The existing `TradeMission` model covers delivery missions well. Operational missions need additional fields (committed ship, duration, stat thresholds, effect magnitude).
-- **Tick processor**: Mission generation likely extends the existing `trade-missions` processor or adds a parallel `faction-missions` processor. Frequency and dependency order TBD.
-- **UI**: All universe/region-level missions appear on the system's mission board (existing UI pattern). Operational missions need to show required ship stats and expected effect magnitude.
-- **War integration**: The boundary between peacetime operational missions and wartime contributions ([war-system.md §8](./war-system.md)) is an implementation design point. The simplest approach: wartime disables peacetime patrol/intelligence generation at affected systems and replaces them with war contribution variants sourced from the war system.
+- **Mission model**: Operational missions use a separate `Mission` model (distinct from `TradeMission`). Fields include type, stat requirements (JSON), enemy tier (bounty), duration (patrol/survey), and standard lifecycle state. Trade missions remain on the existing `TradeMission` model. A future migration may unify them.
+- **Battle model**: Bounty combat uses a `Battle` model tracking player/enemy strength, morale, round history, and resolution state. Battles resolve via a dedicated `battles` tick processor (frequency 1, depends on ship-arrivals).
+- **Tick processors**: Two new processors — `missions` (frequency 5, depends on events + economy) generates/expires/completes operational missions; `battles` (frequency 1, depends on ship-arrivals) resolves combat rounds.
+- **UI**: The Contracts tab has sub-tabs — "Delivery" for trade missions and "Operations" for patrol/survey/bounty. Operations panel shows stat requirements, enemy tiers, ship eligibility. Battle viewer shows live strength bars, morale, and round history on the ship detail page.
+- **War integration**: The boundary between peacetime operational missions and wartime contributions ([war-system.md §8](./war-system.md)) is an implementation design point. The simplest approach: wartime disables peacetime patrol/intelligence generation at affected systems and replaces them with war contribution variants sourced from the war system. The existing combat engine (`lib/engine/combat.ts`) is designed to extend to fleet battles and faction wars.
 
 ---
 

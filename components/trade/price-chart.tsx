@@ -6,9 +6,9 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 
 interface PriceChartProps {
@@ -46,15 +46,8 @@ export function PriceChart({ data, goodName, cargoQuantity }: PriceChartProps) {
                 tick={{ fill: "#999", fontSize: 12 }}
                 tickFormatter={(v: number) => `${v} CR`}
               />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1a1a2e",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "8px",
-                  color: "#fff",
-                }}
-                labelStyle={{ color: "#999" }}
-                formatter={(value: number | undefined) => [`${value ?? 0} CR`, "Price"]}
+              <ChartTooltip
+                formatter={(value) => [`${value ?? 0} CR`, "Price"]}
               />
               <Line
                 type="monotone"

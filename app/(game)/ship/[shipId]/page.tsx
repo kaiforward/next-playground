@@ -6,8 +6,10 @@ import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { usePlayerMissions } from "@/lib/hooks/use-player-missions";
+import { useActiveBattles } from "@/lib/hooks/use-battles";
 import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
+import { BattleViewer } from "@/components/fleet/battle-viewer";
 import { PageContainer } from "@/components/ui/page-container";
 import { Button } from "@/components/ui/button";
 import { BackLink } from "@/components/ui/back-link";
@@ -19,6 +21,7 @@ function ShipDetailContent({ shipId }: { shipId: string }) {
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
   const { missions } = usePlayerMissions();
+  const { battles } = useActiveBattles();
   const { convoys } = useConvoys();
 
   // ?from=system-{id} → back to system page; fallback to dashboard
@@ -44,12 +47,24 @@ function ShipDetailContent({ shipId }: { shipId: string }) {
     );
   }
 
+  // Find active battle for this ship
+  const shipBattle = battles.find(
+    (b) => b.shipId === shipId && b.status === "active",
+  );
+
   return (
     <>
       <div className="flex items-center gap-3 mb-6">
         <BackLink href={backHref} />
         <h1 className="text-2xl font-bold">Ship Details</h1>
       </div>
+
+      {/* Battle viewer if ship is in combat */}
+      {shipBattle && (
+        <div className="mb-6">
+          <BattleViewer battle={shipBattle} />
+        </div>
+      )}
 
       <ShipDetailPanel
         ship={ship}

@@ -7,7 +7,7 @@ import { simulateEconomyTick, type MarketTickEntry, type EconomySimParams } from
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
+import { computeTraitProductionBonus, computeTraitDanger } from "@/lib/engine/trait-gen";
 import { toTraitId, toQualityTier } from "@/lib/types/guards";
 import {
   aggregateDangerLevel,
@@ -137,15 +137,21 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
       ? GOVERNMENT_TYPES[destRegion.governmentType]
       : undefined;
 
-    // Compute danger level from navigation modifiers + government baseline
+    // Compute danger level from navigation modifiers + government baseline + trait modifiers
     const navMods = world.modifiers.filter(
       (m) => m.domain === "navigation" && m.targetType === "system" && m.targetId === destSystemId,
     );
     const govBaseline = govDef?.dangerBaseline ?? 0;
-    const danger = Math.min(
-      aggregateDangerLevel(navMods) + govBaseline,
+    const traitDanger = destSystem
+      ? computeTraitDanger(destSystem.traits.map((t) => ({
+          traitId: toTraitId(t.traitId),
+          quality: toQualityTier(t.quality),
+        })))
+      : 0;
+    const danger = Math.max(0, Math.min(
+      aggregateDangerLevel(navMods) + govBaseline + traitDanger,
       DANGER_CONSTANTS.MAX_DANGER,
-    );
+    ));
 
     // Stage 1: Hazard incidents
     const enriched = cargo

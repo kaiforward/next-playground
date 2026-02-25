@@ -47,7 +47,7 @@ export type TraitId =
   | "radioactive_deposits"
   | "superdense_core"
   | "glacial_aquifer"
-  // Phenomena & Anomalies (9)
+  // Phenomena & Anomalies (13)
   | "nebula_proximity"
   | "solar_flare_activity"
   | "gravitational_anomaly"
@@ -57,14 +57,21 @@ export type TraitId =
   | "pulsar_proximity"
   | "ion_storm_corridor"
   | "bioluminescent_ecosystem"
-  // Infrastructure & Legacy (7)
+  | "signal_anomaly"
+  | "xenobiology_preserve"
+  | "ancient_minefield"
+  | "pirate_stronghold"
+  // Infrastructure & Legacy (10)
   | "ancient_trade_route"
   | "generation_ship_wreckage"
   | "orbital_ring_remnant"
   | "seed_vault"
   | "colonial_capital"
   | "free_port_declaration"
-  | "shipbreaking_yards";
+  | "shipbreaking_yards"
+  | "derelict_fleet"
+  | "abandoned_station"
+  | "smuggler_haven";
 
 export type TraitCategory =
   | "planetary"
@@ -89,6 +96,7 @@ export interface RegionInfo {
   id: string;
   name: string;
   dominantEconomy: EconomyType;
+  governmentType?: GovernmentType;
   x: number;
   y: number;
 }
@@ -103,6 +111,12 @@ export interface UpgradeSlotState {
   slotIndex: number;
   moduleId: string | null;
   moduleTier: number | null;
+}
+
+export interface ShipActiveMission {
+  id: string;
+  type: string;
+  status: OpMissionStatus;
 }
 
 export interface ShipState {
@@ -135,6 +149,7 @@ export interface ShipState {
   departureTick: number | null;
   arrivalTick: number | null;
   convoyId: string | null;
+  activeMission: ShipActiveMission | null;
 }
 
 export type ConvoyStatus = "docked" | "in_transit";
@@ -274,6 +289,73 @@ export interface TradeMissionInfo {
   eventId: string | null;
   playerId: string | null;
   acceptedAtTick: number | null;
+}
+
+// ── Operational mission types ────────────────────────────────────
+
+export type OpMissionStatus = "available" | "accepted" | "in_progress" | "completed" | "failed";
+
+export interface MissionInfo {
+  id: string;
+  type: string; // "patrol" | "survey" | "bounty"
+  systemId: string;
+  systemName: string;
+  targetSystemId: string;
+  targetSystemName: string;
+  reward: number;
+  deadlineTick: number;
+  ticksRemaining: number;
+  durationTicks: number | null;
+  enemyTier: string | null;
+  statRequirements: Record<string, number>;
+  status: OpMissionStatus;
+  playerId: string | null;
+  shipId: string | null;
+  acceptedAtTick: number | null;
+  startedAtTick: number | null;
+  completedAtTick: number | null;
+}
+
+// ── Battle types ────────────────────────────────────────────────
+
+export type BattleStatus =
+  | "active"
+  | "player_victory"
+  | "player_defeat"
+  | "player_retreat"
+  | "enemy_retreat";
+
+export interface BattleRoundResult {
+  round: number;
+  playerDamageDealt: number;
+  enemyDamageDealt: number;
+  playerStrengthAfter: number;
+  enemyStrengthAfter: number;
+  playerMoraleAfter: number;
+  enemyMoraleAfter: number;
+}
+
+export interface BattleInfo {
+  id: string;
+  type: string;
+  systemId: string;
+  systemName: string;
+  missionId: string | null;
+  shipId: string | null;
+  shipName: string | null;
+  status: BattleStatus;
+  playerStrength: number;
+  playerMorale: number;
+  playerMaxStrength: number;
+  enemyStrength: number;
+  enemyMorale: number;
+  enemyMaxStrength: number;
+  enemyType: string;
+  enemyTier: string;
+  roundsCompleted: number;
+  roundHistory: BattleRoundResult[];
+  createdAtTick: number;
+  resolvedAtTick: number | null;
 }
 
 // ── Price history types ─────────────────────────────────────────

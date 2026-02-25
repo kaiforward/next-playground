@@ -93,6 +93,7 @@ model Player {
   ships         Ship[]
   convoys       Convoy[]
   tradeMissions TradeMission[]
+  missions      Mission[]
 }
 
 model Ship {
@@ -128,6 +129,8 @@ model Ship {
   cargo         CargoItem[]
   upgradeSlots  ShipUpgradeSlot[]
   convoyMember  ConvoyMember?
+  missions      Mission[]
+  battles       Battle[]
 
   @@index([playerId])
 }
@@ -210,6 +213,9 @@ model StarSystem {
   priceHistory      PriceHistory?
   missionsPosted    TradeMission[]     @relation("MissionBoard")
   missionsTargeting TradeMission[]     @relation("MissionDest")
+  missions          Mission[]          @relation("MissionSystem")
+  missionTargets    Mission[]          @relation("MissionTarget")
+  battles           Battle[]
 
   @@index([regionId])
 }
@@ -377,4 +383,81 @@ model TradeMission {
   @@index([playerId])
   @@index([deadlineTick])
   @@index([eventId])
+}
+
+// ── Operational Missions ────────────────────────────────────────
+
+model Mission {
+  id               String   @id @default(cuid())
+  type             String                        // "patrol" | "survey" | "bounty"
+  systemId         String                        // Where mission is posted
+  targetSystemId   String                        // Where mission takes place
+  reward           Int
+  deadlineTick     Int
+  durationTicks    Int?                          // Patrol/survey commitment time (null for bounty)
+  enemyTier        String?                       // Bounty: "weak" | "moderate" | "strong"
+  statRequirements String   @default("{}")       // JSON: { firepower: 5 } etc.
+  createdAtTick    Int
+
+  // State
+  status           String   @default("available") // available | accepted | in_progress | completed | failed
+  playerId         String?
+  shipId           String?
+  acceptedAtTick   Int?
+  startedAtTick    Int?                          // When ship arrived and commitment began
+  completedAtTick  Int?
+
+  // Relations
+  system        StarSystem @relation("MissionSystem", fields: [systemId], references: [id])
+  targetSystem  StarSystem @relation("MissionTarget", fields: [targetSystemId], references: [id])
+  player        Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  ship          Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
+  battle        Battle?
+
+  @@index([systemId, status])
+  @@index([playerId])
+  @@index([deadlineTick])
+  @@index([targetSystemId, status])
+}
+
+// ── Battles ─────────────────────────────────────────────────────
+
+model Battle {
+  id              String   @id @default(cuid())
+  type            String                        // "pirate_encounter" — later: "fleet_battle"
+  systemId        String
+  missionId       String?  @unique
+  shipId          String?
+
+  status          String   @default("active")   // active | player_victory | player_defeat | player_retreat | enemy_retreat
+
+  // Player side
+  playerStrength        Float
+  playerMorale          Float
+  dangerLevel           Float?                    // Danger at battle creation for enemy scaling
+  initialPlayerStrength Float?                    // Player strength at battle start for damage calc
+
+  // Enemy side
+  enemyStrength   Float
+  enemyMorale     Float
+  enemyType       String                        // "pirates" — later: faction names
+  enemyTier       String                        // "weak" | "moderate" | "strong"
+
+  // Resolution
+  roundsCompleted Int      @default(0)
+  roundInterval   Int      @default(6)
+  nextRoundTick   Int
+  roundHistory    String   @default("[]")       // JSON: Array<RoundResult>
+
+  createdAtTick   Int
+  resolvedAtTick  Int?
+
+  // Relations
+  system    StarSystem @relation(fields: [systemId], references: [id])
+  mission   Mission?   @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  ship      Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextRoundTick])
+  @@index([systemId])
+  @@index([shipId])
 }

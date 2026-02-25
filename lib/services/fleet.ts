@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { ServiceError } from "./errors";
-import type { FleetState } from "@/lib/types/game";
+import type { FleetState, OpMissionStatus } from "@/lib/types/game";
 
 /** Standard ship include for all fleet/ship queries. */
 export const SHIP_INCLUDE = {
@@ -30,10 +30,36 @@ export async function getFleet(playerId: string): Promise<FleetState> {
     throw new ServiceError("Player not found.", 404);
   }
 
+  const shipIds = player.ships.map((s) => s.id);
+
+  // Query active missions for player's ships (only in_progress has shipId set)
+  const activeMissions = shipIds.length > 0
+    ? await prisma.mission.findMany({
+        where: {
+          shipId: { in: shipIds },
+          status: "in_progress",
+        },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          shipId: true,
+        },
+      })
+    : [];
+
+  const missionByShip = new Map(
+    activeMissions
+      .filter((m) => m.shipId !== null)
+      .map((m) => [m.shipId!, { id: m.id, type: m.type, status: m.status as OpMissionStatus }]),
+  );
+
   return {
     id: player.id,
     userId: player.userId,
     credits: player.credits,
-    ships: player.ships.map(serializeShip),
+    ships: player.ships.map((ship) =>
+      serializeShip(ship, missionByShip.get(ship.id) ?? null),
+    ),
   };
 }

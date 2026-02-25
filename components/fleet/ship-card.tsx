@@ -28,13 +28,16 @@ interface ShipCardProps {
   backTo?: string;
   /** Required for refuel dialog. */
   playerCredits?: number;
+  /** Whether this ship is currently in an active battle. */
+  inBattle?: boolean;
 }
 
-export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: ShipCardProps) {
+export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, inBattle }: ShipCardProps) {
   const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
   const cargoUsed = getCargoUsed(ship.cargo);
   const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
   const isDocked = ship.status === "docked";
+  const onMission = ship.activeMission?.status === "in_progress";
   const needsFuel = isDocked && ship.fuel < ship.maxFuel;
   const hullPercent = ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100;
   const isDamaged = ship.hullCurrent < ship.hullMax;
@@ -62,6 +65,10 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
           <div className="flex items-center gap-2 shrink-0">
             {ship.disabled ? (
               <Badge color="red">Disabled</Badge>
+            ) : inBattle ? (
+              <Badge color="purple">In Battle</Badge>
+            ) : ship.activeMission?.status === "in_progress" ? (
+              <Badge color="cyan">On Mission</Badge>
             ) : (
               <Badge color={isDocked ? "green" : "amber"}>
                 {isDocked ? "Docked" : "In Transit"}
@@ -116,7 +123,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
         {isDocked && (
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
-              {!ship.disabled && (
+              {!ship.disabled && !onMission && (
                 <Button
                   href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
                   variant="action"
@@ -126,7 +133,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
                   Trade
                 </Button>
               )}
-              {!ship.disabled && !ship.convoyId && (
+              {!ship.disabled && !ship.convoyId && !onMission && (
                 <Button
                   href={`/map?shipId=${ship.id}`}
                   variant="action"

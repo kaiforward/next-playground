@@ -34,6 +34,20 @@ Expanded what players fly and how travel works.
 
 **What shipped**: Navigation.md fully rewritten. 12 ship types, upgrade modules, convoys (CRUD, navigate, trade, repair), speed-based travel, 5-stage danger pipeline (added hull/shield damage stage), escort protection (all ships contribute firepower), NavigableUnit abstraction for unified ship/convoy navigation UX. Simulator updated. Facility gating and faction-exclusive ships deferred to Layer 2.
 
+### Layer 1.5 — Mission Architecture & Combat Engine (**Done**)
+
+Pulled forward mission infrastructure and a tick-based combat engine before factions. Gives Layer 2 a foundation to build on rather than shipping missions + combat + factions all at once.
+
+| System | What it does | Status |
+|---|---|---|
+| ~~Operational Missions~~ | Patrol, survey, bounty mission types with stat gating and tick-based generation | **Done** — `Mission` model, `missions` tick processor, generation from danger levels + traits |
+| ~~Combat Engine~~ | Tick-based battle system for bounty encounters (ship vs pirates) | **Done** — `Battle` model, `battles` tick processor, round resolution with strength/morale/variance |
+| ~~Battle Viewer UI~~ | Live battle display with strength bars, morale, round history | **Done** — battle viewer on ship detail page, operations panel on contracts tab, dashboard integration |
+
+**What shipped**: `Mission` + `Battle` Prisma models. Pure combat engine (`lib/engine/combat.ts`) with round resolution, morale cascades, damage translation. Mission generation engine (`lib/engine/mission-gen.ts`) producing candidates from system danger and traits. Two new tick processors: `missions` (generates/expires/completes operational missions) and `battles` (resolves combat rounds every 6 ticks). Service layer, 5 API routes, client hooks with SSE invalidation. Contracts tab redesigned with "Delivery" and "Operations" sub-tabs. Ship cards show "In Battle" status. Battle viewer on ship detail page. 50 new engine tests.
+
+**What's deferred to Layer 2**: Faction-sourced missions (intelligence, diplomacy), facility-gated generation (naval base, embassy, research station), reputation gating, war logistics, escort missions. The combat engine is designed to extend to fleet battles and faction wars.
+
 ### Layer 2 — Political Layer
 
 The big structural change. Named factions replace regions as the primary territorial unit. Government type moves from per-region to per-faction. Wars create demand for player activity.
@@ -55,7 +69,7 @@ Expands what players do with the systems from Layers 0–2. More mission types, 
 
 | System | What it does | Depends on |
 |---|---|---|
-| [Missions](./planned/missions.md) | Operational missions (patrol, escort, intel), faction missions, war contributions | Layers 1–2 (ships, factions, facilities) |
+| [Missions](./planned/missions.md) | Faction-gated missions (intelligence, diplomacy), war contributions, escort. Non-faction patrol/survey/bounty already shipped in Layer 1.5 | Layer 1.5 (combat engine), Layer 2 (factions, facilities) |
 | [In-System Gameplay](./planned/in-system-gameplay.md) | Second gameplay space — story, missions, activities within docked systems. Includes [mini-games](./planned/mini-games.md) (cantina games, push-your-luck, etc.) | Layer 0 (trait-driven flavour), Layer 2 (faction missions) |
 
 **Prototype built**: Void's Gambit (cantina card game) is fully implemented as a client-side prototype at `/cantina` — engine, AI, UI, 4 NPC archetypes. Needs integration into the in-system location framework when that ships.
