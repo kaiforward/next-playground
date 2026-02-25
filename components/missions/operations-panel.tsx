@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { MISSION_TYPE_DEFS, type MissionType, type StatGateKey } from "@/lib/constants/missions";
 import { ENEMY_TIERS, type EnemyTier } from "@/lib/constants/combat";
+import { MISSION_TYPE_BADGE_COLOR, ENEMY_TIER_BADGE_COLOR } from "@/lib/constants/ui";
 
 interface OperationsPanelProps {
   available: MissionInfo[];
@@ -21,20 +22,6 @@ interface OperationsPanelProps {
   fleet: FleetState | null;
   currentTick: number;
 }
-
-const TYPE_COLORS: Record<string, "red" | "cyan" | "purple" | "amber" | "green"> = {
-  patrol: "red",
-  survey: "cyan",
-  bounty: "purple",
-  salvage: "amber",
-  recon: "green",
-};
-
-const TIER_COLORS: Record<string, "green" | "amber" | "red"> = {
-  weak: "green",
-  moderate: "amber",
-  strong: "red",
-};
 
 export function OperationsPanel({
   available,
@@ -100,11 +87,11 @@ function AvailableOperations({
                   return (
                     <tr key={m.id} className="border-b border-white/5">
                       <td className="px-4 py-3">
-                        <Badge color={TYPE_COLORS[m.type] ?? "slate"}>
+                        <Badge color={MISSION_TYPE_BADGE_COLOR[m.type as MissionType] ?? "slate"}>
                           {typeDef?.name ?? m.type}
                         </Badge>
                         {m.enemyTier && (
-                          <Badge color={TIER_COLORS[m.enemyTier] ?? "slate"} className="ml-1">
+                          <Badge color={ENEMY_TIER_BADGE_COLOR[m.enemyTier as EnemyTier] ?? "slate"} className="ml-1">
                             {ENEMY_TIERS[m.enemyTier as EnemyTier]?.name ?? m.enemyTier}
                           </Badge>
                         )}
@@ -253,7 +240,7 @@ function ActiveOperations({
                 return (
                   <tr key={m.id} className="border-b border-white/5">
                     <td className="px-4 py-3">
-                      <Badge color={TYPE_COLORS[m.type] ?? "slate"}>
+                      <Badge color={MISSION_TYPE_BADGE_COLOR[m.type as MissionType] ?? "slate"}>
                         {typeDef?.name ?? m.type}
                       </Badge>
                     </td>

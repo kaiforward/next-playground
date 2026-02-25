@@ -9,14 +9,7 @@ import { formatCredits } from "@/lib/utils/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { MissionInfo } from "@/lib/types/game";
 import { MISSION_TYPE_DEFS, type MissionType } from "@/lib/constants/missions";
-
-const TYPE_COLORS: Record<string, "red" | "cyan" | "purple" | "amber" | "green"> = {
-  patrol: "red",
-  survey: "cyan",
-  bounty: "purple",
-  salvage: "amber",
-  recon: "green",
-};
+import { MISSION_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 
 export function ActiveMissionsCard() {
   const { missions: tradeMissions } = usePlayerMissions();
@@ -100,7 +93,7 @@ function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
         >
           {m.targetSystemName}
         </Link>
-        <Badge color={TYPE_COLORS[m.type] ?? "slate"}>
+        <Badge color={MISSION_TYPE_BADGE_COLOR[m.type as MissionType] ?? "slate"}>
           {typeDef?.name ?? m.type}
         </Badge>
         {m.status === "in_progress" && m.type === "bounty" && (

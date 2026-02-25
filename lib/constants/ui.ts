@@ -1,4 +1,6 @@
 import type { EVENT_DEFINITIONS } from "./events";
+import type { MissionType } from "./missions";
+import type { EnemyTier } from "./combat";
 
 /** Mapping from event type to Badge/dot color. */
 export const EVENT_TYPE_BADGE_COLOR: Record<
@@ -58,6 +60,28 @@ export const EVENT_TYPE_DANGER_PRIORITY: Record<
   pirate_raid: 8,
   solar_storm: 9,
   war: 10,
+};
+
+/** Mapping from mission type to Badge color. */
+export const MISSION_TYPE_BADGE_COLOR: Record<
+  MissionType,
+  "red" | "cyan" | "purple" | "amber" | "green"
+> = {
+  patrol: "red",
+  survey: "cyan",
+  bounty: "purple",
+  salvage: "amber",
+  recon: "green",
+};
+
+/** Mapping from enemy tier to Badge color. */
+export const ENEMY_TIER_BADGE_COLOR: Record<
+  EnemyTier,
+  "green" | "amber" | "red"
+> = {
+  weak: "green",
+  moderate: "amber",
+  strong: "red",
 };
 
 /** Icon key per event type, consumed by EventIcon component. */

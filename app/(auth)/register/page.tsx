@@ -68,64 +68,62 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold tracking-wider">Stellar Trader</h1>
-          <p className="text-white/60 mt-2">Create your account</p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="border border-white/10 rounded-lg p-6 bg-white/5 backdrop-blur-sm space-y-4"
-        >
-          <FormError message={error} />
-
-          <TextInput
-            id="name"
-            type="text"
-            label="Commander Name"
-            autoComplete="name"
-            placeholder="Commander Shepard"
-            error={errors.name?.message}
-            {...register("name")}
-          />
-
-          <TextInput
-            id="email"
-            type="email"
-            label="Email"
-            autoComplete="email"
-            placeholder="commander@example.com"
-            error={errors.email?.message}
-            {...register("email")}
-          />
-
-          <TextInput
-            id="password"
-            type="password"
-            label="Password"
-            autoComplete="new-password"
-            placeholder="At least 6 characters"
-            error={errors.password?.message}
-            {...register("password")}
-          />
-
-          <Button type="submit" disabled={loading} fullWidth>
-            {loading ? "Creating account..." : "Create Account"}
-          </Button>
-
-          <p className="text-center text-sm text-white/50 pt-2">
-            Already have an account?{" "}
-            <Link
-              href="/login"
-              className="text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Sign in
-            </Link>
-          </p>
-        </form>
+    <>
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold tracking-wider">Stellar Trader</h1>
+        <p className="text-text-secondary mt-2">Create your account</p>
       </div>
-    </div>
+
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="border border-border rounded-lg p-6 bg-surface backdrop-blur-sm space-y-4"
+      >
+        <FormError message={error} />
+
+        <TextInput
+          id="name"
+          type="text"
+          label="Commander Name"
+          autoComplete="name"
+          placeholder="Commander Shepard"
+          error={errors.name?.message}
+          {...register("name")}
+        />
+
+        <TextInput
+          id="email"
+          type="email"
+          label="Email"
+          autoComplete="email"
+          placeholder="commander@example.com"
+          error={errors.email?.message}
+          {...register("email")}
+        />
+
+        <TextInput
+          id="password"
+          type="password"
+          label="Password"
+          autoComplete="new-password"
+          placeholder="At least 6 characters"
+          error={errors.password?.message}
+          {...register("password")}
+        />
+
+        <Button type="submit" disabled={loading} fullWidth>
+          {loading ? "Creating account..." : "Create Account"}
+        </Button>
+
+        <p className="text-center text-sm text-text-tertiary pt-2">
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            className="text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            Sign in
+          </Link>
+        </p>
+      </form>
+    </>
   );
 }
