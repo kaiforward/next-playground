@@ -3,11 +3,11 @@
 import { tv, type VariantProps } from "tailwind-variants";
 
 const cardVariants = tv({
-  base: "rounded-xl bg-white/5 backdrop-blur",
+  base: "rounded-xl bg-surface backdrop-blur",
   variants: {
     variant: {
       default: "",
-      bordered: "border border-white/10",
+      bordered: "border border-border",
     },
     padding: {
       sm: "p-3",
@@ -57,7 +57,7 @@ export function CardHeader({
       <div className="min-w-0">
         <h3 className="text-lg font-semibold text-white">{title}</h3>
         {subtitle && (
-          <p className="mt-1 text-sm text-white/50">{subtitle}</p>
+          <p className="mt-1 text-sm text-text-tertiary">{subtitle}</p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}
