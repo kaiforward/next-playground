@@ -7,10 +7,13 @@ import { useAcceptMission, useDeliverMission, useAbandonMission } from "@/lib/ho
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { formatCredits } from "@/lib/utils/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
+
+type MissionRow = TradeMissionInfo & Record<string, unknown>;
 
 interface ContractsPanelProps {
   available: TradeMissionInfo[];
@@ -58,6 +61,86 @@ function AvailableContracts({
   const acceptMutation = useAcceptMission();
   const [error, setError] = useState<string | null>(null);
 
+  const columns: Column<MissionRow>[] = [
+    {
+      key: "type",
+      label: "Type",
+      render: (row) => (
+        <>
+          {row.isImport ? (
+            <Badge color="cyan">Import</Badge>
+          ) : (
+            <Badge color="amber">Export</Badge>
+          )}
+          {row.eventId && (
+            <Badge color="purple" className="ml-1">Event</Badge>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "goodName",
+      label: "Cargo",
+      render: (row) => <>{row.goodName} x{row.quantity}</>,
+    },
+    {
+      key: "destination",
+      label: "Destination",
+      render: (row) =>
+        row.isImport ? (
+          <span className="text-text-muted">Here</span>
+        ) : (
+          <Link
+            href={`/system/${row.destinationId}/contracts`}
+            className="text-indigo-300 hover:text-indigo-200 transition-colors"
+          >
+            {row.destinationName}
+            <span className="text-text-muted ml-1">({row.hops}h)</span>
+          </Link>
+        ),
+    },
+    {
+      key: "payout",
+      label: "Payout",
+      render: (row) => (
+        <div>
+          <div className="text-green-400 font-medium">
+            ~{formatCredits(row.estimatedGoodsValue + row.reward)}
+          </div>
+          <div className="text-xs text-text-faint">
+            {formatCredits(row.estimatedGoodsValue)} sale + {formatCredits(row.reward)} bonus
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "ticksRemaining",
+      label: "Time Left",
+      render: (row) => <span className="text-text-secondary">{row.ticksRemaining} ticks</span>,
+    },
+    {
+      key: "actions",
+      label: "",
+      render: (row) => (
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={acceptMutation.isPending}
+          onClick={async () => {
+            setError(null);
+            try {
+              await acceptMutation.mutateAsync(row.id);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Failed to accept");
+            }
+          }}
+        >
+          Accept
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <Card variant="bordered" padding="md">
       <CardHeader
@@ -72,80 +155,7 @@ function AvailableContracts({
         {missions.length === 0 ? (
           <EmptyState message="No contracts available at this station right now." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Cargo</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Destination</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Payout</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Time Left</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {missions.map((m) => (
-                  <tr key={m.id} className="border-b border-white/5">
-                    <td className="px-4 py-3">
-                      {m.isImport ? (
-                        <Badge color="cyan">Import</Badge>
-                      ) : (
-                        <Badge color="amber">Export</Badge>
-                      )}
-                      {m.eventId && (
-                        <Badge color="purple" className="ml-1">Event</Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-white/80">
-                      {m.goodName} x{m.quantity}
-                    </td>
-                    <td className="px-4 py-3 text-white/80">
-                      {m.isImport ? (
-                        <span className="text-white/40">Here</span>
-                      ) : (
-                        <Link
-                          href={`/system/${m.destinationId}/contracts`}
-                          className="text-indigo-300 hover:text-indigo-200 transition-colors"
-                        >
-                          {m.destinationName}
-                          <span className="text-white/40 ml-1">({m.hops}h)</span>
-                        </Link>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-green-400 font-medium">
-                        ~{formatCredits(m.estimatedGoodsValue + m.reward)}
-                      </div>
-                      <div className="text-xs text-white/30">
-                        {formatCredits(m.estimatedGoodsValue)} sale + {formatCredits(m.reward)} bonus
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-white/60">
-                      {m.ticksRemaining} ticks
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={acceptMutation.isPending}
-                        onClick={async () => {
-                          setError(null);
-                          try {
-                            await acceptMutation.mutateAsync(m.id);
-                          } catch (e) {
-                            setError(e instanceof Error ? e.message : "Failed to accept");
-                          }
-                        }}
-                      >
-                        Accept
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable columns={columns} data={missions as MissionRow[]} />
         )}
       </CardContent>
     </Card>
@@ -196,6 +206,136 @@ function ActiveMissions({
     }
   }
 
+  const columns: Column<MissionRow>[] = [
+    {
+      key: "goodName",
+      label: "Cargo",
+      render: (row) => (
+        <>
+          {row.goodName} x{row.quantity}
+          {row.eventId && (
+            <Badge color="purple" className="ml-2">Event</Badge>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "destination",
+      label: "Destination",
+      render: (row) => (
+        <Link
+          href={`/system/${row.destinationId}/contracts`}
+          className="text-indigo-300 hover:text-indigo-200 transition-colors"
+        >
+          {row.destinationName}
+          {row.destinationId !== row.systemId && (
+            <span className="text-text-muted ml-1">({row.hops}h)</span>
+          )}
+        </Link>
+      ),
+    },
+    {
+      key: "payout",
+      label: "Payout",
+      render: (row) => (
+        <div>
+          <div className="text-green-400 font-medium">
+            ~{formatCredits(row.estimatedGoodsValue + row.reward)}
+          </div>
+          <div className="text-xs text-text-faint">
+            {formatCredits(row.estimatedGoodsValue)} sale + {formatCredits(row.reward)} bonus
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "timeLeft",
+      label: "Time Left",
+      render: (row) => {
+        const isExpired = currentTick > row.deadlineTick;
+        return isExpired ? (
+          <span className="text-red-400">Expired</span>
+        ) : (
+          <span className="text-text-secondary">{row.ticksRemaining} ticks</span>
+        );
+      },
+    },
+    {
+      key: "actions",
+      label: "",
+      render: (row) => {
+        const shipsAtDest = dockedShipsBySystem.get(row.destinationId) ?? [];
+        const eligibleShips = fleet
+          ? shipsAtDest.filter((s) => {
+              const ship = fleet.ships.find((fs) => fs.id === s.id);
+              if (!ship) return false;
+              const cargoItem = ship.cargo.find((c) => c.goodId === row.goodId);
+              return (cargoItem?.quantity ?? 0) >= row.quantity;
+            })
+          : [];
+        const selectedShipId = selectedShips[row.id] ?? eligibleShips[0]?.id;
+
+        return (
+          <div className="flex items-center gap-2">
+            {shipsAtDest.length > 0 && eligibleShips.length > 1 && (
+              <div className="w-36">
+                <SelectInput
+                  size="sm"
+                  options={eligibleShips.map((s): SelectOption => ({
+                    value: s.id,
+                    label: s.name,
+                  }))}
+                  value={selectedShipId ?? ""}
+                  onChange={(value) =>
+                    setSelectedShips((prev) => ({ ...prev, [row.id]: value }))
+                  }
+                  isSearchable={false}
+                />
+              </div>
+            )}
+            {eligibleShips.length > 0 && selectedShipId && (
+              <Button
+                variant="pill"
+                color="green"
+                size="sm"
+                disabled={deliverMutation.isPending}
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    await deliverMutation.mutateAsync({
+                      missionId: row.id,
+                      shipId: selectedShipId,
+                    });
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Failed to deliver");
+                  }
+                }}
+              >
+                Deliver
+              </Button>
+            )}
+            <Button
+              variant="action"
+              color="red"
+              size="sm"
+              disabled={abandonMutation.isPending}
+              onClick={async () => {
+                setError(null);
+                try {
+                  await abandonMutation.mutateAsync(row.id);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Failed to abandon");
+                }
+              }}
+            >
+              Abandon
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
     <Card variant="bordered" padding="md">
       <CardHeader
@@ -206,133 +346,7 @@ function ActiveMissions({
         {error && (
           <InlineAlert className="mb-4">{error}</InlineAlert>
         )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="border-b border-white/10">
-                <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Cargo</th>
-                <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Destination</th>
-                <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Payout</th>
-                <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Time Left</th>
-                <th className="px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {missions.map((m) => {
-                const shipsAtDest = dockedShipsBySystem.get(m.destinationId) ?? [];
-                const canDeliver = shipsAtDest.length > 0;
-                const isExpired = currentTick > m.deadlineTick;
-
-                // Find ships with enough of the right cargo
-                const eligibleShips = fleet
-                  ? shipsAtDest.filter((s) => {
-                      const ship = fleet.ships.find((fs) => fs.id === s.id);
-                      if (!ship) return false;
-                      const cargoItem = ship.cargo.find((c) => c.goodId === m.goodId);
-                      return (cargoItem?.quantity ?? 0) >= m.quantity;
-                    })
-                  : [];
-
-                const selectedShipId = selectedShips[m.id] ?? eligibleShips[0]?.id;
-
-                return (
-                  <tr key={m.id} className="border-b border-white/5">
-                    <td className="px-4 py-3 text-white/80">
-                      {m.goodName} x{m.quantity}
-                      {m.eventId && (
-                        <Badge color="purple" className="ml-2">Event</Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/system/${m.destinationId}/contracts`}
-                        className="text-indigo-300 hover:text-indigo-200 transition-colors"
-                      >
-                        {m.destinationName}
-                        {m.destinationId !== m.systemId && (
-                          <span className="text-white/40 ml-1">({m.hops}h)</span>
-                        )}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-green-400 font-medium">
-                        ~{formatCredits(m.estimatedGoodsValue + m.reward)}
-                      </div>
-                      <div className="text-xs text-white/30">
-                        {formatCredits(m.estimatedGoodsValue)} sale + {formatCredits(m.reward)} bonus
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {isExpired ? (
-                        <span className="text-red-400">Expired</span>
-                      ) : (
-                        <span className="text-white/60">{m.ticksRemaining} ticks</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {canDeliver && eligibleShips.length > 1 && (
-                          <div className="w-36">
-                            <SelectInput
-                              size="sm"
-                              options={eligibleShips.map((s): SelectOption => ({
-                                value: s.id,
-                                label: s.name,
-                              }))}
-                              value={selectedShipId ?? ""}
-                              onChange={(value) =>
-                                setSelectedShips((prev) => ({ ...prev, [m.id]: value }))
-                              }
-                              isSearchable={false}
-                            />
-                          </div>
-                        )}
-                        {eligibleShips.length > 0 && selectedShipId && (
-                          <Button
-                            variant="pill"
-                            color="green"
-                            size="sm"
-                            disabled={deliverMutation.isPending}
-                            onClick={async () => {
-                              setError(null);
-                              try {
-                                await deliverMutation.mutateAsync({
-                                  missionId: m.id,
-                                  shipId: selectedShipId,
-                                });
-                              } catch (e) {
-                                setError(e instanceof Error ? e.message : "Failed to deliver");
-                              }
-                            }}
-                          >
-                            Deliver
-                          </Button>
-                        )}
-                        <Button
-                          variant="action"
-                          color="red"
-                          size="sm"
-                          disabled={abandonMutation.isPending}
-                          onClick={async () => {
-                            setError(null);
-                            try {
-                              await abandonMutation.mutateAsync(m.id);
-                            } catch (e) {
-                              setError(e instanceof Error ? e.message : "Failed to abandon");
-                            }
-                          }}
-                        >
-                          Abandon
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable columns={columns} data={missions as MissionRow[]} />
       </CardContent>
     </Card>
   );
