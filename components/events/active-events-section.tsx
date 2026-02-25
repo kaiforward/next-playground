@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { SectionHeader } from "@/components/ui/section-header";
 import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 import type { ActiveEvent } from "@/lib/types/game";
 
@@ -14,9 +15,7 @@ export function ActiveEventsSection({ events, compact }: ActiveEventsSectionProp
 
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-        Active Events
-      </h3>
+      <SectionHeader className="mb-2">Active Events</SectionHeader>
       <ul className="space-y-2" aria-live="polite">
         {events.map((event) => (
           <li

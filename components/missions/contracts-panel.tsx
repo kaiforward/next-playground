@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { formatCredits } from "@/lib/utils/format";
+import { EmptyState } from "@/components/ui/empty-state";
+import { InlineAlert } from "@/components/ui/inline-alert";
 
 interface ContractsPanelProps {
   available: TradeMissionInfo[];
@@ -64,15 +66,11 @@ function AvailableContracts({
       />
       <CardContent>
         {error && (
-          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2 text-sm text-red-300">
-            {error}
-          </div>
+          <InlineAlert className="mb-4">{error}</InlineAlert>
         )}
 
         {missions.length === 0 ? (
-          <p className="text-white/30 text-sm text-center py-6">
-            No contracts available at this station right now.
-          </p>
+          <EmptyState message="No contracts available at this station right now." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -177,9 +175,7 @@ function ActiveMissions({
       <Card variant="bordered" padding="md">
         <CardHeader title="Your Active Missions" subtitle="No active missions" />
         <CardContent>
-          <p className="text-white/30 text-sm text-center py-6">
-            Accept contracts above to start earning rewards.
-          </p>
+          <EmptyState message="Accept contracts above to start earning rewards." />
         </CardContent>
       </Card>
     );
@@ -208,9 +204,7 @@ function ActiveMissions({
       />
       <CardContent>
         {error && (
-          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2 text-sm text-red-300">
-            {error}
-          </div>
+          <InlineAlert className="mb-4">{error}</InlineAlert>
         )}
 
         <div className="overflow-x-auto">

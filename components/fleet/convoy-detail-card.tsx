@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Disclosure } from "@/components/ui/disclosure";
+import { SectionHeader } from "@/components/ui/section-header";
 import { useDialog } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -111,9 +112,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
           </Disclosure>
         ) : (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-              Members ({members.length})
-            </p>
+            <SectionHeader>Members ({members.length})</SectionHeader>
             {members.map((ship) => {
               const hullPct = ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100;
               const shieldPct = ship.shieldMax > 0 ? (ship.shieldCurrent / ship.shieldMax) * 100 : 100;

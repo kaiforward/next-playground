@@ -13,6 +13,8 @@ import { ThemedPieChart } from "@/components/ui/themed-pie-chart";
 import { Badge } from "@/components/ui/badge";
 import { StatList, StatRow } from "@/components/ui/stat-row";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { SectionHeader } from "@/components/ui/section-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
 import { formatCredits } from "@/lib/utils/format";
@@ -249,15 +251,11 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
             {/* Right column — economy + missions */}
             <div className="space-y-4">
               <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-white/40 mb-2">
-                  Produces
-                </h4>
+                <SectionHeader as="h4" className="mb-2">Produces</SectionHeader>
                 <GoodsList goods={producedGoods} />
               </div>
               <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-white/40 mb-2">
-                  Consumes
-                </h4>
+                <SectionHeader as="h4" className="mb-2">Consumes</SectionHeader>
                 <GoodsList goods={consumedGoods} />
               </div>
               <div className="border-t border-white/10 pt-3 space-y-2">
@@ -282,13 +280,11 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           <CardHeader title="Market Snapshot" />
           <CardContent>
             {market.length === 0 ? (
-              <p className="text-sm text-white/30 py-4 text-center">No market data.</p>
+              <EmptyState message="No market data." />
             ) : (
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-green-400/70 mb-2">
-                    Best Prices
-                  </h4>
+                  <SectionHeader as="h4" color="green" className="mb-2">Best Prices</SectionHeader>
                   <ul className="space-y-1.5">
                     {bestPrices.map((e) => (
                       <PriceRow
@@ -301,9 +297,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                   </ul>
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-red-400/70 mb-2">
-                    Cheapest
-                  </h4>
+                  <SectionHeader as="h4" color="red" className="mb-2">Cheapest</SectionHeader>
                   <ul className="space-y-1.5">
                     {cheapestSorted.map((e) => (
                       <PriceRow
@@ -325,7 +319,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           <CardHeader title="Supply Distribution" />
           <CardContent className="flex-1 min-h-0">
             {supplyData.length === 0 ? (
-              <p className="text-sm text-white/30 py-4 text-center">No market data.</p>
+              <EmptyState message="No market data." />
             ) : (
               <ThemedPieChart
                 data={supplyData}

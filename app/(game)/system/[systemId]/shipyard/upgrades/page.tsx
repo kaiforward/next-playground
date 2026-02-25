@@ -9,6 +9,7 @@ import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { SectionHeader } from "@/components/ui/section-header";
 import { useDialog } from "@/components/ui/dialog";
 import { UpgradeSlot } from "@/components/fleet/upgrade-slot";
 import { UpgradeInstallDialog } from "@/components/fleet/upgrade-install-dialog";
@@ -150,9 +151,9 @@ function SelectedShipCard({
           </p>
         ) : (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <SectionHeader>
               Slots ({ship.upgradeSlots.filter((s) => s.moduleId).length} / {ship.upgradeSlots.length} installed)
-            </p>
+            </SectionHeader>
             {ship.upgradeSlots.map((slot) => (
               <UpgradeSlot
                 key={slot.id}

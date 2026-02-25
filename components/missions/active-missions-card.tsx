@@ -6,6 +6,7 @@ import { usePlayerOpMissions } from "@/lib/hooks/use-op-missions";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCredits } from "@/lib/utils/format";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { MissionInfo } from "@/lib/types/game";
 import { MISSION_TYPE_DEFS, type MissionType } from "@/lib/constants/missions";
 
@@ -31,9 +32,7 @@ export function ActiveMissionsCard() {
       />
       <CardContent>
         {totalCount === 0 ? (
-          <p className="text-white/30 text-sm text-center py-4">
-            No active missions. Visit a station&apos;s Contracts tab to find work.
-          </p>
+          <EmptyState message="No active missions. Visit a station's Contracts tab to find work." />
         ) : (
           <ul className="space-y-3">
             {/* Trade missions */}

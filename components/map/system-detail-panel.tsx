@@ -9,6 +9,7 @@ import type { StarSystemInfo, ShipState, ConvoyState, ActiveEvent } from "@/lib/
 import type { NavigableUnit } from "@/lib/types/navigable";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
+import { SectionHeader } from "@/components/ui/section-header";
 import { enrichTraits } from "@/lib/utils/traits";
 
 interface GatewayTarget {
@@ -93,9 +94,9 @@ export function SystemDetailPanel({
         {/* Connected regions (gateway only) */}
         {gatewayTargetRegions && gatewayTargetRegions.length > 0 && onJumpToRegion && (
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+            <SectionHeader className="mb-2">
               Connected Regions
-            </h3>
+            </SectionHeader>
             <div className="space-y-1.5">
               {gatewayTargetRegions.map((target) => (
                 <Button
@@ -120,9 +121,9 @@ export function SystemDetailPanel({
         {/* Description (hidden when empty — procedural systems have no description yet) */}
         {system.description && (
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+            <SectionHeader className="mb-1">
               Description
-            </h3>
+            </SectionHeader>
             <p className="text-sm text-gray-300 leading-relaxed">
               {system.description}
             </p>
@@ -132,9 +133,9 @@ export function SystemDetailPanel({
         {/* System traits */}
         {system.traits && system.traits.length > 0 && (
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+            <SectionHeader className="mb-2">
               Traits
-            </h3>
+            </SectionHeader>
             <TraitList traits={enrichTraits(system.traits)} variant="compact" />
           </div>
         )}
@@ -144,9 +145,9 @@ export function SystemDetailPanel({
 
         {/* Fleet at this system */}
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+          <SectionHeader className="mb-2">
             Your Fleet Here
-          </h3>
+          </SectionHeader>
 
           {convoysHere.length === 0 && shipsHere.length === 0 ? (
             <p className="text-sm text-gray-500">No ships docked at this system.</p>
@@ -189,9 +190,9 @@ export function SystemDetailPanel({
 
         {/* Coordinates */}
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+          <SectionHeader className="mb-1">
             Coordinates
-          </h3>
+          </SectionHeader>
           <p className="text-sm text-gray-300 font-mono">
             X: {system.x} &middot; Y: {system.y}
           </p>

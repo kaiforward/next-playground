@@ -9,6 +9,7 @@ import {
 } from "@/lib/hooks/use-convoy";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { SectionHeader } from "@/components/ui/section-header";
 import { ShipPickerList } from "./ship-picker-list";
 
 type ConvoyShipDialogProps = {
@@ -161,9 +162,9 @@ export function ConvoyShipDialog(props: ConvoyShipDialogProps) {
         <>
           {manageMembers.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+              <SectionHeader className="mb-1.5">
                 In Convoy ({manageMembers.filter((m) => selected.has(m.id)).length})
-              </p>
+              </SectionHeader>
               <ShipPickerList
                 ships={manageMembers}
                 selected={selected}
@@ -173,9 +174,9 @@ export function ConvoyShipDialog(props: ConvoyShipDialogProps) {
           )}
           {availableShips.length > 0 && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+              <SectionHeader className="mb-1.5">
                 Available ({availableShips.filter((s) => selected.has(s.id)).length}/{availableShips.length})
-              </p>
+              </SectionHeader>
               <ShipPickerList
                 ships={availableShips}
                 selected={selected}
