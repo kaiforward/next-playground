@@ -24,7 +24,7 @@ const dialogStyles = tv({
   base: "",
   variants: {
     modal: {
-      true: "m-auto max-h-none max-w-none border-none p-6 rounded-xl bg-gray-900 border border-white/10 shadow-2xl backdrop:bg-black/60",
+      true: "m-auto max-h-none max-w-none border-none p-6 rounded-xl bg-gray-900 border border-border shadow-2xl backdrop:bg-black/60",
       false: "m-0 max-h-none max-w-none border-none p-0 inset-auto"
     },
     size: {

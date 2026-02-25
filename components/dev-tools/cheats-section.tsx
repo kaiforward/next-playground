@@ -40,7 +40,7 @@ export function CheatsSection() {
     <div className="space-y-4">
       {/* Give credits */}
       <div className="space-y-2">
-        <h4 className="text-xs text-white/50 uppercase tracking-wider">Credits</h4>
+        <h4 className="text-xs text-text-tertiary uppercase tracking-wider">Credits</h4>
         <div className="flex gap-2 items-end">
           <div className="flex-1">
             <NumberInput
@@ -74,7 +74,7 @@ export function CheatsSection() {
 
       {/* Teleport ship */}
       <div className="space-y-2">
-        <h4 className="text-xs text-white/50 uppercase tracking-wider">Teleport</h4>
+        <h4 className="text-xs text-text-tertiary uppercase tracking-wider">Teleport</h4>
 
         <SelectInput
           options={shipOptions}

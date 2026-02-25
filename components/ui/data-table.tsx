@@ -58,11 +58,11 @@ export function DataTable<T extends Record<string, unknown>>({
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left">
         <thead>
-          <tr className="border-b border-white/10">
+          <tr className="border-b border-border">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider ${
+                className={`px-4 py-3 text-xs font-semibold text-text-tertiary uppercase tracking-wider ${
                   col.sortable ? "cursor-pointer select-none hover:text-white/80" : ""
                 }`}
                 onClick={col.sortable ? () => handleSort(col.key) : undefined}
@@ -70,7 +70,7 @@ export function DataTable<T extends Record<string, unknown>>({
                 <span className="inline-flex items-center gap-1">
                   {col.label}
                   {col.sortable && sortKey === col.key && (
-                    <span className="text-white/70">
+                    <span className="text-text-secondary">
                       {sortDir === "asc" ? "\u25B2" : "\u25BC"}
                     </span>
                   )}
@@ -84,7 +84,7 @@ export function DataTable<T extends Record<string, unknown>>({
             <tr
               key={i}
               className={`border-b border-white/5 transition-colors ${
-                onRowClick ? "cursor-pointer hover:bg-white/5" : ""
+                onRowClick ? "cursor-pointer hover:bg-surface-hover" : ""
               } ${rowClassName ? rowClassName(row) : ""}`}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >

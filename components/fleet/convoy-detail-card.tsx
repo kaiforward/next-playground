@@ -61,7 +61,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
             <Badge color={isDocked ? "green" : "amber"}>
               {isDocked ? "Docked" : "In Transit"}
             </Badge>
-            <span className="text-white/40">{convoy.system.name}</span>
+            <span className="text-text-muted">{convoy.system.name}</span>
           </span>
         }
         action={
@@ -102,7 +102,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
           >
             <div className="space-y-1.5">
               {members.map((ship) => (
-                <div key={ship.id} className="flex items-center gap-2 py-1.5 px-3 rounded bg-white/5">
+                <div key={ship.id} className="flex items-center gap-2 px-3 py-2.5 rounded bg-surface">
                   <span className="text-sm text-white font-medium">{ship.name}</span>
                   <Badge color="slate">{ship.role}</Badge>
                   {ship.disabled && <Badge color="red">Disabled</Badge>}
@@ -118,7 +118,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
               const shieldPct = ship.shieldMax > 0 ? (ship.shieldCurrent / ship.shieldMax) * 100 : 100;
 
               return (
-                <div key={ship.id} className="py-2 px-3 rounded bg-white/5 space-y-1.5">
+                <div key={ship.id} className="px-3 py-2.5 rounded bg-surface space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-white font-medium">{ship.name}</span>
                     <Badge color="slate">{ship.role}</Badge>

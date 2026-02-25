@@ -74,10 +74,10 @@ function SystemLayoutContent({
       </div>
 
       {regionInfo && (
-        <p className="text-sm text-white/40 mb-1">
+        <p className="text-sm text-text-muted mb-1">
           Region: <span className="text-white/60">{regionInfo.name}</span>
-          <span className="text-white/30"> &middot; </span>
-          <span className="text-white/50 capitalize">
+          <span className="text-text-faint"> &middot; </span>
+          <span className="text-text-tertiary capitalize">
             {regionInfo.dominantEconomy} economy
           </span>
         </p>

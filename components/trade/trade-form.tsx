@@ -138,19 +138,19 @@ export function TradeForm({
           />
 
           {/* Preview */}
-          <div className="rounded-lg bg-white/5 p-3 space-y-1">
+          <div className="rounded-lg bg-surface p-3 space-y-1">
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Unit Price</span>
+              <span className="text-text-tertiary">Unit Price</span>
               <span className="text-white">
                 {formatCredits(good.currentPrice)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Quantity</span>
+              <span className="text-text-tertiary">Quantity</span>
               <span className="text-white">{quantity}</span>
             </div>
-            <div className="border-t border-white/10 pt-1 flex justify-between text-sm font-semibold">
-              <span className="text-white/70">
+            <div className="border-t border-border pt-1 flex justify-between text-sm font-semibold">
+              <span className="text-text-secondary">
                 {tradeType === "buy" ? "Total Cost" : "Total Revenue"}
               </span>
               <span

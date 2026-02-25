@@ -17,7 +17,7 @@ export function EconomyEventsTab() {
 
   if (sorted.length === 0) {
     return (
-      <div className="px-4 py-8 text-center text-sm text-white/40">
+      <div className="px-4 py-8 text-center text-sm text-text-muted">
         No active events
       </div>
     );
@@ -50,7 +50,7 @@ export function EconomyEventsTab() {
                 </Link>
               )}
 
-              <div className="flex items-center gap-3 mt-0.5 text-[11px] text-white/40">
+              <div className="flex items-center gap-3 mt-0.5 text-[11px] text-text-muted">
                 <span>{event.ticksRemaining} ticks remaining</span>
                 <span>Severity {event.severity.toFixed(1)}</span>
               </div>

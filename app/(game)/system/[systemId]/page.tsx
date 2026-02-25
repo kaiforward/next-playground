@@ -51,17 +51,17 @@ function getDangerInfo(rawDanger: number): { label: string; color: "green" | "am
 
 function GoodsList({ goods }: { goods: { name: string; rate: number }[] }) {
   if (goods.length === 0) {
-    return <p className="text-sm text-white/30">None</p>;
+    return <p className="text-sm text-text-faint">None</p>;
   }
   return (
     <div className="flex flex-wrap gap-1.5">
       {goods.map((g) => (
         <span
           key={g.name}
-          className="inline-flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 text-sm text-white/80"
+          className="inline-flex items-center gap-1 rounded bg-surface px-2 py-0.5 text-sm text-white/80"
         >
           {g.name}
-          <span className="text-white/30 text-xs">({g.rate}/t)</span>
+          <span className="text-text-faint text-xs">({g.rate}/t)</span>
         </span>
       ))}
     </div>
@@ -72,13 +72,13 @@ function GoodsList({ goods }: { goods: { name: string; rate: number }[] }) {
 
 function PriceRow({ name, price, pct }: { name: string; price: number; pct: number }) {
   return (
-    <li className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/5">
+    <li className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-surface">
       <span className="text-sm text-white">{name}</span>
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-white">{formatCredits(price)}</span>
         <span
           className={`text-xs font-medium w-14 text-right ${
-            pct > 0 ? "text-green-400" : pct < 0 ? "text-red-400" : "text-white/40"
+            pct > 0 ? "text-green-400" : pct < 0 ? "text-red-400" : "text-text-muted"
           }`}
         >
           {pct > 0 ? "+" : ""}{pct.toFixed(0)}%
@@ -258,13 +258,13 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 <SectionHeader as="h4" className="mb-2">Consumes</SectionHeader>
                 <GoodsList goods={consumedGoods} />
               </div>
-              <div className="border-t border-white/10 pt-3 space-y-2">
+              <div className="border-t border-border pt-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-white/50">Trade contracts</span>
+                  <span className="text-sm text-text-tertiary">Trade contracts</span>
                   <span className="text-sm text-indigo-400">{tradeAvailable} avail</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-white/50">Operations</span>
+                  <span className="text-sm text-text-tertiary">Operations</span>
                   <span className="text-sm text-indigo-400">{opAvailable} avail</span>
                 </div>
               </div>

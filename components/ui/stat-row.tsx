@@ -22,7 +22,7 @@ interface StatRowProps {
 export function StatRow({ label, children, className }: StatRowProps) {
   return (
     <div className={`flex items-center justify-between ${className ?? ""}`}>
-      <dt className="text-sm text-white/50">{label}</dt>
+      <dt className="text-sm text-text-tertiary">{label}</dt>
       <dd>{children}</dd>
     </div>
   );

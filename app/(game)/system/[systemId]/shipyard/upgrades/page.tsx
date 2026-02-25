@@ -66,7 +66,7 @@ function UpgradesContent({ systemId }: { systemId: string }) {
   if (eligibleShips.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-white/40 text-sm">No eligible ships at this system.</p>
+        <p className="text-text-muted text-sm">No eligible ships at this system.</p>
         <p className="text-white/20 text-xs mt-1">
           Ships must be docked and not disabled to install upgrades.
         </p>
@@ -136,7 +136,7 @@ function SelectedShipCard({
             <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>
               {ship.role}
             </Badge>
-            <span className="capitalize text-white/40">{ship.size}</span>
+            <span className="capitalize text-text-muted">{ship.size}</span>
           </span>
         }
       />
@@ -146,7 +146,7 @@ function SelectedShipCard({
         )}
 
         {ship.upgradeSlots.length === 0 ? (
-          <p className="text-white/30 text-sm text-center py-4">
+          <p className="text-text-faint text-sm text-center py-4">
             This ship has no upgrade slots.
           </p>
         ) : (

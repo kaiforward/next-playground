@@ -39,7 +39,7 @@ const cardRowVariants = tv({
   variants: {
     caught: {
       true: "bg-red-500/10",
-      false: "bg-white/5",
+      false: "bg-surface",
     },
   },
   defaultVariants: { caught: false },
@@ -61,7 +61,7 @@ const scoredValueVariants = tv({
   variants: {
     caught: {
       true: "text-red-400",
-      false: "text-white/70",
+      false: "text-text-secondary",
     },
   },
   defaultVariants: { caught: false },
@@ -108,18 +108,18 @@ export function ScoringDialog({
 
   return (
     <Dialog open={open} onClose={onClose} modal>
-      <div className="bg-slate-900 border border-white/10 rounded-xl p-10 w-[min(92vw,52rem)] max-h-[85vh] overflow-y-auto space-y-7">
+      <div className="bg-slate-900 border border-border rounded-xl p-10 w-[min(92vw,52rem)] max-h-[85vh] overflow-y-auto space-y-7">
         {/* Header */}
         <div className="text-center space-y-2">
           <h2 className={winnerHeadingVariants({ outcome: winner === "tie" ? "tie" : winner })}>
             {winnerLabel}
           </h2>
-          <p className="text-base text-white/50">{wagerText}</p>
+          <p className="text-base text-text-tertiary">{wagerText}</p>
         </div>
 
         {/* NPC dialogue */}
         {npcDialogue && (
-          <p className="text-sm text-white/40 italic text-center">
+          <p className="text-sm text-text-muted italic text-center">
             {npcIdentity.displayName}: &ldquo;{npcDialogue}&rdquo;
           </p>
         )}
@@ -177,7 +177,7 @@ function ScoreColumn({
       </div>
 
       {/* Totals */}
-      <div className="border-t border-white/10 pt-2 space-y-1">
+      <div className="border-t border-border pt-2 space-y-1">
         <div className="flex justify-between text-sm text-white/60">
           <span>Card values</span>
           <span>{breakdown.cardValues}</span>
@@ -204,12 +204,12 @@ function CardRow({ detail }: { detail: ResolvedCardDetail }) {
 
   return (
     <div className={cardRowVariants({ caught })}>
-      <span className="text-white/30 w-5 text-center">{round}</span>
+      <span className="text-text-faint w-5 text-center">{round}</span>
       <SuitBadge suit={declaration.suit} className="text-[10px] px-1.5 py-0" />
       <span className={cardValueVariants({ caught })}>
         {declaration.value}
       </span>
-      <span className="ml-auto text-white/30 text-[11px]">
+      <span className="ml-auto text-text-faint text-[11px]">
         {caught ? "caught" : honest ? "honest" : "bluff"}
       </span>
       <span className={scoredValueVariants({ caught })}>

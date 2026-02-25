@@ -62,7 +62,7 @@ export function TickControlSection() {
       </div>
 
       {advanceMutation.data && (
-        <p className="text-xs text-white/40">
+        <p className="text-xs text-text-muted">
           Tick {advanceMutation.data.newTick} ({advanceMutation.data.elapsed}ms)
         </p>
       )}

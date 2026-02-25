@@ -39,7 +39,7 @@ export function MarketTable({
               const qty = cargoByGoodId.get(row.goodId) ?? 0;
               return qty > 0
                 ? <span className="text-white font-medium">{qty}</span>
-                : <span className="text-white/30">0</span>;
+                : <span className="text-text-faint">0</span>;
             },
           },
         ]
@@ -109,7 +109,7 @@ export function MarketTable({
       data={data}
       onRowClick={(row) => onSelectGood(row.goodId)}
       rowClassName={(row) =>
-        row.goodId === selectedGoodId ? "bg-white/10" : ""
+        row.goodId === selectedGoodId ? "bg-surface-active" : ""
       }
     />
   );

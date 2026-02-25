@@ -30,9 +30,9 @@ export function DevToolsPanel() {
 
       {/* Panel */}
       {open && (
-        <div className="mb-12 w-[400px] max-h-[500px] bg-gray-900 border border-white/10 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+        <div className="mb-12 w-[400px] max-h-[500px] bg-gray-900 border border-border rounded-lg shadow-2xl flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">
+          <div className="px-3 py-2 border-b border-border flex items-center gap-2">
             <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
               Dev Tools
             </span>

@@ -20,7 +20,7 @@ export function MissionsTab() {
   if (missions.length === 0) {
     return (
       <div className="p-6 text-center">
-        <p className="text-white/30 text-sm">No active missions.</p>
+        <p className="text-text-faint text-sm">No active missions.</p>
         <p className="text-white/20 text-xs mt-1">
           Visit a station&apos;s Contracts tab to find work.
         </p>
@@ -44,7 +44,7 @@ export function MissionsTab() {
           });
 
           return (
-            <li key={m.id} className="px-4 py-3 hover:bg-white/5 transition-colors">
+            <li key={m.id} className="px-4 py-3 hover:bg-surface-hover transition-colors">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-white">
@@ -63,7 +63,7 @@ export function MissionsTab() {
                   ~{formatCredits(m.estimatedGoodsValue + m.reward)}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs text-white/40">
+              <div className="flex items-center justify-between text-xs text-text-muted">
                 <span>
                   Deliver to{" "}
                   <Link
@@ -80,7 +80,7 @@ export function MissionsTab() {
                   {m.ticksRemaining} ticks left
                 </span>
               </div>
-              <div className="text-xs text-white/30 mt-0.5">
+              <div className="text-xs text-text-faint mt-0.5">
                 {formatCredits(m.estimatedGoodsValue)} sale + {formatCredits(m.reward)} bonus
               </div>
               <div className="flex items-center gap-2 mt-2">

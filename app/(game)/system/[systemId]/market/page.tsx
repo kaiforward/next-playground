@@ -173,7 +173,7 @@ function MarketContent({ systemId }: { systemId: string }) {
       {/* Market table + Trade form */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className={tradingUnit && selectedGood ? "lg:col-span-2" : "lg:col-span-3"}>
-          <div className="rounded-xl bg-white/5 backdrop-blur border border-white/10 overflow-hidden">
+          <div className="rounded-xl bg-surface backdrop-blur border border-border overflow-hidden">
             <MarketTable
               entries={market}
               onSelectGood={setSelectedGoodId}

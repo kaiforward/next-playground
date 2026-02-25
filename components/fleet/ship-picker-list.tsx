@@ -45,7 +45,7 @@ export function ShipPickerList({
 
       <div className={`${maxHeight} overflow-y-auto space-y-1`}>
         {filtered.length === 0 && (
-          <p className="text-xs text-white/40 py-2 text-center">No ships match filter.</p>
+          <p className="text-xs text-text-muted py-2 text-center">No ships match filter.</p>
         )}
         {filtered.map((ship) => {
           const isSelected = selected.has(ship.id);
@@ -56,15 +56,15 @@ export function ShipPickerList({
               className={`w-full flex items-center gap-2 py-1.5 px-3 rounded text-left transition-colors ${
                 isSelected
                   ? "border-l-2 border-blue-500 bg-blue-500/10"
-                  : "border-l-2 border-transparent bg-white/5 hover:bg-white/10"
+                  : "border-l-2 border-transparent bg-surface hover:bg-surface-active"
               }`}
               onClick={() => onToggle(ship.id)}
             >
               <span className="text-sm text-white truncate flex-1">{ship.name}</span>
               <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>{ship.role}</Badge>
-              <span className="text-xs text-white/40 whitespace-nowrap">{ship.cargoMax} cargo</span>
+              <span className="text-xs text-text-muted whitespace-nowrap">{ship.cargoMax} cargo</span>
               {showSystem && (
-                <span className="text-xs text-white/30 truncate max-w-24">{ship.system.name}</span>
+                <span className="text-xs text-text-faint truncate max-w-24">{ship.system.name}</span>
               )}
             </button>
           );

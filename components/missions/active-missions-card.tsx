@@ -30,7 +30,7 @@ export function ActiveMissionsCard() {
           <ul className="space-y-3">
             {/* Trade missions */}
             {tradeMissions.slice(0, 3).map((m) => (
-              <li key={m.id} className="rounded-lg bg-white/5 px-3 py-2">
+              <li key={m.id} className="rounded-lg bg-surface px-3 py-2.5">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-white">
                     {m.goodName} x{m.quantity}
@@ -39,7 +39,7 @@ export function ActiveMissionsCard() {
                     ~{formatCredits(m.estimatedGoodsValue + m.reward)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-white/40">
+                <div className="flex items-center gap-2 text-xs text-text-muted">
                   <Link
                     href={`/system/${m.destinationId}/contracts`}
                     className="text-indigo-300 hover:text-indigo-200 transition-colors"
@@ -62,7 +62,7 @@ export function ActiveMissionsCard() {
             ))}
 
             {totalCount > 3 && (
-              <li className="text-center text-xs text-white/40 pt-1">
+              <li className="text-center text-xs text-text-muted pt-1">
                 +{totalCount - 3} more mission{totalCount - 3 !== 1 ? "s" : ""}
               </li>
             )}
@@ -77,7 +77,7 @@ function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
   const typeDef = MISSION_TYPE_DEFS[m.type as MissionType];
 
   return (
-    <li className="rounded-lg bg-white/5 px-3 py-2">
+    <li className="rounded-lg bg-surface px-3 py-2.5">
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium text-white">
           {typeDef?.name ?? m.type}
@@ -86,7 +86,7 @@ function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
           {formatCredits(m.reward)}
         </span>
       </div>
-      <div className="flex items-center gap-2 text-xs text-white/40">
+      <div className="flex items-center gap-2 text-xs text-text-muted">
         <Link
           href={`/system/${m.targetSystemId}/contracts`}
           className="text-indigo-300 hover:text-indigo-200 transition-colors"

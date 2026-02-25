@@ -69,7 +69,7 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
     <div className="space-y-8">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-white">Cantina</h1>
-        <p className="text-base text-white/50">
+        <p className="text-base text-text-tertiary">
           Choose an opponent for Void&apos;s Gambit
         </p>
       </div>
@@ -102,7 +102,7 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
                   </Badge>
                 </div>
                 <DifficultyDots level={difficulty} showLabel />
-                <p className="text-sm text-white/40 mt-3">
+                <p className="text-sm text-text-muted mt-3">
                   {NPC_FLAVOR[key]}
                 </p>
                 <p className="text-xs text-white/25 mt-1">

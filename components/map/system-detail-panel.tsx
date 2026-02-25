@@ -86,8 +86,8 @@ export function SystemDetailPanel({
         </div>
 
         {regionName && (
-          <p className="text-xs text-white/50">
-            Region: <span className="text-white/70">{regionName}</span>
+          <p className="text-xs text-text-tertiary">
+            Region: <span className="text-text-secondary">{regionName}</span>
           </p>
         )}
 
@@ -153,7 +153,7 @@ export function SystemDetailPanel({
             <p className="text-sm text-gray-500">No ships docked at this system.</p>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-white/70">
+              <p className="text-sm text-text-secondary">
                 {shipsHere.length > 0 && (
                   <>{shipsHere.length} {shipsHere.length === 1 ? "ship" : "ships"}</>
                 )}

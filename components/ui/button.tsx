@@ -11,7 +11,7 @@ const buttonVariants = tv({
       action:
         "text-white",
       ghost:
-        "text-gray-400 hover:text-white hover:bg-white/5",
+        "text-gray-400 hover:text-white hover:bg-surface-hover",
       pill:
         "text-xs",
       dismiss:

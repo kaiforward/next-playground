@@ -35,20 +35,20 @@ export function PlayerSummary({ fleet }: PlayerSummaryProps) {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white/50">Ships</span>
+            <span className="text-sm text-text-tertiary">Ships</span>
             <span className="text-sm font-medium text-white">
               {fleet.ships.length}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white/50">Docked</span>
+            <span className="text-sm text-text-tertiary">Docked</span>
             <span className="text-sm font-medium text-green-400">
               {docked}
             </span>
           </div>
           {inTransit > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-white/50">In Transit</span>
+              <span className="text-sm text-text-tertiary">In Transit</span>
               <span className="text-sm font-medium text-amber-400">
                 {inTransit}
               </span>

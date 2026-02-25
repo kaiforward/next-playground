@@ -35,7 +35,7 @@ function ConvoysContent({ systemId }: { systemId: string }) {
     <div className="space-y-6">
       {convoysHere.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-white/40 text-sm">No convoys at this system.</p>
+          <p className="text-text-muted text-sm">No convoys at this system.</p>
           <p className="text-white/20 text-xs mt-1">Form a convoy below using 2+ docked ships.</p>
         </div>
       ) : (
