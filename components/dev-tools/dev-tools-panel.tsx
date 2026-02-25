@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { TabList, Tab } from "@/components/ui/tabs";
 import { TickControlSection } from "./tick-control-section";
 import { EventSpawnerSection } from "./event-spawner-section";
 import { EconomyOverviewSection } from "./economy-overview-section";
@@ -38,21 +39,18 @@ export function DevToolsPanel() {
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-white/10">
+          <TabList>
             {TABS.map((t) => (
-              <button
+              <Tab
                 key={t}
+                active={tab === t}
                 onClick={() => setTab(t)}
-                className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                  tab === t
-                    ? "text-indigo-400 border-b-2 border-indigo-400"
-                    : "text-white/40 hover:text-white/70"
-                }`}
+                className="flex-1 py-1.5 text-xs"
               >
                 {t}
-              </button>
+              </Tab>
             ))}
-          </div>
+          </TabList>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-3">

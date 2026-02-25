@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import { TabList, Tab } from "@/components/ui/tabs";
 import { EconomyEventsTab } from "@/components/events/economy-events-tab";
 import { ShipLogTab } from "@/components/events/ship-log-tab";
 import { MissionsTab } from "@/components/events/missions-tab";
@@ -70,30 +71,18 @@ function ActivityPanelContent({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-white/10 px-4">
-        {TABS.map((tab) => {
-          const count = getCount(tab.id);
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                isActive
-                  ? "text-white border-indigo-400"
-                  : "text-white/50 border-transparent hover:text-white/70"
-              }`}
-            >
-              {tab.label}
-              {count > 0 && (
-                <span className={`ml-1.5 text-xs ${isActive ? "text-indigo-300" : "text-white/30"}`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <TabList className="px-4">
+        {TABS.map((tab) => (
+          <Tab
+            key={tab.id}
+            active={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            count={getCount(tab.id)}
+          >
+            {tab.label}
+          </Tab>
+        ))}
+      </TabList>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
