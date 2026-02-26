@@ -52,11 +52,12 @@ function GameShellInner({ userEmail, children }: GameShellProps) {
             userEmail={userEmail}
             currentTick={currentTick}
             collapsed={sidebar.collapsed}
+            hydrated={sidebar.hydrated}
             onToggle={sidebar.toggle}
           />
 
           <div
-            className="flex-1 flex flex-col min-w-0 transition-[margin-left] duration-200 ease-in-out"
+            className={`flex-1 flex flex-col min-w-0 ${sidebar.hydrated ? "transition-[margin-left] duration-200 ease-in-out" : ""}`}
             style={{
               marginLeft: sidebar.collapsed
                 ? "var(--sidebar-collapsed-width)"
