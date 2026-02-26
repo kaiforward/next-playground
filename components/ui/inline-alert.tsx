@@ -1,7 +1,7 @@
 import { tv, type VariantProps } from "tailwind-variants";
 
 const inlineAlertVariants = tv({
-  base: "rounded-lg px-4 py-2 text-sm",
+  base: "px-4 py-2 text-sm",
   variants: {
     variant: {
       error: "bg-red-500/10 border border-red-500/20 text-red-300",

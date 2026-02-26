@@ -24,7 +24,7 @@ export function EconomyEventsTab() {
   }
 
   return (
-    <ul className="divide-y divide-white/5">
+    <ul className="divide-y divide-border">
       {sorted.map((event) => {
         const color = EVENT_TYPE_BADGE_COLOR[event.type] ?? "slate";
         return (
@@ -37,7 +37,7 @@ export function EconomyEventsTab() {
             {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-white truncate">{event.name}</span>
+                <span className="text-sm font-semibold text-text-primary truncate">{event.name}</span>
                 <Badge color={color}>{event.phaseDisplayName}</Badge>
               </div>
 

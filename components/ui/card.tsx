@@ -3,7 +3,7 @@
 import { tv, type VariantProps } from "tailwind-variants";
 
 const cardVariants = tv({
-  base: "rounded-xl bg-surface backdrop-blur",
+  base: "bg-surface border-l-2 border-l-accent",
   variants: {
     variant: {
       default: "",
@@ -55,7 +55,7 @@ export function CardHeader({
   return (
     <div className={`mb-4 flex items-start justify-between gap-3 ${className ?? ""}`} {...props}>
       <div className="min-w-0">
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        <h3 className="text-lg font-semibold font-display text-text-primary">{title}</h3>
         {subtitle && (
           <p className="mt-1 text-sm text-text-tertiary">{subtitle}</p>
         )}

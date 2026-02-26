@@ -70,7 +70,7 @@ export function RoutePreviewPanel({
       <div className="rounded-xl border border-border bg-gray-900/95 backdrop-blur shadow-2xl">
         {/* Header */}
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-bold text-white">Route Preview</h3>
+          <h3 className="text-sm font-bold text-text-primary">Route Preview</h3>
           <p className="text-xs text-text-muted mt-0.5">
             {subtitle} &rarr; {destination.name}
           </p>
@@ -98,7 +98,7 @@ export function RoutePreviewPanel({
 
               {/* System name + hop cost */}
               <div className="flex-1 flex items-center justify-between">
-                <span className="text-xs text-white font-medium">
+                <span className="text-xs text-text-primary font-medium">
                   {getName(systemId)}
                 </span>
                 {i < hops.length && (
@@ -117,7 +117,7 @@ export function RoutePreviewPanel({
             <div className="text-[10px] text-text-muted uppercase tracking-wider">
               Fuel
             </div>
-            <div className="text-sm font-semibold text-white">
+            <div className="text-sm font-semibold text-text-primary">
               {route.totalFuelCost}
               <span className="text-text-faint font-normal">
                 {" "}/ {Math.round(unit.fuel)}
@@ -128,7 +128,7 @@ export function RoutePreviewPanel({
             <div className="text-[10px] text-text-muted uppercase tracking-wider">
               Travel Time
             </div>
-            <div className="text-sm font-semibold text-white">
+            <div className="text-sm font-semibold text-text-primary">
               {route.totalTravelDuration} ticks
             </div>
           </div>

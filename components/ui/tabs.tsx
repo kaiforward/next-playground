@@ -11,7 +11,7 @@ const tabListVariants = tv({
   variants: {
     variant: {
       underline: "border-b border-border gap-6",
-      pill: "rounded-lg overflow-hidden border border-border",
+      pill: "overflow-hidden border border-border",
     },
   },
   defaultVariants: {
@@ -55,10 +55,10 @@ const tabVariants = tv({
   },
   compoundVariants: [
     // underline active
-    { variant: "underline", active: true, class: "border-indigo-400 text-white" },
+    { variant: "underline", active: true, class: "border-accent text-text-primary" },
     { variant: "underline", active: false, class: "border-transparent text-text-tertiary hover:text-text-secondary" },
     // pill active — accent (default)
-    { variant: "pill", active: true, activeColor: "accent", class: "bg-indigo-500/20 text-indigo-300" },
+    { variant: "pill", active: true, activeColor: "accent", class: "bg-accent/20 text-accent" },
     { variant: "pill", active: true, activeColor: "green", class: "bg-green-500/20 text-green-300" },
     { variant: "pill", active: true, activeColor: "red", class: "bg-red-500/20 text-red-300" },
     { variant: "pill", active: false, class: "bg-surface text-text-tertiary hover:text-text-secondary" },

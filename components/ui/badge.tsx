@@ -3,7 +3,7 @@
 import { tv, type VariantProps } from "tailwind-variants";
 
 const badgeVariants = tv({
-  base: "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+  base: "inline-flex items-center px-2 py-0.5 text-xs font-medium",
   variants: {
     color: {
       green: "bg-green-500/20 text-green-300",

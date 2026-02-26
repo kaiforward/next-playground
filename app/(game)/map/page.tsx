@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StarMap } from "@/components/map/star-map";
 import { useUniverse } from "@/lib/hooks/use-universe";
@@ -9,6 +9,7 @@ import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
 import { useConvoys, useConvoyNavigateByIdMutation } from "@/lib/hooks/use-convoy";
 import { useEvents } from "@/lib/hooks/use-events";
+import { useSidebarContext } from "@/components/game-shell";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -31,6 +32,12 @@ function MapContent({
   const convoyNavigate = useConvoyNavigateByIdMutation();
   const { events } = useEvents();
   const [navError, setNavError] = useState<string | null>(null);
+
+  // Auto-collapse sidebar on the map page
+  const { setCollapsed } = useSidebarContext();
+  useEffect(() => {
+    setCollapsed(true);
+  }, [setCollapsed]);
 
   const handleNavigateShip = useCallback(
     async (shipId: string, route: string[]) => {
@@ -57,7 +64,7 @@ function MapContent({
   );
 
   return (
-    <div className="h-[calc(100vh-60px)] w-full relative">
+    <div className="h-[calc(100vh-var(--topbar-height))] w-full relative">
       {navError && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3">
           <InlineAlert className="shadow-lg">{navError}</InlineAlert>
@@ -91,7 +98,7 @@ export default function MapPage() {
       loadingFallback={
         <LoadingFallback
           message="Loading star map..."
-          className="h-[calc(100vh-60px)]"
+          className="h-[calc(100vh-var(--topbar-height))]"
         />
       }
     >

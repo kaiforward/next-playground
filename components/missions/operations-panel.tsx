@@ -83,7 +83,7 @@ function AvailableOperations({
       render: (row) => (
         <Link
           href={`/system/${row.targetSystemId}`}
-          className="text-indigo-300 hover:text-indigo-200 transition-colors"
+          className="text-accent hover:text-accent-muted transition-colors"
         >
           {row.targetSystemName}
         </Link>
@@ -204,7 +204,7 @@ function ActiveOperations({
       render: (row) => (
         <Link
           href={`/system/${row.targetSystemId}`}
-          className="text-indigo-300 hover:text-indigo-200 transition-colors"
+          className="text-accent hover:text-accent-muted transition-colors"
         >
           {row.targetSystemName}
         </Link>

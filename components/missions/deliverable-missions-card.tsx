@@ -34,10 +34,10 @@ export function DeliverableMissionsCard({ missions, ship }: DeliverableMissionsC
           {missions.map((m) => (
             <li
               key={m.id}
-              className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface"
+              className="flex items-center justify-between px-3 py-2.5 bg-surface"
             >
               <div>
-                <span className="text-sm font-medium text-white">
+                <span className="text-sm font-medium text-text-primary">
                   {m.goodName} x{m.quantity}
                 </span>
                 <span className="text-sm text-green-400 ml-2">

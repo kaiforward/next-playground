@@ -15,7 +15,7 @@ const valuePillVariants = tv({
   variants: {
     selected: {
       true: "bg-cyan-500 text-white",
-      false: "bg-surface-active text-white/60 hover:bg-white/20",
+      false: "bg-surface-active text-text-secondary hover:bg-white/20",
     },
   },
   defaultVariants: { selected: false },

@@ -21,7 +21,7 @@ export function EconomyOverviewSection() {
         <>
           <div className="max-h-64 overflow-y-auto">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-gray-900">
+              <thead className="sticky top-0 bg-surface">
                 <tr className="text-text-tertiary text-left">
                   <th className="py-1 pr-2">System</th>
                   <th className="py-1 pr-2">Type</th>
@@ -37,7 +37,7 @@ export function EconomyOverviewSection() {
                         )
                       : 0;
                   return (
-                    <tr key={sys.systemId} className="border-t border-white/5">
+                    <tr key={sys.systemId} className="border-t border-border">
                       <td className="py-1 pr-2 text-text-secondary truncate max-w-[100px]">
                         {sys.systemName}
                       </td>

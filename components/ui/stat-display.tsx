@@ -20,7 +20,7 @@ export function StatDisplay({ label, value, trend, icon }: StatDisplayProps) {
           {label}
         </p>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-2xl font-bold text-white">{value}</span>
+          <span className="text-2xl font-bold text-text-primary">{value}</span>
           {trend && trend !== "neutral" && (
             <span
               className={`text-sm font-medium ${

@@ -21,9 +21,10 @@ interface StatRowProps {
 /** A single key-value row within a StatList. */
 export function StatRow({ label, children, className }: StatRowProps) {
   return (
-    <div className={`flex items-center justify-between ${className ?? ""}`}>
-      <dt className="text-sm text-text-tertiary">{label}</dt>
-      <dd>{children}</dd>
+    <div className={`flex items-center gap-2 ${className ?? ""}`}>
+      <dt className="text-sm text-text-tertiary shrink-0">{label}</dt>
+      <span className="flex-1 border-b border-dotted border-border" />
+      <dd className="shrink-0">{children}</dd>
     </div>
   );
 }

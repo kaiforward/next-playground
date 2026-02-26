@@ -15,7 +15,7 @@ export const DropdownMenuContent = forwardRef<
     <DropdownMenuPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
-      className={`z-50 min-w-[160px] rounded-lg border border-border bg-gray-900 p-1 shadow-xl animate-in fade-in-0 zoom-in-95 ${className}`}
+      className={`z-50 min-w-[160px] border border-border bg-surface p-1 shadow-xl animate-in fade-in-0 zoom-in-95 ${className}`}
       {...props}
     />
   </DropdownMenuPrimitive.Portal>
@@ -28,10 +28,10 @@ export const DropdownMenuItem = forwardRef<
 >(({ className = "", destructive, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
-    className={`relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-1.5 text-xs outline-none transition-colors focus:bg-surface-active data-[disabled]:pointer-events-none data-[disabled]:opacity-50 ${
+    className={`relative flex cursor-pointer select-none items-center gap-2 px-2.5 py-1.5 text-xs outline-none transition-colors focus:bg-surface-active data-[disabled]:pointer-events-none data-[disabled]:opacity-50 ${
       destructive
         ? "text-red-400 focus:text-red-300"
-        : "text-gray-300 focus:text-white"
+        : "text-text-primary focus:text-text-primary"
     } ${className}`}
     {...props}
   />
@@ -56,7 +56,7 @@ export const DropdownMenuLabel = forwardRef<
 >(({ className = "", ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={`px-2.5 py-1 text-xs font-medium text-gray-500 ${className}`}
+    className={`px-2.5 py-1 text-xs font-medium text-text-muted ${className}`}
     {...props}
   />
 ));

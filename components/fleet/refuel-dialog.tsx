@@ -51,7 +51,7 @@ export function RefuelDialog({ ship, playerCredits, open, onClose }: RefuelDialo
       modal
       size="sm"
     >
-      <h2 className="text-lg font-bold text-white mb-1">Refuel {ship.name}</h2>
+      <h2 className="text-lg font-bold text-text-primary mb-1">Refuel {ship.name}</h2>
       <p className="text-xs text-text-muted mb-5">{REFUEL_COST_PER_UNIT} CR per unit</p>
 
       <div className="space-y-4">
@@ -68,10 +68,10 @@ export function RefuelDialog({ ship, playerCredits, open, onClose }: RefuelDialo
         />
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-white/60">
+          <span className="text-text-secondary">
             {clampedAmount} fuel × {REFUEL_COST_PER_UNIT} CR
           </span>
-          <span className="text-white font-medium">
+          <span className="text-text-primary font-medium">
             = {formatCredits(totalCost)}
           </span>
         </div>

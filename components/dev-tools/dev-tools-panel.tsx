@@ -22,7 +22,7 @@ export function DevToolsPanel() {
         variant="primary"
         size="sm"
         onClick={() => setOpen(!open)}
-        className="absolute bottom-0 right-0 w-9 h-9 rounded-full p-0 bg-indigo-600 hover:bg-indigo-500 shadow-lg"
+        className="absolute bottom-0 right-0 w-9 h-9 p-0 bg-accent hover:bg-accent-muted shadow-lg"
         title="Dev Tools"
       >
         {open ? "\u2715" : "\u2699"}
@@ -30,10 +30,10 @@ export function DevToolsPanel() {
 
       {/* Panel */}
       {open && (
-        <div className="mb-12 w-[400px] max-h-[500px] bg-gray-900 border border-border rounded-lg shadow-2xl flex flex-col overflow-hidden">
+        <div className="mb-12 w-[400px] max-h-[500px] bg-surface border border-border shadow-2xl flex flex-col overflow-hidden">
           {/* Header */}
           <div className="px-3 py-2 border-b border-border flex items-center gap-2">
-            <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+            <span className="text-xs font-display font-semibold text-accent uppercase tracking-wider">
               Dev Tools
             </span>
           </div>

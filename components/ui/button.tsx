@@ -7,15 +7,15 @@ const buttonVariants = tv({
   variants: {
     variant: {
       primary:
-        "bg-blue-600 hover:bg-blue-500 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-black",
+        "bg-accent hover:bg-accent-muted text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background",
       action:
-        "text-white",
+        "text-text-primary",
       ghost:
-        "text-gray-400 hover:text-white hover:bg-surface-hover",
+        "text-text-secondary hover:text-text-primary hover:bg-surface-hover",
       pill:
         "text-xs",
       dismiss:
-        "text-red-400 hover:text-white text-xs font-medium",
+        "text-red-400 hover:text-text-primary text-xs font-medium",
     },
     color: {
       blue: "",
@@ -25,10 +25,10 @@ const buttonVariants = tv({
       cyan: "",
     },
     size: {
-      xs: "py-1 px-2.5 rounded-md text-xs",
-      sm: "py-1.5 px-3 rounded-md text-xs",
-      md: "py-2 px-4 rounded-lg text-sm",
-      lg: "py-2.5 px-4 rounded-lg text-sm",
+      xs: "py-1 px-2.5 text-xs",
+      sm: "py-1.5 px-3 text-xs",
+      md: "py-2 px-4 text-sm",
+      lg: "py-2.5 px-4 text-sm",
     },
     fullWidth: {
       true: "w-full",
@@ -38,10 +38,10 @@ const buttonVariants = tv({
     // Action button colors
     { variant: "action", color: "green", className: "bg-green-600 hover:bg-green-500" },
     { variant: "action", color: "red", className: "bg-red-600 hover:bg-red-500" },
-    { variant: "action", color: "indigo", className: "bg-indigo-600 hover:bg-indigo-500" },
+    { variant: "action", color: "indigo", className: "bg-accent hover:bg-accent-muted" },
     // Pill button colors
     { variant: "pill", color: "cyan", className: "bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30" },
-    { variant: "pill", color: "indigo", className: "bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30" },
+    { variant: "pill", color: "indigo", className: "bg-accent/20 text-accent hover:bg-accent/30" },
     // Ghost size uses semibold for lg
     { variant: "action", size: "md", className: "font-semibold" },
     { variant: "action", size: "lg", className: "font-semibold" },

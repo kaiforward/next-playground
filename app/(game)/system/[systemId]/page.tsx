@@ -58,7 +58,7 @@ function GoodsList({ goods }: { goods: { name: string; rate: number }[] }) {
       {goods.map((g) => (
         <span
           key={g.name}
-          className="inline-flex items-center gap-1 rounded bg-surface px-2 py-0.5 text-sm text-white/80"
+          className="inline-flex items-center gap-1 bg-surface px-2 py-0.5 text-sm text-text-primary"
         >
           {g.name}
           <span className="text-text-faint text-xs">({g.rate}/t)</span>
@@ -72,10 +72,10 @@ function GoodsList({ goods }: { goods: { name: string; rate: number }[] }) {
 
 function PriceRow({ name, price, pct }: { name: string; price: number; pct: number }) {
   return (
-    <li className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-surface">
-      <span className="text-sm text-white">{name}</span>
+    <li className="flex items-center justify-between py-1.5 px-3 bg-surface">
+      <span className="text-sm text-text-primary">{name}</span>
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium text-white">{formatCredits(price)}</span>
+        <span className="text-sm font-medium text-text-primary">{formatCredits(price)}</span>
         <span
           className={`text-xs font-medium w-14 text-right ${
             pct > 0 ? "text-green-400" : pct < 0 ? "text-red-400" : "text-text-muted"
@@ -221,7 +221,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
             {/* Left column — system stats */}
             <StatList>
               <StatRow label="Region">
-                <span className="text-sm text-white">{regionInfo?.name ?? "—"}</span>
+                <span className="text-sm text-text-primary">{regionInfo?.name ?? "—"}</span>
               </StatRow>
               <StatRow label="Economy">
                 <EconomyBadge economyType={economyType} />
@@ -230,13 +230,13 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 <span className="text-sm text-white capitalize">{govDef.name}</span>
               </StatRow>
               <StatRow label="Population">
-                <span className="text-sm text-white">{populationLabel}</span>
+                <span className="text-sm text-text-primary">{populationLabel}</span>
               </StatRow>
               <StatRow label="Traits">
-                <span className="text-sm text-white">{traits.length}</span>
+                <span className="text-sm text-text-primary">{traits.length}</span>
               </StatRow>
               <StatRow label="Connections">
-                <span className="text-sm text-white">{connectionCount}</span>
+                <span className="text-sm text-text-primary">{connectionCount}</span>
               </StatRow>
               <StatRow label="Danger">
                 <Badge color={danger.color}>{danger.label}</Badge>
@@ -261,11 +261,11 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
               <div className="border-t border-border pt-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-text-tertiary">Trade contracts</span>
-                  <span className="text-sm text-indigo-400">{tradeAvailable} avail</span>
+                  <span className="text-sm text-accent">{tradeAvailable} avail</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-text-tertiary">Operations</span>
-                  <span className="text-sm text-indigo-400">{opAvailable} avail</span>
+                  <span className="text-sm text-accent">{opAvailable} avail</span>
                 </div>
               </div>
             </div>

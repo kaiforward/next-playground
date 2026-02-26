@@ -115,7 +115,7 @@ export function GameTable({
       <div className="rounded-xl bg-surface p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold text-white">
+            <h2 className="text-xl font-semibold text-text-primary">
               {npcIdentity.displayName}
             </h2>
             <DifficultyDots level={npcIdentity.difficulty} />
@@ -142,7 +142,7 @@ export function GameTable({
       {/* ── Round info ──────────────────────────────────────── */}
       <div className="rounded-xl bg-surface p-6 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-base font-medium text-white">
+          <span className="text-base font-medium text-text-primary">
             Round {round}/{MAX_ROUNDS}
           </span>
           {currentDemand && (
@@ -195,7 +195,7 @@ export function GameTable({
             {npcRoundEntry && (
               <p className="text-sm text-text-tertiary">
                 Opponent declared{" "}
-                <span className="font-semibold text-white">
+                <span className="font-semibold text-text-primary">
                   {SUIT_LABELS[npcRoundEntry.declaration.suit]}{" "}
                   {npcRoundEntry.declaration.value}
                 </span>

@@ -29,21 +29,21 @@ export function RepairDialog({ ship, playerCredits, open, onClose }: RepairDialo
 
   return (
     <Dialog open={open} onClose={onClose} modal size="sm">
-      <h3 className="text-lg font-semibold text-white mb-4">Repair Ship</h3>
+      <h3 className="text-lg font-semibold text-text-primary mb-4">Repair Ship</h3>
 
       <StatList className="mb-4">
         <StatRow label="Hull">
-          <span className="text-sm text-white">
+          <span className="text-sm text-text-primary">
             {ship.hullCurrent} / {ship.hullMax}
           </span>
         </StatRow>
         <StatRow label="Repair cost">
-          <span className={`text-sm ${canAfford ? "text-white" : "text-red-400"}`}>
+          <span className={`text-sm ${canAfford ? "text-text-primary" : "text-red-400"}`}>
             {formatCredits(cost)}
           </span>
         </StatRow>
         <StatRow label="Your balance">
-          <span className="text-sm text-white/60">{formatCredits(playerCredits)}</span>
+          <span className="text-sm text-text-secondary">{formatCredits(playerCredits)}</span>
         </StatRow>
       </StatList>
 

@@ -30,9 +30,9 @@ export function ActiveMissionsCard() {
           <ul className="space-y-3">
             {/* Trade missions */}
             {tradeMissions.slice(0, 3).map((m) => (
-              <li key={m.id} className="rounded-lg bg-surface px-3 py-2.5">
+              <li key={m.id} className="bg-surface px-3 py-2.5">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-medium text-text-primary">
                     {m.goodName} x{m.quantity}
                   </span>
                   <span className="text-sm text-green-400">
@@ -42,7 +42,7 @@ export function ActiveMissionsCard() {
                 <div className="flex items-center gap-2 text-xs text-text-muted">
                   <Link
                     href={`/system/${m.destinationId}/contracts`}
-                    className="text-indigo-300 hover:text-indigo-200 transition-colors"
+                    className="text-accent hover:text-accent-muted transition-colors"
                   >
                     {m.destinationName}
                   </Link>
@@ -77,9 +77,9 @@ function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
   const typeDef = MISSION_TYPE_DEFS[m.type as MissionType];
 
   return (
-    <li className="rounded-lg bg-surface px-3 py-2.5">
+    <li className="bg-surface px-3 py-2.5">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-white">
+        <span className="text-sm font-medium text-text-primary">
           {typeDef?.name ?? m.type}
         </span>
         <span className="text-sm text-green-400">
@@ -89,7 +89,7 @@ function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
       <div className="flex items-center gap-2 text-xs text-text-muted">
         <Link
           href={`/system/${m.targetSystemId}/contracts`}
-          className="text-indigo-300 hover:text-indigo-200 transition-colors"
+          className="text-accent hover:text-accent-muted transition-colors"
         >
           {m.targetSystemName}
         </Link>

@@ -5,9 +5,9 @@ import { formSlots, formSizeVariants } from "./form-slots";
 const rangeInputVariants = tv({
   slots: {
     label: formSlots.label,
-    input: "w-full accent-blue-500 cursor-pointer",
+    input: "w-full accent-[#c75b39] cursor-pointer",
     hint: formSlots.hint,
-    valueDisplay: "text-white tabular-nums",
+    valueDisplay: "text-text-primary tabular-nums",
   },
   variants: {
     size: {

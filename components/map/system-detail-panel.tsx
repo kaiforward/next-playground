@@ -49,12 +49,12 @@ export function SystemDetailPanel({
       open
       onClose={onClose}
       initialFocus="[aria-label='Close panel']"
-      className="fixed top-12 right-0 h-[calc(100%-3rem)] w-80 bg-gray-900 border-l border-gray-700 shadow-2xl z-50 flex flex-col"
+      className="fixed top-12 right-0 h-[calc(100%-3rem)] w-80 bg-surface border-l border-gray-700 shadow-2xl z-50 flex flex-col"
       aria-label={`${system.name} system details`}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-        <h2 className="text-lg font-bold text-white">{system.name}</h2>
+        <h2 className="text-lg font-bold text-text-primary">{system.name}</h2>
         <button
           onClick={onClose}
           className="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-800"
@@ -179,7 +179,7 @@ export function SystemDetailPanel({
                 )}
                 <Link
                   href={`/system/${system.id}/market`}
-                  className="text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
+                  className="text-xs font-medium text-accent hover:text-accent-muted transition-colors"
                 >
                   Market
                 </Link>

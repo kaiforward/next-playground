@@ -68,7 +68,7 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
   return (
     <div className="space-y-8">
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold text-white">Cantina</h1>
+        <h1 className="text-3xl font-bold text-text-primary">Cantina</h1>
         <p className="text-base text-text-tertiary">
           Choose an opponent for Void&apos;s Gambit
         </p>
@@ -94,7 +94,7 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
                 className={opponentCardVariants({ selected: isSelected })}
               >
                 <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-white">
+                  <h3 className="text-lg font-semibold text-text-primary">
                     {label}
                   </h3>
                   <Badge color={badgeColor}>
@@ -105,7 +105,7 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
                 <p className="text-sm text-text-muted mt-3">
                   {NPC_FLAVOR[key]}
                 </p>
-                <p className="text-xs text-white/25 mt-1">
+                <p className="text-xs text-text-faint mt-1">
                   Wager: {wagerLimits.min}–{wagerLimits.max} CR
                 </p>
               </Card>

@@ -48,7 +48,7 @@ export function ConvoyRefuelSlider({
       modal
       size="sm"
     >
-      <h2 className="text-lg font-bold text-white mb-1">
+      <h2 className="text-lg font-bold text-text-primary mb-1">
         Refuel Convoy
       </h2>
       <p className="text-xs text-text-muted mb-5">
@@ -76,7 +76,7 @@ export function ConvoyRefuelSlider({
             return (
               <div key={sp.shipId} className="py-1.5 px-3 rounded bg-surface">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-white font-medium">{sp.shipName}</span>
+                  <span className="text-xs text-text-primary font-medium">{sp.shipName}</span>
                   <span className="text-[10px] text-text-muted">
                     +{sp.fuelAmount} fuel &middot; {formatCredits(sp.cost)}
                   </span>
@@ -95,8 +95,8 @@ export function ConvoyRefuelSlider({
 
         {/* Totals */}
         <div className="flex items-center justify-between text-sm border-t border-border pt-3">
-          <span className="text-white/60">Total fuel</span>
-          <span className="text-white font-medium">
+          <span className="text-text-secondary">Total fuel</span>
+          <span className="text-text-primary font-medium">
             +{plan.totalFuel} fuel &middot; {formatCredits(plan.totalCost)}
           </span>
         </div>

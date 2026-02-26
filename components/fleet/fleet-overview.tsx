@@ -21,7 +21,7 @@ export function FleetOverview({ ships, currentTick, regions, playerCredits }: Fl
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Fleet</h2>
+        <h2 className="text-lg font-semibold text-text-primary">Fleet</h2>
         <div className="flex gap-3 text-xs text-text-tertiary">
           <span>
             {soloShips.length} ship{soloShips.length !== 1 ? "s" : ""}
