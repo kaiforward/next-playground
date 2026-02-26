@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 export interface UseSidebarReturn {
   collapsed: boolean;
@@ -8,13 +8,14 @@ export interface UseSidebarReturn {
   setCollapsed: (value: boolean) => void;
 }
 
-function readInitial(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem("sidebar-collapsed") === "true";
-}
-
 export function useSidebar(): UseSidebarReturn {
-  const [collapsed, setCollapsedState] = useState(readInitial);
+  // Always start expanded to match server render, then sync from localStorage
+  const [collapsed, setCollapsedState] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("sidebar-collapsed");
+    if (stored === "true") setCollapsedState(true);
+  }, []);
 
   const setCollapsed = useCallback((value: boolean) => {
     setCollapsedState(value);
