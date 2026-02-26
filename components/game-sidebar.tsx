@@ -193,8 +193,6 @@ interface GameSidebarProps {
   userEmail: string | null;
   currentTick: number;
   collapsed: boolean;
-  /** True after initial localStorage sync — enables CSS transitions. */
-  hydrated: boolean;
   onToggle: () => void;
 }
 
@@ -202,7 +200,6 @@ export function GameSidebar({
   userEmail,
   currentTick,
   collapsed,
-  hydrated,
   onToggle,
 }: GameSidebarProps) {
   const pathname = usePathname();
@@ -212,7 +209,7 @@ export function GameSidebar({
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-screen bg-surface border-r border-border z-40 flex flex-col ${hydrated ? "transition-[width] duration-200 ease-in-out" : ""}`}
+      className="fixed left-0 top-0 h-screen bg-surface border-r border-border z-40 flex flex-col transition-[width] duration-200 ease-in-out"
       style={{ width: collapsed ? "var(--sidebar-collapsed-width)" : "var(--sidebar-width)" }}
     >
       {/* Logo */}

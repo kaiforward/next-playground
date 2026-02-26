@@ -1,42 +1,35 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 
 export interface UseSidebarReturn {
   collapsed: boolean;
-  /** True after the initial localStorage sync — safe to enable CSS transitions. */
-  hydrated: boolean;
   toggle: () => void;
   setCollapsed: (value: boolean) => void;
 }
 
-export function useSidebar(): UseSidebarReturn {
-  // Always start expanded to match server render, then sync from localStorage
-  const [collapsed, setCollapsedState] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  const didSync = useRef(false);
+const COOKIE_NAME = "sidebar-collapsed";
 
-  useEffect(() => {
-    if (didSync.current) return;
-    didSync.current = true;
-    const stored = localStorage.getItem("sidebar-collapsed");
-    if (stored === "true") setCollapsedState(true);
-    // Enable transitions on the next frame so the initial sync is instant
-    requestAnimationFrame(() => setHydrated(true));
-  }, []);
+function persistCollapsed(value: boolean) {
+  // Cookie: available to the server on next request for SSR
+  document.cookie = `${COOKIE_NAME}=${value ? "1" : "0"}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+}
+
+export function useSidebar(defaultCollapsed = false): UseSidebarReturn {
+  const [collapsed, setCollapsedState] = useState(defaultCollapsed);
 
   const setCollapsed = useCallback((value: boolean) => {
     setCollapsedState(value);
-    localStorage.setItem("sidebar-collapsed", String(value));
+    persistCollapsed(value);
   }, []);
 
   const toggle = useCallback(() => {
     setCollapsedState((prev) => {
       const next = !prev;
-      localStorage.setItem("sidebar-collapsed", String(next));
+      persistCollapsed(next);
       return next;
     });
   }, []);
 
-  return { collapsed, hydrated, toggle, setCollapsed };
+  return { collapsed, toggle, setCollapsed };
 }
