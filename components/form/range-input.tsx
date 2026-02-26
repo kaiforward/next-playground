@@ -1,25 +1,26 @@
 import { forwardRef, type InputHTMLAttributes } from "react";
 import { tv, type VariantProps } from "tailwind-variants";
+import { formSlots, formSizeVariants } from "./form-slots";
 
 const rangeInputVariants = tv({
   slots: {
-    label: "block font-medium mb-1",
+    label: formSlots.label,
     input: "w-full accent-blue-500 cursor-pointer",
-    hint: "mt-1 text-white/40",
+    hint: formSlots.hint,
     valueDisplay: "text-white tabular-nums",
   },
   variants: {
     size: {
       sm: {
-        label: "text-xs text-white/50 uppercase tracking-wider",
+        label: formSizeVariants.sm.label,
         input: "h-1.5",
-        hint: "text-xs",
+        hint: formSizeVariants.sm.hint,
         valueDisplay: "text-xs",
       },
       md: {
-        label: "text-sm text-white/70 mb-1.5",
+        label: formSizeVariants.md.label,
         input: "h-2",
-        hint: "text-xs",
+        hint: formSizeVariants.md.hint,
         valueDisplay: "text-sm",
       },
     },

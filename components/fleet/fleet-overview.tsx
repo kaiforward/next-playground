@@ -22,11 +22,11 @@ export function FleetOverview({ ships, currentTick, regions, playerCredits }: Fl
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-white">Fleet</h2>
-        <div className="flex gap-3 text-xs text-white/50">
+        <div className="flex gap-3 text-xs text-text-tertiary">
           <span>
             {soloShips.length} ship{soloShips.length !== 1 ? "s" : ""}
             {convoyCount > 0 && (
-              <span className="text-white/30"> ({convoyCount} in convoys)</span>
+              <span className="text-text-faint"> ({convoyCount} in convoys)</span>
             )}
           </span>
           <span className="text-green-400">{docked} docked</span>
@@ -37,7 +37,7 @@ export function FleetOverview({ ships, currentTick, regions, playerCredits }: Fl
       </div>
 
       {soloShips.length === 0 ? (
-        <p className="text-sm text-white/30 py-4">All ships are in convoys.</p>
+        <p className="text-sm text-text-faint py-4">All ships are in convoys.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {soloShips.map((ship) => (

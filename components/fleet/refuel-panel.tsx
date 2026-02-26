@@ -64,7 +64,7 @@ export function RefuelPanel({ ship, playerCredits }: RefuelPanelProps) {
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-white/40">
+        <div className="flex items-center justify-between text-xs text-text-muted">
           <span>Balance</span>
           <span>{formatCredits(playerCredits)}</span>
         </div>

@@ -52,7 +52,7 @@ export function RegionNode({ data }: NodeProps<Node<RegionNodeData>>) {
       <div className={regionNode({ navigationState })}>
         <div className="text-base font-bold leading-tight">{label}</div>
         <EconomyBadge economyType={dominantEconomy} className="mt-1 text-[10px] px-2 py-0" />
-        <div className="text-[11px] mt-1 text-white/50">
+        <div className="text-[11px] mt-1 text-text-tertiary">
           {systemCount} system{systemCount !== 1 ? "s" : ""}
         </div>
         {hasShips && (

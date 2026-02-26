@@ -112,7 +112,7 @@ export function GameCard({
   // Face-down card
   if (face === "down") {
     return (
-      <CardShell {...shellProps} bgClassName="bg-white/10 border-white/20">
+      <CardShell {...shellProps} bgClassName="bg-surface-active border-border-strong">
         {declaration ? (
           <DeclarationOverlay declaration={declaration} isCaught={isCaught} />
         ) : (

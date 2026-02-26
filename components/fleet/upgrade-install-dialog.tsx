@@ -50,7 +50,7 @@ export function UpgradeInstallDialog({
   return (
     <Dialog open={open} onClose={handleClose} modal size="sm" className="max-h-[80vh] overflow-y-auto">
       <h3 className="text-lg font-semibold text-white mb-1">Install Module</h3>
-      <p className="text-xs text-white/40 mb-4 capitalize">{slot.slotType} slot</p>
+      <p className="text-xs text-text-muted mb-4 capitalize">{slot.slotType} slot</p>
 
       <div className="space-y-3 mb-4">
         {modules.map((mod) => (
@@ -100,14 +100,14 @@ interface ModuleOptionProps {
 
 function ModuleOption({ mod, playerCredits, selected, onSelect }: ModuleOptionProps) {
   return (
-    <div className="rounded-lg bg-white/5 p-3">
+    <div className="rounded-lg bg-surface p-3">
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium text-white">{mod.name}</span>
         <Badge color={mod.category === "tiered" ? "blue" : "purple"}>
           {mod.category === "tiered" ? "Tiered" : "Capability"}
         </Badge>
       </div>
-      <p className="text-xs text-white/40 mb-2">{mod.description}</p>
+      <p className="text-xs text-text-muted mb-2">{mod.description}</p>
       <div className="flex gap-1.5">
         {mod.tiers.map((tier) => {
           const canAfford = playerCredits >= tier.cost;
@@ -121,8 +121,8 @@ function ModuleOption({ mod, playerCredits, selected, onSelect }: ModuleOptionPr
                 isSelected
                   ? "bg-blue-500/30 text-blue-300 ring-1 ring-blue-500/50"
                   : canAfford
-                    ? "bg-white/5 text-white/60 hover:bg-white/10"
-                    : "bg-white/5 text-white/20 cursor-not-allowed"
+                    ? "bg-surface text-white/60 hover:bg-surface-active"
+                    : "bg-surface text-white/20 cursor-not-allowed"
               }`}
             >
               <div className="font-medium">

@@ -52,7 +52,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>
                 {ship.role}
               </Badge>
-              <span className="capitalize text-white/40">{ship.size}</span>
+              <span className="capitalize text-text-muted">{ship.size}</span>
             </span>
           }
         />
@@ -81,7 +81,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
                 <span className="text-sm text-white">{ship.system.name}</span>
                 <EconomyBadge economyType={ship.system.economyType} />
                 {regions && (
-                  <span className="text-xs text-white/40">
+                  <span className="text-xs text-text-muted">
                     {regions.find((r) => r.id === ship.system.regionId)?.name}
                   </span>
                 )}
@@ -175,7 +175,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
         <CardContent>
           {ship.cargo.length === 0 ? (
             <div className="text-center py-6">
-              <p className="text-white/30 text-sm">Cargo hold is empty</p>
+              <p className="text-text-faint text-sm">Cargo hold is empty</p>
               <p className="text-white/20 text-xs mt-1">Visit a station market to buy goods</p>
             </div>
           ) : (
@@ -183,7 +183,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               {ship.cargo.map((item) => (
                 <li
                   key={item.goodId}
-                  className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5"
+                  className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface"
                 >
                   <span className="text-sm font-medium text-white">{item.goodName}</span>
                   <span className="text-sm text-white/60">x{item.quantity}</span>
@@ -284,7 +284,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
 function StatPair({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex justify-between py-1">
-      <span className="text-sm text-white/50">{label}</span>
+      <span className="text-sm text-text-tertiary">{label}</span>
       <span className="text-sm font-medium text-white">{value}</span>
     </div>
   );

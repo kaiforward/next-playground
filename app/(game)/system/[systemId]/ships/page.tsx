@@ -20,7 +20,7 @@ function ShipsContent({ systemId }: { systemId: string }) {
   if (shipsHere.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-white/40 text-sm">No ships docked at this system.</p>
+        <p className="text-text-muted text-sm">No ships docked at this system.</p>
         <p className="text-white/20 text-xs mt-1">Navigate a ship here from the map to see it.</p>
       </div>
     );

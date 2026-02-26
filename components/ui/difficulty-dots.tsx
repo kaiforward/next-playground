@@ -26,7 +26,7 @@ export function DifficultyDots({ level, showLabel = false }: DifficultyDotsProps
   if (showLabel) {
     return (
       <div className="flex items-center gap-1">
-        <span className="text-[10px] text-white/30 uppercase tracking-wider">
+        <span className="text-[10px] text-text-faint uppercase tracking-wider">
           Difficulty
         </span>
         <span className="inline-flex gap-0.5" aria-label={`level ${level} of 3`}>{dots}</span>

@@ -25,7 +25,7 @@ export function ShipLogTab() {
 
   if (shipNotifications.length === 0) {
     return (
-      <div className="px-4 py-8 text-center text-sm text-white/40">
+      <div className="px-4 py-8 text-center text-sm text-text-muted">
         No ship events this session
       </div>
     );
@@ -36,7 +36,7 @@ export function ShipLogTab() {
       {shipNotifications.map((n) => (
         <li key={n.id} className="px-4 py-2.5 flex items-start gap-3">
           {/* Timestamp */}
-          <span className="text-[10px] text-white/30 mt-0.5 w-12 shrink-0 text-right tabular-nums">
+          <span className="text-[10px] text-text-faint mt-0.5 w-12 shrink-0 text-right tabular-nums">
             {formatRelativeTime(n.receivedAt)}
           </span>
 

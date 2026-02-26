@@ -20,14 +20,14 @@ export function ShipTransitIndicator({ ship, currentTick }: ShipTransitIndicator
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-white/50">{ship.system.name}</span>
-        <span className="text-white/30">→</span>
-        <span className="text-white/70">{ship.destinationSystem.name}</span>
+        <span className="text-text-tertiary">{ship.system.name}</span>
+        <span className="text-text-faint">→</span>
+        <span className="text-text-secondary">{ship.destinationSystem.name}</span>
       </div>
 
       {/* Progress bar */}
       <div
-        className="h-1.5 rounded-full bg-white/10 overflow-hidden"
+        className="h-1.5 rounded-full bg-surface-active overflow-hidden"
         role="progressbar"
         aria-valuenow={Math.round(progress * 100)}
         aria-valuemin={0}
@@ -40,7 +40,7 @@ export function ShipTransitIndicator({ ship, currentTick }: ShipTransitIndicator
         />
       </div>
 
-      <div className="flex justify-between text-[10px] text-white/40">
+      <div className="flex justify-between text-[10px] text-text-muted">
         <span>{Math.round(progress * 100)}%</span>
         <span>
           ETA: {ticksRemaining} tick{ticksRemaining !== 1 ? "s" : ""}

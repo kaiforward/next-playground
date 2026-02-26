@@ -11,7 +11,7 @@ import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
 import { BackLink } from "@/components/ui/back-link";
 import { Badge } from "@/components/ui/badge";
 import { EconomyBadge } from "@/components/ui/economy-badge";
-import { TabCountBadge } from "@/components/ui/tab-count-badge";
+import { TabList, TabLink } from "@/components/ui/tabs";
 import { PageContainer } from "@/components/ui/page-container";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
@@ -74,10 +74,10 @@ function SystemLayoutContent({
       </div>
 
       {regionInfo && (
-        <p className="text-sm text-white/40 mb-1">
+        <p className="text-sm text-text-muted mb-1">
           Region: <span className="text-white/60">{regionInfo.name}</span>
-          <span className="text-white/30"> &middot; </span>
-          <span className="text-white/50 capitalize">
+          <span className="text-text-faint"> &middot; </span>
+          <span className="text-text-tertiary capitalize">
             {regionInfo.dominantEconomy} economy
           </span>
         </p>
@@ -88,22 +88,18 @@ function SystemLayoutContent({
       )}
 
       {/* Tab bar */}
-      <nav className="flex gap-6 border-b border-white/10 mb-6">
+      <TabList className="mb-6">
         {tabs.map((tab) => (
-          <Link
+          <TabLink
             key={tab.href}
             href={tab.href}
-            className={`pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center ${
-              tab.active
-                ? "border-indigo-400 text-white"
-                : "border-transparent text-white/50 hover:text-white/70"
-            }`}
+            active={tab.active}
+            count={tab.badge}
           >
             {tab.label}
-            <TabCountBadge count={tab.badge} />
-          </Link>
+          </TabLink>
         ))}
-      </nav>
+      </TabList>
 
       {/* Active tab content */}
       {children}

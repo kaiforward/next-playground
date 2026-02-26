@@ -254,7 +254,7 @@ export function StarMap({
           variant="ghost"
           size="sm"
           onClick={view.backToRegions}
-          className="absolute top-4 left-4 z-50 gap-2 rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur py-2 text-sm text-white/70 hover:bg-gray-800/90 shadow-lg"
+          className="absolute top-4 left-4 z-50 gap-2 rounded-lg border border-border bg-gray-900/90 backdrop-blur py-2 text-sm text-text-secondary hover:bg-gray-800/90 shadow-lg"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
@@ -266,7 +266,7 @@ export function StarMap({
       {/* Region view hint (only when not navigating) */}
       {viewLevel.level === "region" && !isNavigationActive && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
-          <div className="rounded-lg border border-white/10 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
+          <div className="rounded-lg border border-border bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
             <span className="text-sm text-white/60">
               Click a region to explore its systems
             </span>

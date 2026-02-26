@@ -8,16 +8,9 @@ import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { ContractsPanel } from "@/components/missions/contracts-panel";
 import { OperationsPanel } from "@/components/missions/operations-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { TabList, Tab } from "@/components/ui/tabs";
 
 type SubTab = "delivery" | "operations";
-
-function subTabClass(active: boolean) {
-  return `pb-1.5 text-sm font-medium border-b-2 transition-colors ${
-    active
-      ? "border-indigo-400 text-white"
-      : "border-transparent text-white/50 hover:text-white/70"
-  }`;
-}
 
 function ContractsContent({ systemId }: { systemId: string }) {
   const [subTab, setSubTab] = useState<SubTab>("delivery");
@@ -29,26 +22,22 @@ function ContractsContent({ systemId }: { systemId: string }) {
   return (
     <div>
       {/* Sub-tabs */}
-      <div className="flex gap-4 mb-6">
-        <button
-          className={subTabClass(subTab === "delivery")}
+      <TabList className="mb-6">
+        <Tab
+          active={subTab === "delivery"}
           onClick={() => setSubTab("delivery")}
+          count={available.length}
         >
           Delivery
-          {available.length > 0 && (
-            <span className="ml-1.5 text-xs text-white/30">({available.length})</span>
-          )}
-        </button>
-        <button
-          className={subTabClass(subTab === "operations")}
+        </Tab>
+        <Tab
+          active={subTab === "operations"}
           onClick={() => setSubTab("operations")}
+          count={allMissions.opMissions.available.length}
         >
           Operations
-          {allMissions.opMissions.available.length > 0 && (
-            <span className="ml-1.5 text-xs text-white/30">({allMissions.opMissions.available.length})</span>
-          )}
-        </button>
-      </div>
+        </Tab>
+      </TabList>
 
       {subTab === "delivery" && (
         <ContractsPanel

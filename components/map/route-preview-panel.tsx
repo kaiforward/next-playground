@@ -67,11 +67,11 @@ export function RoutePreviewPanel({
       className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[380px] max-w-[calc(100%-2rem)]"
       aria-label={`Route preview: ${unit.name} to ${destination.name}`}
     >
-      <div className="rounded-xl border border-white/10 bg-gray-900/95 backdrop-blur shadow-2xl">
+      <div className="rounded-xl border border-border bg-gray-900/95 backdrop-blur shadow-2xl">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-white/10">
+        <div className="px-4 py-3 border-b border-border">
           <h3 className="text-sm font-bold text-white">Route Preview</h3>
-          <p className="text-xs text-white/40 mt-0.5">
+          <p className="text-xs text-text-muted mt-0.5">
             {subtitle} &rarr; {destination.name}
           </p>
         </div>
@@ -102,7 +102,7 @@ export function RoutePreviewPanel({
                   {getName(systemId)}
                 </span>
                 {i < hops.length && (
-                  <span className="text-[10px] text-white/40">
+                  <span className="text-[10px] text-text-muted">
                     {hops[i].fuel} fuel &middot; {hops[i].ticks}t
                   </span>
                 )}
@@ -112,20 +112,20 @@ export function RoutePreviewPanel({
         </div>
 
         {/* Totals */}
-        <div className="mx-4 py-2.5 border-t border-white/10 flex gap-4">
+        <div className="mx-4 py-2.5 border-t border-border flex gap-4">
           <div className="flex-1">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">
+            <div className="text-[10px] text-text-muted uppercase tracking-wider">
               Fuel
             </div>
             <div className="text-sm font-semibold text-white">
               {route.totalFuelCost}
-              <span className="text-white/30 font-normal">
+              <span className="text-text-faint font-normal">
                 {" "}/ {Math.round(unit.fuel)}
               </span>
             </div>
           </div>
           <div className="flex-1">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">
+            <div className="text-[10px] text-text-muted uppercase tracking-wider">
               Travel Time
             </div>
             <div className="text-sm font-semibold text-white">
@@ -135,7 +135,7 @@ export function RoutePreviewPanel({
         </div>
 
         {/* Actions */}
-        <div className="px-4 py-3 border-t border-white/10 flex gap-2">
+        <div className="px-4 py-3 border-t border-border flex gap-2">
           <Button
             onClick={onConfirm}
             disabled={isNavigating}

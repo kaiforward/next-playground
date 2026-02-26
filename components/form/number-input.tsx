@@ -1,29 +1,30 @@
 import { forwardRef, type InputHTMLAttributes } from "react";
 import { tv, type VariantProps } from "tailwind-variants";
+import { formSlots, formSizeVariants } from "./form-slots";
 
 const numberInputVariants = tv({
   slots: {
-    label: "block font-medium mb-1",
+    label: formSlots.label,
     input:
-      "w-full border bg-white/5 px-3 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
-    hint: "mt-1 text-white/40",
-    error: "mt-1 text-red-400",
+      "w-full border bg-surface px-3 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+    hint: formSlots.hint,
+    error: formSlots.error,
   },
   variants: {
     size: {
       sm: {
-        label: "text-xs text-white/50 uppercase tracking-wider",
+        label: formSizeVariants.sm.label,
         input:
-          "rounded-lg border-white/10 text-sm placeholder-white/30",
-        hint: "text-xs",
-        error: "text-xs",
+          "rounded-lg border-border text-sm placeholder-text-faint",
+        hint: formSizeVariants.sm.hint,
+        error: formSizeVariants.sm.error,
       },
       md: {
-        label: "text-sm text-white/70 mb-1.5",
+        label: formSizeVariants.md.label,
         input:
-          "rounded-md border-white/10 text-sm placeholder-white/30",
-        hint: "text-xs",
-        error: "text-xs",
+          "rounded-md border-border text-sm placeholder-text-faint",
+        hint: formSizeVariants.md.hint,
+        error: formSizeVariants.md.error,
       },
     },
   },

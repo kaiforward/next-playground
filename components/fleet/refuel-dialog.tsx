@@ -52,7 +52,7 @@ export function RefuelDialog({ ship, playerCredits, open, onClose }: RefuelDialo
       size="sm"
     >
       <h2 className="text-lg font-bold text-white mb-1">Refuel {ship.name}</h2>
-      <p className="text-xs text-white/40 mb-5">{REFUEL_COST_PER_UNIT} CR per unit</p>
+      <p className="text-xs text-text-muted mb-5">{REFUEL_COST_PER_UNIT} CR per unit</p>
 
       <div className="space-y-4">
         <RangeInput
@@ -76,7 +76,7 @@ export function RefuelDialog({ ship, playerCredits, open, onClose }: RefuelDialo
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-white/40">
+        <div className="flex items-center justify-between text-xs text-text-muted">
           <span>Balance</span>
           <span>{formatCredits(playerCredits)}</span>
         </div>

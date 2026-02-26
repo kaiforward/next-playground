@@ -1,5 +1,7 @@
 "use client";
 
+import { SectionHeader } from "./section-header";
+
 interface DisclosureProps {
   summary: string;
   count?: number;
@@ -25,12 +27,12 @@ export function Disclosure({
         >
           <path d="M4.5 2l5 4-5 4V2z" />
         </svg>
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <SectionHeader as="h3">
           {summary}
           {count != null && (
-            <span className="ml-1 text-white/30">({count})</span>
+            <span className="ml-1 text-text-faint">({count})</span>
           )}
-        </span>
+        </SectionHeader>
       </summary>
       <div className="mt-2">{children}</div>
     </details>

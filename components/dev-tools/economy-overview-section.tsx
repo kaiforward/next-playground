@@ -16,13 +16,13 @@ export function EconomyOverviewSection() {
   return (
     <div className="space-y-3">
       {isLoading ? (
-        <p className="text-xs text-white/40">Loading economy...</p>
+        <p className="text-xs text-text-muted">Loading economy...</p>
       ) : (
         <>
           <div className="max-h-64 overflow-y-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-gray-900">
-                <tr className="text-white/50 text-left">
+                <tr className="text-text-tertiary text-left">
                   <th className="py-1 pr-2">System</th>
                   <th className="py-1 pr-2">Type</th>
                   <th className="py-1 text-right">Goods</th>
@@ -38,11 +38,11 @@ export function EconomyOverviewSection() {
                       : 0;
                   return (
                     <tr key={sys.systemId} className="border-t border-white/5">
-                      <td className="py-1 pr-2 text-white/70 truncate max-w-[100px]">
+                      <td className="py-1 pr-2 text-text-secondary truncate max-w-[100px]">
                         {sys.systemName}
                       </td>
-                      <td className="py-1 pr-2 text-white/40">{sys.economyType}</td>
-                      <td className="py-1 text-right text-white/50">
+                      <td className="py-1 pr-2 text-text-muted">{sys.economyType}</td>
+                      <td className="py-1 text-right text-text-tertiary">
                         avg {avgPrice}cr
                       </td>
                     </tr>
@@ -60,7 +60,7 @@ export function EconomyOverviewSection() {
         </>
       )}
 
-      <div className="border-t border-white/10 pt-2">
+      <div className="border-t border-border pt-2">
         {confirmReset ? (
           <div className="flex gap-2">
             <Button

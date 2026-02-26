@@ -51,7 +51,7 @@ export function ConvoyRepairSlider({
       <h2 className="text-lg font-bold text-white mb-1">
         Repair Convoy
       </h2>
-      <p className="text-xs text-white/40 mb-5">
+      <p className="text-xs text-text-muted mb-5">
         {convoy.name ?? "Convoy"} &mdash; {convoy.members.length} ships
       </p>
 
@@ -74,10 +74,10 @@ export function ConvoyRepairSlider({
             if (sp.healAmount <= 0) return null;
             const ship = convoy.members.find((m) => m.id === sp.shipId)!;
             return (
-              <div key={sp.shipId} className="py-1.5 px-3 rounded bg-white/5">
+              <div key={sp.shipId} className="py-1.5 px-3 rounded bg-surface">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-white font-medium">{sp.shipName}</span>
-                  <span className="text-[10px] text-white/40">
+                  <span className="text-[10px] text-text-muted">
                     +{sp.healAmount} hull &middot; {formatCredits(sp.cost)}
                   </span>
                 </div>
@@ -94,14 +94,14 @@ export function ConvoyRepairSlider({
         </div>
 
         {/* Totals */}
-        <div className="flex items-center justify-between text-sm border-t border-white/10 pt-3">
+        <div className="flex items-center justify-between text-sm border-t border-border pt-3">
           <span className="text-white/60">Total repair</span>
           <span className="text-white font-medium">
             +{plan.totalHealed} hull &middot; {formatCredits(plan.totalCost)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-white/40">
+        <div className="flex items-center justify-between text-xs text-text-muted">
           <span>Balance</span>
           <span className={!canAfford && hasRepairs ? "text-red-400" : ""}>
             {formatCredits(playerCredits)}

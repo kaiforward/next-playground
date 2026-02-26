@@ -29,7 +29,7 @@ const phaseStatusVariants = tv({
   variants: {
     processing: {
       true: "text-cyan-300 animate-pulse",
-      false: "text-white/50",
+      false: "text-text-tertiary",
     },
   },
   defaultVariants: { processing: false },
@@ -112,7 +112,7 @@ export function GameTable({
   return (
     <div className="space-y-5">
       {/* ── NPC area ────────────────────────────────────────── */}
-      <div className="rounded-xl bg-white/5 p-6 space-y-4">
+      <div className="rounded-xl bg-surface p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-semibold text-white">
@@ -126,7 +126,7 @@ export function GameTable({
         </div>
 
         {npcDialogue && (
-          <p className="text-base text-white/50 italic">
+          <p className="text-base text-text-tertiary italic">
             &ldquo;{npcDialogue}&rdquo;
           </p>
         )}
@@ -140,14 +140,14 @@ export function GameTable({
       </div>
 
       {/* ── Round info ──────────────────────────────────────── */}
-      <div className="rounded-xl bg-white/5 p-6 space-y-3">
+      <div className="rounded-xl bg-surface p-6 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-base font-medium text-white">
             Round {round}/{MAX_ROUNDS}
           </span>
           {currentDemand && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-white/40">Demand:</span>
+              <span className="text-sm text-text-muted">Demand:</span>
               <SuitBadge suit={currentDemand} />
             </div>
           )}
@@ -156,7 +156,7 @@ export function GameTable({
         {/* Demand history */}
         {demandHistory.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-white/30 uppercase tracking-wider">
+            <span className="text-xs text-text-faint uppercase tracking-wider">
               History:
             </span>
             {demandHistory.map((suit, i) => (
@@ -172,7 +172,7 @@ export function GameTable({
       </div>
 
       {/* ── Player area ─────────────────────────────────────── */}
-      <div className="rounded-xl bg-white/5 p-6 space-y-5">
+      <div className="rounded-xl bg-surface p-6 space-y-5">
         <ManifestRow
           manifest={player.manifest}
           currentRound={round}
@@ -193,7 +193,7 @@ export function GameTable({
         {phase === "player_call" && !isProcessing && (
           <div className="flex flex-col items-center gap-4 pt-3">
             {npcRoundEntry && (
-              <p className="text-sm text-white/50">
+              <p className="text-sm text-text-tertiary">
                 Opponent declared{" "}
                 <span className="font-semibold text-white">
                   {SUIT_LABELS[npcRoundEntry.declaration.suit]}{" "}

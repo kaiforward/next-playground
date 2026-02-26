@@ -6,6 +6,7 @@ import { useDeliverMission } from "@/lib/hooks/use-mission-mutations";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCredits } from "@/lib/utils/format";
+import { InlineAlert } from "@/components/ui/inline-alert";
 
 interface DeliverableMissionsCardProps {
   missions: TradeMissionInfo[];
@@ -26,16 +27,14 @@ export function DeliverableMissionsCard({ missions, ship }: DeliverableMissionsC
       />
       <CardContent>
         {error && (
-          <div className="mb-3 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2 text-sm text-red-300">
-            {error}
-          </div>
+          <InlineAlert className="mb-3">{error}</InlineAlert>
         )}
 
         <ul className="space-y-2">
           {missions.map((m) => (
             <li
               key={m.id}
-              className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5"
+              className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface"
             >
               <div>
                 <span className="text-sm font-medium text-white">

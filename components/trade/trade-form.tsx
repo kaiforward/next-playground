@@ -8,6 +8,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/form/number-input";
 import { formatCredits } from "@/lib/utils/format";
+import { TabList, Tab } from "@/components/ui/tabs";
 import {
   createTradeSchema,
   type TradeFormData,
@@ -102,30 +103,24 @@ export function TradeForm({
       />
       <CardContent>
         {/* Buy / Sell tabs */}
-        <div className="flex mb-4 rounded-lg overflow-hidden border border-white/10">
-          <button
-            type="button"
+        <TabList variant="pill" className="mb-4">
+          <Tab
+            variant="pill"
+            activeColor="green"
+            active={tradeType === "buy"}
             onClick={() => setTradeType("buy")}
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              tradeType === "buy"
-                ? "bg-green-500/20 text-green-300"
-                : "bg-white/5 text-white/50 hover:text-white/80"
-            }`}
           >
             Buy
-          </button>
-          <button
-            type="button"
+          </Tab>
+          <Tab
+            variant="pill"
+            activeColor="red"
+            active={tradeType === "sell"}
             onClick={() => setTradeType("sell")}
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              tradeType === "sell"
-                ? "bg-red-500/20 text-red-300"
-                : "bg-white/5 text-white/50 hover:text-white/80"
-            }`}
           >
             Sell
-          </button>
-        </div>
+          </Tab>
+        </TabList>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <NumberInput
@@ -143,19 +138,19 @@ export function TradeForm({
           />
 
           {/* Preview */}
-          <div className="rounded-lg bg-white/5 p-3 space-y-1">
+          <div className="rounded-lg bg-surface p-3 space-y-1">
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Unit Price</span>
+              <span className="text-text-tertiary">Unit Price</span>
               <span className="text-white">
                 {formatCredits(good.currentPrice)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Quantity</span>
+              <span className="text-text-tertiary">Quantity</span>
               <span className="text-white">{quantity}</span>
             </div>
-            <div className="border-t border-white/10 pt-1 flex justify-between text-sm font-semibold">
-              <span className="text-white/70">
+            <div className="border-t border-border pt-1 flex justify-between text-sm font-semibold">
+              <span className="text-text-secondary">
                 {tradeType === "buy" ? "Total Cost" : "Total Revenue"}
               </span>
               <span

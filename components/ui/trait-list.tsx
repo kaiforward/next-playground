@@ -92,7 +92,7 @@ export function TraitList({ traits, variant = "full", className }: TraitListProp
   return (
     <ul className={traitListVariants({ variant, className })}>
       {sorted.map((t) => (
-        <li key={t.traitId} className="rounded-lg bg-white/5 px-3 py-2.5">
+        <li key={t.traitId} className="rounded-lg bg-surface px-3 py-2.5">
           <div className="flex items-center gap-2 mb-1">
             <QualityStars quality={t.quality} />
             <span className="text-sm font-medium text-white">{t.name}</span>
@@ -101,7 +101,7 @@ export function TraitList({ traits, variant = "full", className }: TraitListProp
             </span>
           </div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-white/30">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-text-faint">
               {t.qualityLabel}
             </span>
             {t.negative && (
@@ -110,7 +110,7 @@ export function TraitList({ traits, variant = "full", className }: TraitListProp
               </span>
             )}
           </div>
-          <p className="text-xs text-white/50 leading-relaxed">
+          <p className="text-xs text-text-tertiary leading-relaxed">
             {t.description}
           </p>
         </li>

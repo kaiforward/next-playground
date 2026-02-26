@@ -15,7 +15,7 @@ const valuePillVariants = tv({
   variants: {
     selected: {
       true: "bg-cyan-500 text-white",
-      false: "bg-white/10 text-white/60 hover:bg-white/20",
+      false: "bg-surface-active text-white/60 hover:bg-white/20",
     },
   },
   defaultVariants: { selected: false },
@@ -80,7 +80,7 @@ export function PlayerHand({
       {/* Declaration form — shown when a card is selected */}
       {isActive && selectedCardId !== null && currentDemand && (
         <div className="flex flex-col items-center gap-3 pt-2">
-          <div className="flex items-center gap-2 text-sm text-white/50">
+          <div className="flex items-center gap-2 text-sm text-text-tertiary">
             <span>Declare as</span>
             <SuitBadge suit={currentDemand} />
           </div>

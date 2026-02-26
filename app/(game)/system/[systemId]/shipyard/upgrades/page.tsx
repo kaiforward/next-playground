@@ -9,6 +9,7 @@ import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { SectionHeader } from "@/components/ui/section-header";
 import { useDialog } from "@/components/ui/dialog";
 import { UpgradeSlot } from "@/components/fleet/upgrade-slot";
 import { UpgradeInstallDialog } from "@/components/fleet/upgrade-install-dialog";
@@ -65,7 +66,7 @@ function UpgradesContent({ systemId }: { systemId: string }) {
   if (eligibleShips.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-white/40 text-sm">No eligible ships at this system.</p>
+        <p className="text-text-muted text-sm">No eligible ships at this system.</p>
         <p className="text-white/20 text-xs mt-1">
           Ships must be docked and not disabled to install upgrades.
         </p>
@@ -135,7 +136,7 @@ function SelectedShipCard({
             <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>
               {ship.role}
             </Badge>
-            <span className="capitalize text-white/40">{ship.size}</span>
+            <span className="capitalize text-text-muted">{ship.size}</span>
           </span>
         }
       />
@@ -145,14 +146,14 @@ function SelectedShipCard({
         )}
 
         {ship.upgradeSlots.length === 0 ? (
-          <p className="text-white/30 text-sm text-center py-4">
+          <p className="text-text-faint text-sm text-center py-4">
             This ship has no upgrade slots.
           </p>
         ) : (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <SectionHeader>
               Slots ({ship.upgradeSlots.filter((s) => s.moduleId).length} / {ship.upgradeSlots.length} installed)
-            </p>
+            </SectionHeader>
             {ship.upgradeSlots.map((slot) => (
               <UpgradeSlot
                 key={slot.id}

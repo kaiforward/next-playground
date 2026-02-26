@@ -82,12 +82,12 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
 
         {/* Location */}
         {isDocked ? (
-          <div className="text-xs text-white/50">
-            <span className="text-white/70">{ship.system.name}</span>
+          <div className="text-xs text-text-tertiary">
+            <span className="text-text-secondary">{ship.system.name}</span>
             {" — "}
             {ship.system.economyType}
             {regions && (
-              <span className="text-white/30">
+              <span className="text-text-faint">
                 {" "}({regions.find((r) => r.id === ship.system.regionId)?.name})
               </span>
             )}
