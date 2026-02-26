@@ -36,7 +36,7 @@ export function PlayerSummary({ fleet }: PlayerSummaryProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm text-text-tertiary">Ships</span>
-            <span className="text-sm font-medium text-white">
+            <span className="text-sm font-medium text-text-primary">
               {fleet.ships.length}
             </span>
           </div>

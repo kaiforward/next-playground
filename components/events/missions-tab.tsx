@@ -34,7 +34,7 @@ export function MissionsTab() {
         <InlineAlert className="mx-4 mt-3 text-xs">{error}</InlineAlert>
       )}
 
-      <ul className="divide-y divide-white/5">
+      <ul className="divide-y divide-border">
         {missions.map((m) => {
           // Find ships docked at destination with enough of the right cargo
           const eligibleShip = fleet.ships.find((s) => {
@@ -47,7 +47,7 @@ export function MissionsTab() {
             <li key={m.id} className="px-4 py-3 hover:bg-surface-hover transition-colors">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-medium text-text-primary">
                     {m.goodName} x{m.quantity}
                   </span>
                   {m.isImport ? (
@@ -68,7 +68,7 @@ export function MissionsTab() {
                   Deliver to{" "}
                   <Link
                     href={`/system/${m.destinationId}/contracts`}
-                    className="text-indigo-300 hover:text-indigo-200 transition-colors"
+                    className="text-accent hover:text-accent-muted transition-colors"
                   >
                     {m.destinationName}
                   </Link>

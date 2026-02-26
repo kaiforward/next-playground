@@ -6,7 +6,7 @@ const textInputVariants = tv({
   slots: {
     label: formSlots.label,
     input:
-      "w-full border bg-surface px-3 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+      "w-full border bg-surface px-3 py-2 text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent",
     error: formSlots.error,
   },
   variants: {
@@ -14,13 +14,13 @@ const textInputVariants = tv({
       sm: {
         label: formSizeVariants.sm.label,
         input:
-          "rounded-lg border-border text-sm placeholder-text-faint",
+          "border-border text-sm placeholder-text-faint",
         error: formSizeVariants.sm.error,
       },
       md: {
         label: formSizeVariants.md.label,
         input:
-          "rounded-md border-border text-sm placeholder-text-faint",
+          "border-border text-sm placeholder-text-faint",
         error: formSizeVariants.md.error,
       },
     },

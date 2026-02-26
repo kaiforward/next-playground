@@ -55,10 +55,10 @@ function ActivityPanelContent({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="w-[480px] max-w-[calc(100vw-2rem)] h-[70vh] flex flex-col rounded-xl border border-border bg-gray-900 shadow-2xl">
+    <div className="w-[480px] max-w-[calc(100vw-2rem)] h-[70vh] flex flex-col rounded-xl border border-border bg-surface shadow-2xl">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-bold text-white">Activity</h2>
+        <h2 className="text-sm font-bold text-text-primary">Activity</h2>
         <button
           onClick={onClose}
           className="text-gray-500 hover:text-white transition-colors p-0.5"

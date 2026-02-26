@@ -47,39 +47,39 @@ interface SelectInputProps<T = string> extends SelectInputVariants {
 const darkStyles: StylesConfig<SelectOption, false> = {
   control: (base, state) => ({
     ...base,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "#161b22",
     borderColor: state.isFocused
-      ? "rgb(59,130,246)"
-      : "rgba(255,255,255,0.1)",
-    borderRadius: "0.5rem",
+      ? "#c75b39"
+      : "rgba(139,148,158,0.15)",
+    borderRadius: "0",
     minHeight: "2.25rem",
-    boxShadow: state.isFocused ? "0 0 0 1px rgb(59,130,246)" : "none",
+    boxShadow: state.isFocused ? "0 0 0 1px #c75b39" : "none",
     "&:hover": {
       borderColor: state.isFocused
-        ? "rgb(59,130,246)"
-        : "rgba(255,255,255,0.2)",
+        ? "#c75b39"
+        : "rgba(139,148,158,0.30)",
     },
   }),
   singleValue: (base) => ({
     ...base,
-    color: "white",
+    color: "#c9d1d9",
     fontSize: "0.875rem",
   }),
   input: (base) => ({
     ...base,
-    color: "white",
+    color: "#c9d1d9",
     fontSize: "0.875rem",
   }),
   placeholder: (base) => ({
     ...base,
-    color: "rgba(255,255,255,0.3)",
+    color: "#545d68",
     fontSize: "0.875rem",
   }),
   menu: (base) => ({
     ...base,
-    backgroundColor: "rgb(17,24,39)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: "0.5rem",
+    backgroundColor: "#161b22",
+    border: "1px solid rgba(139,148,158,0.15)",
+    borderRadius: "0",
     zIndex: 50,
   }),
   menuList: (base) => ({
@@ -89,32 +89,32 @@ const darkStyles: StylesConfig<SelectOption, false> = {
   option: (base, state) => ({
     ...base,
     backgroundColor: state.isFocused
-      ? "rgba(255,255,255,0.1)"
+      ? "#1c2129"
       : "transparent",
-    color: state.isSelected ? "rgb(96,165,250)" : "white",
+    color: state.isSelected ? "#c75b39" : "#c9d1d9",
     fontSize: "0.875rem",
-    borderRadius: "0.375rem",
+    borderRadius: "0",
     padding: "0.375rem 0.75rem",
     cursor: "pointer",
     "&:active": {
-      backgroundColor: "rgba(255,255,255,0.15)",
+      backgroundColor: "#242a33",
     },
   }),
   indicatorSeparator: () => ({ display: "none" }),
   dropdownIndicator: (base) => ({
     ...base,
-    color: "rgba(255,255,255,0.4)",
+    color: "#545d68",
     padding: "0 0.5rem",
-    "&:hover": { color: "rgba(255,255,255,0.6)" },
+    "&:hover": { color: "#8b949e" },
   }),
   clearIndicator: (base) => ({
     ...base,
-    color: "rgba(255,255,255,0.4)",
-    "&:hover": { color: "rgba(255,255,255,0.6)" },
+    color: "#545d68",
+    "&:hover": { color: "#8b949e" },
   }),
   noOptionsMessage: (base) => ({
     ...base,
-    color: "rgba(255,255,255,0.4)",
+    color: "#545d68",
     fontSize: "0.875rem",
   }),
   menuPortal: (base) => ({

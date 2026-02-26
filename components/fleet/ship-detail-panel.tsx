@@ -78,7 +78,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
 
             <StatRow label="Location">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-white">{ship.system.name}</span>
+                <span className="text-sm text-text-primary">{ship.system.name}</span>
                 <EconomyBadge economyType={ship.system.economyType} />
                 {regions && (
                   <span className="text-xs text-text-muted">
@@ -176,17 +176,17 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
           {ship.cargo.length === 0 ? (
             <div className="text-center py-6">
               <p className="text-text-faint text-sm">Cargo hold is empty</p>
-              <p className="text-white/20 text-xs mt-1">Visit a station market to buy goods</p>
+              <p className="text-text-faint text-xs mt-1">Visit a station market to buy goods</p>
             </div>
           ) : (
             <ul className="space-y-2">
               {ship.cargo.map((item) => (
                 <li
                   key={item.goodId}
-                  className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface"
+                  className="flex items-center justify-between py-2 px-3 bg-surface"
                 >
-                  <span className="text-sm font-medium text-white">{item.goodName}</span>
-                  <span className="text-sm text-white/60">x{item.quantity}</span>
+                  <span className="text-sm font-medium text-text-primary">{item.goodName}</span>
+                  <span className="text-sm text-text-secondary">x{item.quantity}</span>
                 </li>
               ))}
             </ul>
@@ -285,7 +285,7 @@ function StatPair({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex justify-between py-1">
       <span className="text-sm text-text-tertiary">{label}</span>
-      <span className="text-sm font-medium text-white">{value}</span>
+      <span className="text-sm font-medium text-text-primary">{value}</span>
     </div>
   );
 }

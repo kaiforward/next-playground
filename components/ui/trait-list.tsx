@@ -10,7 +10,7 @@ function QualityStars({ quality }: { quality: QualityTier }) {
   return (
     <span className="text-xs tracking-tight" aria-label={`Quality ${quality} of 3`}>
       <span className="text-amber-400">{"★".repeat(quality)}</span>
-      <span className="text-white/20">{"☆".repeat(3 - quality)}</span>
+      <span className="text-text-faint">{"☆".repeat(3 - quality)}</span>
     </span>
   );
 }
@@ -26,7 +26,7 @@ const CATEGORY_LABEL: Record<TraitCategory, string> = {
 };
 
 const categoryBadge = tv({
-  base: "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+  base: "inline-block px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider",
   variants: {
     category: {
       planetary: "bg-green-500/15 text-green-400",
@@ -82,7 +82,7 @@ export function TraitList({ traits, variant = "full", className }: TraitListProp
         {sorted.map((t) => (
           <li key={t.traitId} className="flex items-center gap-2">
             <QualityStars quality={t.quality} />
-            <span className="text-sm text-white/80">{t.name}</span>
+            <span className="text-sm text-text-primary">{t.name}</span>
           </li>
         ))}
       </ul>
@@ -92,10 +92,10 @@ export function TraitList({ traits, variant = "full", className }: TraitListProp
   return (
     <ul className={traitListVariants({ variant, className })}>
       {sorted.map((t) => (
-        <li key={t.traitId} className="rounded-lg bg-surface px-3 py-2.5">
+        <li key={t.traitId} className="bg-surface px-3 py-2.5">
           <div className="flex items-center gap-2 mb-1">
             <QualityStars quality={t.quality} />
-            <span className="text-sm font-medium text-white">{t.name}</span>
+            <span className="text-sm font-medium text-text-primary">{t.name}</span>
             <span className={categoryBadge({ category: t.category })}>
               {CATEGORY_LABEL[t.category]}
             </span>

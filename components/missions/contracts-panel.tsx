@@ -92,7 +92,7 @@ function AvailableContracts({
         ) : (
           <Link
             href={`/system/${row.destinationId}/contracts`}
-            className="text-indigo-300 hover:text-indigo-200 transition-colors"
+            className="text-accent hover:text-accent-muted transition-colors"
           >
             {row.destinationName}
             <span className="text-text-muted ml-1">({row.hops}h)</span>
@@ -225,7 +225,7 @@ function ActiveMissions({
       render: (row) => (
         <Link
           href={`/system/${row.destinationId}/contracts`}
-          className="text-indigo-300 hover:text-indigo-200 transition-colors"
+          className="text-accent hover:text-accent-muted transition-colors"
         >
           {row.destinationName}
           {row.destinationId !== row.systemId && (

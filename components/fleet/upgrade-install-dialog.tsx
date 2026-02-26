@@ -49,7 +49,7 @@ export function UpgradeInstallDialog({
 
   return (
     <Dialog open={open} onClose={handleClose} modal size="sm" className="max-h-[80vh] overflow-y-auto">
-      <h3 className="text-lg font-semibold text-white mb-1">Install Module</h3>
+      <h3 className="text-lg font-semibold text-text-primary mb-1">Install Module</h3>
       <p className="text-xs text-text-muted mb-4 capitalize">{slot.slotType} slot</p>
 
       <div className="space-y-3 mb-4">
@@ -102,7 +102,7 @@ function ModuleOption({ mod, playerCredits, selected, onSelect }: ModuleOptionPr
   return (
     <div className="rounded-lg bg-surface p-3">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-white">{mod.name}</span>
+        <span className="text-sm font-medium text-text-primary">{mod.name}</span>
         <Badge color={mod.category === "tiered" ? "blue" : "purple"}>
           {mod.category === "tiered" ? "Tiered" : "Capability"}
         </Badge>
@@ -121,8 +121,8 @@ function ModuleOption({ mod, playerCredits, selected, onSelect }: ModuleOptionPr
                 isSelected
                   ? "bg-blue-500/30 text-blue-300 ring-1 ring-blue-500/50"
                   : canAfford
-                    ? "bg-surface text-white/60 hover:bg-surface-active"
-                    : "bg-surface text-white/20 cursor-not-allowed"
+                    ? "bg-surface text-text-secondary hover:bg-surface-active"
+                    : "bg-surface text-text-faint cursor-not-allowed"
               }`}
             >
               <div className="font-medium">

@@ -89,7 +89,7 @@ function ShipTypeCard({
   return (
     <Card variant="bordered" padding="md">
       <div className="flex items-center justify-between mb-2">
-        <h4 className="text-base font-semibold text-white">{def.name}</h4>
+        <h4 className="text-base font-semibold text-text-primary">{def.name}</h4>
         <Badge color={ROLE_COLORS[def.role] ?? "slate"}>{def.role}</Badge>
       </div>
 

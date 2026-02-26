@@ -1,10 +1,10 @@
 import { tv, type VariantProps } from "tailwind-variants";
 
 const sectionHeaderVariants = tv({
-  base: "text-xs font-semibold uppercase tracking-wider",
+  base: "text-xs font-display font-semibold uppercase tracking-wider",
   variants: {
     color: {
-      default: "text-gray-400",
+      default: "text-text-secondary",
       green: "text-green-400/70",
       red: "text-red-400/70",
     },

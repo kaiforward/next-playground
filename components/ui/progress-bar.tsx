@@ -2,8 +2,8 @@ import { tv, type VariantProps } from "tailwind-variants";
 
 const progressBarVariants = tv({
   slots: {
-    track: "rounded-full bg-surface-active overflow-hidden",
-    fill: "h-full rounded-full transition-all",
+    track: "bg-surface-active overflow-hidden",
+    fill: "h-full transition-all",
     labelRow: "flex justify-between mb-0.5",
   },
   variants: {
@@ -18,6 +18,7 @@ const progressBarVariants = tv({
       },
     },
     color: {
+      copper: { fill: "bg-accent" },
       blue: { fill: "bg-blue-500" },
       amber: { fill: "bg-amber-500" },
       red: { fill: "bg-red-500" },
@@ -27,7 +28,7 @@ const progressBarVariants = tv({
   },
   defaultVariants: {
     size: "sm",
-    color: "blue",
+    color: "copper",
   },
 });
 

@@ -60,7 +60,7 @@ function SystemLayoutContent({
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <BackLink href={`/map?systemId=${systemId}`} />
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-2xl font-bold font-display">
           {systemInfo?.name ?? "System"}
         </h1>
         {systemInfo && (
@@ -75,7 +75,7 @@ function SystemLayoutContent({
 
       {regionInfo && (
         <p className="text-sm text-text-muted mb-1">
-          Region: <span className="text-white/60">{regionInfo.name}</span>
+          Region: <span className="text-text-secondary">{regionInfo.name}</span>
           <span className="text-text-faint"> &middot; </span>
           <span className="text-text-tertiary capitalize">
             {regionInfo.dominantEconomy} economy
@@ -84,7 +84,7 @@ function SystemLayoutContent({
       )}
 
       {systemInfo?.description && (
-        <p className="text-white/60 mb-4">{systemInfo.description}</p>
+        <p className="text-text-secondary mb-4">{systemInfo.description}</p>
       )}
 
       {/* Tab bar */}

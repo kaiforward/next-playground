@@ -2,7 +2,7 @@ import { tv } from "tailwind-variants";
 import type { EconomyType } from "@/lib/types/game";
 
 const economyBadgeVariants = tv({
-  base: "inline-block rounded-full px-3 py-0.5 text-xs font-semibold uppercase tracking-wider ring-1",
+  base: "inline-block px-3 py-0.5 text-xs font-semibold uppercase tracking-wider ring-1",
   variants: {
     economyType: {
       agricultural: "bg-green-900/80 text-green-300 ring-green-500/40",

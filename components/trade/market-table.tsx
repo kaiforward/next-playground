@@ -26,7 +26,7 @@ export function MarketTable({
       label: "Good",
       sortable: true,
       render: (row) => (
-        <span className="font-medium text-white">{row.goodName}</span>
+        <span className="font-medium text-text-primary">{row.goodName}</span>
       ),
     },
     ...(cargoByGoodId
@@ -38,7 +38,7 @@ export function MarketTable({
             render: (row: MarketEntry & Record<string, unknown>) => {
               const qty = cargoByGoodId.get(row.goodId) ?? 0;
               return qty > 0
-                ? <span className="text-white font-medium">{qty}</span>
+                ? <span className="text-text-primary font-medium">{qty}</span>
                 : <span className="text-text-faint">0</span>;
             },
           },
@@ -49,7 +49,7 @@ export function MarketTable({
       label: "Base Price",
       sortable: true,
       render: (row) => (
-        <span className="text-white/60">{formatCredits(row.basePrice)}</span>
+        <span className="text-text-secondary">{formatCredits(row.basePrice)}</span>
       ),
     },
     {
@@ -57,7 +57,7 @@ export function MarketTable({
       label: "Current Price",
       sortable: true,
       render: (row) => (
-        <span className="font-semibold text-white">
+        <span className="font-semibold text-text-primary">
           {formatCredits(row.currentPrice)}
         </span>
       ),

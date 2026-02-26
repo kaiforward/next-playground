@@ -28,7 +28,7 @@ const columnHeadingVariants = tv({
   variants: {
     winner: {
       true: "text-green-400",
-      false: "text-white",
+      false: "text-text-primary",
     },
   },
   defaultVariants: { winner: false },
@@ -50,7 +50,7 @@ const cardValueVariants = tv({
   variants: {
     caught: {
       true: "line-through text-red-400",
-      false: "text-white",
+      false: "text-text-primary",
     },
   },
   defaultVariants: { caught: false },
@@ -178,7 +178,7 @@ function ScoreColumn({
 
       {/* Totals */}
       <div className="border-t border-border pt-2 space-y-1">
-        <div className="flex justify-between text-sm text-white/60">
+        <div className="flex justify-between text-sm text-text-secondary">
           <span>Card values</span>
           <span>{breakdown.cardValues}</span>
         </div>
@@ -188,7 +188,7 @@ function ScoreColumn({
             <span>-{breakdown.penalties}</span>
           </div>
         )}
-        <div className="flex justify-between text-base font-bold text-white">
+        <div className="flex justify-between text-base font-bold text-text-primary">
           <span>Total</span>
           <span>{breakdown.total}</span>
         </div>

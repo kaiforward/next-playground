@@ -38,7 +38,7 @@ export function UpgradeSlot({ slot, onInstall, onRemove, disabled, readOnly }: U
           {SLOT_TYPE_LABELS[slot.slotType] ?? slot.slotType}
         </Badge>
         {mod ? (
-          <span className="text-sm text-white truncate">
+          <span className="text-sm text-text-primary truncate">
             {mod.name}{tierLabel ? ` ${tierLabel}` : ""}
           </span>
         ) : (

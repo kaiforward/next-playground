@@ -14,7 +14,7 @@ export function ConvoyStatus({ convoys }: ConvoyStatusProps) {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-white mb-4">
+      <h2 className="text-lg font-semibold text-text-primary mb-4">
         Convoys
         <span className="text-sm font-normal text-text-muted ml-2">{convoys.length}</span>
       </h2>
@@ -24,7 +24,7 @@ export function ConvoyStatus({ convoys }: ConvoyStatusProps) {
           <Card key={convoy.id} variant="bordered" padding="sm">
             <CardContent className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-white">
+                <span className="text-sm font-medium text-text-primary">
                   {convoy.name ?? "Convoy"}
                 </span>
                 <Badge color={convoy.status === "docked" ? "green" : "amber"}>

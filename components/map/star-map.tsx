@@ -267,7 +267,7 @@ export function StarMap({
       {viewLevel.level === "region" && !isNavigationActive && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="rounded-lg border border-border bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
-            <span className="text-sm text-white/60">
+            <span className="text-sm text-text-secondary">
               Click a region to explore its systems
             </span>
           </div>
@@ -279,7 +279,7 @@ export function StarMap({
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
           <div className="flex items-center gap-3 rounded-lg border border-cyan-500/30 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
             <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-sm text-white">
+            <span className="text-sm text-text-primary">
               Select a destination for <span className="font-semibold text-cyan-300">{mode.unit.name}</span>
               {mode.unit.kind === "convoy" && (
                 <span className="text-cyan-300/60 ml-1">({mode.unit.convoy.members.length} ships)</span>

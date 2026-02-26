@@ -60,7 +60,7 @@ export function ShipPickerList({
               }`}
               onClick={() => onToggle(ship.id)}
             >
-              <span className="text-sm text-white truncate flex-1">{ship.name}</span>
+              <span className="text-sm text-text-primary truncate flex-1">{ship.name}</span>
               <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>{ship.role}</Badge>
               <span className="text-xs text-text-muted whitespace-nowrap">{ship.cargoMax} cargo</span>
               {showSystem && (

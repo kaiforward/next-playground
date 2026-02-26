@@ -54,7 +54,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
           <div className="flex items-center gap-2 min-w-0">
             <Link
               href={detailHref}
-              className="text-sm font-bold text-white hover:text-blue-300 transition-colors truncate"
+              className="text-sm font-bold text-text-primary hover:text-blue-300 transition-colors truncate"
             >
               {ship.name}
             </Link>

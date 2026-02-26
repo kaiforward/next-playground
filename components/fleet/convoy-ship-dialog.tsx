@@ -155,7 +155,7 @@ export function ConvoyShipDialog(props: ConvoyShipDialogProps) {
       modal
       size="sm"
     >
-      <h2 className="text-lg font-bold text-white mb-1">{title}</h2>
+      <h2 className="text-lg font-bold text-text-primary mb-1">{title}</h2>
       <p className="text-xs text-text-muted mb-4">{description}</p>
 
       {mode === "manage" ? (

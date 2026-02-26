@@ -24,7 +24,7 @@ function toAccentColor(type: string): AccentColor {
 }
 
 const toastAccent = tv({
-  base: "relative rounded-lg bg-gray-900/95 backdrop-blur border border-gray-700 border-l-4 px-4 py-3 pr-8 shadow-lg text-sm text-gray-200 max-w-sm",
+  base: "relative bg-surface border border-border border-l-4 px-4 py-3 pr-8 shadow-lg text-sm text-text-primary max-w-sm",
   variants: {
     color: {
       red: "border-l-red-500",
@@ -97,7 +97,7 @@ export function EventToastContainer() {
           <NotificationEntityLinks refs={toast.refs} />
           <button
             onClick={() => dismissToast(toast.id)}
-            className="absolute top-1.5 right-1.5 text-gray-500 hover:text-white transition-colors p-0.5"
+            className="absolute top-1.5 right-1.5 text-text-muted hover:text-text-primary transition-colors p-0.5"
             aria-label="Dismiss notification"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">

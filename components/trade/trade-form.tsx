@@ -141,13 +141,13 @@ export function TradeForm({
           <div className="rounded-lg bg-surface p-3 space-y-1">
             <div className="flex justify-between text-sm">
               <span className="text-text-tertiary">Unit Price</span>
-              <span className="text-white">
+              <span className="text-text-primary">
                 {formatCredits(good.currentPrice)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-text-tertiary">Quantity</span>
-              <span className="text-white">{quantity}</span>
+              <span className="text-text-primary">{quantity}</span>
             </div>
             <div className="border-t border-border pt-1 flex justify-between text-sm font-semibold">
               <span className="text-text-secondary">

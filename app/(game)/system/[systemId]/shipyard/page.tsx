@@ -37,11 +37,11 @@ function HubCard({
     <Link href={href} className="block group">
       <Card variant="bordered" padding="lg" className={`transition-colors ${accentClass}`}>
         <div className="flex items-center gap-4">
-          <div className="shrink-0 text-white/60 group-hover:text-white transition-colors">
+          <div className="shrink-0 text-text-secondary group-hover:text-white transition-colors">
             {icon}
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">{title}</h3>
+            <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
             <p className="text-sm text-text-muted mt-0.5">{description}</p>
           </div>
         </div>

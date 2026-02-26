@@ -1,55 +1,34 @@
 "use client";
 
 import { useFleet } from "@/lib/hooks/use-fleet";
-import { useUniverse } from "@/lib/hooks/use-universe";
-import { useTickContext } from "@/lib/hooks/use-tick-context";
-import { useConvoys } from "@/lib/hooks/use-convoy";
 import { PlayerSummary } from "@/components/dashboard/player-summary";
-import { FleetOverview } from "@/components/fleet/fleet-overview";
-import { ConvoyStatus } from "@/components/fleet/convoy-status";
 import { ActiveMissionsCard } from "@/components/missions/active-missions-card";
 import { PageContainer } from "@/components/ui/page-container";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
-function FleetSection() {
+function DashboardContent() {
   const { fleet } = useFleet();
-  const { data: universeData } = useUniverse();
-  const { currentTick } = useTickContext();
-  const { convoys } = useConvoys();
 
   return (
-    <>
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-        <PlayerSummary fleet={fleet} />
-        <QueryBoundary>
-          <ActiveMissionsCard />
-        </QueryBoundary>
-      </div>
-
-      <FleetOverview
-        ships={fleet.ships}
-        currentTick={currentTick}
-        regions={universeData.regions}
-        playerCredits={fleet.credits}
-      />
-
-      <div className="mt-8">
-        <ConvoyStatus convoys={convoys} />
-      </div>
-    </>
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <PlayerSummary fleet={fleet} />
+      <QueryBoundary>
+        <ActiveMissionsCard />
+      </QueryBoundary>
+    </div>
   );
 }
 
 export default function DashboardPage() {
   return (
     <PageContainer>
-      <h1 className="text-2xl font-bold mb-2">Command Center</h1>
-      <p className="text-white/60 mb-6">
+      <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
+      <p className="text-text-secondary mb-6">
         Your fleet overview. Ship status, cargo, and credits at a glance.
       </p>
 
       <QueryBoundary>
-        <FleetSection />
+        <DashboardContent />
       </QueryBoundary>
     </PageContainer>
   );

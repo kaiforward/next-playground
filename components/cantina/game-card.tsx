@@ -59,7 +59,7 @@ const cardSuitVariants = tv({
 });
 
 const declaredBadgeVariants = tv({
-  base: "absolute left-1/2 -translate-x-1/2 bg-slate-800 border border-white/15 rounded-md whitespace-nowrap",
+  base: "absolute left-1/2 -translate-x-1/2 bg-slate-800 border border-border rounded-md whitespace-nowrap",
   variants: {
     size: {
       sm: "-bottom-4 px-2 py-0.5",
@@ -116,7 +116,7 @@ export function GameCard({
         {declaration ? (
           <DeclarationOverlay declaration={declaration} isCaught={isCaught} />
         ) : (
-          <div className="text-white/20 text-xs font-bold">?</div>
+          <div className="text-text-faint text-xs font-bold">?</div>
         )}
       </CardShell>
     );

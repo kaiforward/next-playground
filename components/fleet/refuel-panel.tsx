@@ -56,10 +56,10 @@ export function RefuelPanel({ ship, playerCredits }: RefuelPanelProps) {
         />
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-white/60">
+          <span className="text-text-secondary">
             {clampedAmount} fuel × {REFUEL_COST_PER_UNIT} CR
           </span>
-          <span className="text-white font-medium">
+          <span className="text-text-primary font-medium">
             = {formatCredits(totalCost)}
           </span>
         </div>
