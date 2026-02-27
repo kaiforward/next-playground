@@ -58,7 +58,6 @@ export default function RegisterPage() {
         router.push("/login");
       } else {
         router.push("/");
-        router.refresh();
       }
     } catch {
       setError("Something went wrong. Please try again.");
