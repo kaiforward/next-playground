@@ -1,29 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  type NodeMouseHandler,
-  type ReactFlowInstance,
-  BackgroundVariant,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 
 import type { UniverseData, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
 import type { NavigableUnit } from "@/lib/types/navigable";
 import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
-import { SystemNode } from "@/components/map/system-node";
-import { RegionNode } from "@/components/map/region-node";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
+import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
-import { useMapGraph } from "@/lib/hooks/use-map-graph";
+import { useMapData } from "@/lib/hooks/use-map-data";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 
 interface StarMapProps {
@@ -39,13 +29,6 @@ interface StarMapProps {
   events?: ActiveEvent[];
 }
 
-// IMPORTANT: nodeTypes must be defined outside the component to prevent
-// infinite re-renders. React Flow compares this by reference.
-const nodeTypes = {
-  systemNode: SystemNode,
-  regionNode: RegionNode,
-};
-
 export function StarMap({
   universe,
   ships,
@@ -58,8 +41,6 @@ export function StarMap({
   initialSelectedSystemId,
   events = [],
 }: StarMapProps) {
-  const rfInstance = useRef<ReactFlowInstance | null>(null);
-
   // ── Foundation memos (stable across renders) ──────────────────
   const systemRegionMap = useMemo(
     () => buildSystemRegionMap(universe.systems),
@@ -71,7 +52,7 @@ export function StarMap({
     [universe.regions],
   );
 
-  // ── All connections (needed by both navigation and graph hooks) ─
+  // ── All connections (needed by both navigation and data hooks) ─
   const allConnections = useMemo(
     (): ConnectionInfo[] =>
       universe.connections.map((c) => ({
@@ -108,8 +89,8 @@ export function StarMap({
   const pathname = usePathname();
   const isPanelOpen = pathname !== "/";
 
-  // ── Derived graph data (nodes, edges, detail panel) ───────────
-  const graph = useMapGraph({
+  // ── Derived map data (replaces useMapGraph) ────────────────────
+  const mapData = useMapData({
     universe,
     ships,
     convoys,
@@ -132,7 +113,6 @@ export function StarMap({
     if (ship) {
       navigation.selectUnit(shipToNavigableUnit(ship));
     }
-    // Only run on mount / when the prop changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSelectedShipId]);
 
@@ -146,19 +126,16 @@ export function StarMap({
     if (convoy) {
       navigation.selectUnit(convoyToNavigableUnit(convoy));
     }
-    // Only run on mount / when the prop changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSelectedConvoyId]);
 
-  // ── fitView on view level transitions ─────────────────────────
+  // ── fitView trigger — incremented on view level changes ───────
+  const [fitViewTrigger, setFitViewTrigger] = useState(0);
   const prevViewLevelRef = useRef(view.viewLevel);
   useEffect(() => {
     if (prevViewLevelRef.current !== view.viewLevel) {
       prevViewLevelRef.current = view.viewLevel;
-      const timer = setTimeout(() => {
-        rfInstance.current?.fitView({ padding: 0.3, duration: 300 });
-      }, 50);
-      return () => clearTimeout(timer);
+      setFitViewTrigger((n) => n + 1);
     }
   }, [view.viewLevel]);
 
@@ -167,32 +144,23 @@ export function StarMap({
     viewLevel, selectedSystem, drillIntoRegion, selectSystem,
     closeSystem, setMapReady, initialSelectedSystem,
   } = view;
-  const { activeRegionSystems, regionNavigationStates } = graph;
+  const { regionNavigationStates } = mapData;
 
   // ── Click handlers ────────────────────────────────────────────
-  const onNodeClick: NodeMouseHandler = useCallback(
-    (_event, node) => {
-      // Region view — click drills into that region
-      if (viewLevel.level === "region") {
-        if (isNavigationActive && regionNavigationStates.get(node.id) === "unreachable") {
-          return;
-        }
-        drillIntoRegion(node.id);
-        return;
-      }
-
-      // System view — navigation logic
+  const onSystemClick = useCallback(
+    (system: { id: string }) => {
+      // Navigation logic
       if (mode.phase === "unit_selected") {
-        if (!mode.reachable.has(node.id) && node.id !== mode.unit.systemId) {
+        if (!mode.reachable.has(system.id) && system.id !== mode.unit.systemId) {
           return;
         }
-        if (node.id === mode.unit.systemId) {
+        if (system.id === mode.unit.systemId) {
           navigation.cancel();
           return;
         }
-        const system = activeRegionSystems.find((s) => s.id === node.id);
-        if (system) {
-          navigation.selectDestination(system);
+        const fullSystem = mapData.activeRegionSystems.find((s) => s.id === system.id);
+        if (fullSystem) {
+          navigation.selectDestination(fullSystem);
         }
         return;
       }
@@ -200,13 +168,29 @@ export function StarMap({
       if (mode.phase === "route_preview") return;
 
       // Default mode — open system detail panel
-      const system = activeRegionSystems.find((s) => s.id === node.id);
-      if (system) {
-        selectSystem(system);
+      const fullSystem = mapData.activeRegionSystems.find((s) => s.id === system.id);
+      if (fullSystem) {
+        selectSystem(fullSystem);
       }
     },
-    [viewLevel, drillIntoRegion, selectSystem, activeRegionSystems, regionNavigationStates, mode, navigation, isNavigationActive],
+    [mode, navigation, mapData.activeRegionSystems, selectSystem],
   );
+
+  const onRegionClick = useCallback(
+    (regionId: string) => {
+      if (isNavigationActive && regionNavigationStates.get(regionId) === "unreachable") {
+        return;
+      }
+      drillIntoRegion(regionId);
+    },
+    [drillIntoRegion, isNavigationActive, regionNavigationStates],
+  );
+
+  const onEmptyClick = useCallback(() => {
+    if (mode.phase === "default") {
+      closeSystem();
+    }
+  }, [mode.phase, closeSystem]);
 
   const handleSelectUnitForNavigation = useCallback(
     (unit: NavigableUnit) => {
@@ -216,42 +200,30 @@ export function StarMap({
     [closeSystem, navigation],
   );
 
-  const handleInit = useCallback((instance: ReactFlowInstance) => {
-    rfInstance.current = instance;
+  // ── Center target (for initial system focus) ──────────────────
+  const centerTarget = useMemo(() => {
+    if (!initialSelectedSystem) return undefined;
+    return { x: initialSelectedSystem.x, y: initialSelectedSystem.y, zoom: 1.2 };
+  }, [initialSelectedSystem]);
 
-    if (initialSelectedSystem) {
-      const { x, y } = initialSelectedSystem;
-      instance.setCenter(x, y, { zoom: 1.2, duration: 0 });
-      setMapReady();
-    }
-  }, [initialSelectedSystem, setMapReady]);
+  const handleReady = useCallback(() => {
+    setMapReady();
+  }, [setMapReady]);
 
   return (
     <div className={`relative h-full w-full ${view.mapReady ? "opacity-100" : "opacity-0"}`}>
-      <ReactFlow
-        nodes={graph.nodes}
-        edges={graph.edges}
-        nodeTypes={nodeTypes}
-        onNodeClick={onNodeClick}
-        onInit={handleInit}
-        fitView={!view.needsInitialCenter}
-        fitViewOptions={{ padding: 0.3 }}
-        minZoom={0.3}
-        maxZoom={2}
-        proOptions={{ hideAttribution: true }}
-        className="bg-gray-950"
-      >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color="rgba(148, 163, 184, 0.08)"
-        />
-        <Controls
-          className="!bg-gray-800 !border-gray-700 !rounded-lg !shadow-lg [&>button]:!bg-gray-800 [&>button]:!border-gray-700 [&>button]:!text-gray-300 [&>button:hover]:!bg-gray-700"
-          showInteractive={false}
-        />
-      </ReactFlow>
+      <PixiMapCanvas
+        mapData={mapData}
+        viewLevel={viewLevel}
+        selectedSystem={selectedSystem}
+        navigationMode={mode}
+        onSystemClick={onSystemClick}
+        onRegionClick={onRegionClick}
+        onEmptyClick={onEmptyClick}
+        fitViewTrigger={fitViewTrigger}
+        centerTarget={centerTarget}
+        onReady={handleReady}
+      />
 
       {/* Back to regions button (system view only) */}
       {viewLevel.level === "system" && (
@@ -264,7 +236,7 @@ export function StarMap({
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
           </svg>
-          {graph.activeRegion?.name ?? "Regions"}
+          {mapData.activeRegion?.name ?? "Regions"}
         </Button>
       )}
 
@@ -320,12 +292,12 @@ export function StarMap({
       {viewLevel.level === "system" && !isNavigationActive && !isPanelOpen && (
         <SystemDetailPanel
           system={selectedSystem}
-          shipsHere={graph.shipsAtSelected}
-          convoysHere={graph.convoysAtSelected}
+          shipsHere={mapData.shipsAtSelected}
+          convoysHere={mapData.convoysAtSelected}
           currentTick={currentTick}
-          regionName={graph.selectedRegionName}
-          gatewayTargetRegions={graph.selectedGatewayTargets}
-          activeEvents={graph.eventsAtSelected}
+          regionName={mapData.selectedRegionName}
+          gatewayTargetRegions={mapData.selectedGatewayTargets}
+          activeEvents={mapData.eventsAtSelected}
           onSelectUnitForNavigation={handleSelectUnitForNavigation}
           onJumpToRegion={view.jumpToRegion}
           onClose={closeSystem}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Node, Edge } from "@xyflow/react";
 import type {
   UniverseData,
   StarSystemInfo,
@@ -9,9 +8,9 @@ import type {
   ConvoyState,
   RegionInfo,
   ActiveEvent,
+  EconomyType,
 } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
-import type { NavigationNodeState, SystemEventInfo } from "@/components/map/system-node";
 import type { MapViewLevel } from "@/lib/hooks/use-map-view-state";
 import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 import {
@@ -20,16 +19,73 @@ import {
   getGatewayTargetRegions,
 } from "@/lib/utils/region";
 
-// ── Edge colors ─────────────────────────────────────────────────
-
-const EDGE_COLOR = "rgba(148, 163, 184, 0.4)";
-const EDGE_DIM = "rgba(148, 163, 184, 0.12)";
-const EDGE_ROUTE = "rgba(99, 179, 237, 0.9)";
-const EDGE_REGION = "rgba(148, 163, 184, 0.5)";
-
 // ── Types ───────────────────────────────────────────────────────
 
-interface UseMapGraphOptions {
+export type NavigationNodeState =
+  | "origin"
+  | "reachable"
+  | "unreachable"
+  | "route_hop"
+  | "destination";
+
+export type RegionNavigationState = "origin" | "reachable" | "unreachable";
+
+export interface SystemEventInfo {
+  type: string;
+  color: "red" | "amber" | "purple" | "green" | "blue" | "slate";
+  priority: number;
+}
+
+export interface SystemNodeData {
+  id: string;
+  x: number;
+  y: number;
+  name: string;
+  economyType: EconomyType;
+  shipCount: number;
+  isGateway: boolean;
+  navigationState?: NavigationNodeState;
+  activeEvents?: SystemEventInfo[];
+}
+
+export interface RegionNodeData {
+  id: string;
+  x: number;
+  y: number;
+  name: string;
+  dominantEconomy: EconomyType;
+  systemCount: number;
+  shipCount: number;
+  navigationState?: RegionNavigationState;
+}
+
+export interface ConnectionData {
+  id: string;
+  fromId: string;
+  toId: string;
+  fuelCost: number;
+  isRoute: boolean;
+  isDimmed: boolean;
+}
+
+export interface MapData {
+  systems: SystemNodeData[];
+  regions: RegionNodeData[];
+  connections: ConnectionData[];
+  // Detail panel data (unchanged from useMapGraph)
+  shipsAtSelected: ShipState[];
+  convoysAtSelected: ConvoyState[];
+  eventsAtSelected: ActiveEvent[];
+  selectedGatewayTargets: { regionId: string; regionName: string }[];
+  selectedRegionName: string | undefined;
+  activeRegion: RegionInfo | undefined;
+  activeRegionSystems: StarSystemInfo[];
+  regionNavigationStates: Map<string, RegionNavigationState>;
+}
+
+// ── Options ─────────────────────────────────────────────────────
+
+interface UseMapDataOptions {
   universe: UniverseData;
   ships: ShipState[];
   convoys: ConvoyState[];
@@ -42,25 +98,9 @@ interface UseMapGraphOptions {
   regionMap: Map<string, RegionInfo>;
 }
 
-export interface MapGraphData {
-  // ReactFlow data
-  nodes: Node[];
-  edges: Edge[];
-  activeRegionSystems: StarSystemInfo[];
-  // Detail panel data
-  shipsAtSelected: ShipState[];
-  convoysAtSelected: ConvoyState[];
-  eventsAtSelected: ActiveEvent[];
-  selectedGatewayTargets: { regionId: string; regionName: string }[];
-  selectedRegionName: string | undefined;
-  activeRegion: RegionInfo | undefined;
-  // Navigation (needed by onNodeClick)
-  regionNavigationStates: Map<string, "origin" | "reachable" | "unreachable">;
-}
-
 // ── Hook ────────────────────────────────────────────────────────
 
-export function useMapGraph({
+export function useMapData({
   universe,
   ships,
   convoys,
@@ -71,7 +111,7 @@ export function useMapGraph({
   isNavigationActive,
   systemRegionMap,
   regionMap,
-}: UseMapGraphOptions): MapGraphData {
+}: UseMapDataOptions): MapData {
   // ── Active region systems ─────────────────────────────────────
   const activeRegionSystems = useMemo((): StarSystemInfo[] => {
     if (viewLevel.level !== "system") return [];
@@ -112,7 +152,7 @@ export function useMapGraph({
     return map;
   }, [universe.systems]);
 
-  // ── Solo ships docked at selected system (excludes convoy members) ──
+  // ── Solo ships docked at selected system ──────────────────────
   const shipsAtSelected = useMemo(
     () =>
       selectedSystem
@@ -123,7 +163,7 @@ export function useMapGraph({
     [selectedSystem, ships],
   );
 
-  // ── Convoys docked at selected system ──────────────────────────
+  // ── Convoys docked at selected system ─────────────────────────
   const convoysAtSelected = useMemo(
     () =>
       selectedSystem
@@ -134,7 +174,7 @@ export function useMapGraph({
     [selectedSystem, convoys],
   );
 
-  // ── Events per system (deduplicated, with color + priority) ───
+  // ── Events per system ─────────────────────────────────────────
   const eventsPerSystem = useMemo(() => {
     const map = new Map<string, SystemEventInfo[]>();
     for (const event of events) {
@@ -163,15 +203,11 @@ export function useMapGraph({
     [selectedSystem, events],
   );
 
-  // ── Navigation state per region (region view during nav) ──────
-  const regionNavigationStates = useMemo((): Map<
-    string,
-    "origin" | "reachable" | "unreachable"
-  > => {
-    const states = new Map<string, "origin" | "reachable" | "unreachable">();
+  // ── Region navigation states ──────────────────────────────────
+  const regionNavigationStates = useMemo((): Map<string, RegionNavigationState> => {
+    const states = new Map<string, RegionNavigationState>();
     if (mode.phase === "default") return states;
     const { unit, reachable } = mode;
-
     const unitRegionId = systemRegionMap.get(unit.systemId);
 
     for (const region of universe.regions) {
@@ -187,7 +223,7 @@ export function useMapGraph({
     return states;
   }, [mode, systemRegionMap, universe.regions, universe.systems]);
 
-  // ── Navigation state per node (system view only) ──────────────
+  // ── Node navigation states (system view only) ─────────────────
   const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
     const states = new Map<string, NavigationNodeState>();
     if (viewLevel.level !== "system") return states;
@@ -226,7 +262,7 @@ export function useMapGraph({
     return states;
   }, [mode, activeRegionSystems, viewLevel]);
 
-  // ── Route edges set (for highlighting) ────────────────────────
+  // ── Route edges set ───────────────────────────────────────────
   const routeEdgeSet = useMemo((): Set<string> => {
     if (mode.phase !== "route_preview") return new Set();
     const set = new Set<string>();
@@ -237,89 +273,74 @@ export function useMapGraph({
     return set;
   }, [mode]);
 
-  // ── Inter-region edges (for region view) ──────────────────────
-  const interRegionEdges = useMemo((): Edge[] => {
-    const crossConns = getInterRegionConnections(
-      universe.connections,
-      systemRegionMap,
-    );
-    const seen = new Set<string>();
-    const result: Edge[] = [];
-
-    for (const c of crossConns) {
-      const rFrom = systemRegionMap.get(c.fromSystemId)!;
-      const rTo = systemRegionMap.get(c.toSystemId)!;
-      const pairKey = [rFrom, rTo].sort().join("--");
-      if (seen.has(pairKey)) continue;
-      seen.add(pairKey);
-
-      result.push({
-        id: `region-${pairKey}`,
-        source: rFrom,
-        target: rTo,
-        style: {
-          stroke: EDGE_REGION,
-          strokeWidth: 3,
-          strokeDasharray: "8 4",
-        },
-      });
-    }
-    return result;
-  }, [universe.connections, systemRegionMap]);
-
-  // ── Nodes ─────────────────────────────────────────────────────
-  const nodes: Node[] = useMemo(() => {
-    if (viewLevel.level === "region") {
-      return universe.regions.map((region) => ({
-        id: region.id,
-        type: "regionNode",
-        position: { x: region.x, y: region.y },
-        data: {
-          label: region.name,
-          dominantEconomy: region.dominantEconomy,
-          systemCount: systemsPerRegion[region.id] ?? 0,
-          shipCount: shipsPerRegion[region.id] ?? 0,
-          navigationState: regionNavigationStates.get(region.id),
-        },
-      }));
-    }
+  // ── System nodes ──────────────────────────────────────────────
+  const systems = useMemo((): SystemNodeData[] => {
+    if (viewLevel.level !== "system") return [];
 
     return activeRegionSystems.map((system) => ({
       id: system.id,
-      type: "systemNode",
-      position: { x: system.x, y: system.y },
-      data: {
-        label: system.name,
-        economyType: system.economyType,
-        shipCount: shipsAtSystem[system.id] ?? 0,
-        isGateway: system.isGateway,
-        navigationState: nodeNavigationStates.get(system.id),
-        activeEvents: eventsPerSystem.get(system.id),
-      },
+      x: system.x,
+      y: system.y,
+      name: system.name,
+      economyType: system.economyType,
+      shipCount: shipsAtSystem[system.id] ?? 0,
+      isGateway: system.isGateway,
+      navigationState: nodeNavigationStates.get(system.id),
+      activeEvents: eventsPerSystem.get(system.id),
     }));
-  }, [
-    viewLevel,
-    universe.regions,
-    activeRegionSystems,
-    systemsPerRegion,
-    shipsPerRegion,
-    shipsAtSystem,
-    nodeNavigationStates,
-    eventsPerSystem,
-    regionNavigationStates,
-  ]);
+  }, [viewLevel, activeRegionSystems, shipsAtSystem, nodeNavigationStates, eventsPerSystem]);
 
-  // ── Edges ─────────────────────────────────────────────────────
-  const edges: Edge[] = useMemo(() => {
-    if (viewLevel.level === "region") return interRegionEdges;
+  // ── Region nodes ──────────────────────────────────────────────
+  const regions = useMemo((): RegionNodeData[] => {
+    if (viewLevel.level !== "region") return [];
 
+    return universe.regions.map((region) => ({
+      id: region.id,
+      x: region.x,
+      y: region.y,
+      name: region.name,
+      dominantEconomy: region.dominantEconomy,
+      systemCount: systemsPerRegion[region.id] ?? 0,
+      shipCount: shipsPerRegion[region.id] ?? 0,
+      navigationState: regionNavigationStates.get(region.id),
+    }));
+  }, [viewLevel, universe.regions, systemsPerRegion, shipsPerRegion, regionNavigationStates]);
+
+  // ── Connections ───────────────────────────────────────────────
+  const connections = useMemo((): ConnectionData[] => {
+    if (viewLevel.level === "region") {
+      // Inter-region connections (deduplicated)
+      const crossConns = getInterRegionConnections(universe.connections, systemRegionMap);
+      const seen = new Set<string>();
+      const result: ConnectionData[] = [];
+
+      for (const c of crossConns) {
+        const rFrom = systemRegionMap.get(c.fromSystemId)!;
+        const rTo = systemRegionMap.get(c.toSystemId)!;
+        const pairKey = [rFrom, rTo].sort().join("--");
+        if (seen.has(pairKey)) continue;
+        seen.add(pairKey);
+
+        result.push({
+          id: `region-${pairKey}`,
+          fromId: rFrom,
+          toId: rTo,
+          fuelCost: 0,  // not shown for region connections
+          isRoute: false,
+          isDimmed: false,
+        });
+      }
+      return result;
+    }
+
+    // Intra-region connections (deduplicated)
     const regionConns = getIntraRegionConnections(
       viewLevel.regionId,
       universe.connections,
       systemRegionMap,
     );
     const seen = new Set<string>();
-    const dedupedEdges: Edge[] = [];
+    const result: ConnectionData[] = [];
 
     for (const conn of regionConns) {
       const pairKey = [conn.fromSystemId, conn.toSystemId].sort().join("--");
@@ -327,46 +348,20 @@ export function useMapGraph({
       seen.add(pairKey);
 
       const isRouteEdge = routeEdgeSet.has(pairKey);
-      const isNavActive = isNavigationActive;
-
-      dedupedEdges.push({
+      result.push({
         id: conn.id,
-        source: conn.fromSystemId,
-        target: conn.toSystemId,
-        style: {
-          stroke: isRouteEdge ? EDGE_ROUTE : isNavActive ? EDGE_DIM : EDGE_COLOR,
-          strokeWidth: isRouteEdge ? 2.5 : 1.5,
-          strokeDasharray: isRouteEdge ? undefined : "6 4",
-        },
-        animated: isRouteEdge,
-        label: `${conn.fuelCost} fuel`,
-        labelStyle: {
-          fill: isRouteEdge
-            ? "rgba(99, 179, 237, 0.9)"
-            : "rgba(148, 163, 184, 0.6)",
-          fontSize: 10,
-          fontWeight: isRouteEdge ? 600 : 500,
-        },
-        labelBgStyle: {
-          fill: "rgba(15, 23, 42, 0.8)",
-          fillOpacity: 0.8,
-        },
-        labelBgPadding: [4, 2] as [number, number],
-        labelBgBorderRadius: 4,
+        fromId: conn.fromSystemId,
+        toId: conn.toSystemId,
+        fuelCost: conn.fuelCost,
+        isRoute: isRouteEdge,
+        isDimmed: isNavigationActive && !isRouteEdge,
       });
     }
 
-    return dedupedEdges;
-  }, [
-    viewLevel,
-    universe.connections,
-    systemRegionMap,
-    interRegionEdges,
-    routeEdgeSet,
-    isNavigationActive,
-  ]);
+    return result;
+  }, [viewLevel, universe.connections, systemRegionMap, routeEdgeSet, isNavigationActive]);
 
-  // ── Gateway target regions for detail panel ───────────────────
+  // ── Gateway target regions ────────────────────────────────────
   const selectedGatewayTargets = useMemo(() => {
     if (!selectedSystem?.isGateway) return [];
     const targetRegionIds = getGatewayTargetRegions(
@@ -382,7 +377,7 @@ export function useMapGraph({
       .filter((t): t is { regionId: string; regionName: string } => t !== null);
   }, [selectedSystem, universe.connections, systemRegionMap, regionMap]);
 
-  // ── Active region info for back button ────────────────────────
+  // ── Active region info ────────────────────────────────────────
   const activeRegion = useMemo(
     (): RegionInfo | undefined =>
       viewLevel.level === "system" ? regionMap.get(viewLevel.regionId) : undefined,
@@ -396,15 +391,16 @@ export function useMapGraph({
   );
 
   return {
-    nodes,
-    edges,
-    activeRegionSystems,
+    systems,
+    regions,
+    connections,
     shipsAtSelected,
     convoysAtSelected,
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,
     activeRegion,
+    activeRegionSystems,
     regionNavigationStates,
   };
 }
