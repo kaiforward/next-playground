@@ -219,7 +219,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
                 </Button>
               ) : (
                 <Button
-                  href={`/map?shipId=${ship.id}`}
+                  href={`/?shipId=${ship.id}`}
                   variant="action"
                   color="indigo"
                   className="flex-1"

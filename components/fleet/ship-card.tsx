@@ -135,7 +135,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
               )}
               {!ship.disabled && !ship.convoyId && !onMission && (
                 <Button
-                  href={`/map?shipId=${ship.id}`}
+                  href={`/?shipId=${ship.id}`}
                   variant="action"
                   color="indigo"
                   size="sm"

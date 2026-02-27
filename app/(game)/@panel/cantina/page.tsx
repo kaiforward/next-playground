@@ -1,15 +1,15 @@
 "use client";
 
-import { PageContainer } from "@/components/ui/page-container";
 import { useVoidsGambit } from "@/lib/hooks/use-voids-gambit";
 import { CantinaLobby } from "@/components/cantina/cantina-lobby";
 import { GameTable } from "@/components/cantina/game-table";
+import { DetailPanel } from "@/components/ui/detail-panel";
 
-export default function CantinaPage() {
+export default function CantinaPanelPage() {
   return (
-    <PageContainer size="lg">
+    <DetailPanel title="Cantina" size="lg">
       <CantinaContent />
-    </PageContainer>
+    </DetailPanel>
   );
 }
 

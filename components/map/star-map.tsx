@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { usePathname } from "next/navigation";
 import {
   ReactFlow,
   Background,
@@ -102,6 +103,10 @@ export function StarMap({
 
   const { mode } = navigation;
   const isNavigationActive = mode.phase !== "default";
+
+  // Hide tier-1 quick-preview when a tier-2 panel route is active
+  const pathname = usePathname();
+  const isPanelOpen = pathname !== "/";
 
   // ── Derived graph data (nodes, edges, detail panel) ───────────
   const graph = useMapGraph({
@@ -311,8 +316,8 @@ export function StarMap({
         />
       )}
 
-      {/* Detail panel overlay (hidden during navigation mode, system view only) */}
-      {viewLevel.level === "system" && !isNavigationActive && (
+      {/* Detail panel overlay (hidden during navigation mode, when a panel route is open, or on region view) */}
+      {viewLevel.level === "system" && !isNavigationActive && !isPanelOpen && (
         <SystemDetailPanel
           system={selectedSystem}
           shipsHere={graph.shipsAtSelected}

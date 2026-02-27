@@ -161,7 +161,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
                 Trade
               </Button>
               <Button
-                href={`/map?convoyId=${convoy.id}`}
+                href={`/?convoyId=${convoy.id}`}
                 variant="action"
                 color="indigo"
                 size="sm"

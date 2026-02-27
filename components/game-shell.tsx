@@ -29,20 +29,21 @@ export function useSidebarContext(): UseSidebarReturn {
 interface GameShellProps {
   userEmail: string | null;
   defaultSidebarCollapsed?: boolean;
+  panel?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export function GameShell({ userEmail, defaultSidebarCollapsed, children }: GameShellProps) {
+export function GameShell({ userEmail, defaultSidebarCollapsed, panel, children }: GameShellProps) {
   return (
     <TickProvider>
-      <GameShellInner userEmail={userEmail} defaultSidebarCollapsed={defaultSidebarCollapsed}>
+      <GameShellInner userEmail={userEmail} defaultSidebarCollapsed={defaultSidebarCollapsed} panel={panel}>
         {children}
       </GameShellInner>
     </TickProvider>
   );
 }
 
-function GameShellInner({ userEmail, defaultSidebarCollapsed, children }: GameShellProps) {
+function GameShellInner({ userEmail, defaultSidebarCollapsed, panel, children }: GameShellProps) {
   const { currentTick } = useTickContext();
   const sidebar = useSidebar(defaultSidebarCollapsed);
   useTickInvalidation();
@@ -67,7 +68,10 @@ function GameShellInner({ userEmail, defaultSidebarCollapsed, children }: GameSh
             }}
           >
             <TopBar />
-            <main className="flex-1">{children}</main>
+            <main className="flex-1 relative overflow-hidden">
+              {children}
+              {panel}
+            </main>
             <EventToastContainer />
             {process.env.NODE_ENV === "development" && <DevToolsPanel />}
           </div>
