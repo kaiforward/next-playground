@@ -7,8 +7,10 @@ import { GameShell } from "@/components/game-shell";
 
 export default async function GameLayout({
   children,
+  panel,
 }: {
   children: React.ReactNode;
+  panel: React.ReactNode;
 }) {
   const session = await auth();
 
@@ -17,7 +19,8 @@ export default async function GameLayout({
   }
 
   const cookieStore = await cookies();
-  const sidebarCollapsed = cookieStore.get("sidebar-collapsed")?.value === "1";
+  const sidebarCookie = cookieStore.get("sidebar-collapsed")?.value;
+  const sidebarCollapsed = sidebarCookie === undefined ? true : sidebarCookie === "1";
 
   return (
     <AuthSessionProvider>
@@ -25,6 +28,7 @@ export default async function GameLayout({
         <GameShell
           userEmail={session.user?.email ?? null}
           defaultSidebarCollapsed={sidebarCollapsed}
+          panel={panel}
         >
           {children}
         </GameShell>

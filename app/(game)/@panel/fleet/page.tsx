@@ -4,7 +4,7 @@ import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { FleetOverview } from "@/components/fleet/fleet-overview";
-import { PageContainer } from "@/components/ui/page-container";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
 function FleetContent() {
@@ -22,14 +22,12 @@ function FleetContent() {
   );
 }
 
-export default function FleetPage() {
+export default function FleetPanelPage() {
   return (
-    <PageContainer>
-      <h1 className="text-2xl font-bold mb-6">Fleet</h1>
-
+    <DetailPanel title="Fleet" size="lg">
       <QueryBoundary>
         <FleetContent />
       </QueryBoundary>
-    </PageContainer>
+    </DetailPanel>
   );
 }

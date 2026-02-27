@@ -1,7 +1,6 @@
 "use client";
 
 import { use } from "react";
-import { useSearchParams } from "next/navigation";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
@@ -10,25 +9,17 @@ import { useActiveBattles } from "@/lib/hooks/use-battles";
 import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
 import { BattleViewer } from "@/components/fleet/battle-viewer";
-import { PageContainer } from "@/components/ui/page-container";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
-import { BackLink } from "@/components/ui/back-link";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
-function ShipDetailContent({ shipId }: { shipId: string }) {
-  const searchParams = useSearchParams();
+function ShipPanelContent({ shipId }: { shipId: string }) {
   const { fleet } = useFleet();
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
   const { missions } = usePlayerMissions();
   const { battles } = useActiveBattles();
   const { convoys } = useConvoys();
-
-  // ?from=system-{id} → back to system page; fallback to dashboard
-  const from = searchParams.get("from");
-  const backHref = from?.startsWith("system-")
-    ? `/system/${from.slice(7)}`
-    : "/dashboard";
 
   const ship = fleet.ships.find((s) => s.id === shipId);
   const shipConvoy = ship?.convoyId
@@ -37,29 +28,21 @@ function ShipDetailContent({ shipId }: { shipId: string }) {
 
   if (!ship) {
     return (
-      <>
-        <h1 className="text-2xl font-bold mb-2">Ship Not Found</h1>
+      <DetailPanel title="Ship Not Found">
         <p className="text-white/60 mb-4">This ship does not exist or does not belong to you.</p>
-        <Button href="/dashboard" variant="ghost" size="sm">
-          Back to Command Center
+        <Button href="/" variant="ghost" size="sm">
+          Back to Star Map
         </Button>
-      </>
+      </DetailPanel>
     );
   }
 
-  // Find active battle for this ship
   const shipBattle = battles.find(
     (b) => b.shipId === shipId && b.status === "active",
   );
 
   return (
-    <>
-      <div className="flex items-center gap-3 mb-6">
-        <BackLink href={backHref} />
-        <h1 className="text-2xl font-bold">Ship Details</h1>
-      </div>
-
-      {/* Battle viewer if ship is in combat */}
+    <DetailPanel title={ship.name} subtitle={`${ship.role} — ${ship.system.name}`}>
       {shipBattle && (
         <div className="mb-6">
           <BattleViewer battle={shipBattle} />
@@ -82,11 +65,11 @@ function ShipDetailContent({ shipId }: { shipId: string }) {
             : undefined
         }
       />
-    </>
+    </DetailPanel>
   );
 }
 
-export default function ShipDetailPage({
+export default function ShipPanelPage({
   params,
 }: {
   params: Promise<{ shipId: string }>;
@@ -94,10 +77,8 @@ export default function ShipDetailPage({
   const { shipId } = use(params);
 
   return (
-    <PageContainer size="sm">
-      <QueryBoundary>
-        <ShipDetailContent shipId={shipId} />
-      </QueryBoundary>
-    </PageContainer>
+    <QueryBoundary>
+      <ShipPanelContent shipId={shipId} />
+    </QueryBoundary>
   );
 }

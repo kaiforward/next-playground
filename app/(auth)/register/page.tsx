@@ -57,7 +57,7 @@ export default function RegisterPage() {
         // Registration succeeded but auto-login failed, redirect to login
         router.push("/login");
       } else {
-        router.push("/dashboard");
+        router.push("/");
         router.refresh();
       }
     } catch {

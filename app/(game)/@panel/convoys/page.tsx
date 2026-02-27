@@ -2,7 +2,7 @@
 
 import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ConvoyStatus } from "@/components/fleet/convoy-status";
-import { PageContainer } from "@/components/ui/page-container";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
 function ConvoysContent() {
@@ -11,14 +11,12 @@ function ConvoysContent() {
   return <ConvoyStatus convoys={convoys} />;
 }
 
-export default function ConvoysPage() {
+export default function ConvoysPanelPage() {
   return (
-    <PageContainer>
-      <h1 className="text-2xl font-bold mb-6">Convoys</h1>
-
+    <DetailPanel title="Convoys">
       <QueryBoundary>
         <ConvoysContent />
       </QueryBoundary>
-    </PageContainer>
+    </DetailPanel>
   );
 }

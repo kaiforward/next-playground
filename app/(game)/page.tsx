@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StarMap } from "@/components/map/star-map";
 import { useUniverse } from "@/lib/hooks/use-universe";
@@ -9,7 +9,6 @@ import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
 import { useConvoys, useConvoyNavigateByIdMutation } from "@/lib/hooks/use-convoy";
 import { useEvents } from "@/lib/hooks/use-events";
-import { useSidebarContext } from "@/components/game-shell";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -18,11 +17,9 @@ import { LoadingFallback } from "@/components/ui/loading-fallback";
 function MapContent({
   initialShipId,
   initialConvoyId,
-  initialSystemId,
 }: {
   initialShipId?: string;
   initialConvoyId?: string;
-  initialSystemId?: string;
 }) {
   const { data } = useUniverse();
   const { fleet } = useFleet();
@@ -32,12 +29,6 @@ function MapContent({
   const convoyNavigate = useConvoyNavigateByIdMutation();
   const { events } = useEvents();
   const [navError, setNavError] = useState<string | null>(null);
-
-  // Auto-collapse sidebar on the map page
-  const { setCollapsed } = useSidebarContext();
-  useEffect(() => {
-    setCollapsed(true);
-  }, [setCollapsed]);
 
   const handleNavigateShip = useCallback(
     async (shipId: string, route: string[]) => {
@@ -80,7 +71,6 @@ function MapContent({
         onNavigateConvoy={handleNavigateConvoy}
         initialSelectedShipId={initialShipId}
         initialSelectedConvoyId={initialConvoyId}
-        initialSelectedSystemId={initialSystemId}
         events={events}
       />
     </div>
@@ -91,7 +81,6 @@ export default function MapPage() {
   const searchParams = useSearchParams();
   const initialShipId = searchParams.get("shipId") ?? undefined;
   const initialConvoyId = searchParams.get("convoyId") ?? undefined;
-  const initialSystemId = searchParams.get("systemId") ?? undefined;
 
   return (
     <QueryBoundary
@@ -105,7 +94,6 @@ export default function MapPage() {
       <MapContent
         initialShipId={initialShipId}
         initialConvoyId={initialConvoyId}
-        initialSystemId={initialSystemId}
       />
     </QueryBoundary>
   );
