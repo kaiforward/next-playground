@@ -392,16 +392,6 @@ export interface EntityRef {
   label: string;
 }
 
-export interface GameNotification {
-  /** Client-side sequence number, used as React key. */
-  id: number;
-  message: string;
-  type: string;
-  refs: Partial<Record<string, EntityRef>>;
-  /** Date.now() when received client-side. */
-  receivedAt: number;
-}
-
 /** Server-persisted notification (returned from API). */
 export interface PlayerNotificationInfo {
   id: string;
