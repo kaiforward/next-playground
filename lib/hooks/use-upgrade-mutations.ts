@@ -22,6 +22,7 @@ export function useUpgradeMutations(shipId: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+      queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
     },
   });
 
@@ -32,6 +33,7 @@ export function useUpgradeMutations(shipId: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+      queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
     },
   });
 
