@@ -17,13 +17,15 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const cursor = params.get("cursor") ?? undefined;
     const limit = params.has("limit") ? Number(params.get("limit")) : undefined;
-    const types = params.get("types")?.split(",").filter(Boolean) ?? undefined;
+    const types = params.getAll("types").filter(Boolean);
+    const search = params.get("search") ?? undefined;
     const unreadOnly = params.get("unreadOnly") === "true";
 
     const result = await getNotifications(playerId, {
       cursor,
       limit,
-      types,
+      types: types.length > 0 ? types : undefined,
+      search,
       unreadOnly,
     });
 

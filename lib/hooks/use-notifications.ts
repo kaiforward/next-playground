@@ -3,15 +3,16 @@
 import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiMutate } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
-import type { NotificationsData } from "@/lib/types/api";
+import type { PaginatedData } from "@/lib/types/api";
+import type { PlayerNotificationInfo } from "@/lib/types/game";
 
 export function useNotifications() {
   const { data } = useSuspenseQuery({
     queryKey: queryKeys.notifications,
-    queryFn: () => apiFetch<NotificationsData>("/api/game/notifications?limit=20"),
+    queryFn: () => apiFetch<PaginatedData<PlayerNotificationInfo>>("/api/game/notifications?limit=20"),
   });
 
-  return { notifications: data.notifications, nextCursor: data.nextCursor };
+  return { notifications: data.items, nextCursor: data.nextCursor };
 }
 
 export function useUnreadCount() {
