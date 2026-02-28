@@ -13,6 +13,7 @@ import {
   selectStartingSystem,
   generateUniverse,
   type GenParams,
+  type GeneratedRegion,
 } from "../universe-gen";
 import {
   UNIVERSE_GEN,
@@ -110,7 +111,7 @@ describe("randInt", () => {
 describe("weightedPick", () => {
   it("respects weight distribution", () => {
     const rng = mulberry32(42);
-    const weights = { a: 90, b: 10 } as Record<string, number>;
+    const weights: Record<string, number> = { a: 90, b: 10 };
     const counts: Record<string, number> = { a: 0, b: 0 };
     for (let i = 0; i < 1000; i++) {
       counts[weightedPick(rng, weights)]++;
@@ -323,9 +324,9 @@ describe("generateSystems", () => {
 
 describe("assignRegions", () => {
   it("assigns each point to the nearest region center", () => {
-    const regions = [
-      { index: 0, name: "A", governmentType: "federation" as GovernmentType, x: 100, y: 100 },
-      { index: 1, name: "B", governmentType: "corporate" as GovernmentType, x: 900, y: 900 },
+    const regions: GeneratedRegion[] = [
+      { index: 0, name: "A", governmentType: "federation", x: 100, y: 100 },
+      { index: 1, name: "B", governmentType: "corporate", x: 900, y: 900 },
     ];
     const points = [
       { x: 150, y: 150 }, // closest to A

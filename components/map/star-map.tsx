@@ -68,9 +68,6 @@ export function StarMap({
   // ── View state (selection, session persistence) ────────────────
   const view = useMapViewState({
     universe,
-    ships,
-    systemRegionMap,
-    initialSelectedShipId,
     initialSelectedSystemId: initialSelectedSystemId ?? (initialSelectedConvoyId
       ? convoys.find((c) => c.id === initialSelectedConvoyId)?.systemId
       : undefined),

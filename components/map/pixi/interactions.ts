@@ -41,19 +41,12 @@ export function setupInteractions({
 
     obj.on("pointerover", () => {
       if (obj.cursor === "not-allowed") return;
-      obj.scale.set(obj.scale.x * ANIM.hoverScale);
+      const baseScale = getBaseScale(obj.systemId, getMapData);
+      obj.scale.set(baseScale * ANIM.hoverScale);
     });
 
     obj.on("pointerout", () => {
-      const mapData = getMapData();
-      const data = mapData.systems.find((s) => s.id === obj.systemId);
-      if (data) {
-        const baseScale =
-          data.navigationState === "origin" || data.navigationState === "destination"
-            ? 1.1
-            : 1;
-        obj.scale.set(baseScale);
-      }
+      obj.scale.set(getBaseScale(obj.systemId, getMapData));
     });
   }
 
@@ -79,4 +72,10 @@ export function setupInteractions({
     systemLayer.onObjectCreated = undefined;
     app.stage.off("pointerdown", onStageClick);
   };
+}
+
+function getBaseScale(systemId: string, getMapData: () => MapData): number {
+  const data = getMapData().systems.find((s) => s.id === systemId);
+  if (!data) return 1;
+  return data.navigationState === "origin" || data.navigationState === "destination" ? 1.1 : 1;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import type { UniverseData, StarSystemInfo, ShipState } from "@/lib/types/game";
+import type { UniverseData, StarSystemInfo } from "@/lib/types/game";
 import {
   getMapSessionState,
   setMapSessionState,
@@ -11,9 +11,6 @@ import {
 
 interface UseMapViewStateOptions {
   universe: UniverseData;
-  ships: ShipState[];
-  systemRegionMap: Map<string, string>;
-  initialSelectedShipId?: string;
   initialSelectedSystemId?: string;
 }
 

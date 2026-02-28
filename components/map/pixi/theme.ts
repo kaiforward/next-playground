@@ -104,7 +104,7 @@ export const STARFIELD = {
 // ── Text rendering ───────────────────────────────────────────────
 
 /** Render text at higher resolution so it stays crisp when zoomed in.
- *  Value matches CAMERA.maxZoom — text is sharp up to max zoom level. */
+ *  Should be >= CAMERA.maxZoom so text stays sharp at max zoom. */
 export const TEXT_RESOLUTION = 3;
 
 // ── Label colors ─────────────────────────────────────────────────

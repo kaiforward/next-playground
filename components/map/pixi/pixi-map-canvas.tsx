@@ -71,10 +71,14 @@ export function PixiMapCanvas({
     if (!container) return;
 
     let app: Application | null = null;
+    let canvas: HTMLCanvasElement | null = null;
     const camera = new Camera();
     const frustum = new Frustum();
     let destroyed = false;
     let interactionCleanup: (() => void) | undefined;
+    const onResize = (width: number, height: number) => {
+      camera.setScreenSize(width, height);
+    };
 
     (async () => {
       const pixi = new Application();
@@ -92,9 +96,11 @@ export function PixiMapCanvas({
       }
 
       app = pixi;
-      container.appendChild(app.canvas);
+      if (!(app.canvas instanceof HTMLCanvasElement)) return;
+      canvas = app.canvas;
+      container.appendChild(canvas);
       camera.setScreenSize(app.screen.width, app.screen.height);
-      camera.attach(app.canvas as HTMLCanvasElement);
+      camera.attach(canvas);
 
       // Create starfield (fixed to stage, not world — parallax is separate)
       const starfield = new StarfieldLayer();
@@ -127,9 +133,7 @@ export function PixiMapCanvas({
       });
 
       // Keep camera screen size in sync with Pixi's own resize
-      app.renderer.on("resize", (width: number, height: number) => {
-        camera.setScreenSize(width, height);
-      });
+      app.renderer.on("resize", onResize);
 
       // Main render loop
       app.ticker.add((ticker) => {
@@ -153,7 +157,7 @@ export function PixiMapCanvas({
         effectLayer.container.visible = lod.showEffects;
 
         starfield.update(camera.x, camera.y, dtMs);
-        effectLayer.update(dtMs);
+        if (lod.showEffects) effectLayer.update(dtMs);
       });
 
       // Store refs and signal ready
@@ -168,7 +172,8 @@ export function PixiMapCanvas({
       destroyed = true;
       interactionCleanup?.();
       if (app) {
-        camera.detach(app.canvas as HTMLCanvasElement);
+        app.renderer.off("resize", onResize);
+        if (canvas) camera.detach(canvas);
         app.destroy(true, { children: true });
       }
       pixiRef.current = null;
@@ -189,23 +194,25 @@ export function PixiMapCanvas({
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
     p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
     p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");
-    p.regionBoundaryLayer.sync(mapData.systems, regionInfos);
-  }, [mapData, selectedSystem, navigationMode, pixiReady, regionInfos]);
+  }, [mapData, selectedSystem, navigationMode, pixiReady]);
 
-  // ── Initial fitView ───────────────────────────────────────────
+  // ── Sync region boundaries (expensive Voronoi — only on region changes) ──
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.regionBoundaryLayer.sync(mapData.systems, regionInfos);
+  }, [mapData.systems, pixiReady, regionInfos]);
+
+  // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady || readyFired.current) return;
-
     if (mapData.systems.length === 0) return;
+    // When centerTarget is set, let the centerTarget effect handle centering + onReady
+    if (centerTarget) return;
 
-    // If we have a specific center target, use that
-    // Otherwise fit view to all systems
-    if (!centerTarget) {
-      const bounds = computeBounds(mapData.systems);
-      p.camera.fitView(bounds, undefined, 0);
-    }
-
+    const bounds = computeBounds(mapData.systems);
+    p.camera.fitView(bounds, undefined, 0);
     readyFired.current = true;
     onReady();
   }, [mapData.systems, onReady, pixiReady, centerTarget]);

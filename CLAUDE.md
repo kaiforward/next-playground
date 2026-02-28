@@ -59,6 +59,7 @@ Design docs:
 
 ## Conventions
 
+- **No `as` type assertions** — The only permitted uses of `as` are `as const` and inside runtime type guard functions (`lib/types/guards.ts`) that validate before returning. All other `as` casts (`as Type`, `as unknown as Type`, etc.) are strictly forbidden. Instead: use type guards, narrow with `instanceof`/`typeof`/conditionals, add proper generics, or validate with Zod at system boundaries. If TypeScript can't infer the type, fix the types rather than casting.
 - Engine functions are pure — no DB imports. Test with Vitest.
 - Prisma singleton in `lib/prisma.ts` — always use this, never create new clients.
 - Prisma Client imported from `@/app/generated/prisma/client`.

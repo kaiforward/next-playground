@@ -3,6 +3,7 @@ import { Delaunay } from "d3-delaunay";
 import type { SystemNodeData } from "@/lib/hooks/use-map-data";
 import type { LODState } from "../lod";
 import { TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
+import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 
 const REGION_NAME_STYLE = new TextStyle({
   fontSize: 64,
@@ -34,12 +35,16 @@ export class RegionBoundaryLayer {
    * Called when system data changes (not per frame).
    */
   sync(systems: SystemNodeData[], regions: RegionInfo[]) {
-    if (systems.length < 3) return;
+    if (systems.length < 3) {
+      this.clear();
+      return;
+    }
 
     // Build Delaunay triangulation from system positions
     const points = systems.map((s) => [s.x, s.y] as [number, number]);
     const delaunay = Delaunay.from(points);
-    const voronoi = delaunay.voronoi([0, 0, 7500, 7500]);
+    const size = UNIVERSE_GEN.MAP_SIZE;
+    const voronoi = delaunay.voronoi([0, 0, size, size]);
 
     // Draw boundary edges: Voronoi edges where adjacent cells belong to different regions
     this.boundaryGraphics.clear();
@@ -110,6 +115,15 @@ export class RegionBoundaryLayer {
 
     this.labelContainer.visible = lod.showRegionLabels;
     this.labelContainer.alpha = lod.regionLabelAlpha;
+  }
+
+  private clear() {
+    this.boundaryGraphics.clear();
+    for (const label of this.regionLabels.values()) {
+      label.destroy();
+    }
+    this.regionLabels.clear();
+    this.labelContainer.removeChildren();
   }
 
   destroy() {
