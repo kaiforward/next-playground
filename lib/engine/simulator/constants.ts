@@ -218,9 +218,11 @@ function mergeRecord<T extends Record<string, unknown>>(
   overrides?: Record<string, Partial<T>>,
 ): Record<string, T> {
   if (!overrides) return base;
-  const result = { ...base };
+  const result = structuredClone(base);
   for (const [key, partial] of Object.entries(overrides)) {
-    result[key] = { ...(result[key] ?? ({} as T)), ...partial } as T;
+    if (key in result) {
+      Object.assign(result[key], partial);
+    }
   }
   return result;
 }

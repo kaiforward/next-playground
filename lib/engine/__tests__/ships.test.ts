@@ -11,7 +11,7 @@ import { isShipTypeId } from "@/lib/types/guards";
 
 describe("Ship constants", () => {
   const allTypes = Object.values(SHIP_TYPES);
-  const allIds = Object.keys(SHIP_TYPES) as ShipTypeId[];
+  const allIds = Object.keys(SHIP_TYPES).filter((k): k is ShipTypeId => isShipTypeId(k));
 
   it("defines exactly 12 ship types", () => {
     expect(allTypes).toHaveLength(12);
@@ -82,7 +82,8 @@ describe("Ship constants", () => {
   });
 
   it("combat ships have higher firepower than trade ships of same size", () => {
-    for (const size of ["small", "medium", "large"] as ShipSize[]) {
+    const sizes: ShipSize[] = ["small", "medium", "large"];
+    for (const size of sizes) {
       const combat = allTypes.filter((t) => t.size === size && t.role === "combat");
       const trade = allTypes.filter((t) => t.size === size && t.role === "trade");
       if (combat.length === 0 || trade.length === 0) continue;

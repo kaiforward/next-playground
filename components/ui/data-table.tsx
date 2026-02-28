@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { getRecordValue } from "@/lib/types/guards";
 
 export interface Column<T> {
   key: string;
@@ -16,7 +17,7 @@ interface DataTableProps<T> {
   rowClassName?: (row: T) => string;
 }
 
-export function DataTable<T extends Record<string, unknown>>({
+export function DataTable<T extends object>({
   columns,
   data,
   onRowClick,
@@ -40,8 +41,8 @@ export function DataTable<T extends Record<string, unknown>>({
   const sortedData = [...data];
   if (sortKey) {
     sortedData.sort((a, b) => {
-      const aVal = a[sortKey];
-      const bVal = b[sortKey];
+      const aVal = getRecordValue(a, sortKey);
+      const bVal = getRecordValue(b, sortKey);
       if (aVal == null || bVal == null) return 0;
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDir === "asc" ? aVal - bVal : bVal - aVal;
@@ -90,7 +91,7 @@ export function DataTable<T extends Record<string, unknown>>({
             >
               {columns.map((col) => (
                 <td key={col.key} className="px-4 py-3 text-text-primary">
-                  {col.render ? col.render(row) : String(row[col.key] ?? "")}
+                  {col.render ? col.render(row) : String(getRecordValue(row, col.key) ?? "")}
                 </td>
               ))}
             </tr>

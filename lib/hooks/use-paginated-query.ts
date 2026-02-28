@@ -98,6 +98,8 @@ export function usePaginatedQuery<
     queryKey,
     queryFn: ({ pageParam }) =>
       apiFetch<PaginatedData<TItem>>(buildUrl(pageParam)),
+    // TanStack Query infers TPageParam from initialPageParam's type — `as` required
+    // to widen from `undefined` to `string | undefined` (library API limitation)
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: opts.enabled,

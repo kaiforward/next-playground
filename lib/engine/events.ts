@@ -264,7 +264,7 @@ export function selectEventToSpawn(
     for (const sys of systems) {
       // Economy type filter
       if (def.targetFilter?.economyTypes) {
-        if (!def.targetFilter.economyTypes.includes(sys.economyType as never)) continue;
+        if (!def.targetFilter.economyTypes.some((t) => t === sys.economyType)) continue;
       }
 
       // Per-system cap
@@ -393,7 +393,7 @@ export function evaluateSpreadTargets(
 
       // Filter: economyTypes
       if (rule.targetFilter?.economyTypes) {
-        if (!rule.targetFilter.economyTypes.includes(neighbor.economyType as never)) {
+        if (!rule.targetFilter.economyTypes.some((t) => t === neighbor.economyType)) {
           continue;
         }
       }

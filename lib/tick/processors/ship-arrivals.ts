@@ -17,7 +17,7 @@ import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { toGovernmentType, toTraitId, toQualityTier, isNotificationEvent } from "@/lib/types/guards";
 import { createNotifications } from "@/lib/services/notifications";
 import type { EntityRef } from "@/lib/types/game";
 import type { TickProcessor, TickProcessorResult } from "../types";
@@ -193,7 +193,7 @@ export const shipArrivalsProcessor: TickProcessor = {
           .map((c) => ({
             goodId: c.goodId,
             quantity: c.quantity,
-            hazard: (GOODS[c.goodId]?.hazard ?? "none") as "none" | "low" | "high",
+            hazard: GOODS[c.goodId]?.hazard ?? "none",
           }));
 
         const incidents = rollHazardIncidents(enriched, danger, Math.random, shipMods);
@@ -470,12 +470,12 @@ export const shipArrivalsProcessor: TickProcessor = {
     for (const [playerId, events] of playerEvents) {
       const notifications = events["gameNotifications"] ?? [];
       for (const n of notifications) {
-        const notif = n as { type: string; message: string; refs: Partial<Record<string, EntityRef>> };
+        if (!isNotificationEvent(n)) continue;
         dbEntries.push({
           playerId,
-          type: notif.type,
-          message: notif.message,
-          refs: notif.refs,
+          type: n.type,
+          message: n.message,
+          refs: n.refs,
           tick: ctx.tick,
         });
       }

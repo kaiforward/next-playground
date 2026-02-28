@@ -93,9 +93,10 @@ export function useTick(): UseTickResult {
   const subscribeToArrivals = useCallback(
     (cb: (shipIds: string[]) => void) => {
       return subscribeToEvent("shipArrived", (events) => {
-        const shipIds = events.map(
-          (e) => (e as { shipId: string }).shipId,
-        );
+        const shipIds = events
+          .filter((e): e is { shipId: string } =>
+            typeof e === "object" && e !== null && "shipId" in e && typeof e.shipId === "string")
+          .map((e) => e.shipId);
         cb(shipIds);
       });
     },

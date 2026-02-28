@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { TxClient } from "@/lib/tick/types";
 import type { PlayerNotificationInfo, EntityRef } from "@/lib/types/game";
+import { toNotificationType } from "@/lib/types/guards";
 import { buildPaginatedArgs, paginateResults, type PaginatedResult } from "@/lib/services/pagination";
 
 // ── Serialization ──────────────────────────────────────────────
@@ -23,7 +24,7 @@ function serializeNotification(row: {
 
   return {
     id: row.id,
-    type: row.type as PlayerNotificationInfo["type"],
+    type: toNotificationType(row.type),
     message: row.message,
     refs,
     tick: row.tick,

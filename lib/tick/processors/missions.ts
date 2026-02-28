@@ -9,7 +9,7 @@ import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { OP_MISSION_CAP_PER_SYSTEM } from "@/lib/constants/missions";
-import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { toGovernmentType, toTraitId, toQualityTier, isNotificationEvent } from "@/lib/types/guards";
 import type { ModifierRow } from "@/lib/engine/events";
 
 export const missionsProcessor: TickProcessor = {
@@ -264,12 +264,12 @@ export const missionsProcessor: TickProcessor = {
     for (const [playerId, events] of playerEvents) {
       const notifications = events["gameNotifications"] ?? [];
       for (const n of notifications) {
-        const notif = n as { type: string; message: string; refs: Partial<Record<string, EntityRef>> };
+        if (!isNotificationEvent(n)) continue;
         dbEntries.push({
           playerId,
-          type: notif.type,
-          message: notif.message,
-          refs: notif.refs,
+          type: n.type,
+          message: n.message,
+          refs: n.refs,
           tick: ctx.tick,
         });
       }

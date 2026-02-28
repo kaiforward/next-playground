@@ -183,6 +183,9 @@ function mergePlayerEvents(
 }
 
 // Singleton — survives HMR in dev via globalThis
-const globalForTick = globalThis as unknown as { tickEngine: TickEngine };
-export const tickEngine = globalForTick.tickEngine || new TickEngine();
-if (process.env.NODE_ENV !== "production") globalForTick.tickEngine = tickEngine;
+declare global {
+  // eslint-disable-next-line no-var
+  var __tickEngine: TickEngine | undefined;
+}
+export const tickEngine = globalThis.__tickEngine ?? new TickEngine();
+if (process.env.NODE_ENV !== "production") globalThis.__tickEngine = tickEngine;

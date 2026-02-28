@@ -11,6 +11,7 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { EVENT_MISSION_GOODS } from "@/lib/constants/events";
 import { GOODS } from "@/lib/constants/goods";
+import { isNotificationEvent } from "@/lib/types/guards";
 
 /** Build good tier lookup from GOODS constants. */
 const goodTiers: Record<string, number> = Object.fromEntries(
@@ -221,12 +222,12 @@ export const tradeMissionsProcessor: TickProcessor = {
     for (const [playerId, events] of playerEvents) {
       const notifications = events["gameNotifications"] ?? [];
       for (const n of notifications) {
-        const notif = n as { type: string; message: string; refs: Partial<Record<string, EntityRef>> };
+        if (!isNotificationEvent(n)) continue;
         dbEntries.push({
           playerId,
-          type: notif.type,
-          message: notif.message,
-          refs: notif.refs,
+          type: n.type,
+          message: n.message,
+          refs: n.refs,
           tick: ctx.tick,
         });
       }

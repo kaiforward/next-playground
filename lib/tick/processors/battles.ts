@@ -10,6 +10,7 @@ import {
   type RoundResult,
 } from "@/lib/engine/combat";
 import { COMBAT_CONSTANTS, ENEMY_TIERS } from "@/lib/constants/combat";
+import { isEnemyTier, isNotificationEvent } from "@/lib/types/guards";
 
 export const battlesProcessor: TickProcessor = {
   name: "battles",
@@ -95,7 +96,8 @@ export const battlesProcessor: TickProcessor = {
       };
 
       // Enemy stats from battle record — derive damage from tier
-      const tierDef = ENEMY_TIERS[battle.enemyTier as keyof typeof ENEMY_TIERS];
+      const eTier = battle.enemyTier;
+      const tierDef = isEnemyTier(eTier) ? ENEMY_TIERS[eTier] : null;
       const dangerScale = battle.dangerLevel != null
         ? (0.6 + battle.dangerLevel * 0.8)
         : 0.8;
@@ -183,12 +185,12 @@ export const battlesProcessor: TickProcessor = {
     for (const [playerId, events] of playerEvents) {
       const notifications = events["gameNotifications"] ?? [];
       for (const n of notifications) {
-        const notif = n as { type: string; message: string; refs: Partial<Record<string, EntityRef>> };
+        if (!isNotificationEvent(n)) continue;
         dbEntries.push({
           playerId,
-          type: notif.type,
-          message: notif.message,
-          refs: notif.refs,
+          type: n.type,
+          message: n.message,
+          refs: n.refs,
           tick: ctx.tick,
         });
       }

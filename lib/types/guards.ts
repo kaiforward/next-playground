@@ -14,8 +14,16 @@ import type {
   TradeType,
   TraitId,
   ConvoyStatus,
+  Hazard,
+  NotificationType,
+  OpMissionStatus,
+  BattleStatus,
+  EntityRef,
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
+import type { ModuleId } from "@/lib/constants/modules";
+import type { MissionType, StatGateKey } from "@/lib/constants/missions";
+import type { EnemyTier } from "@/lib/constants/combat";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -95,6 +103,10 @@ export function toEconomyType(value: string): EconomyType {
   return value as EconomyType;
 }
 
+export function isEconomyType(value: string): value is EconomyType {
+  return ECONOMY_TYPES.has(value);
+}
+
 export function toGovernmentType(value: string): GovernmentType {
   if (!GOVERNMENT_TYPES.has(value)) {
     throw new Error(`Invalid government type: "${value}"`);
@@ -162,8 +174,163 @@ export function toConvoyStatus(value: string): ConvoyStatus {
   return value as ConvoyStatus;
 }
 
+// ── Additional guards (modules, missions, combat, notifications) ─
+
+const MODULE_IDS: ReadonlySet<string> = new Set<ModuleId>([
+  "fuel_optimiser", "thruster_upgrade", "manoeuvring_thrusters",
+  "expanded_hold", "reinforced_containers", "hidden_compartment",
+  "armour_plating", "shield_booster", "point_defence_array",
+  "scanner_array", "automation_module", "repair_bay",
+]);
+
+const MISSION_TYPES: ReadonlySet<string> = new Set<MissionType>([
+  "patrol", "survey", "bounty", "salvage", "recon",
+]);
+
+const STAT_GATE_KEYS: ReadonlySet<string> = new Set<StatGateKey>([
+  "firepower", "sensors", "hullMax", "stealth",
+]);
+
+const ENEMY_TIER_VALUES: ReadonlySet<string> = new Set<EnemyTier>([
+  "weak", "moderate", "strong",
+]);
+
+const HAZARD_VALUES: ReadonlySet<string> = new Set<Hazard>([
+  "none", "low", "high",
+]);
+
+const NOTIFICATION_TYPES: ReadonlySet<string> = new Set<NotificationType>([
+  "ship_arrived", "ship_damaged", "ship_disabled",
+  "mission_completed", "mission_expired",
+  "battle_round", "battle_won", "battle_lost",
+  "cargo_lost", "hazard_incident",
+  "import_duty", "contraband_seized",
+]);
+
+const OP_MISSION_STATUSES: ReadonlySet<string> = new Set<OpMissionStatus>([
+  "available", "accepted", "in_progress", "completed", "failed",
+]);
+
+const BATTLE_STATUSES: ReadonlySet<string> = new Set<BattleStatus>([
+  "active", "player_victory", "player_defeat", "player_retreat", "enemy_retreat",
+]);
+
+export function isModuleId(value: string): value is ModuleId {
+  return MODULE_IDS.has(value);
+}
+
+export function toModuleId(value: string): ModuleId {
+  if (!MODULE_IDS.has(value)) {
+    throw new Error(`Invalid module id: "${value}"`);
+  }
+  return value as ModuleId;
+}
+
+export function toMissionType(value: string): MissionType {
+  if (!MISSION_TYPES.has(value)) {
+    throw new Error(`Invalid mission type: "${value}"`);
+  }
+  return value as MissionType;
+}
+
+export function isMissionType(value: string): value is MissionType {
+  return MISSION_TYPES.has(value);
+}
+
+export function toStatGateKey(value: string): StatGateKey {
+  if (!STAT_GATE_KEYS.has(value)) {
+    throw new Error(`Invalid stat gate key: "${value}"`);
+  }
+  return value as StatGateKey;
+}
+
+export function isStatGateKey(value: string): value is StatGateKey {
+  return STAT_GATE_KEYS.has(value);
+}
+
+export function toEnemyTier(value: string): EnemyTier {
+  if (!ENEMY_TIER_VALUES.has(value)) {
+    throw new Error(`Invalid enemy tier: "${value}"`);
+  }
+  return value as EnemyTier;
+}
+
+export function isEnemyTier(value: string): value is EnemyTier {
+  return ENEMY_TIER_VALUES.has(value);
+}
+
+export function toHazard(value: string): Hazard {
+  if (!HAZARD_VALUES.has(value)) {
+    throw new Error(`Invalid hazard level: "${value}"`);
+  }
+  return value as Hazard;
+}
+
+export function toNotificationType(value: string): NotificationType {
+  if (!NOTIFICATION_TYPES.has(value)) {
+    throw new Error(`Invalid notification type: "${value}"`);
+  }
+  return value as NotificationType;
+}
+
+export function toOpMissionStatus(value: string): OpMissionStatus {
+  if (!OP_MISSION_STATUSES.has(value)) {
+    throw new Error(`Invalid op mission status: "${value}"`);
+  }
+  return value as OpMissionStatus;
+}
+
+export function toBattleStatus(value: string): BattleStatus {
+  if (!BATTLE_STATUSES.has(value)) {
+    throw new Error(`Invalid battle status: "${value}"`);
+  }
+  return value as BattleStatus;
+}
+
 // ── Constant arrays (avoids Object.keys() + as casts) ───────────
 
 export const ALL_GOVERNMENT_TYPES: readonly GovernmentType[] = [
   "federation", "corporate", "authoritarian", "frontier",
 ];
+
+export const ALL_MODULE_IDS: readonly ModuleId[] = [
+  "fuel_optimiser", "thruster_upgrade", "manoeuvring_thrusters",
+  "expanded_hold", "reinforced_containers", "hidden_compartment",
+  "armour_plating", "shield_booster", "point_defence_array",
+  "scanner_array", "automation_module", "repair_bay",
+];
+
+export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
+
+// ── Notification event guard ───────────────────────────────────
+
+interface NotificationEvent {
+  type: string;
+  message: string;
+  refs: Partial<Record<string, EntityRef>>;
+}
+
+export function isNotificationEvent(value: unknown): value is NotificationEvent {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.type === "string"
+    && typeof obj.message === "string"
+    && typeof obj.refs === "object"
+    && obj.refs !== null;
+}
+
+// ── Template literal guards ───────────────────────────────────
+
+export function isStatGateMessage(value: string): value is `STAT_GATE:${string}` {
+  return value.startsWith("STAT_GATE:");
+}
+
+// ── Safe record access (validates key existence before returning) ──
+
+/** Access a property on an object by string key, returning `unknown`. */
+export function getRecordValue(obj: object, key: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(obj, key)) {
+    return (obj as Record<string, unknown>)[key];
+  }
+  return undefined;
+}

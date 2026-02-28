@@ -5,14 +5,14 @@
 
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
-import { OP_MISSION_CONSTANTS, type StatGateKey } from "@/lib/constants/missions";
+import { OP_MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { COMBAT_CONSTANTS, getEnemyTier } from "@/lib/constants/combat";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
-import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
-import type { MissionInfo, BattleInfo, BattleRoundResult, OpMissionStatus, BattleStatus } from "@/lib/types/game";
+import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, isStatGateMessage } from "@/lib/types/guards";
+import type { MissionInfo, BattleInfo, BattleRoundResult } from "@/lib/types/game";
 import type {
   SystemAllMissionsData,
   AcceptOpMissionResult,
@@ -61,8 +61,8 @@ function serializeMission(row: MissionRow, tick: number): MissionInfo {
     ticksRemaining: Math.max(0, row.deadlineTick - tick),
     durationTicks: row.durationTicks,
     enemyTier: row.enemyTier,
-    statRequirements: JSON.parse(row.statRequirements) as Record<string, number>,
-    status: row.status as OpMissionStatus,
+    statRequirements: JSON.parse(row.statRequirements),
+    status: toOpMissionStatus(row.status),
     playerId: row.playerId,
     shipId: row.shipId,
     acceptedAtTick: row.acceptedAtTick,
@@ -119,7 +119,7 @@ function serializeBattle(row: BattleRow): BattleInfo {
     missionId: row.missionId,
     shipId: row.shipId,
     shipName: row.ship?.name ?? null,
-    status: row.status as BattleStatus,
+    status: toBattleStatus(row.status),
     playerStrength: row.playerStrength,
     playerMorale: row.playerMorale,
     playerMaxStrength,
@@ -375,8 +375,8 @@ export async function startMission(
     }
 
     // Check stat gates
-    const statReqs = JSON.parse(mission.statRequirements) as Record<string, number>;
-    const shipStatMap: Record<StatGateKey, number> = {
+    const statReqs: Record<string, number> = JSON.parse(mission.statRequirements);
+    const shipStatMap: Record<string, number> = {
       firepower: freshShip.firepower,
       sensors: freshShip.sensors,
       hullMax: freshShip.hullMax,
@@ -384,7 +384,7 @@ export async function startMission(
     };
 
     for (const [stat, required] of Object.entries(statReqs)) {
-      const actual = shipStatMap[stat as StatGateKey] ?? 0;
+      const actual = shipStatMap[stat] ?? 0;
       if (actual < required) {
         throw new Error(`STAT_GATE:${stat} ${actual} < ${required}`);
       }
@@ -459,7 +459,7 @@ export async function startMission(
 
       const playerStats = derivePlayerCombatStats(freshShip);
       const enemyTier = mission.enemyTier
-        ? (mission.enemyTier as "weak" | "moderate" | "strong")
+        ? toEnemyTier(mission.enemyTier)
         : getEnemyTier(danger);
       const enemyStats = deriveEnemyCombatStats(enemyTier, danger);
 
@@ -497,7 +497,7 @@ export async function startMission(
       if (msg === "SHIP_IN_CONVOY") return "SHIP_IN_CONVOY" as const;
       if (msg === "SHIP_COMMITTED") return "SHIP_COMMITTED" as const;
       if (msg === "SHIP_IN_BATTLE") return "SHIP_IN_BATTLE" as const;
-      if (msg.startsWith("STAT_GATE:")) return msg as `STAT_GATE:${string}`;
+      if (isStatGateMessage(msg)) return msg;
     }
     throw error;
   });
