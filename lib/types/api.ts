@@ -16,6 +16,7 @@ import type {
   TraitId,
   TraitCategory,
   QualityTier,
+  PlayerNotificationInfo,
 } from "./game";
 
 // ── Responses ────────────────────────────────────────────────────
@@ -190,6 +191,16 @@ export type RemoveUpgradeResponse = ApiResponse<{ ship: ShipState }>;
 
 export interface RepairResult { ship: ShipState; creditSpent: number }
 export type RepairResponse = ApiResponse<RepairResult>;
+
+// ── Notification types ──────────────────────────────────────────
+
+export interface NotificationsData {
+  notifications: PlayerNotificationInfo[];
+  nextCursor: string | null;
+}
+export type NotificationsResponse = ApiResponse<NotificationsData>;
+export type UnreadCountResponse = ApiResponse<{ count: number }>;
+export type MarkReadResponse = ApiResponse<{ marked: number }>;
 
 // ── Auth types ──────────────────────────────────────────────────
 

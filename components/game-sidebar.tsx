@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { formatCredits } from "@/lib/utils/format";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 /* ------------------------------------------------------------------ */
 /*  Icons (inline SVG – Heroicons Solid 20×20)                        */
@@ -98,7 +99,16 @@ const FLEET_NAV: NavItem[] = [
   { href: "/convoys", label: "Convoys", icon: ConvoyIcon },
 ];
 
+function LogIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4.5 h-4.5 shrink-0">
+      <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
 const ACTIVITY_NAV: NavItem[] = [
+  { href: "/log", label: "Captain's Log", icon: LogIcon },
   { href: "/events", label: "Events", icon: EventsIcon },
   { href: "/battles", label: "Battles", icon: BattlesIcon },
 ];
@@ -206,6 +216,11 @@ export function GameSidebar({
           )}
         </Link>
       </div>
+
+      {/* Notification bell */}
+      <NotificationBell collapsed={collapsed} />
+
+      <Divider />
 
       {/* Primary nav */}
       <nav className="mt-2 flex flex-col gap-0.5">

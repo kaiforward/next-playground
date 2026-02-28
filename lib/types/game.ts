@@ -373,17 +373,32 @@ export interface SystemPriceHistory {
 
 // ── Notification types ──────────────────────────────────────────
 
+export type NotificationType =
+  | "ship_arrived"
+  | "ship_damaged"
+  | "ship_disabled"
+  | "mission_completed"
+  | "mission_expired"
+  | "battle_round"
+  | "battle_won"
+  | "battle_lost"
+  | "cargo_lost"
+  | "hazard_incident"
+  | "import_duty"
+  | "contraband_seized";
+
 export interface EntityRef {
   id: string;
   label: string;
 }
 
-export interface GameNotification {
-  /** Client-side sequence number, used as React key. */
-  id: number;
+/** Server-persisted notification (returned from API). */
+export interface PlayerNotificationInfo {
+  id: string;
+  type: NotificationType;
   message: string;
-  type: string;
   refs: Partial<Record<string, EntityRef>>;
-  /** Date.now() when received client-side. */
-  receivedAt: number;
+  tick: number;
+  read: boolean;
+  createdAt: string;
 }

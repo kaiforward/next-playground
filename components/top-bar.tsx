@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useDialog } from "@/components/ui/dialog";
-import { ActivityPanel } from "@/components/events/activity-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useFleet } from "@/lib/hooks/use-fleet";
@@ -116,27 +114,11 @@ function BreadcrumbsFallback() {
 /* ------------------------------------------------------------------ */
 
 export function TopBar() {
-  const historyDialog = useDialog();
-
   return (
-    <>
-      <header className="h-[var(--topbar-height)] flex items-center justify-between px-4 bg-background border-b border-border shrink-0">
-        <QueryBoundary loadingFallback={<BreadcrumbsFallback />}>
-          <BreadcrumbsInner />
-        </QueryBoundary>
-
-        <button
-          onClick={historyDialog.onOpen}
-          className="relative text-text-muted hover:text-text-primary transition-colors p-1"
-          aria-label="Activity history"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .67 1.085h3.652a2.75 2.75 0 0 0 5.47 0h3.652a.75.75 0 0 0 .67-1.085A11.95 11.95 0 0 1 16 8a6 6 0 0 0-6-6Zm1.493 12.319a1.25 1.25 0 0 1-2.986 0h2.986Z" clipRule="evenodd" />
-          </svg>
-        </button>
-      </header>
-
-      <ActivityPanel open={historyDialog.open} onClose={historyDialog.onClose} />
-    </>
+    <header className="h-[var(--topbar-height)] flex items-center px-4 bg-background border-b border-border shrink-0">
+      <QueryBoundary loadingFallback={<BreadcrumbsFallback />}>
+        <BreadcrumbsInner />
+      </QueryBoundary>
+    </header>
   );
 }
