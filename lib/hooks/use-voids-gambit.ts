@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type GameState,
-  type GameResult,
   type NpcArchetype,
   type NpcIdentity,
   type Declaration,

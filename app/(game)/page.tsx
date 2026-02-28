@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { StarMap } from "@/components/map/star-map";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useFleet } from "@/lib/hooks/use-fleet";
-import { useTickContext } from "@/lib/hooks/use-tick-context";
+
 import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
 import { useConvoys, useConvoyNavigateByIdMutation } from "@/lib/hooks/use-convoy";
 import { useEvents } from "@/lib/hooks/use-events";
@@ -17,13 +17,14 @@ import { LoadingFallback } from "@/components/ui/loading-fallback";
 function MapContent({
   initialShipId,
   initialConvoyId,
+  initialSystemId,
 }: {
   initialShipId?: string;
   initialConvoyId?: string;
+  initialSystemId?: string;
 }) {
   const { data } = useUniverse();
   const { fleet } = useFleet();
-  const { currentTick } = useTickContext();
   const { mutateAsync: navigateAsync } = useNavigateMutation();
   const { convoys } = useConvoys();
   const convoyNavigate = useConvoyNavigateByIdMutation();
@@ -66,11 +67,11 @@ function MapContent({
         universe={data}
         ships={fleet.ships}
         convoys={convoys}
-        currentTick={currentTick}
         onNavigateShip={handleNavigateShip}
         onNavigateConvoy={handleNavigateConvoy}
         initialSelectedShipId={initialShipId}
         initialSelectedConvoyId={initialConvoyId}
+        initialSelectedSystemId={initialSystemId}
         events={events}
       />
     </div>
@@ -79,8 +80,9 @@ function MapContent({
 
 export default function MapPage() {
   const searchParams = useSearchParams();
-  const initialShipId = searchParams.get("shipId") ?? undefined;
-  const initialConvoyId = searchParams.get("convoyId") ?? undefined;
+  const initialShipId = searchParams.get("navigateShipId") ?? undefined;
+  const initialConvoyId = searchParams.get("navigateConvoyId") ?? undefined;
+  const initialSystemId = searchParams.get("systemId") ?? undefined;
 
   return (
     <QueryBoundary
@@ -94,6 +96,7 @@ export default function MapPage() {
       <MapContent
         initialShipId={initialShipId}
         initialConvoyId={initialConvoyId}
+        initialSystemId={initialSystemId}
       />
     </QueryBoundary>
   );

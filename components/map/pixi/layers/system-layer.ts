@@ -1,6 +1,8 @@
 import { Container } from "pixi.js";
 import { SystemObject } from "../objects/system-object";
 import type { SystemNodeData } from "@/lib/hooks/use-map-data";
+import type { Frustum } from "../frustum";
+import type { LODState } from "../lod";
 
 export class SystemLayer {
   readonly container = new Container();
@@ -29,6 +31,17 @@ export class SystemLayer {
         this.container.removeChild(obj);
         obj.destroy({ children: true });
         this.objects.delete(id);
+      }
+    }
+  }
+
+  /** Per-frame visibility update: frustum culling + LOD */
+  updateVisibility(frustum: Frustum, lod: LODState) {
+    for (const obj of this.objects.values()) {
+      const inView = frustum.contains(obj.position.x, obj.position.y);
+      obj.visible = inView;
+      if (inView) {
+        obj.setLOD(lod);
       }
     }
   }

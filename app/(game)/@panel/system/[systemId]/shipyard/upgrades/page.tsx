@@ -113,7 +113,7 @@ function UpgradesContent({ systemId }: { systemId: string }) {
 function SelectedShipCard({
   ship,
   convoyName,
-  playerCredits,
+  playerCredits: _playerCredits,
   onInstall,
   onRemove,
   removeError,

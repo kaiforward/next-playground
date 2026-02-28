@@ -4,7 +4,7 @@
  */
 
 import { MODULES, type ModuleId } from "@/lib/constants/modules";
-import type { UpgradeSlotType } from "@/lib/constants/ships";
+
 
 // ── Types ────────────────────────────────────────────────────────
 

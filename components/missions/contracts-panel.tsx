@@ -51,8 +51,6 @@ export function ContractsPanel({
 
 function AvailableContracts({
   missions,
-  systemId,
-  fleet,
 }: {
   missions: TradeMissionInfo[];
   systemId: string;
@@ -166,7 +164,6 @@ function AvailableContracts({
 
 function ActiveMissions({
   missions,
-  systemId,
   fleet,
   currentTick,
 }: {

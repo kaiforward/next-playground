@@ -4,14 +4,13 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { GOODS } from "@/lib/constants/goods";
 import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
 import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
-import type { GoodEquilibrium } from "@/lib/constants/goods";
 import {
   UNIVERSE_GEN,
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { toEconomyType } from "@/lib/types/guards";
-import { SHIP_TYPES } from "@/lib/constants/ships";
+
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL ?? "file:./dev.db",
@@ -25,13 +24,15 @@ async function main() {
   const params: GenParams = {
     seed: UNIVERSE_GEN.SEED,
     regionCount: UNIVERSE_GEN.REGION_COUNT,
-    systemsPerRegion: UNIVERSE_GEN.SYSTEMS_PER_REGION,
+    totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
     mapSize: UNIVERSE_GEN.MAP_SIZE,
+    mapPadding: UNIVERSE_GEN.MAP_PADDING,
+    poissonMinDistance: UNIVERSE_GEN.POISSON_MIN_DISTANCE,
+    poissonKCandidates: UNIVERSE_GEN.POISSON_K_CANDIDATES,
     regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
-    systemScatterRadius: UNIVERSE_GEN.SYSTEM_SCATTER_RADIUS,
-    systemMinDistance: UNIVERSE_GEN.SYSTEM_MIN_DISTANCE,
     extraEdgeFraction: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
+    gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
     intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
   };
@@ -44,6 +45,8 @@ async function main() {
 
   // ── Clear existing data (FK-safe order) ──
   await prisma.tradeHistory.deleteMany();
+  await prisma.battle.deleteMany();
+  await prisma.mission.deleteMany();
   await prisma.tradeMission.deleteMany();
   await prisma.eventModifier.deleteMany();
   await prisma.gameEvent.deleteMany();

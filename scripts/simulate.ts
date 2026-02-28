@@ -22,7 +22,7 @@ import {
   buildExperimentResult,
 } from "../lib/engine/simulator/experiment";
 import { STRATEGY_NAMES } from "../lib/engine/simulator/strategies";
-import type { SimConfig, BotConfig, PlayerSummary, SimResults } from "../lib/engine/simulator/types";
+import type { SimConfig, BotConfig, SimResults } from "../lib/engine/simulator/types";
 
 // ── Argument parsing ────────────────────────────────────────────
 

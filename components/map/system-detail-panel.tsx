@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EconomyBadge } from "@/components/ui/economy-badge";
 import type { StarSystemInfo, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
-import type { NavigableUnit } from "@/lib/types/navigable";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -21,12 +20,9 @@ interface SystemDetailPanelProps {
   system: StarSystemInfo | null;
   shipsHere: ShipState[];
   convoysHere: ConvoyState[];
-  currentTick: number;
   regionName?: string;
   gatewayTargetRegions?: GatewayTarget[];
   activeEvents?: ActiveEvent[];
-  onSelectUnitForNavigation?: (unit: NavigableUnit) => void;
-  onJumpToRegion?: (regionId: string) => void;
   onClose: () => void;
 }
 
@@ -34,12 +30,9 @@ export function SystemDetailPanel({
   system,
   shipsHere,
   convoysHere,
-  currentTick,
   regionName,
   gatewayTargetRegions,
   activeEvents,
-  onSelectUnitForNavigation,
-  onJumpToRegion,
   onClose,
 }: SystemDetailPanelProps) {
   if (!system) return null;
@@ -92,27 +85,16 @@ export function SystemDetailPanel({
         )}
 
         {/* Connected regions (gateway only) */}
-        {gatewayTargetRegions && gatewayTargetRegions.length > 0 && onJumpToRegion && (
+        {gatewayTargetRegions && gatewayTargetRegions.length > 0 && (
           <div>
             <SectionHeader className="mb-2">
               Connected Regions
             </SectionHeader>
             <div className="space-y-1.5">
               {gatewayTargetRegions.map((target) => (
-                <Button
-                  key={target.regionId}
-                  variant="ghost"
-                  fullWidth
-                  onClick={() => onJumpToRegion(target.regionId)}
-                  className="justify-between bg-amber-500/10 hover:bg-amber-500/20 text-left"
-                >
-                  <span className="text-sm text-amber-200">
-                    Jump to {target.regionName}
-                  </span>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-amber-400">
-                    <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-                  </svg>
-                </Button>
+                <p key={target.regionId} className="text-sm text-amber-200">
+                  {target.regionName}
+                </p>
               ))}
             </div>
           </div>

@@ -13,7 +13,7 @@ export class ConnectionObject extends Container {
   private line: Graphics;
   private labelBg: Graphics;
   private fuelLabel: Text;
-  private isRegionConnection = false;
+  private hasFuelLabel = false;
 
   constructor() {
     super();
@@ -35,13 +35,11 @@ export class ConnectionObject extends Container {
     fromY: number,
     toX: number,
     toY: number,
-    isRegion = false,
   ) {
     this.connectionId = data.id;
-    this.isRegionConnection = isRegion;
 
     // Pick edge style
-    const style = isRegion
+    const style = data.isGateway
       ? EDGE.region
       : data.isRoute
         ? EDGE.route
@@ -51,8 +49,8 @@ export class ConnectionObject extends Container {
 
     this.line.clear();
 
-    if (data.isRoute || isRegion) {
-      // Solid line for route and region connections
+    if (data.isRoute || data.isGateway) {
+      // Solid line for route and gateway connections
       this.line.moveTo(fromX, fromY);
       this.line.lineTo(toX, toY);
       this.line.stroke({ color: style.color, width: style.width, alpha: style.alpha });
@@ -61,15 +59,14 @@ export class ConnectionObject extends Container {
       drawDashedLine(this.line, fromX, fromY, toX, toY, style.color, style.alpha, style.width);
     }
 
-    // Fuel label at midpoint (only for system connections)
-    if (!isRegion && data.fuelCost > 0) {
+    // Fuel label at midpoint
+    if (data.fuelCost > 0) {
       const mx = (fromX + toX) / 2;
       const my = (fromY + toY) / 2;
 
       this.fuelLabel.text = `${data.fuelCost} fuel`;
       this.fuelLabel.position.set(mx, my);
       this.fuelLabel.style.fill = data.isRoute ? 0x63b3ed : TEXT_COLORS.secondary;
-      this.fuelLabel.visible = true;
 
       // Background rectangle behind label
       const w = this.fuelLabel.width + 8;
@@ -77,10 +74,22 @@ export class ConnectionObject extends Container {
       this.labelBg.clear();
       this.labelBg.roundRect(mx - w / 2, my - h / 2, w, h, 4);
       this.labelBg.fill({ color: 0x0f172a, alpha: 0.8 });
-      this.labelBg.visible = true;
+      this.hasFuelLabel = true;
     } else {
+      this.hasFuelLabel = false;
       this.fuelLabel.visible = false;
       this.labelBg.visible = false;
+    }
+  }
+
+  /** Control fuel label visibility based on LOD */
+  setFuelLabelVisible(show: boolean, alpha: number) {
+    if (!this.hasFuelLabel) return;
+    this.fuelLabel.visible = show;
+    this.labelBg.visible = show;
+    if (show) {
+      this.fuelLabel.alpha = alpha;
+      this.labelBg.alpha = alpha;
     }
   }
 }

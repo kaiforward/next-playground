@@ -4,10 +4,10 @@
  */
 
 import { calculatePrice } from "@/lib/engine/pricing";
-import { hopDuration } from "@/lib/engine/travel";
+
 import { findShortestPathCached } from "./pathfinding-cache";
 import type { TradeStrategy } from "./strategies/types";
-import type { SimWorld, SimPlayer, SimShip, SimMarketEntry, SimRunContext, TickMetrics, GoodTradeRecord } from "./types";
+import type { SimWorld, SimRunContext, TickMetrics, GoodTradeRecord } from "./types";
 import { recordTickMetrics } from "./metrics";
 
 interface BotTickResult {

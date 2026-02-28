@@ -32,18 +32,33 @@ export class EffectLayer {
     this.container.addChild(this.particleContainer);
   }
 
-  /** Sync route particles: only show on route edges */
-  syncRoute(connections: ConnectionData[], systems: SystemNodeData[]) {
+  /** Sync route particles: only show on route edges, flowing in travel direction */
+  syncRoute(connections: ConnectionData[], systems: SystemNodeData[], routePath?: string[]) {
     // Clear old particles
     this.clearParticles();
 
     const posMap = new Map<string, { x: number; y: number }>();
     for (const s of systems) posMap.set(s.id, { x: s.x, y: s.y });
 
+    // Build direction map from the ordered route path
+    const directionMap = new Map<string, { fromId: string; toId: string }>();
+    if (routePath) {
+      for (let i = 0; i < routePath.length - 1; i++) {
+        const key = [routePath[i], routePath[i + 1]].sort().join("--");
+        directionMap.set(key, { fromId: routePath[i], toId: routePath[i + 1] });
+      }
+    }
+
     const routeEdges = connections.filter((c) => c.isRoute);
     for (const edge of routeEdges) {
-      const from = posMap.get(edge.fromId);
-      const to = posMap.get(edge.toId);
+      // Use route direction if available, otherwise fall back to connection order
+      const pairKey = [edge.fromId, edge.toId].sort().join("--");
+      const dir = directionMap.get(pairKey);
+      const fromId = dir ? dir.fromId : edge.fromId;
+      const toId = dir ? dir.toId : edge.toId;
+
+      const from = posMap.get(fromId);
+      const to = posMap.get(toId);
       if (!from || !to) continue;
 
       const dx = to.x - from.x;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { hopDuration } from "@/lib/engine/travel";
-import { REFERENCE_SPEED, SHIP_TYPES } from "@/lib/constants/ships";
+import { SHIP_TYPES } from "@/lib/constants/ships";
 
 describe("hopDuration", () => {
   it("backward compatible: no speed args returns fuelCost/2 rounded up", () => {
@@ -47,7 +47,6 @@ describe("hopDuration", () => {
 
   it("custom reference speed works correctly", () => {
     // With referenceSpeed=10 and shipSpeed=5, travel should take 2x base
-    const base = hopDuration(10); // 5 ticks
     const doubled = hopDuration(10, 5, 10); // ceil(5 * 10/5) = 10
     expect(doubled).toBe(10);
   });

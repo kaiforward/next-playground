@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { processors, sortProcessors } from "@/lib/tick/registry";
-import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
+import type { TickContext } from "@/lib/tick/types";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
 import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";

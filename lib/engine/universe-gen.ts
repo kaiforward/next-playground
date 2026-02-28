@@ -49,13 +49,15 @@ export interface GeneratedUniverse {
 export interface GenParams {
   seed: number;
   regionCount: number;
-  systemsPerRegion: number;
+  totalSystems: number;
   mapSize: number;
+  mapPadding: number;
+  poissonMinDistance: number;
+  poissonKCandidates: number;
   regionMinDistance: number;
-  systemScatterRadius: number;
-  systemMinDistance: number;
   extraEdgeFraction: number;
   gatewayFuelMultiplier: number;
+  gatewaysPerBorder: number;
   intraRegionBaseFuel: number;
   maxPlacementAttempts: number;
 }
@@ -146,8 +148,8 @@ export function generateRegions(
   params: GenParams,
   names: string[],
 ): GeneratedRegion[] {
-  const { regionCount, mapSize, regionMinDistance, maxPlacementAttempts } = params;
-  const padding = mapSize * 0.15;
+  const { regionCount, mapSize, mapPadding, regionMinDistance, maxPlacementAttempts } = params;
+  const padding = mapSize * mapPadding;
   const regions: GeneratedRegion[] = [];
 
   // Track used names to avoid duplicates
@@ -237,6 +239,129 @@ export function generateRegions(
   return regions;
 }
 
+// ── Bridson's Poisson disk sampling ─────────────────────────────
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * Bridson's algorithm for Poisson disk sampling.
+ * O(n) — generates well-spaced points with guaranteed minimum distance.
+ * Uses a seeded RNG for determinism.
+ */
+export function bridsonSample(
+  rng: RNG,
+  width: number,
+  height: number,
+  minDistance: number,
+  kCandidates: number,
+  padding: number,
+  maxPoints: number,
+): Point[] {
+  const cellSize = minDistance / Math.SQRT2;
+  const innerW = width - 2 * padding;
+  const innerH = height - 2 * padding;
+  const gridW = Math.ceil(innerW / cellSize);
+  const gridH = Math.ceil(innerH / cellSize);
+  const grid: (number | null)[] = new Array(gridW * gridH).fill(null);
+  const points: Point[] = [];
+  const active: number[] = [];
+
+  function gridIndex(x: number, y: number): number {
+    const col = Math.floor((x - padding) / cellSize);
+    const row = Math.floor((y - padding) / cellSize);
+    return row * gridW + col;
+  }
+
+  function inBounds(x: number, y: number): boolean {
+    return x >= padding && x < width - padding && y >= padding && y < height - padding;
+  }
+
+  function tooClose(x: number, y: number): boolean {
+    const col = Math.floor((x - padding) / cellSize);
+    const row = Math.floor((y - padding) / cellSize);
+    // Check 5x5 neighborhood
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        const r2 = row + dr;
+        const c2 = col + dc;
+        if (r2 < 0 || r2 >= gridH || c2 < 0 || c2 >= gridW) continue;
+        const idx = grid[r2 * gridW + c2];
+        if (idx === null) continue;
+        const p = points[idx];
+        if (distance(x, y, p.x, p.y) < minDistance) return true;
+      }
+    }
+    return false;
+  }
+
+  // Seed with first point
+  const x0 = padding + rng() * innerW;
+  const y0 = padding + rng() * innerH;
+  points.push({ x: x0, y: y0 });
+  grid[gridIndex(x0, y0)] = 0;
+  active.push(0);
+
+  while (active.length > 0 && points.length < maxPoints) {
+    // Pick a random active point
+    const activeIdx = Math.floor(rng() * active.length);
+    const ptIdx = active[activeIdx];
+    const pt = points[ptIdx];
+    let found = false;
+
+    for (let k = 0; k < kCandidates; k++) {
+      // Random point in annulus [minDistance, 2*minDistance]
+      const angle = rng() * Math.PI * 2;
+      const r = minDistance + rng() * minDistance;
+      const cx = pt.x + Math.cos(angle) * r;
+      const cy = pt.y + Math.sin(angle) * r;
+
+      if (!inBounds(cx, cy) || tooClose(cx, cy)) continue;
+
+      const newIdx = points.length;
+      points.push({ x: cx, y: cy });
+      grid[gridIndex(cx, cy)] = newIdx;
+      active.push(newIdx);
+      found = true;
+
+      if (points.length >= maxPoints) break;
+    }
+
+    if (!found) {
+      // Remove from active list (swap with last for O(1))
+      active[activeIdx] = active[active.length - 1];
+      active.pop();
+    }
+  }
+
+  return points;
+}
+
+// ── Voronoi region assignment ───────────────────────────────────
+
+/**
+ * Assign each system to its nearest region center (Voronoi partition).
+ */
+export function assignRegions(
+  points: Point[],
+  regionCenters: GeneratedRegion[],
+): number[] {
+  return points.map((p) => {
+    let bestIdx = 0;
+    let bestDist = distance(p.x, p.y, regionCenters[0].x, regionCenters[0].y);
+    for (let i = 1; i < regionCenters.length; i++) {
+      const d = distance(p.x, p.y, regionCenters[i].x, regionCenters[i].y);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  });
+}
+
 // ── System generation ───────────────────────────────────────────
 
 export function generateSystems(
@@ -244,72 +369,39 @@ export function generateSystems(
   regions: GeneratedRegion[],
   params: GenParams,
 ): GeneratedSystem[] {
-  const { systemsPerRegion, systemScatterRadius, systemMinDistance, maxPlacementAttempts } = params;
+  const { totalSystems, mapSize, mapPadding, poissonMinDistance, poissonKCandidates } = params;
+  const padding = mapSize * mapPadding;
+
+  // Step 1: Scatter all systems uniformly via Poisson disk sampling
+  const points = bridsonSample(
+    rng, mapSize, mapSize, poissonMinDistance, poissonKCandidates, padding, totalSystems,
+  );
+
+  // Step 2: Assign each point to its nearest region center
+  const regionAssignments = assignRegions(points, regions);
+
+  // Track per-region system count for naming
+  const regionLocalCount: number[] = new Array(regions.length).fill(0);
+
+  // Step 3: Build GeneratedSystem for each point
   const systems: GeneratedSystem[] = [];
-  let globalIndex = 0;
+  for (let i = 0; i < points.length; i++) {
+    const traits = generateSystemTraits(rng);
+    const economyType = deriveEconomyType(traits, rng);
+    const regionIndex = regionAssignments[i];
+    const localIndex = regionLocalCount[regionIndex]++;
 
-  for (const region of regions) {
-    const regionSystems: GeneratedSystem[] = [];
-    let localIndex = 0;
-
-    for (let s = 0; s < systemsPerRegion; s++) {
-      const traits = generateSystemTraits(rng);
-      const economyType = deriveEconomyType(traits, rng);
-
-      let placed = false;
-      for (let attempt = 0; attempt < maxPlacementAttempts; attempt++) {
-        // Random point within scatter radius (uniform in circle via rejection)
-        const dx = (rng() * 2 - 1) * systemScatterRadius;
-        const dy = (rng() * 2 - 1) * systemScatterRadius;
-        if (dx * dx + dy * dy > systemScatterRadius * systemScatterRadius) continue;
-
-        const x = region.x + dx;
-        const y = region.y + dy;
-
-        const tooClose = regionSystems.some(
-          (sys) => distance(x, y, sys.x, sys.y) < systemMinDistance,
-        );
-        if (tooClose) continue;
-
-        regionSystems.push({
-          index: globalIndex,
-          name: `${region.name}-${localIndex + 1}`,
-          economyType,
-          traits,
-          x,
-          y,
-          regionIndex: region.index,
-          isGateway: false,
-          description: "",
-        });
-        localIndex++;
-        globalIndex++;
-        placed = true;
-        break;
-      }
-
-      // If we couldn't place, just skip (rare with proper params)
-      if (!placed) {
-        // Force-place with jitter to not lose systems
-        const angle = (s / systemsPerRegion) * Math.PI * 2;
-        const r = systemScatterRadius * 0.5 + rng() * systemScatterRadius * 0.4;
-        regionSystems.push({
-          index: globalIndex,
-          name: `${region.name}-${localIndex + 1}`,
-          economyType,
-          traits,
-          x: region.x + Math.cos(angle) * r,
-          y: region.y + Math.sin(angle) * r,
-          regionIndex: region.index,
-          isGateway: false,
-          description: "",
-        });
-        localIndex++;
-        globalIndex++;
-      }
-    }
-
-    systems.push(...regionSystems);
+    systems.push({
+      index: i,
+      name: `${regions[regionIndex].name}-${localIndex + 1}`,
+      economyType,
+      traits,
+      x: points[i].x,
+      y: points[i].y,
+      regionIndex,
+      isGateway: false,
+      description: "",
+    });
   }
 
   return systems;
@@ -362,7 +454,7 @@ export function generateConnections(
   regions: GeneratedRegion[],
   params: GenParams,
 ): { connections: GeneratedConnection[]; systems: GeneratedSystem[] } {
-  const { extraEdgeFraction, gatewayFuelMultiplier, intraRegionBaseFuel } = params;
+  const { extraEdgeFraction, gatewayFuelMultiplier, gatewaysPerBorder, intraRegionBaseFuel } = params;
   const connections: GeneratedConnection[] = [];
 
   // Group systems by region
@@ -374,6 +466,20 @@ export function generateConnections(
     regionSystems.get(sys.regionIndex)!.push(sys);
   }
 
+  // Compute average intra-region distance for fuel normalization
+  // (replaces the old fixed systemScatterRadius divisor)
+  let totalIntraDist = 0;
+  let totalIntraEdges = 0;
+  for (const [, regionSys] of regionSystems) {
+    if (regionSys.length < 2) continue;
+    const mst = kruskalMST(regionSys);
+    for (const e of mst) {
+      totalIntraDist += e.dist;
+      totalIntraEdges++;
+    }
+  }
+  const avgIntraDist = totalIntraEdges > 0 ? totalIntraDist / totalIntraEdges : params.poissonMinDistance;
+
   // ── Phase 1: Intra-region connections ──
   for (const [, regionSys] of regionSystems) {
     if (regionSys.length < 2) continue;
@@ -383,7 +489,7 @@ export function generateConnections(
     // MST edges (guaranteed connectivity)
     for (const edge of mstEdges) {
       const fuel = Math.round(
-        (edge.dist / params.systemScatterRadius) * intraRegionBaseFuel * 10,
+        (edge.dist / avgIntraDist) * intraRegionBaseFuel * 10,
       ) / 10;
       // Bidirectional
       connections.push({
@@ -431,7 +537,7 @@ export function generateConnections(
       picked.add(idx);
       const edge = pool[idx];
       const fuel = Math.round(
-        (edge.dist / params.systemScatterRadius) * intraRegionBaseFuel * 10,
+        (edge.dist / avgIntraDist) * intraRegionBaseFuel * 10,
       ) / 10;
       connections.push({
         fromSystemIndex: regionSys[edge.a].index,
@@ -488,44 +594,50 @@ export function generateConnections(
     const sysA = systemsByRegion.get(regionA.index) ?? [];
     const sysB = systemsByRegion.get(regionB.index) ?? [];
 
-    // Find the closest pair of border systems between the two regions
-    let bestDist = Infinity;
-    let bestA: GeneratedSystem | null = null;
-    let bestB: GeneratedSystem | null = null;
-
+    // Build all cross-region pairs sorted by distance
+    const crossPairs: { sa: GeneratedSystem; sb: GeneratedSystem; dist: number }[] = [];
     for (const sa of sysA) {
       for (const sb of sysB) {
-        const d = distance(sa.x, sa.y, sb.x, sb.y);
-        if (d < bestDist) {
-          bestDist = d;
-          bestA = sa;
-          bestB = sb;
-        }
+        crossPairs.push({ sa, sb, dist: distance(sa.x, sa.y, sb.x, sb.y) });
       }
     }
+    crossPairs.sort((a, b) => a.dist - b.dist);
 
-    if (!bestA || !bestB) continue;
+    // Pick up to gatewaysPerBorder pairs, ensuring distinct systems on each side
+    // so crossing points are geographically spread out
+    const usedA = new Set<number>();
+    const usedB = new Set<number>();
+    let picked = 0;
 
-    // Mark as gateways
-    bestA.isGateway = true;
-    bestB.isGateway = true;
+    for (const cp of crossPairs) {
+      if (picked >= gatewaysPerBorder) break;
+      if (usedA.has(cp.sa.index) || usedB.has(cp.sb.index)) continue;
 
-    // Inter-region connection with higher fuel cost
-    const fuel = Math.round(
-      (bestDist / params.systemScatterRadius) * intraRegionBaseFuel * gatewayFuelMultiplier * 10,
-    ) / 10;
-    connections.push({
-      fromSystemIndex: bestA.index,
-      toSystemIndex: bestB.index,
-      fuelCost: Math.max(1, fuel),
-      isGateway: true,
-    });
-    connections.push({
-      fromSystemIndex: bestB.index,
-      toSystemIndex: bestA.index,
-      fuelCost: Math.max(1, fuel),
-      isGateway: true,
-    });
+      usedA.add(cp.sa.index);
+      usedB.add(cp.sb.index);
+      picked++;
+
+      // Mark as gateways
+      cp.sa.isGateway = true;
+      cp.sb.isGateway = true;
+
+      // Inter-region connection with higher fuel cost
+      const fuel = Math.round(
+        (cp.dist / avgIntraDist) * intraRegionBaseFuel * gatewayFuelMultiplier * 10,
+      ) / 10;
+      connections.push({
+        fromSystemIndex: cp.sa.index,
+        toSystemIndex: cp.sb.index,
+        fuelCost: Math.max(1, fuel),
+        isGateway: true,
+      });
+      connections.push({
+        fromSystemIndex: cp.sb.index,
+        toSystemIndex: cp.sa.index,
+        fuelCost: Math.max(1, fuel),
+        isGateway: true,
+      });
+    }
   }
 
   return { connections, systems: updatedSystems };

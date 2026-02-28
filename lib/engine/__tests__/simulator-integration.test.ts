@@ -5,7 +5,7 @@ import { runSimulation } from "../simulator/runner";
 import { DEFAULT_SIM_CONSTANTS } from "../simulator/constants";
 import { mulberry32 } from "../universe-gen";
 import { calculatePrice } from "../pricing";
-import type { SimConfig, SimRunContext, SimWorld } from "../simulator/types";
+import type { SimConfig, SimRunContext } from "../simulator/types";
 
 /** Build a default SimRunContext for tests. */
 function defaultCtx(overrides?: Partial<SimRunContext>): SimRunContext {

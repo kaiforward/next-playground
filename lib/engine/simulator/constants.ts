@@ -64,9 +64,10 @@ export interface SimConstants {
   ships: Record<string, { fuel: number; cargo: number; speed: number; hullMax: number; shieldMax: number; firepower: number; evasion: number; stealth: number; price: number }>;
   universe: {
     regionCount: number;
-    systemsPerRegion: number;
+    totalSystems: number;
     intraRegionBaseFuel: number;
     gatewayFuelMultiplier: number;
+    gatewaysPerBorder: number;
     intraRegionExtraEdges: number;
   };
   bots: {
@@ -159,9 +160,10 @@ function buildDefaults(): SimConstants {
     ships,
     universe: {
       regionCount: UNIVERSE_GEN.REGION_COUNT,
-      systemsPerRegion: UNIVERSE_GEN.SYSTEMS_PER_REGION,
+      totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
       intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
       gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
+      gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
       intraRegionExtraEdges: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     },
     bots: {

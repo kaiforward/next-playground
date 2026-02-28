@@ -32,8 +32,8 @@ function MarketContent({ systemId }: { systemId: string }) {
   const { convoys } = useConvoys();
 
   // Build initial selection from query params
-  const initialShipId = searchParams.get("shipId");
-  const initialConvoyId = searchParams.get("convoyId");
+  const initialShipId = searchParams.get("tradeShipId");
+  const initialConvoyId = searchParams.get("tradeConvoyId");
   const initialRef: FleetUnitRef | null = initialShipId
     ? { kind: "ship", id: initialShipId }
     : initialConvoyId

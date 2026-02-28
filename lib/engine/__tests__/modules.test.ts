@@ -6,7 +6,6 @@ import {
   isModuleId,
   getModuleBonus,
   getModuleCost,
-  type ModuleId,
 } from "@/lib/constants/modules";
 import type { UpgradeSlotType } from "@/lib/constants/ships";
 

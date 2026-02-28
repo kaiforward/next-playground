@@ -194,7 +194,8 @@ export class Camera {
 
   private onWheel(e: WheelEvent) {
     e.preventDefault();
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    if (!(e.target instanceof HTMLElement)) return;
+    const rect = e.target.getBoundingClientRect();
     this.zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY);
   }
 

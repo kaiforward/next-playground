@@ -4,7 +4,7 @@ import type { BattleInfo } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import { formatCredits } from "@/lib/utils/format";
+
 
 interface BattleViewerProps {
   battle: BattleInfo;

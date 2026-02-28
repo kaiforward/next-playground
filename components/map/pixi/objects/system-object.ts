@@ -1,6 +1,7 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, ANIM, TEXT_RESOLUTION } from "../theme";
+import type { LODState } from "../lod";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -176,6 +177,30 @@ export class SystemObject extends Container {
       this.currentEventTypes = eventTypes.split(",").filter(Boolean);
       this.drawEventDots(data.activeEvents, data.navigationState);
     }
+  }
+
+  /** Apply LOD-based visibility. Called per frame from layer. */
+  setLOD(lod: LODState) {
+    this.nameLabel.visible = lod.showSystemNames;
+    this.nameLabel.alpha = lod.systemNameAlpha;
+
+    this.econLabel.visible = lod.showEconomyLabels;
+    this.econLabel.alpha = lod.detailAlpha;
+
+    if (this.currentShipCount > 0) {
+      this.shipLabel.visible = lod.showShipLabels;
+      this.shipLabel.alpha = lod.detailAlpha;
+    }
+
+    this.glow.visible = lod.showGlow;
+
+    this.eventDots.visible = lod.showEventDots;
+    this.eventDots.alpha = lod.eventDotAlpha;
+
+    // Scale core + highlight by LOD
+    this.core.scale.set(lod.systemDotScale);
+    this.highlight.scale.set(lod.systemDotScale);
+    this.navigationRing.scale.set(lod.systemDotScale);
   }
 
   private updateNavigationVisuals(

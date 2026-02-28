@@ -87,9 +87,10 @@ describe("SimConstants", () => {
     it("universe matches UNIVERSE_GEN", () => {
       const c = resolveConstants();
       expect(c.universe.regionCount).toBe(UNIVERSE_GEN.REGION_COUNT);
-      expect(c.universe.systemsPerRegion).toBe(UNIVERSE_GEN.SYSTEMS_PER_REGION);
+      expect(c.universe.totalSystems).toBe(UNIVERSE_GEN.TOTAL_SYSTEMS);
       expect(c.universe.intraRegionBaseFuel).toBe(UNIVERSE_GEN.INTRA_REGION_BASE_FUEL);
       expect(c.universe.gatewayFuelMultiplier).toBe(UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER);
+      expect(c.universe.gatewaysPerBorder).toBe(UNIVERSE_GEN.GATEWAYS_PER_BORDER);
       expect(c.universe.intraRegionExtraEdges).toBe(UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES);
     });
 
