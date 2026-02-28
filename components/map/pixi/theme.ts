@@ -3,12 +3,12 @@ import type { EconomyType } from "@/lib/types/game";
 // ── Economy colors (WebGL hex) ───────────────────────────────────
 
 export const ECONOMY_COLORS: Record<EconomyType, { core: number; glow: number }> = {
-  agricultural: { core: 0x4ade80, glow: 0x22c55e },
-  industrial:   { core: 0xf97316, glow: 0xea580c },
-  tech:         { core: 0x3b82f6, glow: 0x2563eb },
-  extraction:   { core: 0xa78bfa, glow: 0x7c3aed },
-  core:         { core: 0xfbbf24, glow: 0xd97706 },
-  refinery:     { core: 0xf472b6, glow: 0xdb2777 },
+  agricultural: { core: 0x86efac, glow: 0x22c55e },  // green-300 / green-500
+  extraction:   { core: 0xfcd34d, glow: 0xf59e0b },  // amber-300 / amber-500
+  refinery:     { core: 0x67e8f9, glow: 0x06b6d4 },  // cyan-300 / cyan-500
+  industrial:   { core: 0xcbd5e1, glow: 0x94a3b8 },  // slate-300 / slate-400
+  tech:         { core: 0x93c5fd, glow: 0x3b82f6 },  // blue-300 / blue-500
+  core:         { core: 0xd8b4fe, glow: 0xa855f7 },  // purple-300 / purple-500
 };
 
 // ── Navigation state colors ──────────────────────────────────────
