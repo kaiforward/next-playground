@@ -34,8 +34,6 @@ export async function repairShip(
     return { ok: false, error: "Ship hull is already at maximum.", status: 400 };
   }
 
-  const { totalCost } = calculateRepairCost(ship.hullMax, ship.hullCurrent);
-
   const result = await prisma.$transaction(async (tx) => {
     const freshShip = await tx.ship.findUnique({
       where: { id: shipId },

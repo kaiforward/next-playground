@@ -61,9 +61,10 @@ const ConstantOverridesSchema = z.object({
   })).optional(),
   universe: z.object({
     regionCount: z.number().int().min(1).optional(),
-    systemsPerRegion: z.number().int().min(1).optional(),
+    totalSystems: z.number().int().min(1).optional(),
     intraRegionBaseFuel: z.number().optional(),
     gatewayFuelMultiplier: z.number().optional(),
+    gatewaysPerBorder: z.number().int().min(1).optional(),
     intraRegionExtraEdges: z.number().optional(),
   }).optional(),
   bots: z.object({

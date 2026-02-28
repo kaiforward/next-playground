@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createGame, startGame, advancePhase, getDeclaredTotal } from "../game";
 import { declare, passCall } from "../actions";
-import { chooseDeclaration, chooseCallDecision } from "../ai";
+import { chooseDeclaration } from "../ai";
 import type { GameState } from "../types";
 import { MAX_ROUNDS, HAND_SIZE } from "../constants";
 

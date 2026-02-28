@@ -9,10 +9,6 @@ import {
 
 // ── Types ───────────────────────────────────────────────────────
 
-export type MapViewLevel =
-  | { level: "region" }
-  | { level: "system"; regionId: string };
-
 interface UseMapViewStateOptions {
   universe: UniverseData;
   ships: ShipState[];
@@ -22,14 +18,10 @@ interface UseMapViewStateOptions {
 }
 
 export interface MapViewState {
-  viewLevel: MapViewLevel;
   selectedSystem: StarSystemInfo | null;
   mapReady: boolean;
-  drillIntoRegion: (regionId: string) => void;
   selectSystem: (system: StarSystemInfo) => void;
   closeSystem: () => void;
-  backToRegions: () => void;
-  jumpToRegion: (regionId: string) => void;
   setMapReady: () => void;
   needsInitialCenter: boolean;
   initialSelectedSystem: StarSystemInfo | null;
@@ -39,14 +31,10 @@ export interface MapViewState {
 
 export function useMapViewState({
   universe,
-  ships,
-  systemRegionMap,
-  initialSelectedShipId,
   initialSelectedSystemId,
 }: UseMapViewStateOptions): MapViewState {
   // Mount priority chain: query param → session storage → ship fallback
   const initialState = useMemo((): {
-    viewLevel: MapViewLevel;
     selectedSystem: StarSystemInfo | null;
   } => {
     // 1. Query param — highest priority
@@ -55,50 +43,24 @@ export function useMapViewState({
         (s) => s.id === initialSelectedSystemId,
       );
       if (system) {
-        return {
-          viewLevel: { level: "system", regionId: system.regionId },
-          selectedSystem: system,
-        };
+        return { selectedSystem: system };
       }
     }
 
     // 2. Session storage — middle priority
     const session = getMapSessionState();
-    if (session?.regionId) {
-      const region = universe.regions.find((r) => r.id === session.regionId);
-      if (region) {
-        const selectedSystem = session.selectedSystemId
-          ? (universe.systems.find((s) => s.id === session.selectedSystemId) ??
-            null)
-          : null;
-        return {
-          viewLevel: { level: "system", regionId: session.regionId },
-          selectedSystem,
-        };
-      }
+    if (session?.selectedSystemId) {
+      const selectedSystem = universe.systems.find(
+        (s) => s.id === session.selectedSystemId,
+      ) ?? null;
+      return { selectedSystem };
     }
 
-    // 3. Ship-based fallback — lowest priority
-    const dockedShip = initialSelectedShipId
-      ? ships.find(
-          (s) => s.id === initialSelectedShipId && s.status === "docked",
-        )
-      : ships.find((s) => s.status === "docked");
-
-    if (dockedShip) {
-      const regionId = systemRegionMap.get(dockedShip.systemId);
-      if (regionId)
-        return { viewLevel: { level: "system", regionId }, selectedSystem: null };
-    }
-
-    return { viewLevel: { level: "region" }, selectedSystem: null };
+    return { selectedSystem: null };
     // Only compute on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [viewLevel, setViewLevel] = useState<MapViewLevel>(
-    initialState.viewLevel,
-  );
   const [selectedSystem, setSelectedSystem] = useState<StarSystemInfo | null>(
     initialState.selectedSystem,
   );
@@ -109,41 +71,17 @@ export function useMapViewState({
 
   // ── Named actions (encapsulate session writes) ────────────────
 
-  const drillIntoRegion = useCallback((regionId: string) => {
-    setViewLevel({ level: "system", regionId });
-    setMapSessionState({ regionId });
-  }, []);
-
   const selectSystem = useCallback(
     (system: StarSystemInfo) => {
       setSelectedSystem(system);
-      if (viewLevel.level === "system") {
-        setMapSessionState({
-          regionId: viewLevel.regionId,
-          selectedSystemId: system.id,
-        });
-      }
+      setMapSessionState({ selectedSystemId: system.id });
     },
-    [viewLevel],
+    [],
   );
 
   const closeSystem = useCallback(() => {
     setSelectedSystem(null);
-    if (viewLevel.level === "system") {
-      setMapSessionState({ regionId: viewLevel.regionId });
-    }
-  }, [viewLevel]);
-
-  const backToRegions = useCallback(() => {
-    setSelectedSystem(null);
-    setViewLevel({ level: "region" });
     setMapSessionState(null);
-  }, []);
-
-  const jumpToRegion = useCallback((regionId: string) => {
-    setSelectedSystem(null);
-    setViewLevel({ level: "system", regionId });
-    setMapSessionState({ regionId });
   }, []);
 
   const setMapReady = useCallback(() => {
@@ -155,14 +93,10 @@ export function useMapViewState({
   );
 
   return {
-    viewLevel,
     selectedSystem,
     mapReady,
-    drillIntoRegion,
     selectSystem,
     closeSystem,
-    backToRegions,
-    jumpToRegion,
     setMapReady,
     needsInitialCenter,
     initialSelectedSystem: initialState.selectedSystem,

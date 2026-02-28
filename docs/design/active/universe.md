@@ -69,19 +69,23 @@ Each system has:
 
 ## Map Display
 
-### Dual-Level View
+### Flat Rendering with LOD
 
-**Region View (default)**:
-- 24 region nodes at their coordinates, neutral slate palette
-- Shows: region name, dominant economy (coloured EconomyBadge), system count, docked ship count
-- Inter-region connections shown as dashed lines
-- Click a region to drill into system view
+All ~600 systems render simultaneously on a WebGL canvas (Pixi.js). A level-of-detail (LOD) engine controls visibility based on camera zoom, with smooth alpha transitions between thresholds:
 
-**System View (filtered to one region)**:
-- 25 systems displayed at their coordinates, neutral node styling
-- Shows: system name, economy type (EconomyBadge), docked ship count, active event badges
-- Intra-region connections with fuel cost labels
-- Click a system for full detail page
+**Zoomed out (overview)**:
+- System dots always visible, scaled smaller at low zoom
+- Voronoi-derived region boundaries drawn where adjacent systems belong to different regions
+- Large region name labels at each region's centroid
+- Gateway connections shown as thicker solid lines; intra-region connections as dashed lines
+
+**Zoomed in (detail)**:
+- Region boundaries and labels fade out
+- System names fade in, then economy badges, ship counts, fuel cost labels, and event indicators
+- Glow effects and particle animations appear at close zoom
+- Click a system for detail panel / full detail page
+
+**Performance**: Frustum culling hides off-screen systems and connections each frame. Only visible objects are rendered.
 
 ### Map Side Panel
 
@@ -98,7 +102,7 @@ When planning a route:
 - **Route preview**: Selected path highlighted with estimated fuel cost and travel duration
 
 ### State Persistence
-- Last viewed region and selected system stored in session
+- Selected system and camera position stored in session
 - URL params allow direct linking (`?systemId=abc`)
 
 ---

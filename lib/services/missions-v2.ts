@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
-import { MISSION_TYPE_DEFS, OP_MISSION_CONSTANTS, type StatGateKey } from "@/lib/constants/missions";
+import { OP_MISSION_CONSTANTS, type StatGateKey } from "@/lib/constants/missions";
 import { COMBAT_CONSTANTS, getEnemyTier } from "@/lib/constants/combat";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";

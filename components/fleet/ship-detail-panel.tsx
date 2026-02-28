@@ -200,7 +200,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
           {!ship.disabled && !onMission && (
             <>
               <Button
-                href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
+                href={`/system/${ship.systemId}/market?tradeShipId=${ship.id}`}
                 variant="action"
                 color="green"
                 className="flex-1"
@@ -219,7 +219,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
                 </Button>
               ) : (
                 <Button
-                  href={`/?shipId=${ship.id}`}
+                  href={`/?navigateShipId=${ship.id}`}
                   variant="action"
                   color="indigo"
                   className="flex-1"

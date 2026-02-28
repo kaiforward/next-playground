@@ -37,7 +37,6 @@ interface UseNavigationStateOptions {
 
 export function useNavigationState({
   connections,
-  systems,
   onNavigateShip,
   onNavigateConvoy,
 }: UseNavigationStateOptions) {

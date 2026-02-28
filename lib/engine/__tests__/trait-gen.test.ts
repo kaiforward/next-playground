@@ -217,7 +217,6 @@ describe("deriveEconomyType", () => {
   });
 
   it("quality multiplies strong affinity scores", () => {
-    const rng = makeRng();
     // habitable_world has agricultural: 2 (strong), core: 2 (strong)
     // At quality 1: agri = 1, core = 1 — tie, resolved by RNG
     // At quality 3: agri = 3, core = 3 — still a tie

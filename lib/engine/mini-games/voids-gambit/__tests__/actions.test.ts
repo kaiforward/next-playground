@@ -130,41 +130,6 @@ describe("declare", () => {
 });
 
 describe("callOpponent", () => {
-  function setupCallPhase(
-    playerCard: Card,
-    playerDecl: { suit: string; value: number },
-    npcCard: Card,
-    npcDecl: { suit: string; value: number },
-  ): GameState {
-    let state = setupGame(123);
-    const demand = state.currentDemand!;
-
-    // Override hands to control what cards are played
-    state = {
-      ...state,
-      player: { ...state.player, hand: [playerCard, ...state.player.hand.slice(1)] },
-      npc: { ...state.npc, hand: [npcCard, ...state.npc.hand.slice(1)] },
-    };
-
-    // Player declares
-    let result = declare(state, playerCard.id, {
-      suit: demand,
-      value: playerDecl.value,
-    });
-    if (!result.ok) throw new Error(result.error);
-    state = result.state;
-
-    // NPC declares
-    result = declare(state, npcCard.id, {
-      suit: demand,
-      value: npcDecl.value,
-    });
-    if (!result.ok) throw new Error(result.error);
-    state = result.state;
-
-    return state; // should be player_call phase
-  }
-
   it("catches a lie — card marked caught and liar penalized", () => {
     // NPC plays Raw 2 but declares it as demanded suit value 7
     let state = setupGame(123);

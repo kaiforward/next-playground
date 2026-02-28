@@ -29,7 +29,7 @@ interface OperationsPanelProps {
 export function OperationsPanel({
   available,
   active,
-  systemId,
+  systemId: _systemId,
   fleet,
   currentTick,
 }: OperationsPanelProps) {

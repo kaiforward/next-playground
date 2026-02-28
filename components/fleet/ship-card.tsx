@@ -125,7 +125,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
             <div className="flex items-center gap-2">
               {!ship.disabled && !onMission && (
                 <Button
-                  href={`/system/${ship.systemId}/market?shipId=${ship.id}`}
+                  href={`/system/${ship.systemId}/market?tradeShipId=${ship.id}`}
                   variant="action"
                   color="green"
                   size="sm"
@@ -135,7 +135,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
               )}
               {!ship.disabled && !ship.convoyId && !onMission && (
                 <Button
-                  href={`/?shipId=${ship.id}`}
+                  href={`/?navigateShipId=${ship.id}`}
                   variant="action"
                   color="indigo"
                   size="sm"

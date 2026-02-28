@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { ServiceError } from "./errors";
+
 import { computeAllHopDistances } from "@/lib/engine/pathfinding";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";

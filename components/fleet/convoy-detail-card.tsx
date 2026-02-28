@@ -153,7 +153,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
               <Button
-                href={`/system/${convoy.systemId}/market?convoyId=${convoy.id}`}
+                href={`/system/${convoy.systemId}/market?tradeConvoyId=${convoy.id}`}
                 variant="action"
                 color="green"
                 size="sm"
@@ -161,7 +161,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
                 Trade
               </Button>
               <Button
-                href={`/?convoyId=${convoy.id}`}
+                href={`/?navigateConvoyId=${convoy.id}`}
                 variant="action"
                 color="indigo"
                 size="sm"

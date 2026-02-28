@@ -26,13 +26,15 @@ function makeParams(seed: number): GenParams {
   return {
     seed,
     regionCount: UNIVERSE_GEN.REGION_COUNT,
-    systemsPerRegion: UNIVERSE_GEN.SYSTEMS_PER_REGION,
+    totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
     mapSize: UNIVERSE_GEN.MAP_SIZE,
+    mapPadding: UNIVERSE_GEN.MAP_PADDING,
+    poissonMinDistance: UNIVERSE_GEN.POISSON_MIN_DISTANCE,
+    poissonKCandidates: UNIVERSE_GEN.POISSON_K_CANDIDATES,
     regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
-    systemScatterRadius: UNIVERSE_GEN.SYSTEM_SCATTER_RADIUS,
-    systemMinDistance: UNIVERSE_GEN.SYSTEM_MIN_DISTANCE,
     extraEdgeFraction: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
+    gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
     intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
   };

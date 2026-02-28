@@ -16,7 +16,6 @@ import type {
   TraitId,
   TraitCategory,
   QualityTier,
-  SystemTraitInfo,
 } from "./game";
 
 // ── Responses ────────────────────────────────────────────────────

@@ -91,12 +91,6 @@ function applyShocksToMarkets(
   });
 }
 
-function generateId(world: { nextId: number }): string {
-  const id = `sim-${world.nextId}`;
-  world.nextId++;
-  return id;
-}
-
 /**
  * Resolve an injection target to a system ID.
  */

@@ -6,8 +6,6 @@ import {
   applyImportDuty,
   rollContrabandInspection,
   DANGER_CONSTANTS,
-  HAZARD_CONSTANTS,
-  LEGALITY_CONSTANTS,
 } from "../danger";
 import type { ModifierRow } from "../events";
 

@@ -28,19 +28,21 @@ import type {
 /**
  * Build GenParams from constants + the standard universe-gen layout constants.
  * Only the tunable subset comes from SimConstants; layout constants
- * (mapSize, scatterRadius, etc.) stay fixed from UNIVERSE_GEN.
+ * (mapSize, Poisson params, etc.) stay fixed from UNIVERSE_GEN.
  */
 export function buildGenParams(seed: number, universe: SimConstants["universe"]): GenParams {
   return {
     seed,
     regionCount: universe.regionCount,
-    systemsPerRegion: universe.systemsPerRegion,
+    totalSystems: universe.totalSystems,
     mapSize: UNIVERSE_GEN.MAP_SIZE,
+    mapPadding: UNIVERSE_GEN.MAP_PADDING,
+    poissonMinDistance: UNIVERSE_GEN.POISSON_MIN_DISTANCE,
+    poissonKCandidates: UNIVERSE_GEN.POISSON_K_CANDIDATES,
     regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
-    systemScatterRadius: UNIVERSE_GEN.SYSTEM_SCATTER_RADIUS,
-    systemMinDistance: UNIVERSE_GEN.SYSTEM_MIN_DISTANCE,
     extraEdgeFraction: universe.intraRegionExtraEdges,
     gatewayFuelMultiplier: universe.gatewayFuelMultiplier,
+    gatewaysPerBorder: universe.gatewaysPerBorder,
     intraRegionBaseFuel: universe.intraRegionBaseFuel,
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
   };

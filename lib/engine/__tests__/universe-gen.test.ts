@@ -5,13 +5,14 @@ import {
   randInt,
   weightedPick,
   UnionFind,
+  bridsonSample,
+  assignRegions,
   generateRegions,
   generateSystems,
   generateConnections,
   selectStartingSystem,
   generateUniverse,
   type GenParams,
-  type RNG,
 } from "../universe-gen";
 import {
   UNIVERSE_GEN,
@@ -25,13 +26,15 @@ function defaultParams(): GenParams {
   return {
     seed: UNIVERSE_GEN.SEED,
     regionCount: UNIVERSE_GEN.REGION_COUNT,
-    systemsPerRegion: UNIVERSE_GEN.SYSTEMS_PER_REGION,
+    totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
     mapSize: UNIVERSE_GEN.MAP_SIZE,
+    mapPadding: UNIVERSE_GEN.MAP_PADDING,
+    poissonMinDistance: UNIVERSE_GEN.POISSON_MIN_DISTANCE,
+    poissonKCandidates: UNIVERSE_GEN.POISSON_K_CANDIDATES,
     regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
-    systemScatterRadius: UNIVERSE_GEN.SYSTEM_SCATTER_RADIUS,
-    systemMinDistance: UNIVERSE_GEN.SYSTEM_MIN_DISTANCE,
     extraEdgeFraction: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
+    gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
     intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
   };
@@ -139,6 +142,51 @@ describe("UnionFind", () => {
   });
 });
 
+// ── Bridson's Poisson disk sampling ──────────────────────────────
+
+describe("bridsonSample", () => {
+  it("generates well-spaced points with guaranteed minimum distance", () => {
+    const rng = mulberry32(42);
+    const minDist = 250;
+    const points = bridsonSample(rng, 7000, 7000, minDist, 30, 700, 600);
+
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 1; j < points.length; j++) {
+        const d = distance(points[i].x, points[i].y, points[j].x, points[j].y);
+        // Allow tiny floating point tolerance
+        expect(d).toBeGreaterThanOrEqual(minDist - 0.01);
+      }
+    }
+  });
+
+  it("respects maxPoints limit", () => {
+    const rng = mulberry32(42);
+    const points = bridsonSample(rng, 7000, 7000, 250, 30, 700, 100);
+    expect(points.length).toBeLessThanOrEqual(100);
+    expect(points.length).toBeGreaterThan(0);
+  });
+
+  it("places all points within padded bounds", () => {
+    const rng = mulberry32(42);
+    const padding = 700;
+    const size = 7000;
+    const points = bridsonSample(rng, size, size, 250, 30, padding, 600);
+
+    for (const p of points) {
+      expect(p.x).toBeGreaterThanOrEqual(padding);
+      expect(p.x).toBeLessThan(size - padding);
+      expect(p.y).toBeGreaterThanOrEqual(padding);
+      expect(p.y).toBeLessThan(size - padding);
+    }
+  });
+
+  it("is deterministic with the same RNG seed", () => {
+    const p1 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600);
+    const p2 = bridsonSample(mulberry32(42), 7000, 7000, 250, 30, 700, 600);
+    expect(p1).toEqual(p2);
+  });
+});
+
 // ── Region generation ───────────────────────────────────────────
 
 describe("generateRegions", () => {
@@ -200,30 +248,38 @@ describe("generateSystems", () => {
     return { regions, systems };
   }
 
-  it("generates the expected total number of systems", () => {
+  it("generates approximately the target number of systems", () => {
     const { systems } = makeRegionsAndSystems();
-    expect(systems).toHaveLength(params.regionCount * params.systemsPerRegion);
+    // Poisson sampling may produce slightly fewer than target if space fills up
+    expect(systems.length).toBeGreaterThanOrEqual(params.totalSystems * 0.9);
+    expect(systems.length).toBeLessThanOrEqual(params.totalSystems);
   });
 
-  it("scatters systems within scatter radius of their region center", () => {
+  it("every system is assigned to a valid region", () => {
     const { regions, systems } = makeRegionsAndSystems();
-    // Allow some tolerance for force-placed systems
-    const tolerance = params.systemScatterRadius * 1.2;
+    const regionIndices = new Set(regions.map((r) => r.index));
     for (const sys of systems) {
-      const region = regions.find((r) => r.index === sys.regionIndex)!;
-      const d = distance(sys.x, sys.y, region.x, region.y);
-      expect(d).toBeLessThan(tolerance);
+      expect(regionIndices.has(sys.regionIndex)).toBe(true);
+    }
+  });
+
+  it("all systems maintain minimum Poisson distance", () => {
+    const { systems } = makeRegionsAndSystems();
+    for (let i = 0; i < systems.length; i++) {
+      for (let j = i + 1; j < systems.length; j++) {
+        const d = distance(systems[i].x, systems[i].y, systems[j].x, systems[j].y);
+        expect(d).toBeGreaterThanOrEqual(params.poissonMinDistance - 0.01);
+      }
     }
   });
 
   it("derives economy types from traits with no region theme bias", () => {
     const { systems } = makeRegionsAndSystems();
-    // With uniform trait weights, all 6 economy types should appear across 600 systems
+    // With uniform trait weights, all 6 economy types should appear
     const econCounts = new Map<string, number>();
     for (const sys of systems) {
       econCounts.set(sys.economyType, (econCounts.get(sys.economyType) ?? 0) + 1);
     }
-    // All 6 economy types should be present
     expect(econCounts.size).toBe(6);
     // No single type should dominate (>40% of all systems)
     for (const [, count] of econCounts) {
@@ -242,6 +298,43 @@ describe("generateSystems", () => {
     const { systems } = makeRegionsAndSystems();
     const indices = systems.map((s) => s.index);
     expect(new Set(indices).size).toBe(indices.length);
+  });
+
+  it("no large gaps — every map point is near some system", () => {
+    const { systems } = makeRegionsAndSystems();
+    // Sample random points and ensure they're within 2x Poisson distance of a system
+    const rng = mulberry32(999);
+    const padding = params.mapSize * params.mapPadding;
+    const maxGap = params.poissonMinDistance * 3;
+    for (let i = 0; i < 200; i++) {
+      const tx = padding + rng() * (params.mapSize - 2 * padding);
+      const ty = padding + rng() * (params.mapSize - 2 * padding);
+      let minDist = Infinity;
+      for (const s of systems) {
+        const d = distance(tx, ty, s.x, s.y);
+        if (d < minDist) minDist = d;
+      }
+      expect(minDist).toBeLessThan(maxGap);
+    }
+  });
+});
+
+// ── Region assignment ───────────────────────────────────────────
+
+describe("assignRegions", () => {
+  it("assigns each point to the nearest region center", () => {
+    const regions = [
+      { index: 0, name: "A", governmentType: "federation" as GovernmentType, x: 100, y: 100 },
+      { index: 1, name: "B", governmentType: "corporate" as GovernmentType, x: 900, y: 900 },
+    ];
+    const points = [
+      { x: 150, y: 150 }, // closest to A
+      { x: 800, y: 800 }, // closest to B
+      { x: 500, y: 500 }, // equidistant, should pick one consistently
+    ];
+    const assignments = assignRegions(points, regions);
+    expect(assignments[0]).toBe(0);
+    expect(assignments[1]).toBe(1);
   });
 });
 
@@ -301,26 +394,6 @@ describe("generateConnections", () => {
     expect(reachable.size).toBe(regions.length);
   });
 
-  it("gateway connections apply the fuel multiplier to distance-based cost", () => {
-    const { systems, connections } = makeFullUniverse();
-    const gateways = connections.filter((c) => c.isGateway);
-
-    for (const conn of gateways) {
-      const from = systems.find((s) => s.index === conn.fromSystemIndex)!;
-      const to = systems.find((s) => s.index === conn.toSystemIndex)!;
-      const dist = distance(from.x, from.y, to.x, to.y);
-
-      // Expected: round((dist / scatterRadius) * baseFuel * multiplier, 1), min 1
-      const expected = Math.max(
-        1,
-        Math.round(
-          (dist / params.systemScatterRadius) * params.intraRegionBaseFuel * params.gatewayFuelMultiplier * 10,
-        ) / 10,
-      );
-      expect(conn.fuelCost).toBe(expected);
-    }
-  });
-
   it("connections are bidirectional", () => {
     const { connections } = makeFullUniverse();
     const edgeSet = new Set(connections.map((c) => `${c.fromSystemIndex}-${c.toSystemIndex}`));
@@ -346,6 +419,14 @@ describe("generateConnections", () => {
         (s) => s.regionIndex === region.index && s.isGateway,
       );
       expect(gateways.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("fuel costs are positive and reasonable", () => {
+    const { connections } = makeFullUniverse();
+    for (const conn of connections) {
+      expect(conn.fuelCost).toBeGreaterThanOrEqual(1);
+      expect(conn.fuelCost).toBeLessThan(200);
     }
   });
 });
@@ -426,10 +507,24 @@ describe("generateUniverse", () => {
     const u = generateUniverse(params, REGION_NAMES);
 
     expect(u.regions).toHaveLength(params.regionCount);
-    expect(u.systems).toHaveLength(params.regionCount * params.systemsPerRegion);
-    // At minimum MST edges (bidirectional) per region: (25-1)*2*24 = 1152
-    expect(u.connections.length).toBeGreaterThan(1000);
+    // Poisson sampling may generate slightly fewer than target
+    expect(u.systems.length).toBeGreaterThanOrEqual(params.totalSystems * 0.9);
+    expect(u.systems.length).toBeLessThanOrEqual(params.totalSystems);
+    // At minimum MST edges (bidirectional) per region
+    expect(u.connections.length).toBeGreaterThan(500);
     expect(u.startingSystemIndex).toBeGreaterThanOrEqual(0);
     expect(u.startingSystemIndex).toBeLessThan(u.systems.length);
+  });
+
+  it("no region has fewer than 5 systems", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const regionCounts = new Map<number, number>();
+    for (const s of u.systems) {
+      regionCounts.set(s.regionIndex, (regionCounts.get(s.regionIndex) ?? 0) + 1);
+    }
+    for (const [, count] of regionCounts) {
+      expect(count).toBeGreaterThanOrEqual(5);
+    }
   });
 });

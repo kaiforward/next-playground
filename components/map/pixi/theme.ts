@@ -84,8 +84,8 @@ export const BG_COLOR = 0x030712; // gray-950
 // ── Camera ───────────────────────────────────────────────────────
 
 export const CAMERA = {
-  minZoom: 0.3,
-  maxZoom: 2.0,
+  minZoom: 0.15,
+  maxZoom: 2.5,
   zoomStep: 0.001,   // per wheel delta pixel
   fitViewPadding: 0.15,
 } as const;
@@ -105,7 +105,7 @@ export const STARFIELD = {
 
 /** Render text at higher resolution so it stays crisp when zoomed in.
  *  Value matches CAMERA.maxZoom — text is sharp up to max zoom level. */
-export const TEXT_RESOLUTION = 2;
+export const TEXT_RESOLUTION = 3;
 
 // ── Label colors ─────────────────────────────────────────────────
 

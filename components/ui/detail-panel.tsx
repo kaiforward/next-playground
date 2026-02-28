@@ -39,11 +39,12 @@ const panel = tv({
 interface DetailPanelProps {
   title: string;
   subtitle?: React.ReactNode;
+  headerAction?: React.ReactNode;
   size?: "md" | "lg" | "xl";
   children: React.ReactNode;
 }
 
-export function DetailPanel({ title, subtitle, size, children }: DetailPanelProps) {
+export function DetailPanel({ title, subtitle, headerAction, size, children }: DetailPanelProps) {
   const router = useRouter();
   const panelRef = useRef<HTMLDivElement>(null);
   const styles = panel({ size });
@@ -98,13 +99,16 @@ export function DetailPanel({ title, subtitle, size, children }: DetailPanelProp
             <h2 className={styles.title()}>{title}</h2>
             {subtitle && <div className={styles.subtitle()}>{subtitle}</div>}
           </div>
-          <button
-            onClick={close}
-            className={styles.closeBtn()}
-            aria-label="Close panel"
-          >
-            <CloseIcon />
-          </button>
+          <div className="flex items-center gap-2">
+            {headerAction}
+            <button
+              onClick={close}
+              className={styles.closeBtn()}
+              aria-label="Close panel"
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </div>
 
         {/* Body */}

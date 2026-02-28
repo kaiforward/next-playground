@@ -3,7 +3,6 @@
 const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapSessionState {
-  regionId?: string;
   selectedSystemId?: string;
 }
 
