@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { TxClient } from "@/lib/tick/types";
 import type { PlayerNotificationInfo, EntityRef } from "@/lib/types/game";
+import { buildPaginatedArgs, paginateResults, type PaginatedResult } from "@/lib/services/pagination";
 
 // ── Serialization ──────────────────────────────────────────────
 
@@ -82,39 +83,48 @@ interface GetNotificationsOpts {
   cursor?: string;
   limit?: number;
   types?: string[];
+  search?: string;
   unreadOnly?: boolean;
 }
 
 export async function getNotifications(
   playerId: string,
   opts: GetNotificationsOpts = {},
-): Promise<{ notifications: PlayerNotificationInfo[]; nextCursor: string | null }> {
-  const limit = opts.limit ?? 20;
-
-  const where: Record<string, unknown> = { playerId };
+): Promise<PaginatedResult<PlayerNotificationInfo>> {
+  const baseWhere: Record<string, unknown> = { playerId };
   if (opts.types && opts.types.length > 0) {
-    where.type = { in: opts.types };
+    baseWhere.type = { in: opts.types };
   }
   if (opts.unreadOnly) {
-    where.read = false;
+    baseWhere.read = false;
   }
-  if (opts.cursor) {
-    where.createdAt = { lt: await getCursorDate(opts.cursor) };
+  if (opts.search) {
+    baseWhere.message = { contains: opts.search };
   }
 
-  const rows = await prisma.playerNotification.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-  });
+  const args = buildPaginatedArgs(
+    { cursor: opts.cursor, limit: opts.limit ?? 20 },
+    baseWhere,
+    "createdAt",
+    "desc",
+  );
 
-  const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
+  const [rows, total] = await Promise.all([
+    prisma.playerNotification.findMany({
+      where: args.where,
+      orderBy: args.orderBy,
+      take: args.take,
+      skip: args.skip,
+      cursor: args.cursor,
+    }),
+    prisma.playerNotification.count({ where: args.where }),
+  ]);
 
+  const result = paginateResults(rows, total, args.take - 1);
   return {
-    notifications: items.map(serializeNotification),
-    nextCursor,
+    items: result.items.map(serializeNotification),
+    nextCursor: result.nextCursor,
+    total: result.total,
   };
 }
 
@@ -161,12 +171,3 @@ export async function pruneOldNotifications(
   return result.count;
 }
 
-// ── Helpers ────────────────────────────────────────────────────
-
-async function getCursorDate(cursorId: string): Promise<Date> {
-  const row = await prisma.playerNotification.findUnique({
-    where: { id: cursorId },
-    select: { createdAt: true },
-  });
-  return row?.createdAt ?? new Date(0);
-}

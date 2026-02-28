@@ -192,13 +192,19 @@ export type RemoveUpgradeResponse = ApiResponse<{ ship: ShipState }>;
 export interface RepairResult { ship: ShipState; creditSpent: number }
 export type RepairResponse = ApiResponse<RepairResult>;
 
+// ── Pagination types ────────────────────────────────────────────
+
+/** Shared paginated response shape — all paginated endpoints return this. */
+export interface PaginatedData<T> {
+  items: T[];
+  nextCursor: string | null;
+  total: number;
+}
+export type PaginatedResponse<T> = ApiResponse<PaginatedData<T>>;
+
 // ── Notification types ──────────────────────────────────────────
 
-export interface NotificationsData {
-  notifications: PlayerNotificationInfo[];
-  nextCursor: string | null;
-}
-export type NotificationsResponse = ApiResponse<NotificationsData>;
+export type NotificationsResponse = PaginatedResponse<PlayerNotificationInfo>;
 export type UnreadCountResponse = ApiResponse<{ count: number }>;
 export type MarkReadResponse = ApiResponse<{ marked: number }>;
 
