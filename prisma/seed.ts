@@ -57,7 +57,13 @@ async function main() {
   await prisma.systemConnection.deleteMany();
   await prisma.ship.deleteMany();
   await prisma.convoy.deleteMany();
+  await prisma.playerNotification.deleteMany();
   await prisma.player.deleteMany();
+  // Clear auth tables so re-registration works after reseed
+  await prisma.session.deleteMany();
+  await prisma.account.deleteMany();
+  await prisma.verificationToken.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.priceHistory.deleteMany();
   await prisma.systemTrait.deleteMany();
   await prisma.station.deleteMany();
