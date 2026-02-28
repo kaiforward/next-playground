@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
+import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
 import type { ShipTradeRequest } from "@/lib/types/api";
 import type { MarketEntry } from "@/lib/types/game";
 
@@ -54,6 +55,9 @@ export async function executeConvoyTrade(
               playerId: true,
               cargoMax: true,
               cargo: true,
+              upgradeSlots: {
+                select: { slotType: true, moduleId: true, moduleTier: true },
+              },
             },
           },
         },
@@ -102,9 +106,16 @@ export async function executeConvoyTrade(
     marketEntry.good.priceCeiling,
   );
 
-  // Aggregate cargo across all member ships
+  // Aggregate cargo across all member ships (accounting for upgrade bonuses)
   const ships = convoy.members.map((m) => m.ship);
-  const combinedCargoMax = ships.reduce((s, ship) => s + ship.cargoMax, 0);
+  const combinedCargoMax = ships.reduce((s, ship) => {
+    const installed: InstalledModule[] = ship.upgradeSlots
+      .filter((slot): slot is typeof slot & { moduleId: string; moduleTier: number } =>
+        slot.moduleId !== null && slot.moduleTier !== null)
+      .map((slot) => ({ moduleId: slot.moduleId, moduleTier: slot.moduleTier, slotType: slot.slotType }));
+    const bonuses = computeUpgradeBonuses(installed);
+    return s + ship.cargoMax + bonuses.cargoBonus;
+  }, 0);
   const combinedCargoUsed = ships.reduce(
     (s, ship) => s + ship.cargo.reduce((cs, c) => cs + c.quantity, 0),
     0,
@@ -157,8 +168,14 @@ export async function executeConvoyTrade(
         let remaining = quantity;
         for (const ship of ships) {
           if (remaining <= 0) break;
+          const installed: InstalledModule[] = ship.upgradeSlots
+            .filter((slot): slot is typeof slot & { moduleId: string; moduleTier: number } =>
+              slot.moduleId !== null && slot.moduleTier !== null)
+            .map((slot) => ({ moduleId: slot.moduleId, moduleTier: slot.moduleTier, slotType: slot.slotType }));
+          const shipBonuses = computeUpgradeBonuses(installed);
+          const effectiveCargoMax = ship.cargoMax + shipBonuses.cargoBonus;
           const shipCargoUsed = ship.cargo.reduce((s, c) => s + c.quantity, 0);
-          const shipSpace = ship.cargoMax - shipCargoUsed;
+          const shipSpace = effectiveCargoMax - shipCargoUsed;
           if (shipSpace <= 0) continue;
 
           const toAdd = Math.min(remaining, shipSpace);

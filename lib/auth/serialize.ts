@@ -2,6 +2,7 @@ import type { ShipState, ShipActiveMission, ConvoyState, UpgradeSlotState } from
 import { toShipStatus, toEconomyType, toShipSize, toShipRole, toUpgradeSlotType, toConvoyStatus } from "@/lib/types/guards";
 import { SHIP_TYPES, type ShipTypeId } from "@/lib/constants/ships";
 import { isShipTypeId } from "@/lib/types/guards";
+import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
 
 // ── System serialization helper ──────────────────────────────────
 
@@ -141,7 +142,14 @@ export function serializeConvoy(convoy: {
   }>;
 }): ConvoyState {
   const members = convoy.members.map((m) => serializeShip(m.ship));
-  const combinedCargoMax = members.reduce((sum, s) => sum + s.cargoMax, 0);
+  const combinedCargoMax = members.reduce((sum, s) => {
+    const installed: InstalledModule[] = s.upgradeSlots
+      .filter((slot): slot is typeof slot & { moduleId: string; moduleTier: number } =>
+        slot.moduleId !== null && slot.moduleTier !== null)
+      .map((slot) => ({ moduleId: slot.moduleId, moduleTier: slot.moduleTier, slotType: slot.slotType }));
+    const bonuses = computeUpgradeBonuses(installed);
+    return sum + s.cargoMax + bonuses.cargoBonus;
+  }, 0);
   const combinedCargoUsed = members.reduce(
     (sum, s) => sum + s.cargo.reduce((cs, c) => cs + c.quantity, 0),
     0,
