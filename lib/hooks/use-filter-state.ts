@@ -2,17 +2,15 @@
 
 import { useState, useCallback } from "react";
 
-interface UseFilterStateConfig<TSort extends string> {
+interface UseFilterStateConfig {
   defaultChips?: string[];
-  defaultSort?: TSort;
+  defaultSort?: string;
 }
 
-export function useFilterState<TSort extends string = string>(
-  config: UseFilterStateConfig<TSort> = {},
-) {
+export function useFilterState(config: UseFilterStateConfig = {}) {
   const [activeChips, setActiveChips] = useState<string[]>(config.defaultChips ?? ["all"]);
   const [searchValue, setSearchValue] = useState("");
-  const [activeSort, setActiveSort] = useState<TSort | undefined>(config.defaultSort);
+  const [activeSort, setActiveSort] = useState<string | undefined>(config.defaultSort);
 
   const toggleChip = useCallback((id: string) => {
     setActiveChips((prev) => {
