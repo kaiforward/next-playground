@@ -35,11 +35,17 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   pirate_raid: "red",
   solar_storm: "blue",
   ship_arrived: "blue",
+  ship_damaged: "amber",
+  ship_disabled: "red",
   cargo_lost: "red",
   hazard_incident: "amber",
   import_duty: "slate",
   contraband_seized: "red",
+  mission_completed: "green",
   mission_expired: "amber",
+  battle_round: "purple",
+  battle_won: "green",
+  battle_lost: "red",
 };
 
 /**

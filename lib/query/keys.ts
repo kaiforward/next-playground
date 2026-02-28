@@ -18,4 +18,7 @@ export const queryKeys = {
   playerOpMissions: ["opMissions", "player"] as const,
   battles: ["battles"] as const,
   battleDetail: (battleId: string) => ["battles", battleId] as const,
+  // Notifications
+  notifications: ["notifications"] as const,
+  unreadCount: ["unreadCount"] as const,
 };

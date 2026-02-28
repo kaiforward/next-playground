@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { formatCredits } from "@/lib/utils/format";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 /* ------------------------------------------------------------------ */
 /*  Icons (inline SVG – Heroicons Solid 20×20)                        */
@@ -206,6 +207,11 @@ export function GameSidebar({
           )}
         </Link>
       </div>
+
+      {/* Notification bell */}
+      <NotificationBell collapsed={collapsed} />
+
+      <Divider />
 
       {/* Primary nav */}
       <nav className="mt-2 flex flex-col gap-0.5">
