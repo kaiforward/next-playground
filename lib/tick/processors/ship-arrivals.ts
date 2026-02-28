@@ -18,6 +18,8 @@ import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
 import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { createNotifications } from "@/lib/services/notifications";
+import type { EntityRef } from "@/lib/types/game";
 import type { TickProcessor, TickProcessorResult } from "../types";
 
 interface ArrivedShip {
@@ -456,6 +458,29 @@ export const shipArrivalsProcessor: TickProcessor = {
       existing["gameNotifications"] = notifications;
       playerEvents.set(a.playerId, existing);
     }
+
+    // Persist notifications to DB
+    const dbEntries: Array<{
+      playerId: string;
+      type: string;
+      message: string;
+      refs: Partial<Record<string, EntityRef>>;
+      tick: number;
+    }> = [];
+    for (const [playerId, events] of playerEvents) {
+      const notifications = events["gameNotifications"] ?? [];
+      for (const n of notifications) {
+        const notif = n as { type: string; message: string; refs: Partial<Record<string, EntityRef>> };
+        dbEntries.push({
+          playerId,
+          type: notif.type,
+          message: notif.message,
+          refs: notif.refs,
+          tick: ctx.tick,
+        });
+      }
+    }
+    await createNotifications(ctx.tx, dbEntries);
 
     return { playerEvents };
   },

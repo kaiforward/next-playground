@@ -94,6 +94,7 @@ model Player {
   convoys       Convoy[]
   tradeMissions TradeMission[]
   missions      Mission[]
+  notifications PlayerNotification[]
 }
 
 model Ship {
@@ -460,4 +461,22 @@ model Battle {
   @@index([status, nextRoundTick])
   @@index([systemId])
   @@index([shipId])
+}
+
+// ── Notifications ──────────────────────────────────────────────
+
+model PlayerNotification {
+  id        String   @id @default(cuid())
+  playerId  String
+  type      String
+  message   String
+  refs      String   @default("{}")
+  tick      Int
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, createdAt])
+  @@index([playerId, read])
 }

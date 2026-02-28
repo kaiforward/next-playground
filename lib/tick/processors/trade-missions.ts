@@ -1,3 +1,5 @@
+import { createNotifications } from "@/lib/services/notifications";
+import type { EntityRef } from "@/lib/types/game";
 import type { TickProcessor, TickProcessorResult } from "../types";
 import { computeAllHopDistances } from "@/lib/engine/pathfinding";
 import {
@@ -207,6 +209,29 @@ export const tradeMissionsProcessor: TickProcessor = {
       `[trade-missions] Expired ${expired.count} unclaimed + ${expiredAccepted.length} accepted, generated ${toCreate.length} mission(s)` +
       ` (${economyCandidates.length} economy, ${eventCandidates.length} event candidates)`,
     );
+
+    // Persist notifications to DB
+    const dbEntries: Array<{
+      playerId: string;
+      type: string;
+      message: string;
+      refs: Partial<Record<string, EntityRef>>;
+      tick: number;
+    }> = [];
+    for (const [playerId, events] of playerEvents) {
+      const notifications = events["gameNotifications"] ?? [];
+      for (const n of notifications) {
+        const notif = n as { type: string; message: string; refs: Partial<Record<string, EntityRef>> };
+        dbEntries.push({
+          playerId,
+          type: notif.type,
+          message: notif.message,
+          refs: notif.refs,
+          tick: ctx.tick,
+        });
+      }
+    }
+    await createNotifications(ctx.tx, dbEntries);
 
     return {
       globalEvents: {
