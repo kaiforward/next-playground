@@ -71,39 +71,43 @@ interface ButtonAsLink extends ButtonBaseProps {
 
 type ButtonProps = ButtonAsButton | ButtonAsLink;
 
-export const Button = forwardRef<
-  HTMLButtonElement | HTMLAnchorElement,
-  ButtonProps
->(function Button(
-  { variant, color, size, fullWidth, className, children, ...props },
-  ref
-) {
-  const classes = buttonVariants({ variant, color, size, fullWidth, className });
+/**
+ * Button component — renders `<button>` or Next.js `<Link>` depending on `href`.
+ *
+ * Note: `forwardRef` does not support discriminated union element types, so
+ * link-mode Buttons do not forward `ref`. In practice no callers use refs on
+ * link-mode Buttons; if needed, use `<Link>` directly.
+ */
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    { variant, color, size, fullWidth, className, children, ...props },
+    ref
+  ) {
+    const classes = buttonVariants({ variant, color, size, fullWidth, className });
 
-  if ("href" in props && props.href) {
-    const { href, ...rest } = props;
+    if ("href" in props && props.href) {
+      const { href, ...rest } = props;
+      return (
+        <Link
+          href={href}
+          className={classes}
+          {...rest}
+        >
+          {children}
+        </Link>
+      );
+    }
+
     return (
-      <Link
-        ref={ref as React.Ref<HTMLAnchorElement>}
-        href={href}
+      <button
+        ref={ref}
         className={classes}
-        {...rest}
+        {...props}
       >
         {children}
-      </Link>
+      </button>
     );
   }
-
-  const { ...buttonProps } = props as ButtonAsButton;
-  return (
-    <button
-      ref={ref as React.Ref<HTMLButtonElement>}
-      className={classes}
-      {...buttonProps}
-    >
-      {children}
-    </button>
-  );
-});
+);
 
 export { buttonVariants };

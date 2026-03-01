@@ -2,6 +2,7 @@
  * Simulation runner — orchestrates world creation, tick loop, and bot execution.
  */
 
+import type { EventTypeId } from "@/lib/constants/events";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { createSimWorld } from "./world";
 import { simulateWorldTick } from "./economy";
@@ -87,7 +88,7 @@ export function runSimulation(
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
 
   // Event lifecycle tracking
-  const activeEventTracker = new Map<string, { type: string; systemId: string; severity: number; startTick: number; sourceEventId: string | null; startPrices: { goodId: string; price: number }[] }>();
+  const activeEventTracker = new Map<string, { type: EventTypeId; systemId: string; severity: number; startTick: number; sourceEventId: string | null; startPrices: { goodId: string; price: number }[] }>();
   const completedEvents: EventLifecycle[] = [];
 
   // Main loop

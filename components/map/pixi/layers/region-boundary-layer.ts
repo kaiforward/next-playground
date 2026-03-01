@@ -41,7 +41,7 @@ export class RegionBoundaryLayer {
     }
 
     // Build Delaunay triangulation from system positions
-    const points = systems.map((s) => [s.x, s.y] as [number, number]);
+    const points: [number, number][] = systems.map((s) => [s.x, s.y]);
     const delaunay = Delaunay.from(points);
     const size = UNIVERSE_GEN.MAP_SIZE;
     const voronoi = delaunay.voronoi([0, 0, size, size]);

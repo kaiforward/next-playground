@@ -18,6 +18,7 @@ import type {
   QualityTier,
   PlayerNotificationInfo,
 } from "./game";
+import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
 
 // ── Responses ────────────────────────────────────────────────────
 
@@ -67,9 +68,9 @@ export interface TickEvent {
   currentTick: number;
   tickRate: number;
   /** Merged global events from all processors. */
-  events: Record<string, unknown[]>;
+  events: Partial<GlobalEventMap>;
   /** Player-scoped events (filtered to this client). */
-  playerEvents: Record<string, unknown[]>;
+  playerEvents: Partial<PlayerEventMap>;
   /** Which processors ran this tick (dev/debug only). */
   processors?: string[];
 }

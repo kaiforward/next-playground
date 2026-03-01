@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { toEventTypeId } from "@/lib/types/guards";
 import type { ActiveEvent } from "@/lib/types/game";
 
 /**
@@ -26,12 +27,13 @@ export async function getActiveEvents(): Promise<ActiveEvent[]> {
   ]);
 
   return dbEvents.map((e) => {
-    const def = EVENT_DEFINITIONS[e.type];
+    const eventType = toEventTypeId(e.type);
+    const def = EVENT_DEFINITIONS[eventType];
     const phaseDef = def?.phases.find((p) => p.name === e.phase);
 
     return {
       id: e.id,
-      type: e.type,
+      type: eventType,
       name: def?.name ?? e.type,
       phase: e.phase,
       phaseDisplayName: phaseDef?.displayName ?? e.phase,

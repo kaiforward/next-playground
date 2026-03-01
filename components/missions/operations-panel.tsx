@@ -12,11 +12,9 @@ import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { formatCredits } from "@/lib/utils/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
-import { MISSION_TYPE_DEFS, type MissionType } from "@/lib/constants/missions";
-import { ENEMY_TIERS, type EnemyTier } from "@/lib/constants/combat";
+import { MISSION_TYPE_DEFS } from "@/lib/constants/missions";
+import { ENEMY_TIERS } from "@/lib/constants/combat";
 import { MISSION_TYPE_BADGE_COLOR, ENEMY_TIER_BADGE_COLOR } from "@/lib/constants/ui";
-
-type OpRow = MissionInfo & Record<string, unknown>;
 
 interface OperationsPanelProps {
   available: MissionInfo[];
@@ -57,20 +55,21 @@ function AvailableOperations({
   const acceptMutation = useAcceptOpMission();
   const [error, setError] = useState<string | null>(null);
 
-  const columns: Column<OpRow>[] = [
+  const columns: Column<MissionInfo>[] = [
     {
       key: "type",
       label: "Type",
       render: (row) => {
-        const typeDef = MISSION_TYPE_DEFS[row.type as MissionType];
+        const typeDef = MISSION_TYPE_DEFS[row.type];
+        const typeColor = MISSION_TYPE_BADGE_COLOR[row.type];
         return (
           <>
-            <Badge color={MISSION_TYPE_BADGE_COLOR[row.type as MissionType] ?? "slate"}>
+            <Badge color={typeColor ?? "slate"}>
               {typeDef?.name ?? row.type}
             </Badge>
             {row.enemyTier && (
-              <Badge color={ENEMY_TIER_BADGE_COLOR[row.enemyTier as EnemyTier] ?? "slate"} className="ml-1">
-                {ENEMY_TIERS[row.enemyTier as EnemyTier]?.name ?? row.enemyTier}
+              <Badge color={ENEMY_TIER_BADGE_COLOR[row.enemyTier] ?? "slate"} className="ml-1">
+                {ENEMY_TIERS[row.enemyTier]?.name ?? row.enemyTier}
               </Badge>
             )}
           </>
@@ -78,7 +77,7 @@ function AvailableOperations({
       },
     },
     {
-      key: "target",
+      key: "targetSystemId",
       label: "Target",
       render: (row) => (
         <Link
@@ -90,7 +89,7 @@ function AvailableOperations({
       ),
     },
     {
-      key: "requirements",
+      key: "statRequirements",
       label: "Requirements",
       render: (row) => (
         <span className="text-text-tertiary text-xs">
@@ -112,7 +111,7 @@ function AvailableOperations({
       ),
     },
     {
-      key: "time",
+      key: "durationTicks",
       label: "Time",
       render: (row) => (
         <>
@@ -162,7 +161,7 @@ function AvailableOperations({
         {missions.length === 0 ? (
           <EmptyState message="No operational missions available right now." />
         ) : (
-          <DataTable columns={columns} data={missions as OpRow[]} />
+          <DataTable columns={columns} data={missions} />
         )}
       </CardContent>
     </Card>
@@ -185,21 +184,22 @@ function ActiveOperations({
   const [error, setError] = useState<string | null>(null);
   const [selectedShips, setSelectedShips] = useState<Record<string, string>>({});
 
-  const columns: Column<OpRow>[] = [
+  const columns: Column<MissionInfo>[] = [
     {
       key: "type",
       label: "Type",
       render: (row) => {
-        const typeDef = MISSION_TYPE_DEFS[row.type as MissionType];
+        const typeDef = MISSION_TYPE_DEFS[row.type];
+        const typeColor = MISSION_TYPE_BADGE_COLOR[row.type];
         return (
-          <Badge color={MISSION_TYPE_BADGE_COLOR[row.type as MissionType] ?? "slate"}>
+          <Badge color={typeColor ?? "slate"}>
             {typeDef?.name ?? row.type}
           </Badge>
         );
       },
     },
     {
-      key: "target",
+      key: "targetSystemId",
       label: "Target",
       render: (row) => (
         <Link
@@ -351,7 +351,7 @@ function ActiveOperations({
         {error && (
           <InlineAlert className="mb-4">{error}</InlineAlert>
         )}
-        <DataTable columns={columns} data={missions as OpRow[]} />
+        <DataTable columns={columns} data={missions} />
       </CardContent>
     </Card>
   );

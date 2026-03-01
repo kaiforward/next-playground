@@ -17,23 +17,16 @@ import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
-import { createNotifications } from "@/lib/services/notifications";
-import type { EntityRef } from "@/lib/types/game";
-import type { TickProcessor, TickProcessorResult } from "../types";
-
-interface ArrivedShip {
-  shipId: string;
-  shipName: string;
-  systemId: string;
-  destName: string;
-  playerId: string;
-  hazardIncidents?: HazardIncidentEntry[];
-  importDuties?: ImportDutyEntry[];
-  contrabandSeized?: ContrabandSeizedEntry[];
-  cargoLost?: CargoLossEntry[];
-  damageResult?: DamageResult;
-}
+import { toGovernmentType, toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
+import { persistPlayerNotifications } from "../helpers";
+import type {
+  TickProcessor,
+  TickProcessorResult,
+  ShipArrivedPayload,
+  CargoLostPayload,
+  GameNotificationPayload,
+  PlayerEventMap,
+} from "../types";
 
 export const shipArrivalsProcessor: TickProcessor = {
   name: "ship-arrivals",
@@ -120,7 +113,7 @@ export const shipArrivalsProcessor: TickProcessor = {
       }
     }
 
-    const arrived: ArrivedShip[] = [];
+    const arrived: ShipArrivedPayload[] = [];
 
     for (const ship of arrivingShips) {
       if (!ship.destinationSystemId) continue;
@@ -193,7 +186,7 @@ export const shipArrivalsProcessor: TickProcessor = {
           .map((c) => ({
             goodId: c.goodId,
             quantity: c.quantity,
-            hazard: (GOODS[c.goodId]?.hazard ?? "none") as "none" | "low" | "high",
+            hazard: toHazard(GOODS[c.goodId]?.hazard ?? "none"),
           }));
 
         const incidents = rollHazardIncidents(enriched, danger, Math.random, shipMods);
@@ -286,14 +279,8 @@ export const shipArrivalsProcessor: TickProcessor = {
 
           // Apply damage to hull (shields already regenerated, so hull damage from shields is absorbed)
           const newHull = Math.max(0, ship.hullCurrent - dmg.hullDamage);
-          const updateData: Record<string, unknown> = {
-            hullCurrent: newHull,
-            // Reduce regenerated shields by damage taken
-            shieldCurrent: Math.max(0, ship.shieldMax - dmg.shieldDamage),
-          };
 
           if (dmg.disabled) {
-            updateData.disabled = true;
             // Delete all cargo when disabled
             await ctx.tx.cargoItem.deleteMany({ where: { shipId: ship.id } });
             // Clear local cargo tracking
@@ -302,7 +289,12 @@ export const shipArrivalsProcessor: TickProcessor = {
 
           await ctx.tx.ship.update({
             where: { id: ship.id },
-            data: updateData,
+            data: {
+              hullCurrent: newHull,
+              // Reduce regenerated shields by damage taken
+              shieldCurrent: Math.max(0, ship.shieldMax - dmg.shieldDamage),
+              ...(dmg.disabled ? { disabled: true } : {}),
+            },
           });
         }
       }
@@ -373,21 +365,20 @@ export const shipArrivalsProcessor: TickProcessor = {
     }
 
     // Group arrivals by player for scoped events
-    const playerEvents = new Map<string, Record<string, unknown[]>>();
+    const playerEvents = new Map<string, Partial<PlayerEventMap>>();
     for (const a of arrived) {
       const existing = playerEvents.get(a.playerId) ?? {};
-      existing["shipArrived"] = [...(existing["shipArrived"] ?? []), a];
+      const arrivals: ShipArrivedPayload[] = existing.shipArrived ? [...existing.shipArrived, a] : [a];
+      existing.shipArrived = arrivals;
 
       // Emit separate cargoLost event if losses occurred
       if (a.cargoLost && a.cargoLost.length > 0) {
-        existing["cargoLost"] = [
-          ...(existing["cargoLost"] ?? []),
-          { shipId: a.shipId, systemId: a.systemId, losses: a.cargoLost },
-        ];
+        const loss: CargoLostPayload = { shipId: a.shipId, systemId: a.systemId, losses: a.cargoLost };
+        existing.cargoLost = existing.cargoLost ? [...existing.cargoLost, loss] : [loss];
       }
 
       // Emit gameNotifications for the notification system
-      const notifications = existing["gameNotifications"] ?? [];
+      const notifications: GameNotificationPayload[] = existing.gameNotifications ? [...existing.gameNotifications] : [];
       const shipRef = { id: a.shipId, label: a.shipName };
       const systemRef = { id: a.systemId, label: a.destName };
 
@@ -398,7 +389,7 @@ export const shipArrivalsProcessor: TickProcessor = {
       });
 
       if (a.hazardIncidents && a.hazardIncidents.length > 0) {
-        const goodNames = a.hazardIncidents.map((i) => GOODS[i.goodId]?.name ?? i.goodId).join(", ");
+        const goodNames = a.hazardIncidents.map((i: HazardIncidentEntry) => GOODS[i.goodId]?.name ?? i.goodId).join(", ");
         notifications.push({
           message: `${a.shipName}: hazard incident — ${goodNames} damaged near ${a.destName}`,
           type: "hazard_incident",
@@ -408,7 +399,7 @@ export const shipArrivalsProcessor: TickProcessor = {
 
       if (a.importDuties && a.importDuties.length > 0) {
         const details = a.importDuties
-          .map((d) => `${d.seized} ${GOODS[d.goodId]?.name ?? d.goodId}`)
+          .map((d: ImportDutyEntry) => `${d.seized} ${GOODS[d.goodId]?.name ?? d.goodId}`)
           .join(", ");
         notifications.push({
           message: `${a.shipName}: import duty — ${details} seized at ${a.destName}`,
@@ -419,7 +410,7 @@ export const shipArrivalsProcessor: TickProcessor = {
 
       if (a.contrabandSeized && a.contrabandSeized.length > 0) {
         const details = a.contrabandSeized
-          .map((s) => `${s.seized} ${GOODS[s.goodId]?.name ?? s.goodId}`)
+          .map((s: ContrabandSeizedEntry) => `${s.seized} ${GOODS[s.goodId]?.name ?? s.goodId}`)
           .join(", ");
         notifications.push({
           message: `${a.shipName}: contraband confiscated — ${details} at ${a.destName}`,
@@ -455,32 +446,12 @@ export const shipArrivalsProcessor: TickProcessor = {
         }
       }
 
-      existing["gameNotifications"] = notifications;
+      existing.gameNotifications = notifications;
       playerEvents.set(a.playerId, existing);
     }
 
     // Persist notifications to DB
-    const dbEntries: Array<{
-      playerId: string;
-      type: string;
-      message: string;
-      refs: Partial<Record<string, EntityRef>>;
-      tick: number;
-    }> = [];
-    for (const [playerId, events] of playerEvents) {
-      const notifications = events["gameNotifications"] ?? [];
-      for (const n of notifications) {
-        const notif = n as { type: string; message: string; refs: Partial<Record<string, EntityRef>> };
-        dbEntries.push({
-          playerId,
-          type: notif.type,
-          message: notif.message,
-          refs: notif.refs,
-          tick: ctx.tick,
-        });
-      }
-    }
-    await createNotifications(ctx.tx, dbEntries);
+    await persistPlayerNotifications(ctx.tx, playerEvents, ctx.tick);
 
     return { playerEvents };
   },

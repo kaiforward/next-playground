@@ -152,7 +152,7 @@ describe("SimConstants", () => {
     });
 
     it("preserves pricing (read-only) even if passed", () => {
-      const c = resolveConstants({} as never);
+      const c = resolveConstants({});
       expect(c.pricing.minMultiplier).toBe(0.2);
       expect(c.pricing.maxMultiplier).toBe(5.0);
     });

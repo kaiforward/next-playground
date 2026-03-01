@@ -20,8 +20,8 @@ interface PaginationParams {
   order?: "asc" | "desc";
 }
 
-interface PaginatedArgs {
-  where: Record<string, unknown>;
+interface PaginatedArgs<W> {
+  where: W;
   orderBy: Record<string, "asc" | "desc">;
   take: number;
   skip?: number;
@@ -39,21 +39,21 @@ export interface PaginatedResult<T> {
  * Uses Prisma native cursor pagination: `cursor: { id }, skip: 1`.
  *
  * @param params    - Pagination query params (cursor, limit, sort, order)
- * @param baseWhere - Entity-specific where clause (filters, search, etc.)
+ * @param baseWhere - Entity-specific where clause (use the Prisma-generated WhereInput type)
  * @param defaultSort  - Default sort field when `params.sort` is not provided
  * @param defaultOrder - Default sort direction when `params.order` is not provided
  */
-export function buildPaginatedArgs(
+export function buildPaginatedArgs<W>(
   params: PaginationParams,
-  baseWhere: Record<string, unknown>,
+  baseWhere: W,
   defaultSort: string,
   defaultOrder: "asc" | "desc",
-): PaginatedArgs {
+): PaginatedArgs<W> {
   const limit = Math.min(Math.max(params.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const sortField = params.sort ?? defaultSort;
   const order = params.order ?? defaultOrder;
 
-  const args: PaginatedArgs = {
+  const args: PaginatedArgs<W> = {
     where: baseWhere,
     orderBy: { [sortField]: order },
     take: limit + 1, // fetch one extra to detect next page

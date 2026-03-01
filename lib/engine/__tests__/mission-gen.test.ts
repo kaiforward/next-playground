@@ -14,12 +14,12 @@ import { MISSION_TYPE_DEFS, OP_MISSION_DEADLINE_TICKS } from "@/lib/constants/mi
 
 function makeSystem(
   id: string,
-  traits: Array<{ traitId: string; quality: 1 | 2 | 3 }> = [],
+  traits: SystemSnapshot["traits"] = [],
 ): SystemSnapshot {
   return {
     id,
     name: `System ${id}`,
-    traits: traits as SystemSnapshot["traits"],
+    traits,
   };
 }
 

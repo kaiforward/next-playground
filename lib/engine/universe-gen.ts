@@ -4,7 +4,7 @@
  */
 
 import type { EconomyType, GovernmentType } from "@/lib/types/game";
-import { ALL_GOVERNMENT_TYPES } from "@/lib/types/guards";
+import { ALL_GOVERNMENT_TYPES, toGovernmentType } from "@/lib/types/guards";
 import type { GeneratedTrait } from "./trait-gen";
 import { generateSystemTraits, deriveEconomyType } from "./trait-gen";
 
@@ -89,11 +89,11 @@ export function randInt(rng: RNG, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
-export function weightedPick<T extends string>(
+export function weightedPick(
   rng: RNG,
-  weights: Record<T, number>,
-): T {
-  const entries = Object.entries(weights) as [T, number][];
+  weights: Record<string, number>,
+): string {
+  const entries = Object.entries(weights);
   const total = entries.reduce((sum, [, w]) => sum + w, 0);
   let roll = rng() * total;
   for (const [key, weight] of entries) {
@@ -176,12 +176,12 @@ export function generateRegions(
       usedNames.add(name);
 
       // Uniform government: 25% each
-      const governmentType = weightedPick(rng, {
+      const governmentType = toGovernmentType(weightedPick(rng, {
         federation: 1,
         corporate: 1,
         authoritarian: 1,
         frontier: 1,
-      } as Record<GovernmentType, number>) as GovernmentType;
+      }));
       regions.push({ index: i, name, governmentType, x, y });
       placed = true;
       break;
@@ -202,12 +202,12 @@ export function generateRegions(
       }
       usedNames.add(name);
 
-      const governmentType = weightedPick(rng, {
+      const governmentType = toGovernmentType(weightedPick(rng, {
         federation: 1,
         corporate: 1,
         authoritarian: 1,
         frontier: 1,
-      } as Record<GovernmentType, number>) as GovernmentType;
+      }));
       regions.push({ index: i, name, governmentType, x, y });
     }
   }

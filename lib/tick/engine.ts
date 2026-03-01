@@ -5,6 +5,8 @@ import type {
   TickContext,
   TickProcessorResult,
   TickEventRaw,
+  GlobalEventMap,
+  PlayerEventMap,
 } from "./types";
 
 class TickEngine {
@@ -116,8 +118,8 @@ class TickEngine {
       const totalMs = performance.now() - tickStart;
 
       // Merge all processor results into a single event
-      const mergedGlobalEvents: Record<string, unknown[]> = {};
-      const mergedPlayerEvents = new Map<string, Record<string, unknown[]>>();
+      const mergedGlobalEvents: Partial<GlobalEventMap> = {};
+      const mergedPlayerEvents = new Map<string, Partial<PlayerEventMap>>();
 
       for (const processorResult of result.results.values()) {
         mergeGlobalEvents(mergedGlobalEvents, processorResult);
@@ -159,30 +161,55 @@ class TickEngine {
 }
 
 function mergeGlobalEvents(
-  target: Record<string, unknown[]>,
+  target: Partial<GlobalEventMap>,
   result: TickProcessorResult,
 ) {
   if (!result.globalEvents) return;
-  for (const [key, events] of Object.entries(result.globalEvents)) {
-    target[key] = [...(target[key] ?? []), ...events];
+  const src = result.globalEvents;
+  if (src.economyTick) {
+    target.economyTick = target.economyTick ? [...target.economyTick, ...src.economyTick] : [...src.economyTick];
+  }
+  if (src.eventNotifications) {
+    target.eventNotifications = target.eventNotifications ? [...target.eventNotifications, ...src.eventNotifications] : [...src.eventNotifications];
+  }
+  if (src.priceSnapshot) {
+    target.priceSnapshot = target.priceSnapshot ? [...target.priceSnapshot, ...src.priceSnapshot] : [...src.priceSnapshot];
+  }
+  if (src.missionsUpdated) {
+    target.missionsUpdated = target.missionsUpdated ? [...target.missionsUpdated, ...src.missionsUpdated] : [...src.missionsUpdated];
+  }
+  if (src.opMissionsUpdated) {
+    target.opMissionsUpdated = target.opMissionsUpdated ? [...target.opMissionsUpdated, ...src.opMissionsUpdated] : [...src.opMissionsUpdated];
+  }
+  if (src.battlesUpdated) {
+    target.battlesUpdated = target.battlesUpdated ? [...target.battlesUpdated, ...src.battlesUpdated] : [...src.battlesUpdated];
   }
 }
 
 function mergePlayerEvents(
-  target: Map<string, Record<string, unknown[]>>,
+  target: Map<string, Partial<PlayerEventMap>>,
   result: TickProcessorResult,
 ) {
   if (!result.playerEvents) return;
   for (const [playerId, events] of result.playerEvents) {
     const existing = target.get(playerId) ?? {};
-    for (const [key, eventList] of Object.entries(events)) {
-      existing[key] = [...(existing[key] ?? []), ...eventList];
+    if (events.shipArrived) {
+      existing.shipArrived = existing.shipArrived ? [...existing.shipArrived, ...events.shipArrived] : [...events.shipArrived];
+    }
+    if (events.cargoLost) {
+      existing.cargoLost = existing.cargoLost ? [...existing.cargoLost, ...events.cargoLost] : [...events.cargoLost];
+    }
+    if (events.gameNotifications) {
+      existing.gameNotifications = existing.gameNotifications ? [...existing.gameNotifications, ...events.gameNotifications] : [...events.gameNotifications];
     }
     target.set(playerId, existing);
   }
 }
 
 // Singleton — survives HMR in dev via globalThis
-const globalForTick = globalThis as unknown as { tickEngine: TickEngine };
-export const tickEngine = globalForTick.tickEngine || new TickEngine();
-if (process.env.NODE_ENV !== "production") globalForTick.tickEngine = tickEngine;
+declare global {
+  // eslint-disable-next-line no-var
+  var __tickEngine: TickEngine | undefined;
+}
+export const tickEngine = globalThis.__tickEngine ?? new TickEngine();
+if (process.env.NODE_ENV !== "production") globalThis.__tickEngine = tickEngine;

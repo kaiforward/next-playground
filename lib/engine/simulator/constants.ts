@@ -212,15 +212,20 @@ function mergeEvents(
   };
 }
 
-/** Merge a Record<string, T> with partial overrides per key. */
-function mergeRecord<T extends Record<string, unknown>>(
+/** Merge a Record<string, T> with partial overrides per key.
+ *  Existing keys are shallow-merged; new keys are ignored (only base keys are valid). */
+function mergeRecord<T extends object>(
   base: Record<string, T>,
   overrides?: Record<string, Partial<T>>,
 ): Record<string, T> {
   if (!overrides) return base;
-  const result = { ...base };
+  const result = structuredClone(base);
   for (const [key, partial] of Object.entries(overrides)) {
-    result[key] = { ...(result[key] ?? ({} as T)), ...partial } as T;
+    if (key in result) {
+      Object.assign(result[key], partial);
+    } else {
+      console.warn(`[simulator] Unknown override key "${key}" — only existing keys can be overridden`);
+    }
   }
   return result;
 }

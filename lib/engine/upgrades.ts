@@ -3,7 +3,7 @@
  * No DB dependency. Operates on module lists.
  */
 
-import { MODULES, type ModuleId } from "@/lib/constants/modules";
+import { MODULES, isModuleId } from "@/lib/constants/modules";
 
 
 // ── Types ────────────────────────────────────────────────────────
@@ -69,8 +69,8 @@ export function computeUpgradeBonuses(modules: InstalledModule[]): UpgradeBonuse
   const result = { ...EMPTY_BONUSES };
 
   for (const installed of modules) {
-    const def = MODULES[installed.moduleId as ModuleId];
-    if (!def) continue;
+    if (!isModuleId(installed.moduleId)) continue;
+    const def = MODULES[installed.moduleId];
 
     const tierDef = def.tiers.find((t) => t.tier === installed.moduleTier);
     if (!tierDef) continue;
@@ -144,10 +144,10 @@ export function validateUpgradeInstallation(
 ): UpgradeValidationResult {
   const { moduleId, moduleTier, slotType } = params;
 
-  const def = MODULES[moduleId as ModuleId];
-  if (!def) {
+  if (!isModuleId(moduleId)) {
     return { ok: false, error: `Unknown module: "${moduleId}".` };
   }
+  const def = MODULES[moduleId];
 
   if (def.slotType !== slotType) {
     return {
