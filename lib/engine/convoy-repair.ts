@@ -4,6 +4,7 @@
  */
 
 import { DAMAGE_CONSTANTS } from "./damage";
+import { clamp } from "@/lib/utils/math";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ export function computeConvoyRepairPlan(
   ships: ConvoyRepairShip[],
   fraction: number,
 ): ConvoyRepairPlan {
-  const clampedFraction = Math.max(0, Math.min(1, fraction));
+  const clampedFraction = clamp(fraction, 0, 1);
 
   const shipPlans: ConvoyRepairShipPlan[] = ships.map((ship) => {
     const damage = Math.max(0, ship.hullMax - ship.hullCurrent);

@@ -5,6 +5,7 @@
 
 import {
   type MissionType,
+  type StatGateKey,
   MISSION_TYPE_DEFS,
   SURVEY_ELIGIBLE_TRAITS,
   SALVAGE_ELIGIBLE_TRAITS,
@@ -12,6 +13,7 @@ import {
   OP_MISSION_DEADLINE_TICKS,
 } from "@/lib/constants/missions";
 import { getEnemyTier, type EnemyTier } from "@/lib/constants/combat";
+import { clamp } from "@/lib/utils/math";
 import type { TraitId, QualityTier } from "@/lib/types/game";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -30,7 +32,7 @@ export interface OpMissionCandidate {
   deadlineTick: number;
   durationTicks: number | null;
   enemyTier: EnemyTier | null;
-  statRequirements: Record<string, number>;
+  statRequirements: Partial<Record<StatGateKey, number>>;
 }
 
 // ── Reward calculation ──────────────────────────────────────────
@@ -40,7 +42,7 @@ function interpolateReward(
   range: [min: number, max: number],
   factor: number,
 ): number {
-  const clamped = Math.max(0, Math.min(1, factor));
+  const clamped = clamp(factor, 0, 1);
   return Math.round(range[0] + (range[1] - range[0]) * clamped);
 }
 
@@ -66,7 +68,8 @@ export function selectPatrolCandidates(
     // Generation probability scales with danger
     if (rng() > danger * 2) continue;
 
-    const [minDur, maxDur] = def.durationTicks!;
+    if (!def.durationTicks) continue;
+    const [minDur, maxDur] = def.durationTicks;
     const durationTicks = minDur + Math.floor(rng() * (maxDur - minDur + 1));
 
     // Reward scales with danger (normalize to 0-1 factor)
@@ -113,7 +116,8 @@ export function selectSurveyCandidates(
     // Generation probability: 15% per eligible trait per cycle
     if (rng() > 0.15 * surveyTraits.length) continue;
 
-    const [minDur, maxDur] = def.durationTicks!;
+    if (!def.durationTicks) continue;
+    const [minDur, maxDur] = def.durationTicks;
     const durationTicks = minDur + Math.floor(rng() * (maxDur - minDur + 1));
 
     // Reward scales with max trait quality
@@ -204,7 +208,8 @@ export function selectSalvageCandidates(
     // Generation probability: 15% per eligible trait per cycle
     if (rng() > 0.15 * salvageTraits.length) continue;
 
-    const [minDur, maxDur] = def.durationTicks!;
+    if (!def.durationTicks) continue;
+    const [minDur, maxDur] = def.durationTicks;
     const durationTicks = minDur + Math.floor(rng() * (maxDur - minDur + 1));
 
     // Reward scales with max trait quality
@@ -256,7 +261,8 @@ export function selectReconCandidates(
     // Generation probability scales with danger * trait count
     if (rng() > danger * 2 * reconTraits.length) continue;
 
-    const [minDur, maxDur] = def.durationTicks!;
+    if (!def.durationTicks) continue;
+    const [minDur, maxDur] = def.durationTicks;
     const durationTicks = minDur + Math.floor(rng() * (maxDur - minDur + 1));
 
     // Reward scales with danger (normalize to 0-1 factor)

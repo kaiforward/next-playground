@@ -1,10 +1,9 @@
 import type {
   TickProcessor,
   TickProcessorResult,
-  GameNotificationPayload,
   PlayerEventMap,
 } from "../types";
-import { persistPlayerNotifications } from "../helpers";
+import { persistPlayerNotifications, addPlayerNotification } from "../helpers";
 import { computeAllHopDistances } from "@/lib/engine/pathfinding";
 import {
   selectEconomyCandidates,
@@ -14,17 +13,7 @@ import {
 import { calculatePrice } from "@/lib/engine/pricing";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { EVENT_MISSION_GOODS } from "@/lib/constants/events";
-import { GOODS } from "@/lib/constants/goods";
-
-/** Build good tier lookup from GOODS constants. */
-const goodTiers: Record<string, number> = Object.fromEntries(
-  Object.entries(GOODS).map(([key, def]) => [key, def.tier]),
-);
-
-/** Reverse lookup: Good.name → key (e.g. "Food" → "food"). */
-const goodNameToKey = new Map(
-  Object.entries(GOODS).map(([key, def]) => [def.name, key]),
-);
+import { GOOD_NAME_TO_KEY, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 
 export const tradeMissionsProcessor: TickProcessor = {
   name: "trade-missions",
@@ -50,6 +39,7 @@ export const tradeMissionsProcessor: TickProcessor = {
         id: true,
         playerId: true,
         quantity: true,
+        destinationId: true,
         good: { select: { name: true } },
         destination: { select: { name: true } },
       },
@@ -64,16 +54,13 @@ export const tradeMissionsProcessor: TickProcessor = {
 
       for (const m of expiredAccepted) {
         const playerId = m.playerId!;
-        const existing = playerEvents.get(playerId) ?? {};
-        const notification: GameNotificationPayload = {
+        addPlayerNotification(playerEvents, playerId, {
           message: `Mission expired: deliver ${m.quantity} ${m.good.name} to ${m.destination.name}`,
           type: "mission_expired",
-          refs: {},
-        };
-        existing.gameNotifications = existing.gameNotifications
-          ? [...existing.gameNotifications, notification]
-          : [notification];
-        playerEvents.set(playerId, existing);
+          refs: {
+            system: { id: m.destinationId, label: m.destination.name },
+          },
+        });
       }
     }
 
@@ -99,7 +86,7 @@ export const tradeMissionsProcessor: TickProcessor = {
         m.good.priceFloor,
         m.good.priceCeiling,
       );
-      const goodKey = goodNameToKey.get(m.good.name) ?? m.good.id;
+      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.id;
       return {
         systemId: m.station.systemId,
         goodId: goodKey,
@@ -112,7 +99,7 @@ export const tradeMissionsProcessor: TickProcessor = {
     const economyCandidates = selectEconomyCandidates(
       marketSnapshots,
       hopDistances,
-      goodTiers,
+      GOOD_TIER_BY_KEY,
       ctx.tick,
       Math.random,
     );
@@ -130,7 +117,7 @@ export const tradeMissionsProcessor: TickProcessor = {
       eventSnapshots,
       EVENT_MISSION_GOODS,
       hopDistances,
-      goodTiers,
+      GOOD_TIER_BY_KEY,
       ctx.tick,
       Math.random,
     );
@@ -165,7 +152,7 @@ export const tradeMissionsProcessor: TickProcessor = {
     });
     const goodKeyToId = new Map<string, string>();
     for (const g of goodRecords) {
-      const key = goodNameToKey.get(g.name);
+      const key = GOOD_NAME_TO_KEY.get(g.name);
       if (key) goodKeyToId.set(key, g.id);
       // Also map by lowercase name in case key matches
       goodKeyToId.set(g.name.toLowerCase(), g.id);

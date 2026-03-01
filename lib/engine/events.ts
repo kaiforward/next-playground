@@ -3,6 +3,7 @@
  * No DB or constant imports. All randomness injected via `rng` parameter.
  */
 
+import { clamp } from "@/lib/utils/math";
 import type {
   EventDefinition,
   EventPhaseDefinition,
@@ -149,10 +150,6 @@ export function buildModifiersForPhase(
 }
 
 // ── Modifier aggregation ────────────────────────────────────────
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 /**
  * Aggregate a list of active modifiers into a single effect bundle.

@@ -1,6 +1,5 @@
 import {
-  aggregateDangerLevel,
-  DANGER_CONSTANTS,
+  computeSystemDanger,
   rollCargoLoss,
   rollHazardIncidents,
   applyImportDuty,
@@ -15,11 +14,11 @@ import { rollDamageOnArrival, computeEscortProtection, type DamageResult } from 
 import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
 import { getInstalledModules } from "@/lib/utils/ship";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
-import type { ModifierRow } from "@/lib/engine/events";
+
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
 import { toGovernmentType, toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
-import { persistPlayerNotifications } from "../helpers";
+import { persistPlayerNotifications, groupModifiersByTarget } from "../helpers";
 import type {
   TickProcessor,
   TickProcessorResult,
@@ -95,13 +94,7 @@ export const shipArrivalsProcessor: TickProcessor = {
       : [];
 
     // Group modifiers by system ID for quick lookup
-    const modsBySystem = new Map<string, ModifierRow[]>();
-    for (const mod of navModifiers) {
-      if (!mod.targetId) continue;
-      const existing = modsBySystem.get(mod.targetId) ?? [];
-      existing.push(mod);
-      modsBySystem.set(mod.targetId, existing);
-    }
+    const modsBySystem = groupModifiersByTarget(navModifiers);
 
     // Group arriving ships by convoy for escort calculations
     const convoyShips = new Map<string, typeof arrivingShips>();
@@ -159,10 +152,7 @@ export const shipArrivalsProcessor: TickProcessor = {
         quality: toQualityTier(t.quality),
       }));
       const traitDanger = computeTraitDanger(destTraits);
-      const danger = Math.max(0, Math.min(
-        aggregateDangerLevel(systemMods) + govBaseline + traitDanger,
-        DANGER_CONSTANTS.MAX_DANGER,
-      ));
+      const danger = computeSystemDanger(systemMods, govBaseline, traitDanger);
 
       // Mutable local cargo tracking — each stage mutates quantities for the next
       const localCargo = ship.cargo.map((c) => ({

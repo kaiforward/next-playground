@@ -87,14 +87,14 @@ async function applyShocks(
 
 /**
  * Create a child event from a spread decision, including modifiers and shocks.
- * Returns the system name for notification purposes.
+ * Accepts a pre-resolved system name to avoid an extra DB query.
  */
 async function createSpreadEvent(
   tx: TxClient,
   decision: SpawnDecision,
   sourceEventId: string,
   tick: number,
-): Promise<string> {
+): Promise<void> {
   const def = EVENT_DEFINITIONS[decision.type]!;
   const firstPhase = def.phases[0];
 
@@ -129,12 +129,6 @@ async function createSpreadEvent(
   // Apply first-phase shocks
   const shocks = buildShocksForPhase(firstPhase, decision.severity);
   await applyShocks(tx, shocks, decision.systemId);
-
-  const sys = await tx.starSystem.findUnique({
-    where: { id: decision.systemId },
-    select: { name: true },
-  });
-  return sys?.name ?? "Unknown";
 }
 
 // ── Processor ────────────────────────────────────────────────────
@@ -248,13 +242,17 @@ export const eventsProcessor: TickProcessor = {
 
         // ── Spread: spawn child events at neighboring systems ──
         if (nextPhase.spread && nextPhase.spread.length > 0 && !snap.sourceEventId) {
-          // Fetch neighbors of this system
+          // Fetch neighbors of this system (include name for notification)
           const connections = await ctx.tx.systemConnection.findMany({
             where: { fromSystemId: snap.systemId! },
             select: {
-              toSystem: { select: { id: true, economyType: true, regionId: true } },
+              toSystem: { select: { id: true, name: true, economyType: true, regionId: true } },
             },
           });
+
+          const neighborNameMap = new Map(
+            connections.map((c) => [c.toSystem.id, c.toSystem.name]),
+          );
 
           const neighbors: NeighborSnapshot[] = connections.map((c) => ({
             id: c.toSystem.id,
@@ -287,7 +285,8 @@ export const eventsProcessor: TickProcessor = {
           for (const decision of spreadDecisions) {
             const childDef = EVENT_DEFINITIONS[decision.type]!;
             const childPhase = childDef.phases[0];
-            const childSysName = await createSpreadEvent(ctx.tx, decision, snap.id, ctx.tick);
+            await createSpreadEvent(ctx.tx, decision, snap.id, ctx.tick);
+            const childSysName = neighborNameMap.get(decision.systemId) ?? "Unknown";
 
             if (childPhase.notification) {
               notifications.push({
@@ -331,10 +330,12 @@ export const eventsProcessor: TickProcessor = {
 
       const currentSnapshots: EventSnapshot[] = currentEvents.map(toSnapshot);
 
-      // Fetch all systems for spawn selection
+      // Fetch all systems for spawn selection (include name to avoid N+1 lookup)
       const allSystems = await ctx.tx.starSystem.findMany({
-        select: { id: true, economyType: true, regionId: true },
+        select: { id: true, name: true, economyType: true, regionId: true },
       });
+
+      const systemNameMap = new Map(allSystems.map((s) => [s.id, s.name]));
 
       const systemSnapshots: SystemSnapshot[] = allSystems.map((s) => ({
         id: s.id,
@@ -390,12 +391,8 @@ export const eventsProcessor: TickProcessor = {
         const shocks = buildShocksForPhase(firstPhase, decision.severity);
         await applyShocks(ctx.tx, shocks, decision.systemId);
 
-        // Resolve system name for notification
-        const sys = await ctx.tx.starSystem.findUnique({
-          where: { id: decision.systemId },
-          select: { name: true },
-        });
-        const sysName = sys?.name ?? "Unknown";
+        // Resolve system name for notification (from pre-fetched map)
+        const sysName = systemNameMap.get(decision.systemId) ?? "Unknown";
 
         if (firstPhase.notification) {
           notifications.push({
