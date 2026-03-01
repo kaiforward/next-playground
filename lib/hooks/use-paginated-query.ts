@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import type { PaginatedData } from "@/lib/types/api";
 
@@ -97,13 +97,17 @@ export function usePaginatedQuery<
     isLoading,
     isError,
     error,
-  } = useInfiniteQuery({
+  } = useInfiniteQuery<
+    PaginatedData<TItem>,
+    Error,
+    InfiniteData<PaginatedData<TItem>, string | undefined>,
+    readonly unknown[],
+    string | undefined
+  >({
     queryKey,
     queryFn: ({ pageParam }) =>
       apiFetch<PaginatedData<TItem>>(buildUrl(pageParam)),
-    // TanStack Query infers TPageParam from initialPageParam's type — `as` required
-    // to widen from `undefined` to `string | undefined` (library API limitation)
-    initialPageParam: undefined as string | undefined,
+    initialPageParam: undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: opts.enabled,
   });

@@ -165,13 +165,24 @@ function mergeGlobalEvents(
   result: TickProcessorResult,
 ) {
   if (!result.globalEvents) return;
-  for (const _key of Object.keys(result.globalEvents)) {
-    const key = _key as keyof GlobalEventMap;
-    const source = result.globalEvents[key];
-    if (!source) continue;
-    const existing = target[key];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merging heterogeneous arrays by key
-    (target as any)[key] = existing ? [...existing, ...source] : [...source];
+  const src = result.globalEvents;
+  if (src.economyTick) {
+    target.economyTick = target.economyTick ? [...target.economyTick, ...src.economyTick] : [...src.economyTick];
+  }
+  if (src.eventNotifications) {
+    target.eventNotifications = target.eventNotifications ? [...target.eventNotifications, ...src.eventNotifications] : [...src.eventNotifications];
+  }
+  if (src.priceSnapshot) {
+    target.priceSnapshot = target.priceSnapshot ? [...target.priceSnapshot, ...src.priceSnapshot] : [...src.priceSnapshot];
+  }
+  if (src.missionsUpdated) {
+    target.missionsUpdated = target.missionsUpdated ? [...target.missionsUpdated, ...src.missionsUpdated] : [...src.missionsUpdated];
+  }
+  if (src.opMissionsUpdated) {
+    target.opMissionsUpdated = target.opMissionsUpdated ? [...target.opMissionsUpdated, ...src.opMissionsUpdated] : [...src.opMissionsUpdated];
+  }
+  if (src.battlesUpdated) {
+    target.battlesUpdated = target.battlesUpdated ? [...target.battlesUpdated, ...src.battlesUpdated] : [...src.battlesUpdated];
   }
 }
 
@@ -182,13 +193,14 @@ function mergePlayerEvents(
   if (!result.playerEvents) return;
   for (const [playerId, events] of result.playerEvents) {
     const existing = target.get(playerId) ?? {};
-    for (const _key of Object.keys(events)) {
-      const key = _key as keyof PlayerEventMap;
-      const source = events[key];
-      if (!source) continue;
-      const current = existing[key];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merging heterogeneous arrays by key
-      (existing as any)[key] = current ? [...current, ...source] : [...source];
+    if (events.shipArrived) {
+      existing.shipArrived = existing.shipArrived ? [...existing.shipArrived, ...events.shipArrived] : [...events.shipArrived];
+    }
+    if (events.cargoLost) {
+      existing.cargoLost = existing.cargoLost ? [...existing.cargoLost, ...events.cargoLost] : [...events.cargoLost];
+    }
+    if (events.gameNotifications) {
+      existing.gameNotifications = existing.gameNotifications ? [...existing.gameNotifications, ...events.gameNotifications] : [...events.gameNotifications];
     }
     target.set(playerId, existing);
   }

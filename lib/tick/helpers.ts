@@ -1,5 +1,5 @@
 import { createNotifications } from "@/lib/services/notifications";
-import type { TxClient, PlayerEventMap } from "./types";
+import type { TxClient, PlayerEventMap, GameNotificationPayload } from "./types";
 
 /**
  * Persist all gameNotifications from player events to the database.
@@ -10,13 +10,7 @@ export async function persistPlayerNotifications(
   playerEvents: Map<string, Partial<PlayerEventMap>>,
   tick: number,
 ): Promise<void> {
-  const entries: Array<{
-    playerId: string;
-    type: string;
-    message: string;
-    refs: Partial<Record<string, { id: string; label: string }>>;
-    tick: number;
-  }> = [];
+  const entries: Array<GameNotificationPayload & { playerId: string; tick: number }> = [];
 
   for (const [playerId, events] of playerEvents) {
     const notifications = events.gameNotifications;

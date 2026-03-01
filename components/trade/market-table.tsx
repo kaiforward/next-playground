@@ -35,7 +35,6 @@ export function MarketTable({
           {
             key: "owned",
             label: "Owned",
-            sortable: false,
             render: (row: MarketEntry) => {
               const qty = cargoByGoodId.get(row.goodId) ?? 0;
               return qty > 0
@@ -82,7 +81,6 @@ export function MarketTable({
     {
       key: "priceTrend",
       label: "Trend",
-      sortable: false,
       render: (row) => {
         const diff = row.currentPrice - row.basePrice;
         const pct = getPriceTrendPct(row.currentPrice, row.basePrice).toFixed(1);

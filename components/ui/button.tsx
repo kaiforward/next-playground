@@ -71,6 +71,13 @@ interface ButtonAsLink extends ButtonBaseProps {
 
 type ButtonProps = ButtonAsButton | ButtonAsLink;
 
+/**
+ * Button component — renders `<button>` or Next.js `<Link>` depending on `href`.
+ *
+ * Note: `forwardRef` does not support discriminated union element types, so
+ * link-mode Buttons do not forward `ref`. In practice no callers use refs on
+ * link-mode Buttons; if needed, use `<Link>` directly.
+ */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
     { variant, color, size, fullWidth, className, children, ...props },

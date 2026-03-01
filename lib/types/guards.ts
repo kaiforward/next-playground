@@ -18,9 +18,10 @@ import type {
   NotificationType,
   OpMissionStatus,
   BattleStatus,
+  EntityRef,
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
-import type { ModuleId } from "@/lib/constants/modules";
+import { MODULES, type ModuleId } from "@/lib/constants/modules";
 import type { MissionType, StatGateKey } from "@/lib/constants/missions";
 import type { EnemyTier } from "@/lib/constants/combat";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
@@ -176,12 +177,7 @@ export function toConvoyStatus(value: string): ConvoyStatus {
 
 // ── Additional guards (modules, missions, combat, notifications) ─
 
-const MODULE_IDS: ReadonlySet<string> = new Set<ModuleId>([
-  "fuel_optimiser", "thruster_upgrade", "manoeuvring_thrusters",
-  "expanded_hold", "reinforced_containers", "hidden_compartment",
-  "armour_plating", "shield_booster", "point_defence_array",
-  "scanner_array", "automation_module", "repair_bay",
-]);
+const MODULE_IDS: ReadonlySet<string> = new Set(Object.keys(MODULES));
 
 const MISSION_TYPES: ReadonlySet<string> = new Set<MissionType>([
   "patrol", "survey", "bounty", "salvage", "recon",
@@ -300,18 +296,45 @@ export const ALL_GOVERNMENT_TYPES: readonly GovernmentType[] = [
   "federation", "corporate", "authoritarian", "frontier",
 ];
 
-export const ALL_MODULE_IDS: readonly ModuleId[] = [
-  "fuel_optimiser", "thruster_upgrade", "manoeuvring_thrusters",
-  "expanded_hold", "reinforced_containers", "hidden_compartment",
-  "armour_plating", "shield_booster", "point_defence_array",
-  "scanner_array", "automation_module", "repair_bay",
-];
-
 export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
 
 // ── Template literal guards ───────────────────────────────────
 
 export function isStatGateMessage(value: string): value is `STAT_GATE:${string}` {
   return value.startsWith("STAT_GATE:");
+}
+
+// ── JSON boundary guards ────────────────────────────────────────
+
+/** Parse a JSON stat requirements string into a typed record. Invalid keys/values are dropped. */
+export function toStatRequirements(json: string): Partial<Record<StatGateKey, number>> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(json); } catch { return {}; }
+  if (typeof parsed !== "object" || parsed === null) return {};
+  const result: Partial<Record<StatGateKey, number>> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (isStatGateKey(key) && typeof value === "number") {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/** Parse a JSON entity refs string into a typed record. Invalid entries are dropped. */
+export function toEntityRefs(json: string): Partial<Record<string, EntityRef>> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(json); } catch { return {}; }
+  if (typeof parsed !== "object" || parsed === null) return {};
+  const result: Partial<Record<string, EntityRef>> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (
+      typeof value === "object" && value !== null &&
+      "id" in value && typeof value.id === "string" &&
+      "label" in value && typeof value.label === "string"
+    ) {
+      result[key] = { id: value.id, label: value.label };
+    }
+  }
+  return result;
 }
 

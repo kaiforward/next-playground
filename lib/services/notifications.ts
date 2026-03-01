@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/app/generated/prisma/client";
 import type { TxClient } from "@/lib/tick/types";
 import type { PlayerNotificationInfo, EntityRef } from "@/lib/types/game";
-import { toNotificationType } from "@/lib/types/guards";
+import { toNotificationType, toEntityRefs } from "@/lib/types/guards";
 import { buildPaginatedArgs, paginateResults, type PaginatedResult } from "@/lib/services/pagination";
 
 // ── Serialization ──────────────────────────────────────────────
@@ -16,15 +16,7 @@ function serializeNotification(row: {
   read: boolean;
   createdAt: Date;
 }): PlayerNotificationInfo {
-  let refs: Partial<Record<string, EntityRef>> = {};
-  try {
-    const parsed: unknown = JSON.parse(row.refs);
-    if (typeof parsed === "object" && parsed !== null) {
-      refs = parsed as Partial<Record<string, EntityRef>>;
-    }
-  } catch {
-    // malformed JSON — use empty refs
-  }
+  const refs = toEntityRefs(row.refs);
 
   return {
     id: row.id,

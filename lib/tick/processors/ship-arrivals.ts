@@ -17,7 +17,7 @@ import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { toGovernmentType, toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
 import { persistPlayerNotifications } from "../helpers";
 import type {
   TickProcessor,
@@ -186,7 +186,7 @@ export const shipArrivalsProcessor: TickProcessor = {
           .map((c) => ({
             goodId: c.goodId,
             quantity: c.quantity,
-            hazard: GOODS[c.goodId]?.hazard ?? "none",
+            hazard: toHazard(GOODS[c.goodId]?.hazard ?? "none"),
           }));
 
         const incidents = rollHazardIncidents(enriched, danger, Math.random, shipMods);

@@ -11,8 +11,7 @@ import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
-import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, toMissionType, isStatGateMessage } from "@/lib/types/guards";
-import type { StatGateKey } from "@/lib/constants/missions";
+import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, toMissionType, isStatGateMessage, toStatRequirements } from "@/lib/types/guards";
 import type { MissionInfo, BattleInfo, BattleRoundResult } from "@/lib/types/game";
 import type {
   SystemAllMissionsData,
@@ -50,11 +49,7 @@ type MissionRow = {
 };
 
 function serializeMission(row: MissionRow, tick: number): MissionInfo {
-  const parsedReqs: unknown = JSON.parse(row.statRequirements);
-  const statRequirements: Partial<Record<StatGateKey, number>> =
-    typeof parsedReqs === "object" && parsedReqs !== null
-      ? (parsedReqs as Partial<Record<StatGateKey, number>>)
-      : {};
+  const statRequirements = toStatRequirements(row.statRequirements);
 
   return {
     id: row.id,

@@ -125,7 +125,7 @@ function AvailableOperations({
       ),
     },
     {
-      key: "id",
+      key: "actions",
       label: "",
       render: (row) => (
         <Button
@@ -237,7 +237,7 @@ function ActiveOperations({
       ),
     },
     {
-      key: "id",
+      key: "actions",
       label: "",
       render: (row) => {
         // For accepted missions, build eligible ship list
