@@ -1,13 +1,15 @@
 "use client";
 
 import type { ShipState, RegionInfo, TradeMissionInfo } from "@/lib/types/game";
-import { getCargoUsed } from "@/lib/utils/cargo";
+import { getShipDerivedState } from "@/lib/utils/ship";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EconomyBadge } from "@/components/ui/economy-badge";
+import { ShipStatusBadge } from "./ship-status-badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatList, StatRow } from "@/components/ui/stat-row";
+import { StatPair } from "@/components/ui/stat-pair";
 import { useDialog } from "@/components/ui/dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
@@ -28,15 +30,7 @@ interface ShipDetailPanelProps {
 }
 
 export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, deliverableMissions, convoyName }: ShipDetailPanelProps) {
-  const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
-  const cargoUsed = getCargoUsed(ship.cargo);
-  const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
-  const isDocked = ship.status === "docked";
-  const onMission = ship.activeMission?.status === "in_progress";
-  const needsFuel = isDocked && ship.fuel < ship.maxFuel;
-  const isDamaged = ship.hullCurrent < ship.hullMax;
-  const hullPercent = ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100;
-  const shieldPercent = ship.shieldMax > 0 ? (ship.shieldCurrent / ship.shieldMax) * 100 : 100;
+  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, shieldPercent, isDocked, onMission, needsFuel, isDamaged } = getShipDerivedState(ship);
 
   const refuelDialog = useDialog();
   const repairDialog = useDialog();
@@ -59,15 +53,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
         <CardContent className="space-y-4">
           <StatList>
             <StatRow label="Status">
-              {ship.disabled ? (
-                <Badge color="red">Disabled</Badge>
-              ) : ship.activeMission?.status === "in_progress" ? (
-                <Badge color="cyan">On Mission</Badge>
-              ) : (
-                <Badge color={isDocked ? "green" : "amber"}>
-                  {isDocked ? "Docked" : "In Transit"}
-                </Badge>
-              )}
+              <ShipStatusBadge ship={ship} />
             </StatRow>
 
             {convoyName && (
@@ -281,11 +267,3 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
   );
 }
 
-function StatPair({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex justify-between py-1">
-      <span className="text-sm text-text-tertiary">{label}</span>
-      <span className="text-sm font-medium text-text-primary">{value}</span>
-    </div>
-  );
-}

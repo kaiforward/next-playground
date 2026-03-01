@@ -30,11 +30,7 @@ export function ContractsPanel({
 }: ContractsPanelProps) {
   return (
     <div className="space-y-8">
-      <AvailableContracts
-        missions={available}
-        systemId={systemId}
-        fleet={fleet}
-      />
+      <AvailableContracts missions={available} />
       <ActiveMissions
         missions={active}
         systemId={systemId}
@@ -51,8 +47,6 @@ function AvailableContracts({
   missions,
 }: {
   missions: TradeMissionInfo[];
-  systemId: string;
-  fleet: FleetState | null;
 }) {
   const acceptMutation = useAcceptMission();
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +145,7 @@ function AvailableContracts({
         {missions.length === 0 ? (
           <EmptyState message="No contracts available at this station right now." />
         ) : (
-          <DataTable columns={columns} data={missions} />
+          <DataTable columns={columns} data={missions} getKey={(row) => row.id} />
         )}
       </CardContent>
     </Card>
@@ -341,7 +335,7 @@ function ActiveMissions({
         {error && (
           <InlineAlert className="mb-4">{error}</InlineAlert>
         )}
-        <DataTable columns={columns} data={missions} />
+        <DataTable columns={columns} data={missions} getKey={(row) => row.id} />
       </CardContent>
     </Card>
   );

@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { formatCredits } from "@/lib/utils/format";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { SectionHeader } from "@/components/ui/section-header";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 
 /* ------------------------------------------------------------------ */
@@ -145,14 +146,6 @@ function NavLink({
   );
 }
 
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <h3 className="px-3 pt-3 pb-1 text-[10px] font-display font-semibold uppercase tracking-widest text-text-muted">
-      {label}
-    </h3>
-  );
-}
-
 function Divider() {
   return <div className="mx-3 my-1 border-t border-border" />;
 }
@@ -232,7 +225,7 @@ export function GameSidebar({
       <Divider />
 
       {/* Fleet section */}
-      {!collapsed && <SectionHeader label="Fleet" />}
+      {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Fleet</SectionHeader>}
       <nav className="flex flex-col gap-0.5">
         {FLEET_NAV.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
@@ -242,7 +235,7 @@ export function GameSidebar({
       <Divider />
 
       {/* Activity section */}
-      {!collapsed && <SectionHeader label="Activity" />}
+      {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Activity</SectionHeader>}
       <nav className="flex flex-col gap-0.5">
         {ACTIVITY_NAV.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />

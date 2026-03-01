@@ -1,5 +1,3 @@
-"use client";
-
 import { TrendIcon } from "./trend-icon";
 
 interface StatDisplayProps {

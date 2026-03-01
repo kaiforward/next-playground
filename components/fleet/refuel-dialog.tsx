@@ -3,11 +3,10 @@
 import { useState, useMemo } from "react";
 import type { ShipState } from "@/lib/types/game";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
-import { formatCredits } from "@/lib/utils/format";
 import { useRefuelMutation } from "@/lib/hooks/use-refuel-mutation";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RangeInput } from "@/components/form/range-input";
+import { RefuelControls } from "./refuel-controls";
 
 interface RefuelDialogProps {
   ship: ShipState;
@@ -54,70 +53,30 @@ export function RefuelDialog({ ship, playerCredits, open, onClose }: RefuelDialo
       <h2 className="text-lg font-bold text-text-primary mb-1">Refuel {ship.name}</h2>
       <p className="text-xs text-text-muted mb-5">{REFUEL_COST_PER_UNIT} CR per unit</p>
 
-      <div className="space-y-4">
-        <RangeInput
-          id="refuel-amount"
-          label="Fuel Amount"
-          valueLabel={`${clampedAmount} / ${fuelNeeded}`}
-          size="md"
-          min={1}
-          max={sliderMax}
-          step={1}
-          value={clampedAmount}
-          onChange={(e) => setAmount(Number(e.target.value))}
-        />
+      <RefuelControls
+        ship={ship}
+        playerCredits={playerCredits}
+        amount={clampedAmount}
+        setAmount={setAmount}
+        clampedAmount={clampedAmount}
+        totalCost={totalCost}
+        sliderMax={sliderMax}
+        fuelNeeded={fuelNeeded}
+        onRefuel={handleRefuel}
+        onFillTank={handleFillTank}
+        isPending={mutation.isPending}
+        error={mutation.error}
+      />
 
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-text-secondary">
-            {clampedAmount} fuel × {REFUEL_COST_PER_UNIT} CR
-          </span>
-          <span className="text-text-primary font-medium">
-            = {formatCredits(totalCost)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between text-xs text-text-muted">
-          <span>Balance</span>
-          <span>{formatCredits(playerCredits)}</span>
-        </div>
-
-        {mutation.error && (
-          <p className="text-xs text-red-400">{mutation.error.message}</p>
-        )}
-
-        <div className="flex gap-2">
-          <Button
-            variant="action"
-            color="cyan"
-            size="md"
-            className="flex-1"
-            onClick={handleRefuel}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Refueling..." : `Refuel ${formatCredits(totalCost)}`}
-          </Button>
-          {clampedAmount < sliderMax && (
-            <Button
-              variant="pill"
-              color="cyan"
-              size="md"
-              onClick={handleFillTank}
-              disabled={mutation.isPending}
-            >
-              Fill Tank
-            </Button>
-          )}
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          fullWidth
-          onClick={onClose}
-        >
-          Cancel
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        fullWidth
+        onClick={onClose}
+        className="mt-4"
+      >
+        Cancel
+      </Button>
     </Dialog>
   );
 }

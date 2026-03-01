@@ -1,5 +1,3 @@
-"use client";
-
 import { tv, type VariantProps } from "tailwind-variants";
 
 const badgeVariants = tv({
@@ -21,6 +19,8 @@ const badgeVariants = tv({
 });
 
 type BadgeVariants = VariantProps<typeof badgeVariants>;
+
+export type BadgeColor = NonNullable<BadgeVariants["color"]>;
 
 interface BadgeProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, "color">, BadgeVariants {}
 

@@ -109,6 +109,7 @@ export function MarketTable({
     <DataTable
       columns={columns}
       data={entries}
+      getKey={(row) => row.goodId}
       onRowClick={(row) => onSelectGood(row.goodId)}
       rowClassName={(row) =>
         row.goodId === selectedGoodId ? "bg-surface-active" : ""

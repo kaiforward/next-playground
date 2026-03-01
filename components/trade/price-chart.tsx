@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
+import { CHART_THEME } from "@/lib/constants/ui";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 
 interface PriceChartProps {
@@ -35,15 +36,15 @@ export function PriceChart({ data, goodName, cargoQuantity }: PriceChartProps) {
               data={data}
               margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.gridStroke} />
               <XAxis
                 dataKey="time"
-                stroke="#666"
-                tick={{ fill: "#999", fontSize: 12 }}
+                stroke={CHART_THEME.axisStroke}
+                tick={{ fill: CHART_THEME.tickFill, fontSize: CHART_THEME.tickFontSize }}
               />
               <YAxis
-                stroke="#666"
-                tick={{ fill: "#999", fontSize: 12 }}
+                stroke={CHART_THEME.axisStroke}
+                tick={{ fill: CHART_THEME.tickFill, fontSize: CHART_THEME.tickFontSize }}
                 tickFormatter={(v: number) => `${v} CR`}
               />
               <ChartTooltip

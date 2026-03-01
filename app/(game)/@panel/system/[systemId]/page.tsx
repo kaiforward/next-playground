@@ -3,6 +3,7 @@
 import { use, useMemo } from "react";
 import { useMarket } from "@/lib/hooks/use-market";
 import { useEvents } from "@/lib/hooks/use-events";
+import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useSystemAllMissions } from "@/lib/hooks/use-op-missions";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -18,34 +19,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
 import { formatCredits } from "@/lib/utils/format";
+import { getPopulationLabel, getDangerInfo } from "@/lib/utils/system";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { getGoodColor } from "@/lib/constants/ui";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
-import type { EconomyType, GovernmentType } from "@/lib/types/game";
-
-// ── Population derivation ──────────────────────────────────────
-
-const ECONOMY_POP_BASE: Record<EconomyType, number> = {
-  core: 3, industrial: 2, tech: 2, refinery: 1, agricultural: 1, extraction: 0,
-};
-const POP_LABELS = ["Outpost", "Sparse", "Moderate", "Populated", "Dense"] as const;
-
-function getPopulationLabel(economyType: EconomyType, traitCount: number): string {
-  let tier = ECONOMY_POP_BASE[economyType];
-  if (traitCount >= 3) tier += 1;
-  return POP_LABELS[Math.min(Math.max(tier, 0), 4)];
-}
-
-// ── Danger bucketing ───────────────────────────────────────────
-
-function getDangerInfo(rawDanger: number): { label: string; color: "green" | "amber" | "red" } {
-  if (rawDanger <= 0) return { label: "None", color: "green" };
-  if (rawDanger < 0.1) return { label: "Low", color: "green" };
-  if (rawDanger < 0.2) return { label: "Moderate", color: "amber" };
-  if (rawDanger < 0.35) return { label: "High", color: "red" };
-  return { label: "Extreme", color: "red" };
-}
+import type { GovernmentType } from "@/lib/types/game";
 
 // ── Economy goods list ─────────────────────────────────────────
 
@@ -88,45 +68,14 @@ function PriceRow({ name, price, pct }: { name: string; price: number; pct: numb
   );
 }
 
-// ── Pie chart colors (keyed by good slug from GOODS constant) ──
-
-const GOOD_COLORS: Record<string, string> = {
-  water: "#60a5fa",
-  food: "#4ade80",
-  ore: "#d97706",
-  textiles: "#c084fc",
-  fuel: "#f97316",
-  metals: "#94a3b8",
-  chemicals: "#22d3ee",
-  medicine: "#f472b6",
-  electronics: "#818cf8",
-  machinery: "#a8a29e",
-  weapons: "#ef4444",
-  luxuries: "#fbbf24",
-};
-
-/** Reverse map: display name → slug key (e.g. "Water" → "water"). */
-const GOOD_NAME_TO_SLUG: Record<string, string> = Object.fromEntries(
-  Object.entries(GOODS).map(([slug, def]) => [def.name, slug]),
-);
-
-function getGoodColor(goodName: string): string {
-  const slug = GOOD_NAME_TO_SLUG[goodName];
-  return slug ? (GOOD_COLORS[slug] ?? "#6b7280") : "#6b7280";
-}
-
 // ── Main content ───────────────────────────────────────────────
 
 function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { market } = useMarket(systemId);
   const { events } = useEvents();
+  const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const { data: universeData } = useUniverse();
   const allMissions = useSystemAllMissions(systemId);
-
-  const systemInfo = universeData?.systems.find((s) => s.id === systemId);
-  const regionInfo = systemInfo
-    ? universeData?.regions.find((r) => r.id === systemInfo.regionId)
-    : undefined;
 
   const traits = useMemo(
     () => enrichTraits(systemInfo?.traits ?? []),

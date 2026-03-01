@@ -1,5 +1,8 @@
 "use client";
 
+import { TextInput } from "@/components/form/text-input";
+import { NativeSelect } from "@/components/form/native-select";
+
 interface FilterChip {
   id: string;
   label: string;
@@ -12,7 +15,7 @@ interface SortOption {
 }
 
 interface FilterBarProps {
-  chips: FilterChip[];
+  chips: readonly FilterChip[];
   activeChips: string[];
   onChipToggle: (id: string) => void;
   searchValue?: string;
@@ -64,29 +67,22 @@ export function FilterBar({
       {/* Search */}
       {onSearchChange && (
         <div className="flex-1 min-w-[140px] max-w-[240px]">
-          <input
-            type="text"
+          <TextInput
+            size="sm"
             value={searchValue ?? ""}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full px-2.5 py-1 text-xs bg-surface border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
           />
         </div>
       )}
 
       {/* Sort */}
       {sortOptions && sortOptions.length > 0 && onSortChange && (
-        <select
+        <NativeSelect
+          options={sortOptions}
           value={activeSort}
-          onChange={(e) => onSortChange(e.target.value)}
-          className="px-2 py-1 text-xs bg-surface border border-border rounded text-text-primary focus:outline-none focus:border-accent transition-colors"
-        >
-          {sortOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          onChange={onSortChange}
+        />
       )}
 
       {/* Result count */}

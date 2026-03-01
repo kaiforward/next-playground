@@ -7,6 +7,7 @@ import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { ShipCard } from "@/components/fleet/ship-card";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { FilterBar } from "@/components/ui/filter-bar";
+import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useFilterState } from "@/lib/hooks/use-filter-state";
 import type { ShipState } from "@/lib/types/game";
@@ -98,9 +99,7 @@ function FleetContent() {
       />
 
       {filtered.length === 0 ? (
-        <div className="flex items-center justify-center py-16 text-text-muted text-sm">
-          No ships match this filter.
-        </div>
+        <EmptyState message="No ships match this filter." className="py-16" />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((ship) => (

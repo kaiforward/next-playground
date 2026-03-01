@@ -2,8 +2,10 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { withCounts } from "@/lib/utils/filter";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { FilterBar } from "@/components/ui/filter-bar";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { EventIcon } from "@/components/events/event-icon";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -11,6 +13,7 @@ import { useEvents } from "@/lib/hooks/use-events";
 import { useFilterState } from "@/lib/hooks/use-filter-state";
 import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 import type { ActiveEvent } from "@/lib/types/game";
+import type { EventTypeId } from "@/lib/constants/events";
 
 const FILTER_CHIPS = [
   { id: "all", label: "All" },
@@ -26,7 +29,7 @@ const SORT_OPTIONS = [
   { id: "system", label: "System name" },
 ];
 
-const TYPE_CATEGORY: Record<string, string> = {
+const TYPE_CATEGORY: Record<EventTypeId, string> = {
   war: "conflict",
   conflict_spillover: "conflict",
   pirate_raid: "conflict",
@@ -71,14 +74,7 @@ function EventsContent() {
   }, [events, activeChips, activeSort]);
 
   const chipsWithCounts = useMemo(
-    () =>
-      FILTER_CHIPS.map((chip) => ({
-        ...chip,
-        count:
-          chip.id === "all"
-            ? events.length
-            : events.filter((e) => TYPE_CATEGORY[e.type] === chip.id).length,
-      })),
+    () => withCounts(FILTER_CHIPS, events, (e) => TYPE_CATEGORY[e.type] ?? ""),
     [events],
   );
 
@@ -95,9 +91,7 @@ function EventsContent() {
       />
 
       {filtered.length === 0 ? (
-        <div className="flex items-center justify-center py-16 text-text-muted text-sm">
-          No active events match this filter.
-        </div>
+        <EmptyState message="No active events match this filter." className="py-16" />
       ) : (
         <ul className="space-y-2">
           {filtered.map((event) => (

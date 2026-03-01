@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useActiveBattles } from "@/lib/hooks/use-battles";
 import { ENEMY_TIER_BADGE_COLOR } from "@/lib/constants/ui";
@@ -18,11 +19,7 @@ function BattlesContent() {
   );
 
   if (sorted.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-16 text-text-muted text-sm">
-        No active battles.
-      </div>
-    );
+    return <EmptyState message="No active battles." className="py-16" />;
   }
 
   return (

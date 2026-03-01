@@ -1,6 +1,7 @@
 import type { EVENT_DEFINITIONS } from "./events";
 import type { MissionType } from "./missions";
 import type { EnemyTier } from "./combat";
+import type { NotificationType } from "@/lib/types/game";
 
 /** Mapping from event type to Badge/dot color. */
 export const EVENT_TYPE_BADGE_COLOR: Record<
@@ -19,9 +20,9 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   solar_storm: "blue",
 };
 
-/** Mapping from notification type to toast/badge accent color. */
+/** Mapping from notification/event type to toast/badge accent color. */
 export const NOTIFICATION_BADGE_COLOR: Record<
-  string,
+  NotificationType | keyof typeof EVENT_DEFINITIONS,
   "red" | "amber" | "purple" | "green" | "blue" | "slate"
 > = {
   war: "red",
@@ -106,4 +107,50 @@ export const EVENT_TYPE_ICON: Record<
   pirate_raid: "skull",
   solar_storm: "bolt",
 };
+
+// ── Chart theme ──────────────────────────────────────────────
+
+export const CHART_THEME = {
+  gridStroke: "#333",
+  axisStroke: "#666",
+  tickFill: "#999",
+  tickFontSize: 12,
+  legendColor: "#999",
+  tooltipBg: "#1a1a2e",
+  tooltipBorder: "rgba(255,255,255,0.1)",
+  tooltipBorderRadius: "8px",
+  tooltipTextColor: "#fff",
+  tooltipLabelColor: "#999",
+} as const;
+
+// ── Good colors (for charts) ─────────────────────────────────
+
+import { GOODS } from "./goods";
+
+/** Pie/bar chart fill color per good slug. */
+export const GOOD_COLORS: Record<string, string> = {
+  water: "#60a5fa",
+  food: "#4ade80",
+  ore: "#d97706",
+  textiles: "#c084fc",
+  fuel: "#f97316",
+  metals: "#94a3b8",
+  chemicals: "#22d3ee",
+  medicine: "#f472b6",
+  electronics: "#818cf8",
+  machinery: "#a8a29e",
+  weapons: "#ef4444",
+  luxuries: "#fbbf24",
+};
+
+/** Reverse map: display name → slug key (e.g. "Water" → "water"). */
+const GOOD_NAME_TO_SLUG: Record<string, string> = Object.fromEntries(
+  Object.entries(GOODS).map(([slug, def]) => [def.name, slug]),
+);
+
+/** Resolve a chart color for a good by display name. */
+export function getGoodColor(goodName: string): string {
+  const slug = GOOD_NAME_TO_SLUG[goodName];
+  return slug ? (GOOD_COLORS[slug] ?? "#6b7280") : "#6b7280";
+}
 

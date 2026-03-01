@@ -1,7 +1,9 @@
 "use client";
 
 import type { ConvoyState, ShipState } from "@/lib/types/game";
-import { useDisbandConvoyMutation } from "@/lib/hooks/use-convoy";
+import { useDisbandConvoyMutation, useConvoyRefuelMutation, useConvoyRepairMutation } from "@/lib/hooks/use-convoy";
+import { computeConvoyRefuelPlan } from "@/lib/engine/convoy-refuel";
+import { computeConvoyRepairPlan } from "@/lib/engine/convoy-repair";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +19,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { HiEllipsisVertical } from "react-icons/hi2";
-import { ConvoyRepairSlider } from "./convoy-repair-slider";
-import { ConvoyRefuelSlider } from "./convoy-refuel-slider";
+import { ConvoyActionDialog, type ConvoyActionPlan } from "./convoy-action-dialog";
 import { ConvoyShipDialog } from "./convoy-ship-dialog";
 
 interface ConvoyDetailCardProps {
@@ -30,8 +31,34 @@ interface ConvoyDetailCardProps {
   variant?: "summary" | "full";
 }
 
+function adaptRefuelPlan(members: ShipState[], fraction: number): ConvoyActionPlan {
+  const plan = computeConvoyRefuelPlan(members, fraction);
+  return {
+    ships: plan.ships.map((sp) => {
+      const ship = members.find((m) => m.id === sp.shipId)!;
+      return { shipId: sp.shipId, shipName: sp.shipName, amount: sp.fuelAmount, after: sp.fuelAfter, max: ship.maxFuel, cost: sp.cost };
+    }),
+    totalUnits: plan.totalFuel,
+    totalCost: plan.totalCost,
+  };
+}
+
+function adaptRepairPlan(members: ShipState[], fraction: number): ConvoyActionPlan {
+  const plan = computeConvoyRepairPlan(members, fraction);
+  return {
+    ships: plan.ships.map((sp) => {
+      const ship = members.find((m) => m.id === sp.shipId)!;
+      return { shipId: sp.shipId, shipName: sp.shipName, amount: sp.healAmount, after: sp.hullAfter, max: ship.hullMax, cost: sp.cost };
+    }),
+    totalUnits: plan.totalHealed,
+    totalCost: plan.totalCost,
+  };
+}
+
 export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full" }: ConvoyDetailCardProps) {
   const disbandMutation = useDisbandConvoyMutation();
+  const refuelMutation = useConvoyRefuelMutation(convoy.id);
+  const repairMutation = useConvoyRepairMutation(convoy.id);
   const repairDialog = useDialog();
   const refuelDialog = useDialog();
   const manageDialog = useDialog();
@@ -206,23 +233,43 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
         )}
       </CardContent>
 
-      {/* Convoy repair slider dialog */}
+      {/* Convoy repair dialog */}
       {hasDamage && isDocked && (
-        <ConvoyRepairSlider
+        <ConvoyActionDialog
+          title="Repair Convoy"
           convoy={convoy}
           playerCredits={playerCredits}
           open={repairDialog.open}
           onClose={repairDialog.onClose}
+          computePlan={adaptRepairPlan}
+          barLabel="Hull"
+          unitLabel="hull"
+          totalLabel="Total repair"
+          barColor={(pct) => (pct < 30 ? "red" : "green")}
+          actionColor="green"
+          actionLabel="Repair"
+          pendingLabel="Repairing..."
+          mutation={repairMutation}
         />
       )}
 
-      {/* Convoy refuel slider dialog */}
+      {/* Convoy refuel dialog */}
       {needsFuel && isDocked && (
-        <ConvoyRefuelSlider
+        <ConvoyActionDialog
+          title="Refuel Convoy"
           convoy={convoy}
           playerCredits={playerCredits}
           open={refuelDialog.open}
           onClose={refuelDialog.onClose}
+          computePlan={adaptRefuelPlan}
+          barLabel="Fuel"
+          unitLabel="fuel"
+          totalLabel="Total fuel"
+          barColor={(pct) => (pct < 30 ? "red" : "blue")}
+          actionColor="blue"
+          actionLabel="Refuel"
+          pendingLabel="Refueling..."
+          mutation={refuelMutation}
         />
       )}
 

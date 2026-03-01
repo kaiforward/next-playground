@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Select, { type StylesConfig } from "react-select";
 import { tv, type VariantProps } from "tailwind-variants";
 import { formSlots, formSizeVariants } from "./form-slots";
@@ -141,6 +142,7 @@ export function SelectInput<T = string>({
   const currentKey = toKey(value);
   const styles = selectInputVariants({ size });
   const selected = options.find((o) => toKey(o.value) === currentKey) ?? null;
+  const resolvedDarkStyles = useMemo(() => darkStyles<T>(), []);
 
   return (
     <div>
@@ -159,7 +161,7 @@ export function SelectInput<T = string>({
         getOptionValue={(o) => toKey(o.value)}
         placeholder={placeholder}
         isSearchable={isSearchable}
-        styles={darkStyles<T>()}
+        styles={resolvedDarkStyles}
         menuPortalTarget={typeof document !== "undefined" ? document.body : null}
       />
       {error && <p className={styles.error()}>{error}</p>}
