@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import { toEventTypeId } from "@/lib/types/guards";
 import type { SimConfig, SimResults, EventInjection, InjectionTarget } from "./types";
 import type { SimConstantOverrides } from "./constants";
 
@@ -105,7 +106,7 @@ export function experimentToSimConfig(exp: ExperimentConfig): {
     const target: InjectionTarget = "systemIndex" in inj.target
       ? { systemIndex: inj.target.systemIndex }
       : { economyType: inj.target.economyType, nth: inj.target.nth };
-    return { tick: inj.tick, target, eventType: inj.type, severity: inj.severity };
+    return { tick: inj.tick, target, eventType: toEventTypeId(inj.type), severity: inj.severity };
   });
 
   const config: SimConfig = {

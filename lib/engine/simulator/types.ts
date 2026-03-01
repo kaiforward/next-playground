@@ -3,6 +3,7 @@
  * No DB dependency. All data is plain objects.
  */
 
+import type { EventTypeId } from "@/lib/constants/events";
 import type { EconomyType, GovernmentType } from "@/lib/types/game";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SimConstants, SimConstantOverrides } from "./constants";
@@ -47,7 +48,7 @@ export interface SimMarketEntry {
 
 export interface SimEvent {
   id: string;
-  type: string;
+  type: EventTypeId;
   phase: string;
   systemId: string;
   regionId: string;
@@ -130,7 +131,7 @@ export type InjectionTarget =
 export interface EventInjection {
   tick: number;
   target: InjectionTarget;
-  eventType: string;
+  eventType: EventTypeId;
   severity?: number;
 }
 
@@ -252,7 +253,7 @@ export interface EventBoundaryPrice {
 /** Lifecycle record for an event (tracked during simulation). */
 export interface EventLifecycle {
   id: string;
-  type: string;
+  type: EventTypeId;
   systemId: string;
   severity: number;
   startTick: number;

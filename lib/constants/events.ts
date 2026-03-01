@@ -1,5 +1,19 @@
 import type { EconomyType } from "@/lib/types/game";
 
+// ── Event type union ────────────────────────────────────────────
+
+export type EventTypeId =
+  | "war"
+  | "plague"
+  | "trade_festival"
+  | "conflict_spillover"
+  | "plague_risk"
+  | "mining_boom"
+  | "ore_glut"
+  | "supply_shortage"
+  | "pirate_raid"
+  | "solar_storm";
+
 // ── Type interfaces ─────────────────────────────────────────────
 
 export interface ModifierTemplate {
@@ -19,7 +33,7 @@ export interface ShockTemplate {
 }
 
 export interface SpreadRule {
-  eventType: string;
+  eventType: EventTypeId;
   probability: number;  // 0-1, rolled per eligible neighbor
   severity: number;     // Severity multiplier for child events
   targetFilter?: {
@@ -39,7 +53,7 @@ export interface EventPhaseDefinition {
 }
 
 export interface EventDefinition {
-  type: string;
+  type: EventTypeId;
   name: string;
   description: string;
   targetFilter?: {
@@ -474,8 +488,6 @@ const EVENT_DEFINITIONS_INTERNAL = {
   supply_shortage: supplyShortage,
   pirate_raid: pirateRaid,
   solar_storm: solarStorm,
-} as const satisfies Record<string, EventDefinition>;
-
-export type EventTypeId = keyof typeof EVENT_DEFINITIONS_INTERNAL;
+} as const satisfies Record<EventTypeId, EventDefinition>;
 
 export const EVENT_DEFINITIONS: Record<string, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;

@@ -6,6 +6,7 @@
 import type {
   EventDefinition,
   EventPhaseDefinition,
+  EventTypeId,
   ModifierTemplate,
   SpreadRule,
 } from "@/lib/constants/events";
@@ -15,7 +16,7 @@ import type {
 /** Minimal event representation for pure functions. */
 export interface EventSnapshot {
   id: string;
-  type: string;
+  type: EventTypeId;
   phase: string;
   systemId: string | null;
   regionId: string | null;
@@ -58,7 +59,7 @@ export interface AggregatedModifiers {
 
 /** Decision to spawn a new event. */
 export interface SpawnDecision {
-  type: string;
+  type: EventTypeId;
   systemId: string;
   regionId: string;
   phase: string;

@@ -1,6 +1,6 @@
 import type { Prisma } from "@/app/generated/prisma/client";
-import type { NotificationType, EntityRef } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
+import type { NotificationType, EntityRef } from "@/lib/types/game";
 import type { HazardIncidentEntry, ImportDutyEntry, ContrabandSeizedEntry, CargoLossEntry } from "@/lib/engine/danger";
 import type { DamageResult } from "@/lib/engine/damage";
 

@@ -6,6 +6,7 @@ import {
   MAX_EVENTS_GLOBAL,
   MAX_EVENTS_PER_SYSTEM,
 } from "@/lib/constants/events";
+import type { SpawnDecision } from "@/lib/engine/events";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import {
   checkPhaseTransition,
@@ -23,7 +24,7 @@ import { toEventTypeId } from "@/lib/types/guards";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Map a DB event row to an EventSnapshot. */
+/** Map a DB event row to an EventSnapshot. Validates type at the Prisma boundary. */
 function toSnapshot(e: {
   id: string;
   type: string;
@@ -38,7 +39,7 @@ function toSnapshot(e: {
 }): EventSnapshot {
   return {
     id: e.id,
-    type: e.type,
+    type: toEventTypeId(e.type),
     phase: e.phase,
     systemId: e.systemId,
     regionId: e.regionId,
@@ -90,7 +91,7 @@ async function applyShocks(
  */
 async function createSpreadEvent(
   tx: TxClient,
-  decision: { type: string; systemId: string; regionId: string; phase: string; phaseDuration: number; severity: number },
+  decision: SpawnDecision,
   sourceEventId: string,
   tick: number,
 ): Promise<string> {
@@ -188,7 +189,7 @@ export const eventsProcessor: TickProcessor = {
         const sysName = systemNameById.get(snap.id) ?? "Unknown";
         notifications.push({
           message: `${def.name} at ${sysName} has ended.`,
-          type: toEventTypeId(snap.type),
+          type: snap.type,
           refs: snap.systemId ? { system: { id: snap.systemId, label: sysName } } : {},
         });
         continue;
@@ -236,7 +237,7 @@ export const eventsProcessor: TickProcessor = {
         if (nextPhase.notification) {
           notifications.push({
             message: nextPhase.notification.replace("{systemName}", sysName),
-            type: toEventTypeId(snap.type),
+            type: snap.type,
             refs: snap.systemId ? { system: { id: snap.systemId, label: sysName } } : {},
           });
         }
@@ -291,7 +292,7 @@ export const eventsProcessor: TickProcessor = {
             if (childPhase.notification) {
               notifications.push({
                 message: childPhase.notification.replace("{systemName}", childSysName),
-                type: toEventTypeId(decision.type),
+                type: decision.type,
                 refs: { system: { id: decision.systemId, label: childSysName } },
               });
             }
@@ -399,7 +400,7 @@ export const eventsProcessor: TickProcessor = {
         if (firstPhase.notification) {
           notifications.push({
             message: firstPhase.notification.replace("{systemName}", sysName),
-            type: toEventTypeId(decision.type),
+            type: decision.type,
             refs: { system: { id: decision.systemId, label: sysName } },
           });
         }

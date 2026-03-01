@@ -29,7 +29,7 @@ function makeDefinition(
   overrides: Partial<EventDefinition> = {},
 ): EventDefinition {
   return {
-    type: "test_event",
+    type: "war",
     name: "Test Event",
     description: "A test event",
     cooldown: 50,
@@ -76,7 +76,7 @@ function makeSnapshot(
 ): EventSnapshot {
   return {
     id: "evt-1",
-    type: "test_event",
+    type: "war",
     phase: "phase_one",
     systemId: "sys-1",
     regionId: "reg-1",
@@ -336,7 +336,7 @@ describe("rollPhaseDuration", () => {
 
 describe("selectEventToSpawn", () => {
   const defs: Record<string, EventDefinition> = {
-    test_event: makeDefinition(),
+    war: makeDefinition(),
   };
 
   const systems: SystemSnapshot[] = [
@@ -350,7 +350,7 @@ describe("selectEventToSpawn", () => {
   it("returns a spawn decision when eligible", () => {
     const result = selectEventToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("test_event");
+    expect(result!.type).toBe("war");
   });
 
   it("returns null when global cap reached", () => {
@@ -363,7 +363,7 @@ describe("selectEventToSpawn", () => {
 
   it("returns null when per-type cap reached", () => {
     const events = Array.from({ length: 5 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, type: "test_event", systemId: `sys-other-${i}` }),
+      makeSnapshot({ id: `evt-${i}`, type: "war", systemId: `sys-other-${i}` }),
     );
     const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).toBeNull();
@@ -372,8 +372,8 @@ describe("selectEventToSpawn", () => {
   it("skips systems at per-system cap", () => {
     // sys-1 has 2 events already (at cap)
     const events = [
-      makeSnapshot({ id: "evt-1", type: "other_a", systemId: "sys-1" }),
-      makeSnapshot({ id: "evt-2", type: "other_b", systemId: "sys-1" }),
+      makeSnapshot({ id: "evt-1", type: "plague", systemId: "sys-1" }),
+      makeSnapshot({ id: "evt-2", type: "mining_boom", systemId: "sys-1" }),
     ];
     const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
     if (result) {
@@ -382,10 +382,10 @@ describe("selectEventToSpawn", () => {
   });
 
   it("respects cooldown", () => {
-    // test_event at sys-1 started at tick 90, cooldown is 50
-    const events = [makeSnapshot({ startTick: 90, systemId: "sys-1", type: "test_event" })];
+    // war at sys-1 started at tick 90, cooldown is 50
+    const events = [makeSnapshot({ startTick: 90, systemId: "sys-1", type: "war" })];
     // At tick 100, cooldown not expired (90 + 50 > 100)
-    // Only sys-2 and sys-3 remain. The test_event has no economy filter,
+    // Only sys-2 and sys-3 remain. The war def has no economy filter,
     // so it can spawn at either.
     const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
     if (result) {
@@ -395,7 +395,7 @@ describe("selectEventToSpawn", () => {
 
   it("respects economy type filter", () => {
     const filtered: Record<string, EventDefinition> = {
-      test_event: makeDefinition({
+      war: makeDefinition({
         targetFilter: { economyTypes: ["core"] },
       }),
     };
@@ -406,7 +406,7 @@ describe("selectEventToSpawn", () => {
 
   it("returns null when no systems match filter", () => {
     const filtered: Record<string, EventDefinition> = {
-      test_event: makeDefinition({
+      war: makeDefinition({
         targetFilter: { economyTypes: ["tech"] },
       }),
     };
@@ -428,7 +428,7 @@ describe("selectEventToSpawn", () => {
 
   it("skips weight-0 definitions (child events)", () => {
     const childOnly: Record<string, EventDefinition> = {
-      child: makeDefinition({ type: "child", weight: 0 }),
+      conflict_spillover: makeDefinition({ type: "conflict_spillover", weight: 0 }),
     };
     const result = selectEventToSpawn(childOnly, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).toBeNull();
@@ -520,7 +520,7 @@ describe("buildShocksForPhase", () => {
 
 describe("evaluateSpreadTargets", () => {
   const childDef = makeDefinition({
-    type: "child_event",
+    type: "conflict_spillover",
     weight: 0,
     phases: [{
       name: "child_phase",
@@ -531,8 +531,8 @@ describe("evaluateSpreadTargets", () => {
   });
 
   const defs: Record<string, EventDefinition> = {
-    test_event: makeDefinition(),
-    child_event: childDef,
+    war: makeDefinition(),
+    conflict_spillover: childDef,
   };
 
   const defaultSpreadCaps = { maxEventsGlobal: 15, maxEventsPerSystem: 2 };
@@ -544,7 +544,7 @@ describe("evaluateSpreadTargets", () => {
   ];
 
   const baseRule: SpreadRule = {
-    eventType: "child_event",
+    eventType: "conflict_spillover",
     probability: 1.0,
     severity: 0.3,
   };
@@ -593,8 +593,8 @@ describe("evaluateSpreadTargets", () => {
 
   it("skips neighbors at per-system cap", () => {
     const existingEvents = [
-      makeSnapshot({ id: "evt-a", type: "other_a", systemId: "sys-2", sourceEventId: null }),
-      makeSnapshot({ id: "evt-b", type: "other_b", systemId: "sys-2", sourceEventId: null }),
+      makeSnapshot({ id: "evt-a", type: "plague", systemId: "sys-2", sourceEventId: null }),
+      makeSnapshot({ id: "evt-b", type: "mining_boom", systemId: "sys-2", sourceEventId: null }),
     ];
     const result = evaluateSpreadTargets(
       [baseRule], makeSnapshot(), neighbors, existingEvents, defaultSpreadCaps, defs, () => 0,
@@ -605,12 +605,12 @@ describe("evaluateSpreadTargets", () => {
 
   it("skips neighbors with same event type already active", () => {
     const existingEvents = [
-      makeSnapshot({ id: "evt-a", type: "child_event", systemId: "sys-3", sourceEventId: "evt-parent" }),
+      makeSnapshot({ id: "evt-a", type: "conflict_spillover", systemId: "sys-3", sourceEventId: "evt-parent" }),
     ];
     const result = evaluateSpreadTargets(
       [baseRule], makeSnapshot(), neighbors, existingEvents, defaultSpreadCaps, defs, () => 0,
     );
-    // sys-3 already has child_event, should be skipped
+    // sys-3 already has conflict_spillover, should be skipped
     expect(result.map((d) => d.systemId)).not.toContain("sys-3");
   });
 
@@ -645,7 +645,7 @@ describe("evaluateSpreadTargets", () => {
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      type: "child_event",
+      type: "conflict_spillover",
       systemId: "sys-2",
       regionId: "reg-1",
       phase: "child_phase",
@@ -655,8 +655,9 @@ describe("evaluateSpreadTargets", () => {
     expect(result[0].phaseDuration).toBeLessThanOrEqual(40);
   });
 
-  it("skips rules for unknown event types", () => {
-    const rule: SpreadRule = { ...baseRule, eventType: "nonexistent" };
+  it("skips rules for event types not in definitions record", () => {
+    // "plague" is a valid EventTypeId but not in the test's defs record
+    const rule: SpreadRule = { ...baseRule, eventType: "plague" };
     const result = evaluateSpreadTargets(
       [rule], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 0,
     );
