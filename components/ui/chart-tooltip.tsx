@@ -2,6 +2,7 @@
 
 import { Tooltip } from "recharts";
 import type { ComponentProps } from "react";
+import { CHART_THEME } from "@/lib/constants/ui";
 
 type ChartTooltipProps = ComponentProps<typeof Tooltip>;
 
@@ -9,13 +10,13 @@ export function ChartTooltip(props: ChartTooltipProps) {
   return (
     <Tooltip
       contentStyle={{
-        backgroundColor: "#1a1a2e",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: "8px",
-        color: "#fff",
+        backgroundColor: CHART_THEME.tooltipBg,
+        border: `1px solid ${CHART_THEME.tooltipBorder}`,
+        borderRadius: CHART_THEME.tooltipBorderRadius,
+        color: CHART_THEME.tooltipTextColor,
       }}
-      labelStyle={{ color: "#999" }}
-      itemStyle={{ color: "#fff" }}
+      labelStyle={{ color: CHART_THEME.tooltipLabelColor }}
+      itemStyle={{ color: CHART_THEME.tooltipTextColor }}
       {...props}
     />
   );

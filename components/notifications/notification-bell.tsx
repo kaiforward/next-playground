@@ -83,26 +83,22 @@ interface NotificationBellProps {
 export function NotificationBell({ collapsed }: NotificationBellProps) {
   return (
     <Popover.Root>
-      <div className={`flex items-center px-3 py-2 ${collapsed ? "justify-center" : "gap-3"}`}>
-        <Popover.Trigger asChild>
-          <button
-            className="relative text-text-secondary hover:text-text-primary transition-colors"
-            aria-label="Notifications"
-          >
+      <Popover.Trigger asChild>
+        <button
+          className={`flex items-center px-3 py-2 text-text-secondary hover:text-text-primary transition-colors ${collapsed ? "justify-center" : "gap-3"}`}
+          aria-label="Notifications"
+        >
+          <span className="relative">
             <BellIcon />
             <QueryBoundary loadingFallback={null} errorFallback={() => null}>
               <UnreadBadge />
             </QueryBoundary>
-          </button>
-        </Popover.Trigger>
-        {!collapsed && (
-          <Popover.Trigger asChild>
-            <button className="text-sm text-text-secondary hover:text-text-primary transition-colors">
-              Notifications
-            </button>
-          </Popover.Trigger>
-        )}
-      </div>
+          </span>
+          {!collapsed && (
+            <span className="text-sm">Notifications</span>
+          )}
+        </button>
+      </Popover.Trigger>
 
       <Popover.Portal>
         <Popover.Content

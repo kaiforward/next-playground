@@ -31,6 +31,7 @@ interface UsePaginatedQueryResult<TItem> {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
+  refetch: () => void;
 }
 
 /**
@@ -97,6 +98,7 @@ export function usePaginatedQuery<
     isLoading,
     isError,
     error,
+    refetch,
   } = useInfiniteQuery<
     PaginatedData<TItem>,
     Error,
@@ -129,5 +131,6 @@ export function usePaginatedQuery<
     isLoading,
     isError,
     error: error instanceof Error ? error : error ? new Error(String(error)) : null,
+    refetch,
   };
 }

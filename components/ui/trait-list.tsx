@@ -1,6 +1,4 @@
-"use client";
-
-import { tv, type VariantProps } from "tailwind-variants";
+import { tv } from "tailwind-variants";
 import type { QualityTier, TraitCategory } from "@/lib/types/game";
 import type { EnrichedTrait } from "@/lib/utils/traits";
 
@@ -38,25 +36,11 @@ const categoryBadge = tv({
   },
 });
 
-// ── Trait list variants ──────────────────────────────────────────
+// ── Trait list ───────────────────────────────────────────────────
 
-const traitListVariants = tv({
-  base: "space-y-2",
-  variants: {
-    variant: {
-      full: "",
-      compact: "",
-    },
-  },
-  defaultVariants: {
-    variant: "full",
-  },
-});
-
-type TraitListVariants = VariantProps<typeof traitListVariants>;
-
-interface TraitListProps extends TraitListVariants {
+interface TraitListProps {
   traits: EnrichedTrait[];
+  variant?: "full" | "compact";
   className?: string;
 }
 
@@ -90,7 +74,7 @@ export function TraitList({ traits, variant = "full", className }: TraitListProp
   }
 
   return (
-    <ul className={traitListVariants({ variant, className })}>
+    <ul className={`space-y-2 ${className ?? ""}`}>
       {sorted.map((t) => (
         <li key={t.traitId} className="bg-surface px-3 py-2.5">
           <div className="flex items-center gap-2 mb-1">

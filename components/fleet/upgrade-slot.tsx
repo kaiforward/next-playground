@@ -1,18 +1,18 @@
 "use client";
 
-import type { UpgradeSlotState } from "@/lib/types/game";
+import type { UpgradeSlotState, UpgradeSlotType } from "@/lib/types/game";
 import { MODULES } from "@/lib/constants/modules";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const SLOT_TYPE_LABELS: Record<string, string> = {
+const SLOT_TYPE_LABELS: Record<UpgradeSlotType, string> = {
   engine: "Engine",
   cargo: "Cargo",
   defence: "Defence",
   systems: "Systems",
 };
 
-const SLOT_TYPE_COLORS: Record<string, "blue" | "amber" | "green" | "purple"> = {
+const SLOT_TYPE_COLORS: Record<UpgradeSlotType, "blue" | "amber" | "green" | "purple"> = {
   engine: "blue",
   cargo: "amber",
   defence: "green",

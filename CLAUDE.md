@@ -15,6 +15,7 @@ Browser-based multiplayer space trading game.
 - `npx vitest run` — Run unit tests
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). **Main game economy only** — does not simulate mini-games.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`). Main game economy only.
+- `npm run index` — Regenerate `docs/MODULE_INDEX.md` (shared module export inventory)
 - `npx prisma db seed` — Seed database
 - `npx prisma db push` — Push schema changes to SQLite
 
@@ -26,23 +27,20 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 
 ## Project Structure
 
+Core layers (fixed roles — see CLAUDE.md conventions for rules):
 - `lib/engine/` — Pure game logic. Zero DB dependency. Test with Vitest.
-- `lib/services/` — Server-side business logic. All DB access lives here. Route handlers are thin wrappers.
-- `lib/tick/` — Tick engine and processor pipeline (ship-arrivals, events, economy, trade-missions, price-snapshots).
-- `lib/constants/` — Game data definitions (goods, economy types, government types, events, ships, etc.).
-- `lib/types/` — Shared types (`game.ts`, `api.ts`) and runtime type guards (`guards.ts`).
-- `lib/auth/` — NextAuth config, helpers, password hashing.
-- `lib/query/` — TanStack Query client factory, query key factory, `apiFetch`/`apiMutate` helpers.
-- `lib/hooks/` — Read hooks (`useSuspenseQuery`), mutation hooks, SSE (tick stream + invalidation), map state, dev tools.
-- `lib/api/` — API utilities (body parser, rate limiter, dev-only guard).
+- `lib/services/` — All DB access and business logic. Route handlers are thin wrappers.
+- `lib/tick/` — Tick engine and processor pipeline.
 - `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json.
-- `app/(game)/` — Dashboard, map, ship/[shipId], system/[systemId] with tabbed sub-routes (auth-protected via layout).
-- `app/(auth)/` — Login, register pages.
+- `app/(game)/` — Game UI pages. `app/(auth)/` — Auth pages.
 - `prisma/` — Schema and seed script.
+
+Shared modules (utils, hooks, constants, components) are inventoried in `docs/MODULE_INDEX.md` — run `npm run index` to regenerate.
 
 ## Docs
 
 Functional spec: `docs/SPEC.md` — master game spec with system interaction map. Read this first.
+Module index: `docs/MODULE_INDEX.md` — auto-generated inventory of all shared exports (utils, hooks, components, constants). Regenerate with `npm run index`.
 
 Design docs:
 - `docs/design/active/` — Implemented systems (economy, events, trading, navigation, universe, tick-engine, event-catalog)
@@ -52,9 +50,12 @@ Design docs:
 
 ## Design Principles
 
-- **Separation of concerns** — Components render UI; they don't fetch data or hold business logic. Prefer additional boilerplate (hooks, schemas, services) over mixing concerns in components.
-- **Reusability first** — Extract shared UI into `components/ui/` or `components/form/`. Never duplicate markup that already has a component. Keep variant counts small and intentional.
-- **Scalability** — Design for the next 10 uses, not just the current one. Use `tv()` variants, typed props, and semantic HTML (`<dl>` for key-value, `<button>` for actions).
+These apply to every layer — components, hooks, services, engine, processors, constants.
+
+- **Separation of concerns** — Each layer has one job. Components render UI. Hooks manage data fetching and client state. Services own business logic and DB access. Engine functions are pure computation. Route handlers are thin wrappers. Prefer additional boilerplate (hooks, schemas, services) over mixing concerns in a single file.
+- **DRY (Don't Repeat Yourself)** — When logic, markup, or configuration appears in more than one place, extract it. Shared UI goes in `components/ui/` or `components/form/`. Shared business logic goes in `lib/utils/` or `lib/engine/`. Shared types go in `lib/types/`. The second occurrence is the signal to extract — don't wait for a third.
+- **KISS (Keep It Simple)** — Solve the current problem with the minimum necessary complexity. Don't add indirection, abstraction, or configuration for hypothetical future needs. A straightforward 20-line function is better than a clever 5-line one. When choosing between approaches, pick the one that's easiest to read, debug, and delete.
+- **Reusability** — Design interfaces (props, function signatures, types) for the next 10 uses, not just the current one. Use typed props, discriminated unions, and explicit accessor functions over loose string keys or open-ended config objects.
 - **Security** — Validate at system boundaries (API routes, form schemas). Use Prisma transactions with optimistic locking for mutations. Never trust client state for writes.
 
 ## Conventions
@@ -74,17 +75,29 @@ Design docs:
 
 ## UI Components
 
-Use existing components instead of inline markup. When a pattern appears twice, extract it.
+Use existing components instead of inline markup. Never duplicate markup that already has a component. Use `tv()` variants, typed props, and semantic HTML (`<dl>` for key-value, `<button>` for actions). Keep variant counts small and intentional.
 
 - `components/ui/` — Layout and action primitives (Button, Card, Badge, PageContainer, ProgressBar, StatDisplay, DataTable, StatList, LoadingFallback, ErrorFallback). Read the file for props/variants.
 - `components/form/` — Form controls (TextInput, NumberInput, RangeInput, SelectInput, FormError). Never use raw `<input>` or `<select>`.
 - **QueryBoundary** (`components/ui/query-boundary.tsx`) — Wraps data-fetching sections. Uses a mounted guard to defer children past SSR hydration so `useSuspenseQuery` only fires in the browser. Composes Suspense + ErrorBoundary + QueryErrorResetBoundary.
 - **Dialog** (`components/ui/dialog.tsx`) — Native `<dialog>` wrapper. Non-modal uses `.show()` + manual Escape/focus; modal uses `showModal()` + browser-native focus trap. Companion `useDialog` hook.
 
+## Quality Checklist
+
+After each phase or meaningful commit, verify against these common pitfalls before moving on:
+
+- **Typed keys** — Maps use union keys from constants/types, not `Record<string, ...>`
+- **Existing components** — `EmptyState`, `ErrorFallback`, form components, `Badge` — not raw markup
+- **No duplication** — If logic/markup exists in two places, extract to `lib/utils/` or `components/ui/`
+- **`"use client"` only where needed** — Components without hooks, state, or event handlers don't need it
+- **Clean up after yourself** — No unused props, dead imports, or orphaned code left behind
+
 ## Git Workflow
 
 - Feature branch per feature (`feat/feature-name`), PR to main when complete.
+- Use worktrees for larger pieces of work, merging into a shared feature branch.
 - Commit after each meaningful unit of work (new model, API route, component).
+- **Break large features into 2-4 phase PRs** — each PR small enough to hold full convention context. Review against the quality checklist after each phase, not just at the end. A 12-phase plan should ship as 3-4 PRs, not one monolithic branch.
 
 ## Troubleshooting
 

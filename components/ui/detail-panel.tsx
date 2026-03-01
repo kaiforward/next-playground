@@ -41,10 +41,12 @@ interface DetailPanelProps {
   subtitle?: React.ReactNode;
   headerAction?: React.ReactNode;
   size?: "md" | "lg" | "xl";
+  /** Path to navigate to when the panel is closed (default: "/"). */
+  backPath?: string;
   children: React.ReactNode;
 }
 
-export function DetailPanel({ title, subtitle, headerAction, size, children }: DetailPanelProps) {
+export function DetailPanel({ title, subtitle, headerAction, size, backPath = "/", children }: DetailPanelProps) {
   const router = useRouter();
   const panelRef = useRef<HTMLDivElement>(null);
   const styles = panel({ size });
@@ -57,8 +59,8 @@ export function DetailPanel({ title, subtitle, headerAction, size, children }: D
   }, []);
 
   const close = useCallback(() => {
-    router.push("/");
-  }, [router]);
+    router.push(backPath);
+  }, [router, backPath]);
 
   // Close on Escape — only when focus is not inside an input/textarea/select
   useEffect(() => {

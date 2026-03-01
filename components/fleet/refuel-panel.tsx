@@ -3,11 +3,9 @@
 import { useState, useMemo } from "react";
 import type { ShipState } from "@/lib/types/game";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
-import { formatCredits } from "@/lib/utils/format";
 import { useRefuelMutation } from "@/lib/hooks/use-refuel-mutation";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { RangeInput } from "@/components/form/range-input";
+import { RefuelControls } from "./refuel-controls";
 
 interface RefuelPanelProps {
   ship: ShipState;
@@ -42,46 +40,20 @@ export function RefuelPanel({ ship, playerCredits }: RefuelPanelProps) {
   return (
     <Card variant="bordered" padding="md">
       <CardHeader title="Refuel" subtitle={`${REFUEL_COST_PER_UNIT} CR per unit`} />
-      <CardContent className="space-y-4">
-        <RangeInput
-          id="refuel-amount"
-          label="Fuel Amount"
-          valueLabel={`${clampedAmount} / ${fuelNeeded}`}
-          size="md"
-          min={1}
-          max={sliderMax}
-          step={1}
-          value={clampedAmount}
-          onChange={(e) => setAmount(Number(e.target.value))}
+      <CardContent>
+        <RefuelControls
+          ship={ship}
+          playerCredits={playerCredits}
+          amount={clampedAmount}
+          setAmount={setAmount}
+          clampedAmount={clampedAmount}
+          totalCost={totalCost}
+          sliderMax={sliderMax}
+          fuelNeeded={fuelNeeded}
+          onRefuel={handleRefuel}
+          isPending={mutation.isPending}
+          error={mutation.error}
         />
-
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-text-secondary">
-            {clampedAmount} fuel × {REFUEL_COST_PER_UNIT} CR
-          </span>
-          <span className="text-text-primary font-medium">
-            = {formatCredits(totalCost)}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between text-xs text-text-muted">
-          <span>Balance</span>
-          <span>{formatCredits(playerCredits)}</span>
-        </div>
-
-        {mutation.error && (
-          <p className="text-xs text-red-400">{mutation.error.message}</p>
-        )}
-
-        <Button
-          variant="action"
-          color="cyan"
-          className="w-full"
-          onClick={handleRefuel}
-          disabled={mutation.isPending}
-        >
-          {mutation.isPending ? "Refueling..." : `Refuel for ${formatCredits(totalCost)}`}
-        </Button>
       </CardContent>
     </Card>
   );

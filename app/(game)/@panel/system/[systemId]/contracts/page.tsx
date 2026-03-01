@@ -53,7 +53,6 @@ function ContractsContent({ systemId }: { systemId: string }) {
         <OperationsPanel
           available={allMissions.opMissions.available}
           active={allMissions.opMissions.active}
-          systemId={systemId}
           fleet={fleet}
           currentTick={currentTick}
         />

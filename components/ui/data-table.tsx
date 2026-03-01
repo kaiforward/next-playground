@@ -16,6 +16,8 @@ export interface Column<T> {
 interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
+  /** Stable key for each row. Falls back to array index if omitted. */
+  getKey?: (row: T, index: number) => string;
   onRowClick?: (row: T) => void;
   rowClassName?: (row: T) => string;
 }
@@ -23,6 +25,7 @@ interface DataTableProps<T> {
 export function DataTable<T extends object>({
   columns,
   data,
+  getKey,
   onRowClick,
   rowClassName,
 }: DataTableProps<T>) {
@@ -87,7 +90,7 @@ export function DataTable<T extends object>({
         <tbody>
           {sortedData.map((row, i) => (
             <tr
-              key={i}
+              key={getKey ? getKey(row, i) : i}
               className={`border-b border-border transition-colors ${
                 onRowClick ? "cursor-pointer hover:bg-surface-hover" : ""
               } ${rowClassName ? rowClassName(row) : ""}`}

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import type { ShipState, RegionInfo } from "@/lib/types/game";
-import { getCargoUsed } from "@/lib/utils/cargo";
+import { getShipDerivedState } from "@/lib/utils/ship";
 import { ROLE_COLORS } from "@/lib/constants/ships";
+import { ShipStatusBadge } from "./ship-status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,14 +34,7 @@ interface ShipCardProps {
 }
 
 export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, inBattle }: ShipCardProps) {
-  const fuelPercent = ship.maxFuel > 0 ? (ship.fuel / ship.maxFuel) * 100 : 0;
-  const cargoUsed = getCargoUsed(ship.cargo);
-  const cargoPercent = ship.cargoMax > 0 ? (cargoUsed / ship.cargoMax) * 100 : 0;
-  const isDocked = ship.status === "docked";
-  const onMission = ship.activeMission?.status === "in_progress";
-  const needsFuel = isDocked && ship.fuel < ship.maxFuel;
-  const hullPercent = ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100;
-  const isDamaged = ship.hullCurrent < ship.hullMax;
+  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, isDocked, onMission, needsFuel, isDamaged } = getShipDerivedState(ship);
 
   const detailHref = backTo ? `/ship/${ship.id}?from=${backTo}` : `/ship/${ship.id}`;
   const refuelDialog = useDialog();
@@ -63,17 +57,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
             </Badge>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {ship.disabled ? (
-              <Badge color="red">Disabled</Badge>
-            ) : inBattle ? (
-              <Badge color="purple">In Battle</Badge>
-            ) : ship.activeMission?.status === "in_progress" ? (
-              <Badge color="cyan">On Mission</Badge>
-            ) : (
-              <Badge color={isDocked ? "green" : "amber"}>
-                {isDocked ? "Docked" : "In Transit"}
-              </Badge>
-            )}
+            <ShipStatusBadge ship={ship} inBattle={inBattle} />
             <Button href={detailHref} variant="ghost" size="xs">
               Details &rarr;
             </Button>

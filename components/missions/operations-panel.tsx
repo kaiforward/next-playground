@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { MissionInfo, FleetState } from "@/lib/types/game";
 import { useAcceptOpMission, useAbandonOpMission, useStartOpMission } from "@/lib/hooks/use-op-mission-mutations";
+import { isShipEligible } from "@/lib/utils/missions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -19,7 +20,6 @@ import { MISSION_TYPE_BADGE_COLOR, ENEMY_TIER_BADGE_COLOR } from "@/lib/constant
 interface OperationsPanelProps {
   available: MissionInfo[];
   active: MissionInfo[];
-  systemId: string;
   fleet: FleetState | null;
   currentTick: number;
 }
@@ -27,7 +27,6 @@ interface OperationsPanelProps {
 export function OperationsPanel({
   available,
   active,
-  systemId: _systemId,
   fleet,
   currentTick,
 }: OperationsPanelProps) {
@@ -161,7 +160,7 @@ function AvailableOperations({
         {missions.length === 0 ? (
           <EmptyState message="No operational missions available right now." />
         ) : (
-          <DataTable columns={columns} data={missions} />
+          <DataTable columns={columns} data={missions} getKey={(row) => row.id} />
         )}
       </CardContent>
     </Card>
@@ -243,27 +242,14 @@ function ActiveOperations({
         // For accepted missions, build eligible ship list
         const eligible: Array<{ id: string; name: string }> = [];
         if (row.status === "accepted" && fleet) {
-          const statReqs = row.statRequirements;
           for (const ship of fleet.ships) {
             if (ship.status !== "docked") continue;
             if (ship.systemId !== row.targetSystemId) continue;
             if (ship.disabled) continue;
             if (ship.convoyId) continue;
             if (ship.activeMission) continue;
-            const stats: Record<string, number> = {
-              firepower: ship.firepower,
-              sensors: ship.sensors,
-              hullMax: ship.hullMax,
-              stealth: ship.stealth,
-            };
-            let meets = true;
-            for (const [stat, required] of Object.entries(statReqs)) {
-              if ((stats[stat] ?? 0) < required) {
-                meets = false;
-                break;
-              }
-            }
-            if (meets) eligible.push({ id: ship.id, name: ship.name });
+            if (!isShipEligible(ship, row.statRequirements)) continue;
+            eligible.push({ id: ship.id, name: ship.name });
           }
         }
 
@@ -351,7 +337,7 @@ function ActiveOperations({
         {error && (
           <InlineAlert className="mb-4">{error}</InlineAlert>
         )}
-        <DataTable columns={columns} data={missions} />
+        <DataTable columns={columns} data={missions} getKey={(row) => row.id} />
       </CardContent>
     </Card>
   );

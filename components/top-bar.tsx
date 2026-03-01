@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -33,17 +34,14 @@ interface Crumb {
 
 /** Resolve system/ship/convoy names from hooks. */
 function useBreadcrumbNames() {
-  // System names
   const { data: universe } = useUniverse();
-  const systemMap = new Map(universe.systems.map((s) => [s.id, s.name]));
+  const systemMap = useMemo(() => new Map(universe.systems.map((s) => [s.id, s.name])), [universe.systems]);
 
-  // Ship names
   const { fleet } = useFleet();
-  const shipMap = new Map(fleet.ships.map((s) => [s.id, s.name]));
+  const shipMap = useMemo(() => new Map(fleet.ships.map((s) => [s.id, s.name])), [fleet.ships]);
 
-  // Convoy names
   const { convoys } = useConvoys();
-  const convoyMap = new Map(convoys.map((c) => [c.id, c.name]));
+  const convoyMap = useMemo(() => new Map(convoys.map((c) => [c.id, c.name])), [convoys]);
 
   return { systemMap, shipMap, convoyMap };
 }

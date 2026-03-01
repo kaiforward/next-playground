@@ -7,6 +7,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerSchema, type RegisterInput } from "@/lib/schemas/auth";
+import { apiMutate } from "@/lib/query/fetcher";
 import { TextInput } from "@/components/form/text-input";
 import { FormError } from "@/components/form/form-error";
 import { Button } from "@/components/ui/button";
@@ -29,22 +30,11 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: data.name,
-          email: data.email,
-          password: data.password,
-        }),
+      await apiMutate("/api/register", {
+        name: data.name,
+        email: data.email,
+        password: data.password,
       });
-
-      if (!res.ok) {
-        const json = await res.json();
-        setError(json.error || "Registration failed");
-        setLoading(false);
-        return;
-      }
 
       // Auto sign-in after successful registration
       const signInResult = await signIn("credentials", {
@@ -59,8 +49,8 @@ export default function RegisterPage() {
       } else {
         router.push("/");
       }
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }

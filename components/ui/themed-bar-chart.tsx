@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
+import { CHART_THEME } from "@/lib/constants/ui";
 import type { ComponentProps } from "react";
 
 type TooltipFormatter = ComponentProps<typeof ChartTooltip>["formatter"];
@@ -20,17 +21,17 @@ interface BarDef {
   color: string;
 }
 
-interface ThemedBarChartProps {
-  data: Record<string, string | number>[];
+interface ThemedBarChartProps<T extends Record<string, string | number>> {
+  data: T[];
   bars: BarDef[];
-  xAxisKey: string;
+  xAxisKey: keyof T & string;
   showLegend?: boolean;
   minHeight?: number;
   formatter?: TooltipFormatter;
   yAxisFormatter?: (v: number) => string;
 }
 
-export function ThemedBarChart({
+export function ThemedBarChart<T extends Record<string, string | number>>({
   data,
   bars,
   xAxisKey,
@@ -38,27 +39,27 @@ export function ThemedBarChart({
   minHeight = 288,
   formatter,
   yAxisFormatter,
-}: ThemedBarChartProps) {
+}: ThemedBarChartProps<T>) {
   return (
     <ResponsiveContainer width="100%" height="100%" minHeight={minHeight}>
       <BarChart
         data={data}
         margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
       >
-        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.gridStroke} />
         <XAxis
           dataKey={xAxisKey}
-          stroke="#666"
-          tick={{ fill: "#999", fontSize: 12 }}
+          stroke={CHART_THEME.axisStroke}
+          tick={{ fill: CHART_THEME.tickFill, fontSize: CHART_THEME.tickFontSize }}
         />
         <YAxis
-          stroke="#666"
-          tick={{ fill: "#999", fontSize: 12 }}
+          stroke={CHART_THEME.axisStroke}
+          tick={{ fill: CHART_THEME.tickFill, fontSize: CHART_THEME.tickFontSize }}
           tickFormatter={yAxisFormatter}
         />
         <ChartTooltip formatter={formatter} />
         {showLegend && (
-          <Legend wrapperStyle={{ color: "#999", paddingTop: "10px" }} />
+          <Legend wrapperStyle={{ color: CHART_THEME.legendColor, paddingTop: "10px" }} />
         )}
         {bars.map((bar) => (
           <Bar

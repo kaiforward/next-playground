@@ -4,8 +4,9 @@ import { NotificationEntityLinks } from "@/components/events/notification-entity
 import { NOTIFICATION_BADGE_COLOR } from "@/lib/constants/ui";
 import { formatRelativeTime } from "@/lib/utils/format";
 import type { PlayerNotificationInfo } from "@/lib/types/game";
+import type { BadgeColor } from "@/components/ui/badge";
 
-const COLOR_CLASSES: Record<string, string> = {
+const COLOR_CLASSES: Record<BadgeColor, string> = {
   red: "bg-red-500",
   amber: "bg-amber-500",
   purple: "bg-purple-500",

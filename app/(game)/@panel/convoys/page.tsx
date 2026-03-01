@@ -2,9 +2,11 @@
 
 import { useMemo } from "react";
 import { useConvoys } from "@/lib/hooks/use-convoy";
+import { withCounts } from "@/lib/utils/filter";
 import { ConvoyStatus } from "@/components/fleet/convoy-status";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { FilterBar } from "@/components/ui/filter-bar";
+import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useFilterState } from "@/lib/hooks/use-filter-state";
 import type { ConvoyState } from "@/lib/types/game";
@@ -59,14 +61,7 @@ function ConvoysContent() {
   }, [convoys, activeChips, searchValue, activeSort]);
 
   const chipsWithCounts = useMemo(
-    () =>
-      FILTER_CHIPS.map((chip) => ({
-        ...chip,
-        count:
-          chip.id === "all"
-            ? convoys.length
-            : convoys.filter((c) => c.status === chip.id).length,
-      })),
+    () => withCounts(FILTER_CHIPS, convoys, (c) => c.status),
     [convoys],
   );
 
@@ -86,9 +81,10 @@ function ConvoysContent() {
       />
 
       {filtered.length === 0 ? (
-        <div className="flex items-center justify-center py-16 text-text-muted text-sm">
-          {convoys.length === 0 ? "No convoys formed yet." : "No convoys match this filter."}
-        </div>
+        <EmptyState
+          message={convoys.length === 0 ? "No convoys formed yet." : "No convoys match this filter."}
+          className="py-16"
+        />
       ) : (
         <ConvoyStatus convoys={filtered} />
       )}

@@ -1,5 +1,3 @@
-"use client";
-
 import { tv, type VariantProps } from "tailwind-variants";
 
 const cardVariants = tv({
