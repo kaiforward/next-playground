@@ -31,10 +31,10 @@ function parseArgs(argv: string[]): {
   help: boolean;
   config?: string;
 } {
-  const result = {
+  const result: { json: boolean; help: boolean; config: string | undefined } = {
     json: false,
     help: false,
-    config: undefined as string | undefined,
+    config: undefined,
   };
 
   for (let i = 0; i < argv.length; i++) {

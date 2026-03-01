@@ -3,10 +3,14 @@
 import { useState, useCallback } from "react";
 
 export interface Column<T> {
+  /** Unique column identifier — used for React keys and sort tracking. */
   key: string;
   label: string;
   sortable?: boolean;
-  render?: (row: T) => React.ReactNode;
+  /** How to render the cell. */
+  render: (row: T) => React.ReactNode;
+  /** Sort value extractor — required when `sortable` is true. */
+  getValue?: (row: T) => string | number | null;
 }
 
 interface DataTableProps<T> {
@@ -16,7 +20,7 @@ interface DataTableProps<T> {
   rowClassName?: (row: T) => string;
 }
 
-export function DataTable<T extends Record<string, unknown>>({
+export function DataTable<T extends object>({
   columns,
   data,
   onRowClick,
@@ -39,9 +43,10 @@ export function DataTable<T extends Record<string, unknown>>({
 
   const sortedData = [...data];
   if (sortKey) {
+    const sortCol = columns.find((c) => c.key === sortKey);
     sortedData.sort((a, b) => {
-      const aVal = a[sortKey];
-      const bVal = b[sortKey];
+      const aVal = sortCol?.getValue ? sortCol.getValue(a) : null;
+      const bVal = sortCol?.getValue ? sortCol.getValue(b) : null;
       if (aVal == null || bVal == null) return 0;
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDir === "asc" ? aVal - bVal : bVal - aVal;
@@ -90,7 +95,7 @@ export function DataTable<T extends Record<string, unknown>>({
             >
               {columns.map((col) => (
                 <td key={col.key} className="px-4 py-3 text-text-primary">
-                  {col.render ? col.render(row) : String(row[col.key] ?? "")}
+                  {col.render(row)}
                 </td>
               ))}
             </tr>

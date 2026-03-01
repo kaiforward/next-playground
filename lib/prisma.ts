@@ -1,7 +1,10 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+declare global {
+  // eslint-disable-next-line no-var
+  var __prisma: PrismaClient | undefined;
+}
 
 function createPrismaClient() {
   const adapter = new PrismaBetterSqlite3({
@@ -10,6 +13,6 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma || createPrismaClient();
+export const prisma = globalThis.__prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") globalThis.__prisma = prisma;

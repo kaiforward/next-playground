@@ -217,7 +217,9 @@ export const MODULES: Record<ModuleId, ModuleDefinition> = {
 };
 
 /** All module IDs as an array. */
-export const ALL_MODULE_IDS: ModuleId[] = Object.keys(MODULES) as ModuleId[];
+export const ALL_MODULE_IDS: ModuleId[] = Object.keys(MODULES).filter(
+  (k): k is ModuleId => k in MODULES,
+);
 
 /** Get modules available for a specific slot type. */
 export function getModulesForSlot(slotType: UpgradeSlotType): ModuleDefinition[] {

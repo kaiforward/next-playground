@@ -110,6 +110,8 @@ export const OP_MISSION_CONSTANTS = {
 
 // ── Trade mission constants ─────────────────────────────────────
 
+const REWARD_TIER_MULT: Readonly<Record<number, number>> = { 0: 1.0, 1: 4.0, 2: 12.0 };
+
 export const MISSION_CONSTANTS = {
   MAX_ACTIVE_PER_PLAYER: 10,
   MAX_AVAILABLE_PER_STATION: 8,
@@ -120,7 +122,7 @@ export const MISSION_CONSTANTS = {
   QUANTITY_RANGE: [20, 60] as const,
   REWARD_PER_UNIT: 3,
   REWARD_DISTANCE_MULT: 1.25,    // compounding per hop
-  REWARD_TIER_MULT: { 0: 1.0, 1: 4.0, 2: 12.0 } as Record<number, number>,
+  REWARD_TIER_MULT,
   REWARD_EVENT_MULT: 1.5,
   REWARD_MIN: 50,
   MAX_EXPORT_DISTANCE: 3,        // hops

@@ -148,7 +148,7 @@ describe("buildModifiersForPhase", () => {
     const regionPhase = {
       name: "test",
       displayName: "Test",
-      durationRange: [10, 20] as [number, number],
+      durationRange: [10, 20] satisfies [number, number],
       modifiers: [{
         domain: "economy" as const,
         type: "equilibrium_shift" as const,

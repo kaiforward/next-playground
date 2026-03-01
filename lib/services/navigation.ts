@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { validateFleetRouteNavigation } from "@/lib/engine/navigation";
+import { toShipStatus } from "@/lib/types/guards";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipNavigateResult } from "@/lib/types/api";
 
@@ -75,7 +76,7 @@ export async function executeNavigation(
     route,
     connections,
     currentFuel: ship.fuel,
-    shipStatus: ship.status as "docked" | "in_transit",
+    shipStatus: toShipStatus(ship.status),
     currentTick: world.currentTick,
     shipSpeed: ship.speed,
   });

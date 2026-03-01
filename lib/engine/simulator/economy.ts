@@ -8,7 +8,7 @@ import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
 import { computeTraitProductionBonus, computeTraitDanger } from "@/lib/engine/trait-gen";
-import { toTraitId, toQualityTier } from "@/lib/types/guards";
+import { toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
 import {
   aggregateDangerLevel,
   rollCargoLoss,
@@ -153,7 +153,7 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
       .map((c) => ({
         goodId: c.goodId,
         quantity: c.quantity,
-        hazard: (GOODS[c.goodId]?.hazard ?? "none") as "none" | "low" | "high",
+        hazard: toHazard(GOODS[c.goodId]?.hazard ?? "none"),
       }));
     const hazardLosses = rollHazardIncidents(enriched, danger, rng);
     for (const inc of hazardLosses) {

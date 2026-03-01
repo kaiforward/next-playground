@@ -23,7 +23,8 @@ import {
   REGION_NAMES,
 } from "../lib/constants/universe-gen";
 import { QUALITY_TIERS, TRAITS } from "../lib/constants/traits";
-import type { EconomyType, QualityTier, TraitCategory } from "../lib/types/game";
+import type { EconomyType, QualityTier } from "../lib/types/game";
+import { ALL_QUALITY_TIERS } from "../lib/types/guards";
 
 // ── Configuration ────────────────────────────────────────────────
 
@@ -54,8 +55,8 @@ interface SeedResult {
   seed: number;
   totalTraits: number;
   qualityCounts: Record<QualityTier, number>;
-  economyCounts: Record<EconomyType, number>;
-  categoryCounts: Record<TraitCategory, number>;
+  economyCounts: Record<string, number>;
+  categoryCounts: Record<string, number>;
   traitCountDistribution: Record<number, number>; // traits-per-system → count
   regionCoherence: { name: string; dominant: string; pct: number; monotonous: boolean }[];
   coherenceViolations: number;
@@ -124,8 +125,8 @@ function analyzeSeed(seed: number): SeedResult {
     seed,
     totalTraits,
     qualityCounts,
-    economyCounts: economyCounts as Record<EconomyType, number>,
-    categoryCounts: categoryCounts as Record<TraitCategory, number>,
+    economyCounts,
+    categoryCounts,
     traitCountDistribution,
     regionCoherence,
     coherenceViolations,
@@ -154,7 +155,7 @@ function run() {
   const totalTraitsAll = results.reduce((s, r) => s + r.totalTraits, 0);
   const aggQuality: Record<QualityTier, number> = { 1: 0, 2: 0, 3: 0 };
   for (const r of results) {
-    for (const q of [1, 2, 3] as QualityTier[]) {
+    for (const q of ALL_QUALITY_TIERS) {
       aggQuality[q] += r.qualityCounts[q];
     }
   }
@@ -162,7 +163,7 @@ function run() {
   console.log("── Quality Tier Distribution ──");
   console.log(`Total traits across all seeds: ${totalTraitsAll}`);
   const targets = { 1: 50, 2: 35, 3: 15 };
-  for (const q of [1, 2, 3] as QualityTier[]) {
+  for (const q of ALL_QUALITY_TIERS) {
     const pct = ((aggQuality[q] / totalTraitsAll) * 100).toFixed(1);
     const target = targets[q];
     const label = QUALITY_TIERS[q].label;
@@ -266,7 +267,7 @@ function run() {
 
   // ── Summary verdict ──────────────────────────────────────────
   const issues: string[] = [];
-  for (const q of [1, 2, 3] as QualityTier[]) {
+  for (const q of ALL_QUALITY_TIERS) {
     const pct = (aggQuality[q] / totalTraitsAll) * 100;
     if (Math.abs(pct - targets[q]) > 5) {
       issues.push(`Quality ${q} off by ${(pct - targets[q]).toFixed(1)}%`);
