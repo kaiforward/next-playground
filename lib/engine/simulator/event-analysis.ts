@@ -6,6 +6,7 @@
  * system-local bot activity for each event.
  */
 
+import type { EventTypeId } from "@/lib/constants/events";
 import { calculatePrice } from "@/lib/engine/pricing";
 import type {
   SimWorld,
@@ -35,7 +36,7 @@ function snapshotPrices(
 // ── Active event record (internal) ──────────────────────────────
 
 interface ActiveEventRecord {
-  type: string;
+  type: EventTypeId;
   systemId: string;
   severity: number;
   startTick: number;

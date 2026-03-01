@@ -6,6 +6,7 @@
 import type {
   EventDefinition,
   EventPhaseDefinition,
+  EventTypeId,
   ModifierTemplate,
   SpreadRule,
 } from "@/lib/constants/events";
@@ -15,7 +16,7 @@ import type {
 /** Minimal event representation for pure functions. */
 export interface EventSnapshot {
   id: string;
-  type: string;
+  type: EventTypeId;
   phase: string;
   systemId: string | null;
   regionId: string | null;
@@ -58,7 +59,7 @@ export interface AggregatedModifiers {
 
 /** Decision to spawn a new event. */
 export interface SpawnDecision {
-  type: string;
+  type: EventTypeId;
   systemId: string;
   regionId: string;
   phase: string;
@@ -264,7 +265,7 @@ export function selectEventToSpawn(
     for (const sys of systems) {
       // Economy type filter
       if (def.targetFilter?.economyTypes) {
-        if (!def.targetFilter.economyTypes.includes(sys.economyType as never)) continue;
+        if (!def.targetFilter.economyTypes.some((t) => t === sys.economyType)) continue;
       }
 
       // Per-system cap
@@ -393,7 +394,7 @@ export function evaluateSpreadTargets(
 
       // Filter: economyTypes
       if (rule.targetFilter?.economyTypes) {
-        if (!rule.targetFilter.economyTypes.includes(neighbor.economyType as never)) {
+        if (!rule.targetFilter.economyTypes.some((t) => t === neighbor.economyType)) {
           continue;
         }
       }

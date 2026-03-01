@@ -1,6 +1,6 @@
 import type { ShipState, ShipActiveMission, ConvoyState, UpgradeSlotState } from "@/lib/types/game";
-import { toShipStatus, toEconomyType, toShipSize, toShipRole, toUpgradeSlotType, toConvoyStatus } from "@/lib/types/guards";
-import { SHIP_TYPES, type ShipTypeId } from "@/lib/constants/ships";
+import { toShipStatus, toEconomyType, toShipSize, toShipRole, toUpgradeSlotType, toConvoyStatus, toModuleId } from "@/lib/types/guards";
+import { SHIP_TYPES } from "@/lib/constants/ships";
 import { isShipTypeId } from "@/lib/types/guards";
 import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
 
@@ -75,7 +75,8 @@ export function serializeShip(ship: {
   }>;
   convoyMember?: { convoyId: string } | null;
 }, activeMission?: ShipActiveMission | null): ShipState {
-  const typeDef = isShipTypeId(ship.shipType) ? SHIP_TYPES[ship.shipType as ShipTypeId] : null;
+  const shipType = ship.shipType;
+  const typeDef = isShipTypeId(shipType) ? SHIP_TYPES[shipType] : null;
 
   return {
     id: ship.id,
@@ -113,7 +114,7 @@ export function serializeShip(ship: {
       id: s.id,
       slotType: toUpgradeSlotType(s.slotType),
       slotIndex: s.slotIndex,
-      moduleId: s.moduleId,
+      moduleId: s.moduleId ? toModuleId(s.moduleId) : null,
       moduleTier: s.moduleTier,
     })),
     convoyId: ship.convoyMember?.convoyId ?? null,

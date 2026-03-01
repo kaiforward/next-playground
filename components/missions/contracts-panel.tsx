@@ -13,8 +13,6 @@ import { formatCredits } from "@/lib/utils/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
 
-type MissionRow = TradeMissionInfo & Record<string, unknown>;
-
 interface ContractsPanelProps {
   available: TradeMissionInfo[];
   active: TradeMissionInfo[];
@@ -59,7 +57,7 @@ function AvailableContracts({
   const acceptMutation = useAcceptMission();
   const [error, setError] = useState<string | null>(null);
 
-  const columns: Column<MissionRow>[] = [
+  const columns: Column<TradeMissionInfo>[] = [
     {
       key: "type",
       label: "Type",
@@ -153,7 +151,7 @@ function AvailableContracts({
         {missions.length === 0 ? (
           <EmptyState message="No contracts available at this station right now." />
         ) : (
-          <DataTable columns={columns} data={missions as MissionRow[]} />
+          <DataTable columns={columns} data={missions} />
         )}
       </CardContent>
     </Card>
@@ -203,7 +201,7 @@ function ActiveMissions({
     }
   }
 
-  const columns: Column<MissionRow>[] = [
+  const columns: Column<TradeMissionInfo>[] = [
     {
       key: "goodName",
       label: "Cargo",
@@ -343,7 +341,7 @@ function ActiveMissions({
         {error && (
           <InlineAlert className="mb-4">{error}</InlineAlert>
         )}
-        <DataTable columns={columns} data={missions as MissionRow[]} />
+        <DataTable columns={columns} data={missions} />
       </CardContent>
     </Card>
   );

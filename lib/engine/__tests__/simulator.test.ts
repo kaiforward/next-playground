@@ -211,7 +211,7 @@ describe("Simulator", () => {
       expect(world.events[0].severity).toBe(2.0);
     });
 
-    it("skips invalid eventType without crashing", () => {
+    it("skips injection targeting non-existent system without crashing", () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -219,7 +219,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx({
         disableRandomEvents: true,
         eventInjections: [
-          { tick: 5, target: { systemIndex: 0 }, eventType: "nonexistent_event" },
+          { tick: 5, target: { systemIndex: 99999 }, eventType: "war" },
         ],
       });
 

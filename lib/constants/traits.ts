@@ -705,6 +705,6 @@ export const TRAITS: Record<TraitId, TraitDefinition> = {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-export const ALL_TRAIT_IDS: readonly TraitId[] = Object.keys(
-  TRAITS,
-) as TraitId[];
+export const ALL_TRAIT_IDS: readonly TraitId[] = Object.keys(TRAITS).filter(
+  (k): k is TraitId => k in TRAITS,
+);

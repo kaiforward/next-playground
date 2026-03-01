@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { validateRefuel } from "@/lib/engine/refuel";
+import { toShipStatus } from "@/lib/types/guards";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipRefuelResult } from "@/lib/types/api";
@@ -45,7 +46,7 @@ export async function executeRefuel(
   const validation = validateRefuel({
     fuel: ship.fuel,
     maxFuel: ship.maxFuel,
-    shipStatus: ship.status as "docked" | "in_transit",
+    shipStatus: toShipStatus(ship.status),
     amount,
     playerCredits: player.credits,
     costPerUnit: REFUEL_COST_PER_UNIT,

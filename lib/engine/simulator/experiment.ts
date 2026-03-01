@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import { toEventTypeId } from "@/lib/types/guards";
 import type { SimConfig, SimResults, EventInjection, InjectionTarget } from "./types";
 import type { SimConstantOverrides } from "./constants";
 
@@ -100,13 +101,13 @@ export function experimentToSimConfig(exp: ExperimentConfig): {
   overrides: SimConstantOverrides;
   label?: string;
 } {
-  const injections: EventInjection[] = (exp.events?.inject ?? []).map((inj) => ({
-    tick: inj.tick,
-    // Zod schema structurally matches InjectionTarget but TS can't verify union compatibility
-    target: inj.target as InjectionTarget,
-    eventType: inj.type,
-    severity: inj.severity,
-  }));
+  const injections: EventInjection[] = (exp.events?.inject ?? []).map((inj) => {
+    // Zod validates structure — narrow the union via property checks
+    const target: InjectionTarget = "systemIndex" in inj.target
+      ? { systemIndex: inj.target.systemIndex }
+      : { economyType: inj.target.economyType, nth: inj.target.nth };
+    return { tick: inj.tick, target, eventType: toEventTypeId(inj.type), severity: inj.severity };
+  });
 
   const config: SimConfig = {
     tickCount: exp.ticks,
@@ -116,8 +117,8 @@ export function experimentToSimConfig(exp: ExperimentConfig): {
     disableRandomEvents: exp.events?.disableRandom ?? false,
   };
 
-  // Zod schema validates a subset of SimConstantOverrides fields
-  const overrides = (exp.overrides ?? {}) as SimConstantOverrides;
+  // Zod validates the shape — construct with explicit fields to satisfy the type
+  const overrides: SimConstantOverrides = exp.overrides ?? {};
 
   return { config, overrides, label: exp.label };
 }

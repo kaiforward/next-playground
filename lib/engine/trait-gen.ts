@@ -5,6 +5,7 @@
 
 import type { EconomyType, QualityTier, TraitId } from "@/lib/types/game";
 import { TRAITS, ALL_TRAIT_IDS, QUALITY_TIERS } from "@/lib/constants/traits";
+import { toTraitId, toQualityTier, toEconomyType } from "@/lib/types/guards";
 import { TRAIT_COUNT } from "@/lib/constants/universe-gen";
 import type { RNG } from "./universe-gen";
 import { weightedPick, randInt } from "./universe-gen";
@@ -48,18 +49,18 @@ export function generateSystemTraits(
   for (const traitId of STRONG_AFFINITY_TRAIT_IDS) {
     strongWeights[traitId] = 1;
   }
-  const firstTraitId = weightedPick(rng, strongWeights) as TraitId;
+  const firstTraitId = toTraitId(weightedPick(rng, strongWeights));
   delete weights[firstTraitId];
   const firstQuality = weightedPick(rng, {
     "1": QUALITY_TIERS[1].rarity,
     "2": QUALITY_TIERS[2].rarity,
     "3": QUALITY_TIERS[3].rarity,
   });
-  traits.push({ traitId: firstTraitId, quality: Number(firstQuality) as QualityTier });
+  traits.push({ traitId: firstTraitId, quality: toQualityTier(Number(firstQuality)) });
 
   // REMAINING TRAITS: uniformly random from full pool
   for (let i = 1; i < traitCount; i++) {
-    const traitId = weightedPick(rng, weights) as TraitId;
+    const traitId = toTraitId(weightedPick(rng, weights));
     delete weights[traitId];
 
     const quality = weightedPick(rng, {
@@ -68,7 +69,7 @@ export function generateSystemTraits(
       "3": QUALITY_TIERS[3].rarity,
     });
 
-    traits.push({ traitId, quality: Number(quality) as QualityTier });
+    traits.push({ traitId, quality: toQualityTier(Number(quality)) });
   }
 
   return traits;
@@ -141,7 +142,7 @@ export function deriveEconomyType(
     const def = TRAITS[traitId];
     for (const [econ, affinity] of Object.entries(def.economyAffinity)) {
       if (affinity === 2) {
-        scores[econ as EconomyType] += quality;
+        scores[toEconomyType(econ)] += quality;
       }
     }
   }

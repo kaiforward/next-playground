@@ -20,11 +20,12 @@ export function MarketTable({
   selectedGoodId,
   cargoByGoodId,
 }: MarketTableProps) {
-  const columns: Column<MarketEntry & Record<string, unknown>>[] = [
+  const columns: Column<MarketEntry>[] = [
     {
       key: "goodName",
       label: "Good",
       sortable: true,
+      getValue: (row) => row.goodName,
       render: (row) => (
         <span className="font-medium text-text-primary">{row.goodName}</span>
       ),
@@ -32,10 +33,9 @@ export function MarketTable({
     ...(cargoByGoodId
       ? [
           {
-            key: "owned" as const,
+            key: "owned",
             label: "Owned",
-            sortable: false,
-            render: (row: MarketEntry & Record<string, unknown>) => {
+            render: (row: MarketEntry) => {
               const qty = cargoByGoodId.get(row.goodId) ?? 0;
               return qty > 0
                 ? <span className="text-text-primary font-medium">{qty}</span>
@@ -48,6 +48,7 @@ export function MarketTable({
       key: "basePrice",
       label: "Base Price",
       sortable: true,
+      getValue: (row) => row.basePrice,
       render: (row) => (
         <span className="text-text-secondary">{formatCredits(row.basePrice)}</span>
       ),
@@ -56,6 +57,7 @@ export function MarketTable({
       key: "currentPrice",
       label: "Current Price",
       sortable: true,
+      getValue: (row) => row.currentPrice,
       render: (row) => (
         <span className="font-semibold text-text-primary">
           {formatCredits(row.currentPrice)}
@@ -66,16 +68,19 @@ export function MarketTable({
       key: "supply",
       label: "Supply",
       sortable: true,
+      getValue: (row) => row.supply,
+      render: (row) => <>{row.supply}</>,
     },
     {
       key: "demand",
       label: "Demand",
       sortable: true,
+      getValue: (row) => row.demand,
+      render: (row) => <>{row.demand}</>,
     },
     {
       key: "priceTrend",
       label: "Trend",
-      sortable: false,
       render: (row) => {
         const diff = row.currentPrice - row.basePrice;
         const pct = getPriceTrendPct(row.currentPrice, row.basePrice).toFixed(1);
@@ -100,13 +105,10 @@ export function MarketTable({
     },
   ];
 
-  // Cast entries so they satisfy Record<string, unknown> for DataTable
-  const data = entries as (MarketEntry & Record<string, unknown>)[];
-
   return (
     <DataTable
       columns={columns}
-      data={data}
+      data={entries}
       onRowClick={(row) => onSelectGood(row.goodId)}
       rowClassName={(row) =>
         row.goodId === selectedGoodId ? "bg-surface-active" : ""

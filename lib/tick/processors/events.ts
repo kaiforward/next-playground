@@ -1,4 +1,4 @@
-import type { TickProcessor, TickProcessorResult } from "../types";
+import type { TickProcessor, TickProcessorResult, EventNotificationPayload } from "../types";
 import type { TxClient } from "../types";
 import {
   EVENT_DEFINITIONS,
@@ -6,6 +6,7 @@ import {
   MAX_EVENTS_GLOBAL,
   MAX_EVENTS_PER_SYSTEM,
 } from "@/lib/constants/events";
+import type { SpawnDecision } from "@/lib/engine/events";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import {
   checkPhaseTransition,
@@ -19,10 +20,11 @@ import {
   type ShockRow,
   type NeighborSnapshot,
 } from "@/lib/engine/events";
+import { toEventTypeId } from "@/lib/types/guards";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Map a DB event row to an EventSnapshot. */
+/** Map a DB event row to an EventSnapshot. Validates type at the Prisma boundary. */
 function toSnapshot(e: {
   id: string;
   type: string;
@@ -37,7 +39,7 @@ function toSnapshot(e: {
 }): EventSnapshot {
   return {
     id: e.id,
-    type: e.type,
+    type: toEventTypeId(e.type),
     phase: e.phase,
     systemId: e.systemId,
     regionId: e.regionId,
@@ -89,7 +91,7 @@ async function applyShocks(
  */
 async function createSpreadEvent(
   tx: TxClient,
-  decision: { type: string; systemId: string; regionId: string; phase: string; phaseDuration: number; severity: number },
+  decision: SpawnDecision,
   sourceEventId: string,
   tick: number,
 ): Promise<string> {
@@ -142,7 +144,7 @@ export const eventsProcessor: TickProcessor = {
   frequency: 1,
 
   async process(ctx): Promise<TickProcessorResult> {
-    const notifications: { message: string; type: string; refs: Record<string, { id: string; label: string }> }[] = [];
+    const notifications: EventNotificationPayload[] = [];
 
     // ── 1. Fetch all active events ────────────────────────────────
     const dbEvents = await ctx.tx.gameEvent.findMany({

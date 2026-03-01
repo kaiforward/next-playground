@@ -78,7 +78,8 @@ export function Dialog({
     if (!dialog) return;
 
     if (open) {
-      previousFocus.current = document.activeElement as HTMLElement;
+      const active = document.activeElement;
+      previousFocus.current = active instanceof HTMLElement ? active : null;
       if (modal) {
         dialog.showModal();
       } else {

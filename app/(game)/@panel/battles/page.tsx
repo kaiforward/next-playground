@@ -35,7 +35,7 @@ function BattlesContent() {
 }
 
 function BattleRow({ battle }: { battle: BattleInfo }) {
-  const tierColor = ENEMY_TIER_BADGE_COLOR[battle.enemyTier as keyof typeof ENEMY_TIER_BADGE_COLOR] ?? "slate";
+  const tierColor = ENEMY_TIER_BADGE_COLOR[battle.enemyTier];
   const playerPct = battle.playerMaxStrength > 0
     ? Math.round((battle.playerStrength / battle.playerMaxStrength) * 100)
     : 0;

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
+import { toShipStatus } from "@/lib/types/guards";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
 
@@ -97,7 +98,7 @@ export async function executeTrade(
     cargoMax: ship.cargoMax,
     currentSupply: marketEntry.supply,
     currentGoodQuantityInCargo,
-    shipStatus: ship.status as "docked" | "in_transit",
+    shipStatus: toShipStatus(ship.status),
   });
 
   if (!result.ok) {

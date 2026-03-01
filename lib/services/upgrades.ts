@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { validateUpgradeInstallation } from "@/lib/engine/upgrades";
-import { MODULES, type ModuleId, getModuleCost } from "@/lib/constants/modules";
+import { MODULES, isModuleId, getModuleCost } from "@/lib/constants/modules";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipState } from "@/lib/types/game";
 
@@ -25,12 +25,12 @@ export async function installUpgrade(
   tier: number = 1,
 ): Promise<UpgradeResult> {
   // Pre-validate module
-  const moduleDef = MODULES[moduleId as ModuleId];
-  if (!moduleDef) {
+  if (!isModuleId(moduleId)) {
     return { ok: false, error: `Unknown module: "${moduleId}".`, status: 400 };
   }
+  const moduleDef = MODULES[moduleId];
 
-  const cost = getModuleCost(moduleId as ModuleId, tier);
+  const cost = getModuleCost(moduleId, tier);
   if (cost <= 0) {
     return { ok: false, error: `Invalid tier ${tier} for ${moduleDef.name}.`, status: 400 };
   }
