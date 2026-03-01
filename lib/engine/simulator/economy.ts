@@ -10,12 +10,11 @@ import { GOODS } from "@/lib/constants/goods";
 import { computeTraitProductionBonus, computeTraitDanger } from "@/lib/engine/trait-gen";
 import { toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
 import {
-  aggregateDangerLevel,
+  computeSystemDanger,
   rollCargoLoss,
   rollHazardIncidents,
   applyImportDuty,
   rollContrabandInspection,
-  DANGER_CONSTANTS,
 } from "@/lib/engine/danger";
 import {
   checkPhaseTransition,
@@ -142,10 +141,7 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
           quality: toQualityTier(t.quality),
         })))
       : 0;
-    const danger = Math.max(0, Math.min(
-      aggregateDangerLevel(navMods) + govBaseline + traitDanger,
-      DANGER_CONSTANTS.MAX_DANGER,
-    ));
+    const danger = computeSystemDanger(navMods, govBaseline, traitDanger);
 
     // Stage 1: Hazard incidents
     const enriched = cargo

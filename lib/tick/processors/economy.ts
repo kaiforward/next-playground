@@ -7,17 +7,12 @@ import {
   getConsumptionRate,
 } from "@/lib/constants/universe";
 import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
-import { GOODS } from "@/lib/constants/goods";
+import { GOODS, GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
-
-/** Reverse lookup: Good.name → GOODS key (e.g. "Food" → "food"). */
-const goodNameToKey = new Map(
-  Object.entries(GOODS).map(([key, def]) => [def.name, key]),
-);
 
 /** Build EconomySimParams from constants (done once, reused every tick). */
 const simParams: EconomySimParams = {
@@ -118,7 +113,7 @@ export const economyProcessor: TickProcessor = {
     // Build tick entries for the simulation engine
     const tickEntries = markets.map((m) => {
       const econ = toEconomyType(m.station.system.economyType);
-      const goodKey = goodNameToKey.get(m.good.name) ?? m.good.name;
+      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
       const sysMods = modifiersBySystem.get(m.station.system.id) ?? [];
       const agg = sysMods.length > 0
         ? aggregateModifiers(sysMods, goodKey, MODIFIER_CAPS)

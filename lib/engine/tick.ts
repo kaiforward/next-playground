@@ -6,6 +6,8 @@
  * All functions are pure — no DB or constant imports.
  */
 
+import { clamp } from "@/lib/utils/math";
+
 export interface MarketTickEntry {
   goodId: string;
   supply: number;
@@ -48,13 +50,6 @@ export interface EconomySimParams {
     consumes: { supply: number; demand: number };
     neutral: { supply: number; demand: number };
   };
-}
-
-/**
- * Clamp a value between a minimum and maximum.
- */
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 /**

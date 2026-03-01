@@ -8,7 +8,7 @@ import { ServiceError } from "./errors";
 import { OP_MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { COMBAT_CONSTANTS, getEnemyTier } from "@/lib/constants/combat";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
-import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
+import { computeSystemDanger } from "@/lib/engine/danger";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
 import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, toMissionType, isStatGateMessage, toStatRequirements } from "@/lib/types/guards";
@@ -454,10 +454,7 @@ export async function startMission(
         quality: toQualityTier(t.quality),
       }));
       const traitDanger = computeTraitDanger(destTraits);
-      const danger = Math.max(0, Math.min(
-        aggregateDangerLevel(navModifiers) + govBaseline + traitDanger,
-        DANGER_CONSTANTS.MAX_DANGER,
-      ));
+      const danger = computeSystemDanger(navModifiers, govBaseline, traitDanger);
 
       const playerStats = derivePlayerCombatStats(freshShip);
       const enemyTier = mission.enemyTier

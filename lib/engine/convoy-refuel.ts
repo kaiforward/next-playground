@@ -4,6 +4,7 @@
  */
 
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
+import { clamp } from "@/lib/utils/math";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ export function computeConvoyRefuelPlan(
   ships: ConvoyRefuelShip[],
   fraction: number,
 ): ConvoyRefuelPlan {
-  const clampedFraction = Math.max(0, Math.min(1, fraction));
+  const clampedFraction = clamp(fraction, 0, 1);
 
   const shipPlans: ConvoyRefuelShipPlan[] = ships.map((ship) => {
     const missing = Math.max(0, ship.maxFuel - ship.fuel);

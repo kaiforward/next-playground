@@ -223,3 +223,13 @@ export const GOODS: Record<string, GoodDefinition> = {
 } as const;
 
 export const GOOD_NAMES = Object.keys(GOODS);
+
+/** Reverse lookup: Good.name -> GOODS key (e.g. "Food" -> "food"). */
+export const GOOD_NAME_TO_KEY: ReadonlyMap<string, string> = new Map(
+  Object.entries(GOODS).map(([key, def]) => [def.name, key]),
+);
+
+/** Good tier indexed by GOODS key (e.g. "food" -> 0). */
+export const GOOD_TIER_BY_KEY: Readonly<Record<string, number>> = Object.fromEntries(
+  Object.entries(GOODS).map(([key, def]) => [key, def.tier]),
+);
