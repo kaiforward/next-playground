@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import type { TxClient } from "@/lib/tick/types";
 import type { PlayerNotificationInfo, EntityRef } from "@/lib/types/game";
 import { toNotificationType } from "@/lib/types/guards";
@@ -95,16 +96,12 @@ export async function getNotifications(
   playerId: string,
   opts: GetNotificationsOpts = {},
 ): Promise<PaginatedResult<PlayerNotificationInfo>> {
-  const baseWhere: Record<string, unknown> = { playerId };
-  if (opts.types && opts.types.length > 0) {
-    baseWhere.type = { in: opts.types };
-  }
-  if (opts.unreadOnly) {
-    baseWhere.read = false;
-  }
-  if (opts.search) {
-    baseWhere.message = { contains: opts.search };
-  }
+  const baseWhere: Prisma.PlayerNotificationWhereInput = {
+    playerId,
+    ...(opts.types && opts.types.length > 0 ? { type: { in: opts.types } } : {}),
+    ...(opts.unreadOnly ? { read: false } : {}),
+    ...(opts.search ? { message: { contains: opts.search } } : {}),
+  };
 
   const args = buildPaginatedArgs(
     { cursor: opts.cursor, limit: opts.limit ?? 20 },
@@ -142,7 +139,7 @@ export async function markAsRead(
   playerId: string,
   beforeId?: string,
 ): Promise<number> {
-  const where: Record<string, unknown> = { playerId, read: false };
+  let where: Prisma.PlayerNotificationWhereInput = { playerId, read: false };
 
   if (beforeId) {
     const cursor = await prisma.playerNotification.findUnique({
@@ -150,7 +147,7 @@ export async function markAsRead(
       select: { createdAt: true },
     });
     if (cursor) {
-      where.createdAt = { lte: cursor.createdAt };
+      where = { ...where, createdAt: { lte: cursor.createdAt } };
     }
   }
 

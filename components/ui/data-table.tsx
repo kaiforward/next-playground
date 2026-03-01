@@ -3,12 +3,13 @@
 import { useState, useCallback } from "react";
 
 export interface Column<T> {
-  /** Unique column identifier. Use a real field name for default rendering/sorting, or any unique string for render-only columns. */
-  key: (keyof T & string) | (string & {});
+  /** Unique column identifier — used for React keys and sort tracking. */
+  key: string;
   label: string;
   sortable?: boolean;
-  render?: (row: T) => React.ReactNode;
-  /** Custom sort value extractor — use for computed columns that don't map to a field. */
+  /** How to render the cell. */
+  render: (row: T) => React.ReactNode;
+  /** Sort value extractor — required when `sortable` is true. */
   getValue?: (row: T) => string | number | null;
 }
 
@@ -44,12 +45,8 @@ export function DataTable<T extends object>({
   if (sortKey) {
     const sortCol = columns.find((c) => c.key === sortKey);
     sortedData.sort((a, b) => {
-      const aVal = sortCol?.getValue
-        ? sortCol.getValue(a)
-        : sortKey in a ? (a as Record<string, unknown>)[sortKey] : null;
-      const bVal = sortCol?.getValue
-        ? sortCol.getValue(b)
-        : sortKey in b ? (b as Record<string, unknown>)[sortKey] : null;
+      const aVal = sortCol?.getValue ? sortCol.getValue(a) : null;
+      const bVal = sortCol?.getValue ? sortCol.getValue(b) : null;
       if (aVal == null || bVal == null) return 0;
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDir === "asc" ? aVal - bVal : bVal - aVal;
@@ -98,9 +95,7 @@ export function DataTable<T extends object>({
             >
               {columns.map((col) => (
                 <td key={col.key} className="px-4 py-3 text-text-primary">
-                  {col.render
-                    ? col.render(row)
-                    : String(col.key in row ? (row as Record<string, unknown>)[col.key] ?? "" : "")}
+                  {col.render(row)}
                 </td>
               ))}
             </tr>

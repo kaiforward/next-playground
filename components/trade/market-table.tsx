@@ -25,6 +25,7 @@ export function MarketTable({
       key: "goodName",
       label: "Good",
       sortable: true,
+      getValue: (row) => row.goodName,
       render: (row) => (
         <span className="font-medium text-text-primary">{row.goodName}</span>
       ),
@@ -48,6 +49,7 @@ export function MarketTable({
       key: "basePrice",
       label: "Base Price",
       sortable: true,
+      getValue: (row) => row.basePrice,
       render: (row) => (
         <span className="text-text-secondary">{formatCredits(row.basePrice)}</span>
       ),
@@ -56,6 +58,7 @@ export function MarketTable({
       key: "currentPrice",
       label: "Current Price",
       sortable: true,
+      getValue: (row) => row.currentPrice,
       render: (row) => (
         <span className="font-semibold text-text-primary">
           {formatCredits(row.currentPrice)}
@@ -66,11 +69,15 @@ export function MarketTable({
       key: "supply",
       label: "Supply",
       sortable: true,
+      getValue: (row) => row.supply,
+      render: (row) => <>{row.supply}</>,
     },
     {
       key: "demand",
       label: "Demand",
       sortable: true,
+      getValue: (row) => row.demand,
+      render: (row) => <>{row.demand}</>,
     },
     {
       key: "priceTrend",

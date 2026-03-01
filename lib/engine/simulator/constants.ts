@@ -213,7 +213,7 @@ function mergeEvents(
 }
 
 /** Merge a Record<string, T> with partial overrides per key. */
-function mergeRecord<T extends Record<string, unknown>>(
+function mergeRecord<T extends object>(
   base: Record<string, T>,
   overrides?: Record<string, Partial<T>>,
 ): Record<string, T> {

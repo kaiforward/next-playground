@@ -8,7 +8,10 @@ import type { PaginatedData } from "@/lib/types/api";
 const DEBOUNCE_MS = 300;
 const DEFAULT_LIMIT = 30;
 
-interface UsePaginatedQueryOptions<TFilters extends Record<string, unknown>> {
+/** Values that can be serialized to URL query params. */
+type FilterValue = string | number | boolean | null | undefined | string[];
+
+interface UsePaginatedQueryOptions<TFilters extends Record<string, FilterValue>> {
   queryKey: readonly unknown[];
   endpoint: string;
   filters?: TFilters;
@@ -40,7 +43,7 @@ interface UsePaginatedQueryResult<TItem> {
  */
 export function usePaginatedQuery<
   TItem,
-  TFilters extends Record<string, unknown> = Record<string, never>,
+  TFilters extends Record<string, FilterValue> = Record<string, never>,
 >(opts: UsePaginatedQueryOptions<TFilters>): UsePaginatedQueryResult<TItem> {
   const limit = opts.limit ?? DEFAULT_LIMIT;
 

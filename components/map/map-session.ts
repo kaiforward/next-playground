@@ -1,9 +1,5 @@
 // ── Session storage helpers for map view persistence ────────────
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
 const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapSessionState {
@@ -15,8 +11,13 @@ export function getMapSessionState(): MapSessionState | null {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) return null;
-    return { selectedSystemId: typeof parsed.selectedSystemId === "string" ? parsed.selectedSystemId : undefined };
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return {
+      selectedSystemId:
+        "selectedSystemId" in parsed && typeof parsed.selectedSystemId === "string"
+          ? parsed.selectedSystemId
+          : undefined,
+    };
   } catch {
     return null;
   }
