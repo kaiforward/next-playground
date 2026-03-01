@@ -1,12 +1,10 @@
-import type { PrismaClient } from "@/app/generated/prisma/client";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type { NotificationType, EntityRef } from "@/lib/types/game";
 import type { HazardIncidentEntry, ImportDutyEntry, ContrabandSeizedEntry, CargoLossEntry } from "@/lib/engine/danger";
 import type { DamageResult } from "@/lib/engine/damage";
 
-/** Transaction client type — works for both shared and independent transactions. */
-export type TxClient = Parameters<
-  Parameters<PrismaClient["$transaction"]>[0]
->[0];
+/** Transaction client type — Prisma's official type for `$transaction` callback parameter. */
+export type TxClient = Prisma.TransactionClient;
 
 // ── Typed tick event payloads ─────────────────────────────────────
 
