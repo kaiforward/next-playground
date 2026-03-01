@@ -10,6 +10,7 @@ Run the following checks and report a summary. Only flag items that need attenti
 4. **Env file:** Check if `.env` exists with `AUTH_SECRET` and `AUTH_URL`. If not, show what to create.
 5. **Outdated packages:** Run `npm outdated` and report any major version bumps. Minor/patch updates are informational only.
 6. **Build check:** Run `npm run build` to verify everything compiles.
+7. **Module index:** Run `npm run index` then read `docs/MODULE_INDEX.md` to load the shared module inventory.
 
 ## Output
 

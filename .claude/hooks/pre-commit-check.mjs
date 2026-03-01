@@ -23,6 +23,26 @@ process.stdin.on("end", () => {
     return;
   }
 
+  // --- Non-blocking: regenerate module index and auto-stage if stale ---
+  try {
+    execSync("node scripts/generate-module-index.mjs", {
+      stdio: "pipe",
+      timeout: 10_000,
+    });
+    const status = execSync("git status --porcelain docs/MODULE_INDEX.md", {
+      encoding: "utf-8",
+      timeout: 5_000,
+    }).trim();
+    if (status) {
+      execSync("git add docs/MODULE_INDEX.md", {
+        stdio: "pipe",
+        timeout: 5_000,
+      });
+    }
+  } catch {
+    // Non-fatal — never block a commit for index generation
+  }
+
   // --- Hard gate 1: tests ---
   try {
     execSync("npx vitest run", { stdio: "pipe", timeout: 120_000 });
