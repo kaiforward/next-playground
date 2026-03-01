@@ -12,7 +12,8 @@ import {
   type ShipDangerModifiers,
 } from "@/lib/engine/danger";
 import { rollDamageOnArrival, computeEscortProtection, type DamageResult } from "@/lib/engine/damage";
-import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
+import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
+import { getInstalledModules } from "@/lib/utils/ship";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -119,11 +120,7 @@ export const shipArrivalsProcessor: TickProcessor = {
       if (!ship.destinationSystemId) continue;
 
       // Compute upgrade bonuses from installed modules
-      const installedModules: InstalledModule[] = ship.upgradeSlots
-        .filter((s): s is typeof s & { moduleId: string; moduleTier: number } =>
-          s.moduleId !== null && s.moduleTier !== null)
-        .map((s) => ({ moduleId: s.moduleId, moduleTier: s.moduleTier, slotType: s.slotType }));
-      const bonuses = computeUpgradeBonuses(installedModules);
+      const bonuses = computeUpgradeBonuses(getInstalledModules(ship.upgradeSlots));
 
       // Build ship danger modifiers from stats + upgrade bonuses
       const shipMods: ShipDangerModifiers = {

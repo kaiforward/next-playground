@@ -1,36 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requirePlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { getBattleDetail } from "@/lib/services/missions-v2";
-import { ServiceError } from "@/lib/services/errors";
 import type { BattleDetailResponse } from "@/lib/types/api";
 
-export async function GET(
+export function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ battleId: string }> },
 ) {
-  try {
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<BattleDetailResponse>(
-        { error: "Player not found." },
-        { status: 404 },
-      );
-    }
+  return withServiceErrors("GET /api/game/battles/[battleId]", async () => {
+    const auth = await requirePlayer();
+    if (isErrorResponse(auth)) return auth;
 
     const { battleId } = await params;
-    const battle = await getBattleDetail(battleId, playerId);
+    const battle = await getBattleDetail(battleId, auth.playerId);
     return NextResponse.json<BattleDetailResponse>({ data: battle });
-  } catch (error) {
-    if (error instanceof ServiceError) {
-      return NextResponse.json<BattleDetailResponse>(
-        { error: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("GET /api/game/battles/[battleId] error:", error);
-    return NextResponse.json<BattleDetailResponse>(
-      { error: "Failed to fetch battle." },
-      { status: 500 },
-    );
-  }
+  });
 }

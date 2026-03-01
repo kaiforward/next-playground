@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
-import { computeUpgradeBonuses, type InstalledModule } from "@/lib/engine/upgrades";
+import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
+import { getInstalledModules } from "@/lib/utils/ship";
 import type { ShipTradeRequest } from "@/lib/types/api";
 import type { MarketEntry } from "@/lib/types/game";
 
@@ -109,11 +110,7 @@ export async function executeConvoyTrade(
   // Aggregate cargo across all member ships (accounting for upgrade bonuses)
   const ships = convoy.members.map((m) => m.ship);
   const combinedCargoMax = ships.reduce((s, ship) => {
-    const installed: InstalledModule[] = ship.upgradeSlots
-      .filter((slot): slot is typeof slot & { moduleId: string; moduleTier: number } =>
-        slot.moduleId !== null && slot.moduleTier !== null)
-      .map((slot) => ({ moduleId: slot.moduleId, moduleTier: slot.moduleTier, slotType: slot.slotType }));
-    const bonuses = computeUpgradeBonuses(installed);
+    const bonuses = computeUpgradeBonuses(getInstalledModules(ship.upgradeSlots));
     return s + ship.cargoMax + bonuses.cargoBonus;
   }, 0);
   const combinedCargoUsed = ships.reduce(
@@ -168,11 +165,7 @@ export async function executeConvoyTrade(
         let remaining = quantity;
         for (const ship of ships) {
           if (remaining <= 0) break;
-          const installed: InstalledModule[] = ship.upgradeSlots
-            .filter((slot): slot is typeof slot & { moduleId: string; moduleTier: number } =>
-              slot.moduleId !== null && slot.moduleTier !== null)
-            .map((slot) => ({ moduleId: slot.moduleId, moduleTier: slot.moduleTier, slotType: slot.slotType }));
-          const shipBonuses = computeUpgradeBonuses(installed);
+          const shipBonuses = computeUpgradeBonuses(getInstalledModules(ship.upgradeSlots));
           const effectiveCargoMax = ship.cargoMax + shipBonuses.cargoBonus;
           const shipCargoUsed = ship.cargo.reduce((s, c) => s + c.quantity, 0);
           const shipSpace = effectiveCargoMax - shipCargoUsed;

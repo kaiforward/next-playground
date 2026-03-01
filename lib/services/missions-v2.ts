@@ -5,13 +5,14 @@
 
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
-import { OP_MISSION_CONSTANTS } from "@/lib/constants/missions";
+import { OP_MISSION_CONSTANTS, type StatGateKey } from "@/lib/constants/missions";
 import { COMBAT_CONSTANTS, getEnemyTier } from "@/lib/constants/combat";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
-import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, toMissionType, isStatGateMessage, toStatRequirements } from "@/lib/types/guards";
+import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, toMissionType, isStatGateKey, isStatGateMessage, toStatRequirements } from "@/lib/types/guards";
+import { getGameWorld } from "@/lib/services/world";
 import type { MissionInfo, BattleInfo, BattleRoundResult } from "@/lib/types/game";
 import type {
   SystemAllMissionsData,
@@ -19,13 +20,6 @@ import type {
   StartOpMissionResult,
 } from "@/lib/types/api";
 import * as tradeMissionService from "./missions";
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-async function getCurrentTick(): Promise<number> {
-  const world = await prisma.gameWorld.findFirst();
-  return world?.currentTick ?? 0;
-}
 
 type MissionRow = {
   id: string;
@@ -151,7 +145,7 @@ export async function getSystemAllMissions(
   playerId: string,
   systemId: string,
 ): Promise<SystemAllMissionsData> {
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
 
   const [tradeMissions, availableOp, activeOp] = await Promise.all([
     tradeMissionService.getSystemMissions(playerId, systemId),
@@ -187,7 +181,7 @@ export async function getSystemAllMissions(
 export async function getPlayerOpMissions(
   playerId: string,
 ): Promise<MissionInfo[]> {
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
 
   const missions = await prisma.mission.findMany({
     where: {
@@ -232,7 +226,7 @@ export async function acceptMission(
     return { ok: false, error: `Cannot have more than ${OP_MISSION_CONSTANTS.MAX_ACTIVE_PER_PLAYER} active operational missions.`, status: 400 };
   }
 
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
 
   // Transaction: TOCTOU guard
   const txResult = await prisma.$transaction(async (tx) => {
@@ -291,6 +285,16 @@ export async function acceptMission(
 
 // ── Start mission ────────────────────────────────────────────────
 
+type StartMissionSentinel =
+  | "MISSION_UNAVAILABLE"
+  | "SHIP_NOT_FOUND"
+  | "SHIP_NOT_DOCKED"
+  | "SHIP_DISABLED"
+  | "SHIP_WRONG_SYSTEM"
+  | "SHIP_IN_CONVOY"
+  | "SHIP_COMMITTED"
+  | "SHIP_IN_BATTLE";
+
 type StartResult =
   | { ok: true; data: StartOpMissionResult }
   | { ok: false; error: string; status: number };
@@ -327,7 +331,7 @@ export async function startMission(
     return { ok: false, error: "This mission does not belong to you.", status: 403 };
   }
 
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
 
   // Transaction: all ship validation + mission update inside for TOCTOU safety
   const txResult = await prisma.$transaction(async (tx) => {
@@ -377,8 +381,8 @@ export async function startMission(
     }
 
     // Check stat gates
-    const statReqs: Record<string, number> = JSON.parse(mission.statRequirements);
-    const shipStatMap: Record<string, number> = {
+    const statReqs = toStatRequirements(mission.statRequirements);
+    const shipStatMap: Record<StatGateKey, number> = {
       firepower: freshShip.firepower,
       sensors: freshShip.sensors,
       hullMax: freshShip.hullMax,
@@ -386,6 +390,7 @@ export async function startMission(
     };
 
     for (const [stat, required] of Object.entries(statReqs)) {
+      if (required === undefined || !isStatGateKey(stat)) continue;
       const actual = shipStatMap[stat] ?? 0;
       if (actual < required) {
         throw new Error(`STAT_GATE:${stat} ${actual} < ${required}`);
@@ -505,7 +510,10 @@ export async function startMission(
   });
 
   if (typeof txResult === "string") {
-    const errorMap: Record<string, { error: string; status: number }> = {
+    if (isStatGateMessage(txResult)) {
+      return { ok: false, error: `Ship does not meet requirement: ${txResult.slice("STAT_GATE:".length)}.`, status: 400 };
+    }
+    const errorMap: Record<StartMissionSentinel, { error: string; status: number }> = {
       MISSION_UNAVAILABLE: { error: "Mission is no longer available.", status: 409 },
       SHIP_NOT_FOUND: { error: "Ship not found or does not belong to you.", status: 404 },
       SHIP_NOT_DOCKED: { error: "Ship must be docked to start a mission.", status: 400 },
@@ -515,12 +523,8 @@ export async function startMission(
       SHIP_COMMITTED: { error: "Ship is already committed to another mission.", status: 400 },
       SHIP_IN_BATTLE: { error: "Ship is currently in battle.", status: 400 },
     };
-    if (txResult.startsWith("STAT_GATE:")) {
-      return { ok: false, error: `Ship does not meet requirement: ${txResult.slice("STAT_GATE:".length)}.`, status: 400 };
-    }
     const mapped = errorMap[txResult];
-    if (mapped) return { ok: false, ...mapped };
-    throw new Error(`Unexpected sentinel: ${txResult}`);
+    return { ok: false, ...mapped };
   }
 
   return {

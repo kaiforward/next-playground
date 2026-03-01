@@ -1,26 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
-import { acceptMission } from "@/lib/services/missions";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requireMutationPlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { parseJsonBody } from "@/lib/api/parse-json";
-import { rateLimit } from "@/lib/api/rate-limit";
-import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
+import { acceptMission } from "@/lib/services/missions";
 import type { AcceptMissionRequest, AcceptMissionResponse } from "@/lib/types/api";
 
-export async function POST(request: NextRequest) {
-  try {
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<AcceptMissionResponse>(
-        { error: "Player not found." },
-        { status: 404 },
-      );
-    }
-
-    const mutationLimit = rateLimit({
-      key: `mutation:${playerId}`,
-      tier: RATE_LIMIT_TIERS.mutation,
-    });
-    if (mutationLimit) return mutationLimit;
+export function POST(request: NextRequest) {
+  return withServiceErrors("POST /api/game/missions/accept", async () => {
+    const auth = await requireMutationPlayer();
+    if (isErrorResponse(auth)) return auth;
 
     const body = await parseJsonBody<AcceptMissionRequest>(request);
     if (!body?.missionId) {
@@ -30,7 +19,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await acceptMission(playerId, body.missionId);
+    const result = await acceptMission(auth.playerId, body.missionId);
 
     if (!result.ok) {
       return NextResponse.json<AcceptMissionResponse>(
@@ -40,11 +29,5 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json<AcceptMissionResponse>({ data: result.data });
-  } catch (error) {
-    console.error("POST /api/game/missions/accept error:", error);
-    return NextResponse.json<AcceptMissionResponse>(
-      { error: "Failed to accept mission." },
-      { status: 500 },
-    );
-  }
+  });
 }

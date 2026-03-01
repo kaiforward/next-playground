@@ -1,16 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requireMutationPlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { parseJsonBody } from "@/lib/api/parse-json";
 import { executeTrade } from "@/lib/services/trade";
-import { rateLimit } from "@/lib/api/rate-limit";
-import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
 import type { ShipTradeRequest, ShipTradeResponse } from "@/lib/types/api";
 
-export async function POST(
+export function POST(
   request: NextRequest,
   { params }: { params: Promise<{ shipId: string }> },
 ) {
-  try {
+  return withServiceErrors("POST /api/game/ship/[shipId]/trade", async () => {
     const { shipId } = await params;
 
     const body = await parseJsonBody<ShipTradeRequest>(request);
@@ -21,21 +21,10 @@ export async function POST(
       );
     }
 
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<ShipTradeResponse>(
-        { error: "Player not found." },
-        { status: 404 },
-      );
-    }
+    const auth = await requireMutationPlayer();
+    if (isErrorResponse(auth)) return auth;
 
-    const mutationLimit = rateLimit({
-      key: `mutation:${playerId}`,
-      tier: RATE_LIMIT_TIERS.mutation,
-    });
-    if (mutationLimit) return mutationLimit;
-
-    const result = await executeTrade(playerId, shipId, body);
+    const result = await executeTrade(auth.playerId, shipId, body);
 
     if (!result.ok) {
       return NextResponse.json<ShipTradeResponse>(
@@ -45,11 +34,5 @@ export async function POST(
     }
 
     return NextResponse.json<ShipTradeResponse>({ data: result.data });
-  } catch (error) {
-    console.error("POST /api/game/ship/[shipId]/trade error:", error);
-    return NextResponse.json<ShipTradeResponse>(
-      { error: "Failed to execute trade." },
-      { status: 500 },
-    );
-  }
+  });
 }

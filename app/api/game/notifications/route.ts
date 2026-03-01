@@ -1,27 +1,23 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
+import { NextResponse } from "next/server";
+import { requirePlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { getNotifications } from "@/lib/services/notifications";
 import type { NotificationsResponse } from "@/lib/types/api";
 
-export async function GET(request: NextRequest) {
-  try {
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<NotificationsResponse>(
-        { error: "Player not found." },
-        { status: 404 },
-      );
-    }
+export function GET(request: NextRequest) {
+  return withServiceErrors("GET /api/game/notifications", async () => {
+    const auth = await requirePlayer();
+    if (isErrorResponse(auth)) return auth;
 
-    const params = request.nextUrl.searchParams;
-    const cursor = params.get("cursor") ?? undefined;
-    const limit = params.has("limit") ? Number(params.get("limit")) : undefined;
-    const types = params.getAll("types").filter(Boolean);
-    const search = params.get("search") ?? undefined;
-    const unreadOnly = params.get("unreadOnly") === "true";
+    const searchParams = request.nextUrl.searchParams;
+    const cursor = searchParams.get("cursor") ?? undefined;
+    const limit = searchParams.has("limit") ? Number(searchParams.get("limit")) : undefined;
+    const types = searchParams.getAll("types").filter(Boolean);
+    const search = searchParams.get("search") ?? undefined;
+    const unreadOnly = searchParams.get("unreadOnly") === "true";
 
-    const result = await getNotifications(playerId, {
+    const result = await getNotifications(auth.playerId, {
       cursor,
       limit,
       types: types.length > 0 ? types : undefined,
@@ -30,11 +26,5 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json<NotificationsResponse>({ data: result });
-  } catch (error) {
-    console.error("GET /api/game/notifications error:", error);
-    return NextResponse.json<NotificationsResponse>(
-      { error: "Failed to fetch notifications." },
-      { status: 500 },
-    );
-  }
+  });
 }

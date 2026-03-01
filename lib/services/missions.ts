@@ -4,6 +4,7 @@ import { computeAllHopDistances } from "@/lib/engine/pathfinding";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
+import { getGameWorld } from "@/lib/services/world";
 import type { TradeMissionInfo } from "@/lib/types/game";
 import type {
   SystemMissionsData,
@@ -19,12 +20,6 @@ async function loadHopDistances(): Promise<Map<string, Map<string, number>>> {
     select: { fromSystemId: true, toSystemId: true, fuelCost: true },
   });
   return computeAllHopDistances(connections);
-}
-
-/** Get current tick from game world. */
-async function getCurrentTick(): Promise<number> {
-  const world = await prisma.gameWorld.findFirst();
-  return world?.currentTick ?? 0;
 }
 
 type MissionRow = {
@@ -128,7 +123,7 @@ export async function getSystemMissions(
   playerId: string,
   systemId: string,
 ): Promise<SystemMissionsData> {
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
   const hopDistances = await loadHopDistances();
 
   const [available, active] = await Promise.all([
@@ -158,7 +153,7 @@ export async function getSystemMissions(
 export async function getPlayerMissions(
   playerId: string,
 ): Promise<TradeMissionInfo[]> {
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
   const hopDistances = await loadHopDistances();
 
   const missions = await prisma.tradeMission.findMany({
@@ -205,7 +200,7 @@ export async function acceptMission(
     return { ok: false, error: validation.error, status: 400 };
   }
 
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
 
   // Transaction: TOCTOU guard — re-read mission + active count inside transaction
   const txResult = await prisma.$transaction(async (tx) => {
@@ -303,7 +298,7 @@ export async function deliverMission(
   const cargoItem = ship.cargo.find((c) => c.goodId === mission.goodId);
   const cargoQty = cargoItem?.quantity ?? 0;
 
-  const tick = await getCurrentTick();
+  const { currentTick: tick } = await getGameWorld();
 
   const validation = validateDelivery(
     mission.playerId,
