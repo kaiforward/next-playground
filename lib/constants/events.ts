@@ -463,7 +463,7 @@ export const EVENT_MISSION_GOODS: Record<string, { goods: string[]; isImport: bo
 };
 
 /** All registered event definitions, keyed by type. */
-export const EVENT_DEFINITIONS: Record<string, EventDefinition> = {
+const EVENT_DEFINITIONS_INTERNAL = {
   war,
   plague,
   trade_festival: tradeFestival,
@@ -474,4 +474,8 @@ export const EVENT_DEFINITIONS: Record<string, EventDefinition> = {
   supply_shortage: supplyShortage,
   pirate_raid: pirateRaid,
   solar_storm: solarStorm,
-};
+} as const satisfies Record<string, EventDefinition>;
+
+export type EventTypeId = keyof typeof EVENT_DEFINITIONS_INTERNAL;
+
+export const EVENT_DEFINITIONS: Record<string, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;

@@ -15,7 +15,6 @@ import { InlineAlert } from "@/components/ui/inline-alert";
 import { MISSION_TYPE_DEFS } from "@/lib/constants/missions";
 import { ENEMY_TIERS } from "@/lib/constants/combat";
 import { MISSION_TYPE_BADGE_COLOR, ENEMY_TIER_BADGE_COLOR } from "@/lib/constants/ui";
-import { isMissionType, isEnemyTier } from "@/lib/types/guards";
 
 interface OperationsPanelProps {
   available: MissionInfo[];
@@ -61,18 +60,16 @@ function AvailableOperations({
       key: "type",
       label: "Type",
       render: (row) => {
-        const rType = row.type;
-        const typeDef = isMissionType(rType) ? MISSION_TYPE_DEFS[rType] : null;
-        const typeColor = isMissionType(rType) ? MISSION_TYPE_BADGE_COLOR[rType] : "slate";
-        const eTier = row.enemyTier;
+        const typeDef = MISSION_TYPE_DEFS[row.type];
+        const typeColor = MISSION_TYPE_BADGE_COLOR[row.type];
         return (
           <>
             <Badge color={typeColor ?? "slate"}>
               {typeDef?.name ?? row.type}
             </Badge>
-            {eTier && isEnemyTier(eTier) && (
-              <Badge color={ENEMY_TIER_BADGE_COLOR[eTier] ?? "slate"} className="ml-1">
-                {ENEMY_TIERS[eTier]?.name ?? eTier}
+            {row.enemyTier && (
+              <Badge color={ENEMY_TIER_BADGE_COLOR[row.enemyTier] ?? "slate"} className="ml-1">
+                {ENEMY_TIERS[row.enemyTier]?.name ?? row.enemyTier}
               </Badge>
             )}
           </>
@@ -80,7 +77,7 @@ function AvailableOperations({
       },
     },
     {
-      key: "target",
+      key: "targetSystemId",
       label: "Target",
       render: (row) => (
         <Link
@@ -92,7 +89,7 @@ function AvailableOperations({
       ),
     },
     {
-      key: "requirements",
+      key: "statRequirements",
       label: "Requirements",
       render: (row) => (
         <span className="text-text-tertiary text-xs">
@@ -114,7 +111,7 @@ function AvailableOperations({
       ),
     },
     {
-      key: "time",
+      key: "durationTicks",
       label: "Time",
       render: (row) => (
         <>
@@ -128,7 +125,7 @@ function AvailableOperations({
       ),
     },
     {
-      key: "actions",
+      key: "id",
       label: "",
       render: (row) => (
         <Button
@@ -192,9 +189,8 @@ function ActiveOperations({
       key: "type",
       label: "Type",
       render: (row) => {
-        const rType = row.type;
-        const typeDef = isMissionType(rType) ? MISSION_TYPE_DEFS[rType] : null;
-        const typeColor = isMissionType(rType) ? MISSION_TYPE_BADGE_COLOR[rType] : "slate";
+        const typeDef = MISSION_TYPE_DEFS[row.type];
+        const typeColor = MISSION_TYPE_BADGE_COLOR[row.type];
         return (
           <Badge color={typeColor ?? "slate"}>
             {typeDef?.name ?? row.type}
@@ -203,7 +199,7 @@ function ActiveOperations({
       },
     },
     {
-      key: "target",
+      key: "targetSystemId",
       label: "Target",
       render: (row) => (
         <Link
@@ -241,7 +237,7 @@ function ActiveOperations({
       ),
     },
     {
-      key: "actions",
+      key: "id",
       label: "",
       render: (row) => {
         // For accepted missions, build eligible ship list

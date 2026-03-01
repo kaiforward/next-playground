@@ -64,7 +64,7 @@ export const economyProcessor: TickProcessor = {
     });
 
     if (regions.length === 0) {
-      return { globalEvents: { economyTick: [{ marketCount: 0, regionName: null }] } };
+      return { globalEvents: { economyTick: [{ regionId: "", regionName: "", marketCount: 0 }] } };
     }
 
     // Round-robin: one region per tick

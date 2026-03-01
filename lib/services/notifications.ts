@@ -17,7 +17,10 @@ function serializeNotification(row: {
 }): PlayerNotificationInfo {
   let refs: Partial<Record<string, EntityRef>> = {};
   try {
-    refs = JSON.parse(row.refs);
+    const parsed: unknown = JSON.parse(row.refs);
+    if (typeof parsed === "object" && parsed !== null) {
+      refs = parsed as Partial<Record<string, EntityRef>>;
+    }
   } catch {
     // malformed JSON — use empty refs
   }

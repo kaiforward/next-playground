@@ -18,12 +18,12 @@ import type {
   NotificationType,
   OpMissionStatus,
   BattleStatus,
-  EntityRef,
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
 import type { ModuleId } from "@/lib/constants/modules";
 import type { MissionType, StatGateKey } from "@/lib/constants/missions";
 import type { EnemyTier } from "@/lib/constants/combat";
+import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -287,6 +287,13 @@ export function toBattleStatus(value: string): BattleStatus {
   return value as BattleStatus;
 }
 
+export function toEventTypeId(value: string): EventTypeId {
+  if (!(value in EVENT_DEFINITIONS)) {
+    throw new Error(`Invalid event type: "${value}"`);
+  }
+  return value as EventTypeId;
+}
+
 // ── Constant arrays (avoids Object.keys() + as casts) ───────────
 
 export const ALL_GOVERNMENT_TYPES: readonly GovernmentType[] = [
@@ -302,35 +309,9 @@ export const ALL_MODULE_IDS: readonly ModuleId[] = [
 
 export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
 
-// ── Notification event guard ───────────────────────────────────
-
-interface NotificationEvent {
-  type: string;
-  message: string;
-  refs: Partial<Record<string, EntityRef>>;
-}
-
-export function isNotificationEvent(value: unknown): value is NotificationEvent {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return typeof obj.type === "string"
-    && typeof obj.message === "string"
-    && typeof obj.refs === "object"
-    && obj.refs !== null;
-}
-
 // ── Template literal guards ───────────────────────────────────
 
 export function isStatGateMessage(value: string): value is `STAT_GATE:${string}` {
   return value.startsWith("STAT_GATE:");
 }
 
-// ── Safe record access (validates key existence before returning) ──
-
-/** Access a property on an object by string key, returning `unknown`. */
-export function getRecordValue(obj: object, key: string): unknown {
-  if (Object.prototype.hasOwnProperty.call(obj, key)) {
-    return (obj as Record<string, unknown>)[key];
-  }
-  return undefined;
-}

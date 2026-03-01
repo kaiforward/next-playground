@@ -5,6 +5,8 @@ import type {
   TickContext,
   TickProcessorResult,
   TickEventRaw,
+  GlobalEventMap,
+  PlayerEventMap,
 } from "./types";
 
 class TickEngine {
@@ -116,8 +118,8 @@ class TickEngine {
       const totalMs = performance.now() - tickStart;
 
       // Merge all processor results into a single event
-      const mergedGlobalEvents: Record<string, unknown[]> = {};
-      const mergedPlayerEvents = new Map<string, Record<string, unknown[]>>();
+      const mergedGlobalEvents: Partial<GlobalEventMap> = {};
+      const mergedPlayerEvents = new Map<string, Partial<PlayerEventMap>>();
 
       for (const processorResult of result.results.values()) {
         mergeGlobalEvents(mergedGlobalEvents, processorResult);
@@ -159,24 +161,34 @@ class TickEngine {
 }
 
 function mergeGlobalEvents(
-  target: Record<string, unknown[]>,
+  target: Partial<GlobalEventMap>,
   result: TickProcessorResult,
 ) {
   if (!result.globalEvents) return;
-  for (const [key, events] of Object.entries(result.globalEvents)) {
-    target[key] = [...(target[key] ?? []), ...events];
+  for (const _key of Object.keys(result.globalEvents)) {
+    const key = _key as keyof GlobalEventMap;
+    const source = result.globalEvents[key];
+    if (!source) continue;
+    const existing = target[key];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merging heterogeneous arrays by key
+    (target as any)[key] = existing ? [...existing, ...source] : [...source];
   }
 }
 
 function mergePlayerEvents(
-  target: Map<string, Record<string, unknown[]>>,
+  target: Map<string, Partial<PlayerEventMap>>,
   result: TickProcessorResult,
 ) {
   if (!result.playerEvents) return;
   for (const [playerId, events] of result.playerEvents) {
     const existing = target.get(playerId) ?? {};
-    for (const [key, eventList] of Object.entries(events)) {
-      existing[key] = [...(existing[key] ?? []), ...eventList];
+    for (const _key of Object.keys(events)) {
+      const key = _key as keyof PlayerEventMap;
+      const source = events[key];
+      if (!source) continue;
+      const current = existing[key];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merging heterogeneous arrays by key
+      (existing as any)[key] = current ? [...current, ...source] : [...source];
     }
     target.set(playerId, existing);
   }

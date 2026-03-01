@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useActiveBattles } from "@/lib/hooks/use-battles";
 import { ENEMY_TIER_BADGE_COLOR } from "@/lib/constants/ui";
-import { isEnemyTier } from "@/lib/types/guards";
 import type { BattleInfo } from "@/lib/types/game";
 
 function BattlesContent() {
@@ -36,8 +35,7 @@ function BattlesContent() {
 }
 
 function BattleRow({ battle }: { battle: BattleInfo }) {
-  const eTier = battle.enemyTier;
-  const tierColor = isEnemyTier(eTier) ? ENEMY_TIER_BADGE_COLOR[eTier] : "slate";
+  const tierColor = ENEMY_TIER_BADGE_COLOR[battle.enemyTier];
   const playerPct = battle.playerMaxStrength > 0
     ? Math.round((battle.playerStrength / battle.playerMaxStrength) * 100)
     : 0;

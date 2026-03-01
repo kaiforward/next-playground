@@ -32,7 +32,7 @@ export function MarketTable({
     ...(cargoByGoodId
       ? [
           {
-            key: "owned" as const,
+            key: "owned",
             label: "Owned",
             sortable: false,
             render: (row: MarketEntry) => {

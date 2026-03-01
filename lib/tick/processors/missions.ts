@@ -1,6 +1,10 @@
-import { createNotifications } from "@/lib/services/notifications";
-import type { EntityRef } from "@/lib/types/game";
-import type { TickProcessor, TickProcessorResult } from "../types";
+import type {
+  TickProcessor,
+  TickProcessorResult,
+  GameNotificationPayload,
+  PlayerEventMap,
+} from "../types";
+import { persistPlayerNotifications } from "../helpers";
 import {
   generateOpMissionCandidates,
   type SystemSnapshot,
@@ -9,7 +13,7 @@ import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { OP_MISSION_CAP_PER_SYSTEM } from "@/lib/constants/missions";
-import { toGovernmentType, toTraitId, toQualityTier, isNotificationEvent } from "@/lib/types/guards";
+import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 import type { ModifierRow } from "@/lib/engine/events";
 
 export const missionsProcessor: TickProcessor = {
@@ -46,7 +50,7 @@ export const missionsProcessor: TickProcessor = {
       },
     });
 
-    const playerEvents = new Map<string, Record<string, unknown[]>>();
+    const playerEvents = new Map<string, Partial<PlayerEventMap>>();
 
     for (const mission of completedMissions) {
       if (
@@ -74,13 +78,14 @@ export const missionsProcessor: TickProcessor = {
         });
 
         const existing = playerEvents.get(mission.playerId) ?? {};
-        const notifications = existing["gameNotifications"] ?? [];
-        notifications.push({
+        const notification: GameNotificationPayload = {
           message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission completed at ${mission.targetSystem.name} — earned ${mission.reward} CR`,
           type: "mission_completed",
           refs: {},
-        });
-        existing["gameNotifications"] = notifications;
+        };
+        existing.gameNotifications = existing.gameNotifications
+          ? [...existing.gameNotifications, notification]
+          : [notification];
         playerEvents.set(mission.playerId, existing);
       }
     }
@@ -111,13 +116,14 @@ export const missionsProcessor: TickProcessor = {
 
       if (mission.playerId) {
         const existing = playerEvents.get(mission.playerId) ?? {};
-        const notifications = existing["gameNotifications"] ?? [];
-        notifications.push({
+        const notification: GameNotificationPayload = {
           message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission expired — ${mission.targetSystem.name}`,
           type: "mission_expired",
           refs: {},
-        });
-        existing["gameNotifications"] = notifications;
+        };
+        existing.gameNotifications = existing.gameNotifications
+          ? [...existing.gameNotifications, notification]
+          : [notification];
         playerEvents.set(mission.playerId, existing);
       }
     }
@@ -254,27 +260,7 @@ export const missionsProcessor: TickProcessor = {
     }
 
     // Persist notifications to DB
-    const dbEntries: Array<{
-      playerId: string;
-      type: string;
-      message: string;
-      refs: Partial<Record<string, EntityRef>>;
-      tick: number;
-    }> = [];
-    for (const [playerId, events] of playerEvents) {
-      const notifications = events["gameNotifications"] ?? [];
-      for (const n of notifications) {
-        if (!isNotificationEvent(n)) continue;
-        dbEntries.push({
-          playerId,
-          type: n.type,
-          message: n.message,
-          refs: n.refs,
-          tick: ctx.tick,
-        });
-      }
-    }
-    await createNotifications(ctx.tx, dbEntries);
+    await persistPlayerNotifications(ctx.tx, playerEvents, ctx.tick);
 
     return {
       globalEvents: {

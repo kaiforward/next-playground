@@ -11,7 +11,8 @@ import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
-import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, isStatGateMessage } from "@/lib/types/guards";
+import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, toMissionType, isStatGateMessage } from "@/lib/types/guards";
+import type { StatGateKey } from "@/lib/constants/missions";
 import type { MissionInfo, BattleInfo, BattleRoundResult } from "@/lib/types/game";
 import type {
   SystemAllMissionsData,
@@ -49,9 +50,15 @@ type MissionRow = {
 };
 
 function serializeMission(row: MissionRow, tick: number): MissionInfo {
+  const parsedReqs: unknown = JSON.parse(row.statRequirements);
+  const statRequirements: Partial<Record<StatGateKey, number>> =
+    typeof parsedReqs === "object" && parsedReqs !== null
+      ? (parsedReqs as Partial<Record<StatGateKey, number>>)
+      : {};
+
   return {
     id: row.id,
-    type: row.type,
+    type: toMissionType(row.type),
     systemId: row.systemId,
     systemName: row.system.name,
     targetSystemId: row.targetSystemId,
@@ -60,8 +67,8 @@ function serializeMission(row: MissionRow, tick: number): MissionInfo {
     deadlineTick: row.deadlineTick,
     ticksRemaining: Math.max(0, row.deadlineTick - tick),
     durationTicks: row.durationTicks,
-    enemyTier: row.enemyTier,
-    statRequirements: JSON.parse(row.statRequirements),
+    enemyTier: row.enemyTier ? toEnemyTier(row.enemyTier) : null,
+    statRequirements,
     status: toOpMissionStatus(row.status),
     playerId: row.playerId,
     shipId: row.shipId,
@@ -127,7 +134,7 @@ function serializeBattle(row: BattleRow): BattleInfo {
     enemyMorale: row.enemyMorale,
     enemyMaxStrength,
     enemyType: row.enemyType,
-    enemyTier: row.enemyTier,
+    enemyTier: toEnemyTier(row.enemyTier),
     roundsCompleted: row.roundsCompleted,
     roundHistory,
     createdAtTick: row.createdAtTick,

@@ -1,6 +1,10 @@
 // Shared game types — no Prisma dependency, importable everywhere
 
 import type { ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
+import type { ModuleId } from "@/lib/constants/modules";
+import type { MissionType, StatGateKey } from "@/lib/constants/missions";
+import type { EnemyTier } from "@/lib/constants/combat";
+import type { EventTypeId } from "@/lib/constants/events";
 
 export type { ShipSize, ShipRole, UpgradeSlotType };
 
@@ -109,13 +113,13 @@ export interface UpgradeSlotState {
   id: string;
   slotType: UpgradeSlotType;
   slotIndex: number;
-  moduleId: string | null;
+  moduleId: ModuleId | null;
   moduleTier: number | null;
 }
 
 export interface ShipActiveMission {
   id: string;
-  type: string;
+  type: MissionType;
   status: OpMissionStatus;
 }
 
@@ -254,7 +258,7 @@ export interface UniverseData {
 
 export interface ActiveEvent {
   id: string;
-  type: string;
+  type: EventTypeId;
   name: string;
   phase: string;
   phaseDisplayName: string;
@@ -297,7 +301,7 @@ export type OpMissionStatus = "available" | "accepted" | "in_progress" | "comple
 
 export interface MissionInfo {
   id: string;
-  type: string; // "patrol" | "survey" | "bounty"
+  type: MissionType;
   systemId: string;
   systemName: string;
   targetSystemId: string;
@@ -306,8 +310,8 @@ export interface MissionInfo {
   deadlineTick: number;
   ticksRemaining: number;
   durationTicks: number | null;
-  enemyTier: string | null;
-  statRequirements: Record<string, number>;
+  enemyTier: EnemyTier | null;
+  statRequirements: Partial<Record<StatGateKey, number>>;
   status: OpMissionStatus;
   playerId: string | null;
   shipId: string | null;
@@ -351,7 +355,7 @@ export interface BattleInfo {
   enemyMorale: number;
   enemyMaxStrength: number;
   enemyType: string;
-  enemyTier: string;
+  enemyTier: EnemyTier;
   roundsCompleted: number;
   roundHistory: BattleRoundResult[];
   createdAtTick: number;

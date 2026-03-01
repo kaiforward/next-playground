@@ -59,7 +59,10 @@ Design docs:
 
 ## Conventions
 
-- **No `as` type assertions** — The only permitted uses of `as` are `as const` and inside runtime type guard functions (`lib/types/guards.ts`) that validate before returning. All other `as` casts (`as Type`, `as unknown as Type`, etc.) are strictly forbidden. Instead: use type guards, narrow with `instanceof`/`typeof`/conditionals, add proper generics, or validate with Zod at system boundaries. If TypeScript can't infer the type, fix the types rather than casting.
+- **No `as` type assertions** — The only permitted uses of `as` are `as const` and inside runtime type guard functions (`lib/types/guards.ts`) that validate before returning. All other `as` casts are strictly forbidden. If TypeScript can't infer the type, fix the types at the source rather than casting at the consumer.
+- **Type at the boundary, trust downstream** — Prisma returns strings for union fields; validate these once in the service layer using guards from `lib/types/guards.ts`. Services return fully typed data — components, hooks, and processors never re-validate types that were already validated upstream. If a component needs a type guard, the service isn't returning the right type.
+- **No `unknown` for internal data** — Never use `unknown`, `Record<string, unknown>`, or untyped maps/arrays to pass data between systems we control. If you're putting typed data in and getting `unknown` out, the container type is wrong. Define typed interfaces for internal data structures (event buses, message maps, state containers).
+- **Generics must stay generic** — Generic components like `DataTable<T>` must work with `T` directly, never intersect it with `Record<string, unknown>` or widen it to weaken type safety. Use typed accessors (`render(row: T)`, `getValue(row: T)`) instead of string-key property access.
 - Engine functions are pure — no DB imports. Test with Vitest.
 - Prisma singleton in `lib/prisma.ts` — always use this, never create new clients.
 - Prisma Client imported from `@/app/generated/prisma/client`.

@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import type { MissionInfo } from "@/lib/types/game";
 import { MISSION_TYPE_DEFS } from "@/lib/constants/missions";
 import { MISSION_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
-import { isMissionType } from "@/lib/types/guards";
 
 export function ActiveMissionsCard() {
   const { missions: tradeMissions } = usePlayerMissions();
@@ -75,9 +74,8 @@ export function ActiveMissionsCard() {
 }
 
 function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
-  const mType = m.type;
-  const typeDef = isMissionType(mType) ? MISSION_TYPE_DEFS[mType] : null;
-  const badgeColor = isMissionType(mType) ? MISSION_TYPE_BADGE_COLOR[mType] : "slate";
+  const typeDef = MISSION_TYPE_DEFS[m.type];
+  const badgeColor = MISSION_TYPE_BADGE_COLOR[m.type];
 
   return (
     <li className="bg-surface px-3 py-2.5">

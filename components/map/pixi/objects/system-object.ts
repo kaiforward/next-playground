@@ -1,8 +1,8 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
+import type { EconomyType } from "@/lib/types/game";
 import type { LODState } from "../lod";
 import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, TEXT_RESOLUTION } from "../theme";
-import { isEconomyType } from "@/lib/types/guards";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -207,7 +207,7 @@ export class SystemObject extends Container {
   private updateNavigationVisuals(
     state: NavigationNodeState | undefined,
     isSelected: boolean,
-    economyType: string,
+    economyType: EconomyType,
   ) {
     this.navigationRing.clear();
     this.alpha = 1;
@@ -215,7 +215,7 @@ export class SystemObject extends Container {
     this.cursor = "pointer";
 
     const glowAlpha = 0.15;
-    const colors = isEconomyType(economyType) ? ECONOMY_COLORS[economyType] : ECONOMY_COLORS.industrial;
+    const colors = ECONOMY_COLORS[economyType];
 
     if (isSelected && !state) {
       // Selected system (no navigation) — subtle highlight ring

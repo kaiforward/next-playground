@@ -1,6 +1,10 @@
-import { createNotifications } from "@/lib/services/notifications";
-import type { EntityRef } from "@/lib/types/game";
-import type { TickProcessor, TickProcessorResult } from "../types";
+import type {
+  TickProcessor,
+  TickProcessorResult,
+  GameNotificationPayload,
+  PlayerEventMap,
+} from "../types";
+import { persistPlayerNotifications } from "../helpers";
 import {
   resolveRound,
   checkBattleEnd,
@@ -10,7 +14,8 @@ import {
   type RoundResult,
 } from "@/lib/engine/combat";
 import { COMBAT_CONSTANTS, ENEMY_TIERS } from "@/lib/constants/combat";
-import { isEnemyTier, isNotificationEvent } from "@/lib/types/guards";
+import { isEnemyTier } from "@/lib/types/guards";
+import type { NotificationType } from "@/lib/types/game";
 
 export const battlesProcessor: TickProcessor = {
   name: "battles",
@@ -49,7 +54,7 @@ export const battlesProcessor: TickProcessor = {
       return {};
     }
 
-    const playerEvents = new Map<string, Record<string, unknown[]>>();
+    const playerEvents = new Map<string, Partial<PlayerEventMap>>();
 
     for (const battle of activeBattles) {
       if (!battle.ship) {
@@ -175,27 +180,7 @@ export const battlesProcessor: TickProcessor = {
     }
 
     // Persist notifications to DB
-    const dbEntries: Array<{
-      playerId: string;
-      type: string;
-      message: string;
-      refs: Partial<Record<string, EntityRef>>;
-      tick: number;
-    }> = [];
-    for (const [playerId, events] of playerEvents) {
-      const notifications = events["gameNotifications"] ?? [];
-      for (const n of notifications) {
-        if (!isNotificationEvent(n)) continue;
-        dbEntries.push({
-          playerId,
-          type: n.type,
-          message: n.message,
-          refs: n.refs,
-          tick: ctx.tick,
-        });
-      }
-    }
-    await createNotifications(ctx.tx, dbEntries);
+    await persistPlayerNotifications(ctx.tx, playerEvents, ctx.tick);
 
     return {
       globalEvents: activeBattles.length > 0
@@ -232,7 +217,7 @@ async function resolveBattle(
   outcome: BattleOutcome,
   finalRound: RoundResult,
   roundHistory: RoundResult[],
-  playerEvents: Map<string, Record<string, unknown[]>>,
+  playerEvents: Map<string, Partial<PlayerEventMap>>,
 ): Promise<void> {
   // Update battle status
   await ctx.tx.battle.update({
@@ -268,29 +253,19 @@ async function resolveBattle(
     },
   );
 
-  const shipUpdate: Record<string, unknown> = {};
-
   if (damage.shieldDamage > 0 || damage.hullDamage > 0) {
-    shipUpdate.shieldCurrent = Math.max(
-      0,
-      battle.ship.shieldCurrent - damage.shieldDamage,
-    );
-    shipUpdate.hullCurrent = Math.max(
-      0,
-      battle.ship.hullCurrent - damage.hullDamage,
-    );
-
     if (damage.disabled) {
-      shipUpdate.disabled = true;
       // Delete all cargo when disabled
       await ctx.tx.cargoItem.deleteMany({ where: { shipId: battle.ship.id } });
     }
-  }
 
-  if (Object.keys(shipUpdate).length > 0) {
     await ctx.tx.ship.update({
       where: { id: battle.ship.id },
-      data: shipUpdate,
+      data: {
+        shieldCurrent: Math.max(0, battle.ship.shieldCurrent - damage.shieldDamage),
+        hullCurrent: Math.max(0, battle.ship.hullCurrent - damage.hullDamage),
+        ...(damage.disabled ? { disabled: true } : {}),
+      },
     });
   }
 
@@ -350,25 +325,26 @@ async function resolveBattle(
 }
 
 function emitBattleNotification(
-  playerEvents: Map<string, Record<string, unknown[]>>,
+  playerEvents: Map<string, Partial<PlayerEventMap>>,
   playerId: string,
   message: string,
-  type: string,
+  type: NotificationType,
   shipId: string,
   shipName: string,
   systemId: string,
   systemName: string,
 ): void {
   const existing = playerEvents.get(playerId) ?? {};
-  const notifications = existing["gameNotifications"] ?? [];
-  notifications.push({
+  const notification: GameNotificationPayload = {
     message,
     type,
     refs: {
       ship: { id: shipId, label: shipName },
       system: { id: systemId, label: systemName },
     },
-  });
-  existing["gameNotifications"] = notifications;
+  };
+  existing.gameNotifications = existing.gameNotifications
+    ? [...existing.gameNotifications, notification]
+    : [notification];
   playerEvents.set(playerId, existing);
 }

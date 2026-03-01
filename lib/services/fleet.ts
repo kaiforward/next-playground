@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { ServiceError } from "./errors";
-import { toOpMissionStatus } from "@/lib/types/guards";
+import { toOpMissionStatus, toMissionType } from "@/lib/types/guards";
 import type { FleetState } from "@/lib/types/game";
 
 /** Standard ship include for all fleet/ship queries. */
@@ -52,7 +52,7 @@ export async function getFleet(playerId: string): Promise<FleetState> {
   const missionByShip = new Map(
     activeMissions
       .filter((m) => m.shipId !== null)
-      .map((m) => [m.shipId!, { id: m.id, type: m.type, status: toOpMissionStatus(m.status) }]),
+      .map((m) => [m.shipId!, { id: m.id, type: toMissionType(m.type), status: toOpMissionStatus(m.status) }]),
   );
 
   return {

@@ -1,6 +1,10 @@
-import { createNotifications } from "@/lib/services/notifications";
-import type { EntityRef } from "@/lib/types/game";
-import type { TickProcessor, TickProcessorResult } from "../types";
+import type {
+  TickProcessor,
+  TickProcessorResult,
+  GameNotificationPayload,
+  PlayerEventMap,
+} from "../types";
+import { persistPlayerNotifications } from "../helpers";
 import { computeAllHopDistances } from "@/lib/engine/pathfinding";
 import {
   selectEconomyCandidates,
@@ -11,7 +15,6 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { EVENT_MISSION_GOODS } from "@/lib/constants/events";
 import { GOODS } from "@/lib/constants/goods";
-import { isNotificationEvent } from "@/lib/types/guards";
 
 /** Build good tier lookup from GOODS constants. */
 const goodTiers: Record<string, number> = Object.fromEntries(
@@ -52,7 +55,7 @@ export const tradeMissionsProcessor: TickProcessor = {
       },
     });
 
-    const playerEvents = new Map<string, Record<string, unknown[]>>();
+    const playerEvents = new Map<string, Partial<PlayerEventMap>>();
 
     if (expiredAccepted.length > 0) {
       await ctx.tx.tradeMission.deleteMany({
@@ -62,13 +65,14 @@ export const tradeMissionsProcessor: TickProcessor = {
       for (const m of expiredAccepted) {
         const playerId = m.playerId!;
         const existing = playerEvents.get(playerId) ?? {};
-        const notifications = existing["gameNotifications"] ?? [];
-        notifications.push({
+        const notification: GameNotificationPayload = {
           message: `Mission expired: deliver ${m.quantity} ${m.good.name} to ${m.destination.name}`,
           type: "mission_expired",
           refs: {},
-        });
-        existing["gameNotifications"] = notifications;
+        };
+        existing.gameNotifications = existing.gameNotifications
+          ? [...existing.gameNotifications, notification]
+          : [notification];
         playerEvents.set(playerId, existing);
       }
     }
@@ -212,27 +216,7 @@ export const tradeMissionsProcessor: TickProcessor = {
     );
 
     // Persist notifications to DB
-    const dbEntries: Array<{
-      playerId: string;
-      type: string;
-      message: string;
-      refs: Partial<Record<string, EntityRef>>;
-      tick: number;
-    }> = [];
-    for (const [playerId, events] of playerEvents) {
-      const notifications = events["gameNotifications"] ?? [];
-      for (const n of notifications) {
-        if (!isNotificationEvent(n)) continue;
-        dbEntries.push({
-          playerId,
-          type: n.type,
-          message: n.message,
-          refs: n.refs,
-          tick: ctx.tick,
-        });
-      }
-    }
-    await createNotifications(ctx.tx, dbEntries);
+    await persistPlayerNotifications(ctx.tx, playerEvents, ctx.tick);
 
     return {
       globalEvents: {

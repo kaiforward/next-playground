@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { getRecordValue } from "@/lib/types/guards";
 
 export interface Column<T> {
-  key: string;
+  /** Unique column identifier. Use a real field name for default rendering/sorting, or any unique string for render-only columns. */
+  key: (keyof T & string) | (string & {});
   label: string;
   sortable?: boolean;
   render?: (row: T) => React.ReactNode;
+  /** Custom sort value extractor — use for computed columns that don't map to a field. */
+  getValue?: (row: T) => string | number | null;
 }
 
 interface DataTableProps<T> {
@@ -40,9 +42,14 @@ export function DataTable<T extends object>({
 
   const sortedData = [...data];
   if (sortKey) {
+    const sortCol = columns.find((c) => c.key === sortKey);
     sortedData.sort((a, b) => {
-      const aVal = getRecordValue(a, sortKey);
-      const bVal = getRecordValue(b, sortKey);
+      const aVal = sortCol?.getValue
+        ? sortCol.getValue(a)
+        : sortKey in a ? (a as Record<string, unknown>)[sortKey] : null;
+      const bVal = sortCol?.getValue
+        ? sortCol.getValue(b)
+        : sortKey in b ? (b as Record<string, unknown>)[sortKey] : null;
       if (aVal == null || bVal == null) return 0;
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDir === "asc" ? aVal - bVal : bVal - aVal;
@@ -91,7 +98,9 @@ export function DataTable<T extends object>({
             >
               {columns.map((col) => (
                 <td key={col.key} className="px-4 py-3 text-text-primary">
-                  {col.render ? col.render(row) : String(getRecordValue(row, col.key) ?? "")}
+                  {col.render
+                    ? col.render(row)
+                    : String(col.key in row ? (row as Record<string, unknown>)[col.key] ?? "" : "")}
                 </td>
               ))}
             </tr>

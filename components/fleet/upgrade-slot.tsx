@@ -2,7 +2,6 @@
 
 import type { UpgradeSlotState } from "@/lib/types/game";
 import { MODULES } from "@/lib/constants/modules";
-import { isModuleId } from "@/lib/types/guards";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -29,7 +28,7 @@ interface UpgradeSlotProps {
 }
 
 export function UpgradeSlot({ slot, onInstall, onRemove, disabled, readOnly }: UpgradeSlotProps) {
-  const mod = slot.moduleId && isModuleId(slot.moduleId) ? MODULES[slot.moduleId] : null;
+  const mod = slot.moduleId ? MODULES[slot.moduleId] : null;
   const tierLabel = mod && slot.moduleTier ? mod.tiers.find((t) => t.tier === slot.moduleTier)?.label : null;
 
   return (
