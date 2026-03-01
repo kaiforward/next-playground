@@ -6,6 +6,7 @@
  * the original behavior for backward compatibility.
  */
 
+import { clamp } from "@/lib/utils/math";
 import type { ModifierRow } from "./events";
 
 // ── Constants ────────────────────────────────────────────────────
@@ -121,6 +122,22 @@ export function aggregateDangerLevel(
     }
   }
   return Math.min(total, maxDanger);
+}
+
+/**
+ * Compute total system danger from event modifiers, government baseline, and trait danger.
+ * Clamps result to [0, MAX_DANGER].
+ */
+export function computeSystemDanger(
+  modifiers: ModifierRow[],
+  govBaseline: number,
+  traitDanger: number,
+): number {
+  return clamp(
+    aggregateDangerLevel(modifiers) + govBaseline + traitDanger,
+    0,
+    DANGER_CONSTANTS.MAX_DANGER,
+  );
 }
 
 /**

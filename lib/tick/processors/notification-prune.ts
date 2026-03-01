@@ -1,7 +1,6 @@
 import { pruneOldNotifications } from "@/lib/services/notifications";
+import { MAX_AGE_TICKS } from "@/lib/constants/notifications";
 import type { TickProcessor, TickProcessorResult } from "../types";
-
-const MAX_AGE_TICKS = 500;
 
 export const notificationPruneProcessor: TickProcessor = {
   name: "notification-prune",

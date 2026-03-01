@@ -1,42 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requireMutationPlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { parseJsonBody } from "@/lib/api/parse-json";
 import { removeMembersFromConvoy } from "@/lib/services/convoy";
-import { rateLimit } from "@/lib/api/rate-limit";
-import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
 import type { ConvoyBatchMemberRequest, ConvoyMemberResponse } from "@/lib/types/api";
 
-export async function POST(
+export function POST(
   request: NextRequest,
   { params }: { params: Promise<{ convoyId: string }> },
 ) {
-  try {
+  return withServiceErrors("POST /api/game/convoy/[convoyId]/members/batch-remove", async () => {
     const { convoyId } = await params;
     const body = await parseJsonBody<ConvoyBatchMemberRequest>(request);
     if (!body?.shipIds || !Array.isArray(body.shipIds) || body.shipIds.length === 0) {
       return NextResponse.json<ConvoyMemberResponse>({ error: "Missing or empty shipIds array." }, { status: 400 });
     }
 
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<ConvoyMemberResponse>({ error: "Player not found." }, { status: 404 });
-    }
+    const auth = await requireMutationPlayer();
+    if (isErrorResponse(auth)) return auth;
 
-    const mutationLimit = rateLimit({ key: `mutation:${playerId}`, tier: RATE_LIMIT_TIERS.mutation });
-    if (mutationLimit) return mutationLimit;
-
-    const result = await removeMembersFromConvoy(playerId, convoyId, body.shipIds);
+    const result = await removeMembersFromConvoy(auth.playerId, convoyId, body.shipIds);
     if (!result.ok) {
       return NextResponse.json<ConvoyMemberResponse>({ error: result.error }, { status: result.status });
     }
 
-    // Auto-disband returns data: null — send disbanded marker so client knows
     if (result.data === null) {
       return NextResponse.json({ disbanded: true });
     }
     return NextResponse.json<ConvoyMemberResponse>({ data: result.data });
-  } catch (error) {
-    console.error("POST /api/game/convoy/[convoyId]/members/batch-remove error:", error);
-    return NextResponse.json<ConvoyMemberResponse>({ error: "Failed to remove members." }, { status: 500 });
-  }
+  });
 }

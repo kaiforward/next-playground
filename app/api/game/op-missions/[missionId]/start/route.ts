@@ -1,29 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
-import { startMission } from "@/lib/services/missions-v2";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requireMutationPlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { parseJsonBody } from "@/lib/api/parse-json";
-import { rateLimit } from "@/lib/api/rate-limit";
-import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
+import { startMission } from "@/lib/services/missions-v2";
 import type { StartOpMissionRequest, StartOpMissionResponse } from "@/lib/types/api";
 
-export async function POST(
+export function POST(
   request: NextRequest,
   { params }: { params: Promise<{ missionId: string }> },
 ) {
-  try {
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<StartOpMissionResponse>(
-        { error: "Player not found." },
-        { status: 404 },
-      );
-    }
-
-    const mutationLimit = rateLimit({
-      key: `mutation:${playerId}`,
-      tier: RATE_LIMIT_TIERS.mutation,
-    });
-    if (mutationLimit) return mutationLimit;
+  return withServiceErrors("POST /api/game/op-missions/[missionId]/start", async () => {
+    const auth = await requireMutationPlayer();
+    if (isErrorResponse(auth)) return auth;
 
     const { missionId } = await params;
 
@@ -35,7 +24,7 @@ export async function POST(
       );
     }
 
-    const result = await startMission(playerId, missionId, body.shipId);
+    const result = await startMission(auth.playerId, missionId, body.shipId);
 
     if (!result.ok) {
       return NextResponse.json<StartOpMissionResponse>(
@@ -45,11 +34,5 @@ export async function POST(
     }
 
     return NextResponse.json<StartOpMissionResponse>({ data: result.data });
-  } catch (error) {
-    console.error("POST /api/game/op-missions/[missionId]/start error:", error);
-    return NextResponse.json<StartOpMissionResponse>(
-      { error: "Failed to start mission." },
-      { status: 500 },
-    );
-  }
+  });
 }

@@ -1,20 +1,18 @@
 import type {
   TickProcessor,
   TickProcessorResult,
-  GameNotificationPayload,
   PlayerEventMap,
 } from "../types";
-import { persistPlayerNotifications } from "../helpers";
+import { persistPlayerNotifications, addPlayerNotification, groupModifiersByTarget } from "../helpers";
 import {
   generateOpMissionCandidates,
   type SystemSnapshot,
 } from "@/lib/engine/mission-gen";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
-import { aggregateDangerLevel, DANGER_CONSTANTS } from "@/lib/engine/danger";
+import { computeSystemDanger } from "@/lib/engine/danger";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { OP_MISSION_CAP_PER_SYSTEM } from "@/lib/constants/missions";
 import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
-import type { ModifierRow } from "@/lib/engine/events";
 
 export const missionsProcessor: TickProcessor = {
   name: "missions",
@@ -46,7 +44,9 @@ export const missionsProcessor: TickProcessor = {
         shipId: true,
         startedAtTick: true,
         durationTicks: true,
+        targetSystemId: true,
         targetSystem: { select: { name: true } },
+        ship: { select: { name: true } },
       },
     });
 
@@ -77,16 +77,14 @@ export const missionsProcessor: TickProcessor = {
           data: { credits: { increment: mission.reward } },
         });
 
-        const existing = playerEvents.get(mission.playerId) ?? {};
-        const notification: GameNotificationPayload = {
+        addPlayerNotification(playerEvents, mission.playerId, {
           message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission completed at ${mission.targetSystem.name} — earned ${mission.reward} CR`,
           type: "mission_completed",
-          refs: {},
-        };
-        existing.gameNotifications = existing.gameNotifications
-          ? [...existing.gameNotifications, notification]
-          : [notification];
-        playerEvents.set(mission.playerId, existing);
+          refs: {
+            system: { id: mission.targetSystemId, label: mission.targetSystem.name },
+            ...(mission.shipId && mission.ship ? { ship: { id: mission.shipId, label: mission.ship.name } } : {}),
+          },
+        });
       }
     }
 
@@ -101,7 +99,9 @@ export const missionsProcessor: TickProcessor = {
         type: true,
         playerId: true,
         shipId: true,
+        targetSystemId: true,
         targetSystem: { select: { name: true } },
+        ship: { select: { name: true } },
       },
     });
 
@@ -115,16 +115,14 @@ export const missionsProcessor: TickProcessor = {
       });
 
       if (mission.playerId) {
-        const existing = playerEvents.get(mission.playerId) ?? {};
-        const notification: GameNotificationPayload = {
+        addPlayerNotification(playerEvents, mission.playerId, {
           message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission expired — ${mission.targetSystem.name}`,
           type: "mission_expired",
-          refs: {},
-        };
-        existing.gameNotifications = existing.gameNotifications
-          ? [...existing.gameNotifications, notification]
-          : [notification];
-        playerEvents.set(mission.playerId, existing);
+          refs: {
+            system: { id: mission.targetSystemId, label: mission.targetSystem.name },
+            ...(mission.shipId && mission.ship ? { ship: { id: mission.shipId, label: mission.ship.name } } : {}),
+          },
+        });
       }
     }
 
@@ -157,13 +155,7 @@ export const missionsProcessor: TickProcessor = {
     });
 
     // Group modifiers by system
-    const modsBySystem = new Map<string, ModifierRow[]>();
-    for (const mod of navModifiers) {
-      if (!mod.targetId) continue;
-      const existing = modsBySystem.get(mod.targetId) ?? [];
-      existing.push(mod);
-      modsBySystem.set(mod.targetId, existing);
-    }
+    const modsBySystem = groupModifiersByTarget(navModifiers);
 
     // Compute danger levels for each system
     const dangerLevels = new Map<string, number>();
@@ -180,10 +172,7 @@ export const missionsProcessor: TickProcessor = {
         })),
       );
       const systemMods = modsBySystem.get(system.id) ?? [];
-      const danger = Math.max(0, Math.min(
-        aggregateDangerLevel(systemMods) + govBaseline + traitDanger,
-        DANGER_CONSTANTS.MAX_DANGER,
-      ));
+      const danger = computeSystemDanger(systemMods, govBaseline, traitDanger);
       dangerLevels.set(system.id, danger);
     }
 

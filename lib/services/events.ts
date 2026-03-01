@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ServiceError } from "./errors";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { toEventTypeId } from "@/lib/types/guards";
 import type { ActiveEvent } from "@/lib/types/game";
@@ -9,7 +10,10 @@ import type { ActiveEvent } from "@/lib/types/game";
  */
 export async function getActiveEvents(): Promise<ActiveEvent[]> {
   const [world, dbEvents] = await Promise.all([
-    prisma.gameWorld.findFirstOrThrow({ select: { currentTick: true } }),
+    prisma.gameWorld.findUnique({
+      where: { id: "world" },
+      select: { currentTick: true },
+    }),
     prisma.gameEvent.findMany({
       select: {
         id: true,
@@ -25,6 +29,10 @@ export async function getActiveEvents(): Promise<ActiveEvent[]> {
       },
     }),
   ]);
+
+  if (!world) {
+    throw new ServiceError("Game world not initialized.", 500);
+  }
 
   return dbEvents.map((e) => {
     const eventType = toEventTypeId(e.type);

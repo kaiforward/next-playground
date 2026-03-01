@@ -1,32 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requireMutationPlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { acceptMission } from "@/lib/services/missions-v2";
-import { rateLimit } from "@/lib/api/rate-limit";
-import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
 import type { AcceptOpMissionResponse } from "@/lib/types/api";
 
-export async function POST(
+export function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ missionId: string }> },
 ) {
-  try {
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<AcceptOpMissionResponse>(
-        { error: "Player not found." },
-        { status: 404 },
-      );
-    }
-
-    const mutationLimit = rateLimit({
-      key: `mutation:${playerId}`,
-      tier: RATE_LIMIT_TIERS.mutation,
-    });
-    if (mutationLimit) return mutationLimit;
+  return withServiceErrors("POST /api/game/op-missions/[missionId]/accept", async () => {
+    const auth = await requireMutationPlayer();
+    if (isErrorResponse(auth)) return auth;
 
     const { missionId } = await params;
-
-    const result = await acceptMission(playerId, missionId);
+    const result = await acceptMission(auth.playerId, missionId);
 
     if (!result.ok) {
       return NextResponse.json<AcceptOpMissionResponse>(
@@ -36,11 +24,5 @@ export async function POST(
     }
 
     return NextResponse.json<AcceptOpMissionResponse>({ data: result.data });
-  } catch (error) {
-    console.error("POST /api/game/op-missions/[missionId]/accept error:", error);
-    return NextResponse.json<AcceptOpMissionResponse>(
-      { error: "Failed to accept mission." },
-      { status: 500 },
-    );
-  }
+  });
 }

@@ -1,10 +1,9 @@
 import type {
   TickProcessor,
   TickProcessorResult,
-  GameNotificationPayload,
   PlayerEventMap,
 } from "../types";
-import { persistPlayerNotifications } from "../helpers";
+import { persistPlayerNotifications, addPlayerNotification } from "../helpers";
 import {
   resolveRound,
   checkBattleEnd,
@@ -39,6 +38,8 @@ export const battlesProcessor: TickProcessor = {
             hullCurrent: true,
             shieldMax: true,
             shieldCurrent: true,
+            firepower: true,
+            evasion: true,
           },
         },
         mission: {
@@ -80,17 +81,8 @@ export const battlesProcessor: TickProcessor = {
       // Use ship stats to derive per-round damage (same as combat engine)
       const { FIREPOWER_TO_DAMAGE, EVASION_K, MAX_EVASION_REDUCTION } = COMBAT_CONSTANTS;
 
-      // We need the ship's firepower/evasion. Since these aren't on the battle record,
-      // fetch them from the ship.
-      const shipStats = await ctx.tx.ship.findUnique({
-        where: { id: battle.ship.id },
-        select: { firepower: true, evasion: true },
-      });
-
-      if (!shipStats) continue;
-
-      const playerDamagePerRound = shipStats.firepower * FIREPOWER_TO_DAMAGE;
-      const rawReduction = shipStats.evasion / (shipStats.evasion + EVASION_K);
+      const playerDamagePerRound = battle.ship.firepower * FIREPOWER_TO_DAMAGE;
+      const rawReduction = battle.ship.evasion / (battle.ship.evasion + EVASION_K);
       const playerDamageReduction = Math.min(rawReduction, MAX_EVASION_REDUCTION);
 
       const playerStats: CombatStats = {
@@ -334,17 +326,12 @@ function emitBattleNotification(
   systemId: string,
   systemName: string,
 ): void {
-  const existing = playerEvents.get(playerId) ?? {};
-  const notification: GameNotificationPayload = {
+  addPlayerNotification(playerEvents, playerId, {
     message,
     type,
     refs: {
       ship: { id: shipId, label: shipName },
       system: { id: systemId, label: systemName },
     },
-  };
-  existing.gameNotifications = existing.gameNotifications
-    ? [...existing.gameNotifications, notification]
-    : [notification];
-  playerEvents.set(playerId, existing);
+  });
 }

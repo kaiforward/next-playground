@@ -22,23 +22,19 @@ type ConvoyResult =
   | { ok: true; data: ConvoyState }
   | { ok: false; error: string; status: number };
 
-type ConvoyListResult =
-  | { ok: true; data: ConvoyState[] }
-  | { ok: false; error: string; status: number };
-
 type ConvoyNavigateResult =
   | { ok: true; data: { convoy: ConvoyState; fuelUsed: number; travelDuration: number } }
   | { ok: false; error: string; status: number };
 
 // ── List convoys ────────────────────────────────────────────────
 
-export async function listConvoys(playerId: string): Promise<ConvoyListResult> {
+export async function listConvoys(playerId: string): Promise<ConvoyState[]> {
   const convoys = await prisma.convoy.findMany({
     where: { playerId },
     include: CONVOY_INCLUDE,
   });
 
-  return { ok: true, data: convoys.map(serializeConvoy) };
+  return convoys.map(serializeConvoy);
 }
 
 // ── Create convoy ───────────────────────────────────────────────

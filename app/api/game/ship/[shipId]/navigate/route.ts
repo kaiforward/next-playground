@@ -1,16 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionPlayerId } from "@/lib/auth/get-player";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requireMutationPlayer, isErrorResponse } from "@/lib/api/require-player";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { parseJsonBody } from "@/lib/api/parse-json";
 import { executeNavigation } from "@/lib/services/navigation";
-import { rateLimit } from "@/lib/api/rate-limit";
-import { RATE_LIMIT_TIERS } from "@/lib/constants/rate-limit";
 import type { ShipNavigateRequest, ShipNavigateResponse } from "@/lib/types/api";
 
-export async function POST(
+export function POST(
   request: NextRequest,
   { params }: { params: Promise<{ shipId: string }> },
 ) {
-  try {
+  return withServiceErrors("POST /api/game/ship/[shipId]/navigate", async () => {
     const { shipId } = await params;
 
     const body = await parseJsonBody<ShipNavigateRequest>(request);
@@ -21,21 +21,10 @@ export async function POST(
       );
     }
 
-    const playerId = await getSessionPlayerId();
-    if (!playerId) {
-      return NextResponse.json<ShipNavigateResponse>(
-        { error: "Player not found." },
-        { status: 404 },
-      );
-    }
+    const auth = await requireMutationPlayer();
+    if (isErrorResponse(auth)) return auth;
 
-    const mutationLimit = rateLimit({
-      key: `mutation:${playerId}`,
-      tier: RATE_LIMIT_TIERS.mutation,
-    });
-    if (mutationLimit) return mutationLimit;
-
-    const result = await executeNavigation(playerId, shipId, body.route);
+    const result = await executeNavigation(auth.playerId, shipId, body.route);
 
     if (!result.ok) {
       return NextResponse.json<ShipNavigateResponse>(
@@ -45,11 +34,5 @@ export async function POST(
     }
 
     return NextResponse.json<ShipNavigateResponse>({ data: result.data });
-  } catch (error) {
-    console.error("POST /api/game/ship/[shipId]/navigate error:", error);
-    return NextResponse.json<ShipNavigateResponse>(
-      { error: "Failed to navigate." },
-      { status: 500 },
-    );
-  }
+  });
 }

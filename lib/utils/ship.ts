@@ -1,6 +1,29 @@
 import type { ShipState } from "@/lib/types/game";
 import type { BadgeColor } from "@/components/ui/badge";
+import type { InstalledModule } from "@/lib/engine/upgrades";
 import { getCargoUsed } from "./cargo";
+
+// ── Server-safe utilities ─────────────────────────────────────────
+
+/** Slot shape accepted by getInstalledModules — matches Prisma select results. */
+interface UpgradeSlotRow {
+  moduleId: string | null;
+  moduleTier: number | null;
+  slotType: string;
+}
+
+/**
+ * Extract installed modules from upgrade slot rows.
+ * Filters out empty slots and returns typed InstalledModule[].
+ */
+export function getInstalledModules(slots: UpgradeSlotRow[]): InstalledModule[] {
+  return slots
+    .filter((slot): slot is UpgradeSlotRow & { moduleId: string; moduleTier: number } =>
+      slot.moduleId !== null && slot.moduleTier !== null)
+    .map((slot) => ({ moduleId: slot.moduleId, moduleTier: slot.moduleTier, slotType: slot.slotType }));
+}
+
+// ── Client utilities ──────────────────────────────────────────────
 
 export interface ShipDerivedState {
   fuelPercent: number;
