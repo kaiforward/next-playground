@@ -14,10 +14,12 @@ import { EffectLayer } from "./layers/effect-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
 import type { MapData } from "@/lib/hooks/use-map-data";
-import type { StarSystemInfo } from "@/lib/types/game";
+import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
+import type { ViewportBounds } from "@/lib/hooks/use-viewport-systems";
 
 export interface PixiMapCanvasProps {
+  atlasData: AtlasData;
   mapData: MapData;
   selectedSystem: StarSystemInfo | null;
   navigationMode: NavigationMode;
@@ -26,6 +28,7 @@ export interface PixiMapCanvasProps {
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
+  onViewportChange?: (bounds: ViewportBounds) => void;
 }
 
 /** Holds all mutable Pixi references. Created once during mount. */
@@ -43,6 +46,7 @@ interface PixiRefs {
 }
 
 export function PixiMapCanvas({
+  atlasData,
   mapData,
   selectedSystem,
   navigationMode,
@@ -51,6 +55,7 @@ export function PixiMapCanvas({
   centerTarget,
   onReady,
   regionInfos,
+  onViewportChange,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pixiRef = useRef<PixiRefs | null>(null);
@@ -59,6 +64,9 @@ export function PixiMapCanvas({
   // Store callbacks in refs so Pixi event handlers always see latest
   const callbacksRef = useRef({ onSystemClick, onEmptyClick });
   callbacksRef.current = { onSystemClick, onEmptyClick };
+
+  const onViewportChangeRef = useRef(onViewportChange);
+  onViewportChangeRef.current = onViewportChange;
 
   // Store latest data in ref for interaction handlers
   const mapDataRef = useRef(mapData);
@@ -154,6 +162,16 @@ export function PixiMapCanvas({
         frustum.update(camera.x, camera.y, camera.zoom, app!.screen.width, app!.screen.height);
         const lod = computeLOD(camera.zoom);
 
+        // Emit viewport bounds for progressive data loading
+        if (lod.systemObjectsActive) {
+          onViewportChangeRef.current?.({
+            minX: frustum.minX,
+            minY: frustum.minY,
+            maxX: frustum.maxX,
+            maxY: frustum.maxY,
+          });
+        }
+
         // Point cloud layer (universe view)
         pointCloudLayer.updateVisibility(lod.pointCloudAlpha);
 
@@ -199,23 +217,16 @@ export function PixiMapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Sync map data → Pixi display objects ────────────────────────
+  // ── Sync atlas data → point cloud + territories ──────────────────
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
 
-    // Sync point cloud (always — lightweight, covers universe view)
-    p.pointCloudLayer.sync(mapData.systems);
+    // Point cloud driven by atlas (always available, lightweight)
+    p.pointCloudLayer.sync(atlasData.systems);
+  }, [atlasData.systems, pixiReady]);
 
-    // Sync system objects and connections (interactive detail)
-    p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
-    p.connectionLayer.sync(mapData.connections, mapData.systems);
-    const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
-    p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
-    p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");
-  }, [mapData, selectedSystem, navigationMode, pixiReady]);
-
-  // ── Sync territories (expensive Voronoi — only on region/system changes) ──
+  // ── Sync territories (expensive Voronoi — only on atlas/region changes) ──
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
@@ -228,22 +239,35 @@ export function PixiMapCanvas({
       }
     }
     p.territoryLayer.setPlayerPresence(playerRegionIds);
-    p.territoryLayer.sync(mapData.systems, regionInfos);
-  }, [mapData.systems, pixiReady, regionInfos]);
+    p.territoryLayer.sync(atlasData.systems, regionInfos);
+  }, [atlasData.systems, mapData.systems, pixiReady, regionInfos]);
+
+  // ── Sync map data → system objects + connections ──────────────────
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+
+    // System objects and connections driven by mapData (viewport detail)
+    p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
+    p.connectionLayer.sync(mapData.connections, mapData.systems);
+    const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
+    p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
+    p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");
+  }, [mapData, selectedSystem, navigationMode, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady || readyFired.current) return;
-    if (mapData.systems.length === 0) return;
+    if (atlasData.systems.length === 0) return;
     // When centerTarget is set, let the centerTarget effect handle centering + onReady
     if (centerTarget) return;
 
-    const bounds = computeBounds(mapData.systems);
+    const bounds = computeBounds(atlasData.systems);
     p.camera.fitView(bounds, undefined, 0);
     readyFired.current = true;
     onReady();
-  }, [mapData.systems, onReady, pixiReady, centerTarget]);
+  }, [atlasData.systems, onReady, pixiReady, centerTarget]);
 
   // ── centerTarget (pan camera to system) ─────────────────────────
   const lastCenterRef = useRef<typeof centerTarget>(undefined);

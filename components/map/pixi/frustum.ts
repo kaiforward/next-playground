@@ -4,10 +4,10 @@
  */
 
 export class Frustum {
-  private minX = 0;
-  private minY = 0;
-  private maxX = 0;
-  private maxY = 0;
+  minX = 0;
+  minY = 0;
+  maxX = 0;
+  maxY = 0;
 
   /**
    * Update viewport bounds from camera state.

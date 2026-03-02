@@ -21,4 +21,7 @@ export const queryKeys = {
   // Notifications
   notifications: ["notifications"] as const,
   unreadCount: ["unreadCount"] as const,
+  // Atlas + progressive loading
+  atlas: ["atlas"] as const,
+  viewportSystems: (bounds: string) => ["viewportSystems", bounds] as const,
 };

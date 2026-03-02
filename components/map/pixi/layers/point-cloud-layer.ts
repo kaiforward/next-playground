@@ -1,6 +1,6 @@
 import { Graphics, ParticleContainer, Particle, Texture } from "pixi.js";
 import type { Renderer } from "pixi.js";
-import type { SystemNodeData } from "@/lib/hooks/use-map-data";
+import type { AtlasSystem } from "@/lib/types/game";
 import { ECONOMY_COLORS, POINT_CLOUD } from "../theme";
 
 /**
@@ -38,8 +38,8 @@ export class PointCloudLayer {
     g.destroy();
   }
 
-  /** Sync particles to match current system data */
-  sync(systems: SystemNodeData[]) {
+  /** Sync particles to match current atlas data */
+  sync(systems: AtlasSystem[]) {
     if (!this.dotTexture) return;
 
     const incoming = new Set<string>();

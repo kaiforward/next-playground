@@ -1,11 +1,10 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { Delaunay } from "d3-delaunay";
-import type { SystemNodeData } from "@/lib/hooks/use-map-data";
 import type { LODState } from "../lod";
 import { ECONOMY_COLORS, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { computeTerritoryPolygons } from "../territory-utils";
-import type { EconomyType } from "@/lib/types/game";
+import type { AtlasSystem, EconomyType } from "@/lib/types/game";
 
 const REGION_NAME_STYLE = new TextStyle({
   fontSize: 64,
@@ -37,7 +36,7 @@ export class TerritoryLayer {
    * Compute and render filled territory polygons per region.
    * Called when system data changes (not per frame).
    */
-  sync(systems: SystemNodeData[], regions: RegionInfo[]) {
+  sync(systems: AtlasSystem[], regions: RegionInfo[]) {
     if (systems.length < 3) {
       this.clear();
       return;

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
-import type { UniverseData, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
+import type { AtlasData, UniverseData, StarSystemInfo, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
 import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
@@ -13,10 +13,11 @@ import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
+import { useViewportSystems } from "@/lib/hooks/use-viewport-systems";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 
 interface StarMapProps {
-  universe: UniverseData;
+  atlas: AtlasData;
   ships: ShipState[];
   convoys: ConvoyState[];
   onNavigateShip: (shipId: string, route: string[]) => Promise<void>;
@@ -28,7 +29,7 @@ interface StarMapProps {
 }
 
 export function StarMap({
-  universe,
+  atlas,
   ships,
   convoys,
   onNavigateShip,
@@ -38,6 +39,38 @@ export function StarMap({
   initialSelectedSystemId,
   events = [],
 }: StarMapProps) {
+  // ── Progressive data loading ──────────────────────────────────
+  const { systems: viewportSystems, onViewportChange } = useViewportSystems();
+
+  // Merge atlas (lightweight) with viewport detail (full StarSystemInfo)
+  const mergedSystems = useMemo((): StarSystemInfo[] => {
+    const detailMap = new Map(
+      (viewportSystems ?? []).map((s) => [s.id, s]),
+    );
+    return atlas.systems.map((as) => {
+      const detail = detailMap.get(as.id);
+      if (detail) return detail;
+      // Atlas-only: minimal StarSystemInfo (name loads with viewport detail)
+      return {
+        id: as.id,
+        x: as.x,
+        y: as.y,
+        regionId: as.regionId,
+        economyType: as.economyType,
+        isGateway: as.isGateway,
+        name: "",
+        description: "",
+      };
+    });
+  }, [atlas.systems, viewportSystems]);
+
+  // Build UniverseData-compatible structure from atlas + viewport detail
+  const universe = useMemo((): UniverseData => ({
+    regions: atlas.regions,
+    systems: mergedSystems,
+    connections: atlas.connections,
+  }), [atlas.regions, mergedSystems, atlas.connections]);
+
   // ── Foundation memos (stable across renders) ──────────────────
   const systemRegionMap = useMemo(
     () => buildSystemRegionMap(universe.systems),
@@ -192,6 +225,7 @@ export function StarMap({
   return (
     <div className={`relative h-full w-full ${view.mapReady ? "opacity-100" : "opacity-0"}`}>
       <PixiMapCanvas
+        atlasData={atlas}
         mapData={mapData}
         selectedSystem={selectedSystem}
         navigationMode={mode}
@@ -200,6 +234,7 @@ export function StarMap({
         centerTarget={centerTarget}
         onReady={handleReady}
         regionInfos={regionInfos}
+        onViewportChange={onViewportChange}
       />
 
       {/* Navigation mode banner */}

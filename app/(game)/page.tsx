@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StarMap } from "@/components/map/star-map";
-import { useUniverse } from "@/lib/hooks/use-universe";
+import { useAtlas } from "@/lib/hooks/use-atlas";
 import { useFleet } from "@/lib/hooks/use-fleet";
 
 import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
@@ -23,7 +23,7 @@ function MapContent({
   initialConvoyId?: string;
   initialSystemId?: string;
 }) {
-  const { data } = useUniverse();
+  const { atlas } = useAtlas();
   const { fleet } = useFleet();
   const { mutateAsync: navigateAsync } = useNavigateMutation();
   const { convoys } = useConvoys();
@@ -64,7 +64,7 @@ function MapContent({
         </div>
       )}
       <StarMap
-        universe={data}
+        atlas={atlas}
         ships={fleet.ships}
         convoys={convoys}
         onNavigateShip={handleNavigateShip}

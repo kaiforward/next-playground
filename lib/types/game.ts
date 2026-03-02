@@ -256,6 +256,23 @@ export interface UniverseData {
   connections: SystemConnectionInfo[];
 }
 
+// ── Atlas (lightweight map data) ──────────────────────────────────
+
+export interface AtlasSystem {
+  id: string;
+  x: number;
+  y: number;
+  regionId: string;
+  economyType: EconomyType;
+  isGateway: boolean;
+}
+
+export interface AtlasData {
+  regions: RegionInfo[];
+  systems: AtlasSystem[];
+  connections: SystemConnectionInfo[];
+}
+
 export interface ActiveEvent {
   id: string;
   type: EventTypeId;
