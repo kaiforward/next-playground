@@ -12,7 +12,7 @@ export function GET() {
     const data = await getAtlas();
     return NextResponse.json<AtlasResponse>(
       { data },
-      { headers: { "Cache-Control": "public, max-age=31536000, immutable" } },
+      { headers: { "Cache-Control": "private, max-age=3600" } },
     );
   });
 }

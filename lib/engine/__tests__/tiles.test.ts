@@ -24,8 +24,8 @@ describe("tile constants", () => {
   });
 
   it("each tile is 437.5 world units", () => {
-    expect(TILE_WIDTH).toBe(7000 / 16);
-    expect(TILE_HEIGHT).toBe(7000 / 16);
+    expect(TILE_WIDTH).toBe(UNIVERSE_GEN.MAP_SIZE / 16);
+    expect(TILE_HEIGHT).toBe(UNIVERSE_GEN.MAP_SIZE / 16);
   });
 });
 
@@ -51,8 +51,10 @@ describe("systemToTile", () => {
   });
 
   it("clamps coordinates at exact map size to last tile", () => {
-    // x=7000 / 437.5 = 16 → would be out of range, clamped to 15
-    expect(systemToTile(7000, 7000)).toEqual({ col: 15, row: 15 });
+    expect(systemToTile(UNIVERSE_GEN.MAP_SIZE, UNIVERSE_GEN.MAP_SIZE)).toEqual({
+      col: 15,
+      row: 15,
+    });
   });
 
   it("clamps negative coordinates to tile (0, 0)", () => {
@@ -64,7 +66,6 @@ describe("systemToTile", () => {
   });
 
   it("handles exact tile boundary — belongs to next tile", () => {
-    // Exactly on the boundary between tile 0 and tile 1
     expect(systemToTile(TILE_WIDTH, 0)).toEqual({ col: 1, row: 0 });
   });
 });
@@ -145,26 +146,57 @@ describe("frustumToTiles", () => {
   });
 
   it("returns all tiles for a frustum covering the entire map", () => {
-    const tiles = frustumToTiles({ minX: 0, minY: 0, maxX: 7000, maxY: 7000 });
+    // Use a maxX/maxY slightly past a tile boundary to enter the last tile
+    const tiles = frustumToTiles({
+      minX: 0,
+      minY: 0,
+      maxX: UNIVERSE_GEN.MAP_SIZE - 1,
+      maxY: UNIVERSE_GEN.MAP_SIZE - 1,
+    });
     expect(tiles).toHaveLength(TILE_COLS * TILE_ROWS);
   });
 
   it("clamps frustum that extends beyond map bounds", () => {
     const tiles = frustumToTiles({ minX: -500, minY: -500, maxX: 8000, maxY: 8000 });
     expect(tiles).toHaveLength(TILE_COLS * TILE_ROWS);
-    // First tile should be (0,0) and last should be (15,15)
     expect(tiles[0]).toEqual({ col: 0, row: 0 });
     expect(tiles[tiles.length - 1]).toEqual({ col: 15, row: 15 });
   });
 
-  it("returns tiles in row-major order", () => {
+  it("excludes tiles when frustum edge sits exactly on tile boundary (half-open)", () => {
+    // maxX = exactly TILE_WIDTH means the frustum stops at col 0's right edge
+    // and does NOT enter col 1 (half-open convention)
     const tiles = frustumToTiles({
       minX: 0,
       minY: 0,
-      maxX: TILE_WIDTH * 2,
-      maxY: TILE_HEIGHT * 2,
+      maxX: TILE_WIDTH,
+      maxY: TILE_HEIGHT,
     });
-    // Row 0 first, then row 1
+    expect(tiles).toEqual([{ col: 0, row: 0 }]);
+  });
+
+  it("includes next tile when frustum edge passes just beyond boundary", () => {
+    const tiles = frustumToTiles({
+      minX: 0,
+      minY: 0,
+      maxX: TILE_WIDTH + 0.001,
+      maxY: TILE_HEIGHT + 0.001,
+    });
+    expect(tiles).toHaveLength(4);
+    expect(tiles).toContainEqual({ col: 0, row: 0 });
+    expect(tiles).toContainEqual({ col: 1, row: 0 });
+    expect(tiles).toContainEqual({ col: 0, row: 1 });
+    expect(tiles).toContainEqual({ col: 1, row: 1 });
+  });
+
+  it("returns tiles in row-major order", () => {
+    // Use maxX/maxY slightly past the 2nd boundary to include tiles 0, 1, 2
+    const tiles = frustumToTiles({
+      minX: 0,
+      minY: 0,
+      maxX: TILE_WIDTH * 2 + 1,
+      maxY: TILE_HEIGHT * 2 + 1,
+    });
     expect(tiles).toEqual([
       { col: 0, row: 0 },
       { col: 1, row: 0 },
