@@ -21,6 +21,15 @@ export const NAV_COLORS = {
   destination: 0x34d399,  // emerald-400
 } as const;
 
+// ── Territory (universe view) ────────────────────────────────────
+
+export const TERRITORY = {
+  fillAlpha: 0.08,
+  playerFillAlpha: 0.15,
+  strokeAlpha: 0.3,
+  strokeWidth: 2,
+} as const;
+
 // ── Edge colors ──────────────────────────────────────────────────
 
 export const EDGE = {

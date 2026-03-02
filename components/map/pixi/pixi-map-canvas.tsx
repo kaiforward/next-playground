@@ -9,7 +9,7 @@ import { StarfieldLayer } from "./layers/starfield-layer";
 import { PointCloudLayer } from "./layers/point-cloud-layer";
 import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
-import { RegionBoundaryLayer } from "./layers/region-boundary-layer";
+import { TerritoryLayer } from "./layers/territory-layer";
 import { EffectLayer } from "./layers/effect-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
@@ -38,7 +38,7 @@ interface PixiRefs {
   pointCloudLayer: PointCloudLayer;
   systemLayer: SystemLayer;
   connectionLayer: ConnectionLayer;
-  regionBoundaryLayer: RegionBoundaryLayer;
+  territoryLayer: TerritoryLayer;
   effectLayer: EffectLayer;
 }
 
@@ -121,8 +121,8 @@ export function PixiMapCanvas({
       const connectionLayer = new ConnectionLayer();
       world.addChild(connectionLayer.container);
 
-      const regionBoundaryLayer = new RegionBoundaryLayer();
-      world.addChild(regionBoundaryLayer.container);
+      const territoryLayer = new TerritoryLayer();
+      world.addChild(territoryLayer.container);
 
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
@@ -167,7 +167,7 @@ export function PixiMapCanvas({
         // Connections follow system layer alpha
         connectionLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
 
-        regionBoundaryLayer.updateVisibility(lod);
+        territoryLayer.updateVisibility(lod);
 
         // Effect layer visibility based on LOD
         effectLayer.container.visible = lod.showEffects;
@@ -179,7 +179,7 @@ export function PixiMapCanvas({
       // Store refs and signal ready
       pixiRef.current = {
         app, camera, frustum, world, starfield,
-        pointCloudLayer, systemLayer, connectionLayer, regionBoundaryLayer, effectLayer,
+        pointCloudLayer, systemLayer, connectionLayer, territoryLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -215,11 +215,20 @@ export function PixiMapCanvas({
     p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");
   }, [mapData, selectedSystem, navigationMode, pixiReady]);
 
-  // ── Sync region boundaries (expensive Voronoi — only on region changes) ──
+  // ── Sync territories (expensive Voronoi — only on region/system changes) ──
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
-    p.regionBoundaryLayer.sync(mapData.systems, regionInfos);
+
+    // Compute player presence: regions that contain at least one player ship
+    const playerRegionIds = new Set<string>();
+    for (const sys of mapData.systems) {
+      if (sys.shipCount > 0) {
+        playerRegionIds.add(sys.regionId);
+      }
+    }
+    p.territoryLayer.setPlayerPresence(playerRegionIds);
+    p.territoryLayer.sync(mapData.systems, regionInfos);
   }, [mapData.systems, pixiReady, regionInfos]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
