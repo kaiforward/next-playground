@@ -41,6 +41,20 @@ export const EVENT_DOT_COLORS: Record<string, number> = {
   slate:  0x94a3b8,
 };
 
+// ── Point cloud (universe view) ─────────────────────────────────
+
+export const POINT_CLOUD = {
+  dotRadius: 3,
+  gatewayScale: 1.5,
+  textureSize: 16,
+} as const;
+
+export const VIEW_TIERS = {
+  universeMax: 0.3,   // below this = pure universe view
+  systemMin: 0.4,     // above this = pure system view
+  bufferStart: 0.28,  // start creating SystemObjects before crossfade
+} as const;
+
 // ── Sizes ────────────────────────────────────────────────────────
 
 export const SIZES = {

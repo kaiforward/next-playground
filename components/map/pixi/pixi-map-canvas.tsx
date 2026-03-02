@@ -6,6 +6,7 @@ import { Camera } from "./camera";
 import { Frustum } from "./frustum";
 import { computeLOD } from "./lod";
 import { StarfieldLayer } from "./layers/starfield-layer";
+import { PointCloudLayer } from "./layers/point-cloud-layer";
 import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
 import { RegionBoundaryLayer } from "./layers/region-boundary-layer";
@@ -34,6 +35,7 @@ interface PixiRefs {
   frustum: Frustum;
   world: Container;
   starfield: StarfieldLayer;
+  pointCloudLayer: PointCloudLayer;
   systemLayer: SystemLayer;
   connectionLayer: ConnectionLayer;
   regionBoundaryLayer: RegionBoundaryLayer;
@@ -112,6 +114,10 @@ export function PixiMapCanvas({
       app.stage.addChild(world);
 
       // Create layers in z-order (bottom to top)
+      const pointCloudLayer = new PointCloudLayer();
+      pointCloudLayer.init(app.renderer);
+      world.addChild(pointCloudLayer.container);
+
       const connectionLayer = new ConnectionLayer();
       world.addChild(connectionLayer.container);
 
@@ -148,9 +154,19 @@ export function PixiMapCanvas({
         frustum.update(camera.x, camera.y, camera.zoom, app!.screen.width, app!.screen.height);
         const lod = computeLOD(camera.zoom);
 
-        // Apply per-frame visibility
-        systemLayer.updateVisibility(frustum, lod);
-        connectionLayer.updateVisibility(frustum, lod);
+        // Point cloud layer (universe view)
+        pointCloudLayer.updateVisibility(lod.pointCloudAlpha);
+
+        // System layer crossfade + lifecycle
+        systemLayer.setActive(lod.systemObjectsActive);
+        systemLayer.container.alpha = lod.systemLayerAlpha;
+        if (lod.systemObjectsActive) {
+          systemLayer.updateVisibility(frustum, lod);
+        }
+
+        // Connections follow system layer alpha
+        connectionLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
+
         regionBoundaryLayer.updateVisibility(lod);
 
         // Effect layer visibility based on LOD
@@ -163,7 +179,7 @@ export function PixiMapCanvas({
       // Store refs and signal ready
       pixiRef.current = {
         app, camera, frustum, world, starfield,
-        systemLayer, connectionLayer, regionBoundaryLayer, effectLayer,
+        pointCloudLayer, systemLayer, connectionLayer, regionBoundaryLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -188,7 +204,10 @@ export function PixiMapCanvas({
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
 
-    // Sync all systems and connections (no view level switching)
+    // Sync point cloud (always — lightweight, covers universe view)
+    p.pointCloudLayer.sync(mapData.systems);
+
+    // Sync system objects and connections (interactive detail)
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
