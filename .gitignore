@@ -53,3 +53,9 @@ next-env.d.ts
 # claude local settings
 .claude/settings.local.json
 .claude/worktrees/
+
+# cocoindex code search index
+.cocoindex_code/
+
+# MCP server config (local tooling)
+.mcp.json
