@@ -34,8 +34,9 @@ export class Frustum {
     // If either endpoint is inside, it intersects
     if (this.contains(x1, y1) || this.contains(x2, y2)) return true;
 
-    // Cohen-Sutherland-style: check if the line crosses any edge
-    // Simplified: check if bounding box of segment overlaps viewport
+    // AABB overlap: check if bounding box of segment overlaps viewport.
+    // This over-includes diagonal segments at low zoom (segment bbox overlaps
+    // but the segment itself misses the viewport). Acceptable trade-off for speed.
     const segMinX = Math.min(x1, x2);
     const segMaxX = Math.max(x1, x2);
     const segMinY = Math.min(y1, y2);

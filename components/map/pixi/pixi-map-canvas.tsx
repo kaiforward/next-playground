@@ -68,6 +68,9 @@ export function PixiMapCanvas({
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
 
+  // Store previous viewport bounds to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
+  const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
+
   // Store latest data in ref for interaction handlers
   const mapDataRef = useRef(mapData);
   mapDataRef.current = mapData;
@@ -162,14 +165,24 @@ export function PixiMapCanvas({
         frustum.update(camera.x, camera.y, camera.zoom, app!.screen.width, app!.screen.height);
         const lod = computeLOD(camera.zoom);
 
-        // Emit viewport bounds for progressive data loading
+        // Emit viewport bounds for progressive data loading (only when bounds actually changed)
         if (lod.systemObjectsActive) {
-          onViewportChangeRef.current?.({
-            minX: frustum.minX,
-            minY: frustum.minY,
-            maxX: frustum.maxX,
-            maxY: frustum.maxY,
-          });
+          const prev = lastViewportRef.current;
+          if (
+            frustum.minX !== prev.minX || frustum.minY !== prev.minY ||
+            frustum.maxX !== prev.maxX || frustum.maxY !== prev.maxY
+          ) {
+            prev.minX = frustum.minX;
+            prev.minY = frustum.minY;
+            prev.maxX = frustum.maxX;
+            prev.maxY = frustum.maxY;
+            onViewportChangeRef.current?.({
+              minX: frustum.minX,
+              minY: frustum.minY,
+              maxX: frustum.maxX,
+              maxY: frustum.maxY,
+            });
+          }
         }
 
         // Point cloud layer (universe view)
@@ -208,6 +221,8 @@ export function PixiMapCanvas({
       if (app) {
         app.renderer.off("resize", onResize);
         if (canvas) camera.detach(canvas);
+        // Destroy point cloud first to free its standalone dotTexture
+        pixiRef.current?.pointCloudLayer.destroy();
         app.destroy(true, { children: true });
       }
       pixiRef.current = null;
@@ -231,7 +246,14 @@ export function PixiMapCanvas({
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
 
-    // Compute player presence: regions that contain at least one player ship
+    p.territoryLayer.sync(atlasData.systems, regionInfos);
+  }, [atlasData.systems, pixiReady, regionInfos]);
+
+  // ── Update player presence highlights (lightweight fill-only redraw) ──
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+
     const playerRegionIds = new Set<string>();
     for (const sys of mapData.systems) {
       if (sys.shipCount > 0) {
@@ -239,8 +261,7 @@ export function PixiMapCanvas({
       }
     }
     p.territoryLayer.setPlayerPresence(playerRegionIds);
-    p.territoryLayer.sync(atlasData.systems, regionInfos);
-  }, [atlasData.systems, mapData.systems, pixiReady, regionInfos]);
+  }, [mapData.systems, pixiReady]);
 
   // ── Sync map data → system objects + connections ──────────────────
   useEffect(() => {

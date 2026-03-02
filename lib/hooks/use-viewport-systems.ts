@@ -4,14 +4,9 @@ import { useState, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
-import type { StarSystemInfo } from "@/lib/types/game";
+import type { StarSystemInfo, ViewportBounds } from "@/lib/types/game";
 
-export interface ViewportBounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
+export type { ViewportBounds };
 
 const DEBOUNCE_MS = 200;
 const VIEWPORT_BUFFER = 2; // Fetch 2x viewport size to avoid re-fetches on small pans

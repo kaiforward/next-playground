@@ -1,7 +1,7 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
+import { BG_COLOR, ECONOMY_COLORS, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { computeTerritoryPolygons } from "../territory-utils";
 import type { AtlasSystem, EconomyType } from "@/lib/types/game";
@@ -26,6 +26,11 @@ export class TerritoryLayer {
   private labelContainer = new Container();
   private regionLabels = new Map<string, Text>();
   private playerRegionIds = new Set<string>();
+
+  // Cached Voronoi results for lightweight fill-only redraws
+  private cachedTerritories: Map<string, [number, number][][][]> | null = null;
+  private cachedRegionEconomy: Map<string, EconomyType> | null = null;
+  private lastRegionIds: string[] = [];
 
   constructor() {
     this.container.addChild(this.territoryGraphics);
@@ -79,11 +84,32 @@ export class TerritoryLayer {
       (i) => systems[i].regionId,
     );
 
-    // Draw filled territory shapes
+    // Cache for lightweight fill updates
+    this.cachedTerritories = territories;
+    this.cachedRegionEconomy = regionDominantEconomy;
+
+    // Draw fills
+    this.drawFills();
+
+    // Rebuild labels only if regions changed
+    const regionIds = regions.map((r) => r.id).sort();
+    const regionsChanged = regionIds.length !== this.lastRegionIds.length
+      || regionIds.some((id, i) => id !== this.lastRegionIds[i]);
+
+    if (regionsChanged) {
+      this.lastRegionIds = regionIds;
+      this.rebuildLabels(systems, regions);
+    }
+  }
+
+  /** Redraw only polygon fills (no Voronoi recompute). Used by setPlayerPresence. */
+  private drawFills() {
+    if (!this.cachedTerritories || !this.cachedRegionEconomy) return;
+
     this.territoryGraphics.clear();
 
-    for (const [regionId, multiPoly] of territories) {
-      const economy = regionDominantEconomy.get(regionId) ?? "industrial";
+    for (const [regionId, multiPoly] of this.cachedTerritories) {
+      const economy = this.cachedRegionEconomy.get(regionId) ?? "industrial";
       const color = ECONOMY_COLORS[economy].core;
       const isPlayer = this.playerRegionIds.has(regionId);
       const fillAlpha = isPlayer ? TERRITORY.playerFillAlpha : TERRITORY.fillAlpha;
@@ -107,11 +133,13 @@ export class TerritoryLayer {
           const hole = poly[h];
           if (!hole || hole.length < 3) continue;
           this.territoryGraphics.poly(hole.flat());
-          this.territoryGraphics.fill({ color: 0x030712, alpha: fillAlpha });
+          this.territoryGraphics.fill({ color: BG_COLOR, alpha: fillAlpha });
         }
       }
     }
+  }
 
+  private rebuildLabels(systems: AtlasSystem[], regions: RegionInfo[]) {
     // Compute region centroids for labels
     const regionSums = new Map<string, { x: number; y: number; count: number }>();
     for (const sys of systems) {
@@ -152,7 +180,8 @@ export class TerritoryLayer {
   setPlayerPresence(regionIds: Set<string>) {
     if (setsEqual(this.playerRegionIds, regionIds)) return;
     this.playerRegionIds = regionIds;
-    // Requires re-sync to update fill colors — caller should trigger sync
+    // Lightweight redraw — only redraws polygon fills, no Voronoi recompute
+    this.drawFills();
   }
 
   /** Per-frame LOD update */

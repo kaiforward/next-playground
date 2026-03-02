@@ -1,4 +1,5 @@
 import type { EconomyType } from "@/lib/types/game";
+import type { SystemEventInfo } from "@/lib/hooks/use-map-data";
 
 // ── Economy colors (WebGL hex) ───────────────────────────────────
 
@@ -41,7 +42,7 @@ export const EDGE = {
 
 // ── Event dot colors ─────────────────────────────────────────────
 
-export const EVENT_DOT_COLORS: Record<string, number> = {
+export const EVENT_DOT_COLORS: Record<SystemEventInfo["color"], number> = {
   red:    0xef4444,
   amber:  0xf59e0b,
   purple: 0xa855f7,

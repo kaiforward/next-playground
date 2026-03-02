@@ -166,6 +166,10 @@ export function StarMap({
   // ── Click handlers ────────────────────────────────────────────
   const onSystemClick = useCallback(
     (system: { id: string }) => {
+      const fullSystem = universe.systems.find((s) => s.id === system.id);
+      // Guard: viewport detail hasn't loaded yet — name is empty placeholder
+      if (!fullSystem || fullSystem.name === "") return;
+
       // Navigation logic
       if (mode.phase === "unit_selected") {
         if (!mode.reachable.has(system.id) && system.id !== mode.unit.systemId) {
@@ -175,20 +179,14 @@ export function StarMap({
           navigation.cancel();
           return;
         }
-        const fullSystem = universe.systems.find((s) => s.id === system.id);
-        if (fullSystem) {
-          navigation.selectDestination(fullSystem);
-        }
+        navigation.selectDestination(fullSystem);
         return;
       }
 
       if (mode.phase === "route_preview") return;
 
       // Default mode — open system detail panel
-      const fullSystem = universe.systems.find((s) => s.id === system.id);
-      if (fullSystem) {
-        selectSystem(fullSystem);
-      }
+      selectSystem(fullSystem);
     },
     [mode, navigation, universe.systems, selectSystem],
   );

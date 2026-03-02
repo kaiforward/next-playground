@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { AtlasData, StarSystemInfo } from "@/lib/types/game";
+import type { AtlasData, StarSystemInfo, ViewportBounds } from "@/lib/types/game";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 
 /**
@@ -62,13 +62,6 @@ export async function getAtlas(): Promise<AtlasData> {
       fuelCost: c.fuelCost,
     })),
   };
-}
-
-interface ViewportBounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
 }
 
 /**

@@ -42,7 +42,7 @@ export function RoutePreviewPanel({
   onCancel,
 }: RoutePreviewPanelProps) {
   const systemNameMap = new Map(systems.map((s) => [s.id, s.name]));
-  const getName = (id: string) => systemNameMap.get(id) ?? id;
+  const getName = (id: string) => systemNameMap.get(id) || id;
 
   // Build per-hop breakdown with speed-adjusted travel times
   const hops: { from: string; to: string; fuel: number; ticks: number }[] = [];

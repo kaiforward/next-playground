@@ -100,9 +100,16 @@ export interface RegionInfo {
   id: string;
   name: string;
   dominantEconomy: EconomyType;
-  governmentType?: GovernmentType;
+  governmentType: GovernmentType;
   x: number;
   y: number;
+}
+
+export interface ViewportBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
 }
 
 export type TradeType = "buy" | "sell";

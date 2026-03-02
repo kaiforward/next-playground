@@ -4,12 +4,14 @@ import type { Voronoi } from "d3-delaunay";
 type Ring = [number, number][];
 type MultiPolygon = Ring[][];
 
-// Set precision for polyclip-ts to handle floating-point edge cases
-setPrecision(1e-6);
+let precisionSet = false;
 
 /**
  * Group Voronoi cells by a key function and union them into territory polygons.
  * Pure function — reusable for regions, factions, or any grouping.
+ *
+ * Note: border systems produce large Voronoi cells clipped to the bounding box.
+ * This is inherent to Voronoi — an area cap would create visual gaps between territories.
  *
  * @param systemCount - number of systems (matches Voronoi cell indices)
  * @param voronoi - d3-delaunay Voronoi diagram
@@ -21,6 +23,12 @@ export function computeTerritoryPolygons(
   voronoi: Voronoi<Float64Array>,
   getGroupKey: (index: number) => string | null,
 ): Map<string, MultiPolygon> {
+  // Set precision once (not at import time to avoid side effects during module loading)
+  if (!precisionSet) {
+    setPrecision(1e-6);
+    precisionSet = true;
+  }
+
   // Collect cells per group
   const groups = new Map<string, Ring[]>();
 

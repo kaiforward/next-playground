@@ -12,7 +12,7 @@ export class PointCloudLayer {
   readonly container = new ParticleContainer({
     dynamicProperties: {
       position: false,
-      color: false,
+      color: true, // tint is set at particle creation; must be true so PixiJS uploads the attribute
       rotation: false,
       uvs: false,
       vertex: false,
@@ -47,26 +47,28 @@ export class PointCloudLayer {
     for (const sys of systems) {
       incoming.add(sys.id);
 
-      let p = this.particles.get(sys.id);
-      if (!p) {
-        p = new Particle({
+      const existing = this.particles.get(sys.id);
+      if (!existing) {
+        const p = new Particle({
           texture: this.dotTexture,
           anchorX: 0.5,
           anchorY: 0.5,
         });
+
+        // Position and tint are set once at creation — atlas data is static
+        p.x = sys.x;
+        p.y = sys.y;
+        p.tint = ECONOMY_COLORS[sys.economyType].core;
+
+        const scale = sys.isGateway
+          ? POINT_CLOUD.dotRadius * POINT_CLOUD.gatewayScale / (POINT_CLOUD.textureSize / 2)
+          : POINT_CLOUD.dotRadius / (POINT_CLOUD.textureSize / 2);
+        p.scaleX = scale;
+        p.scaleY = scale;
+
         this.particles.set(sys.id, p);
         this.container.addParticle(p);
       }
-
-      p.x = sys.x;
-      p.y = sys.y;
-      p.tint = ECONOMY_COLORS[sys.economyType].core;
-
-      const scale = sys.isGateway
-        ? POINT_CLOUD.dotRadius * POINT_CLOUD.gatewayScale / (POINT_CLOUD.textureSize / 2)
-        : POINT_CLOUD.dotRadius / (POINT_CLOUD.textureSize / 2);
-      p.scaleX = scale;
-      p.scaleY = scale;
     }
 
     // Remove stale particles
