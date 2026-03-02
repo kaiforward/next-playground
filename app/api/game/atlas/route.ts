@@ -10,6 +10,9 @@ export function GET() {
     if (isErrorResponse(auth)) return auth;
 
     const data = await getAtlas();
-    return NextResponse.json<AtlasResponse>({ data });
+    return NextResponse.json<AtlasResponse>(
+      { data },
+      { headers: { "Cache-Control": "public, max-age=31536000, immutable" } },
+    );
   });
 }
