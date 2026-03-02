@@ -100,9 +100,16 @@ export interface RegionInfo {
   id: string;
   name: string;
   dominantEconomy: EconomyType;
-  governmentType?: GovernmentType;
+  governmentType: GovernmentType;
   x: number;
   y: number;
+}
+
+export interface ViewportBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
 }
 
 export type TradeType = "buy" | "sell";
@@ -253,6 +260,23 @@ export interface TradeHistoryEntry {
 export interface UniverseData {
   regions: RegionInfo[];
   systems: StarSystemInfo[];
+  connections: SystemConnectionInfo[];
+}
+
+// ── Atlas (lightweight map data) ──────────────────────────────────
+
+export interface AtlasSystem {
+  id: string;
+  x: number;
+  y: number;
+  regionId: string;
+  economyType: EconomyType;
+  isGateway: boolean;
+}
+
+export interface AtlasData {
+  regions: RegionInfo[];
+  systems: AtlasSystem[];
   connections: SystemConnectionInfo[];
 }
 

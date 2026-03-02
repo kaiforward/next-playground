@@ -4,6 +4,7 @@ import type {
   ConvoyState,
   GameWorldState,
   UniverseData,
+  AtlasData,
   StarSystemInfo,
   MarketEntry,
   TradeHistoryEntry,
@@ -30,6 +31,8 @@ export interface ApiResponse<T> {
 export type FleetResponse = ApiResponse<FleetState>;
 export type GameWorldResponse = ApiResponse<GameWorldState>;
 export type UniverseResponse = ApiResponse<UniverseData>;
+export type AtlasResponse = ApiResponse<AtlasData>;
+export type ViewportSystemsResponse = ApiResponse<StarSystemInfo[]>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;

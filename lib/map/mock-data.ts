@@ -6,6 +6,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "mock-region",
       name: "Mock Region",
       dominantEconomy: "core" as const,
+      governmentType: "federation" as const,
       x: 400,
       y: 300,
     },

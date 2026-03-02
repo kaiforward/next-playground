@@ -1,4 +1,5 @@
 import type { EconomyType } from "@/lib/types/game";
+import type { SystemEventInfo } from "@/lib/hooks/use-map-data";
 
 // ── Economy colors (WebGL hex) ───────────────────────────────────
 
@@ -21,6 +22,15 @@ export const NAV_COLORS = {
   destination: 0x34d399,  // emerald-400
 } as const;
 
+// ── Territory (universe view) ────────────────────────────────────
+
+export const TERRITORY = {
+  fillAlpha: 0.08,
+  playerFillAlpha: 0.15,
+  strokeAlpha: 0.3,
+  strokeWidth: 2,
+} as const;
+
 // ── Edge colors ──────────────────────────────────────────────────
 
 export const EDGE = {
@@ -32,7 +42,7 @@ export const EDGE = {
 
 // ── Event dot colors ─────────────────────────────────────────────
 
-export const EVENT_DOT_COLORS: Record<string, number> = {
+export const EVENT_DOT_COLORS: Record<SystemEventInfo["color"], number> = {
   red:    0xef4444,
   amber:  0xf59e0b,
   purple: 0xa855f7,
@@ -40,6 +50,20 @@ export const EVENT_DOT_COLORS: Record<string, number> = {
   blue:   0x3b82f6,
   slate:  0x94a3b8,
 };
+
+// ── Point cloud (universe view) ─────────────────────────────────
+
+export const POINT_CLOUD = {
+  dotRadius: 3,
+  gatewayScale: 1.5,
+  textureSize: 16,
+} as const;
+
+export const VIEW_TIERS = {
+  universeMax: 0.3,   // below this = pure universe view
+  systemMin: 0.4,     // above this = pure system view
+  bufferStart: 0.28,  // start creating SystemObjects before crossfade
+} as const;
 
 // ── Sizes ────────────────────────────────────────────────────────
 

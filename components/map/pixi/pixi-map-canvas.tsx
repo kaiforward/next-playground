@@ -6,17 +6,20 @@ import { Camera } from "./camera";
 import { Frustum } from "./frustum";
 import { computeLOD } from "./lod";
 import { StarfieldLayer } from "./layers/starfield-layer";
+import { PointCloudLayer } from "./layers/point-cloud-layer";
 import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
-import { RegionBoundaryLayer } from "./layers/region-boundary-layer";
+import { TerritoryLayer } from "./layers/territory-layer";
 import { EffectLayer } from "./layers/effect-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
 import type { MapData } from "@/lib/hooks/use-map-data";
-import type { StarSystemInfo } from "@/lib/types/game";
+import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
+import type { ViewportBounds } from "@/lib/hooks/use-viewport-systems";
 
 export interface PixiMapCanvasProps {
+  atlasData: AtlasData;
   mapData: MapData;
   selectedSystem: StarSystemInfo | null;
   navigationMode: NavigationMode;
@@ -25,6 +28,7 @@ export interface PixiMapCanvasProps {
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
+  onViewportChange?: (bounds: ViewportBounds) => void;
 }
 
 /** Holds all mutable Pixi references. Created once during mount. */
@@ -34,13 +38,15 @@ interface PixiRefs {
   frustum: Frustum;
   world: Container;
   starfield: StarfieldLayer;
+  pointCloudLayer: PointCloudLayer;
   systemLayer: SystemLayer;
   connectionLayer: ConnectionLayer;
-  regionBoundaryLayer: RegionBoundaryLayer;
+  territoryLayer: TerritoryLayer;
   effectLayer: EffectLayer;
 }
 
 export function PixiMapCanvas({
+  atlasData,
   mapData,
   selectedSystem,
   navigationMode,
@@ -49,6 +55,7 @@ export function PixiMapCanvas({
   centerTarget,
   onReady,
   regionInfos,
+  onViewportChange,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pixiRef = useRef<PixiRefs | null>(null);
@@ -57,6 +64,12 @@ export function PixiMapCanvas({
   // Store callbacks in refs so Pixi event handlers always see latest
   const callbacksRef = useRef({ onSystemClick, onEmptyClick });
   callbacksRef.current = { onSystemClick, onEmptyClick };
+
+  const onViewportChangeRef = useRef(onViewportChange);
+  onViewportChangeRef.current = onViewportChange;
+
+  // Store previous viewport bounds to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
+  const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
 
   // Store latest data in ref for interaction handlers
   const mapDataRef = useRef(mapData);
@@ -112,11 +125,15 @@ export function PixiMapCanvas({
       app.stage.addChild(world);
 
       // Create layers in z-order (bottom to top)
+      const pointCloudLayer = new PointCloudLayer();
+      pointCloudLayer.init(app.renderer);
+      world.addChild(pointCloudLayer.container);
+
       const connectionLayer = new ConnectionLayer();
       world.addChild(connectionLayer.container);
 
-      const regionBoundaryLayer = new RegionBoundaryLayer();
-      world.addChild(regionBoundaryLayer.container);
+      const territoryLayer = new TerritoryLayer();
+      world.addChild(territoryLayer.container);
 
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
@@ -148,10 +165,40 @@ export function PixiMapCanvas({
         frustum.update(camera.x, camera.y, camera.zoom, app!.screen.width, app!.screen.height);
         const lod = computeLOD(camera.zoom);
 
-        // Apply per-frame visibility
-        systemLayer.updateVisibility(frustum, lod);
-        connectionLayer.updateVisibility(frustum, lod);
-        regionBoundaryLayer.updateVisibility(lod);
+        // Emit viewport bounds for progressive data loading (only when bounds actually changed)
+        if (lod.systemObjectsActive) {
+          const prev = lastViewportRef.current;
+          if (
+            frustum.minX !== prev.minX || frustum.minY !== prev.minY ||
+            frustum.maxX !== prev.maxX || frustum.maxY !== prev.maxY
+          ) {
+            prev.minX = frustum.minX;
+            prev.minY = frustum.minY;
+            prev.maxX = frustum.maxX;
+            prev.maxY = frustum.maxY;
+            onViewportChangeRef.current?.({
+              minX: frustum.minX,
+              minY: frustum.minY,
+              maxX: frustum.maxX,
+              maxY: frustum.maxY,
+            });
+          }
+        }
+
+        // Point cloud layer (universe view)
+        pointCloudLayer.updateVisibility(lod.pointCloudAlpha);
+
+        // System layer crossfade + lifecycle
+        systemLayer.setActive(lod.systemObjectsActive);
+        systemLayer.container.alpha = lod.systemLayerAlpha;
+        if (lod.systemObjectsActive) {
+          systemLayer.updateVisibility(frustum, lod);
+        }
+
+        // Connections follow system layer alpha
+        connectionLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
+
+        territoryLayer.updateVisibility(lod);
 
         // Effect layer visibility based on LOD
         effectLayer.container.visible = lod.showEffects;
@@ -163,7 +210,7 @@ export function PixiMapCanvas({
       // Store refs and signal ready
       pixiRef.current = {
         app, camera, frustum, world, starfield,
-        systemLayer, connectionLayer, regionBoundaryLayer, effectLayer,
+        pointCloudLayer, systemLayer, connectionLayer, territoryLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -174,6 +221,8 @@ export function PixiMapCanvas({
       if (app) {
         app.renderer.off("resize", onResize);
         if (canvas) camera.detach(canvas);
+        // Destroy point cloud first to free its standalone dotTexture
+        pixiRef.current?.pointCloudLayer.destroy();
         app.destroy(true, { children: true });
       }
       pixiRef.current = null;
@@ -183,12 +232,43 @@ export function PixiMapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Sync map data → Pixi display objects ────────────────────────
+  // ── Sync atlas data → point cloud + territories ──────────────────
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
 
-    // Sync all systems and connections (no view level switching)
+    // Point cloud driven by atlas (always available, lightweight)
+    p.pointCloudLayer.sync(atlasData.systems);
+  }, [atlasData.systems, pixiReady]);
+
+  // ── Sync territories (expensive Voronoi — only on atlas/region changes) ──
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+
+    p.territoryLayer.sync(atlasData.systems, regionInfos);
+  }, [atlasData.systems, pixiReady, regionInfos]);
+
+  // ── Update player presence highlights (lightweight fill-only redraw) ──
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+
+    const playerRegionIds = new Set<string>();
+    for (const sys of mapData.systems) {
+      if (sys.shipCount > 0) {
+        playerRegionIds.add(sys.regionId);
+      }
+    }
+    p.territoryLayer.setPlayerPresence(playerRegionIds);
+  }, [mapData.systems, pixiReady]);
+
+  // ── Sync map data → system objects + connections ──────────────────
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+
+    // System objects and connections driven by mapData (viewport detail)
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
@@ -196,26 +276,19 @@ export function PixiMapCanvas({
     p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");
   }, [mapData, selectedSystem, navigationMode, pixiReady]);
 
-  // ── Sync region boundaries (expensive Voronoi — only on region changes) ──
-  useEffect(() => {
-    const p = pixiRef.current;
-    if (!p || !pixiReady) return;
-    p.regionBoundaryLayer.sync(mapData.systems, regionInfos);
-  }, [mapData.systems, pixiReady, regionInfos]);
-
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady || readyFired.current) return;
-    if (mapData.systems.length === 0) return;
+    if (atlasData.systems.length === 0) return;
     // When centerTarget is set, let the centerTarget effect handle centering + onReady
     if (centerTarget) return;
 
-    const bounds = computeBounds(mapData.systems);
+    const bounds = computeBounds(atlasData.systems);
     p.camera.fitView(bounds, undefined, 0);
     readyFired.current = true;
     onReady();
-  }, [mapData.systems, onReady, pixiReady, centerTarget]);
+  }, [atlasData.systems, onReady, pixiReady, centerTarget]);
 
   // ── centerTarget (pan camera to system) ─────────────────────────
   const lastCenterRef = useRef<typeof centerTarget>(undefined);

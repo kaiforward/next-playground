@@ -4,14 +4,26 @@
  * Uses smooth transitions (lerp over a zoom range) to avoid hard cuts.
  */
 
+/** Which rendering tier is active based on zoom level */
+export type ViewTier = "universe" | "crossfade" | "system";
+
 export interface LODState {
+  /** Current rendering tier */
+  viewTier: ViewTier;
+  /** Point cloud alpha: 1 in universe, fades out 0.3→0.4, 0 in system */
+  pointCloudAlpha: number;
+  /** System layer alpha: 0 in universe, fades in 0.3→0.4, 1 in system */
+  systemLayerAlpha: number;
+  /** Whether SystemObjects should exist (hysteresis buffer at 0.28) */
+  systemObjectsActive: boolean;
+
   showSystemDots: boolean;
   showSystemNames: boolean;
   showEconomyLabels: boolean;
   showShipLabels: boolean;
   showEventDots: boolean;
   showFuelLabels: boolean;
-  showRegionBoundaries: boolean;
+  showTerritories: boolean;
   showRegionLabels: boolean;
   /** Scale factor for system dots at low zoom */
   systemDotScale: number;
@@ -19,8 +31,8 @@ export interface LODState {
   systemNameAlpha: number;
   /** Alpha for economy/ship/fuel labels */
   detailAlpha: number;
-  /** Alpha for region boundary lines */
-  regionBoundaryAlpha: number;
+  /** Alpha for territory fills and outlines */
+  territoryAlpha: number;
   /** Alpha for region name labels */
   regionLabelAlpha: number;
   /** Alpha for event dots */
@@ -38,7 +50,23 @@ function smoothStep(edge0: number, edge1: number, x: number): number {
 }
 
 export function computeLOD(zoom: number): LODState {
+  // View tier: universe < 0.3, crossfade 0.3–0.4, system > 0.4
+  const viewTier: ViewTier =
+    zoom < 0.3 ? "universe" : zoom > 0.4 ? "system" : "crossfade";
+
+  // Crossfade alphas
+  const pointCloudAlpha = 1 - smoothStep(0.3, 0.4, zoom);
+  const systemLayerAlpha = smoothStep(0.3, 0.4, zoom);
+
+  // Start creating SystemObjects slightly before crossfade begins (hysteresis)
+  const systemObjectsActive = zoom >= 0.28;
+
   return {
+    viewTier,
+    pointCloudAlpha,
+    systemLayerAlpha,
+    systemObjectsActive,
+
     // System dots always visible
     showSystemDots: true,
 
@@ -56,13 +84,13 @@ export function computeLOD(zoom: number): LODState {
     showEventDots: zoom > 0.4,
     eventDotAlpha: smoothStep(0.4, 0.5, zoom),
 
-    // Region boundaries fade out 1.0–1.5
-    showRegionBoundaries: zoom < 1.5,
-    regionBoundaryAlpha: 1 - smoothStep(1.0, 1.5, zoom),
+    // Territories visible in universe/crossfade, fade out in system view
+    showTerritories: zoom < 0.5,
+    territoryAlpha: 1 - smoothStep(0.3, 0.5, zoom),
 
-    // Region labels fade out 0.7–1.0
-    showRegionLabels: zoom < 1.0,
-    regionLabelAlpha: 1 - smoothStep(0.7, 1.0, zoom),
+    // Region labels visible in universe view, fade at same range as territories
+    showRegionLabels: zoom < 0.5,
+    regionLabelAlpha: 1 - smoothStep(0.3, 0.5, zoom),
 
     // Scale dots down at low zoom (min 0.35, max 1.0)
     systemDotScale: Math.max(0.35, Math.min(1.0, smoothStep(0.15, 0.5, zoom))),

@@ -7,9 +7,34 @@ import type { LODState } from "../lod";
 export class SystemLayer {
   readonly container = new Container();
   private objects = new Map<string, SystemObject>();
+  private active = true;
+  /** Pending data to sync when re-activated */
+  private pendingSync: { systems: SystemNodeData[]; selectedId: string | null } | null = null;
   onObjectCreated?: (obj: SystemObject) => void;
 
+  /** Toggle active state. When inactive, destroys all SystemObjects to free GPU memory. */
+  setActive(active: boolean) {
+    if (this.active === active) return;
+    this.active = active;
+
+    if (!active) {
+      // Destroy all objects — point cloud covers universe view
+      for (const obj of this.objects.values()) {
+        obj.removeAllListeners();
+        obj.destroy({ children: true });
+      }
+      this.objects.clear();
+    } else if (this.pendingSync) {
+      // Re-entering active: rebuild from pending data
+      this.sync(this.pendingSync.systems, this.pendingSync.selectedId);
+    }
+  }
+
   sync(systems: SystemNodeData[], selectedId: string | null) {
+    // Always store latest data for re-activation
+    this.pendingSync = { systems, selectedId };
+    if (!this.active) return;
+
     const incoming = new Set<string>();
 
     for (const data of systems) {

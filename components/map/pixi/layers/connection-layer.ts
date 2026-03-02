@@ -47,7 +47,15 @@ export class ConnectionLayer {
   }
 
   /** Per-frame visibility update: frustum culling + fuel label LOD */
-  updateVisibility(frustum: Frustum, lod: LODState) {
+  updateVisibility(frustum: Frustum, lod: LODState, layerAlpha = 1) {
+    // Skip entirely when invisible (universe view)
+    this.container.alpha = layerAlpha;
+    if (layerAlpha === 0) {
+      this.container.visible = false;
+      return;
+    }
+    this.container.visible = true;
+
     for (const [id, obj] of this.objects) {
       const pos = this.positions.get(id);
       if (!pos) { obj.visible = false; continue; }
