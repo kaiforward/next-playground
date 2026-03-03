@@ -1,18 +1,23 @@
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
+import { Worker } from "node:worker_threads";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { processors, sortProcessors } from "./registry";
 import type {
-  TickContext,
-  TickProcessorResult,
   TickEventRaw,
-  GlobalEventMap,
   PlayerEventMap,
 } from "./types";
+import type { MainToWorker, WorkerToMain } from "./worker-types";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 class TickEngine {
   private emitter = new EventEmitter();
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private worker: Worker | null = null;
+  private workerBusy = false;
+  private tickStart = 0;
 
   constructor() {
     this.emitter.setMaxListeners(0); // No limit — one listener per SSE client
@@ -21,10 +26,8 @@ class TickEngine {
   start() {
     if (this.running) return;
     this.running = true;
-    console.log("[TickEngine] Started");
-
-    this.tick();
-    this.scheduleNext();
+    console.log("[TickEngine] Starting with worker thread...");
+    this.spawnWorker();
   }
 
   stop() {
@@ -33,6 +36,13 @@ class TickEngine {
       this.intervalId = null;
     }
     this.running = false;
+
+    if (this.worker) {
+      const msg: MainToWorker = { type: "shutdown" };
+      this.worker.postMessage(msg);
+      this.worker = null;
+    }
+
     console.log("[TickEngine] Stopped");
   }
 
@@ -59,12 +69,106 @@ class TickEngine {
     };
   }
 
-  private scheduleNext() {
-    this.intervalId = setInterval(() => this.tick(), 1000);
+  private spawnWorker() {
+    const workerPath = path.join(__dirname, "worker.ts");
+    this.worker = new Worker(workerPath, {
+      execArgv: ["--import", "tsx"],
+    });
+
+    this.worker.on("message", (msg: WorkerToMain) => {
+      this.handleWorkerMessage(msg);
+    });
+
+    this.worker.on("error", (error) => {
+      console.error("[TickEngine] Worker error:", error);
+    });
+
+    this.worker.on("exit", (code) => {
+      this.workerBusy = false;
+
+      if (!this.running) return; // Intentional shutdown
+
+      console.warn(
+        `[TickEngine] Worker exited with code ${code}, respawning...`,
+      );
+      this.worker = null;
+      // Respawn after a short delay to avoid tight crash loops
+      setTimeout(() => {
+        if (this.running) this.spawnWorker();
+      }, 1000);
+    });
+  }
+
+  private handleWorkerMessage(msg: WorkerToMain) {
+    switch (msg.type) {
+      case "ready":
+        console.log("[TickEngine] Worker ready");
+        this.tick();
+        this.intervalId = setInterval(() => this.tick(), 1000);
+        break;
+
+      case "tick-result": {
+        this.workerBusy = false;
+
+        const totalMs = performance.now() - this.tickStart;
+
+        // Reconstruct Map from serialized entries
+        const playerEvents = new Map<string, Partial<PlayerEventMap>>(
+          msg.playerEvents,
+        );
+
+        const event: TickEventRaw = {
+          currentTick: msg.tick,
+          tickRate: 0, // Filled below from DB state
+          events: msg.globalEvents,
+          playerEvents,
+        };
+
+        if (process.env.NODE_ENV !== "production") {
+          event.processors = msg.processors;
+        }
+
+        // Get tickRate from the latest state for the event
+        prisma.gameWorld
+          .findUnique({ where: { id: "world" } })
+          .then((world) => {
+            event.tickRate = world?.tickRate ?? 5000;
+            this.emitter.emit("tick", event);
+          })
+          .catch(() => {
+            event.tickRate = 5000;
+            this.emitter.emit("tick", event);
+          });
+
+        // Log tick summary
+        const parts = msg.timings.map(
+          ([name, ms]) => `${name}: ${ms.toFixed(1)}ms`,
+        );
+        console.log(
+          `[TickEngine] Tick ${msg.tick} (${totalMs.toFixed(0)}ms) — ${parts.join(", ")}`,
+        );
+
+        break;
+      }
+
+      case "tick-skipped":
+        this.workerBusy = false;
+        break;
+
+      case "tick-error":
+        this.workerBusy = false;
+        console.error(
+          `[TickEngine] Worker tick ${msg.tick} error: ${msg.error}`,
+        );
+        break;
+    }
   }
 
   private async tick() {
+    if (this.workerBusy || !this.worker) return;
+
     try {
+      // Read game world on main thread (fast, WAL mode — doesn't block)
       const world = await prisma.gameWorld.findUnique({
         where: { id: "world" },
       });
@@ -75,134 +179,18 @@ class TickEngine {
       if (elapsed < world.tickRate) return;
 
       const newTick = world.currentTick + 1;
-      const tickStart = performance.now();
+      this.tickStart = performance.now();
+      this.workerBusy = true;
 
-      // Determine which processors run this tick
-      const activeProcessors = sortProcessors(processors, newTick);
-
-      const result = await prisma.$transaction(async (tx) => {
-        // Optimistic lock: only update if currentTick hasn't changed
-        const updated = await tx.gameWorld.updateMany({
-          where: { id: "world", currentTick: world.currentTick },
-          data: {
-            currentTick: newTick,
-            lastTickAt: new Date(),
-          },
-        });
-
-        if (updated.count === 0) return null;
-
-        // Run processors sequentially with error isolation
-        const ctx: TickContext = { tx, tick: newTick, results: new Map() };
-        const timings = new Map<string, number>();
-
-        for (const processor of activeProcessors) {
-          try {
-            const start = performance.now();
-            const processorResult = await processor.process(ctx);
-            ctx.results.set(processor.name, processorResult);
-            timings.set(processor.name, performance.now() - start);
-          } catch (error) {
-            console.error(
-              `[TickEngine] Processor "${processor.name}" failed on tick ${newTick}:`,
-              error,
-            );
-          }
-        }
-
-        return { results: ctx.results, timings };
-      });
-
-      if (!result) return;
-
-      const totalMs = performance.now() - tickStart;
-
-      // Merge all processor results into a single event
-      const mergedGlobalEvents: Partial<GlobalEventMap> = {};
-      const mergedPlayerEvents = new Map<string, Partial<PlayerEventMap>>();
-
-      for (const processorResult of result.results.values()) {
-        mergeGlobalEvents(mergedGlobalEvents, processorResult);
-        mergePlayerEvents(mergedPlayerEvents, processorResult);
-      }
-
-      const event: TickEventRaw = {
-        currentTick: newTick,
-        tickRate: world.tickRate,
-        events: mergedGlobalEvents,
-        playerEvents: mergedPlayerEvents,
+      const msg: MainToWorker = {
+        type: "run-tick",
+        tick: newTick,
+        previousTick: world.currentTick,
       };
-
-      if (process.env.NODE_ENV !== "production") {
-        event.processors = activeProcessors.map((p) => p.name);
-      }
-
-      this.emitter.emit("tick", event);
-
-      // Log tick summary with per-processor timing
-      const parts = [...result.timings.entries()].map(
-        ([name, ms]) => `${name}: ${ms.toFixed(1)}ms`,
-      );
-      console.log(
-        `[TickEngine] Tick ${newTick} (${totalMs.toFixed(0)}ms) — ${parts.join(", ")}`,
-      );
-
-      // Overrun warning
-      if (totalMs > world.tickRate * 0.8) {
-        console.warn(
-          `[TickEngine] WARN Tick ${newTick} took ${totalMs.toFixed(0)}ms ` +
-            `(${((totalMs / world.tickRate) * 100).toFixed(0)}% of ${world.tickRate}ms tick rate) — ${parts.join(", ")}`,
-        );
-      }
+      this.worker.postMessage(msg);
     } catch (error) {
       console.error("[TickEngine] Error:", error);
     }
-  }
-}
-
-function mergeGlobalEvents(
-  target: Partial<GlobalEventMap>,
-  result: TickProcessorResult,
-) {
-  if (!result.globalEvents) return;
-  const src = result.globalEvents;
-  if (src.economyTick) {
-    target.economyTick = target.economyTick ? [...target.economyTick, ...src.economyTick] : [...src.economyTick];
-  }
-  if (src.eventNotifications) {
-    target.eventNotifications = target.eventNotifications ? [...target.eventNotifications, ...src.eventNotifications] : [...src.eventNotifications];
-  }
-  if (src.priceSnapshot) {
-    target.priceSnapshot = target.priceSnapshot ? [...target.priceSnapshot, ...src.priceSnapshot] : [...src.priceSnapshot];
-  }
-  if (src.missionsUpdated) {
-    target.missionsUpdated = target.missionsUpdated ? [...target.missionsUpdated, ...src.missionsUpdated] : [...src.missionsUpdated];
-  }
-  if (src.opMissionsUpdated) {
-    target.opMissionsUpdated = target.opMissionsUpdated ? [...target.opMissionsUpdated, ...src.opMissionsUpdated] : [...src.opMissionsUpdated];
-  }
-  if (src.battlesUpdated) {
-    target.battlesUpdated = target.battlesUpdated ? [...target.battlesUpdated, ...src.battlesUpdated] : [...src.battlesUpdated];
-  }
-}
-
-function mergePlayerEvents(
-  target: Map<string, Partial<PlayerEventMap>>,
-  result: TickProcessorResult,
-) {
-  if (!result.playerEvents) return;
-  for (const [playerId, events] of result.playerEvents) {
-    const existing = target.get(playerId) ?? {};
-    if (events.shipArrived) {
-      existing.shipArrived = existing.shipArrived ? [...existing.shipArrived, ...events.shipArrived] : [...events.shipArrived];
-    }
-    if (events.cargoLost) {
-      existing.cargoLost = existing.cargoLost ? [...existing.cargoLost, ...events.cargoLost] : [...events.cargoLost];
-    }
-    if (events.gameNotifications) {
-      existing.gameNotifications = existing.gameNotifications ? [...existing.gameNotifications, ...events.gameNotifications] : [...events.gameNotifications];
-    }
-    target.set(playerId, existing);
   }
 }
 

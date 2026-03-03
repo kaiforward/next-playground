@@ -1,6 +1,6 @@
 import { createNotifications } from "@/lib/services/notifications";
 import type { ModifierRow } from "@/lib/engine/events";
-import type { TxClient, PlayerEventMap, GameNotificationPayload } from "./types";
+import type { TxClient, TickProcessorResult, GlobalEventMap, PlayerEventMap, GameNotificationPayload } from "./types";
 
 /**
  * Add a notification to a player's event map. Gets or creates the player entry
@@ -59,4 +59,56 @@ export async function persistPlayerNotifications(
   }
 
   await createNotifications(tx, entries);
+}
+
+/**
+ * Merge global events from a single processor result into a target accumulator.
+ */
+export function mergeGlobalEvents(
+  target: Partial<GlobalEventMap>,
+  result: TickProcessorResult,
+): void {
+  if (!result.globalEvents) return;
+  const src = result.globalEvents;
+  if (src.economyTick) {
+    target.economyTick = target.economyTick ? [...target.economyTick, ...src.economyTick] : [...src.economyTick];
+  }
+  if (src.eventNotifications) {
+    target.eventNotifications = target.eventNotifications ? [...target.eventNotifications, ...src.eventNotifications] : [...src.eventNotifications];
+  }
+  if (src.priceSnapshot) {
+    target.priceSnapshot = target.priceSnapshot ? [...target.priceSnapshot, ...src.priceSnapshot] : [...src.priceSnapshot];
+  }
+  if (src.missionsUpdated) {
+    target.missionsUpdated = target.missionsUpdated ? [...target.missionsUpdated, ...src.missionsUpdated] : [...src.missionsUpdated];
+  }
+  if (src.opMissionsUpdated) {
+    target.opMissionsUpdated = target.opMissionsUpdated ? [...target.opMissionsUpdated, ...src.opMissionsUpdated] : [...src.opMissionsUpdated];
+  }
+  if (src.battlesUpdated) {
+    target.battlesUpdated = target.battlesUpdated ? [...target.battlesUpdated, ...src.battlesUpdated] : [...src.battlesUpdated];
+  }
+}
+
+/**
+ * Merge player events from a single processor result into a target accumulator.
+ */
+export function mergePlayerEvents(
+  target: Map<string, Partial<PlayerEventMap>>,
+  result: TickProcessorResult,
+): void {
+  if (!result.playerEvents) return;
+  for (const [playerId, events] of result.playerEvents) {
+    const existing = target.get(playerId) ?? {};
+    if (events.shipArrived) {
+      existing.shipArrived = existing.shipArrived ? [...existing.shipArrived, ...events.shipArrived] : [...events.shipArrived];
+    }
+    if (events.cargoLost) {
+      existing.cargoLost = existing.cargoLost ? [...existing.cargoLost, ...events.cargoLost] : [...events.cargoLost];
+    }
+    if (events.gameNotifications) {
+      existing.gameNotifications = existing.gameNotifications ? [...existing.gameNotifications, ...events.gameNotifications] : [...events.gameNotifications];
+    }
+    target.set(playerId, existing);
+  }
 }
