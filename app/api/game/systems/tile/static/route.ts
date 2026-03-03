@@ -39,7 +39,7 @@ export function GET(request: NextRequest) {
     const data = await getStaticTile(col, row);
     return NextResponse.json<StaticTileResponse>(
       { data },
-      { headers: { "Cache-Control": "public, max-age=31536000, immutable" } },
+      { headers: { "Cache-Control": "private, max-age=31536000, immutable" } },
     );
   });
 }

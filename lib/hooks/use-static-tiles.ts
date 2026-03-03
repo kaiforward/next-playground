@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
@@ -10,10 +10,8 @@ import type { ViewportBounds, StaticTileSystem } from "@/lib/types/game";
 /** Zoom threshold: start fetching tiles when system objects become active. */
 const NAME_ZOOM_THRESHOLD = 0.28;
 
-interface ViewportState {
-  bounds: ViewportBounds;
-  zoom: number;
-}
+/** Debounce viewport updates to avoid 60fps React state churn during zoom. */
+const DEBOUNCE_MS = 100;
 
 /**
  * Fetches static tile data (system names + economy types) for tiles visible
@@ -24,22 +22,26 @@ interface ViewportState {
  * Returns an `onViewportChange` callback matching the PixiMapCanvas contract.
  */
 export function useStaticTiles() {
-  const [viewport, setViewport] = useState<ViewportState | null>(null);
+  const [viewport, setViewport] = useState<ViewportBounds | null>(null);
+  const [zoom, setZoom] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const onViewportChange = useCallback(
-    (bounds: ViewportBounds, zoom: number) => {
-      setViewport({ bounds, zoom });
+    (bounds: ViewportBounds, z: number) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setViewport(bounds);
+        setZoom(z);
+      }, DEBOUNCE_MS);
     },
     [],
   );
 
-  const active = viewport !== null && viewport.zoom >= NAME_ZOOM_THRESHOLD;
+  const active = viewport !== null && zoom >= NAME_ZOOM_THRESHOLD;
 
   const visibleTiles = useMemo(
-    () => (active ? frustumToTiles(viewport.bounds) : []),
-    // Recompute when bounds change — tiles are discrete so this is cheap
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [active, viewport?.bounds.minX, viewport?.bounds.minY, viewport?.bounds.maxX, viewport?.bounds.maxY],
+    () => (active ? frustumToTiles(viewport) : []),
+    [active, viewport],
   );
 
   const queries = useQueries({
