@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
     // while the server may use 25000, causing tile coordinate mismatches.
     UNIVERSE_SCALE: process.env.UNIVERSE_SCALE,
   },
+  // esbuild contains native binaries that Turbopack can't bundle.
+  // It's only used at runtime by the tick engine to compile the worker.
+  serverExternalPackages: ["esbuild"],
 };
 
 export default nextConfig;

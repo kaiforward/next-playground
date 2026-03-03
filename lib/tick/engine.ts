@@ -66,19 +66,48 @@ class TickEngine {
   }
 
   private async spawnWorker() {
-    // Load Node.js built-ins at runtime via globalThis.require to prevent
-    // Turbopack's NFT tracer from statically resolving them (it can't handle
-    // node: protocol URLs and crashes). Safe because this only runs in Node.js
-    // server context via instrumentation.ts.
+    // Dynamic requires prevent Turbopack's NFT tracer from statically
+    // resolving node: built-in URLs (which crashes the production build).
+    // Safe because this only runs in Node.js server context via instrumentation.ts.
     const nodeRequire = globalThis.require ?? require;
     const { Worker } = nodeRequire("worker_threads") as typeof import("node:worker_threads");
-    const { fileURLToPath } = nodeRequire("url") as typeof import("node:url");
     const path = nodeRequire("path") as typeof import("node:path");
-    const workerDir = path.dirname(fileURLToPath(import.meta.url));
-    const workerPath = path.join(workerDir, "worker.ts");
-    this.worker = new Worker(workerPath, {
-      execArgv: ["--import", "tsx"],
-    });
+    const fs = nodeRequire("fs") as typeof import("node:fs");
+    const { fileURLToPath } = nodeRequire("url") as typeof import("node:url");
+
+    // Bundle worker.ts → .next/worker.mjs with esbuild so the worker runs
+    // as plain JS with all imports resolved (no tsx loader needed at runtime).
+    const projectRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../..",
+    );
+    const workerSrc = path.join(projectRoot, "lib/tick/worker.ts");
+    const outDir = path.join(projectRoot, ".next");
+    const workerOut = path.join(outDir, "worker.mjs");
+
+    // Only rebuild if source is newer than output (or output doesn't exist)
+    const needsBuild =
+      !fs.existsSync(workerOut) ||
+      fs.statSync(workerSrc).mtimeMs > fs.statSync(workerOut).mtimeMs;
+
+    if (needsBuild) {
+      const esbuild = nodeRequire("esbuild") as typeof import("esbuild");
+      await esbuild.build({
+        entryPoints: [workerSrc],
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        outfile: workerOut,
+        // Mark node_modules as external — they resolve fine at runtime.
+        // Only our @/ aliased source code needs bundling.
+        packages: "external",
+        tsconfig: path.join(projectRoot, "tsconfig.json"),
+        // esbuild resolves tsconfig paths automatically
+      });
+      console.log("[TickEngine] Worker bundled");
+    }
+
+    this.worker = new Worker(workerOut);
 
     this.worker.on("message", (msg: WorkerToMain) => {
       this.handleWorkerMessage(msg);
