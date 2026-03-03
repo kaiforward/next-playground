@@ -112,6 +112,13 @@ export interface ViewportBounds {
   maxY: number;
 }
 
+/** Lightweight system data returned by static tile endpoints (names + economy for map labels). */
+export interface StaticTileSystem {
+  id: string;
+  name: string;
+  economyType: EconomyType;
+}
+
 export type TradeType = "buy" | "sell";
 
 export type ShipStatus = "docked" | "in_transit";

@@ -24,4 +24,5 @@ export const queryKeys = {
   // Atlas + progressive loading
   atlas: ["atlas"] as const,
   viewportSystems: (bounds: string) => ["viewportSystems", bounds] as const,
+  staticTile: (col: number, row: number) => ["staticTile", col, row] as const,
 };
