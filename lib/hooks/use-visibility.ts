@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
 
@@ -14,7 +14,7 @@ import { queryKeys } from "@/lib/query/keys";
  * Invalidated on `shipArrived` only (not every tick).
  */
 export function useVisibility(): { visibleSystemIds: Set<string> } {
-  const { data } = useQuery({
+  const { data } = useSuspenseQuery({
     queryKey: queryKeys.visibility,
     queryFn: () =>
       apiFetch<{ systemIds: string[] }>("/api/game/systems/visibility"),
@@ -23,7 +23,7 @@ export function useVisibility(): { visibleSystemIds: Set<string> } {
   });
 
   const visibleSystemIds = useMemo(
-    () => new Set(data?.systemIds ?? []),
+    () => new Set(data.systemIds),
     [data],
   );
 

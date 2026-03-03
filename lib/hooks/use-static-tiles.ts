@@ -15,9 +15,9 @@ const THROTTLE_MS = 150;
 
 /**
  * Fetches static tile data (system names + economy types) for tiles visible
- * in the current camera frustum. Only active when zoomed in enough to show
- * system labels. Uses immutable TanStack Query caching — tiles are never
- * refetched once loaded.
+ * in the current camera frustum. Activates before system labels appear (0.35)
+ * so data is ready by the time names render (0.45). Uses immutable TanStack
+ * Query caching — tiles are never refetched once loaded.
  *
  * Returns an `onViewportChange` callback matching the PixiMapCanvas contract.
  */
@@ -82,5 +82,5 @@ export function useStaticTiles() {
     return result;
   }, [queries]);
 
-  return { systems, onViewportChange, visibleTiles, active };
+  return { systems, onViewportChange, active };
 }

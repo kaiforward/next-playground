@@ -14,7 +14,7 @@ export interface LODState {
   pointCloudAlpha: number;
   /** System layer alpha: 0 in universe, fades in 0.3→0.4, 1 in system */
   systemLayerAlpha: number;
-  /** Whether SystemObjects should exist (hysteresis buffer at 0.28) */
+  /** Whether SystemObject creation and frustum updates are enabled */
   systemObjectsActive: boolean;
 
   showSystemDots: boolean;
@@ -58,7 +58,7 @@ export function computeLOD(zoom: number): LODState {
   const pointCloudAlpha = 1 - smoothStep(0.3, 0.4, zoom);
   const systemLayerAlpha = smoothStep(0.3, 0.4, zoom);
 
-  // Start creating SystemObjects slightly before crossfade begins (hysteresis)
+  // Enable SystemObject creation before crossfade begins so objects are ready
   const systemObjectsActive = zoom >= 0.28;
 
   return {

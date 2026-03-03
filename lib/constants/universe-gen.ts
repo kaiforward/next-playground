@@ -1,4 +1,4 @@
-
+import { toUniverseScale } from "@/lib/types/guards";
 
 /** Shape of tuneable universe generation parameters. */
 interface UniverseGenConfig {
@@ -54,10 +54,7 @@ const SCALE_OVERRIDES: Record<UniverseScale, Partial<UniverseGenConfig>> = {
 };
 
 function resolveScale(): UniverseScale {
-  const env = process.env.UNIVERSE_SCALE ?? "default";
-  if (env in SCALE_OVERRIDES) return env as UniverseScale;
-  const valid = Object.keys(SCALE_OVERRIDES).join(", ");
-  throw new Error(`Invalid UNIVERSE_SCALE="${env}". Valid values: ${valid}`);
+  return toUniverseScale(process.env.UNIVERSE_SCALE ?? "default");
 }
 
 /** Active scale preset, resolved from UNIVERSE_SCALE env var. */

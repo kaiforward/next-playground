@@ -15,6 +15,8 @@ import type { DynamicTileSystem } from "@/lib/types/game";
 export function useDynamicData(
   active: boolean,
 ): { dynamicSystems: DynamicTileSystem[] } {
+  // useQuery (not useSuspenseQuery) because `enabled` gates fetching until
+  // the camera is zoomed in — useSuspenseQuery doesn't support `enabled`.
   const { data } = useQuery({
     queryKey: queryKeys.dynamicVisible,
     queryFn: () =>
