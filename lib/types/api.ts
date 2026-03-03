@@ -7,6 +7,7 @@ import type {
   AtlasData,
   StarSystemInfo,
   StaticTileSystem,
+  DynamicTileSystem,
   MarketEntry,
   TradeHistoryEntry,
   TradeType,
@@ -35,6 +36,7 @@ export type UniverseResponse = ApiResponse<UniverseData>;
 export type AtlasResponse = ApiResponse<AtlasData>;
 export type ViewportSystemsResponse = ApiResponse<StarSystemInfo[]>;
 export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
+export type DynamicTileResponse = ApiResponse<{ systems: DynamicTileSystem[] }>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;

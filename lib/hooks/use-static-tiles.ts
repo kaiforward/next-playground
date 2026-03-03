@@ -67,5 +67,5 @@ export function useStaticTiles() {
     return result;
   }, [queries]);
 
-  return { systems, onViewportChange };
+  return { systems, onViewportChange, visibleTiles, active };
 }

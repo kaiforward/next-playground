@@ -119,6 +119,24 @@ export interface StaticTileSystem {
   economyType: EconomyType;
 }
 
+// ── Visibility types (fog of war) ────────────────────────────────
+
+export type SystemVisibility = "visible" | "unknown";
+
+/** Dynamic tile system data — discriminated union on visibility. */
+export type DynamicTileSystem =
+  | {
+      id: string;
+      visibility: "visible";
+      eventTypeIds: EventTypeId[];
+      hasPlayerShips: boolean;
+      danger: number;
+    }
+  | {
+      id: string;
+      visibility: "unknown";
+    };
+
 export type TradeType = "buy" | "sell";
 
 export type ShipStatus = "docked" | "in_transit";

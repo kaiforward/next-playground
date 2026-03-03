@@ -25,4 +25,6 @@ export const queryKeys = {
   atlas: ["atlas"] as const,
   viewportSystems: (bounds: string) => ["viewportSystems", bounds] as const,
   staticTile: (col: number, row: number) => ["staticTile", col, row] as const,
+  dynamicTileAll: ["dynamicTile"] as const,
+  dynamicTile: (col: number, row: number) => ["dynamicTile", col, row] as const,
 };
