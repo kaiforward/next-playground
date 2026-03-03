@@ -1,21 +1,17 @@
 import { EventEmitter } from "node:events";
-import { Worker } from "node:worker_threads";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { prisma } from "@/lib/prisma";
+import type { Worker as WorkerType } from "node:worker_threads";
 import type {
   TickEventRaw,
   PlayerEventMap,
 } from "./types";
 import type { MainToWorker, WorkerToMain } from "./worker-types";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 class TickEngine {
   private emitter = new EventEmitter();
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private running = false;
-  private worker: Worker | null = null;
+  private worker: WorkerType | null = null;
   private workerBusy = false;
   private tickStart = 0;
 
@@ -69,8 +65,17 @@ class TickEngine {
     };
   }
 
-  private spawnWorker() {
-    const workerPath = path.join(__dirname, "worker.ts");
+  private async spawnWorker() {
+    // Load Node.js built-ins at runtime via globalThis.require to prevent
+    // Turbopack's NFT tracer from statically resolving them (it can't handle
+    // node: protocol URLs and crashes). Safe because this only runs in Node.js
+    // server context via instrumentation.ts.
+    const nodeRequire = globalThis.require ?? require;
+    const { Worker } = nodeRequire("worker_threads") as typeof import("node:worker_threads");
+    const { fileURLToPath } = nodeRequire("url") as typeof import("node:url");
+    const path = nodeRequire("path") as typeof import("node:path");
+    const workerDir = path.dirname(fileURLToPath(import.meta.url));
+    const workerPath = path.join(workerDir, "worker.ts");
     this.worker = new Worker(workerPath, {
       execArgv: ["--import", "tsx"],
     });
