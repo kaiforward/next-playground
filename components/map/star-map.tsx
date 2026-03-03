@@ -13,7 +13,9 @@ import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
-import { useViewportSystems } from "@/lib/hooks/use-viewport-systems";
+import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
+import { useVisibility } from "@/lib/hooks/use-visibility";
+import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 
 interface StarMapProps {
@@ -39,18 +41,18 @@ export function StarMap({
   initialSelectedSystemId,
   events = [],
 }: StarMapProps) {
-  // ── Progressive data loading ──────────────────────────────────
-  const { systems: viewportSystems, onViewportChange } = useViewportSystems();
+  // ── Progressive data loading ────────────────────────────────────
+  const { systems: tileSystems, onViewportChange, active } = useStaticTiles();
+  const { visibleSystemIds } = useVisibility();
+  const { dynamicSystems } = useDynamicData(active);
 
-  // Merge atlas (lightweight) with viewport detail (full StarSystemInfo)
+  // Merge atlas (positions) with static tile data (names + economy)
   const mergedSystems = useMemo((): StarSystemInfo[] => {
-    const detailMap = new Map(
-      (viewportSystems ?? []).map((s) => [s.id, s]),
+    const nameMap = new Map(
+      tileSystems.map((s) => [s.id, s]),
     );
     return atlas.systems.map((as) => {
-      const detail = detailMap.get(as.id);
-      if (detail) return detail;
-      // Atlas-only: minimal StarSystemInfo (name loads with viewport detail)
+      const tileData = nameMap.get(as.id);
       return {
         id: as.id,
         x: as.x,
@@ -58,11 +60,11 @@ export function StarMap({
         regionId: as.regionId,
         economyType: as.economyType,
         isGateway: as.isGateway,
-        name: "",
+        name: tileData?.name ?? "",
         description: "",
       };
     });
-  }, [atlas.systems, viewportSystems]);
+  }, [atlas.systems, tileSystems]);
 
   // Build UniverseData-compatible structure from atlas + viewport detail
   const universe = useMemo((): UniverseData => ({
@@ -127,6 +129,8 @@ export function StarMap({
     ships,
     convoys,
     events,
+    visibleSystemIds,
+    dynamicSystems,
     selectedSystem: view.selectedSystem,
     navigationMode: mode,
     isNavigationActive,
@@ -281,6 +285,7 @@ export function StarMap({
           regionName={mapData.selectedRegionName}
           gatewayTargetRegions={mapData.selectedGatewayTargets}
           activeEvents={mapData.eventsAtSelected}
+          visibility={mapData.selectedVisibility}
           onClose={closeSystem}
         />
       )}

@@ -6,6 +6,8 @@ import type {
   UniverseData,
   AtlasData,
   StarSystemInfo,
+  StaticTileSystem,
+  DynamicTileSystem,
   MarketEntry,
   TradeHistoryEntry,
   TradeType,
@@ -32,7 +34,9 @@ export type FleetResponse = ApiResponse<FleetState>;
 export type GameWorldResponse = ApiResponse<GameWorldState>;
 export type UniverseResponse = ApiResponse<UniverseData>;
 export type AtlasResponse = ApiResponse<AtlasData>;
-export type ViewportSystemsResponse = ApiResponse<StarSystemInfo[]>;
+export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
+export type DynamicTileResponse = ApiResponse<{ systems: DynamicTileSystem[] }>;
+export type VisibilityResponse = ApiResponse<{ systemIds: string[] }>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;
@@ -42,12 +46,22 @@ export interface SystemTraitResponse {
   description: string;
 }
 
-export type SystemDetailResponse = ApiResponse<
-  StarSystemInfo & {
-    station: { id: string; name: string } | null;
-    traits: SystemTraitResponse[];
-  }
->;
+/** Full system detail — discriminated union on visibility. */
+export type SystemDetailData =
+  | (StarSystemInfo & {
+      visibility: "visible";
+      station: { id: string; name: string } | null;
+      traits: SystemTraitResponse[];
+    })
+  | {
+      id: string;
+      name: string;
+      economyType: StarSystemInfo["economyType"];
+      regionId: string;
+      isGateway: boolean;
+      visibility: "unknown";
+    };
+export type SystemDetailResponse = ApiResponse<SystemDetailData>;
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;

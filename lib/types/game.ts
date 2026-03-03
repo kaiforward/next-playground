@@ -112,6 +112,25 @@ export interface ViewportBounds {
   maxY: number;
 }
 
+/** Lightweight system data returned by static tile endpoints (names + economy for map labels). */
+export interface StaticTileSystem {
+  id: string;
+  name: string;
+  economyType: EconomyType;
+}
+
+// ── Visibility types (fog of war) ────────────────────────────────
+
+export type SystemVisibility = "visible" | "unknown";
+
+/** Dynamic system data — events, danger, and ship presence for visible systems. */
+export interface DynamicTileSystem {
+  id: string;
+  eventTypeIds: EventTypeId[];
+  hasPlayerShips: boolean;
+  danger: number;
+}
+
 export type TradeType = "buy" | "sell";
 
 export type ShipStatus = "docked" | "in_transit";

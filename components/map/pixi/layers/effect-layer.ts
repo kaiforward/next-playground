@@ -15,6 +15,7 @@ interface RouteParticle {
 
 interface PulseRing {
   gfx: Graphics;
+  systemId: string;
   x: number;
   y: number;
   phase: number;
@@ -24,6 +25,7 @@ export class EffectLayer {
   readonly container = new Container();
   private particles: RouteParticle[] = [];
   private pulseRings: PulseRing[] = [];
+  private pulseRingMap = new Map<string, PulseRing>();
   private particleContainer = new Container();
   private pulseContainer = new Container();
 
@@ -86,23 +88,46 @@ export class EffectLayer {
     }
   }
 
-  /** Sync pulse rings on systems with ships (default mode only) */
+  /** Sync pulse rings on systems with ships (default mode only). Diffs by systemId to avoid destroy/recreate churn. */
   syncPulseRings(systems: SystemNodeData[], isDefaultMode: boolean) {
-    this.clearPulseRings();
-    if (!isDefaultMode) return;
+    if (!isDefaultMode) {
+      this.clearPulseRings();
+      return;
+    }
 
+    // Build set of systems that should have rings
+    const wanted = new Set<string>();
+    for (const sys of systems) {
+      if (sys.shipCount > 0) wanted.add(sys.id);
+    }
+
+    // Remove stale rings
+    for (const [id, ring] of this.pulseRingMap) {
+      if (!wanted.has(id)) {
+        ring.gfx.destroy();
+        this.pulseRingMap.delete(id);
+      }
+    }
+
+    // Add new rings
     for (const sys of systems) {
       if (sys.shipCount <= 0) continue;
+      if (this.pulseRingMap.has(sys.id)) continue;
 
       const gfx = new Graphics();
       this.pulseContainer.addChild(gfx);
-      this.pulseRings.push({
+      const ring: PulseRing = {
         gfx,
+        systemId: sys.id,
         x: sys.x,
         y: sys.y,
         phase: Math.random() * ANIM.pulseRingPeriod,
-      });
+      };
+      this.pulseRingMap.set(sys.id, ring);
     }
+
+    // Rebuild flat array for update loop
+    this.pulseRings = [...this.pulseRingMap.values()];
   }
 
   update(dtMs: number) {
@@ -140,6 +165,7 @@ export class EffectLayer {
       ring.gfx.destroy();
     }
     this.pulseRings = [];
+    this.pulseRingMap.clear();
     this.pulseContainer.removeChildren();
   }
 

@@ -16,7 +16,7 @@ import { BG_COLOR } from "./theme";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
-import type { ViewportBounds } from "@/lib/hooks/use-viewport-systems";
+import type { ViewportBounds } from "@/lib/types/game";
 
 export interface PixiMapCanvasProps {
   atlasData: AtlasData;
@@ -28,7 +28,7 @@ export interface PixiMapCanvasProps {
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
-  onViewportChange?: (bounds: ViewportBounds) => void;
+  onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
 }
 
 /** Holds all mutable Pixi references. Created once during mount. */
@@ -68,8 +68,11 @@ export function PixiMapCanvas({
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
 
-  // Store previous viewport bounds to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
-  const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
+  // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
+  const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
+
+  // Debug zoom display
+  const zoomLabelRef = useRef<HTMLDivElement>(null);
 
   // Store latest data in ref for interaction handlers
   const mapDataRef = useRef(mapData);
@@ -89,6 +92,7 @@ export function PixiMapCanvas({
     const frustum = new Frustum();
     let destroyed = false;
     let interactionCleanup: (() => void) | undefined;
+    let prevZoom = 0; // Track zoom delta to detect active zooming
     const onResize = (width: number, height: number) => {
       camera.setScreenSize(width, height);
     };
@@ -165,23 +169,23 @@ export function PixiMapCanvas({
         frustum.update(camera.x, camera.y, camera.zoom, app!.screen.width, app!.screen.height);
         const lod = computeLOD(camera.zoom);
 
-        // Emit viewport bounds for progressive data loading (only when bounds actually changed)
-        if (lod.systemObjectsActive) {
+        // Emit viewport bounds + zoom for tile-based data loading (only when changed)
+        {
           const prev = lastViewportRef.current;
-          if (
-            frustum.minX !== prev.minX || frustum.minY !== prev.minY ||
-            frustum.maxX !== prev.maxX || frustum.maxY !== prev.maxY
-          ) {
+          const changed = frustum.minX !== prev.minX || frustum.minY !== prev.minY ||
+            frustum.maxX !== prev.maxX || frustum.maxY !== prev.maxY ||
+            camera.zoom !== prev.zoom;
+          if (changed) {
             prev.minX = frustum.minX;
             prev.minY = frustum.minY;
             prev.maxX = frustum.maxX;
             prev.maxY = frustum.maxY;
-            onViewportChangeRef.current?.({
-              minX: frustum.minX,
-              minY: frustum.minY,
-              maxX: frustum.maxX,
-              maxY: frustum.maxY,
-            });
+            prev.zoom = camera.zoom;
+            const cb = onViewportChangeRef.current;
+            cb?.(
+              { minX: frustum.minX, minY: frustum.minY, maxX: frustum.maxX, maxY: frustum.maxY },
+              camera.zoom,
+            );
           }
         }
 
@@ -203,7 +207,14 @@ export function PixiMapCanvas({
         // Effect layer visibility based on LOD
         effectLayer.container.visible = lod.showEffects;
 
-        starfield.update(camera.x, camera.y, dtMs);
+        const isZooming = Math.abs(camera.zoom - prevZoom) > 0.0005;
+        prevZoom = camera.zoom;
+
+        // Debug: show zoom level (direct DOM write, no React render)
+        const zl = zoomLabelRef.current;
+        if (zl) zl.textContent = `zoom: ${camera.zoom.toFixed(3)}`;
+
+        starfield.update(camera.x, camera.y, dtMs, isZooming);
         if (lod.showEffects) effectLayer.update(dtMs);
       });
 
@@ -306,11 +317,19 @@ export function PixiMapCanvas({
   }, [centerTarget, onReady, pixiReady]);
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0"
-      style={{ touchAction: "none" }}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ touchAction: "none" }}
+      />
+      <div
+        ref={zoomLabelRef}
+        className="absolute bottom-2 left-2 z-50 rounded bg-black/70 px-2 py-1 font-mono text-xs text-white/80"
+      >
+        zoom: —
+      </div>
+    </>
   );
 }
 

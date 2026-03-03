@@ -16,7 +16,7 @@ Browser-based multiplayer space trading game.
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). **Main game economy only** — does not simulate mini-games.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`). Main game economy only.
 - `npm run index` — Regenerate `docs/MODULE_INDEX.md` (shared module export inventory)
-- `npx prisma db seed` — Seed database
+- `npx prisma db seed` — Seed database (scale controlled by `UNIVERSE_SCALE` in `.env`: `"default"` = 600 systems/7K map, `"10k"` = 10,000 systems/25K map)
 - `npx prisma db push` — Push schema changes to SQLite
 
 ## Tech Stack
@@ -98,6 +98,10 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 - Use worktrees for larger pieces of work, merging into a shared feature branch.
 - Commit after each meaningful unit of work (new model, API route, component).
 - **Break large features into 2-4 phase PRs** — each PR small enough to hold full convention context. Review against the quality checklist after each phase, not just at the end. A 12-phase plan should ship as 3-4 PRs, not one monolithic branch.
+
+## Shell Commands
+
+- **Never use `cd` in compound commands** — The working directory is already the project root. Compound commands like `cd /path && git log` trigger security approval prompts. Just run the command directly (e.g. `git log`).
 
 ## Codebase Search
 

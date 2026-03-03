@@ -25,6 +25,7 @@ import { MODULES, type ModuleId } from "@/lib/constants/modules";
 import type { MissionType, StatGateKey } from "@/lib/constants/missions";
 import type { EnemyTier } from "@/lib/constants/combat";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
+import type { UniverseScale } from "@/lib/constants/universe-gen";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -288,6 +289,18 @@ export function toEventTypeId(value: string): EventTypeId {
     throw new Error(`Invalid event type: "${value}"`);
   }
   return value as EventTypeId;
+}
+
+const UNIVERSE_SCALES: ReadonlySet<string> = new Set<UniverseScale>([
+  "default", "10k",
+]);
+
+export function toUniverseScale(value: string): UniverseScale {
+  if (!UNIVERSE_SCALES.has(value)) {
+    const valid = [...UNIVERSE_SCALES].join(", ");
+    throw new Error(`Invalid universe scale: "${value}". Valid values: ${valid}`);
+  }
+  return value as UniverseScale;
 }
 
 // ── Constant arrays (avoids Object.keys() + as casts) ───────────

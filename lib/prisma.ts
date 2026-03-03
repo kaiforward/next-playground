@@ -10,7 +10,11 @@ function createPrismaClient() {
   const adapter = new PrismaBetterSqlite3({
     url: process.env.DATABASE_URL ?? "file:./dev.db",
   });
-  return new PrismaClient({ adapter });
+  const client = new PrismaClient({ adapter });
+  // Enable WAL mode so readers don't block on tick transaction writes.
+  // Persistent once set — survives restarts.
+  client.$executeRawUnsafe("PRAGMA journal_mode=WAL").catch(() => {});
+  return client;
 }
 
 export const prisma = globalThis.__prisma ?? createPrismaClient();
