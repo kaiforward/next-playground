@@ -46,12 +46,22 @@ export interface SystemTraitResponse {
   description: string;
 }
 
-export type SystemDetailResponse = ApiResponse<
-  StarSystemInfo & {
-    station: { id: string; name: string } | null;
-    traits: SystemTraitResponse[];
-  }
->;
+/** Full system detail — discriminated union on visibility. */
+export type SystemDetailData =
+  | (StarSystemInfo & {
+      visibility: "visible";
+      station: { id: string; name: string } | null;
+      traits: SystemTraitResponse[];
+    })
+  | {
+      id: string;
+      name: string;
+      economyType: StarSystemInfo["economyType"];
+      regionId: string;
+      isGateway: boolean;
+      visibility: "unknown";
+    };
+export type SystemDetailResponse = ApiResponse<SystemDetailData>;
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EconomyBadge } from "@/components/ui/economy-badge";
-import type { StarSystemInfo, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
+import type { StarSystemInfo, ShipState, ConvoyState, ActiveEvent, SystemVisibility } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -23,6 +23,7 @@ interface SystemDetailPanelProps {
   regionName?: string;
   gatewayTargetRegions?: GatewayTarget[];
   activeEvents?: ActiveEvent[];
+  visibility: SystemVisibility;
   onClose: () => void;
 }
 
@@ -33,6 +34,7 @@ export function SystemDetailPanel({
   regionName,
   gatewayTargetRegions,
   activeEvents,
+  visibility,
   onClose,
 }: SystemDetailPanelProps) {
   if (!system) return null;
@@ -84,115 +86,130 @@ export function SystemDetailPanel({
           </p>
         )}
 
-        {/* Connected regions (gateway only) */}
-        {gatewayTargetRegions && gatewayTargetRegions.length > 0 && (
-          <div>
-            <SectionHeader className="mb-2">
-              Connected Regions
-            </SectionHeader>
-            <div className="space-y-1.5">
-              {gatewayTargetRegions.map((target) => (
-                <p key={target.regionId} className="text-sm text-amber-200">
-                  {target.regionName}
-                </p>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Description (hidden when empty — procedural systems have no description yet) */}
-        {system.description && (
-          <div>
-            <SectionHeader className="mb-1">
-              Description
-            </SectionHeader>
-            <p className="text-sm text-gray-300 leading-relaxed">
-              {system.description}
+        {visibility === "unknown" ? (
+          /* Unknown system — limited info */
+          <div className="rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-6 text-center">
+            <p className="text-sm text-text-tertiary">No current intel</p>
+            <p className="mt-1 text-xs text-text-faint">
+              Move a ship closer to scan this system.
             </p>
           </div>
-        )}
-
-        {/* System traits */}
-        {system.traits && system.traits.length > 0 && (
-          <div>
-            <SectionHeader className="mb-2">
-              Traits
-            </SectionHeader>
-            <TraitList traits={enrichTraits(system.traits)} variant="compact" />
-          </div>
-        )}
-
-        {/* Active events */}
-        {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
-
-        {/* Fleet at this system */}
-        <div>
-          <SectionHeader className="mb-2">
-            Your Fleet Here
-          </SectionHeader>
-
-          {convoysHere.length === 0 && shipsHere.length === 0 ? (
-            <p className="text-sm text-gray-500">No ships docked at this system.</p>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-sm text-text-secondary">
-                {shipsHere.length > 0 && (
-                  <>{shipsHere.length} {shipsHere.length === 1 ? "ship" : "ships"}</>
-                )}
-                {shipsHere.length > 0 && convoysHere.length > 0 && " · "}
-                {convoysHere.length > 0 && (
-                  <>{convoysHere.length} {convoysHere.length === 1 ? "convoy" : "convoys"} ({convoysHere.reduce((sum, c) => sum + c.members.length, 0)} ships)</>
-                )}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href={`/system/${system.id}/ships`}
-                  className="text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
-                >
-                  Ships tab
-                </Link>
-                {convoysHere.length > 0 && (
-                  <Link
-                    href={`/system/${system.id}/convoys`}
-                    className="text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
-                  >
-                    Convoys tab
-                  </Link>
-                )}
-                <Link
-                  href={`/system/${system.id}/market`}
-                  className="text-xs font-medium text-accent hover:text-accent-muted transition-colors"
-                >
-                  Market
-                </Link>
+        ) : (
+          /* Visible system — full detail */
+          <>
+            {/* Connected regions (gateway only) */}
+            {gatewayTargetRegions && gatewayTargetRegions.length > 0 && (
+              <div>
+                <SectionHeader className="mb-2">
+                  Connected Regions
+                </SectionHeader>
+                <div className="space-y-1.5">
+                  {gatewayTargetRegions.map((target) => (
+                    <p key={target.regionId} className="text-sm text-amber-200">
+                      {target.regionName}
+                    </p>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* Coordinates */}
-        <div>
-          <SectionHeader className="mb-1">
-            Coordinates
-          </SectionHeader>
-          <p className="text-sm text-gray-300 font-mono">
-            X: {system.x} &middot; Y: {system.y}
-          </p>
-        </div>
+            {/* Description (hidden when empty — procedural systems have no description yet) */}
+            {system.description && (
+              <div>
+                <SectionHeader className="mb-1">
+                  Description
+                </SectionHeader>
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  {system.description}
+                </p>
+              </div>
+            )}
+
+            {/* System traits */}
+            {system.traits && system.traits.length > 0 && (
+              <div>
+                <SectionHeader className="mb-2">
+                  Traits
+                </SectionHeader>
+                <TraitList traits={enrichTraits(system.traits)} variant="compact" />
+              </div>
+            )}
+
+            {/* Active events */}
+            {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
+
+            {/* Fleet at this system */}
+            <div>
+              <SectionHeader className="mb-2">
+                Your Fleet Here
+              </SectionHeader>
+
+              {convoysHere.length === 0 && shipsHere.length === 0 ? (
+                <p className="text-sm text-gray-500">No ships docked at this system.</p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-text-secondary">
+                    {shipsHere.length > 0 && (
+                      <>{shipsHere.length} {shipsHere.length === 1 ? "ship" : "ships"}</>
+                    )}
+                    {shipsHere.length > 0 && convoysHere.length > 0 && " · "}
+                    {convoysHere.length > 0 && (
+                      <>{convoysHere.length} {convoysHere.length === 1 ? "convoy" : "convoys"} ({convoysHere.reduce((sum, c) => sum + c.members.length, 0)} ships)</>
+                    )}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/system/${system.id}/ships`}
+                      className="text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
+                    >
+                      Ships tab
+                    </Link>
+                    {convoysHere.length > 0 && (
+                      <Link
+                        href={`/system/${system.id}/convoys`}
+                        className="text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
+                      >
+                        Convoys tab
+                      </Link>
+                    )}
+                    <Link
+                      href={`/system/${system.id}/market`}
+                      className="text-xs font-medium text-accent hover:text-accent-muted transition-colors"
+                    >
+                      Market
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Coordinates */}
+            <div>
+              <SectionHeader className="mb-1">
+                Coordinates
+              </SectionHeader>
+              <p className="text-sm text-gray-300 font-mono">
+                X: {system.x} &middot; Y: {system.y}
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Actions */}
       <div className="px-4 py-3 border-t border-gray-700 space-y-2">
-        <Button
-          href={`/system/${system.id}`}
-          variant="action"
-          color="indigo"
-          size="md"
-          fullWidth
-          className="shadow-lg shadow-indigo-900/30 active:scale-[0.98]"
-        >
-          View System
-        </Button>
+        {visibility === "visible" && (
+          <Button
+            href={`/system/${system.id}`}
+            variant="action"
+            color="indigo"
+            size="md"
+            fullWidth
+            className="shadow-lg shadow-indigo-900/30 active:scale-[0.98]"
+          >
+            View System
+          </Button>
+        )}
         <Button onClick={onClose} variant="ghost" size="md" fullWidth>
           Close
         </Button>

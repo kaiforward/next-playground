@@ -7,7 +7,9 @@ import type {
   ShipState,
   ConvoyState,
   ActiveEvent,
+  DynamicTileSystem,
   EconomyType,
+  SystemVisibility,
 } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
@@ -36,6 +38,7 @@ export interface SystemNodeData {
   regionId: string;
   shipCount: number;
   isGateway: boolean;
+  visibility: SystemVisibility;
   navigationState?: NavigationNodeState;
   activeEvents?: SystemEventInfo[];
 }
@@ -59,6 +62,7 @@ export interface MapData {
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
+  selectedVisibility: SystemVisibility;
   allSystems: StarSystemInfo[];
 }
 
@@ -69,6 +73,7 @@ interface UseMapDataOptions {
   ships: ShipState[];
   convoys: ConvoyState[];
   events: ActiveEvent[];
+  dynamicSystems: DynamicTileSystem[];
   selectedSystem: StarSystemInfo | null;
   navigationMode: NavigationMode;
   isNavigationActive: boolean;
@@ -83,6 +88,7 @@ export function useMapData({
   ships,
   convoys,
   events,
+  dynamicSystems,
   selectedSystem,
   navigationMode: mode,
   isNavigationActive,
@@ -122,34 +128,39 @@ export function useMapData({
     [selectedSystem, convoys],
   );
 
-  // ── Events per system ─────────────────────────────────────────
-  const eventsPerSystem = useMemo(() => {
-    const map = new Map<string, SystemEventInfo[]>();
-    for (const event of events) {
-      if (!event.systemId) continue;
-      const existing = map.get(event.systemId);
-      const info: SystemEventInfo = {
-        type: event.type,
-        color: EVENT_TYPE_BADGE_COLOR[event.type] ?? "slate",
-        priority: EVENT_TYPE_DANGER_PRIORITY[event.type] ?? 0,
-      };
-      if (existing) {
-        if (!existing.some((e) => e.type === event.type)) existing.push(info);
-      } else {
-        map.set(event.systemId, [info]);
-      }
+  // ── Visibility lookup from dynamic tiles ─────────────────────
+  const visibilityMap = useMemo(() => {
+    const map = new Map<string, DynamicTileSystem>();
+    for (const ds of dynamicSystems) {
+      map.set(ds.id, ds);
     }
     return map;
-  }, [events]);
+  }, [dynamicSystems]);
 
-  // ── Events at selected system ─────────────────────────────────
-  const eventsAtSelected = useMemo(
-    () =>
-      selectedSystem
-        ? events.filter((e) => e.systemId === selectedSystem.id)
-        : [],
-    [selectedSystem, events],
-  );
+  // ── Events per system (from dynamic tiles, visibility-gated) ─
+  const eventsPerSystem = useMemo(() => {
+    const map = new Map<string, SystemEventInfo[]>();
+    for (const ds of dynamicSystems) {
+      if (ds.visibility !== "visible" || ds.eventTypeIds.length === 0) continue;
+      map.set(
+        ds.id,
+        ds.eventTypeIds.map((type) => ({
+          type,
+          color: EVENT_TYPE_BADGE_COLOR[type] ?? "slate",
+          priority: EVENT_TYPE_DANGER_PRIORITY[type] ?? 0,
+        })),
+      );
+    }
+    return map;
+  }, [dynamicSystems]);
+
+  // ── Events at selected system (gated by visibility) ──────────
+  const eventsAtSelected = useMemo(() => {
+    if (!selectedSystem) return [];
+    const ds = visibilityMap.get(selectedSystem.id);
+    if (!ds || ds.visibility !== "visible") return [];
+    return events.filter((e) => e.systemId === selectedSystem.id);
+  }, [selectedSystem, events, visibilityMap]);
 
   // ── Node navigation states (all systems) ──────────────────────
   const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
@@ -202,19 +213,24 @@ export function useMapData({
 
   // ── System nodes (all systems) ────────────────────────────────
   const systems = useMemo((): SystemNodeData[] => {
-    return universe.systems.map((system) => ({
-      id: system.id,
-      x: system.x,
-      y: system.y,
-      name: system.name,
-      economyType: system.economyType,
-      regionId: system.regionId,
-      shipCount: shipsAtSystem[system.id] ?? 0,
-      isGateway: system.isGateway,
-      navigationState: nodeNavigationStates.get(system.id),
-      activeEvents: eventsPerSystem.get(system.id),
-    }));
-  }, [universe.systems, shipsAtSystem, nodeNavigationStates, eventsPerSystem]);
+    return universe.systems.map((system) => {
+      const ds = visibilityMap.get(system.id);
+      const visibility: SystemVisibility = ds?.visibility ?? "unknown";
+      return {
+        id: system.id,
+        x: system.x,
+        y: system.y,
+        name: system.name,
+        economyType: system.economyType,
+        regionId: system.regionId,
+        shipCount: shipsAtSystem[system.id] ?? 0,
+        isGateway: system.isGateway,
+        visibility,
+        navigationState: nodeNavigationStates.get(system.id),
+        activeEvents: eventsPerSystem.get(system.id),
+      };
+    });
+  }, [universe.systems, shipsAtSystem, nodeNavigationStates, eventsPerSystem, visibilityMap]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
@@ -274,6 +290,11 @@ export function useMapData({
     [selectedSystem, regionMap],
   );
 
+  // ── Selected system visibility ───────────────────────────────
+  const selectedVisibility: SystemVisibility = selectedSystem
+    ? (visibilityMap.get(selectedSystem.id)?.visibility ?? "unknown")
+    : "unknown";
+
   return {
     systems,
     connections,
@@ -282,6 +303,7 @@ export function useMapData({
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,
+    selectedVisibility,
     allSystems: universe.systems,
   };
 }

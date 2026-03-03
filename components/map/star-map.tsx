@@ -14,6 +14,7 @@ import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
+import { useDynamicTiles } from "@/lib/hooks/use-dynamic-tiles";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 
 interface StarMapProps {
@@ -40,7 +41,8 @@ export function StarMap({
   events = [],
 }: StarMapProps) {
   // ── Progressive data loading (tile-based) ──────────────────────
-  const { systems: tileSystems, onViewportChange } = useStaticTiles();
+  const { systems: tileSystems, onViewportChange, visibleTiles, active } = useStaticTiles();
+  const { dynamicSystems } = useDynamicTiles(visibleTiles, active);
 
   // Merge atlas (positions) with static tile data (names + economy)
   const mergedSystems = useMemo((): StarSystemInfo[] => {
@@ -125,6 +127,7 @@ export function StarMap({
     ships,
     convoys,
     events,
+    dynamicSystems,
     selectedSystem: view.selectedSystem,
     navigationMode: mode,
     isNavigationActive,
@@ -279,6 +282,7 @@ export function StarMap({
           regionName={mapData.selectedRegionName}
           gatewayTargetRegions={mapData.selectedGatewayTargets}
           activeEvents={mapData.eventsAtSelected}
+          visibility={mapData.selectedVisibility}
           onClose={closeSystem}
         />
       )}

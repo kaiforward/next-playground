@@ -1,6 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
-import type { EconomyType } from "@/lib/types/game";
+import type { EconomyType, SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
 import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, TEXT_RESOLUTION } from "../theme";
 
@@ -44,6 +44,7 @@ export class SystemObject extends Container {
   // Track state for update diffing
   private currentEconomy = "";
   private currentNavState: NavigationNodeState | undefined;
+  private currentVisibility: SystemVisibility = "unknown";
   private currentShipCount = 0;
   private currentIsGateway = false;
   private currentSelected = false;
@@ -109,47 +110,56 @@ export class SystemObject extends Container {
 
     const econChanged = data.economyType !== this.currentEconomy;
     const navChanged = data.navigationState !== this.currentNavState;
+    const visibilityChanged = data.visibility !== this.currentVisibility;
     const shipChanged = data.shipCount !== this.currentShipCount;
     const gatewayChanged = data.isGateway !== this.currentIsGateway;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
     const eventsChanged = eventTypes !== this.currentEventTypes.join(",");
 
-    if (econChanged) {
-      this.currentEconomy = data.economyType;
-      const colors = ECONOMY_COLORS[data.economyType];
+    const isUnknown = data.visibility === "unknown";
 
-      this.glow.clear();
-      this.glow.circle(0, 0, SIZES.systemGlowRadius);
-      this.glow.fill({ color: colors.glow, alpha: 0.15 });
+    if (econChanged || visibilityChanged) {
+      this.currentEconomy = data.economyType;
+      this.currentVisibility = data.visibility;
+      const colors = ECONOMY_COLORS[data.economyType];
 
       this.core.clear();
       this.core.circle(0, 0, SIZES.systemCoreRadius);
       this.core.fill(colors.core);
+      this.core.alpha = isUnknown ? 0.4 : 1;
+
+      this.glow.clear();
+      this.glow.circle(0, 0, SIZES.systemGlowRadius);
+      this.glow.fill({ color: colors.glow, alpha: isUnknown ? 0.05 : 0.15 });
 
       this.highlight.clear();
       this.highlight.circle(0, 0, 4);
-      this.highlight.fill({ color: 0xffffff, alpha: 0.6 });
+      this.highlight.fill({ color: 0xffffff, alpha: isUnknown ? 0.2 : 0.6 });
       this.highlight.position.set(-3, -3);
 
       this.econLabel.text = data.economyType.toUpperCase();
       this.econLabel.style.fill = colors.core;
     }
 
-    if (econChanged || navChanged || selectedChanged) {
+    if (econChanged || navChanged || selectedChanged || visibilityChanged) {
       this.currentNavState = data.navigationState;
       this.currentSelected = isSelected;
-      this.updateNavigationVisuals(data.navigationState, isSelected, data.economyType);
+      this.updateNavigationVisuals(data.navigationState, isSelected, data.economyType, isUnknown);
     }
 
     // Name (always update — cheap)
     this.nameLabel.text = data.name;
     this.nameLabel.position.set(0, SIZES.systemCoreRadius + 4);
+    this.nameLabel.alpha = isUnknown ? 0.3 : 1;
     this.econLabel.position.set(0, SIZES.systemCoreRadius + 4 + SIZES.systemLabelSize + 2);
 
-    if (shipChanged) {
+    // Unknown systems: hide economy label, ship count, event dots
+    this.econLabel.visible = !isUnknown;
+
+    if (shipChanged || visibilityChanged) {
       this.currentShipCount = data.shipCount;
-      if (data.shipCount > 0) {
+      if (data.shipCount > 0 && !isUnknown) {
         this.shipLabel.visible = true;
         this.shipLabel.text = `${data.shipCount} SHIP${data.shipCount !== 1 ? "S" : ""}`;
       } else {
@@ -174,28 +184,36 @@ export class SystemObject extends Container {
       }
     }
 
-    if (eventsChanged) {
+    if (eventsChanged || visibilityChanged) {
       this.currentEventTypes = eventTypes.split(",").filter(Boolean);
-      this.drawEventDots(data.activeEvents, data.navigationState);
+      if (isUnknown) {
+        this.eventDots.clear();
+      } else {
+        this.drawEventDots(data.activeEvents, data.navigationState);
+      }
     }
   }
 
   /** Apply LOD-based visibility. Called per frame from layer. */
   setLOD(lod: LODState) {
-    this.nameLabel.visible = lod.showSystemNames;
-    this.nameLabel.alpha = lod.systemNameAlpha;
+    const isUnknown = this.currentVisibility === "unknown";
 
-    this.econLabel.visible = lod.showEconomyLabels;
+    this.nameLabel.visible = lod.showSystemNames;
+    this.nameLabel.alpha = lod.systemNameAlpha * (isUnknown ? 0.3 : 1);
+
+    // Unknown systems: economy label hidden regardless of LOD
+    this.econLabel.visible = lod.showEconomyLabels && !isUnknown;
     this.econLabel.alpha = lod.detailAlpha;
 
-    if (this.currentShipCount > 0) {
+    if (this.currentShipCount > 0 && !isUnknown) {
       this.shipLabel.visible = lod.showShipLabels;
       this.shipLabel.alpha = lod.detailAlpha;
     }
 
     this.glow.visible = lod.showGlow;
 
-    this.eventDots.visible = lod.showEventDots;
+    // Unknown systems: event dots hidden regardless of LOD
+    this.eventDots.visible = lod.showEventDots && !isUnknown;
     this.eventDots.alpha = lod.eventDotAlpha;
 
     // Scale core + highlight by LOD
@@ -208,14 +226,15 @@ export class SystemObject extends Container {
     state: NavigationNodeState | undefined,
     isSelected: boolean,
     economyType: EconomyType,
+    isUnknown = false,
   ) {
     this.navigationRing.clear();
     this.alpha = 1;
     this.scale.set(1);
     this.cursor = "pointer";
 
-    const glowAlpha = 0.15;
     const colors = ECONOMY_COLORS[economyType];
+    const glowAlpha = isUnknown ? 0.05 : 0.15;
 
     if (isSelected && !state) {
       // Selected system (no navigation) — subtle highlight ring
@@ -241,8 +260,11 @@ export class SystemObject extends Container {
         break;
 
       case "reachable":
-        this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 3);
-        this.navigationRing.stroke({ color: NAV_COLORS.reachable, width: 1.5, alpha: 0.6 });
+        // Don't show reachable ring on unknown systems
+        if (!isUnknown) {
+          this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 3);
+          this.navigationRing.stroke({ color: NAV_COLORS.reachable, width: 1.5, alpha: 0.6 });
+        }
         break;
 
       case "unreachable":
