@@ -99,6 +99,10 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 - Commit after each meaningful unit of work (new model, API route, component).
 - **Break large features into 2-4 phase PRs** — each PR small enough to hold full convention context. Review against the quality checklist after each phase, not just at the end. A 12-phase plan should ship as 3-4 PRs, not one monolithic branch.
 
+## Shell Commands
+
+- **Never use `cd` in compound commands** — The working directory is already the project root. Compound commands like `cd /path && git log` trigger security approval prompts. Just run the command directly (e.g. `git log`).
+
 ## Codebase Search
 
 Prefer **cocoindex semantic search** (`mcp__cocoindex-code__search`) over grep/glob for codebase exploration, especially for vague or cross-system questions. Use `refresh_index: false` for consecutive queries within the same session. Fall back to grep/glob only for exact-string or regex matches where you know the precise term.
