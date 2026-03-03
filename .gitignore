@@ -42,11 +42,6 @@ next-env.d.ts
 
 /app/generated/prisma
 
-# local database files
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
 
 # experiment results (auto-saved by simulate --config)
 /experiments
