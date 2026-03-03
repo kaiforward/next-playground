@@ -152,7 +152,6 @@ export function selectEconomyCandidates(
 export function selectEventCandidates(
   events: EventSnapshot[],
   missionGoods: Record<string, EventMissionGoodsEntry>,
-  _hopDistances: Map<string, Map<string, number>>,
   goodTiers: Record<string, number>,
   tick: number,
   rng: () => number,

@@ -1,5 +1,5 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -7,14 +7,12 @@ declare global {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
+  const adapter = new PrismaPg({
+    connectionString:
+      process.env.DATABASE_URL ??
+      "postgresql://postgres:postgres@localhost:5432/stellar_trader",
   });
-  const client = new PrismaClient({ adapter });
-  // Enable WAL mode so readers don't block on tick transaction writes.
-  // Persistent once set — survives restarts.
-  client.$executeRawUnsafe("PRAGMA journal_mode=WAL").catch(() => {});
-  return client;
+  return new PrismaClient({ adapter });
 }
 
 export const prisma = globalThis.__prisma ?? createPrismaClient();

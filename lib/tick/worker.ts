@@ -7,7 +7,7 @@
  * Spawned by engine.ts via `new Worker()`. Communicates via postMessage.
  *
  * Each worker thread gets its own V8 isolate, so importing the prisma singleton
- * here creates a fresh PrismaClient (separate better-sqlite3 connection, WAL mode).
+ * here creates a fresh PrismaClient (separate PostgreSQL connection).
  */
 
 import { parentPort } from "node:worker_threads";
@@ -35,6 +35,8 @@ parentPort.on("message", async (msg: MainToWorker) => {
     try {
       const activeProcessors = sortProcessors(processors, msg.tick);
 
+      // PostgreSQL has per-query network overhead unlike in-process SQLite,
+      // so the tick transaction needs a generous timeout at 10K scale.
       const result = await prisma.$transaction(async (tx) => {
         // Optimistic lock: only update if currentTick hasn't changed
         const updated = await tx.gameWorld.updateMany({
@@ -66,7 +68,7 @@ parentPort.on("message", async (msg: MainToWorker) => {
         }
 
         return { results: ctx.results, timings, activeProcessors };
-      });
+      }, { timeout: 30_000 });
 
       if (!result) {
         send({

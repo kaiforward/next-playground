@@ -197,16 +197,12 @@ export function findReachableSystems(
   return result;
 }
 
-// ── All-pairs hop distances (BFS) ──────────────────────────────
+// ── Hop distance helpers ─────────────────────────────────────────
 
-/**
- * BFS hop-count from every system to every other system.
- * Returns Map<origin, Map<dest, hops>>. ~40 systems × BFS = trivial cost.
- */
-export function computeAllHopDistances(
+/** Build a bidirectional adjacency list for hop counting. */
+function buildHopAdjacencyList(
   connections: ConnectionInfo[],
-): Map<string, Map<string, number>> {
-  // Build bidirectional adjacency list (connections are directed, but we need both directions)
+): { adj: Map<string, string[]>; allSystems: Set<string> } {
   const adj = new Map<string, string[]>();
   const allSystems = new Set<string>();
 
@@ -221,7 +217,6 @@ export function computeAllHopDistances(
     }
     neighborsFrom.push(c.toSystemId);
 
-    // Also add reverse direction for undirected hop counting
     let neighborsTo = adj.get(c.toSystemId);
     if (!neighborsTo) {
       neighborsTo = [];
@@ -230,6 +225,22 @@ export function computeAllHopDistances(
     neighborsTo.push(c.fromSystemId);
   }
 
+  return { adj, allSystems };
+}
+
+// ── All-pairs hop distances (BFS) ──────────────────────────────
+
+/**
+ * BFS hop-count from every system to every other system.
+ * Returns Map<origin, Map<dest, hops>>.
+ *
+ * WARNING: O(V²) memory and O(V×(V+E)) time — only suitable for small graphs.
+ * For large universes, use computeBoundedHopDistances instead.
+ */
+export function computeAllHopDistances(
+  connections: ConnectionInfo[],
+): Map<string, Map<string, number>> {
+  const { adj, allSystems } = buildHopAdjacencyList(connections);
   const result = new Map<string, Map<string, number>>();
 
   for (const origin of allSystems) {
@@ -243,6 +254,48 @@ export function computeAllHopDistances(
       const currentDist = distances.get(current)!;
       const neighbors = adj.get(current) ?? [];
 
+      for (const neighbor of neighbors) {
+        if (!distances.has(neighbor)) {
+          distances.set(neighbor, currentDist + 1);
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    result.set(origin, distances);
+  }
+
+  return result;
+}
+
+// ── Bounded hop distances (BFS with depth limit) ────────────────
+
+/**
+ * BFS hop-count from every system, stopping at maxHops depth.
+ * Returns Map<origin, Map<dest, hops>> with only nearby systems included.
+ *
+ * Much faster than computeAllHopDistances for large universes — each BFS
+ * visits at most ~branching_factor^maxHops nodes instead of the entire graph.
+ */
+export function computeBoundedHopDistances(
+  connections: ConnectionInfo[],
+  maxHops: number,
+): Map<string, Map<string, number>> {
+  const { adj, allSystems } = buildHopAdjacencyList(connections);
+  const result = new Map<string, Map<string, number>>();
+
+  for (const origin of allSystems) {
+    const distances = new Map<string, number>();
+    distances.set(origin, 0);
+    const queue: string[] = [origin];
+    let head = 0;
+
+    while (head < queue.length) {
+      const current = queue[head++];
+      const currentDist = distances.get(current)!;
+      if (currentDist >= maxHops) continue;
+
+      const neighbors = adj.get(current) ?? [];
       for (const neighbor of neighbors) {
         if (!distances.has(neighbor)) {
           distances.set(neighbor, currentDist + 1);

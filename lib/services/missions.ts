@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-import { computeAllHopDistances } from "@/lib/engine/pathfinding";
+import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
@@ -14,12 +14,22 @@ import type {
 
 // ── Shared helpers ──────────────────────────────────────────────
 
-/** Load connections and compute all hop distances. */
+// Connections are static (set at seed time), so hop distances are computed once
+// and cached for the lifetime of the server process.
+let cachedHopDistances: Map<string, Map<string, number>> | null = null;
+
+/** Load or return cached bounded hop distances. */
 async function loadHopDistances(): Promise<Map<string, Map<string, number>>> {
-  const connections = await prisma.systemConnection.findMany({
-    select: { fromSystemId: true, toSystemId: true, fuelCost: true },
-  });
-  return computeAllHopDistances(connections);
+  if (!cachedHopDistances) {
+    const connections = await prisma.systemConnection.findMany({
+      select: { fromSystemId: true, toSystemId: true, fuelCost: true },
+    });
+    cachedHopDistances = computeBoundedHopDistances(
+      connections,
+      MISSION_CONSTANTS.MAX_EXPORT_DISTANCE,
+    );
+  }
+  return cachedHopDistances;
 }
 
 type MissionRow = {

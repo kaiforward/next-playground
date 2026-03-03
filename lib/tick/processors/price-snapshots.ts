@@ -39,7 +39,10 @@ export const priceSnapshotsProcessor: TickProcessor = {
 
     const newEntries = buildPriceEntry(marketInputs, ctx.tick);
 
-    // 4. Append and write back
+    // 4. Append and bulk-write back via single SQL round-trip
+    const ids: string[] = [];
+    const entriesArr: string[] = [];
+
     for (const row of historyRows) {
       const newEntry = newEntries.get(row.systemId);
       if (!newEntry) continue;
@@ -47,10 +50,19 @@ export const priceSnapshotsProcessor: TickProcessor = {
       const existing: PriceHistoryEntry[] = JSON.parse(row.entries);
       const updated = appendSnapshot(existing, newEntry, MAX_SNAPSHOTS);
 
-      await ctx.tx.priceHistory.update({
-        where: { id: row.id },
-        data: { entries: JSON.stringify(updated) },
-      });
+      ids.push(row.id);
+      entriesArr.push(JSON.stringify(updated));
+    }
+
+    if (ids.length > 0) {
+      await ctx.tx.$executeRawUnsafe(
+        `UPDATE "PriceHistory" AS ph
+         SET "entries" = batch."entries"
+         FROM (SELECT unnest($1::text[]) AS "id", unnest($2::text[]) AS "entries") AS batch
+         WHERE ph."id" = batch."id"`,
+        ids,
+        entriesArr,
+      );
     }
 
     console.log(
