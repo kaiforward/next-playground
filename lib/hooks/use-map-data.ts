@@ -141,7 +141,8 @@ export function useMapData({
   const eventsPerSystem = useMemo(() => {
     const map = new Map<string, SystemEventInfo[]>();
     for (const ds of dynamicSystems) {
-      if (ds.visibility !== "visible" || ds.eventTypeIds.length === 0) continue;
+      if (ds.visibility !== "visible") continue;
+      if (ds.eventTypeIds.length === 0) continue;
       map.set(
         ds.id,
         ds.eventTypeIds.map((type) => ({

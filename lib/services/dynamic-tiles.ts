@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { tileBounds } from "@/lib/engine/tiles";
-import { buildAdjacencyList, computeVisibilitySet } from "@/lib/engine/visibility";
+import { computeVisibilitySet } from "@/lib/engine/visibility";
+import { getAdjacencyList } from "./adjacency";
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import { EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 import { isShipTypeId, toEventTypeId } from "@/lib/types/guards";
@@ -19,15 +20,13 @@ export async function getDynamicTile(
 ): Promise<{ systems: DynamicTileSystem[] }> {
   const bounds = tileBounds(col, row);
 
-  // 1. Parallel: player ships, all connections, systems in tile, active events
-  const [playerShips, connections, tileSystems, activeEvents] = await Promise.all([
+  // 1. Parallel: player ships, adjacency graph (cached), systems in tile, active events
+  const [playerShips, adjacency, tileSystems, activeEvents] = await Promise.all([
     prisma.ship.findMany({
-      where: { player: { userId: playerId } },
+      where: { playerId },
       select: { systemId: true, shipType: true },
     }),
-    prisma.systemConnection.findMany({
-      select: { fromSystemId: true, toSystemId: true },
-    }),
+    getAdjacencyList(),
     prisma.starSystem.findMany({
       where: {
         x: { gte: bounds.minX, lt: bounds.maxX },
@@ -56,7 +55,6 @@ export async function getDynamicTile(
     }
   }
 
-  const adjacency = buildAdjacencyList(connections);
   const visibilitySet = computeVisibilitySet(shipPositions, adjacency);
 
   // 3. Build events-per-system map for visible systems

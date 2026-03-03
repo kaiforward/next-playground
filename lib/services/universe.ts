@@ -4,7 +4,8 @@ import type { UniverseData } from "@/lib/types/game";
 import type { SystemDetailData } from "@/lib/types/api";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier, isShipTypeId } from "@/lib/types/guards";
 import { TRAITS } from "@/lib/constants/traits";
-import { buildAdjacencyList, computeVisibilitySet } from "@/lib/engine/visibility";
+import { computeVisibilitySet } from "@/lib/engine/visibility";
+import { getAdjacencyList } from "./adjacency";
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import type { ShipPosition } from "@/lib/engine/visibility";
 
@@ -87,7 +88,7 @@ export async function getSystemDetail(
   systemId: string,
   playerId: string,
 ): Promise<SystemDetailData> {
-  const [system, playerShips, connections] = await Promise.all([
+  const [system, playerShips, adjacency] = await Promise.all([
     prisma.starSystem.findUnique({
       where: { id: systemId },
       include: {
@@ -96,12 +97,10 @@ export async function getSystemDetail(
       },
     }),
     prisma.ship.findMany({
-      where: { player: { userId: playerId } },
+      where: { playerId },
       select: { systemId: true, shipType: true },
     }),
-    prisma.systemConnection.findMany({
-      select: { fromSystemId: true, toSystemId: true },
-    }),
+    getAdjacencyList(),
   ]);
 
   if (!system) {
@@ -115,7 +114,6 @@ export async function getSystemDetail(
       shipPositions.push({ systemId: s.systemId, role: SHIP_TYPES[s.shipType].role });
     }
   }
-  const adjacency = buildAdjacencyList(connections);
   const visibilitySet = computeVisibilitySet(shipPositions, adjacency);
 
   const economyType = toEconomyType(system.economyType);
