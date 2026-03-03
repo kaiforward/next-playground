@@ -219,6 +219,7 @@ model StarSystem {
   battles           Battle[]
 
   @@index([regionId])
+  @@index([x, y])
 }
 
 model SystemTrait {

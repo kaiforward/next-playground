@@ -5,6 +5,7 @@ import { useQueries } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
 import { frustumToTiles } from "@/lib/engine/tiles";
+import { ACTIVE_SCALE } from "@/lib/constants/universe-gen";
 import type { ViewportBounds, StaticTileSystem } from "@/lib/types/game";
 
 /** Zoom threshold: start fetching tiles before names appear (0.45) but after universe view. */
@@ -61,10 +62,10 @@ export function useStaticTiles() {
 
   const queries = useQueries({
     queries: visibleTiles.map((tile) => ({
-      queryKey: queryKeys.staticTile(tile.col, tile.row),
+      queryKey: queryKeys.staticTile(tile.col, tile.row, ACTIVE_SCALE),
       queryFn: () =>
         apiFetch<{ systems: StaticTileSystem[] }>(
-          `/api/game/systems/tile/static?col=${tile.col}&row=${tile.row}`,
+          `/api/game/systems/tile/static?col=${tile.col}&row=${tile.row}&scale=${ACTIVE_SCALE}`,
         ),
       staleTime: Infinity,
       gcTime: Infinity,
