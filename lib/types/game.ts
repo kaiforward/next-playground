@@ -123,19 +123,13 @@ export interface StaticTileSystem {
 
 export type SystemVisibility = "visible" | "unknown";
 
-/** Dynamic tile system data — discriminated union on visibility. */
-export type DynamicTileSystem =
-  | {
-      id: string;
-      visibility: "visible";
-      eventTypeIds: EventTypeId[];
-      hasPlayerShips: boolean;
-      danger: number;
-    }
-  | {
-      id: string;
-      visibility: "unknown";
-    };
+/** Dynamic system data — events, danger, and ship presence for visible systems. */
+export interface DynamicTileSystem {
+  id: string;
+  eventTypeIds: EventTypeId[];
+  hasPlayerShips: boolean;
+  danger: number;
+}
 
 export type TradeType = "buy" | "sell";
 

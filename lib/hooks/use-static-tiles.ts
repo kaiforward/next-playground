@@ -7,11 +7,11 @@ import { queryKeys } from "@/lib/query/keys";
 import { frustumToTiles } from "@/lib/engine/tiles";
 import type { ViewportBounds, StaticTileSystem } from "@/lib/types/game";
 
-/** Zoom threshold: start fetching tiles when system objects become active. */
-const NAME_ZOOM_THRESHOLD = 0.28;
+/** Zoom threshold: start fetching tiles before names appear (0.45) but after universe view. */
+const NAME_ZOOM_THRESHOLD = 0.35;
 
-/** Debounce viewport updates to avoid 60fps React state churn during zoom. */
-const DEBOUNCE_MS = 100;
+/** Leading-edge throttle: fire immediately, then suppress for this duration. */
+const THROTTLE_MS = 150;
 
 /**
  * Fetches static tile data (system names + economy types) for tiles visible
@@ -25,14 +25,29 @@ export function useStaticTiles() {
   const [viewport, setViewport] = useState<ViewportBounds | null>(null);
   const [zoom, setZoom] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const pendingRef = useRef<{ bounds: ViewportBounds; zoom: number } | null>(null);
 
   const onViewportChange = useCallback(
     (bounds: ViewportBounds, z: number) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
+      if (!timerRef.current) {
+        // Leading edge: fire immediately, start cooldown
         setViewport(bounds);
         setZoom(z);
-      }, DEBOUNCE_MS);
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null;
+          // Trailing edge: flush the most recent suppressed value so we
+          // never lose the final viewport state when zoom/pan stops
+          if (pendingRef.current) {
+            const { bounds: b, zoom: pz } = pendingRef.current;
+            pendingRef.current = null;
+            setViewport(b);
+            setZoom(pz);
+          }
+        }, THROTTLE_MS);
+      } else {
+        // Suppressed: store latest value for trailing edge
+        pendingRef.current = { bounds, zoom: z };
+      }
     },
     [],
   );

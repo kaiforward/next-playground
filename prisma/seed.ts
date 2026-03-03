@@ -7,6 +7,7 @@ import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
 import {
   UNIVERSE_GEN,
   REGION_NAMES,
+  ACTIVE_SCALE,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { toEconomyType } from "@/lib/types/guards";
@@ -18,7 +19,9 @@ const adapter = new PrismaBetterSqlite3({
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("Seeding database...");
+  console.log(
+    `Seeding database (scale: ${ACTIVE_SCALE}, ${UNIVERSE_GEN.TOTAL_SYSTEMS} systems, ${UNIVERSE_GEN.MAP_SIZE}×${UNIVERSE_GEN.MAP_SIZE} map)...`,
+  );
 
   // ── Generate universe ──
   const params: GenParams = {

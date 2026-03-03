@@ -1,46 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
-import type { TileCoord } from "@/lib/engine/tiles";
 import type { DynamicTileSystem } from "@/lib/types/game";
 
 /**
- * Fetches dynamic tile data (visibility-gated events, danger, ship presence)
- * for tiles visible in the current camera frustum. Shares viewport state with
- * useStaticTiles to avoid duplicate debounce timers.
+ * Fetches dynamic data (events, danger, ship presence) for ALL visible systems.
+ * No viewport dependency — data is cached per tick and viewport culling happens
+ * client-side. This eliminates flicker and redundant API calls on pan/zoom.
  *
- * Unlike static tiles, dynamic tiles have short stale/gc times since the data
- * changes every tick.
+ * Invalidated on `shipArrived` and `eventNotifications`.
  */
-export function useDynamicTiles(
-  visibleTiles: TileCoord[],
+export function useDynamicData(
   active: boolean,
 ): { dynamicSystems: DynamicTileSystem[] } {
-  const queries = useQueries({
-    queries: visibleTiles.map((tile) => ({
-      queryKey: queryKeys.dynamicTile(tile.col, tile.row),
-      queryFn: () =>
-        apiFetch<{ systems: DynamicTileSystem[] }>(
-          `/api/game/systems/tile/dynamic?col=${tile.col}&row=${tile.row}`,
-        ),
-      staleTime: 10_000,
-      gcTime: 30_000,
-      enabled: active,
-    })),
+  const { data } = useQuery({
+    queryKey: queryKeys.dynamicVisible,
+    queryFn: () =>
+      apiFetch<{ systems: DynamicTileSystem[] }>(
+        "/api/game/systems/dynamic",
+      ),
+    staleTime: 10_000,
+    gcTime: 30_000,
+    enabled: active,
   });
 
-  const dynamicSystems = useMemo(() => {
-    const result: DynamicTileSystem[] = [];
-    for (const query of queries) {
-      if (query.data) {
-        result.push(...query.data.systems);
-      }
-    }
-    return result;
-  }, [queries]);
-
-  return { dynamicSystems };
+  return { dynamicSystems: data?.systems ?? [] };
 }

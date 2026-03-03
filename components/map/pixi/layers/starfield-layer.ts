@@ -58,8 +58,9 @@ export class StarfieldLayer {
   /**
    * Update parallax positions based on camera world center.
    * Also handles twinkle animation.
+   * @param zooming When true, skips twinkle redraws (parallax motion makes twinkle imperceptible)
    */
-  update(cameraX: number, cameraY: number, dtMs: number) {
+  update(cameraX: number, cameraY: number, dtMs: number, zooming = false) {
     this.time += dtMs;
 
     for (const layer of this.layerData) {
@@ -67,7 +68,8 @@ export class StarfieldLayer {
     }
 
     // Redraw stars every ~4 frames for twinkle (perf: don't redraw every frame)
-    if (Math.floor(this.time / 64) !== Math.floor((this.time - dtMs) / 64)) {
+    // Skip entirely during zoom — parallax motion makes twinkle imperceptible
+    if (!zooming && Math.floor(this.time / 64) !== Math.floor((this.time - dtMs) / 64)) {
       this.drawAll();
     }
   }

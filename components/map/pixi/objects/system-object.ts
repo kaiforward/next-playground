@@ -42,6 +42,7 @@ export class SystemObject extends Container {
   private hitCircle: Graphics;
 
   // Track state for update diffing
+  private currentName = "";
   private currentEconomy = "";
   private currentNavState: NavigationNodeState | undefined;
   private currentVisibility: SystemVisibility = "unknown";
@@ -148,8 +149,11 @@ export class SystemObject extends Container {
       this.updateNavigationVisuals(data.navigationState, isSelected, data.economyType, isUnknown);
     }
 
-    // Name (always update — cheap)
-    this.nameLabel.text = data.name;
+    // Name — only update text when changed (avoids Pixi texture regeneration for 600+ systems)
+    if (data.name !== this.currentName) {
+      this.currentName = data.name;
+      this.nameLabel.text = data.name;
+    }
     this.nameLabel.position.set(0, SIZES.systemCoreRadius + 4);
     this.nameLabel.alpha = isUnknown ? 0.3 : 1;
     this.econLabel.position.set(0, SIZES.systemCoreRadius + 4 + SIZES.systemLabelSize + 2);
@@ -157,9 +161,10 @@ export class SystemObject extends Container {
     // Unknown systems: hide economy label, ship count, event dots
     this.econLabel.visible = !isUnknown;
 
-    if (shipChanged || visibilityChanged) {
+    if (shipChanged) {
       this.currentShipCount = data.shipCount;
-      if (data.shipCount > 0 && !isUnknown) {
+      // Ship count comes from the player's own fleet data — always show regardless of fog-of-war
+      if (data.shipCount > 0) {
         this.shipLabel.visible = true;
         this.shipLabel.text = `${data.shipCount} SHIP${data.shipCount !== 1 ? "S" : ""}`;
       } else {
@@ -205,7 +210,7 @@ export class SystemObject extends Container {
     this.econLabel.visible = lod.showEconomyLabels && !isUnknown;
     this.econLabel.alpha = lod.detailAlpha;
 
-    if (this.currentShipCount > 0 && !isUnknown) {
+    if (this.currentShipCount > 0) {
       this.shipLabel.visible = lod.showShipLabels;
       this.shipLabel.alpha = lod.detailAlpha;
     }
@@ -260,11 +265,9 @@ export class SystemObject extends Container {
         break;
 
       case "reachable":
-        // Don't show reachable ring on unknown systems
-        if (!isUnknown) {
-          this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 3);
-          this.navigationRing.stroke({ color: NAV_COLORS.reachable, width: 1.5, alpha: 0.6 });
-        }
+        // Reachability is graph topology (from atlas), not fog-of-war intel — always show
+        this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 3);
+        this.navigationRing.stroke({ color: NAV_COLORS.reachable, width: 1.5, alpha: 0.6 });
         break;
 
       case "unreachable":

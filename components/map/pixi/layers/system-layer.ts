@@ -4,54 +4,52 @@ import type { SystemNodeData } from "@/lib/hooks/use-map-data";
 import type { Frustum } from "../frustum";
 import type { LODState } from "../lod";
 
+/** Max SystemObjects to create per frame to avoid freezing on zoom transitions. */
+const MAX_CREATES_PER_FRAME = 50;
+
 export class SystemLayer {
   readonly container = new Container();
   private objects = new Map<string, SystemObject>();
   private active = true;
-  /** Pending data to sync when re-activated */
-  private pendingSync: { systems: SystemNodeData[]; selectedId: string | null } | null = null;
+  /** All system data — creation is deferred to updateVisibility (frustum-gated). */
+  private systemData = new Map<string, SystemNodeData>();
+  private selectedId: string | null = null;
   onObjectCreated?: (obj: SystemObject) => void;
 
-  /** Toggle active state. When inactive, destroys all SystemObjects to free GPU memory. */
+  /** Toggle active state. Hides container when inactive — objects are preserved. */
   setActive(active: boolean) {
     if (this.active === active) return;
     this.active = active;
-
-    if (!active) {
-      // Destroy all objects — point cloud covers universe view
-      for (const obj of this.objects.values()) {
-        obj.removeAllListeners();
-        obj.destroy({ children: true });
-      }
-      this.objects.clear();
-    } else if (this.pendingSync) {
-      // Re-entering active: rebuild from pending data
-      this.sync(this.pendingSync.systems, this.pendingSync.selectedId);
-    }
+    this.container.visible = active;
   }
 
+  /**
+   * Receive new system data from React. Updates existing objects immediately
+   * but does NOT create new ones — that's updateVisibility's job (frustum-gated).
+   */
   sync(systems: SystemNodeData[], selectedId: string | null) {
-    // Always store latest data for re-activation
-    this.pendingSync = { systems, selectedId };
+    this.selectedId = selectedId;
+
+    // Rebuild data lookup
+    const newData = new Map<string, SystemNodeData>();
+    for (const data of systems) {
+      newData.set(data.id, data);
+    }
+    this.systemData = newData;
+
     if (!this.active) return;
 
-    const incoming = new Set<string>();
-
-    for (const data of systems) {
-      incoming.add(data.id);
-      let obj = this.objects.get(data.id);
-      if (!obj) {
-        obj = new SystemObject();
-        this.objects.set(data.id, obj);
-        this.container.addChild(obj);
-        this.onObjectCreated?.(obj);
+    // Update existing objects with fresh data
+    for (const [id, obj] of this.objects) {
+      const data = newData.get(id);
+      if (data) {
+        obj.update(data, id === selectedId);
       }
-      obj.update(data, data.id === selectedId);
     }
 
-    // Remove stale objects
+    // Remove objects whose systems no longer exist in data
     for (const [id, obj] of this.objects) {
-      if (!incoming.has(id)) {
+      if (!newData.has(id)) {
         obj.removeAllListeners();
         this.container.removeChild(obj);
         obj.destroy({ children: true });
@@ -60,13 +58,32 @@ export class SystemLayer {
     }
   }
 
-  /** Per-frame visibility update: frustum culling + LOD */
+  /**
+   * Per-frame: frustum culling + LOD + on-demand object creation.
+   * Only creates SystemObjects for systems in the viewport, capped per frame.
+   */
   updateVisibility(frustum: Frustum, lod: LODState) {
-    for (const obj of this.objects.values()) {
-      const inView = frustum.contains(obj.position.x, obj.position.y);
-      obj.visible = inView;
-      if (inView) {
-        obj.setLOD(lod);
+    let createdThisFrame = 0;
+
+    for (const [id, data] of this.systemData) {
+      const inView = frustum.contains(data.x, data.y);
+      let obj = this.objects.get(id);
+
+      // Create on demand for visible systems (batched to avoid frame spikes)
+      if (inView && !obj && createdThisFrame < MAX_CREATES_PER_FRAME) {
+        obj = new SystemObject();
+        this.objects.set(id, obj);
+        this.container.addChild(obj);
+        this.onObjectCreated?.(obj);
+        obj.update(data, id === this.selectedId);
+        createdThisFrame++;
+      }
+
+      if (obj) {
+        obj.visible = inView;
+        if (inView) {
+          obj.setLOD(lod);
+        }
       }
     }
   }

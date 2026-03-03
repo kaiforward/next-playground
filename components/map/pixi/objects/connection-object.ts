@@ -14,6 +14,8 @@ export class ConnectionObject extends Container {
   private labelBg: Graphics;
   private fuelLabel: Text;
   private hasFuelLabel = false;
+  /** Style fingerprint for dirty-checking (positions are immutable from static tiles) */
+  private styleFingerprint = "";
 
   constructor() {
     super();
@@ -36,7 +38,12 @@ export class ConnectionObject extends Container {
     toX: number,
     toY: number,
   ) {
+    // Style fingerprint: skip redraw when only style-relevant flags are unchanged
+    // Positions are immutable (static tile data), so only style flags matter
+    const fingerprint = `${data.isGateway}|${data.isRoute}|${data.isDimmed}|${data.fuelCost}`;
+    if (this.connectionId === data.id && fingerprint === this.styleFingerprint) return;
     this.connectionId = data.id;
+    this.styleFingerprint = fingerprint;
 
     // Pick edge style
     const style = data.isGateway

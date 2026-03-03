@@ -36,6 +36,7 @@ export type UniverseResponse = ApiResponse<UniverseData>;
 export type AtlasResponse = ApiResponse<AtlasData>;
 export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
 export type DynamicTileResponse = ApiResponse<{ systems: DynamicTileSystem[] }>;
+export type VisibilityResponse = ApiResponse<{ systemIds: string[] }>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;

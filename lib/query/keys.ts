@@ -24,6 +24,7 @@ export const queryKeys = {
   // Atlas + progressive loading
   atlas: ["atlas"] as const,
   staticTile: (col: number, row: number) => ["staticTile", col, row] as const,
-  dynamicTileAll: ["dynamicTile"] as const,
-  dynamicTile: (col: number, row: number) => ["dynamicTile", col, row] as const,
+  // Visibility + dynamic data (separated concerns)
+  visibility: ["visibility"] as const,
+  dynamicVisible: ["dynamicVisible"] as const,
 };

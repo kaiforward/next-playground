@@ -16,7 +16,8 @@ Browser-based multiplayer space trading game.
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). **Main game economy only** — does not simulate mini-games.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`). Main game economy only.
 - `npm run index` — Regenerate `docs/MODULE_INDEX.md` (shared module export inventory)
-- `npx prisma db seed` — Seed database
+- `npx prisma db seed` — Seed database (600 systems default)
+- `UNIVERSE_SCALE=10k npx prisma db seed` — Seed at 10K scale (10,000 systems, 25K map). Run dev server with matching env: `UNIVERSE_SCALE=10k npm run dev`
 - `npx prisma db push` — Push schema changes to SQLite
 
 ## Tech Stack

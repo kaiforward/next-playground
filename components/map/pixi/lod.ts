@@ -70,9 +70,9 @@ export function computeLOD(zoom: number): LODState {
     // System dots always visible
     showSystemDots: true,
 
-    // System names fade in 0.35–0.45
-    showSystemNames: zoom > 0.35,
-    systemNameAlpha: smoothStep(0.35, 0.45, zoom),
+    // System names fade in 0.45–0.55 (after crossfade completes at 0.4)
+    showSystemNames: zoom > 0.45,
+    systemNameAlpha: smoothStep(0.45, 0.55, zoom),
 
     // Economy/ship/fuel labels fade in 0.6–0.7
     showEconomyLabels: zoom > 0.6,
@@ -80,9 +80,9 @@ export function computeLOD(zoom: number): LODState {
     showFuelLabels: zoom > 0.6,
     detailAlpha: smoothStep(0.6, 0.7, zoom),
 
-    // Event dots fade in 0.4–0.5
-    showEventDots: zoom > 0.4,
-    eventDotAlpha: smoothStep(0.4, 0.5, zoom),
+    // Event dots fade in 0.5–0.6 (after names settle)
+    showEventDots: zoom > 0.5,
+    eventDotAlpha: smoothStep(0.5, 0.6, zoom),
 
     // Territories visible in universe/crossfade, fade out in system view
     showTerritories: zoom < 0.5,
@@ -98,7 +98,7 @@ export function computeLOD(zoom: number): LODState {
     // Glow effects only at medium+ zoom
     showGlow: zoom > 0.45,
 
-    // Effects (particles, pulse rings) only when zoomed in enough to see
-    showEffects: zoom > 0.6,
+    // Effects (particles, pulse rings) visible alongside names
+    showEffects: zoom > 0.45,
   };
 }
