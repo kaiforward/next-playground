@@ -44,6 +44,9 @@ next-env.d.ts
 
 # local database files
 *.db
+*.db-journal
+*.db-shm
+*.db-wal
 
 # experiment results (auto-saved by simulate --config)
 /experiments
