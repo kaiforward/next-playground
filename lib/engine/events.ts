@@ -315,7 +315,9 @@ export function selectEventToSpawn(
  * Select up to `batchSize` events to spawn in a single tick.
  *
  * Iteratively picks weighted-random candidates, updating running type/system
- * counts between picks so caps are respected within the batch.
+ * counts between picks so caps are respected within the batch. Cooldown tracking
+ * uses `systemTypeLastEnd` to prevent the same event type re-spawning on a system
+ * too soon after expiry.
  */
 export function selectEventsToSpawn(
   definitions: Record<string, EventDefinition>,

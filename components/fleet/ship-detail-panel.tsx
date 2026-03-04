@@ -144,7 +144,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
             </div>
             {isDocked && !ship.disabled && (
               <Button
-                href={`/system/${ship.systemId}/shipyard/upgrades`}
+                href={`/system/${ship.systemId}/shipyard`}
                 variant="ghost"
                 size="sm"
               >

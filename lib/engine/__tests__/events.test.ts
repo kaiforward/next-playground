@@ -670,7 +670,7 @@ describe("evaluateSpreadTargets", () => {
 
 describe("selectEventsToSpawn", () => {
   const defs: Record<string, EventDefinition> = {
-    war: makeDefinition(),
+    war: makeDefinition({ maxActive: 200 }),
   };
 
   const systems: SystemSnapshot[] = [
@@ -700,10 +700,13 @@ describe("selectEventsToSpawn", () => {
 
   it("respects per-type cap across batch", () => {
     // maxActive for war is 5, start with 3 active → can only add 2
+    const typeDefs: Record<string, EventDefinition> = {
+      war: makeDefinition({ maxActive: 5 }),
+    };
     const events = Array.from({ length: 3 }, (_, i) =>
       makeSnapshot({ id: `evt-${i}`, type: "war", systemId: `sys-other-${i}` }),
     );
-    const results = selectEventsToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5, 10);
+    const results = selectEventsToSpawn(typeDefs, events, systems, 100, defaultCapsSpawn, () => 0.5, 10);
     expect(results.length).toBe(2); // 5 - 3 = 2 more war events possible
   });
 

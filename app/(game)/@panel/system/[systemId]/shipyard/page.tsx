@@ -8,6 +8,7 @@ import type { UpgradeSlotState } from "@/lib/types/game";
 import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { TabList, Tab } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ShipyardPanel } from "@/components/shipyard/shipyard-panel";
 import { useDialog } from "@/components/ui/dialog";
 import { UpgradeInstallDialog } from "@/components/fleet/upgrade-install-dialog";
@@ -67,12 +68,10 @@ function UpgradesContent({ systemId }: { systemId: string }) {
 
   if (eligibleShips.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-text-muted text-sm">No eligible ships at this system.</p>
-        <p className="text-white/20 text-xs mt-1">
-          Ships must be docked and not disabled to install upgrades.
-        </p>
-      </div>
+      <EmptyState
+        message="No eligible ships at this system. Ships must be docked and not disabled to install upgrades."
+        className="py-12"
+      />
     );
   }
 

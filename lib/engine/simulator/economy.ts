@@ -21,7 +21,7 @@ import {
   buildModifiersForPhase,
   buildShocksForPhase,
   evaluateSpreadTargets,
-  selectEventToSpawn,
+  selectEventsToSpawn,
   rollPhaseDuration,
   aggregateModifiers,
   type EventSnapshot,
@@ -346,16 +346,17 @@ function processSimEvents(world: SimWorld, rng: RNG, ctx: SimRunContext): SimWor
       regionId: s.regionId,
     }));
 
-    const decision = selectEventToSpawn(
+    const decisions = selectEventsToSpawn(
       EVENT_DEFINITIONS,
       currentSnapshots,
       systemSnapshots,
       world.tick,
       { maxEventsGlobal: constants.events.maxGlobal, maxEventsPerSystem: constants.events.maxPerSystem },
       rng,
+      constants.events.maxBatchSpawn,
     );
 
-    if (decision) {
+    for (const decision of decisions) {
       const eventId = `sim-${nextId++}`;
       events.push({
         id: eventId,

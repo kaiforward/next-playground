@@ -13,7 +13,6 @@ import {
   buildModifiersForPhase,
   buildShocksForPhase,
   evaluateSpreadTargets,
-  selectEventToSpawn,
   selectEventsToSpawn,
   rollPhaseDuration,
   type EventSnapshot,
