@@ -73,8 +73,14 @@ export const EVENT_SPAWN_INTERVAL = 5;
 /** Max concurrent events at a single system. */
 export const MAX_EVENTS_PER_SYSTEM = 3;
 
-/** Max concurrent events globally. */
+/**
+ * Base max concurrent events globally (for 600 systems).
+ * Actual cap is derived at runtime: TOTAL_SYSTEMS * EVENT_COVERAGE_TARGET.
+ */
 export const MAX_EVENTS_GLOBAL = 150;
+
+/** Target fraction of systems with active events. Used to scale caps by universe size. */
+export const EVENT_COVERAGE_TARGET = 0.25;
 
 /** Safety caps for aggregated modifier values. */
 export const MODIFIER_CAPS = {
@@ -494,3 +500,36 @@ export const EVENT_DEFINITIONS: Record<EventTypeId, EventDefinition> = EVENT_DEF
 
 /** All event type IDs as a typed array. Use instead of Object.keys(EVENT_DEFINITIONS). */
 export const EVENT_TYPE_IDS: EventTypeId[] = Object.keys(EVENT_DEFINITIONS_INTERNAL) as Array<keyof typeof EVENT_DEFINITIONS_INTERNAL>;
+
+// ── Scale-aware caps ────────────────────────────────────────────
+
+const BASE_SYSTEMS = 600;
+
+interface ScaledEventCaps {
+  maxEventsGlobal: number;
+  maxEventsPerSystem: number;
+  definitions: Record<EventTypeId, EventDefinition>;
+}
+
+/**
+ * Scale event caps and per-type maxActive for a given universe size.
+ * Base values are tuned for 600 systems; this multiplies proportionally.
+ */
+export function scaleEventCaps(totalSystems: number): ScaledEventCaps {
+  const scale = totalSystems / BASE_SYSTEMS;
+  const maxEventsGlobal = Math.round(totalSystems * EVENT_COVERAGE_TARGET);
+
+  const definitions: Record<string, EventDefinition> = {};
+  for (const [key, def] of Object.entries(EVENT_DEFINITIONS)) {
+    definitions[key] = {
+      ...def,
+      maxActive: Math.max(2, Math.round(def.maxActive * scale)),
+    };
+  }
+
+  return {
+    maxEventsGlobal,
+    maxEventsPerSystem: MAX_EVENTS_PER_SYSTEM,
+    definitions: definitions as Record<EventTypeId, EventDefinition>,
+  };
+}

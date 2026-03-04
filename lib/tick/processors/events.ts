@@ -1,11 +1,10 @@
 import type { TickProcessor, TickProcessorResult, EventNotificationPayload } from "../types";
 import type { TxClient } from "../types";
 import {
-  EVENT_DEFINITIONS,
   EVENT_SPAWN_INTERVAL,
-  MAX_EVENTS_GLOBAL,
-  MAX_EVENTS_PER_SYSTEM,
+  scaleEventCaps,
 } from "@/lib/constants/events";
+import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import type { SpawnDecision } from "@/lib/engine/events";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import {
@@ -21,6 +20,9 @@ import {
   type NeighborSnapshot,
 } from "@/lib/engine/events";
 import { toEventTypeId } from "@/lib/types/guards";
+
+const { maxEventsGlobal, maxEventsPerSystem, definitions: SCALED_DEFINITIONS } =
+  scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -95,7 +97,7 @@ async function createSpreadEvent(
   sourceEventId: string,
   tick: number,
 ): Promise<void> {
-  const def = EVENT_DEFINITIONS[decision.type]!;
+  const def = SCALED_DEFINITIONS[decision.type]!;
   const firstPhase = def.phases[0];
 
   const newEvent = await tx.gameEvent.create({
@@ -170,7 +172,7 @@ export const eventsProcessor: TickProcessor = {
     const expiredIds: string[] = [];
 
     for (const snap of snapshots) {
-      const def = EVENT_DEFINITIONS[snap.type];
+      const def = SCALED_DEFINITIONS[snap.type];
       if (!def) {
         expiredIds.push(snap.id);
         continue;
@@ -277,13 +279,13 @@ export const eventsProcessor: TickProcessor = {
             snap,
             neighbors,
             currentSnapshots,
-            { maxEventsGlobal: MAX_EVENTS_GLOBAL, maxEventsPerSystem: MAX_EVENTS_PER_SYSTEM },
-            EVENT_DEFINITIONS,
+            { maxEventsGlobal, maxEventsPerSystem },
+            SCALED_DEFINITIONS,
             Math.random,
           );
 
           for (const decision of spreadDecisions) {
-            const childDef = EVENT_DEFINITIONS[decision.type]!;
+            const childDef = SCALED_DEFINITIONS[decision.type]!;
             const childPhase = childDef.phases[0];
             await createSpreadEvent(ctx.tx, decision, snap.id, ctx.tick);
             const childSysName = neighborNameMap.get(decision.systemId) ?? "Unknown";
@@ -344,16 +346,16 @@ export const eventsProcessor: TickProcessor = {
       }));
 
       const decisions = selectEventsToSpawn(
-        EVENT_DEFINITIONS,
+        SCALED_DEFINITIONS,
         currentSnapshots,
         systemSnapshots,
         ctx.tick,
-        { maxEventsGlobal: MAX_EVENTS_GLOBAL, maxEventsPerSystem: MAX_EVENTS_PER_SYSTEM },
+        { maxEventsGlobal, maxEventsPerSystem },
         Math.random,
       );
 
       for (const decision of decisions) {
-        const def = EVENT_DEFINITIONS[decision.type]!;
+        const def = SCALED_DEFINITIONS[decision.type]!;
         const firstPhase = def.phases[0];
 
         // Create the event

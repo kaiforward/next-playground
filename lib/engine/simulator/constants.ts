@@ -8,9 +8,8 @@ import { GOODS } from "@/lib/constants/goods";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
 import {
   EVENT_SPAWN_INTERVAL,
-  MAX_EVENTS_PER_SYSTEM,
-  MAX_EVENTS_GLOBAL,
   MODIFIER_CAPS,
+  scaleEventCaps,
 } from "@/lib/constants/events";
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
@@ -152,13 +151,16 @@ function buildDefaults(): SimConstants {
     fuel: {
       refuelCostPerUnit: REFUEL_COST_PER_UNIT,
     },
-    events: {
-      spawnInterval: EVENT_SPAWN_INTERVAL,
-      maxPerSystem: MAX_EVENTS_PER_SYSTEM,
-      maxGlobal: MAX_EVENTS_GLOBAL,
-      maxBatchSpawn: 10,
-      modifierCaps: { ...MODIFIER_CAPS },
-    },
+    events: (() => {
+      const scaled = scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
+      return {
+        spawnInterval: EVENT_SPAWN_INTERVAL,
+        maxPerSystem: scaled.maxEventsPerSystem,
+        maxGlobal: scaled.maxEventsGlobal,
+        maxBatchSpawn: 10,
+        modifierCaps: { ...MODIFIER_CAPS },
+      };
+    })(),
     ships,
     universe: {
       regionCount: UNIVERSE_GEN.REGION_COUNT,

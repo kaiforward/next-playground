@@ -4,7 +4,8 @@
  */
 
 import { simulateEconomyTick, type MarketTickEntry, type EconomySimParams } from "@/lib/engine/tick";
-import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { scaleEventCaps } from "@/lib/constants/events";
+import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
 import { computeTraitProductionBonus, computeTraitDanger } from "@/lib/engine/trait-gen";
@@ -38,6 +39,9 @@ import type {
   SimRunContext,
   InjectionTarget,
 } from "./types";
+
+const SCALED = scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
+const EVENT_DEFINITIONS = SCALED.definitions;
 
 /**
  * Build EconomySimParams from resolved constants.
