@@ -206,7 +206,8 @@ After cargo processing, the ship may take structural damage:
 |---|---|
 | Government baseline | 0-10% (Frontier highest) |
 | Event modifiers | 0-25% (Solar Storm highest) |
-| Combined max | 50% (hard cap) |
+| Trait danger (`computeTraitDanger`) | -3% to +8% per trait. Positive: dark_nebula (+6%), subspace_rift (+8%), pirate_stronghold (+8%), volcanic_world (+5%), ancient_minefield (+5%), ion_storm_corridor (+4%), radioactive_deposits (+4%), solar_flare_activity (+3%), binary_star (+3%). Negative: habitable_world (-3%), lagrange_stations (-3%). Sums across all system traits |
+| Combined max | 50% (hard cap, clamped to [0, 0.5]) |
 
 ---
 

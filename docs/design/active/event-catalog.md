@@ -49,7 +49,7 @@ Player opportunity: Sell luxuries and food at premium prices.
 
 ### Mining Boom
 
-Target: Extraction systems. Multi-phase arc with spread. Weight 8, cooldown 120.
+Target: Extraction systems. Multi-phase arc with spread. Weight 10, cooldown 100.
 
 | Phase | Duration | Economy Modifiers | Spread |
 |-------|----------|-------------------|--------|
@@ -62,7 +62,7 @@ Player opportunity: Buy cheap ore during boom, sell to industrial systems. Sell 
 
 ### Supply Shortage
 
-Target: Any system. Single-phase shock event. Weight 10, cooldown 60.
+Target: Any system. Single-phase shock event. Weight 8, cooldown 80.
 
 | Phase | Duration | Economy Modifiers |
 |-------|----------|-------------------|
