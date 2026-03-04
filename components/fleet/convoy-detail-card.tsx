@@ -7,6 +7,7 @@ import { computeConvoyRepairPlan } from "@/lib/engine/convoy-repair";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { MapPinIcon } from "@/components/ui/icons";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Disclosure } from "@/components/ui/disclosure";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -92,15 +93,16 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
           </span>
         }
         action={
-          variant === "summary" ? (
-            <Button
-              href={`/convoy/${convoy.id}`}
-              variant="ghost"
-              size="xs"
-            >
-              Details &rarr;
+          <div className="flex items-center gap-2">
+            <Button href={`/?systemId=${convoy.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
+              <MapPinIcon />
             </Button>
-          ) : undefined
+            {variant === "summary" && (
+              <Button href={`/convoy/${convoy.id}`} variant="ghost" size="xs">
+                Details &rarr;
+              </Button>
+            )}
+          </div>
         }
       />
       <CardContent className="space-y-4">

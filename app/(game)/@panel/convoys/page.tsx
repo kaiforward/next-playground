@@ -2,8 +2,9 @@
 
 import { useMemo } from "react";
 import { useConvoys } from "@/lib/hooks/use-convoy";
+import { useFleet } from "@/lib/hooks/use-fleet";
 import { withCounts } from "@/lib/utils/filter";
-import { ConvoyStatus } from "@/components/fleet/convoy-status";
+import { ConvoyDetailCard } from "@/components/fleet/convoy-detail-card";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -40,6 +41,7 @@ function sortConvoys(convoys: ConvoyState[], sortBy: string): ConvoyState[] {
 
 function ConvoysContent() {
   const { convoys } = useConvoys();
+  const { fleet } = useFleet();
   const { activeChips, toggleChip, searchValue, setSearchValue, activeSort, setActiveSort } =
     useFilterState({ defaultSort: "name" });
 
@@ -86,7 +88,17 @@ function ConvoysContent() {
           className="py-16"
         />
       ) : (
-        <ConvoyStatus convoys={filtered} />
+        <div className="space-y-4">
+          {filtered.map((convoy) => (
+            <ConvoyDetailCard
+              key={convoy.id}
+              convoy={convoy}
+              playerCredits={fleet.credits}
+              ships={fleet.ships}
+              variant="summary"
+            />
+          ))}
+        </div>
       )}
     </>
   );
@@ -94,7 +106,7 @@ function ConvoysContent() {
 
 export default function ConvoysPanelPage() {
   return (
-    <DetailPanel title="Convoys">
+    <DetailPanel title="Convoys" size="lg">
       <QueryBoundary>
         <ConvoysContent />
       </QueryBoundary>

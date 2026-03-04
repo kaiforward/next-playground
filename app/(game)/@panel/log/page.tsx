@@ -60,7 +60,7 @@ export default function LogPanelPage() {
     });
 
   return (
-    <DetailPanel title="Captain's Log" size="md">
+    <DetailPanel title="Captain's Log" size="lg">
       <FilterBar
         chips={FILTER_CHIPS}
         activeChips={activeChips}

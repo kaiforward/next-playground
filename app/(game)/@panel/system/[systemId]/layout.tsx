@@ -77,7 +77,7 @@ function SystemPanelContent({
       title={systemInfo?.name ?? "System"}
       subtitle={subtitle}
       headerAction={showOnMapButton}
-      size="lg"
+      size="xl"
     >
       {/* Tab bar */}
       <TabList className="mb-6">

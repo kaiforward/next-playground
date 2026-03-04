@@ -7,6 +7,7 @@ import { ConvoyDetailCard } from "@/components/fleet/convoy-detail-card";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { MapPinIcon } from "@/components/ui/icons";
 
 function ConvoyPanelContent({ convoyId }: { convoyId: string }) {
   const { fleet } = useFleet();
@@ -16,7 +17,7 @@ function ConvoyPanelContent({ convoyId }: { convoyId: string }) {
 
   if (!convoy) {
     return (
-      <DetailPanel title="Convoy Not Found">
+      <DetailPanel title="Convoy Not Found" size="lg">
         <p className="text-white/60 mb-4">
           This convoy does not exist or has been disbanded.
         </p>
@@ -28,7 +29,17 @@ function ConvoyPanelContent({ convoyId }: { convoyId: string }) {
   }
 
   return (
-    <DetailPanel title={convoy.name ?? "Convoy"} subtitle={convoy.system.name}>
+    <DetailPanel
+      title={convoy.name ?? "Convoy"}
+      subtitle={convoy.system.name}
+      size="lg"
+      headerAction={
+        <Button variant="ghost" size="xs" href={`/?systemId=${convoy.systemId}`} aria-label="Show on map">
+          <MapPinIcon />
+          <span className="ml-1">Show on Map</span>
+        </Button>
+      }
+    >
       <ConvoyDetailCard
         convoy={convoy}
         playerCredits={fleet.credits}

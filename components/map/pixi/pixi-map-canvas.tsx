@@ -10,6 +10,7 @@ import { PointCloudLayer } from "./layers/point-cloud-layer";
 import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
 import { TerritoryLayer } from "./layers/territory-layer";
+import { VisibilityHullLayer } from "./layers/visibility-hull-layer";
 import { EffectLayer } from "./layers/effect-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
@@ -42,6 +43,7 @@ interface PixiRefs {
   systemLayer: SystemLayer;
   connectionLayer: ConnectionLayer;
   territoryLayer: TerritoryLayer;
+  visibilityHullLayer: VisibilityHullLayer;
   effectLayer: EffectLayer;
 }
 
@@ -139,6 +141,9 @@ export function PixiMapCanvas({
       const territoryLayer = new TerritoryLayer();
       world.addChild(territoryLayer.container);
 
+      const visibilityHullLayer = new VisibilityHullLayer();
+      world.addChild(visibilityHullLayer.container);
+
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
 
@@ -203,6 +208,7 @@ export function PixiMapCanvas({
         connectionLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
 
         territoryLayer.updateVisibility(lod);
+        visibilityHullLayer.updateVisibility(lod);
 
         // Effect layer visibility based on LOD
         effectLayer.container.visible = lod.showEffects;
@@ -221,7 +227,8 @@ export function PixiMapCanvas({
       // Store refs and signal ready
       pixiRef.current = {
         app, camera, frustum, world, starfield,
-        pointCloudLayer, systemLayer, connectionLayer, territoryLayer, effectLayer,
+        pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
+        visibilityHullLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -234,6 +241,7 @@ export function PixiMapCanvas({
         if (canvas) camera.detach(canvas);
         // Destroy point cloud first to free its standalone dotTexture
         pixiRef.current?.pointCloudLayer.destroy();
+        pixiRef.current?.visibilityHullLayer.destroy();
         app.destroy(true, { children: true });
       }
       pixiRef.current = null;
@@ -272,6 +280,17 @@ export function PixiMapCanvas({
       }
     }
     p.territoryLayer.setPlayerPresence(playerRegionIds);
+  }, [mapData.systems, pixiReady]);
+
+  // ── Sync fleet presence dots (systems with ships) ──────────────────
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+
+    const shipPositions = mapData.systems
+      .filter((s) => s.shipCount > 0)
+      .map((s) => ({ x: s.x, y: s.y }));
+    p.visibilityHullLayer.sync(shipPositions);
   }, [mapData.systems, pixiReady]);
 
   // ── Sync map data → system objects + connections ──────────────────

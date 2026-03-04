@@ -12,6 +12,7 @@ import { BattleViewer } from "@/components/fleet/battle-viewer";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { MapPinIcon } from "@/components/ui/icons";
 
 function ShipPanelContent({ shipId }: { shipId: string }) {
   const { fleet } = useFleet();
@@ -28,7 +29,7 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
 
   if (!ship) {
     return (
-      <DetailPanel title="Ship Not Found">
+      <DetailPanel title="Ship Not Found" size="lg">
         <p className="text-white/60 mb-4">This ship does not exist or does not belong to you.</p>
         <Button href="/" variant="ghost" size="sm">
           Back to Star Map
@@ -42,7 +43,17 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
   );
 
   return (
-    <DetailPanel title={ship.name} subtitle={`${ship.role} — ${ship.system.name}`}>
+    <DetailPanel
+      title={ship.name}
+      subtitle={`${ship.role} — ${ship.system.name}`}
+      size="lg"
+      headerAction={
+        <Button variant="ghost" size="xs" href={`/?systemId=${ship.systemId}`} aria-label="Show on map">
+          <MapPinIcon />
+          <span className="ml-1">Show on Map</span>
+        </Button>
+      }
+    >
       {shipBattle && (
         <div className="mb-6">
           <BattleViewer battle={shipBattle} />

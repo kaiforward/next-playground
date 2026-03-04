@@ -41,6 +41,10 @@ export interface LODState {
   showGlow: boolean;
   /** Whether to show effect layer (particles, pulse rings) */
   showEffects: boolean;
+  /** Whether to show visibility hull outline */
+  showVisibilityCloud: boolean;
+  /** Alpha for visibility hull */
+  visibilityCloudAlpha: number;
 }
 
 /** Cubic smoothstep: 0 at edge0, 1 at edge1 with smooth acceleration/deceleration */
@@ -100,5 +104,9 @@ export function computeLOD(zoom: number): LODState {
 
     // Effects (particles, pulse rings) visible alongside names
     showEffects: zoom > 0.45,
+
+    // Visibility hull visible at low zoom, fades with territories
+    showVisibilityCloud: zoom < 0.5,
+    visibilityCloudAlpha: 1 - smoothStep(0.3, 0.5, zoom),
   };
 }
