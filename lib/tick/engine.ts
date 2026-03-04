@@ -199,10 +199,10 @@ class TickEngine {
   }
 
   private async tick() {
-    if (this.workerBusy || !this.worker) return;
+    const worker = this.worker;
+    if (this.workerBusy || !worker) return;
 
     try {
-      // Read game world on main thread (fast, WAL mode — doesn't block)
       const world = await prisma.gameWorld.findUnique({
         where: { id: "world" },
       });
@@ -211,6 +211,9 @@ class TickEngine {
 
       const elapsed = Date.now() - world.lastTickAt.getTime();
       if (elapsed < world.tickRate) return;
+
+      // Re-check after await — worker may have exited while we read DB
+      if (!this.running || this.worker !== worker) return;
 
       const newTick = world.currentTick + 1;
       this.tickStart = performance.now();
@@ -221,7 +224,7 @@ class TickEngine {
         tick: newTick,
         previousTick: world.currentTick,
       };
-      this.worker.postMessage(msg);
+      worker.postMessage(msg);
     } catch (error) {
       console.error("[TickEngine] Error:", error);
     }

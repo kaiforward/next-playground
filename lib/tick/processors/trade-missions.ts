@@ -4,7 +4,6 @@ import type {
   PlayerEventMap,
 } from "../types";
 import { persistPlayerNotifications, addPlayerNotification } from "../helpers";
-import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import {
   selectEconomyCandidates,
   selectEventCandidates,
@@ -14,10 +13,7 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { EVENT_MISSION_GOODS } from "@/lib/constants/events";
 import { GOOD_NAME_TO_KEY, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
-
-// Connections are static (set at seed time), so hop distances are computed once
-// and cached for the lifetime of the process.
-let cachedHopDistances: Map<string, Map<string, number>> | null = null;
+import { loadHopDistances } from "@/lib/services/hop-distances";
 
 export const tradeMissionsProcessor: TickProcessor = {
   name: "trade-missions",
@@ -68,20 +64,8 @@ export const tradeMissionsProcessor: TickProcessor = {
       }
     }
 
-    // 2. Build or reuse cached hop distances (bounded to MAX_EXPORT_DISTANCE)
-    if (!cachedHopDistances) {
-      const connections = await ctx.tx.systemConnection.findMany({
-        select: { fromSystemId: true, toSystemId: true, fuelCost: true },
-      });
-      cachedHopDistances = computeBoundedHopDistances(
-        connections,
-        MISSION_CONSTANTS.MAX_EXPORT_DISTANCE,
-      );
-      console.log(
-        `[trade-missions] Cached hop distances (${cachedHopDistances.size} systems, max ${MISSION_CONSTANTS.MAX_EXPORT_DISTANCE} hops)`,
-      );
-    }
-    const hopDistances = cachedHopDistances;
+    // 2. Load cached hop distances (bounded to MAX_EXPORT_DISTANCE)
+    const hopDistances = await loadHopDistances();
 
     // 3. Fetch all markets with good data for price snapshots
     const markets = await ctx.tx.stationMarket.findMany({

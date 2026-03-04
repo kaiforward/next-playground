@@ -7,11 +7,9 @@ declare global {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({
-    connectionString:
-      process.env.DATABASE_URL ??
-      "postgresql://postgres:postgres@localhost:5432/stellar_trader",
-  });
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL environment variable is required");
+  const adapter = new PrismaPg({ connectionString: url });
   return new PrismaClient({ adapter });
 }
 

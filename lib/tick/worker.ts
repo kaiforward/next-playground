@@ -64,6 +64,10 @@ parentPort.on("message", async (msg: MainToWorker) => {
               `[Worker] Processor "${processor.name}" failed on tick ${msg.tick}:`,
               error,
             );
+            // Re-throw to abort the transaction — PostgreSQL invalidates
+            // the connection after any query error, so continuing would
+            // cascade failures while the tick counter has already advanced.
+            throw error;
           }
         }
 

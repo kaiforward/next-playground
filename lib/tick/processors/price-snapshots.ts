@@ -58,7 +58,8 @@ export const priceSnapshotsProcessor: TickProcessor = {
       await ctx.tx.$executeRawUnsafe(
         `UPDATE "PriceHistory" AS ph
          SET "entries" = batch."entries"
-         FROM (SELECT unnest($1::text[]) AS "id", unnest($2::text[]) AS "entries") AS batch
+         FROM unnest($1::text[], $2::text[])
+           AS batch("id", "entries")
          WHERE ph."id" = batch."id"`,
         ids,
         entriesArr,

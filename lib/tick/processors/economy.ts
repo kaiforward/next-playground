@@ -33,17 +33,14 @@ async function batchUpdateMarkets(
   if (updates.length === 0) return;
 
   const ids = updates.map((u) => u.id);
-  const supplies = updates.map((u) => u.supply);
-  const demands = updates.map((u) => u.demand);
+  const supplies = updates.map((u) => isFinite(u.supply) ? u.supply : 0);
+  const demands = updates.map((u) => isFinite(u.demand) ? u.demand : 0);
 
   await tx.$executeRawUnsafe(
     `UPDATE "StationMarket" AS sm
      SET "supply" = batch."supply", "demand" = batch."demand"
-     FROM (
-       SELECT unnest($1::text[]) AS "id",
-              unnest($2::double precision[]) AS "supply",
-              unnest($3::double precision[]) AS "demand"
-     ) AS batch
+     FROM unnest($1::text[], $2::double precision[], $3::double precision[])
+       AS batch("id", "supply", "demand")
      WHERE sm."id" = batch."id"`,
     ids,
     supplies,

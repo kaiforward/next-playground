@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
 
-import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { getGameWorld } from "@/lib/services/world";
+import { loadHopDistances } from "@/lib/services/hop-distances";
 import type { TradeMissionInfo } from "@/lib/types/game";
 import type {
   SystemMissionsData,
@@ -13,24 +13,6 @@ import type {
 } from "@/lib/types/api";
 
 // ── Shared helpers ──────────────────────────────────────────────
-
-// Connections are static (set at seed time), so hop distances are computed once
-// and cached for the lifetime of the server process.
-let cachedHopDistances: Map<string, Map<string, number>> | null = null;
-
-/** Load or return cached bounded hop distances. */
-async function loadHopDistances(): Promise<Map<string, Map<string, number>>> {
-  if (!cachedHopDistances) {
-    const connections = await prisma.systemConnection.findMany({
-      select: { fromSystemId: true, toSystemId: true, fuelCost: true },
-    });
-    cachedHopDistances = computeBoundedHopDistances(
-      connections,
-      MISSION_CONSTANTS.MAX_EXPORT_DISTANCE,
-    );
-  }
-  return cachedHopDistances;
-}
 
 type MissionRow = {
   id: string;
@@ -336,9 +318,10 @@ export async function deliverMission(
 
   // Transaction: TOCTOU guard — re-read mission, cargo, and market inside transaction
   const txResult = await prisma.$transaction(async (tx) => {
-    // Re-read mission state (ownership + deadline)
+    // Re-read mission state (ownership + deadline) with relations for serialization
     const freshMission = await tx.tradeMission.findUnique({
       where: { id: missionId },
+      include: missionInclude,
     });
     if (!freshMission || freshMission.playerId !== playerId) {
       throw new Error("MISSION_OWNERSHIP_CHANGED");
@@ -416,7 +399,7 @@ export async function deliverMission(
     // Delete the mission
     await tx.tradeMission.delete({ where: { id: missionId } });
 
-    return { newBalance: updatedPlayer.credits, goodsValue, totalCredit };
+    return { newBalance: updatedPlayer.credits, goodsValue, totalCredit, freshMission };
   }).catch((error) => {
     if (error instanceof Error) {
       if (error.message === "MISSION_OWNERSHIP_CHANGED") return "OWNERSHIP_CHANGED" as const;
@@ -441,14 +424,14 @@ export async function deliverMission(
   }
 
   const hopDistances = await loadHopDistances();
-  const priceLookup = await buildPriceLookup([mission]);
+  const priceLookup = await buildPriceLookup([txResult.freshMission]);
 
   return {
     ok: true,
     data: {
-      mission: serializeMission(mission, tick, hopDistances, priceLookup),
+      mission: serializeMission(txResult.freshMission, tick, hopDistances, priceLookup),
       goodsValue: txResult.goodsValue,
-      reward: mission.reward,
+      reward: txResult.freshMission.reward,
       creditEarned: txResult.totalCredit,
       newBalance: txResult.newBalance,
     },
