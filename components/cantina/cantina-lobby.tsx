@@ -8,6 +8,7 @@ import {
   NPC_DIFFICULTY,
   NPC_WAGER_LIMITS,
 } from "@/lib/engine/mini-games/voids-gambit";
+import { NPC_ARCHETYPES, ARCHETYPE_DISPLAY } from "@/lib/constants/cantina-npcs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,21 +27,6 @@ const opponentCardVariants = tv({
   },
   defaultVariants: { selected: false },
 });
-
-// ── Archetype display config ─────────────────────────────────────
-
-interface ArchetypeInfo {
-  key: NpcArchetype;
-  label: string;
-  badgeColor: "green" | "amber" | "purple" | "red";
-}
-
-const ARCHETYPES: ArchetypeInfo[] = [
-  { key: "cautious_trader", label: "Cautious Trader", badgeColor: "green" },
-  { key: "frontier_gambler", label: "Frontier Gambler", badgeColor: "amber" },
-  { key: "sharp_smuggler", label: "Sharp Smuggler", badgeColor: "purple" },
-  { key: "station_regular", label: "Station Regular", badgeColor: "red" },
-];
 
 // ── Component ────────────────────────────────────────────────────
 
@@ -101,7 +87,8 @@ export function CantinaLobby({
 
       {/* Opponent grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {ARCHETYPES.map(({ key, label, badgeColor }) => {
+        {NPC_ARCHETYPES.map((key) => {
+          const display = ARCHETYPE_DISPLAY[key];
           const isSelected = selected === key;
           const difficulty = NPC_DIFFICULTY[key];
           const wagerLimits = NPC_WAGER_LIMITS[key];
@@ -120,10 +107,10 @@ export function CantinaLobby({
               >
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="text-lg font-semibold text-text-primary">
-                    {label}
+                    {display.label}
                   </h3>
-                  <Badge color={badgeColor}>
-                    {label.split(" ")[0]}
+                  <Badge color={display.badgeColor}>
+                    {display.label.split(" ")[0]}
                   </Badge>
                 </div>
                 <DifficultyDots level={difficulty} showLabel />

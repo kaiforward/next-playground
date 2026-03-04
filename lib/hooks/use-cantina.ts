@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { apiFetch, apiMutate } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
-import type { BartenderData, PatronData, NpcVisitResult, WagerResult } from "@/lib/types/cantina";
+import type { BartenderData, PatronData, NpcVisitResult, NpcVisitCounts, WagerResult } from "@/lib/types/cantina";
 import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
 
 // ── Bartender tips ──────────────────────────────────────────────
@@ -30,6 +30,16 @@ export function usePatronRumors(systemId: string) {
   return data;
 }
 
+// ── NPC visit counts ─────────────────────────────────────────────
+
+export function useNpcVisitCounts(systemId: string) {
+  const { data } = useSuspenseQuery({
+    queryKey: queryKeys.cantinaNpcVisits(systemId),
+    queryFn: () => apiFetch<NpcVisitCounts>(`/api/game/cantina/${systemId}/visits`),
+  });
+  return data;
+}
+
 // ── NPC visit mutation ──────────────────────────────────────────
 
 export function useNpcVisitMutation(systemId: string) {
@@ -43,6 +53,9 @@ export function useNpcVisitMutation(systemId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.cantinaTips(systemId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.cantinaNpcVisits(systemId),
       });
     },
   });

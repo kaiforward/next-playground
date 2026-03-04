@@ -5,18 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { NpcArchetype } from "@/lib/engine/mini-games/voids-gambit";
 import { NPC_FLAVOR } from "@/lib/engine/mini-games/voids-gambit";
+import { ARCHETYPE_DISPLAY } from "@/lib/constants/cantina-npcs";
 import type { PatronRumor } from "@/lib/engine/cantina/rumors";
-import type { BadgeColor } from "@/components/ui/badge";
-
-const ARCHETYPE_DISPLAY: Record<
-  NpcArchetype,
-  { label: string; icon: string; badgeColor: BadgeColor }
-> = {
-  cautious_trader: { label: "Cautious Trader", icon: "\uD83E\uDDD1\u200D\uD83D\uDCBC", badgeColor: "green" },
-  frontier_gambler: { label: "Frontier Gambler", icon: "\uD83C\uDFB2", badgeColor: "amber" },
-  sharp_smuggler: { label: "Sharp Smuggler", icon: "\uD83D\uDD75\uFE0F", badgeColor: "purple" },
-  station_regular: { label: "Station Regular", icon: "\uD83C\uDF7A", badgeColor: "red" },
-};
 
 interface PatronCardProps {
   archetype: NpcArchetype;

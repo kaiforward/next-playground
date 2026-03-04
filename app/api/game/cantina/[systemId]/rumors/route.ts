@@ -5,16 +5,12 @@ import { getPatronRumors } from "@/lib/services/cantina";
 import type { ApiResponse } from "@/lib/types/api";
 import type { PatronData } from "@/lib/types/cantina";
 
-export function GET(
-  _request: Request,
-  { params }: { params: Promise<{ systemId: string }> },
-) {
+export function GET(_request: Request) {
   return withServiceErrors("GET /api/game/cantina/[systemId]/rumors", async () => {
-    const { systemId } = await params;
     const auth = await requirePlayer();
     if (isErrorResponse(auth)) return auth;
 
-    const data = await getPatronRumors(auth.playerId, systemId);
+    const data = await getPatronRumors(auth.playerId);
     return NextResponse.json<ApiResponse<PatronData>>(
       { data },
       { headers: { "Cache-Control": "private, no-store" } },

@@ -13,6 +13,7 @@ import { generateRumors } from "@/lib/engine/cantina/rumors";
 import { getGreeting } from "@/lib/engine/cantina/greetings";
 import type { MarketEntry } from "@/lib/types/game";
 import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
+import { isCantinaNpcType } from "@/lib/types/guards";
 import type {
   BartenderData,
   PatronData,
@@ -28,9 +29,9 @@ export async function getBartenderTips(
   playerId: string,
   systemId: string,
 ): Promise<BartenderData> {
-  // Record the visit and get count
-  const { visits } = await recordNpcVisit(playerId, "bartender", systemId);
-  const greeting = getGreeting("bartender", visits - 1); // visits already incremented
+  // Read visit count — visits are recorded via POST /visit, not here
+  const visits = await getNpcVisits(playerId, "bartender", systemId);
+  const greeting = getGreeting("bartender", visits);
 
   // Get local market
   const { entries: localEntries } = await getMarket(systemId);
@@ -110,16 +111,11 @@ export async function getBartenderTips(
 
 export async function getPatronRumors(
   playerId: string,
-  systemId: string,
 ): Promise<PatronData> {
   const events = await getActiveEvents(playerId);
   const rumors = generateRumors(events);
 
-  // Don't record a visit here — visits are tracked per-patron when the player clicks
-  const visit = await getNpcVisits(playerId, "bartender", systemId);
-  const greeting = ""; // Patron greetings handled client-side per archetype
-
-  return { greeting, rumors, visitCount: visit };
+  return { rumors };
 }
 
 // ── NPC visits ──────────────────────────────────────────────────
@@ -157,14 +153,16 @@ export async function getNpcVisits(
 export async function getSystemNpcVisits(
   playerId: string,
   systemId: string,
-): Promise<Record<string, number>> {
+): Promise<Partial<Record<CantinaNpcType, number>>> {
   const results = await prisma.npcVisit.findMany({
     where: { playerId, systemId },
     select: { npcType: true, visits: true },
   });
-  const map: Record<string, number> = {};
+  const map: Partial<Record<CantinaNpcType, number>> = {};
   for (const r of results) {
-    map[r.npcType] = r.visits;
+    if (isCantinaNpcType(r.npcType)) {
+      map[r.npcType] = r.visits;
+    }
   }
   return map;
 }

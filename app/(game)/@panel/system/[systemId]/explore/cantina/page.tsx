@@ -1,14 +1,16 @@
 "use client";
 
-import { use, useState, useCallback, useRef } from "react";
+import { use, useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import type { NpcArchetype } from "@/lib/engine/mini-games/voids-gambit";
 import type { GameResult } from "@/lib/engine/mini-games/voids-gambit";
+import { NPC_ARCHETYPES } from "@/lib/constants/cantina-npcs";
 import { useVoidsGambit } from "@/lib/hooks/use-voids-gambit";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import {
   useBartenderTips,
   usePatronRumors,
+  useNpcVisitCounts,
   useNpcVisitMutation,
   useSettleWagerMutation,
 } from "@/lib/hooks/use-cantina";
@@ -17,16 +19,27 @@ import { BartenderPanel } from "@/components/cantina/bartender-panel";
 import { PatronCard } from "@/components/cantina/patron-card";
 import { CantinaLobby } from "@/components/cantina/cantina-lobby";
 import { GameTable } from "@/components/cantina/game-table";
+import { SectionHeader } from "@/components/ui/section-header";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
-// ── Patron archetypes to display ────────────────────────────────
+// ── Back nav button (shared style for in-page view changes) ─────
 
-const PATRON_ARCHETYPES: NpcArchetype[] = [
-  "cautious_trader",
-  "frontier_gambler",
-  "sharp_smuggler",
-  "station_regular",
-];
+function BackNav({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="text-xs text-text-faint hover:text-text-secondary transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
 
 // ── View states ─────────────────────────────────────────────────
 
@@ -43,8 +56,18 @@ function CantinaContent({ systemId }: { systemId: string }) {
   const { fleet } = useFleet();
   const bartender = useBartenderTips(systemId);
   const { rumors } = usePatronRumors(systemId);
+  const npcVisits = useNpcVisitCounts(systemId);
   const visitMutation = useNpcVisitMutation(systemId);
   const settleWager = useSettleWagerMutation();
+
+  // Record bartender visit once on mount
+  const bartenderVisitedRef = useRef(false);
+  useEffect(() => {
+    if (!bartenderVisitedRef.current) {
+      bartenderVisitedRef.current = true;
+      visitMutation.mutate("bartender");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track wager for settlement
   const currentWagerRef = useRef(0);
@@ -114,12 +137,9 @@ function CantinaContent({ systemId }: { systemId: string }) {
   if (view === "game" && vg.game && vg.npcIdentity) {
     return (
       <div className="space-y-4">
-        <button
-          onClick={handleReturnToLobby}
-          className="text-xs text-text-faint hover:text-text-secondary transition-colors"
-        >
+        <BackNav onClick={handleReturnToLobby}>
           &larr; Back to Cantina
-        </button>
+        </BackNav>
         <GameTable
           game={vg.game}
           npcIdentity={vg.npcIdentity}
@@ -139,15 +159,14 @@ function CantinaContent({ systemId }: { systemId: string }) {
   if (view === "lobby") {
     return (
       <div className="space-y-4">
-        <button
+        <BackNav
           onClick={() => {
             setView("npcs");
             setChallengedArchetype(null);
           }}
-          className="text-xs text-text-faint hover:text-text-secondary transition-colors"
         >
           &larr; Back to Cantina
-        </button>
+        </BackNav>
         <CantinaLobby
           onStart={handleStartGame}
           playerCredits={fleet.credits}
@@ -181,21 +200,17 @@ function CantinaContent({ systemId }: { systemId: string }) {
 
       {/* Bartender */}
       <section>
-        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
-          Bartender
-        </h3>
+        <SectionHeader className="mb-3">Bartender</SectionHeader>
         <BartenderPanel data={bartender} />
       </section>
 
       {/* Patrons */}
       <section>
-        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
-          Patrons
-        </h3>
+        <SectionHeader className="mb-3">Patrons</SectionHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {PATRON_ARCHETYPES.map((archetype, i) => {
-            const visitCount = bartender.visitCount; // Approximate from bartender visits
-            const greeting = getGreeting(archetype, visitCount > 0 ? 1 : 0);
+          {NPC_ARCHETYPES.map((archetype, i) => {
+            const visitCount = npcVisits[archetype] ?? 0;
+            const greeting = getGreeting(archetype, visitCount);
             const rumor = rumors[i] ?? null;
 
             return (

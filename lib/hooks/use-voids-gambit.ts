@@ -73,6 +73,7 @@ export function useVoidsGambit(
   const [npcIdentity, setNpcIdentity] = useState<NpcIdentity | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameCompleteCalledRef = useRef(false);
 
   // ── Actions ──────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ export function useVoidsGambit(
       const result = startGame(created);
       if (!result.ok) return;
 
+      gameCompleteCalledRef.current = false;
       setNpcIdentity(identity);
       setNpcDialogue(pickDialogue(archetype, "greeting"));
       setGame(result.state);
@@ -266,7 +268,10 @@ export function useVoidsGambit(
           setNpcDialogue(
             pickDialogue(game.config.npcArchetype, key),
           );
-          onGameCompleteRef.current?.(game.result);
+          if (!gameCompleteCalledRef.current) {
+            gameCompleteCalledRef.current = true;
+            onGameCompleteRef.current?.(game.result);
+          }
         }
         return;
       }

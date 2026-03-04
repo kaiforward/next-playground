@@ -17,6 +17,9 @@ export function POST(
   { params }: { params: Promise<{ systemId: string }> },
 ) {
   return withServiceErrors("POST /api/game/cantina/[systemId]/visit", async () => {
+    const auth = await requireMutationPlayer();
+    if (isErrorResponse(auth)) return auth;
+
     const { systemId } = await params;
     const body = await parseJsonBody<VisitRequest>(request);
     if (!body?.npcType) {
@@ -25,9 +28,6 @@ export function POST(
         { status: 400 },
       );
     }
-
-    const auth = await requireMutationPlayer();
-    if (isErrorResponse(auth)) return auth;
 
     const data = await recordNpcVisit(auth.playerId, body.npcType, systemId);
     return NextResponse.json<ApiResponse<NpcVisitResult>>({ data });

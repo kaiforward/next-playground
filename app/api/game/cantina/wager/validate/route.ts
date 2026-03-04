@@ -13,16 +13,16 @@ interface ValidateRequest {
 
 export function POST(request: NextRequest) {
   return withServiceErrors("POST /api/game/cantina/wager/validate", async () => {
+    const auth = await requirePlayer();
+    if (isErrorResponse(auth)) return auth;
+
     const body = await parseJsonBody<ValidateRequest>(request);
-    if (!body?.wager) {
+    if (!body || typeof body.wager !== "number" || !Number.isFinite(body.wager) || body.wager <= 0) {
       return NextResponse.json<ApiResponse<never>>(
-        { error: "Missing wager." },
+        { error: "Invalid wager." },
         { status: 400 },
       );
     }
-
-    const auth = await requirePlayer();
-    if (isErrorResponse(auth)) return auth;
 
     const data = await validateWager(auth.playerId, body.wager);
     return NextResponse.json<ApiResponse<WagerValidation>>({ data });

@@ -1,4 +1,5 @@
 import type { NpcArchetype } from "@/lib/engine/mini-games/voids-gambit";
+import type { EventTypeId } from "@/lib/constants/events";
 
 // ── NPC type union ──────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ export const NO_TIPS_LINES = [
 
 // ── Rumor message templates ─────────────────────────────────────
 
-export const RUMOR_TEMPLATES: Record<string, readonly string[]> = {
+export const RUMOR_TEMPLATES: Partial<Record<EventTypeId, readonly string[]>> = {
   war: [
     "There's fighting at {system}. War's bad for business, but good for arms dealers.",
     "Heard shots fired near {system}. People are getting nervous.",
@@ -156,6 +157,28 @@ export const RUMOR_TEMPLATES: Record<string, readonly string[]> = {
     "Bad solar weather near {system}. Ships are waiting it out.",
   ],
 };
+
+// ── Archetype display config ────────────────────────────────────
+
+/** Canonical list for iteration — matches the NpcArchetype union. */
+export const NPC_ARCHETYPES: readonly NpcArchetype[] = [
+  "cautious_trader",
+  "frontier_gambler",
+  "sharp_smuggler",
+  "station_regular",
+];
+
+export const ARCHETYPE_DISPLAY: Record<
+  NpcArchetype,
+  { label: string; icon: string; badgeColor: "green" | "amber" | "purple" | "red" }
+> = {
+  cautious_trader: { label: "Cautious Trader", icon: "\uD83E\uDDD1\u200D\uD83D\uDCBC", badgeColor: "green" },
+  frontier_gambler: { label: "Frontier Gambler", icon: "\uD83C\uDFB2", badgeColor: "amber" },
+  sharp_smuggler: { label: "Sharp Smuggler", icon: "\uD83D\uDD75\uFE0F", badgeColor: "purple" },
+  station_regular: { label: "Station Regular", icon: "\uD83C\uDF7A", badgeColor: "red" },
+};
+
+// ── No-content fallback lines ───────────────────────────────────
 
 export const NO_RUMORS_LINES = [
   "Quiet out there lately. Almost too quiet.",

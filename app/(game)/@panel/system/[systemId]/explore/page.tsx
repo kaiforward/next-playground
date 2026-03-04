@@ -9,6 +9,7 @@ import {
   type DerivedLocation,
 } from "@/lib/constants/locations";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { SectionHeader } from "@/components/ui/section-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeColor } from "@/components/ui/badge";
@@ -102,9 +103,9 @@ function ExploreContent({ systemId }: { systemId: string }) {
     <div className="space-y-8">
       {/* Orbital Station */}
       <section>
-        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
+        <SectionHeader className="mb-3">
           Orbital Station
-        </h3>
+        </SectionHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {stationLocations.map((loc) => (
             <LocationCard
@@ -119,9 +120,9 @@ function ExploreContent({ systemId }: { systemId: string }) {
       {/* System Locations */}
       {systemLocations.length > 0 && (
         <section>
-          <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">
+          <SectionHeader className="mb-3">
             System Locations
-          </h3>
+          </SectionHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {systemLocations.map((loc) => (
               <LocationCard

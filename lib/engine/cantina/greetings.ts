@@ -1,4 +1,3 @@
-import type { NpcArchetype } from "@/lib/engine/mini-games/voids-gambit";
 import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
 import {
   BARTENDER_GREETINGS,
@@ -17,7 +16,7 @@ export function getGreeting(npcType: CantinaNpcType, visitCount: number): string
   const greetings: GreetingSet =
     npcType === "bartender"
       ? BARTENDER_GREETINGS
-      : PATRON_GREETINGS[npcType as NpcArchetype];
+      : PATRON_GREETINGS[npcType];
 
   const bucket =
     visitCount === 0

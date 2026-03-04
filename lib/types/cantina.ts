@@ -11,10 +11,10 @@ export interface BartenderData {
 }
 
 export interface PatronData {
-  greeting: string;
   rumors: PatronRumor[];
-  visitCount: number;
 }
+
+export type NpcVisitCounts = Partial<Record<CantinaNpcType, number>>;
 
 export interface NpcVisitResult {
   npcType: CantinaNpcType;
