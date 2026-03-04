@@ -211,7 +211,9 @@ export function GameSidebar({
       </div>
 
       {/* Notification bell */}
-      <NotificationBell collapsed={collapsed} />
+      <div className="mt-1">
+        <NotificationBell collapsed={collapsed} />
+      </div>
 
       <Divider />
 
