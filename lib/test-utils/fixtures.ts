@@ -51,6 +51,47 @@ export interface TestShipOpts {
   disabled?: boolean;
 }
 
+export interface TestTradeMissionOpts {
+  systemId: string;
+  destinationId: string;
+  goodId: string;
+  quantity?: number;
+  reward?: number;
+  deadlineTick?: number;
+  createdAtTick?: number;
+  playerId?: string | null;
+  acceptedAtTick?: number | null;
+  eventId?: string | null;
+}
+
+export interface TestOpMissionOpts {
+  type: string;
+  systemId: string;
+  targetSystemId?: string;
+  reward?: number;
+  deadlineTick?: number;
+  durationTicks?: number | null;
+  enemyTier?: string | null;
+  statRequirements?: string;
+  createdAtTick?: number;
+  status?: string;
+  playerId?: string | null;
+  shipId?: string | null;
+  acceptedAtTick?: number | null;
+  startedAtTick?: number | null;
+}
+
+export interface TestConvoyOpts {
+  playerId: string;
+  systemId: string;
+  shipIds: string[];
+  name?: string;
+  status?: "docked" | "in_transit";
+  destinationSystemId?: string | null;
+  departureTick?: number | null;
+  arrivalTick?: number | null;
+}
+
 // ── Seed test universe ───────────────────────────────────────────
 
 let seedCounter = 0;
@@ -276,4 +317,74 @@ export async function createTestShip(
   });
 
   return ship.id;
+}
+
+export async function createTestTradeMission(
+  prisma: PrismaClient,
+  opts: TestTradeMissionOpts,
+): Promise<string> {
+  const mission = await prisma.tradeMission.create({
+    data: {
+      systemId: opts.systemId,
+      destinationId: opts.destinationId,
+      goodId: opts.goodId,
+      quantity: opts.quantity ?? 10,
+      reward: opts.reward ?? 500,
+      deadlineTick: opts.deadlineTick ?? 200,
+      createdAtTick: opts.createdAtTick ?? 10,
+      playerId: opts.playerId ?? null,
+      acceptedAtTick: opts.acceptedAtTick ?? null,
+      eventId: opts.eventId ?? null,
+    },
+  });
+
+  return mission.id;
+}
+
+export async function createTestOpMission(
+  prisma: PrismaClient,
+  opts: TestOpMissionOpts,
+): Promise<string> {
+  const mission = await prisma.mission.create({
+    data: {
+      type: opts.type,
+      systemId: opts.systemId,
+      targetSystemId: opts.targetSystemId ?? opts.systemId,
+      reward: opts.reward ?? 1000,
+      deadlineTick: opts.deadlineTick ?? 200,
+      durationTicks: opts.durationTicks ?? null,
+      enemyTier: opts.enemyTier ?? null,
+      statRequirements: opts.statRequirements ?? "{}",
+      createdAtTick: opts.createdAtTick ?? 10,
+      status: opts.status ?? "available",
+      playerId: opts.playerId ?? null,
+      shipId: opts.shipId ?? null,
+      acceptedAtTick: opts.acceptedAtTick ?? null,
+      startedAtTick: opts.startedAtTick ?? null,
+    },
+  });
+
+  return mission.id;
+}
+
+export async function createTestConvoy(
+  prisma: PrismaClient,
+  opts: TestConvoyOpts,
+): Promise<string> {
+  const convoy = await prisma.convoy.create({
+    data: {
+      playerId: opts.playerId,
+      systemId: opts.systemId,
+      name: opts.name ?? "Test Convoy",
+      status: opts.status ?? "docked",
+      destinationSystemId: opts.destinationSystemId ?? null,
+      departureTick: opts.departureTick ?? null,
+      arrivalTick: opts.arrivalTick ?? null,
+      members: {
+        create: opts.shipIds.map((shipId) => ({ shipId })),
+      },
+    },
+  });
+
+  return convoy.id;
 }
