@@ -41,6 +41,10 @@ export interface LODState {
   showGlow: boolean;
   /** Whether to show effect layer (particles, pulse rings) */
   showEffects: boolean;
+  /** Whether to show fleet presence dots */
+  showFleetDots: boolean;
+  /** Alpha for fleet presence dots */
+  fleetDotAlpha: number;
 }
 
 /** Cubic smoothstep: 0 at edge0, 1 at edge1 with smooth acceleration/deceleration */
@@ -100,5 +104,9 @@ export function computeLOD(zoom: number): LODState {
 
     // Effects (particles, pulse rings) visible alongside names
     showEffects: zoom > 0.45,
+
+    // Fleet dots visible at low zoom, fade with territories
+    showFleetDots: zoom < 0.5,
+    fleetDotAlpha: 1 - smoothStep(0.3, 0.5, zoom),
   };
 }

@@ -31,6 +31,17 @@ export const TERRITORY = {
   strokeWidth: 2,
 } as const;
 
+// ── Fleet presence dots (zoomed-out ship positions) ─────────────
+
+export const FLEET_DOTS = {
+  color: 0x38bdf8,       // sky-400
+  fillAlpha: 0.7,
+  radius: 18,            // world-space radius
+  glowColor: 0x38bdf8,
+  glowAlpha: 0.15,
+  glowRadius: 50,
+} as const;
+
 // ── Edge colors ──────────────────────────────────────────────────
 
 export const EDGE = {

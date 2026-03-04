@@ -8,6 +8,7 @@ import { ShipStatusBadge } from "./ship-status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { MapPinIcon } from "@/components/ui/icons";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { useDialog } from "@/components/ui/dialog";
 import {
@@ -58,6 +59,9 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <ShipStatusBadge ship={ship} inBattle={inBattle} />
+            <Button href={`/?systemId=${ship.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
+              <MapPinIcon />
+            </Button>
             <Button href={detailHref} variant="ghost" size="xs">
               Details &rarr;
             </Button>

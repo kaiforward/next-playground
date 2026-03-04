@@ -109,7 +109,7 @@ function BattleRow({ battle }: { battle: BattleInfo }) {
 
 export default function BattlesPanelPage() {
   return (
-    <DetailPanel title="Battles">
+    <DetailPanel title="Battles" size="lg">
       <QueryBoundary>
         <BattlesContent />
       </QueryBoundary>

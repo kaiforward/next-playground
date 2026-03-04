@@ -7,7 +7,7 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 
 export default function CantinaPanelPage() {
   return (
-    <DetailPanel title="Cantina" size="lg">
+    <DetailPanel title="Cantina" size="xl">
       <CantinaContent />
     </DetailPanel>
   );
