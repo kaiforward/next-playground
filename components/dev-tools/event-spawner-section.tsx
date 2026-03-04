@@ -6,9 +6,9 @@ import { NumberInput } from "@/components/form/number-input";
 import { SelectInput } from "@/components/form/select-input";
 import { useSpawnEventMutation } from "@/lib/hooks/use-dev-tools";
 import { useUniverse } from "@/lib/hooks/use-universe";
-import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { EVENT_DEFINITIONS, EVENT_TYPE_IDS } from "@/lib/constants/events";
 
-const eventTypes = Object.keys(EVENT_DEFINITIONS);
+const eventTypes = EVENT_TYPE_IDS;
 
 export function EventSpawnerSection() {
   const { data: universe } = useUniverse();

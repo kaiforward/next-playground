@@ -54,6 +54,7 @@ export interface SimConstants {
     spawnInterval: number;
     maxPerSystem: number;
     maxGlobal: number;
+    maxBatchSpawn: number;
     modifierCaps: {
       maxShift: number;
       minMultiplier: number;
@@ -155,6 +156,7 @@ function buildDefaults(): SimConstants {
       spawnInterval: EVENT_SPAWN_INTERVAL,
       maxPerSystem: MAX_EVENTS_PER_SYSTEM,
       maxGlobal: MAX_EVENTS_GLOBAL,
+      maxBatchSpawn: 10,
       modifierCaps: { ...MODIFIER_CAPS },
     },
     ships,

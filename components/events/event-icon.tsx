@@ -1,6 +1,5 @@
-"use client";
-
 import { EVENT_TYPE_ICON } from "@/lib/constants/ui";
+import { isEventTypeId } from "@/lib/types/guards";
 
 interface EventIconProps {
   eventType: string;
@@ -9,7 +8,7 @@ interface EventIconProps {
 
 /** Inline SVG icon for a given event type. Falls back to warning triangle. */
 export function EventIcon({ eventType, className = "w-4 h-4" }: EventIconProps) {
-  const iconKey = EVENT_TYPE_ICON[eventType] ?? "warning";
+  const iconKey = isEventTypeId(eventType) ? EVENT_TYPE_ICON[eventType] : "warning";
   const Icon = ICONS[iconKey] ?? ICONS.warning;
   return <Icon className={className} />;
 }

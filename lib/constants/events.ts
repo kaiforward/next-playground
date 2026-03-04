@@ -68,13 +68,13 @@ export interface EventDefinition {
 // ── Spawn / cap constants ───────────────────────────────────────
 
 /** Ticks between spawn attempts. */
-export const EVENT_SPAWN_INTERVAL = 20;
+export const EVENT_SPAWN_INTERVAL = 5;
 
 /** Max concurrent events at a single system. */
-export const MAX_EVENTS_PER_SYSTEM = 2;
+export const MAX_EVENTS_PER_SYSTEM = 3;
 
 /** Max concurrent events globally. */
-export const MAX_EVENTS_GLOBAL = 15;
+export const MAX_EVENTS_GLOBAL = 150;
 
 /** Safety caps for aggregated modifier values. */
 export const MODIFIER_CAPS = {
@@ -96,7 +96,7 @@ const war: EventDefinition = {
   description: "Military conflict erupts, disrupting production and spiking demand for fuel and machinery.",
   targetFilter: { economyTypes: ["industrial", "tech", "extraction", "core"] },
   cooldown: 80,
-  maxActive: 3,
+  maxActive: 30,
   weight: 10,
   phases: [
     {
@@ -168,7 +168,7 @@ const plague: EventDefinition = {
   description: "A blight sweeps agricultural systems, devastating food production.",
   targetFilter: { economyTypes: ["agricultural"] },
   cooldown: 100,
-  maxActive: 2,
+  maxActive: 20,
   weight: 10,
   phases: [
     {
@@ -231,7 +231,7 @@ const tradeFestival: EventDefinition = {
   description: "A grand trade festival boosts demand for luxuries and food.",
   targetFilter: { economyTypes: ["core"] },
   cooldown: 120,
-  maxActive: 3,
+  maxActive: 30,
   weight: 8,
   phases: [
     {
@@ -253,7 +253,7 @@ const conflictSpillover: EventDefinition = {
   name: "Conflict Spillover",
   description: "Nearby conflict disrupts trade routes, increasing demand for fuel and machinery.",
   cooldown: 80,
-  maxActive: 5,
+  maxActive: 50,
   weight: 0, // Never spawned randomly — only via spread
   phases: [
     {
@@ -276,7 +276,7 @@ const plagueRisk: EventDefinition = {
   name: "Plague Risk",
   description: "A neighboring blight threatens local food production.",
   cooldown: 60,
-  maxActive: 5,
+  maxActive: 50,
   weight: 0, // Never spawned randomly — only via spread
   phases: [
     {
@@ -298,7 +298,7 @@ const miningBoom: EventDefinition = {
   description: "A rich mineral vein is discovered, flooding the market with ore.",
   targetFilter: { economyTypes: ["extraction"] },
   cooldown: 100,
-  maxActive: 2,
+  maxActive: 20,
   weight: 10,
   phases: [
     {
@@ -359,7 +359,7 @@ const oreGlut: EventDefinition = {
   name: "Ore Glut",
   description: "Excess ore from a nearby mining boom depresses local prices.",
   cooldown: 80,
-  maxActive: 5,
+  maxActive: 50,
   weight: 0, // Never spawned randomly — only via spread
   phases: [
     {
@@ -380,7 +380,7 @@ const supplyShortage: EventDefinition = {
   name: "Supply Shortage",
   description: "A supply chain disruption causes widespread scarcity.",
   cooldown: 80,
-  maxActive: 3,
+  maxActive: 30,
   weight: 8,
   phases: [
     {
@@ -406,7 +406,7 @@ const pirateRaid: EventDefinition = {
   name: "Pirate Raid",
   description: "Pirates raid local shipping lanes, disrupting supply and threatening navigation.",
   cooldown: 80,
-  maxActive: 3,
+  maxActive: 30,
   weight: 8,
   phases: [
     {
@@ -438,7 +438,7 @@ const solarStorm: EventDefinition = {
   name: "Solar Storm",
   description: "Intense solar activity disrupts all production and navigation.",
   cooldown: 40,
-  maxActive: 2,
+  maxActive: 20,
   weight: 6,
   phases: [
     {
@@ -466,7 +466,7 @@ const solarStorm: EventDefinition = {
 
 // ── Event → mission theme mapping ──────────────────────────────
 
-export const EVENT_MISSION_GOODS: Record<string, { goods: string[]; isImport: boolean }> = {
+export const EVENT_MISSION_GOODS: Partial<Record<EventTypeId, { goods: string[]; isImport: boolean }>> = {
   war:             { goods: ["weapons", "fuel", "machinery"], isImport: true },
   plague:          { goods: ["medicine", "food"],             isImport: true },
   trade_festival:  { goods: ["luxuries", "food"],             isImport: true },
@@ -490,4 +490,7 @@ const EVENT_DEFINITIONS_INTERNAL = {
   solar_storm: solarStorm,
 } as const satisfies Record<EventTypeId, EventDefinition>;
 
-export const EVENT_DEFINITIONS: Record<string, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;
+export const EVENT_DEFINITIONS: Record<EventTypeId, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;
+
+/** All event type IDs as a typed array. Use instead of Object.keys(EVENT_DEFINITIONS). */
+export const EVENT_TYPE_IDS: EventTypeId[] = Object.keys(EVENT_DEFINITIONS_INTERNAL) as Array<keyof typeof EVENT_DEFINITIONS_INTERNAL>;
