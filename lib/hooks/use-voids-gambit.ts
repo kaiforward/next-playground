@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type GameState,
+  type GameResult,
   type NpcArchetype,
   type NpcIdentity,
   type Declaration,
@@ -26,7 +27,12 @@ import {
   CARD_REVEAL_DELAY,
 } from "@/lib/engine/mini-games/voids-gambit";
 
-// ── Hook return type ─────────────────────────────────────────────
+// ── Hook options & return type ───────────────────────────────────
+
+export interface UseVoidsGambitOptions {
+  /** Called once when a game reaches the "complete" phase with its result. */
+  onGameComplete?: (result: GameResult) => void;
+}
 
 export interface UseVoidsGambit {
   game: GameState | null;
@@ -56,7 +62,12 @@ function pickDialogue(
 
 // ── Hook ─────────────────────────────────────────────────────────
 
-export function useVoidsGambit(): UseVoidsGambit {
+export function useVoidsGambit(
+  options?: UseVoidsGambitOptions,
+): UseVoidsGambit {
+  const onGameCompleteRef = useRef(options?.onGameComplete);
+  onGameCompleteRef.current = options?.onGameComplete;
+
   const [game, setGame] = useState<GameState | null>(null);
   const [npcDialogue, setNpcDialogue] = useState<string | null>(null);
   const [npcIdentity, setNpcIdentity] = useState<NpcIdentity | null>(null);
@@ -255,6 +266,7 @@ export function useVoidsGambit(): UseVoidsGambit {
           setNpcDialogue(
             pickDialogue(game.config.npcArchetype, key),
           );
+          onGameCompleteRef.current?.(game.result);
         }
         return;
       }

@@ -74,6 +74,8 @@ interface GameTableProps {
   onPass: () => void;
   onPlayAgain: () => void;
   onReturnToLobby: () => void;
+  /** Real credit change from server settlement. */
+  creditsChange?: number | null;
 }
 
 export function GameTable({
@@ -86,6 +88,7 @@ export function GameTable({
   onPass,
   onPlayAgain,
   onReturnToLobby,
+  creditsChange,
 }: GameTableProps) {
   const scoringDialog = useDialog(false);
 
@@ -243,6 +246,7 @@ export function GameTable({
           result={game.result}
           npcIdentity={npcIdentity}
           npcDialogue={npcDialogue}
+          creditsChange={creditsChange}
           onPlayAgain={() => {
             scoringDialog.onClose();
             onPlayAgain();

@@ -46,11 +46,23 @@ const ARCHETYPES: ArchetypeInfo[] = [
 
 interface CantinaLobbyProps {
   onStart: (archetype: NpcArchetype, wager: number) => void;
+  /** Player credit balance. When provided, shows balance and disables when insufficient. */
+  playerCredits?: number;
+  /** Pre-select an archetype (e.g. from patron challenge). */
+  initialArchetype?: NpcArchetype | null;
 }
 
-export function CantinaLobby({ onStart }: CantinaLobbyProps) {
-  const [selected, setSelected] = useState<NpcArchetype | null>(null);
-  const [wager, setWager] = useState(50);
+export function CantinaLobby({
+  onStart,
+  playerCredits,
+  initialArchetype,
+}: CantinaLobbyProps) {
+  const [selected, setSelected] = useState<NpcArchetype | null>(
+    initialArchetype ?? null,
+  );
+  const [wager, setWager] = useState(
+    initialArchetype ? NPC_WAGER_LIMITS[initialArchetype].default : 50,
+  );
 
   const limits = selected ? NPC_WAGER_LIMITS[selected] : null;
 
@@ -65,13 +77,26 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
     onStart(selected, Math.max(limits.min, Math.min(limits.max, wager)));
   };
 
+  const insufficientFunds =
+    playerCredits !== undefined && playerCredits < (limits?.min ?? 10);
+
   return (
     <div className="space-y-8">
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold text-text-primary">Cantina</h1>
+        <h1 className="text-3xl font-bold text-text-primary">
+          Void&apos;s Gambit
+        </h1>
         <p className="text-base text-text-tertiary">
-          Choose an opponent for Void&apos;s Gambit
+          Choose an opponent
         </p>
+        {playerCredits !== undefined && (
+          <p className="text-sm text-text-secondary">
+            Your balance:{" "}
+            <span className={insufficientFunds ? "text-red-400" : "text-amber-300"}>
+              {Math.floor(playerCredits)} CR
+            </span>
+          </p>
+        )}
       </div>
 
       {/* Opponent grid */}
@@ -133,7 +158,7 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
           variant="action"
           color="green"
           size="lg"
-          disabled={!selected}
+          disabled={!selected || insufficientFunds}
           onClick={handleStart}
         >
           Sit Down

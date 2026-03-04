@@ -95,6 +95,7 @@ model Player {
   tradeMissions TradeMission[]
   missions      Mission[]
   notifications PlayerNotification[]
+  npcVisits     NpcVisit[]
 }
 
 model Ship {
@@ -480,4 +481,17 @@ model PlayerNotification {
 
   @@index([playerId, createdAt])
   @@index([playerId, read])
+}
+
+model NpcVisit {
+  id       String @id @default(cuid())
+  playerId String
+  npcType  String
+  systemId String
+  visits   Int    @default(0)
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, npcType, systemId])
+  @@index([playerId])
 }

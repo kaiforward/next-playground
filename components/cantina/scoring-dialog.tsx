@@ -77,6 +77,8 @@ interface ScoringDialogProps {
   npcDialogue: string | null;
   onPlayAgain: () => void;
   onReturnToLobby: () => void;
+  /** Actual credit change amount (from server settlement). */
+  creditsChange?: number | null;
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -89,6 +91,7 @@ export function ScoringDialog({
   npcDialogue,
   onPlayAgain,
   onReturnToLobby,
+  creditsChange,
 }: ScoringDialogProps) {
   const { winner, playerScore, npcScore, potWinnings } = result;
 
@@ -99,12 +102,19 @@ export function ScoringDialog({
         ? `${npcIdentity.displayName} wins`
         : "Tie game";
 
+  // Use real credit change from server if available, otherwise estimate
   const wagerText =
-    winner === "player"
-      ? `+${potWinnings} CR`
-      : winner === "npc"
-        ? `-${potWinnings / 2} CR`
-        : `${potWinnings} CR returned`;
+    creditsChange !== undefined && creditsChange !== null
+      ? creditsChange > 0
+        ? `+${creditsChange} CR`
+        : creditsChange < 0
+          ? `${creditsChange} CR`
+          : "No credits exchanged"
+      : winner === "player"
+        ? `+${potWinnings} CR`
+        : winner === "npc"
+          ? `-${potWinnings / 2} CR`
+          : `${potWinnings} CR returned`;
 
   return (
     <Dialog open={open} onClose={onClose} modal>
