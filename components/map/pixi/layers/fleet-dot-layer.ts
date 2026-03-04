@@ -6,7 +6,7 @@ import type { LODState } from "../lod";
  * Draws prominent dots at systems where the player has ships.
  * Visible at low zoom to show fleet deployment at a glance.
  */
-export class VisibilityHullLayer {
+export class FleetDotLayer {
   readonly container = new Container();
   private graphics = new Graphics();
 
@@ -40,12 +40,11 @@ export class VisibilityHullLayer {
 
   /** Per-frame LOD update */
   updateVisibility(lod: LODState) {
-    this.container.visible = lod.showVisibilityCloud;
-    this.container.alpha = lod.visibilityCloudAlpha;
+    this.container.visible = lod.showFleetDots;
+    this.container.alpha = lod.fleetDotAlpha;
   }
 
   destroy() {
-    this.graphics.destroy();
     this.container.destroy({ children: true });
   }
 }

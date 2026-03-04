@@ -93,16 +93,16 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
           </span>
         }
         action={
-          <div className="flex items-center gap-2">
-            <Button href={`/?systemId=${convoy.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
-              <MapPinIcon />
-            </Button>
-            {variant === "summary" && (
+          variant === "summary" ? (
+            <div className="flex items-center gap-2">
+              <Button href={`/?systemId=${convoy.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
+                <MapPinIcon />
+              </Button>
               <Button href={`/convoy/${convoy.id}`} variant="ghost" size="xs">
                 Details &rarr;
               </Button>
-            )}
-          </div>
+            </div>
+          ) : undefined
         }
       />
       <CardContent className="space-y-4">
