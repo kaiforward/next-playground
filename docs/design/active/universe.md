@@ -7,17 +7,19 @@ The game world — star systems, regions, connections, traits, and how players n
 ## Universe Structure
 
 ### Scale
-- **600 systems** across 24 regions (25 systems per region)
-- **7000x7000** coordinate space (usable area ~4900² via Poisson-disc sampling with 800 minimum region distance)
+- Configurable via `UNIVERSE_SCALE` env var. The goal is to scale as high as possible. Current presets:
+  - **default**: 600 systems / 24 regions / 7,000×7,000 map (small, for quick testing)
+  - **10k**: ~10,000 systems / 60 regions / 25,000×25,000 map (target production scale)
+- Generation parameters (region count, system count, map size, Poisson distances) scale with the preset
 - Procedurally generated from a fixed seed (deterministic — same seed always produces the same universe)
 - Generated once at database seed, then immutable
 
 ### Regions
 
-24 regions placed via Poisson-disc sampling. Each region is a geographic cluster with a neutral identity — names come from a flat pool of generic space names (Arcturus, Meridian, Vanguard, etc.), not themed by economy type.
+Regions placed via Poisson-disc sampling (count scales with preset). Each region is a geographic cluster with a neutral identity — names come from a flat pool of 28 generic space names (Arcturus, Meridian, Vanguard, etc.), not themed by economy type. At >28 regions, names are recycled with a `-N` suffix.
 
 Each region has:
-- **Name**: From a pool of 28 generic space names, picked sequentially. Suffix `-N` on collision
+- **Name**: From a pool of 28 generic space names, picked sequentially. Suffix `-N` when pool is exhausted
 - **Government type**: One of 4 types (federation, corporate, authoritarian, frontier), assigned with uniform 25% distribution. Coverage guarantee ensures all 4 types appear
 - **Dominant economy**: The most common economy type among the region's systems, computed at seed time and stored on the Region model. Displayed as a subtitle on the map (e.g., "Arcturus — Extraction")
 
@@ -54,7 +56,7 @@ Each system has:
 - **Name**: Region-based naming (e.g., "Nexus-1-7")
 - **Economy type**: One of 6 types (agricultural, extraction, refinery, industrial, tech, core), derived from trait affinities
 - **Traits**: 2–4 system traits with quality tiers
-- **Coordinates**: Fixed position within region scatter radius (875 units from center)
+- **Coordinates**: Fixed position via Poisson-disc sampling, assigned to nearest region
 - **Station**: Exactly one station with a market carrying all 12 goods
 - **Gateway flag**: 1-2 systems per region pair serve as inter-region connection points
 
@@ -62,30 +64,37 @@ Each system has:
 - **Intra-region**: Minimum spanning tree ensures all systems in a region are connected, plus ~50% extra edges for route variety
 - **Inter-region**: MST on region centers plus bonus edges, connecting via gateway systems
 - **All bidirectional**: Every connection works in both directions
-- **~1778 connections** at 600 systems
+- Connection count scales with system count (~1,778 at 600 systems)
 - **Fuel cost**: Distance-scaled. Intra-region ~1-10 fuel per hop. Inter-region (gateway) 2.5x multiplier (~15-25 fuel)
 
 ---
 
 ## Map Display
 
-### Flat Rendering with LOD
+### Two-Tier Rendering Pipeline
 
-All ~600 systems render simultaneously on a WebGL canvas (Pixi.js). A level-of-detail (LOD) engine controls visibility based on camera zoom, with smooth alpha transitions between thresholds:
+The map uses a WebGL canvas (Pixi.js) with two rendering tiers that crossfade based on zoom level:
 
-**Zoomed out (overview)**:
-- System dots always visible, scaled smaller at low zoom
-- Voronoi-derived region boundaries drawn where adjacent systems belong to different regions
-- Large region name labels at each region's centroid
-- Gateway connections shown as thicker solid lines; intra-region connections as dashed lines
+**Point cloud tier (universe zoom, <0.3)**:
+- All systems rendered as lightweight dots from atlas data (loaded once at mount, covers entire universe)
+- Voronoi-derived region boundaries with territory fills and player presence highlighting
+- Region name labels at each region's centroid
+- Fleet presence dots — prominent glowing markers at systems where the player has ships
 
-**Zoomed in (detail)**:
-- Region boundaries and labels fade out
-- System names fade in, then economy badges, ship counts, fuel cost labels, and event indicators
-- Glow effects and particle animations appear at close zoom
-- Click a system for detail panel / full detail page
+**Detail tier (system zoom, >0.4)**:
+- Tile-based viewport loading — only systems in visible tiles are fetched from the API
+- Full SystemObject rendering with economy-colored cores, glow effects, and hit areas
+- System names, economy badges, ship counts, event indicator dots
+- Connection lines between systems (dashed for intra-region, solid for gateway/route) with fuel cost labels
+- Effect layer: route particles and pulse ring animations
 
-**Performance**: Frustum culling hides off-screen systems and connections each frame. Only visible objects are rendered.
+**Crossfade (0.3–0.4)**: Smooth alpha transition between tiers using cubic smoothstep. SystemObject creation begins slightly before the crossfade (zoom 0.28) so objects are ready when they fade in.
+
+**LOD within detail tier**: Additional smoothstep fades control progressive disclosure — system names (0.45–0.55), event dots (0.5–0.6), economy/ship/fuel labels (0.6–0.7), glow effects (>0.45).
+
+**Background**: Parallax starfield with 3 depth layers, independent of the world container.
+
+**Performance**: Frustum culling skips off-screen systems and connections each frame. SystemObjects are created on demand (batched per frame) and hidden on deactivation rather than destroyed — constructor cost is high (~10 display objects each). Viewport change callbacks are throttled to avoid 60 setState calls/sec during pan/zoom.
 
 ### Map Side Panel
 
@@ -124,14 +133,13 @@ New players spawn at a core-economy system in the region closest to the map cent
 
 ## Planned Changes
 
-The current 600-system universe is a foundation. The faction system design targets 1,000-2,000 systems with region-based map rendering to handle the increased scale. Key changes:
+The configurable universe and tile-based map renderer are in place — scale ceiling is a performance target, not a design constraint. Remaining planned changes are faction-oriented:
 
 - **Faction territory**: Systems will belong to factions, with colored territory visualization
 - **Government migration**: Government type moves from per-region to per-faction (see [faction-system.md](../planned/faction-system.md) §1)
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
 - **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-enrichment.md](../planned/system-enrichment.md) §2.2)
 - **Facilities**: Faction-owned strategic infrastructure seeded at systems based on traits (see [system-enrichment.md](../planned/system-enrichment.md) §5)
-- **Scale increase**: More systems to accommodate faction territory needs (see [faction-system.md](../planned/faction-system.md) §7)
 
 ---
 
