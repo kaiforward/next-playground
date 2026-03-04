@@ -122,6 +122,7 @@ describe("trade mission lifecycle (integration)", () => {
       const playerBefore = await prisma.player.findUnique({
         where: { id: player.playerId },
       });
+      expect(playerBefore).not.toBeNull();
       const stationId = universe.stations.agricultural;
       const marketBefore = await prisma.stationMarket.findUnique({
         where: {
@@ -129,6 +130,7 @@ describe("trade mission lifecycle (integration)", () => {
         },
         include: { good: true },
       });
+      expect(marketBefore).not.toBeNull();
 
       const expectedUnitPrice = calculatePrice(
         marketBefore!.good.basePrice,
@@ -161,12 +163,14 @@ describe("trade mission lifecycle (integration)", () => {
           stationId_goodId: { stationId, goodId: universe.goodIds["food"] },
         },
       });
+      expect(marketAfter).not.toBeNull();
       expect(marketAfter!.supply).toBe(marketBefore!.supply + 10);
 
       // 3. Credits += goodsValue + reward
       const playerAfter = await prisma.player.findUnique({
         where: { id: player.playerId },
       });
+      expect(playerAfter).not.toBeNull();
       expect(playerAfter!.credits).toBe(
         playerBefore!.credits + expectedTotalCredit,
       );
@@ -271,6 +275,7 @@ describe("trade mission lifecycle (integration)", () => {
       const before = await prisma.tradeMission.findUnique({
         where: { id: missionId },
       });
+      expect(before).not.toBeNull();
       expect(before!.playerId).toBe(player.playerId);
 
       const result = await abandonMission(player.playerId, missionId);
@@ -279,6 +284,7 @@ describe("trade mission lifecycle (integration)", () => {
       const after = await prisma.tradeMission.findUnique({
         where: { id: missionId },
       });
+      expect(after).not.toBeNull();
       expect(after!.playerId).toBeNull();
       expect(after!.acceptedAtTick).toBeNull();
     });

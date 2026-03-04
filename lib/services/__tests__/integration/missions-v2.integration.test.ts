@@ -116,6 +116,7 @@ describe("op mission lifecycle (integration)", () => {
       const mission = await prisma.mission.findUnique({
         where: { id: missionId },
       });
+      expect(mission).not.toBeNull();
       expect(mission!.status).toBe("in_progress");
       expect(mission!.shipId).toBe(shipId);
       expect(mission!.startedAtTick).toBe(10);
@@ -160,6 +161,7 @@ describe("op mission lifecycle (integration)", () => {
       const mission = await prisma.mission.findUnique({
         where: { id: patrolId },
       });
+      expect(mission).not.toBeNull();
       expect(mission!.status).toBe("in_progress");
       expect(mission!.shipId).toBe(shipId);
 
@@ -284,6 +286,7 @@ describe("op mission lifecycle (integration)", () => {
       const before = await prisma.mission.findUnique({
         where: { id: missionId },
       });
+      expect(before).not.toBeNull();
       expect(before!.status).toBe("accepted");
       expect(before!.playerId).toBe(player.playerId);
 
@@ -293,6 +296,7 @@ describe("op mission lifecycle (integration)", () => {
       const after = await prisma.mission.findUnique({
         where: { id: missionId },
       });
+      expect(after).not.toBeNull();
       expect(after!.status).toBe("available");
       expect(after!.playerId).toBeNull();
       expect(after!.shipId).toBeNull();
