@@ -73,9 +73,6 @@ export function PixiMapCanvas({
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
 
-  // Debug zoom display
-  const zoomLabelRef = useRef<HTMLDivElement>(null);
-
   // Store latest data in ref for interaction handlers
   const mapDataRef = useRef(mapData);
   mapDataRef.current = mapData;
@@ -115,7 +112,13 @@ export function PixiMapCanvas({
       }
 
       app = pixi;
-      if (!(app.canvas instanceof HTMLCanvasElement)) return;
+      // Runtime guard: Pixi may return OffscreenCanvas in WebWorker contexts.
+      // Capture constructor name before instanceof narrows the type.
+      const canvasTypeName = app.canvas.constructor.name;
+      if (!(app.canvas instanceof HTMLCanvasElement)) {
+        console.error("Unexpected canvas type:", canvasTypeName);
+        return;
+      }
       canvas = app.canvas;
       container.appendChild(canvas);
       camera.setScreenSize(app.screen.width, app.screen.height);
@@ -171,7 +174,7 @@ export function PixiMapCanvas({
         world.scale.set(t.scale);
 
         // Update frustum + LOD
-        frustum.update(camera.x, camera.y, camera.zoom, app!.screen.width, app!.screen.height);
+        frustum.update(camera.x, camera.y, camera.zoom, pixi.screen.width, pixi.screen.height);
         const lod = computeLOD(camera.zoom);
 
         // Emit viewport bounds + zoom for tile-based data loading (only when changed)
@@ -216,10 +219,6 @@ export function PixiMapCanvas({
         const isZooming = Math.abs(camera.zoom - prevZoom) > 0.0005;
         prevZoom = camera.zoom;
 
-        // Debug: show zoom level (direct DOM write, no React render)
-        const zl = zoomLabelRef.current;
-        if (zl) zl.textContent = `zoom: ${camera.zoom.toFixed(3)}`;
-
         starfield.update(camera.x, camera.y, dtMs, isZooming);
         if (lod.showEffects) effectLayer.update(dtMs);
       });
@@ -239,9 +238,18 @@ export function PixiMapCanvas({
       if (app) {
         app.renderer.off("resize", onResize);
         if (canvas) camera.detach(canvas);
-        // Destroy point cloud first to free its standalone dotTexture
-        pixiRef.current?.pointCloudLayer.destroy();
-        pixiRef.current?.fleetDotLayer.destroy();
+        // Destroy layers to clear internal Maps and free JS-side references
+        // that app.destroy({ children: true }) doesn't touch
+        const refs = pixiRef.current;
+        if (refs) {
+          refs.systemLayer.destroy();
+          refs.connectionLayer.destroy();
+          refs.territoryLayer.destroy();
+          refs.effectLayer.destroy();
+          refs.starfield.destroy();
+          refs.pointCloudLayer.destroy();
+          refs.fleetDotLayer.destroy();
+        }
         app.destroy(true, { children: true });
       }
       pixiRef.current = null;
@@ -336,19 +344,11 @@ export function PixiMapCanvas({
   }, [centerTarget, onReady, pixiReady]);
 
   return (
-    <>
-      <div
-        ref={containerRef}
-        className="absolute inset-0"
-        style={{ touchAction: "none" }}
-      />
-      <div
-        ref={zoomLabelRef}
-        className="absolute bottom-2 left-2 z-50 rounded bg-black/70 px-2 py-1 font-mono text-xs text-white/80"
-      >
-        zoom: —
-      </div>
-    </>
+    <div
+      ref={containerRef}
+      className="absolute inset-0"
+      style={{ touchAction: "none" }}
+    />
   );
 }
 
