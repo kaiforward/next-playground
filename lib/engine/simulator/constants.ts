@@ -157,7 +157,7 @@ function buildDefaults(): SimConstants {
         spawnInterval: EVENT_SPAWN_INTERVAL,
         maxPerSystem: scaled.maxEventsPerSystem,
         maxGlobal: scaled.maxEventsGlobal,
-        maxBatchSpawn: 10,
+        maxBatchSpawn: scaled.batchSize,
         modifierCaps: { ...MODIFIER_CAPS },
       };
     })(),

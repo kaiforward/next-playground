@@ -508,6 +508,7 @@ const BASE_SYSTEMS = 600;
 interface ScaledEventCaps {
   maxEventsGlobal: number;
   maxEventsPerSystem: number;
+  batchSize: number;
   definitions: Record<EventTypeId, EventDefinition>;
 }
 
@@ -530,6 +531,7 @@ export function scaleEventCaps(totalSystems: number): ScaledEventCaps {
   return {
     maxEventsGlobal,
     maxEventsPerSystem: MAX_EVENTS_PER_SYSTEM,
+    batchSize: Math.ceil(maxEventsGlobal / 50),
     definitions: definitions as Record<EventTypeId, EventDefinition>,
   };
 }

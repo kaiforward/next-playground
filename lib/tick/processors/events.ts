@@ -21,7 +21,7 @@ import {
 } from "@/lib/engine/events";
 import { toEventTypeId } from "@/lib/types/guards";
 
-const { maxEventsGlobal, maxEventsPerSystem, definitions: SCALED_DEFINITIONS } =
+const { maxEventsGlobal, maxEventsPerSystem, batchSize, definitions: SCALED_DEFINITIONS } =
   scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -352,6 +352,7 @@ export const eventsProcessor: TickProcessor = {
         ctx.tick,
         { maxEventsGlobal, maxEventsPerSystem },
         Math.random,
+        batchSize,
       );
 
       for (const decision of decisions) {
