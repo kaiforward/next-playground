@@ -311,6 +311,113 @@ export function selectEventToSpawn(
   };
 }
 
+/**
+ * Select up to `batchSize` events to spawn in a single tick.
+ *
+ * Iteratively picks weighted-random candidates, updating running type/system
+ * counts between picks so caps are respected within the batch.
+ */
+export function selectEventsToSpawn(
+  definitions: Record<string, EventDefinition>,
+  activeEvents: EventSnapshot[],
+  systems: SystemSnapshot[],
+  tick: number,
+  caps: SpawnCaps,
+  rng: () => number,
+  batchSize: number = 10,
+): SpawnDecision[] {
+  const results: SpawnDecision[] = [];
+
+  // Build mutable per-type count and per-system count from active events
+  const typeCount = new Map<string, number>();
+  const systemCount = new Map<string, number>();
+  const systemTypeLastEnd = new Map<string, number>();
+
+  for (const ev of activeEvents) {
+    typeCount.set(ev.type, (typeCount.get(ev.type) ?? 0) + 1);
+    if (ev.systemId) {
+      systemCount.set(ev.systemId, (systemCount.get(ev.systemId) ?? 0) + 1);
+    }
+    if (ev.systemId) {
+      const key = `${ev.systemId}:${ev.type}`;
+      const prev = systemTypeLastEnd.get(key) ?? 0;
+      if (ev.startTick > prev) systemTypeLastEnd.set(key, ev.startTick);
+    }
+  }
+
+  let totalActive = activeEvents.length;
+
+  for (let i = 0; i < batchSize; i++) {
+    // Global cap check (including events spawned in this batch)
+    if (totalActive >= caps.maxEventsGlobal) break;
+
+    // Build eligible candidates with current running counts
+    interface Candidate {
+      definition: EventDefinition;
+      system: SystemSnapshot;
+      weight: number;
+    }
+    const candidates: Candidate[] = [];
+
+    for (const def of Object.values(definitions)) {
+      if (def.weight <= 0) continue;
+      if ((typeCount.get(def.type) ?? 0) >= def.maxActive) continue;
+
+      for (const sys of systems) {
+        if (def.targetFilter?.economyTypes) {
+          if (!def.targetFilter.economyTypes.some((t) => t === sys.economyType)) continue;
+        }
+        if ((systemCount.get(sys.id) ?? 0) >= caps.maxEventsPerSystem) continue;
+        const cooldownKey = `${sys.id}:${def.type}`;
+        const lastStart = systemTypeLastEnd.get(cooldownKey);
+        if (lastStart !== undefined && tick - lastStart < def.cooldown) continue;
+
+        candidates.push({ definition: def, system: sys, weight: def.weight });
+      }
+    }
+
+    if (candidates.length === 0) break;
+
+    // Weighted random selection
+    const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
+    let roll = rng() * totalWeight;
+    let picked: Candidate | null = null;
+
+    for (const candidate of candidates) {
+      roll -= candidate.weight;
+      if (roll <= 0) {
+        picked = candidate;
+        break;
+      }
+    }
+
+    // Fallback for floating-point edge cases
+    if (!picked) {
+      picked = candidates[candidates.length - 1];
+    }
+
+    const firstPhase = picked.definition.phases[0];
+    const decision: SpawnDecision = {
+      type: picked.definition.type,
+      systemId: picked.system.id,
+      regionId: picked.system.regionId,
+      phase: firstPhase.name,
+      phaseDuration: rollPhaseDuration(firstPhase.durationRange, rng),
+      severity: 1.0,
+    };
+
+    results.push(decision);
+
+    // Update running counts for next iteration
+    totalActive++;
+    typeCount.set(decision.type, (typeCount.get(decision.type) ?? 0) + 1);
+    systemCount.set(decision.systemId, (systemCount.get(decision.systemId) ?? 0) + 1);
+    systemTypeLastEnd.set(`${decision.systemId}:${decision.type}`, tick);
+  }
+
+  return results;
+}
+
 // ── Shock building ──────────────────────────────────────────────
 
 /** A market shock ready for application (severity-scaled). */

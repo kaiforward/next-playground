@@ -14,6 +14,7 @@ import {
   buildShocksForPhase,
   evaluateSpreadTargets,
   selectEventToSpawn,
+  selectEventsToSpawn,
   rollPhaseDuration,
   type EventSnapshot,
   type SystemSnapshot,
@@ -343,7 +344,7 @@ export const eventsProcessor: TickProcessor = {
         regionId: s.regionId,
       }));
 
-      const decision = selectEventToSpawn(
+      const decisions = selectEventsToSpawn(
         EVENT_DEFINITIONS,
         currentSnapshots,
         systemSnapshots,
@@ -352,7 +353,7 @@ export const eventsProcessor: TickProcessor = {
         Math.random,
       );
 
-      if (decision) {
+      for (const decision of decisions) {
         const def = EVENT_DEFINITIONS[decision.type]!;
         const firstPhase = def.phases[0];
 

@@ -6,6 +6,7 @@ import {
   evaluateSpreadTargets,
   aggregateModifiers,
   selectEventToSpawn,
+  selectEventsToSpawn,
   rollPhaseDuration,
   type EventSnapshot,
   type SystemSnapshot,
@@ -662,5 +663,67 @@ describe("evaluateSpreadTargets", () => {
       [rule], makeSnapshot(), neighbors, [], defaultSpreadCaps, defs, () => 0,
     );
     expect(result).toEqual([]);
+  });
+});
+
+// ── selectEventsToSpawn ───────────────────────────────────────
+
+describe("selectEventsToSpawn", () => {
+  const defs: Record<string, EventDefinition> = {
+    war: makeDefinition(),
+  };
+
+  const systems: SystemSnapshot[] = [
+    { id: "sys-1", economyType: "extraction", regionId: "reg-1" },
+    { id: "sys-2", economyType: "agricultural", regionId: "reg-1" },
+    { id: "sys-3", economyType: "core", regionId: "reg-2" },
+  ];
+
+  const defaultCapsSpawn = { maxEventsGlobal: 150, maxEventsPerSystem: 3 };
+
+  it("returns multiple spawn decisions up to batchSize", () => {
+    const results = selectEventsToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5, 3);
+    expect(results.length).toBe(3);
+    for (const r of results) {
+      expect(r.type).toBe("war");
+    }
+  });
+
+  it("respects global cap within batch", () => {
+    const events = Array.from({ length: 148 }, (_, i) =>
+      makeSnapshot({ id: `evt-${i}`, systemId: `sys-other-${i}` }),
+    );
+    // Global cap is 150, 148 active + batchSize 10 → should only spawn 2
+    const results = selectEventsToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5, 10);
+    expect(results.length).toBe(2);
+  });
+
+  it("respects per-type cap across batch", () => {
+    // maxActive for war is 5, start with 3 active → can only add 2
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makeSnapshot({ id: `evt-${i}`, type: "war", systemId: `sys-other-${i}` }),
+    );
+    const results = selectEventsToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5, 10);
+    expect(results.length).toBe(2); // 5 - 3 = 2 more war events possible
+  });
+
+  it("respects per-system cap across batch", () => {
+    // Only 1 system available, maxEventsPerSystem=3
+    const oneSys: SystemSnapshot[] = [{ id: "sys-1", economyType: "extraction", regionId: "reg-1" }];
+    const results = selectEventsToSpawn(defs, [], oneSys, 100, defaultCapsSpawn, () => 0.5, 10);
+    expect(results.length).toBeLessThanOrEqual(3);
+  });
+
+  it("returns empty array when global cap already reached", () => {
+    const events = Array.from({ length: 150 }, (_, i) =>
+      makeSnapshot({ id: `evt-${i}`, systemId: `sys-other-${i}` }),
+    );
+    const results = selectEventsToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
+    expect(results).toEqual([]);
+  });
+
+  it("returns empty array with no eligible candidates", () => {
+    const results = selectEventsToSpawn({}, [], systems, 100, defaultCapsSpawn, () => 0.5);
+    expect(results).toEqual([]);
   });
 });
