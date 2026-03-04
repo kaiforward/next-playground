@@ -55,15 +55,12 @@ export const priceSnapshotsProcessor: TickProcessor = {
     }
 
     if (ids.length > 0) {
-      await ctx.tx.$executeRawUnsafe(
-        `UPDATE "PriceHistory" AS ph
-         SET "entries" = batch."entries"
-         FROM unnest($1::text[], $2::text[])
-           AS batch("id", "entries")
-         WHERE ph."id" = batch."id"`,
-        ids,
-        entriesArr,
-      );
+      await ctx.tx.$executeRaw`
+        UPDATE "PriceHistory" AS ph
+        SET "entries" = batch."entries"
+        FROM unnest(${ids}::text[], ${entriesArr}::text[])
+          AS batch("id", "entries")
+        WHERE ph."id" = batch."id"`;
     }
 
     console.log(

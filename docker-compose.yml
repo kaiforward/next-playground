@@ -10,6 +10,7 @@ services:
       POSTGRES_DB: stellar_trader
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
 
 volumes:
   pgdata:

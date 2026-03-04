@@ -36,16 +36,12 @@ async function batchUpdateMarkets(
   const supplies = updates.map((u) => isFinite(u.supply) ? u.supply : 0);
   const demands = updates.map((u) => isFinite(u.demand) ? u.demand : 0);
 
-  await tx.$executeRawUnsafe(
-    `UPDATE "StationMarket" AS sm
-     SET "supply" = batch."supply", "demand" = batch."demand"
-     FROM unnest($1::text[], $2::double precision[], $3::double precision[])
-       AS batch("id", "supply", "demand")
-     WHERE sm."id" = batch."id"`,
-    ids,
-    supplies,
-    demands,
-  );
+  await tx.$executeRaw`
+    UPDATE "StationMarket" AS sm
+    SET "supply" = batch."supply", "demand" = batch."demand"
+    FROM unnest(${ids}::text[], ${supplies}::double precision[], ${demands}::double precision[])
+      AS batch("id", "supply", "demand")
+    WHERE sm."id" = batch."id"`;
 }
 
 export const economyProcessor: TickProcessor = {
