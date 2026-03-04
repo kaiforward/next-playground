@@ -2,37 +2,43 @@ import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { toEventTypeId } from "@/lib/types/guards";
+import { getPlayerVisibility } from "./visibility-cache";
 import type { ActiveEvent } from "@/lib/types/game";
 
 /**
- * Get all active events with display-friendly fields.
- * Joins system name and resolves phase display names from EVENT_DEFINITIONS.
+ * Get active events visible to a specific player.
+ * Filters by the player's visible system set and resolves display-friendly fields.
  */
-export async function getActiveEvents(): Promise<ActiveEvent[]> {
-  const [world, dbEvents] = await Promise.all([
+export async function getActiveEvents(playerId: string): Promise<ActiveEvent[]> {
+  const [world, { visibleSet }] = await Promise.all([
     prisma.gameWorld.findUnique({
       where: { id: "world" },
       select: { currentTick: true },
     }),
-    prisma.gameEvent.findMany({
-      select: {
-        id: true,
-        type: true,
-        phase: true,
-        systemId: true,
-        regionId: true,
-        startTick: true,
-        phaseStartTick: true,
-        phaseDuration: true,
-        severity: true,
-        system: { select: { name: true } },
-      },
-    }),
+    getPlayerVisibility(playerId),
   ]);
 
   if (!world) {
     throw new ServiceError("Game world not initialized.", 500);
   }
+
+  const dbEvents = await prisma.gameEvent.findMany({
+    where: {
+      systemId: { in: [...visibleSet] },
+    },
+    select: {
+      id: true,
+      type: true,
+      phase: true,
+      systemId: true,
+      regionId: true,
+      startTick: true,
+      phaseStartTick: true,
+      phaseDuration: true,
+      severity: true,
+      system: { select: { name: true } },
+    },
+  });
 
   return dbEvents.map((e) => {
     const eventType = toEventTypeId(e.type);
