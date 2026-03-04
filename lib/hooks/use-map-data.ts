@@ -99,10 +99,10 @@ export function useMapData({
 }: UseMapDataOptions): MapData {
   // ── Ship counts per system (docked only) ──────────────────────
   const shipsAtSystem = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map = new Map<string, number>();
     for (const ship of ships) {
       if (ship.status === "docked") {
-        map[ship.systemId] = (map[ship.systemId] ?? 0) + 1;
+        map.set(ship.systemId, (map.get(ship.systemId) ?? 0) + 1);
       }
     }
     return map;
@@ -216,7 +216,7 @@ export function useMapData({
         name: system.name,
         economyType: system.economyType,
         regionId: system.regionId,
-        shipCount: shipsAtSystem[system.id] ?? 0,
+        shipCount: shipsAtSystem.get(system.id) ?? 0,
         isGateway: system.isGateway,
         visibility,
         navigationState: nodeNavigationStates.get(system.id),

@@ -104,6 +104,7 @@ export class EffectLayer {
     // Remove stale rings
     for (const [id, ring] of this.pulseRingMap) {
       if (!wanted.has(id)) {
+        this.pulseContainer.removeChild(ring.gfx);
         ring.gfx.destroy();
         this.pulseRingMap.delete(id);
       }
