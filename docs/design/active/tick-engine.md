@@ -15,7 +15,7 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Processor Pipeline
 
-7 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+8 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
 
 ```
 Ship Arrivals ──────────────────────────────────┐
@@ -25,24 +25,26 @@ Events ────────────────────────�
        └→ Trade Missions (depends on: events, economy)
        └→ Op Missions (depends on: events, economy)
        └→ Price Snapshots (depends on: economy) ┘
+Notification Prune (independent, every 50 ticks) ┘
 ```
 
 ### Processor Details
 
 | Processor | Frequency | Dependencies | What It Does |
 |---|---|---|---|
-| Ship Arrivals | Every tick | None | Lands ships that have reached their arrival tick. Runs 4-stage cargo danger pipeline (hazard, tax, contraband, loss). Activates operational missions on arrival (bounty → battle creation, patrol/survey → commitment start). Notifies players of arrivals and losses |
+| Ship Arrivals | Every tick | None | Lands ships that have reached their arrival tick. Runs 5-stage cargo danger pipeline (hazard, tax, contraband, loss, hull/shield damage). Notifies players of arrivals and losses |
 | Battles | Every tick | Ship Arrivals | Resolves active battle rounds (every 6 ticks). Updates strength/morale, checks for victory/defeat/retreat. Applies ship damage and credits rewards on resolution |
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
 | Economy | Every tick | Events | Simulates one region's markets per tick (round-robin). Applies event modifiers and government effects to supply/demand |
 | Trade Missions | Every 5 ticks | Events, Economy | Generates new missions from price extremes and active events. Expires unclaimed/overdue missions. Notifies players |
-| Op Missions | Every 5 ticks | Events, Economy | Generates patrol/survey/bounty missions from danger levels and traits. Expires unclaimed missions. Completes timed missions (patrol/survey). Fails missions with destroyed/disabled ships |
+| Op Missions | Every tick | Events, Economy | Generates patrol/survey/bounty/salvage/recon missions from danger levels and traits. Expires unclaimed missions. Completes timed missions. Fails missions with destroyed/disabled ships |
 | Price Snapshots | Every 20 ticks | Economy | Records current prices for all systems into rolling history (max 50 snapshots per system) |
+| Notification Prune | Every 50 ticks | None | Deletes old notifications past their max age to prevent unbounded growth |
 
 ### Execution Model
 - All processors run inside a single transaction — all updates commit atomically
-- If one processor fails, others still run (error isolation with logging)
-- Performance is monitored: warns if total tick processing exceeds 80% of tick rate
+- If one processor fails, the error is re-thrown and the entire tick transaction aborts (PostgreSQL invalidates the connection after any query error, so continuing would cascade failures). The tick counter only advances if all processors succeed.
+- Performance is monitored via per-processor timing logged after each tick
 
 ---
 
@@ -64,12 +66,12 @@ After all processors complete, results are broadcast to connected clients via Se
 
 ## Region Round-Robin
 
-The economy processor doesn't update all markets every tick — it processes one region per tick in round-robin order. With 8 regions, each region's markets update once every 8 ticks.
+The economy processor doesn't update all markets every tick — it processes one region per tick in round-robin order. With 24 regions (default scale), each region's markets update once every 24 ticks.
 
 This means:
-- Markets in different regions can be temporarily out of sync (by up to 8 ticks)
+- Markets in different regions can be temporarily out of sync (by up to 24 ticks at default scale)
 - Keeps per-tick processing cost constant regardless of total system count
-- Scales to 1000+ systems without performance issues
+- Scales to 10,000+ systems without performance issues
 
 ---
 

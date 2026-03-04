@@ -12,17 +12,17 @@ The economy is a mean-reverting market simulation where supply and demand drift 
 | Good | Base Price | Volatility | Hazard |
 |---|---|---|---|
 | Water | 25 | 0.5 | none |
-| Food | 30 | 0.6 | none |
-| Ore | 35 | 0.8 | none |
-| Textiles | 28 | 0.5 | none |
+| Food | 30 | 0.7 | none |
+| Ore | 35 | 0.6 | none |
+| Textiles | 35 | 0.8 | none |
 
 Price range: 0.1x to 8.0x base. Wide equilibrium spreads (up to 6x between producing and consuming systems). Cheap, high volume, low risk.
 
 ### Tier 1 — Processed Goods
 | Good | Base Price | Volatility | Hazard |
 |---|---|---|---|
-| Fuel | 45 | 1.0 | low |
-| Metals | 50 | 0.8 | none |
+| Fuel | 35 | 1.0 | low |
+| Metals | 45 | 0.8 | none |
 | Chemicals | 55 | 1.2 | low |
 | Medicine | 65 | 1.5 | none |
 
@@ -31,12 +31,12 @@ Price range: 0.15x to 6.0x base. Medium equilibrium spreads. Moderate margins, s
 ### Tier 2 — Advanced Goods
 | Good | Base Price | Volatility | Hazard |
 |---|---|---|---|
-| Electronics | 80 | 0.8 | none |
-| Machinery | 100 | 1.0 | none |
+| Electronics | 80 | 1.0 | none |
+| Machinery | 100 | 0.8 | none |
 | Weapons | 120 | 2.0 | high |
-| Luxuries | 150 | 1.5 | none |
+| Luxuries | 150 | 1.8 | none |
 
-Price range: 0.2x to 4.0x base. Tight equilibrium spreads (1.6-2.7x). High value, tight margins, high risk for weapons.
+Price range: 0.2x to 4.0x base (Luxuries: 0.15x to 4.5x). Tight equilibrium spreads (1.6-2.7x). High value, tight margins, high risk for weapons.
 
 ### Good Properties
 Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in data but not currently enforced for cargo. Reserved for future use.
@@ -47,14 +47,14 @@ Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in 
 
 6 economy types define what a system produces and consumes. Each type has specific production and consumption rates per good (units/tick).
 
-| Type | Produces | Key Consumption |
+| Type | Produces (rate/tick) | Consumes (rate/tick) |
 |---|---|---|
-| Agricultural | Food (5), Textiles (4) | Water, Machinery, Chemicals, Medicine |
-| Extraction | Ore (4), Water (5) | Food, Fuel, Machinery, Textiles |
-| Refinery | Fuel (3), Metals (3), Chemicals (2) | Ore, Water, Food |
-| Industrial | Machinery (2), Weapons (1) | Metals, Electronics, Chemicals, Fuel (+ many others) |
-| Tech | Electronics (2), Medicine (2) | Metals, Chemicals, Luxuries, Food |
-| Core | Luxuries (1) | Food, Textiles, Electronics, Medicine, Weapons |
+| Agricultural | Food (5), Textiles (4) | Water (4), Chemicals (3), Machinery (1), Medicine (1) |
+| Extraction | Water (5), Ore (4) | Food (3), Fuel (3), Textiles (2), Machinery (1) |
+| Refinery | Fuel (3), Metals (3), Chemicals (2) | Ore (4), Water (3), Food (1) |
+| Industrial | Machinery (2), Weapons (1) | Metals (3), Electronics (2), Chemicals (2), Fuel (2), Water (2), Food (2), Ore (2), Textiles (1) |
+| Tech | Electronics (2), Medicine (2) | Metals (2), Chemicals (2), Food (2), Luxuries (1), Water (1) |
+| Core | Luxuries (1) | Food (3), Textiles (2), Electronics (2), Medicine (2), Water (2), Weapons (1) |
 
 This creates natural supply chains: Extraction produces ore, Refinery consumes ore and produces metals, Industrial consumes metals and produces machinery. Disrupting any link cascades through the chain.
 
@@ -62,7 +62,7 @@ This creates natural supply chains: Extraction produces ore, Refinery consumes o
 
 ## Government Types
 
-8 government types shape regional market behavior. Every type has trade-offs — buffs balanced by debuffs.
+4 government types shape regional market behavior (4 more planned). Every type has trade-offs — buffs balanced by debuffs.
 
 | Government | Volatility | Eq. Spread | Tax Rate | Danger | Contraband | Identity |
 |---|---|---|---|---|---|---|
@@ -98,7 +98,7 @@ Clamped to tier-specific floor/ceiling. If supply = 0, price hits the ceiling (m
 ### Per-Tick Simulation (runs once per region per tick, round-robin)
 Each good at each station is updated:
 
-1. **Determine equilibrium target** — producing systems target high supply/low demand, consuming systems target opposite, neutral systems use balanced defaults
+1. **Determine equilibrium target** — each good has per-good equilibrium targets for producing and consuming systems (e.g., Water produces: supply 150/demand 25, consumes: supply 25/demand 140). Neutral systems use balanced defaults (supply 60/demand 60). Government equilibrium spread adjustments scale these targets.
 2. **Apply event modifiers** — active events shift supply/demand targets, multiply production/consumption rates, and dampen reversion speed
 3. **Apply government modifiers** — scale volatility, adjust equilibrium spread, add consumption boosts
 4. **Mean reversion** — supply and demand are pulled 5% of the gap toward their equilibrium target each tick

@@ -41,7 +41,7 @@ Auto-generated delivery contracts posted at stations. They give players structur
 
 **Export missions** ("We have surplus X, deliver to Y"):
 - Generated when a good's price drops below 0.5x its base price
-- Source is the cheap system, destination is a random system 1-3 hops away
+- Source is the cheap system, destination is a random system 1-8 hops away
 - 8% chance per eligible market per generation cycle
 
 **Event-linked missions**:
