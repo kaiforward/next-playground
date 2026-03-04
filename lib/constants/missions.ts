@@ -125,5 +125,5 @@ export const MISSION_CONSTANTS = {
   REWARD_TIER_MULT,
   REWARD_EVENT_MULT: 1.5,
   REWARD_MIN: 50,
-  MAX_EXPORT_DISTANCE: 3,        // hops
+  MAX_EXPORT_DISTANCE: 8,        // hops
 } as const;

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { PrismaClient } from "@/app/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { GOODS } from "@/lib/constants/goods";
 import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
 import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
@@ -12,10 +12,9 @@ import {
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { toEconomyType } from "@/lib/types/guards";
 
-
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL ?? "file:./dev.db",
-});
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL environment variable is required");
+const adapter = new PrismaPg({ connectionString: url });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {

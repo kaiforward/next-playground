@@ -4,7 +4,6 @@ import type {
   PlayerEventMap,
 } from "../types";
 import { persistPlayerNotifications, addPlayerNotification } from "../helpers";
-import { computeAllHopDistances } from "@/lib/engine/pathfinding";
 import {
   selectEconomyCandidates,
   selectEventCandidates,
@@ -14,6 +13,7 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { EVENT_MISSION_GOODS } from "@/lib/constants/events";
 import { GOOD_NAME_TO_KEY, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
+import { loadHopDistances } from "@/lib/services/hop-distances";
 
 export const tradeMissionsProcessor: TickProcessor = {
   name: "trade-missions",
@@ -64,11 +64,8 @@ export const tradeMissionsProcessor: TickProcessor = {
       }
     }
 
-    // 2. Fetch connections and compute hop distances
-    const connections = await ctx.tx.systemConnection.findMany({
-      select: { fromSystemId: true, toSystemId: true, fuelCost: true },
-    });
-    const hopDistances = computeAllHopDistances(connections);
+    // 2. Load cached hop distances (bounded to MAX_EXPORT_DISTANCE)
+    const hopDistances = await loadHopDistances();
 
     // 3. Fetch all markets with good data for price snapshots
     const markets = await ctx.tx.stationMarket.findMany({
@@ -116,7 +113,6 @@ export const tradeMissionsProcessor: TickProcessor = {
     const eventCandidates = selectEventCandidates(
       eventSnapshots,
       EVENT_MISSION_GOODS,
-      hopDistances,
       GOOD_TIER_BY_KEY,
       ctx.tick,
       Math.random,

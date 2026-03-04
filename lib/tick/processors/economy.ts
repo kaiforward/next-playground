@@ -25,24 +25,27 @@ const simParams: EconomySimParams = {
   equilibrium: EQUILIBRIUM_TARGETS,
 };
 
-/**
- * Update market supply/demand for a batch of markets.
- * Uses individual Prisma updates inside the shared transaction — single commit,
- * safe, and fast enough for ~150 rows on SQLite.
- *
- * TODO: Replace with parameterized batch SQL (`UPDATE...FROM VALUES`) after
- * PostgreSQL migration (Step 5).
- */
+/** Bulk-update market supply/demand in a single SQL round-trip. */
 async function batchUpdateMarkets(
   tx: TxClient,
   updates: { id: string; supply: number; demand: number }[],
 ): Promise<void> {
-  for (const u of updates) {
-    await tx.stationMarket.update({
-      where: { id: u.id },
-      data: { supply: u.supply, demand: u.demand },
-    });
-  }
+  if (updates.length === 0) return;
+
+  const ids = updates.map((u) => u.id);
+  const supplies = updates.map((u) => isFinite(u.supply) ? u.supply : 0);
+  const demands = updates.map((u) => isFinite(u.demand) ? u.demand : 0);
+
+  await tx.$executeRawUnsafe(
+    `UPDATE "StationMarket" AS sm
+     SET "supply" = batch."supply", "demand" = batch."demand"
+     FROM unnest($1::text[], $2::double precision[], $3::double precision[])
+       AS batch("id", "supply", "demand")
+     WHERE sm."id" = batch."id"`,
+    ids,
+    supplies,
+    demands,
+  );
 }
 
 export const economyProcessor: TickProcessor = {

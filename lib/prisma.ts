@@ -1,5 +1,5 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -7,14 +7,10 @@ declare global {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
-  });
-  const client = new PrismaClient({ adapter });
-  // Enable WAL mode so readers don't block on tick transaction writes.
-  // Persistent once set — survives restarts.
-  client.$executeRawUnsafe("PRAGMA journal_mode=WAL").catch(() => {});
-  return client;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL environment variable is required");
+  const adapter = new PrismaPg({ connectionString: url });
+  return new PrismaClient({ adapter });
 }
 
 export const prisma = globalThis.__prisma ?? createPrismaClient();

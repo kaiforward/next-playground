@@ -19,6 +19,7 @@ export function usePurchaseShipMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
+      queryClient.invalidateQueries({ queryKey: queryKeys.visibility });
     },
   });
 }

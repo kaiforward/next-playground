@@ -166,7 +166,6 @@ describe("selectEconomyCandidates", () => {
 // ── selectEventCandidates ───────────────────────────────────────
 
 describe("selectEventCandidates", () => {
-  const hopDist = makeHopDistances([["sys-a", "sys-b", 1]]);
   const missionGoods = {
     war: { goods: ["weapons", "fuel", "machinery"], isImport: true },
     plague: { goods: ["medicine", "food"], isImport: true },
@@ -184,7 +183,7 @@ describe("selectEventCandidates", () => {
       return 0.5;
     };
 
-    const candidates = selectEventCandidates(events, missionGoods, hopDist, goodTiers, 100, rng);
+    const candidates = selectEventCandidates(events, missionGoods, goodTiers, 100, rng);
     expect(candidates.length).toBeGreaterThanOrEqual(1);
     expect(candidates.length).toBeLessThanOrEqual(3);
 
@@ -201,7 +200,7 @@ describe("selectEventCandidates", () => {
       { id: "evt-2", type: "plague", systemId: "sys-b" },
     ];
 
-    const candidates = selectEventCandidates(events, missionGoods, hopDist, goodTiers, 100, fixedRng(0.5));
+    const candidates = selectEventCandidates(events, missionGoods, goodTiers, 100, fixedRng(0.5));
     expect(candidates.length).toBeGreaterThanOrEqual(1);
 
     for (const c of candidates) {
@@ -215,7 +214,7 @@ describe("selectEventCandidates", () => {
       { id: "evt-3", type: "ore_glut", systemId: "sys-a" },
     ];
 
-    const candidates = selectEventCandidates(events, missionGoods, hopDist, goodTiers, 100, fixedRng(0.5));
+    const candidates = selectEventCandidates(events, missionGoods, goodTiers, 100, fixedRng(0.5));
     expect(candidates).toHaveLength(0);
   });
 
@@ -224,7 +223,7 @@ describe("selectEventCandidates", () => {
       { id: "evt-4", type: "war", systemId: "sys-a" },
     ];
 
-    const candidates = selectEventCandidates(events, missionGoods, hopDist, goodTiers, 100, fixedRng(0.0));
+    const candidates = selectEventCandidates(events, missionGoods, goodTiers, 100, fixedRng(0.0));
     for (const c of candidates) {
       expect(c.eventId).toBe("evt-4");
     }

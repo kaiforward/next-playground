@@ -16,10 +16,13 @@ import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 
 export const missionsProcessor: TickProcessor = {
   name: "missions",
-  frequency: 5,
+  // Runs every tick; round-robin region selection for candidate generation
+  frequency: 1,
   dependsOn: ["events", "economy"],
 
   async process(ctx): Promise<TickProcessorResult> {
+    // ── Global housekeeping (cheap indexed queries, not region-scoped) ──
+
     // 1. Expire unclaimed missions past deadline
     const expired = await ctx.tx.mission.deleteMany({
       where: {
@@ -126,45 +129,69 @@ export const missionsProcessor: TickProcessor = {
       }
     }
 
-    // 4. Generate new candidates
-    // Fetch all systems with traits for survey eligibility + danger computation
+    // ── Region round-robin candidate generation ──
+
+    // 4. Determine target region for this tick
+    const regions = await ctx.tx.region.findMany({
+      select: { id: true, name: true, governmentType: true },
+      orderBy: { name: "asc" },
+    });
+
+    if (regions.length === 0) {
+      await persistPlayerNotifications(ctx.tx, playerEvents, ctx.tick);
+      return {
+        globalEvents: {
+          opMissionsUpdated: [{ generated: 0, expired: expired.count }],
+        },
+        playerEvents: playerEvents.size > 0 ? playerEvents : undefined,
+      };
+    }
+
+    const regionIndex = ctx.tick % regions.length;
+    const targetRegion = regions[regionIndex];
+
+    // Fetch systems in the target region only
     const systems = await ctx.tx.starSystem.findMany({
+      where: { regionId: targetRegion.id },
       select: {
         id: true,
         name: true,
         traits: { select: { traitId: true, quality: true } },
-        region: { select: { governmentType: true } },
       },
     });
 
-    // Fetch navigation modifiers for danger computation
-    const navModifiers = await ctx.tx.eventModifier.findMany({
-      where: {
-        domain: "navigation",
-        targetType: "system",
-      },
-      select: {
-        targetId: true,
-        domain: true,
-        type: true,
-        targetType: true,
-        goodId: true,
-        parameter: true,
-        value: true,
-      },
-    });
+    const systemIds = systems.map((s) => s.id);
+
+    // Fetch navigation modifiers scoped to target region's systems
+    const navModifiers = systemIds.length > 0
+      ? await ctx.tx.eventModifier.findMany({
+          where: {
+            domain: "navigation",
+            targetType: "system",
+            targetId: { in: systemIds },
+          },
+          select: {
+            targetId: true,
+            domain: true,
+            type: true,
+            targetType: true,
+            goodId: true,
+            parameter: true,
+            value: true,
+          },
+        })
+      : [];
 
     // Group modifiers by system
     const modsBySystem = groupModifiersByTarget(navModifiers);
 
-    // Compute danger levels for each system
+    // Compute danger levels for each system in the region
+    const govType = toGovernmentType(targetRegion.governmentType);
+    const govDef = GOVERNMENT_TYPES[govType];
+    const govBaseline = govDef?.dangerBaseline ?? 0;
+
     const dangerLevels = new Map<string, number>();
     for (const system of systems) {
-      const govType = system.region?.governmentType
-        ? toGovernmentType(system.region.governmentType)
-        : undefined;
-      const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
-      const govBaseline = govDef?.dangerBaseline ?? 0;
       const traitDanger = computeTraitDanger(
         system.traits.map((t) => ({
           traitId: toTraitId(t.traitId),
@@ -193,11 +220,15 @@ export const missionsProcessor: TickProcessor = {
       Math.random,
     );
 
-    // 5. Cap check per system
+    // 5. Cap check scoped to the target region's systems
+    let created = 0;
     if (candidates.length > 0) {
       const existingCounts = await ctx.tx.mission.groupBy({
         by: ["systemId"],
-        where: { status: "available" },
+        where: {
+          status: "available",
+          systemId: { in: systemIds },
+        },
         _count: { id: true },
       });
 
@@ -243,17 +274,19 @@ export const missionsProcessor: TickProcessor = {
         await ctx.tx.mission.createMany({ data: toCreate });
       }
 
-      console.log(
-        `[missions] Expired ${expired.count} available, completed ${completedMissions.length} timed, generated ${toCreate.length} operational mission(s)`,
-      );
+      created = toCreate.length;
     }
+
+    console.log(
+      `[missions] Region ${regionIndex + 1}/${regions.length} "${targetRegion.name}" — expired ${expired.count}, completed ${completedMissions.length}, generated ${created} mission(s)`,
+    );
 
     // Persist notifications to DB
     await persistPlayerNotifications(ctx.tx, playerEvents, ctx.tick);
 
     return {
       globalEvents: {
-        opMissionsUpdated: [{ generated: candidates.length, expired: expired.count }],
+        opMissionsUpdated: [{ generated: created, expired: expired.count }],
       },
       playerEvents: playerEvents.size > 0 ? playerEvents : undefined,
     };
