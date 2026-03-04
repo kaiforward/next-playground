@@ -7,6 +7,8 @@ import { useFleet } from "@/lib/hooks/use-fleet";
 import { useConvoys } from "@/lib/hooks/use-convoy";
 import { useSystemAllMissions } from "@/lib/hooks/use-op-missions";
 import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
+import { enrichTraits } from "@/lib/utils/traits";
+import { deriveSystemLocations } from "@/lib/constants/locations";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +42,11 @@ function SystemPanelContent({
     allMissions.tradeMissions.available.length +
     allMissions.opMissions.available.length;
 
+  const exploreCount = useMemo(() => {
+    const traits = systemInfo?.traits ? enrichTraits(systemInfo.traits) : [];
+    return deriveSystemLocations(traits).filter((l) => l.available).length;
+  }, [systemInfo?.traits]);
+
   const basePath = `/system/${systemId}`;
   const tabs = [
     { label: "Overview", href: basePath, active: pathname === basePath, badge: 0 },
@@ -48,6 +55,7 @@ function SystemPanelContent({
     { label: "Convoys", href: `${basePath}/convoys`, active: pathname.startsWith(`${basePath}/convoys`), badge: convoyCount },
     { label: "Shipyard", href: `${basePath}/shipyard`, active: pathname.startsWith(`${basePath}/shipyard`), badge: 0 },
     { label: "Contracts", href: `${basePath}/contracts`, active: pathname.startsWith(`${basePath}/contracts`), badge: contractCount },
+    { label: "Explore", href: `${basePath}/explore`, active: pathname.startsWith(`${basePath}/explore`), badge: exploreCount },
   ];
 
   const subtitle = (

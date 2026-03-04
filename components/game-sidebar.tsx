@@ -13,15 +13,6 @@ import { NotificationBell } from "@/components/notifications/notification-bell";
 /*  Icons (inline SVG – Heroicons Solid 20×20)                        */
 /* ------------------------------------------------------------------ */
 
-function CantinaIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4.5 h-4.5 shrink-0">
-      <path d="M10 9.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V10a.75.75 0 0 0-.75-.75H10ZM6 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H6ZM8 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H8ZM9.25 14a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V14ZM12 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H12ZM12 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H12ZM13.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H14a.75.75 0 0 1-.75-.75V12ZM11.25 10a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H12a.75.75 0 0 1-.75-.75V10ZM14 9.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V10a.75.75 0 0 0-.75-.75H14Z" />
-      <path fillRule="evenodd" d="M1 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V6Zm2-.5h14a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V6a.5.5 0 0 1 .5-.5Z" clipRule="evenodd" />
-    </svg>
-  );
-}
-
 function FleetIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4.5 h-4.5 shrink-0">
@@ -90,10 +81,6 @@ interface NavItem {
   label: string;
   icon: React.ComponentType;
 }
-
-const PRIMARY_NAV: NavItem[] = [
-  { href: "/cantina", label: "Cantina", icon: CantinaIcon },
-];
 
 const FLEET_NAV: NavItem[] = [
   { href: "/fleet", label: "Fleet", icon: FleetIcon },
@@ -223,15 +210,6 @@ export function GameSidebar({
       <div className="mt-1">
         <NotificationBell collapsed={collapsed} />
       </div>
-
-      <Divider />
-
-      {/* Primary nav */}
-      <nav className="mt-2 flex flex-col gap-0.5">
-        {PRIMARY_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
-        ))}
-      </nav>
 
       <Divider />
 

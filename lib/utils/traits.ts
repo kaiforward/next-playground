@@ -1,9 +1,9 @@
-import type { SystemTraitInfo, QualityTier, TraitCategory } from "@/lib/types/game";
+import type { SystemTraitInfo, TraitId, QualityTier, TraitCategory } from "@/lib/types/game";
 import { TRAITS, QUALITY_TIERS } from "@/lib/constants/traits";
 
 /** Enriched trait with pre-resolved display fields. */
 export interface EnrichedTrait {
-  traitId: string;
+  traitId: TraitId;
   quality: QualityTier;
   name: string;
   category: TraitCategory;

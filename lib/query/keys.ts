@@ -27,4 +27,8 @@ export const queryKeys = {
   // Visibility + dynamic data (separated concerns)
   visibility: ["visibility"] as const,
   dynamicVisible: ["dynamicVisible"] as const,
+  // Cantina
+  cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
+  cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,
+  cantinaNpcVisits: (systemId: string) => ["cantinaNpcVisits", systemId] as const,
 };

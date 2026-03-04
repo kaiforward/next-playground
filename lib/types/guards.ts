@@ -26,6 +26,7 @@ import type { MissionType, StatGateKey } from "@/lib/constants/missions";
 import type { EnemyTier } from "@/lib/constants/combat";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import type { UniverseScale } from "@/lib/constants/universe-gen";
+import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -298,6 +299,14 @@ export function toEventTypeId(value: string): EventTypeId {
 const UNIVERSE_SCALES: ReadonlySet<string> = new Set<UniverseScale>([
   "default", "10k",
 ]);
+
+const CANTINA_NPC_TYPES: ReadonlySet<string> = new Set<CantinaNpcType>([
+  "bartender", "cautious_trader", "frontier_gambler", "sharp_smuggler", "station_regular",
+]);
+
+export function isCantinaNpcType(value: string): value is CantinaNpcType {
+  return CANTINA_NPC_TYPES.has(value);
+}
 
 export function toUniverseScale(value: string): UniverseScale {
   if (!UNIVERSE_SCALES.has(value)) {

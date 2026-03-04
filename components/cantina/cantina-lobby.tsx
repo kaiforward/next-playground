@@ -8,6 +8,7 @@ import {
   NPC_DIFFICULTY,
   NPC_WAGER_LIMITS,
 } from "@/lib/engine/mini-games/voids-gambit";
+import { NPC_ARCHETYPES, ARCHETYPE_DISPLAY } from "@/lib/constants/cantina-npcs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,30 +28,27 @@ const opponentCardVariants = tv({
   defaultVariants: { selected: false },
 });
 
-// ── Archetype display config ─────────────────────────────────────
-
-interface ArchetypeInfo {
-  key: NpcArchetype;
-  label: string;
-  badgeColor: "green" | "amber" | "purple" | "red";
-}
-
-const ARCHETYPES: ArchetypeInfo[] = [
-  { key: "cautious_trader", label: "Cautious Trader", badgeColor: "green" },
-  { key: "frontier_gambler", label: "Frontier Gambler", badgeColor: "amber" },
-  { key: "sharp_smuggler", label: "Sharp Smuggler", badgeColor: "purple" },
-  { key: "station_regular", label: "Station Regular", badgeColor: "red" },
-];
-
 // ── Component ────────────────────────────────────────────────────
 
 interface CantinaLobbyProps {
   onStart: (archetype: NpcArchetype, wager: number) => void;
+  /** Player credit balance. When provided, shows balance and disables when insufficient. */
+  playerCredits?: number;
+  /** Pre-select an archetype (e.g. from patron challenge). */
+  initialArchetype?: NpcArchetype | null;
 }
 
-export function CantinaLobby({ onStart }: CantinaLobbyProps) {
-  const [selected, setSelected] = useState<NpcArchetype | null>(null);
-  const [wager, setWager] = useState(50);
+export function CantinaLobby({
+  onStart,
+  playerCredits,
+  initialArchetype,
+}: CantinaLobbyProps) {
+  const [selected, setSelected] = useState<NpcArchetype | null>(
+    initialArchetype ?? null,
+  );
+  const [wager, setWager] = useState(
+    initialArchetype ? NPC_WAGER_LIMITS[initialArchetype].default : 50,
+  );
 
   const limits = selected ? NPC_WAGER_LIMITS[selected] : null;
 
@@ -65,18 +63,32 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
     onStart(selected, Math.max(limits.min, Math.min(limits.max, wager)));
   };
 
+  const insufficientFunds =
+    playerCredits !== undefined && playerCredits < (limits?.min ?? 10);
+
   return (
     <div className="space-y-8">
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold text-text-primary">Cantina</h1>
+        <h1 className="text-3xl font-bold text-text-primary">
+          Void&apos;s Gambit
+        </h1>
         <p className="text-base text-text-tertiary">
-          Choose an opponent for Void&apos;s Gambit
+          Choose an opponent
         </p>
+        {playerCredits !== undefined && (
+          <p className="text-sm text-text-secondary">
+            Your balance:{" "}
+            <span className={insufficientFunds ? "text-red-400" : "text-amber-300"}>
+              {Math.floor(playerCredits)} CR
+            </span>
+          </p>
+        )}
       </div>
 
       {/* Opponent grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {ARCHETYPES.map(({ key, label, badgeColor }) => {
+        {NPC_ARCHETYPES.map((key) => {
+          const display = ARCHETYPE_DISPLAY[key];
           const isSelected = selected === key;
           const difficulty = NPC_DIFFICULTY[key];
           const wagerLimits = NPC_WAGER_LIMITS[key];
@@ -95,10 +107,10 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
               >
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="text-lg font-semibold text-text-primary">
-                    {label}
+                    {display.label}
                   </h3>
-                  <Badge color={badgeColor}>
-                    {label.split(" ")[0]}
+                  <Badge color={display.badgeColor}>
+                    {display.label.split(" ")[0]}
                   </Badge>
                 </div>
                 <DifficultyDots level={difficulty} showLabel />
@@ -133,7 +145,7 @@ export function CantinaLobby({ onStart }: CantinaLobbyProps) {
           variant="action"
           color="green"
           size="lg"
-          disabled={!selected}
+          disabled={!selected || insufficientFunds}
           onClick={handleStart}
         >
           Sit Down
