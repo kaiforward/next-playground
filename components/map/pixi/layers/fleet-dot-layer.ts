@@ -11,6 +11,9 @@ export class FleetDotLayer {
   private graphics = new Graphics();
 
   constructor() {
+    // Non-interactive — must not intercept pointer events from system objects above
+    this.container.eventMode = "none";
+    this.container.interactiveChildren = false;
     this.container.addChild(this.graphics);
   }
 
