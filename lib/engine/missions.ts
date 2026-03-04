@@ -24,7 +24,8 @@ export interface MissionCandidate {
   eventId: string | null;
 }
 
-export interface EventSnapshot {
+/** Minimal event snapshot for mission generation (system-level events only). */
+export interface MissionEventSnapshot {
   id: string;
   type: string;
   systemId: string;
@@ -150,8 +151,8 @@ export function selectEconomyCandidates(
  * Uses EVENT_MISSION_GOODS mapping to determine themed goods.
  */
 export function selectEventCandidates(
-  events: EventSnapshot[],
-  missionGoods: Record<string, EventMissionGoodsEntry>,
+  events: MissionEventSnapshot[],
+  missionGoods: Partial<Record<string, EventMissionGoodsEntry>>,
   goodTiers: Record<string, number>,
   tick: number,
   rng: () => number,

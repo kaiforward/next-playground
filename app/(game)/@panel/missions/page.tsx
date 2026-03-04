@@ -31,7 +31,7 @@ function DeliveryMissions() {
   const { fleet } = useFleet();
   const deliverMutation = useDeliverMission();
   const abandonMutation = useAbandonMission();
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedShips, setSelectedShips] = useState<Record<string, string>>({});
 
   if (missions.length === 0) {
@@ -54,7 +54,6 @@ function DeliveryMissions() {
 
   return (
     <div className="space-y-3">
-      {error && <InlineAlert className="mb-2">{error}</InlineAlert>}
       {missions.map((mission) => (
         <DeliveryMissionRow
           key={mission.id}
@@ -67,7 +66,16 @@ function DeliveryMissions() {
           }
           deliverMutation={deliverMutation}
           abandonMutation={abandonMutation}
-          onError={setError}
+          error={errors[mission.id] ?? null}
+          onError={(msg) =>
+            setErrors((prev) => {
+              if (msg === null) {
+                const { [mission.id]: _, ...rest } = prev;
+                return rest;
+              }
+              return { ...prev, [mission.id]: msg };
+            })
+          }
         />
       ))}
     </div>
@@ -82,6 +90,7 @@ interface DeliveryMissionRowProps {
   onSelectShip: (shipId: string) => void;
   deliverMutation: ReturnType<typeof useDeliverMission>;
   abandonMutation: ReturnType<typeof useAbandonMission>;
+  error: string | null;
   onError: (msg: string | null) => void;
 }
 
@@ -93,6 +102,7 @@ function DeliveryMissionRow({
   onSelectShip,
   deliverMutation,
   abandonMutation,
+  error,
   onError,
 }: DeliveryMissionRowProps) {
   const shipsAtDest = dockedShipsBySystem.get(mission.destinationId) ?? [];
@@ -105,7 +115,9 @@ function DeliveryMissionRow({
   const resolvedShipId = selectedShipId ?? eligibleShips[0]?.id;
 
   return (
-    <div className="flex items-start gap-3 py-3 px-3 rounded-lg bg-surface-hover/40">
+    <div className="space-y-1">
+      {error && <InlineAlert className="text-xs">{error}</InlineAlert>}
+      <div className="flex items-start gap-3 py-3 px-3 rounded-lg bg-surface-hover/40">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-text-primary">
@@ -189,6 +201,7 @@ function DeliveryMissionRow({
           Abandon
         </Button>
       </div>
+      </div>
     </div>
   );
 }
@@ -200,7 +213,7 @@ function OperationsMissions() {
   const { fleet } = useFleet();
   const abandonMutation = useAbandonOpMission();
   const startMutation = useStartOpMission();
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedShips, setSelectedShips] = useState<Record<string, string>>({});
 
   if (missions.length === 0) {
@@ -214,7 +227,6 @@ function OperationsMissions() {
 
   return (
     <div className="space-y-3">
-      {error && <InlineAlert className="mb-2">{error}</InlineAlert>}
       {missions.map((mission) => (
         <OperationMissionRow
           key={mission.id}
@@ -226,7 +238,16 @@ function OperationsMissions() {
           }
           startMutation={startMutation}
           abandonMutation={abandonMutation}
-          onError={setError}
+          error={errors[mission.id] ?? null}
+          onError={(msg) =>
+            setErrors((prev) => {
+              if (msg === null) {
+                const { [mission.id]: _, ...rest } = prev;
+                return rest;
+              }
+              return { ...prev, [mission.id]: msg };
+            })
+          }
         />
       ))}
     </div>
@@ -240,6 +261,7 @@ interface OperationMissionRowProps {
   onSelectShip: (shipId: string) => void;
   startMutation: ReturnType<typeof useStartOpMission>;
   abandonMutation: ReturnType<typeof useAbandonOpMission>;
+  error: string | null;
   onError: (msg: string | null) => void;
 }
 
@@ -250,6 +272,7 @@ function OperationMissionRow({
   onSelectShip,
   startMutation,
   abandonMutation,
+  error,
   onError,
 }: OperationMissionRowProps) {
   const typeDef = MISSION_TYPE_DEFS[mission.type];
@@ -277,12 +300,14 @@ function OperationMissionRow({
   }
 
   return (
-    <div className="flex items-start gap-3 py-3 px-3 rounded-lg bg-surface-hover/40">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge color={typeColor ?? "slate"}>
-            {typeDef?.name ?? mission.type}
-          </Badge>
+    <div className="space-y-1">
+      {error && <InlineAlert className="text-xs">{error}</InlineAlert>}
+      <div className="flex items-start gap-3 py-3 px-3 rounded-lg bg-surface-hover/40">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge color={typeColor ?? "slate"}>
+              {typeDef?.name ?? mission.type}
+            </Badge>
           {mission.enemyTier && (
             <Badge color={ENEMY_TIER_BADGE_COLOR[mission.enemyTier] ?? "slate"}>
               {ENEMY_TIERS[mission.enemyTier]?.name ?? mission.enemyTier}
@@ -366,6 +391,7 @@ function OperationMissionRow({
             Abandon
           </Button>
         )}
+        </div>
       </div>
     </div>
   );

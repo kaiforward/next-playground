@@ -22,7 +22,7 @@ const cache = new Map<string, CachedVisibility>();
 
 export async function getPlayerVisibility(
   playerId: string,
-): Promise<{ visibleSet: Set<string>; playerSystemIds: Set<string> }> {
+): Promise<{ visibleSet: Set<string>; playerSystemIds: Set<string>; currentTick: number }> {
   // 1. Read current tick (single-row table, indexed PK)
   const world = await prisma.gameWorld.findUniqueOrThrow({
     where: { id: "world" },
@@ -32,7 +32,7 @@ export async function getPlayerVisibility(
   // 2. Cache hit — same tick, return immediately
   const cached = cache.get(playerId);
   if (cached && cached.tick === world.currentTick) {
-    return { visibleSet: cached.visibleSet, playerSystemIds: cached.playerSystemIds };
+    return { visibleSet: cached.visibleSet, playerSystemIds: cached.playerSystemIds, currentTick: world.currentTick };
   }
 
   // 3. Cache miss — load ships + adjacency, compute BFS
@@ -62,7 +62,7 @@ export async function getPlayerVisibility(
     playerSystemIds,
   });
 
-  return { visibleSet, playerSystemIds };
+  return { visibleSet, playerSystemIds, currentTick: world.currentTick };
 }
 
 /** Returns just the visible system IDs as an array (for the visibility API). */

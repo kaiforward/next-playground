@@ -12,7 +12,7 @@ import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { calculatePrice } from "@/lib/engine/pricing";
-import { toEconomyType } from "@/lib/types/guards";
+import { toEconomyType, isEventTypeId } from "@/lib/types/guards";
 
 // ── Result types ────────────────────────────────────────────────
 
@@ -71,10 +71,10 @@ export async function spawnEvent(params: {
   eventType: string;
   severity?: number;
 }): Promise<ServiceResult<{ eventId: string; type: string; phase: string }>> {
-  const def = EVENT_DEFINITIONS[params.eventType];
-  if (!def) {
+  if (!isEventTypeId(params.eventType)) {
     return { ok: false, error: `Unknown event type: ${params.eventType}` };
   }
+  const def = EVENT_DEFINITIONS[params.eventType];
 
   const system = await prisma.starSystem.findUnique({
     where: { id: params.systemId },

@@ -466,7 +466,7 @@ const solarStorm: EventDefinition = {
 
 // ── Event → mission theme mapping ──────────────────────────────
 
-export const EVENT_MISSION_GOODS: Record<string, { goods: string[]; isImport: boolean }> = {
+export const EVENT_MISSION_GOODS: Partial<Record<EventTypeId, { goods: string[]; isImport: boolean }>> = {
   war:             { goods: ["weapons", "fuel", "machinery"], isImport: true },
   plague:          { goods: ["medicine", "food"],             isImport: true },
   trade_festival:  { goods: ["luxuries", "food"],             isImport: true },
@@ -490,4 +490,7 @@ const EVENT_DEFINITIONS_INTERNAL = {
   solar_storm: solarStorm,
 } as const satisfies Record<EventTypeId, EventDefinition>;
 
-export const EVENT_DEFINITIONS: Record<string, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;
+export const EVENT_DEFINITIONS: Record<EventTypeId, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;
+
+/** All event type IDs as a typed array. Use instead of Object.keys(EVENT_DEFINITIONS). */
+export const EVENT_TYPE_IDS: EventTypeId[] = Object.keys(EVENT_DEFINITIONS_INTERNAL) as Array<keyof typeof EVENT_DEFINITIONS_INTERNAL>;

@@ -6,7 +6,7 @@ import {
   validateAccept,
   validateDelivery,
   type MarketSnapshot,
-  type EventSnapshot,
+  type MissionEventSnapshot,
 } from "../missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 
@@ -172,7 +172,7 @@ describe("selectEventCandidates", () => {
   };
 
   it("generates missions for war event", () => {
-    const events: EventSnapshot[] = [
+    const events: MissionEventSnapshot[] = [
       { id: "evt-1", type: "war", systemId: "sys-a" },
     ];
 
@@ -196,7 +196,7 @@ describe("selectEventCandidates", () => {
   });
 
   it("generates missions for plague event", () => {
-    const events: EventSnapshot[] = [
+    const events: MissionEventSnapshot[] = [
       { id: "evt-2", type: "plague", systemId: "sys-b" },
     ];
 
@@ -210,7 +210,7 @@ describe("selectEventCandidates", () => {
   });
 
   it("skips events without mission goods mapping", () => {
-    const events: EventSnapshot[] = [
+    const events: MissionEventSnapshot[] = [
       { id: "evt-3", type: "ore_glut", systemId: "sys-a" },
     ];
 
@@ -219,7 +219,7 @@ describe("selectEventCandidates", () => {
   });
 
   it("sets eventId for cascade expiry", () => {
-    const events: EventSnapshot[] = [
+    const events: MissionEventSnapshot[] = [
       { id: "evt-4", type: "war", systemId: "sys-a" },
     ];
 

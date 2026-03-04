@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { ServiceError } from "./errors";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { toEventTypeId } from "@/lib/types/guards";
 import { getPlayerVisibility } from "./visibility-cache";
@@ -10,18 +9,10 @@ import type { ActiveEvent } from "@/lib/types/game";
  * Filters by the player's visible system set and resolves display-friendly fields.
  */
 export async function getActiveEvents(playerId: string): Promise<ActiveEvent[]> {
-  const [world, { visibleSet }] = await Promise.all([
-    prisma.gameWorld.findUnique({
-      where: { id: "world" },
-      select: { currentTick: true },
-    }),
-    getPlayerVisibility(playerId),
-  ]);
+  const { visibleSet, currentTick } = await getPlayerVisibility(playerId);
 
-  if (!world) {
-    throw new ServiceError("Game world not initialized.", 500);
-  }
-
+  // NOTE: Filters by systemId only — region-level events (systemId=null) are excluded.
+  // All current event definitions target systems, so this is safe for now.
   const dbEvents = await prisma.gameEvent.findMany({
     where: {
       systemId: { in: [...visibleSet] },
@@ -57,7 +48,7 @@ export async function getActiveEvents(playerId: string): Promise<ActiveEvent[]> 
       startTick: e.startTick,
       phaseStartTick: e.phaseStartTick,
       phaseDuration: e.phaseDuration,
-      ticksRemaining: Math.max(0, e.phaseStartTick + e.phaseDuration - world.currentTick),
+      ticksRemaining: Math.max(0, e.phaseStartTick + e.phaseDuration - currentTick),
       severity: e.severity,
     };
   });

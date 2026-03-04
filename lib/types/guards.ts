@@ -284,11 +284,15 @@ export function toBattleStatus(value: string): BattleStatus {
   return value as BattleStatus;
 }
 
+export function isEventTypeId(value: string): value is EventTypeId {
+  return value in EVENT_DEFINITIONS;
+}
+
 export function toEventTypeId(value: string): EventTypeId {
-  if (!(value in EVENT_DEFINITIONS)) {
+  if (!isEventTypeId(value)) {
     throw new Error(`Invalid event type: "${value}"`);
   }
-  return value as EventTypeId;
+  return value;
 }
 
 const UNIVERSE_SCALES: ReadonlySet<string> = new Set<UniverseScale>([
