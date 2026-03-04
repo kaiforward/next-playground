@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "simulate": "tsx scripts/simulate.ts",
     "index": "node scripts/generate-module-index.mjs"
   },
