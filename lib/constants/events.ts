@@ -1,4 +1,5 @@
 import type { EconomyType } from "@/lib/types/game";
+import { summarizePhaseEffects } from "@/lib/utils/event-effects";
 
 // ── Event type union ────────────────────────────────────────────
 
@@ -750,7 +751,32 @@ const EVENT_DEFINITIONS_INTERNAL = {
 export const EVENT_DEFINITIONS: Record<EventTypeId, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;
 
 /** All event type IDs as a typed array. Use instead of Object.keys(EVENT_DEFINITIONS). */
-export const EVENT_TYPE_IDS: EventTypeId[] = Object.keys(EVENT_DEFINITIONS_INTERNAL) as Array<keyof typeof EVENT_DEFINITIONS_INTERNAL>;
+export const EVENT_TYPE_IDS = [
+  "inner_system_conflict", "plague", "trade_festival", "conflict_spillover",
+  "plague_risk", "mining_boom", "ore_glut", "supply_shortage", "pirate_raid",
+  "solar_storm", "refugee_crisis", "trade_embargo", "tech_breakthrough", "asteroid_strike",
+] as const satisfies readonly EventTypeId[];
+
+// ── Phase effect summaries ──────────────────────────────────────
+
+/**
+ * Pre-computed effect summaries for every (eventType, phaseName) pair.
+ * Built once at module load — modifiers are constants so the output never changes.
+ */
+const PHASE_EFFECT_SUMMARIES: Record<string, string> = {};
+for (const [type, def] of Object.entries(EVENT_DEFINITIONS)) {
+  for (const phase of def.phases) {
+    PHASE_EFFECT_SUMMARIES[`${type}:${phase.name}`] = summarizePhaseEffects(phase);
+  }
+}
+
+/**
+ * Get the effect summary for a specific event type and phase name.
+ * Returns a short human-readable string describing the phase's impact.
+ */
+export function getPhaseEffectSummary(eventType: EventTypeId, phaseName: string): string {
+  return PHASE_EFFECT_SUMMARIES[`${eventType}:${phaseName}`] ?? "";
+}
 
 // ── Scale-aware caps ────────────────────────────────────────────
 
@@ -771,11 +797,11 @@ export function scaleEventCaps(totalSystems: number): ScaledEventCaps {
   const scale = totalSystems / BASE_SYSTEMS;
   const maxEventsGlobal = Math.round(totalSystems * EVENT_COVERAGE_TARGET);
 
-  const definitions: Record<string, EventDefinition> = {};
-  for (const [key, def] of Object.entries(EVENT_DEFINITIONS)) {
+  const definitions: Record<EventTypeId, EventDefinition> = { ...EVENT_DEFINITIONS };
+  for (const key of EVENT_TYPE_IDS) {
     definitions[key] = {
-      ...def,
-      maxActive: Math.max(2, Math.round(def.maxActive * scale)),
+      ...definitions[key],
+      maxActive: Math.max(2, Math.round(definitions[key].maxActive * scale)),
     };
   }
 
@@ -783,6 +809,6 @@ export function scaleEventCaps(totalSystems: number): ScaledEventCaps {
     maxEventsGlobal,
     maxEventsPerSystem: MAX_EVENTS_PER_SYSTEM,
     batchSize: Math.ceil(maxEventsGlobal / 50),
-    definitions: definitions as Record<EventTypeId, EventDefinition>,
+    definitions,
   };
 }

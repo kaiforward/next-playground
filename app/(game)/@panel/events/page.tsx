@@ -113,6 +113,9 @@ function EventsContent() {
                     {event.phaseDisplayName}
                   </Badge>
                 </div>
+                {event.effects && (
+                  <p className="text-xs text-text-secondary mt-0.5">{event.effects}</p>
+                )}
                 {event.systemName && (
                   <Link
                     href={`/system/${event.systemId}`}

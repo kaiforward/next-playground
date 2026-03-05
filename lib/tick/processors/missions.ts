@@ -304,15 +304,16 @@ export const missionsProcessor: TickProcessor = {
         eventId: string | null;
       }> = [];
 
+      const pendingBySystem = new Map<string, number>();
+
       for (const c of candidates) {
         const currentCount = countBySystem.get(c.systemId) ?? 0;
-        if (
-          currentCount + toCreate.filter((t) => t.systemId === c.systemId).length >=
-          OP_MISSION_CAP_PER_SYSTEM
-        ) {
+        const pendingCount = pendingBySystem.get(c.systemId) ?? 0;
+        if (currentCount + pendingCount >= OP_MISSION_CAP_PER_SYSTEM) {
           continue;
         }
 
+        pendingBySystem.set(c.systemId, pendingCount + 1);
         toCreate.push({
           type: c.type,
           systemId: c.systemId,

@@ -1,5 +1,3 @@
-"use client";
-
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
@@ -22,14 +20,21 @@ export function ActiveEventsSection({ events, compact }: ActiveEventsSectionProp
             key={event.id}
             className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface"
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <Badge color={EVENT_TYPE_BADGE_COLOR[event.type] ?? "slate"}>
-                {event.name}
-              </Badge>
-              {!compact && (
-                <span className="text-xs text-text-tertiary truncate">
-                  {event.phaseDisplayName}
-                </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Badge color={EVENT_TYPE_BADGE_COLOR[event.type] ?? "slate"}>
+                  {event.name}
+                </Badge>
+                {!compact && (
+                  <span className="text-xs text-text-tertiary truncate">
+                    {event.phaseDisplayName}
+                  </span>
+                )}
+              </div>
+              {!compact && event.effects && (
+                <p className="text-xs text-text-secondary mt-1 truncate">
+                  {event.effects}
+                </p>
               )}
             </div>
             <span className="text-xs text-text-muted whitespace-nowrap ml-2">
