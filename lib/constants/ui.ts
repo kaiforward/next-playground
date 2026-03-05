@@ -91,21 +91,35 @@ export const ENEMY_TIER_BADGE_COLOR: Record<
   strong: "red",
 };
 
-/** Icon key per event type, consumed by EventIcon component. */
+import type { LucideIcon } from "lucide-react";
+import {
+  Swords,
+  Biohazard,
+  Sparkles,
+  Bomb,
+  TriangleAlert,
+  Pickaxe,
+  Boxes,
+  PackageX,
+  Skull,
+  Zap,
+} from "lucide-react";
+
+/** Lucide icon component per event type, consumed by EventIcon component. */
 export const EVENT_TYPE_ICON: Record<
   keyof typeof EVENT_DEFINITIONS,
-  string
+  LucideIcon
 > = {
-  war: "sword",
-  plague: "virus",
-  trade_festival: "sparkles",
-  conflict_spillover: "explosion",
-  plague_risk: "biohazard",
-  mining_boom: "pickaxe",
-  ore_glut: "cubes",
-  supply_shortage: "package-x",
-  pirate_raid: "skull",
-  solar_storm: "bolt",
+  war: Swords,
+  plague: Biohazard,
+  trade_festival: Sparkles,
+  conflict_spillover: Bomb,
+  plague_risk: TriangleAlert,
+  mining_boom: Pickaxe,
+  ore_glut: Boxes,
+  supply_shortage: PackageX,
+  pirate_raid: Skull,
+  solar_storm: Zap,
 };
 
 // ── Chart theme ──────────────────────────────────────────────

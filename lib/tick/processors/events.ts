@@ -3,9 +3,10 @@ import type { TxClient } from "../types";
 import {
   EVENT_SPAWN_INTERVAL,
   scaleEventCaps,
+  type EventPhaseDefinition,
+  type EventTypeId,
 } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
-import type { SpawnDecision } from "@/lib/engine/events";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import {
   checkPhaseTransition,
@@ -17,6 +18,7 @@ import {
   type EventSnapshot,
   type SystemSnapshot,
   type ShockRow,
+  type ModifierRow,
   type NeighborSnapshot,
 } from "@/lib/engine/events";
 import { toEventTypeId } from "@/lib/types/guards";
@@ -53,84 +55,156 @@ function toSnapshot(e: {
   };
 }
 
-/**
- * Apply one-time shocks to station markets at a system.
- * Clamps values to economy bounds [MIN_LEVEL, MAX_LEVEL].
- */
-async function applyShocks(
-  tx: TxClient,
-  shocks: ShockRow[],
-  systemId: string | null,
-): Promise<void> {
-  if (shocks.length === 0 || !systemId) return;
-
-  const { MIN_LEVEL, MAX_LEVEL } = ECONOMY_CONSTANTS;
-
-  for (const shock of shocks) {
-    // Find markets at this system for the shocked good
-    const markets = await tx.stationMarket.findMany({
-      where: {
-        goodId: shock.goodId,
-        station: { systemId },
-      },
-      select: { id: true, supply: true, demand: true },
-    });
-
-    for (const market of markets) {
-      const current = shock.parameter === "supply" ? market.supply : market.demand;
-      const newValue = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, current + shock.value));
-      await tx.stationMarket.update({
-        where: { id: market.id },
-        data: { [shock.parameter]: newValue },
-      });
-    }
-  }
+/** A shock targeting a specific system's market. */
+interface SystemShock {
+  systemId: string;
+  goodId: string;
+  parameter: "supply" | "demand";
+  value: number;
 }
 
 /**
- * Create a child event from a spread decision, including modifiers and shocks.
- * Accepts a pre-resolved system name to avoid an extra DB query.
+ * Expand ShockRow[] for a system into SystemShock[].
+ * Skips when systemId is null (region-only events have no market to shock).
  */
-async function createSpreadEvent(
-  tx: TxClient,
-  decision: SpawnDecision,
-  sourceEventId: string,
-  tick: number,
-): Promise<void> {
-  const def = SCALED_DEFINITIONS[decision.type]!;
-  const firstPhase = def.phases[0];
+function expandShocks(
+  shocks: ShockRow[],
+  systemId: string | null,
+): SystemShock[] {
+  if (!systemId || shocks.length === 0) return [];
+  return shocks.map((s) => ({
+    systemId,
+    goodId: s.goodId,
+    parameter: s.parameter,
+    value: s.value,
+  }));
+}
 
-  const newEvent = await tx.gameEvent.create({
-    data: {
-      type: decision.type,
-      phase: decision.phase,
-      systemId: decision.systemId,
-      regionId: decision.regionId,
-      startTick: tick,
-      phaseStartTick: tick,
-      phaseDuration: decision.phaseDuration,
-      severity: decision.severity,
-      sourceEventId,
+/**
+ * Bulk-apply one-time shocks to station markets across multiple systems.
+ * Finds all affected markets in a single Prisma query, aggregates shock
+ * deltas in JS, then batch-updates with unnest(). Returns count of markets updated.
+ */
+async function applyShocksBulk(
+  tx: TxClient,
+  shocks: SystemShock[],
+): Promise<number> {
+  if (shocks.length === 0) return 0;
+
+  const { MIN_LEVEL, MAX_LEVEL } = ECONOMY_CONSTANTS;
+
+  // 1. Unique system IDs targeted by shocks
+  const systemIds = [...new Set(shocks.map((s) => s.systemId))];
+
+  // 2. Single query: fetch all markets at affected systems
+  const allMarkets = await tx.stationMarket.findMany({
+    where: { station: { systemId: { in: systemIds } } },
+    select: {
+      id: true,
+      supply: true,
+      demand: true,
+      goodId: true,
+      station: { select: { systemId: true } },
     },
   });
 
-  // Create modifiers
-  const modifierRows = buildModifiersForPhase(
-    firstPhase,
-    decision.systemId,
-    decision.regionId,
-    decision.severity,
-  );
+  if (allMarkets.length === 0) return 0;
 
-  if (modifierRows.length > 0) {
-    await tx.eventModifier.createMany({
-      data: modifierRows.map((row) => ({ eventId: newEvent.id, ...row })),
+  // 3. Lookup: "systemId|goodId" → mutable market snapshot
+  const marketByKey = new Map<string, { id: string; supply: number; demand: number }>();
+  for (const m of allMarkets) {
+    marketByKey.set(`${m.station.systemId}|${m.goodId}`, {
+      id: m.id,
+      supply: m.supply,
+      demand: m.demand,
     });
   }
 
-  // Apply first-phase shocks
-  const shocks = buildShocksForPhase(firstPhase, decision.severity);
-  await applyShocks(tx, shocks, decision.systemId);
+  // 4. Aggregate shock deltas
+  const touchedIds = new Set<string>();
+  for (const shock of shocks) {
+    const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
+    if (!market) continue;
+    if (shock.parameter === "supply") {
+      market.supply += shock.value;
+    } else {
+      market.demand += shock.value;
+    }
+    touchedIds.add(market.id);
+  }
+
+  if (touchedIds.size === 0) return 0;
+
+  // 5. Clamp and build update arrays
+  const ids: string[] = [];
+  const supplies: number[] = [];
+  const demands: number[] = [];
+
+  for (const market of marketByKey.values()) {
+    if (!touchedIds.has(market.id)) continue;
+    ids.push(market.id);
+    const s = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.supply));
+    const d = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.demand));
+    supplies.push(isFinite(s) ? s : 0);
+    demands.push(isFinite(d) ? d : 0);
+  }
+
+  // 6. Batch update with unnest()
+  await tx.$executeRaw`
+    UPDATE "StationMarket" AS sm
+    SET "supply" = batch."supply", "demand" = batch."demand"
+    FROM unnest(${ids}::text[], ${supplies}::double precision[], ${demands}::double precision[])
+      AS batch("id", "supply", "demand")
+    WHERE sm."id" = batch."id"`;
+
+  return ids.length;
+}
+
+/**
+ * Collect modifier rows for a set of (eventId, phase, decision) tuples.
+ * Returns flat array ready for a single createMany call.
+ */
+function collectModifierRows(
+  entries: Array<{
+    eventId: string;
+    phase: EventPhaseDefinition;
+    systemId: string | null;
+    regionId: string | null;
+    severity: number;
+  }>,
+): Array<ModifierRow & { eventId: string }> {
+  const rows: Array<ModifierRow & { eventId: string }> = [];
+  for (const entry of entries) {
+    const modifiers = buildModifiersForPhase(
+      entry.phase,
+      entry.systemId,
+      entry.regionId,
+      entry.severity,
+    );
+    for (const row of modifiers) {
+      rows.push({ eventId: entry.eventId, ...row });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Collect SystemShock tuples for a set of (phase, severity, systemId) entries.
+ */
+function collectSystemShocks(
+  entries: Array<{
+    phase: EventPhaseDefinition;
+    severity: number;
+    systemId: string | null;
+  }>,
+): SystemShock[] {
+  const result: SystemShock[] = [];
+  for (const entry of entries) {
+    const shocks = buildShocksForPhase(entry.phase, entry.severity);
+    const expanded = expandShocks(shocks, entry.systemId);
+    for (const s of expanded) result.push(s);
+  }
+  return result;
 }
 
 // ── Processor ────────────────────────────────────────────────────
@@ -168,8 +242,16 @@ export const eventsProcessor: TickProcessor = {
         .map((e) => [e.id, e.system!.name]),
     );
 
-    // ── 2. Phase transitions ──────────────────────────────────────
+    // ── 2. Phase transitions (batched) ─────────────────────────────
     const expiredIds: string[] = [];
+
+    // Collect all advancing events in one pass
+    interface AdvancingEvent {
+      snap: EventSnapshot;
+      nextPhase: EventPhaseDefinition;
+      duration: number;
+    }
+    const advancing: AdvancingEvent[] = [];
 
     for (const snap of snapshots) {
       const def = SCALED_DEFINITIONS[snap.type];
@@ -195,41 +277,65 @@ export const eventsProcessor: TickProcessor = {
         const currentIndex = def.phases.findIndex((p) => p.name === snap.phase);
         const nextPhase = def.phases[currentIndex + 1];
         const duration = rollPhaseDuration(nextPhase.durationRange, Math.random);
+        advancing.push({ snap, nextPhase, duration });
+      }
+    }
 
-        // Delete old modifiers, create new ones
-        await ctx.tx.eventModifier.deleteMany({ where: { eventId: snap.id } });
+    // Batch process all advancing events
+    if (advancing.length > 0) {
+      const advancingIds = advancing.map((a) => a.snap.id);
 
-        const modifierRows = buildModifiersForPhase(
-          nextPhase,
-          snap.systemId,
-          snap.regionId,
-          snap.severity,
-        );
+      // Batch delete old modifiers (1 query instead of N)
+      await ctx.tx.eventModifier.deleteMany({
+        where: { eventId: { in: advancingIds } },
+      });
 
-        if (modifierRows.length > 0) {
-          await ctx.tx.eventModifier.createMany({
-            data: modifierRows.map((row) => ({
-              eventId: snap.id,
-              ...row,
-            })),
-          });
-        }
+      // Batch create new modifiers (1 query instead of N)
+      const modifierEntries = advancing.map((a) => ({
+        eventId: a.snap.id,
+        phase: a.nextPhase,
+        systemId: a.snap.systemId,
+        regionId: a.snap.regionId,
+        severity: a.snap.severity,
+      }));
+      const allModifierRows = collectModifierRows(modifierEntries);
+      if (allModifierRows.length > 0) {
+        await ctx.tx.eventModifier.createMany({ data: allModifierRows });
+      }
 
-        // Apply shocks for the new phase
-        const shocks = buildShocksForPhase(nextPhase, snap.severity);
-        await applyShocks(ctx.tx, shocks, snap.systemId);
+      // Batch apply shocks (2-3 queries instead of N×M)
+      const transitionShocks = collectSystemShocks(
+        advancing.map((a) => ({
+          phase: a.nextPhase,
+          severity: a.snap.severity,
+          systemId: a.snap.systemId,
+        })),
+      );
+      await applyShocksBulk(ctx.tx, transitionShocks);
 
-        // Update event phase
-        await ctx.tx.gameEvent.update({
-          where: { id: snap.id },
-          data: {
-            phase: nextPhase.name,
-            phaseStartTick: ctx.tick,
-            phaseDuration: duration,
-          },
-        });
+      // Batch update event phases with unnest() (1 query instead of N)
+      const phaseNames = advancing.map((a) => a.nextPhase.name);
+      const phaseTicks = advancing.map(() => ctx.tick);
+      const phaseDurations = advancing.map((a) => a.duration);
 
+      await ctx.tx.$executeRaw`
+        UPDATE "GameEvent" AS ge
+        SET "phase" = batch."phase",
+            "phaseStartTick" = batch."phaseStartTick",
+            "phaseDuration" = batch."phaseDuration"
+        FROM unnest(
+          ${advancingIds}::text[],
+          ${phaseNames}::text[],
+          ${phaseTicks}::int[],
+          ${phaseDurations}::int[]
+        ) AS batch("id", "phase", "phaseStartTick", "phaseDuration")
+        WHERE ge."id" = batch."id"`;
+
+      // Notifications and logging
+      for (const { snap, nextPhase, duration } of advancing) {
+        const def = SCALED_DEFINITIONS[snap.type]!;
         const sysName = systemNameById.get(snap.id) ?? "Unknown";
+
         if (nextPhase.notification) {
           notifications.push({
             message: nextPhase.notification.replace("{systemName}", sysName),
@@ -241,41 +347,76 @@ export const eventsProcessor: TickProcessor = {
         console.log(
           `[events] ${def.name} at ${sysName}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
         );
+      }
 
-        // ── Spread: spawn child events at neighboring systems ──
-        if (nextPhase.spread && nextPhase.spread.length > 0 && !snap.sourceEventId) {
-          // Fetch neighbors of this system (include name for notification)
-          const connections = await ctx.tx.systemConnection.findMany({
-            where: { fromSystemId: snap.systemId! },
-            select: {
-              toSystem: { select: { id: true, name: true, economyType: true, regionId: true } },
-            },
-          });
+      // ── Spread: batch-create child events at neighboring systems ──
+      const spreadSources = advancing.filter(
+        (a) => a.nextPhase.spread && a.nextPhase.spread.length > 0 && !a.snap.sourceEventId,
+      );
 
-          const neighborNameMap = new Map(
-            connections.map((c) => [c.toSystem.id, c.toSystem.name]),
-          );
+      if (spreadSources.length > 0) {
+        // Re-fetch active events once (not per-source)
+        const currentEvents = await ctx.tx.gameEvent.findMany({
+          select: {
+            id: true, type: true, phase: true,
+            systemId: true, regionId: true,
+            startTick: true, phaseStartTick: true,
+            phaseDuration: true, severity: true,
+            sourceEventId: true,
+          },
+        });
+        const currentSnapshots = currentEvents.map(toSnapshot);
 
-          const neighbors: NeighborSnapshot[] = connections.map((c) => ({
+        // Batch fetch all neighbors for all spread-source systems (1 query instead of N)
+        const sourceSystemIds = spreadSources
+          .map((s) => s.snap.systemId)
+          .filter((id): id is string => id !== null);
+
+        const allConnections = await ctx.tx.systemConnection.findMany({
+          where: { fromSystemId: { in: sourceSystemIds } },
+          select: {
+            fromSystemId: true,
+            toSystem: { select: { id: true, name: true, economyType: true, regionId: true } },
+          },
+        });
+
+        // Group by source system
+        const connectionsBySystem = new Map<string, typeof allConnections>();
+        for (const conn of allConnections) {
+          let list = connectionsBySystem.get(conn.fromSystemId);
+          if (!list) {
+            list = [];
+            connectionsBySystem.set(conn.fromSystemId, list);
+          }
+          list.push(conn);
+        }
+
+        // Evaluate spread targets and collect all decisions
+        interface SpreadDecisionWithSource {
+          type: EventTypeId;
+          phase: string;
+          systemId: string;
+          regionId: string;
+          phaseDuration: number;
+          severity: number;
+          sourceEventId: string;
+        }
+        const allSpreadDecisions: SpreadDecisionWithSource[] = [];
+        const spreadNameMap = new Map<string, string>(); // systemId → name
+
+        for (const { snap, nextPhase } of spreadSources) {
+          if (!snap.systemId) continue;
+
+          const conns = connectionsBySystem.get(snap.systemId) ?? [];
+          const neighbors: NeighborSnapshot[] = conns.map((c) => ({
             id: c.toSystem.id,
             economyType: c.toSystem.economyType,
             regionId: c.toSystem.regionId,
           }));
+          for (const c of conns) spreadNameMap.set(c.toSystem.id, c.toSystem.name);
 
-          // Re-fetch active events for accurate spread evaluation
-          const currentEvents = await ctx.tx.gameEvent.findMany({
-            select: {
-              id: true, type: true, phase: true,
-              systemId: true, regionId: true,
-              startTick: true, phaseStartTick: true,
-              phaseDuration: true, severity: true,
-              sourceEventId: true,
-            },
-          });
-          const currentSnapshots = currentEvents.map(toSnapshot);
-
-          const spreadDecisions = evaluateSpreadTargets(
-            nextPhase.spread,
+          const decisions = evaluateSpreadTargets(
+            nextPhase.spread!,
             snap,
             neighbors,
             currentSnapshots,
@@ -284,22 +425,76 @@ export const eventsProcessor: TickProcessor = {
             Math.random,
           );
 
-          for (const decision of spreadDecisions) {
-            const childDef = SCALED_DEFINITIONS[decision.type]!;
+          for (const d of decisions) {
+            allSpreadDecisions.push({ ...d, sourceEventId: snap.id });
+          }
+        }
+
+        if (allSpreadDecisions.length > 0) {
+          // Bulk create spread events (1 query instead of N)
+          const createdSpread = await ctx.tx.gameEvent.createManyAndReturn({
+            data: allSpreadDecisions.map((d) => ({
+              type: d.type,
+              phase: d.phase,
+              systemId: d.systemId,
+              regionId: d.regionId,
+              startTick: ctx.tick,
+              phaseStartTick: ctx.tick,
+              phaseDuration: d.phaseDuration,
+              severity: d.severity,
+              sourceEventId: d.sourceEventId,
+            })),
+            select: { id: true },
+          });
+
+          // Bulk create spread modifiers (1 query instead of N)
+          const spreadModifierEntries = allSpreadDecisions.map((d, i) => {
+            const def = SCALED_DEFINITIONS[d.type]!;
+            return {
+              eventId: createdSpread[i].id,
+              phase: def.phases[0],
+              systemId: d.systemId,
+              regionId: d.regionId,
+              severity: d.severity,
+            };
+          });
+          const spreadModifierRows = collectModifierRows(spreadModifierEntries);
+          if (spreadModifierRows.length > 0) {
+            await ctx.tx.eventModifier.createMany({ data: spreadModifierRows });
+          }
+
+          // Bulk apply spread shocks (2-3 queries instead of N×M)
+          const spreadShocks = collectSystemShocks(
+            allSpreadDecisions.map((d) => {
+              const def = SCALED_DEFINITIONS[d.type]!;
+              return {
+                phase: def.phases[0],
+                severity: d.severity,
+                systemId: d.systemId,
+              };
+            }),
+          );
+          await applyShocksBulk(ctx.tx, spreadShocks);
+
+          // Notifications and logging
+          for (const d of allSpreadDecisions) {
+            const childDef = SCALED_DEFINITIONS[d.type]!;
             const childPhase = childDef.phases[0];
-            await createSpreadEvent(ctx.tx, decision, snap.id, ctx.tick);
-            const childSysName = neighborNameMap.get(decision.systemId) ?? "Unknown";
+            const childSysName = spreadNameMap.get(d.systemId) ?? "Unknown";
 
             if (childPhase.notification) {
               notifications.push({
                 message: childPhase.notification.replace("{systemName}", childSysName),
-                type: decision.type,
-                refs: { system: { id: decision.systemId, label: childSysName } },
+                type: d.type,
+                refs: { system: { id: d.systemId, label: childSysName } },
               });
             }
 
+            // Find the parent system name for logging
+            const parentSnap = spreadSources.find((s) => s.snap.id === d.sourceEventId)?.snap;
+            const parentSysName = parentSnap ? (systemNameById.get(parentSnap.id) ?? "Unknown") : "Unknown";
             console.log(
-              `[events] Spread ${childDef.name} to ${childSysName} from ${sysName} (severity: ${decision.severity.toFixed(2)})`,
+              `[events] Spread ${childDef.name} to ${childSysName} from ${parentSysName} (severity: ${d.severity.toFixed(2)})`,
             );
           }
         }
@@ -315,7 +510,7 @@ export const eventsProcessor: TickProcessor = {
       console.log(`[events] Expired ${expiredIds.length} event(s)`);
     }
 
-    // ── 4. Spawn new events ───────────────────────────────────────
+    // ── 4. Spawn new events (batched) ─────────────────────────────
     const isSpawnTick = ctx.tick % EVENT_SPAWN_INTERVAL === 0;
 
     if (isSpawnTick) {
@@ -345,6 +540,7 @@ export const eventsProcessor: TickProcessor = {
         regionId: s.regionId,
       }));
 
+      const selectStart = performance.now();
       const decisions = selectEventsToSpawn(
         SCALED_DEFINITIONS,
         currentSnapshots,
@@ -354,59 +550,83 @@ export const eventsProcessor: TickProcessor = {
         Math.random,
         batchSize,
       );
+      const selectMs = performance.now() - selectStart;
 
-      for (const decision of decisions) {
-        const def = SCALED_DEFINITIONS[decision.type]!;
-        const firstPhase = def.phases[0];
+      if (decisions.length > 0) {
+        const createStart = performance.now();
 
-        // Create the event
-        const newEvent = await ctx.tx.gameEvent.create({
-          data: {
-            type: decision.type,
-            phase: decision.phase,
-            systemId: decision.systemId,
-            regionId: decision.regionId,
+        // Bulk create all events (1 query instead of N)
+        const createdEvents = await ctx.tx.gameEvent.createManyAndReturn({
+          data: decisions.map((d) => ({
+            type: d.type,
+            phase: d.phase,
+            systemId: d.systemId,
+            regionId: d.regionId,
             startTick: ctx.tick,
             phaseStartTick: ctx.tick,
-            phaseDuration: decision.phaseDuration,
-            severity: decision.severity,
-          },
+            phaseDuration: d.phaseDuration,
+            severity: d.severity,
+          })),
+          select: { id: true },
         });
 
-        // Create initial modifiers
-        const modifierRows = buildModifiersForPhase(
-          firstPhase,
-          decision.systemId,
-          decision.regionId,
-          decision.severity,
-        );
-
-        if (modifierRows.length > 0) {
-          await ctx.tx.eventModifier.createMany({
-            data: modifierRows.map((row) => ({
-              eventId: newEvent.id,
-              ...row,
-            })),
-          });
+        // Bulk create all modifiers (1 query instead of N)
+        const modifierEntries = decisions.map((d, i) => {
+          const def = SCALED_DEFINITIONS[d.type]!;
+          return {
+            eventId: createdEvents[i].id,
+            phase: def.phases[0],
+            systemId: d.systemId,
+            regionId: d.regionId,
+            severity: d.severity,
+          };
+        });
+        const allModifierRows = collectModifierRows(modifierEntries);
+        if (allModifierRows.length > 0) {
+          await ctx.tx.eventModifier.createMany({ data: allModifierRows });
         }
 
-        // Apply first-phase shocks
-        const shocks = buildShocksForPhase(firstPhase, decision.severity);
-        await applyShocks(ctx.tx, shocks, decision.systemId);
+        // Bulk apply all shocks (2-3 queries instead of N×M)
+        const allShocks = collectSystemShocks(
+          decisions.map((d) => {
+            const def = SCALED_DEFINITIONS[d.type]!;
+            return {
+              phase: def.phases[0],
+              severity: d.severity,
+              systemId: d.systemId,
+            };
+          }),
+        );
+        const shocksApplied = await applyShocksBulk(ctx.tx, allShocks);
 
-        // Resolve system name for notification (from pre-fetched map)
-        const sysName = systemNameMap.get(decision.systemId) ?? "Unknown";
+        const createMs = performance.now() - createStart;
 
-        if (firstPhase.notification) {
-          notifications.push({
-            message: firstPhase.notification.replace("{systemName}", sysName),
-            type: decision.type,
-            refs: { system: { id: decision.systemId, label: sysName } },
-          });
+        // Notifications
+        for (let i = 0; i < decisions.length; i++) {
+          const decision = decisions[i];
+          const def = SCALED_DEFINITIONS[decision.type]!;
+          const firstPhase = def.phases[0];
+          const sysName = systemNameMap.get(decision.systemId) ?? "Unknown";
+
+          if (firstPhase.notification) {
+            notifications.push({
+              message: firstPhase.notification.replace("{systemName}", sysName),
+              type: decision.type,
+              refs: { system: { id: decision.systemId, label: sysName } },
+            });
+          }
         }
 
         console.log(
-          `[events] Spawned ${def.name} at ${sysName} — phase: ${decision.phase} (${decision.phaseDuration} ticks)`,
+          `[events] Spawn tick ${ctx.tick}: ${currentSnapshots.length} active, ${allSystems.length} systems, ` +
+          `caps={global:${maxEventsGlobal},batch:${batchSize}}, ` +
+          `selected ${decisions.length} in ${selectMs.toFixed(0)}ms, ` +
+          `created ${decisions.length} events + ${allModifierRows.length} modifiers + ${shocksApplied} shocks in ${createMs.toFixed(0)}ms`,
+        );
+      } else {
+        console.log(
+          `[events] Spawn tick ${ctx.tick}: ${currentSnapshots.length} active, ${allSystems.length} systems, ` +
+          `caps={global:${maxEventsGlobal},batch:${batchSize}}, selected 0 in ${selectMs.toFixed(0)}ms`,
         );
       }
     }

@@ -2,17 +2,10 @@
 
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
+import { Bell } from "lucide-react";
 import { useNotifications, useUnreadCount, useMarkAsRead } from "@/lib/hooks/use-notifications";
 import { LogEntry } from "@/components/notifications/log-entry";
 import { QueryBoundary } from "@/components/ui/query-boundary";
-
-function BellIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4.5 h-4.5 shrink-0">
-      <path fillRule="evenodd" d="M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .67 1.085h3.652a2.75 2.75 0 0 0 5.47 0h3.652a.75.75 0 0 0 .67-1.085A11.95 11.95 0 0 1 16 8a6 6 0 0 0-6-6Zm1.493 12.319a1.25 1.25 0 0 1-2.986 0h2.986Z" clipRule="evenodd" />
-    </svg>
-  );
-}
 
 function UnreadBadge() {
   const count = useUnreadCount();
@@ -89,7 +82,7 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
           aria-label="Notifications"
         >
           <span className="relative">
-            <BellIcon />
+            <Bell className="w-4.5 h-4.5 shrink-0" />
             <QueryBoundary loadingFallback={null} errorFallback={() => null}>
               <UnreadBadge />
             </QueryBoundary>

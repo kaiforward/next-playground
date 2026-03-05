@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { HiEllipsisVertical } from "react-icons/hi2";
+import { EllipsisVertical } from "lucide-react";
 import { ConvoyActionDialog, type ConvoyActionPlan } from "./convoy-action-dialog";
 import { ConvoyShipDialog } from "./convoy-ship-dialog";
 
@@ -204,7 +204,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="px-2">
                   <span className="sr-only">More actions</span>
-                  <HiEllipsisVertical className="w-5 h-5" />
+                  <EllipsisVertical className="w-5 h-5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
