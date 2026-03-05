@@ -8,7 +8,7 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   keyof typeof EVENT_DEFINITIONS,
   "red" | "amber" | "purple" | "green" | "blue" | "slate"
 > = {
-  war: "red",
+  inner_system_conflict: "red",
   plague: "amber",
   trade_festival: "purple",
   conflict_spillover: "red",
@@ -18,6 +18,10 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   supply_shortage: "amber",
   pirate_raid: "red",
   solar_storm: "blue",
+  refugee_crisis: "amber",
+  trade_embargo: "purple",
+  tech_breakthrough: "green",
+  asteroid_strike: "red",
 };
 
 /** Mapping from notification/event type to toast/badge accent color. */
@@ -25,7 +29,7 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   NotificationType | keyof typeof EVENT_DEFINITIONS,
   "red" | "amber" | "purple" | "green" | "blue" | "slate"
 > = {
-  war: "red",
+  inner_system_conflict: "red",
   plague: "amber",
   trade_festival: "purple",
   conflict_spillover: "red",
@@ -35,6 +39,10 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   supply_shortage: "amber",
   pirate_raid: "red",
   solar_storm: "blue",
+  refugee_crisis: "amber",
+  trade_embargo: "purple",
+  tech_breakthrough: "green",
+  asteroid_strike: "red",
   ship_arrived: "blue",
   ship_damaged: "amber",
   ship_disabled: "red",
@@ -58,15 +66,19 @@ export const EVENT_TYPE_DANGER_PRIORITY: Record<
   number
 > = {
   trade_festival: 1,
-  mining_boom: 2,
-  ore_glut: 3,
-  plague_risk: 4,
-  supply_shortage: 5,
-  conflict_spillover: 6,
-  plague: 7,
-  pirate_raid: 8,
-  solar_storm: 9,
-  war: 10,
+  tech_breakthrough: 2,
+  mining_boom: 3,
+  ore_glut: 4,
+  plague_risk: 5,
+  supply_shortage: 6,
+  refugee_crisis: 7,
+  trade_embargo: 8,
+  conflict_spillover: 9,
+  plague: 10,
+  pirate_raid: 11,
+  solar_storm: 12,
+  asteroid_strike: 13,
+  inner_system_conflict: 14,
 };
 
 /** Mapping from mission type to Badge color. */
@@ -103,6 +115,10 @@ import {
   PackageX,
   Skull,
   Zap,
+  Users,
+  ShieldBan,
+  Lightbulb,
+  Flame,
 } from "lucide-react";
 
 /** Lucide icon component per event type, consumed by EventIcon component. */
@@ -110,7 +126,7 @@ export const EVENT_TYPE_ICON: Record<
   keyof typeof EVENT_DEFINITIONS,
   LucideIcon
 > = {
-  war: Swords,
+  inner_system_conflict: Swords,
   plague: Biohazard,
   trade_festival: Sparkles,
   conflict_spillover: Bomb,
@@ -120,6 +136,10 @@ export const EVENT_TYPE_ICON: Record<
   supply_shortage: PackageX,
   pirate_raid: Skull,
   solar_storm: Zap,
+  refugee_crisis: Users,
+  trade_embargo: ShieldBan,
+  tech_breakthrough: Lightbulb,
+  asteroid_strike: Flame,
 };
 
 // ── Chart theme ──────────────────────────────────────────────

@@ -49,7 +49,8 @@ const ConstantOverridesSchema = z.object({
     maxPerSystem: z.number().int().min(1).optional(),
     maxGlobal: z.number().int().min(1).optional(),
     modifierCaps: z.object({
-      maxShift: z.number().optional(),
+      minTargetMult: z.number().optional(),
+      maxTargetMult: z.number().optional(),
       minMultiplier: z.number().optional(),
       maxMultiplier: z.number().optional(),
       minReversionMult: z.number().optional(),

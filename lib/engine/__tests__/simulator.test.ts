@@ -175,7 +175,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx({
         disableRandomEvents: true,
         eventInjections: [
-          { tick: 10, target: { economyType: "extraction" }, eventType: "war" },
+          { tick: 10, target: { economyType: "extraction" }, eventType: "inner_system_conflict" },
         ],
       });
 
@@ -185,7 +185,7 @@ describe("Simulator", () => {
       }
 
       expect(world.events).toHaveLength(1);
-      expect(world.events[0].type).toBe("war");
+      expect(world.events[0].type).toBe("inner_system_conflict");
 
       // Verify it landed on an extraction system
       const targetSystem = world.systems.find((s) => s.id === world.events[0].systemId);
@@ -200,7 +200,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx({
         disableRandomEvents: true,
         eventInjections: [
-          { tick: 5, target: { economyType: "extraction" }, eventType: "war", severity: 2.0 },
+          { tick: 5, target: { economyType: "extraction" }, eventType: "inner_system_conflict", severity: 2.0 },
         ],
       });
 
@@ -219,7 +219,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx({
         disableRandomEvents: true,
         eventInjections: [
-          { tick: 5, target: { systemIndex: 99999 }, eventType: "war" },
+          { tick: 5, target: { systemIndex: 99999 }, eventType: "inner_system_conflict" },
         ],
       });
 
@@ -238,7 +238,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx({
         disableRandomEvents: true,
         eventInjections: [
-          { tick: 5, target: { systemIndex: 0 }, eventType: "war" },
+          { tick: 5, target: { systemIndex: 0 }, eventType: "inner_system_conflict" },
           { tick: 5, target: { systemIndex: 1 }, eventType: "trade_festival" },
         ],
       });
@@ -249,7 +249,7 @@ describe("Simulator", () => {
 
       expect(world.events).toHaveLength(2);
       const types = world.events.map((e) => e.type).sort();
-      expect(types).toEqual(["trade_festival", "war"]);
+      expect(types).toEqual(["inner_system_conflict", "trade_festival"]);
     });
   });
 });

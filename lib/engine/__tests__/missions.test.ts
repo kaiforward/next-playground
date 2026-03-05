@@ -167,13 +167,13 @@ describe("selectEconomyCandidates", () => {
 
 describe("selectEventCandidates", () => {
   const missionGoods = {
-    war: { goods: ["weapons", "fuel", "machinery"], isImport: true },
+    inner_system_conflict: { goods: ["weapons", "fuel", "machinery"], isImport: true },
     plague: { goods: ["medicine", "food"], isImport: true },
   };
 
-  it("generates missions for war event", () => {
+  it("generates missions for inner_system_conflict event", () => {
     const events: MissionEventSnapshot[] = [
-      { id: "evt-1", type: "war", systemId: "sys-a" },
+      { id: "evt-1", type: "inner_system_conflict", systemId: "sys-a" },
     ];
 
     // rng: 0.5 → count = 1+floor(0.5*3) = 2, then quantities
@@ -191,7 +191,7 @@ describe("selectEventCandidates", () => {
       expect(c.systemId).toBe("sys-a");
       expect(c.destinationId).toBe("sys-a"); // Import
       expect(c.eventId).toBe("evt-1");
-      expect(missionGoods.war.goods).toContain(c.goodId);
+      expect(missionGoods.inner_system_conflict.goods).toContain(c.goodId);
     }
   });
 
@@ -220,7 +220,7 @@ describe("selectEventCandidates", () => {
 
   it("sets eventId for cascade expiry", () => {
     const events: MissionEventSnapshot[] = [
-      { id: "evt-4", type: "war", systemId: "sys-a" },
+      { id: "evt-4", type: "inner_system_conflict", systemId: "sys-a" },
     ];
 
     const candidates = selectEventCandidates(events, missionGoods, goodTiers, 100, fixedRng(0.0));

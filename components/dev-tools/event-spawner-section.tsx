@@ -6,14 +6,14 @@ import { NumberInput } from "@/components/form/number-input";
 import { SelectInput } from "@/components/form/select-input";
 import { useSpawnEventMutation } from "@/lib/hooks/use-dev-tools";
 import { useUniverse } from "@/lib/hooks/use-universe";
-import { EVENT_DEFINITIONS, EVENT_TYPE_IDS } from "@/lib/constants/events";
+import { EVENT_DEFINITIONS, EVENT_TYPE_IDS, type EventTypeId } from "@/lib/constants/events";
 
 const eventTypes = EVENT_TYPE_IDS;
 
 export function EventSpawnerSection() {
   const { data: universe } = useUniverse();
   const [systemId, setSystemId] = useState("");
-  const [eventType, setEventType] = useState(eventTypes[0]);
+  const [eventType, setEventType] = useState<EventTypeId>(eventTypes[0]);
   const [severity, setSeverity] = useState(1.0);
   const spawnMutation = useSpawnEventMutation();
 

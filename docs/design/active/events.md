@@ -17,13 +17,17 @@ Dynamic world events that inject economic shocks, trade opportunities, and navig
 | Supply Shortage | Any | Single phase | 30-60 | 3 | None |
 | Pirate Raid | Any | Raiding → Crackdown | 40-80 → 20-40 | 3 | Up to 0.15 |
 | Solar Storm | Any | Storm → Clearing | 15-30 → 10-20 | 2 | 0.25 (highest) |
+| Refugee Crisis | Core, Agricultural | Influx → Overcrowding → Settlement | 20-40 → 40-80 → 30-60 | 25 | 0.08 |
+| Trade Embargo | Core, Industrial | Imposed → Enforcement → Easing | 20-40 → 40-80 → 30-60 | 15 | None |
+| Tech Breakthrough | Tech | Discovery → Innovation → Adoption | 15-30 → 40-80 → 30-60 | 15 | None |
+| Asteroid Strike | Extraction | Impact → Aftermath → Recovery | 10-20 → 40-80 → 30-60 | 15 | 0.25 |
 
 ### Child Events (spread only, never spawn independently)
 
 | Event | Parent | Effect |
 |---|---|---|
 | Conflict Spillover | War (Active phase) | Smaller war echo — fuel/machinery demand, mild danger |
-| Plague Risk | Plague (Spreading phase) | Milder plague — reduced food production, medicine demand |
+| Plague Risk | Plague (Spreading phase), Refugee Crisis (Overcrowding phase) | Milder plague — reduced food production, medicine demand |
 | Ore Glut | Mining Boom (Boom phase) | Market oversupply — ore floods neighboring systems |
 
 ---
@@ -88,6 +92,10 @@ One-time market jolts applied when a phase starts. Directly modify supply or dem
 - **Solar Storm** has the highest danger (0.25) but is short-lived. Near-total production halt makes it devastating but brief.
 - **Trade Festival** is the only purely positive event — demand surge creates profitable opportunities.
 - **Mining Boom** floods ore markets, benefits refineries downstream, but ends in depletion.
+- **Refugee Crisis** strains food and medicine supplies at core/agricultural systems, with overcrowding spreading plague risk to neighbors.
+- **Trade Embargo** creates severe supply shortages at core/industrial systems — all production and supply suppressed, with slow easing.
+- **Tech Breakthrough** is a positive event for tech systems — electronics production surges, machinery demand rises.
+- **Asteroid Strike** devastates extraction systems — near-total production halt on impact (0.05x), with high danger (0.25) and ore/fuel supply shocks.
 - **Events create trade missions** — war spawns weapons/fuel delivery contracts, plague spawns medicine/food contracts, etc.
 
 ---

@@ -6,8 +6,12 @@ import type {
 import { persistPlayerNotifications, addPlayerNotification, groupModifiersByTarget } from "../helpers";
 import {
   generateOpMissionCandidates,
+  selectEventOpMissionCandidates,
   type SystemSnapshot,
+  type EventMissionContext,
 } from "@/lib/engine/mission-gen";
+import { EVENT_OP_MISSIONS } from "@/lib/constants/events";
+import { toEventTypeId } from "@/lib/types/guards";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { computeSystemDanger } from "@/lib/engine/danger";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -55,18 +59,20 @@ export const missionsProcessor: TickProcessor = {
 
     const playerEvents = new Map<string, Partial<PlayerEventMap>>();
 
-    for (const mission of completedMissions) {
-      if (
-        mission.startedAtTick === null ||
-        mission.durationTicks === null ||
-        mission.startedAtTick + mission.durationTicks > ctx.tick
-      ) {
-        continue;
-      }
+    // Filter eligible missions in JS (duration check)
+    const eligible = completedMissions.filter(
+      (m) =>
+        m.startedAtTick !== null &&
+        m.durationTicks !== null &&
+        m.startedAtTick + m.durationTicks <= ctx.tick,
+    );
 
-      // Complete the mission — credit the player
-      await ctx.tx.mission.update({
-        where: { id: mission.id },
+    if (eligible.length > 0) {
+      const eligibleIds = eligible.map((m) => m.id);
+
+      // Batch update all completed missions (1 query instead of N)
+      await ctx.tx.mission.updateMany({
+        where: { id: { in: eligibleIds } },
         data: {
           status: "completed",
           completedAtTick: ctx.tick,
@@ -74,20 +80,38 @@ export const missionsProcessor: TickProcessor = {
         },
       });
 
-      if (mission.playerId) {
-        await ctx.tx.player.update({
-          where: { id: mission.playerId },
-          data: { credits: { increment: mission.reward } },
-        });
+      // Aggregate rewards per player, then bulk credit with unnest()
+      const rewardsByPlayer = new Map<string, number>();
+      for (const m of eligible) {
+        if (m.playerId) {
+          rewardsByPlayer.set(m.playerId, (rewardsByPlayer.get(m.playerId) ?? 0) + m.reward);
+        }
+      }
 
-        addPlayerNotification(playerEvents, mission.playerId, {
-          message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission completed at ${mission.targetSystem.name} — earned ${mission.reward} CR`,
-          type: "mission_completed",
-          refs: {
-            system: { id: mission.targetSystemId, label: mission.targetSystem.name },
-            ...(mission.shipId && mission.ship ? { ship: { id: mission.shipId, label: mission.ship.name } } : {}),
-          },
-        });
+      if (rewardsByPlayer.size > 0) {
+        const playerIds = [...rewardsByPlayer.keys()];
+        const rewards = playerIds.map((id) => rewardsByPlayer.get(id)!);
+
+        await ctx.tx.$executeRaw`
+          UPDATE "Player" AS p
+          SET "credits" = p."credits" + batch."reward"
+          FROM unnest(${playerIds}::text[], ${rewards}::int[])
+            AS batch("id", "reward")
+          WHERE p."id" = batch."id"`;
+      }
+
+      // Build notifications from already-fetched data (no extra queries)
+      for (const mission of eligible) {
+        if (mission.playerId) {
+          addPlayerNotification(playerEvents, mission.playerId, {
+            message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission completed at ${mission.targetSystem.name} — earned ${mission.reward} CR`,
+            type: "mission_completed",
+            refs: {
+              system: { id: mission.targetSystemId, label: mission.targetSystem.name },
+              ...(mission.shipId && mission.ship ? { ship: { id: mission.shipId, label: mission.ship.name } } : {}),
+            },
+          });
+        }
       }
     }
 
@@ -108,24 +132,27 @@ export const missionsProcessor: TickProcessor = {
       },
     });
 
-    for (const mission of failedMissions) {
-      await ctx.tx.mission.update({
-        where: { id: mission.id },
+    if (failedMissions.length > 0) {
+      // Batch update all failed missions (1 query instead of N)
+      await ctx.tx.mission.updateMany({
+        where: { id: { in: failedMissions.map((m) => m.id) } },
         data: {
           status: "failed",
           shipId: null, // free the ship
         },
       });
 
-      if (mission.playerId) {
-        addPlayerNotification(playerEvents, mission.playerId, {
-          message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission expired — ${mission.targetSystem.name}`,
-          type: "mission_expired",
-          refs: {
-            system: { id: mission.targetSystemId, label: mission.targetSystem.name },
-            ...(mission.shipId && mission.ship ? { ship: { id: mission.shipId, label: mission.ship.name } } : {}),
-          },
-        });
+      for (const mission of failedMissions) {
+        if (mission.playerId) {
+          addPlayerNotification(playerEvents, mission.playerId, {
+            message: `${mission.type.charAt(0).toUpperCase() + mission.type.slice(1)} mission expired — ${mission.targetSystem.name}`,
+            type: "mission_expired",
+            refs: {
+              system: { id: mission.targetSystemId, label: mission.targetSystem.name },
+              ...(mission.shipId && mission.ship ? { ship: { id: mission.shipId, label: mission.ship.name } } : {}),
+            },
+          });
+        }
       }
     }
 
@@ -220,6 +247,34 @@ export const missionsProcessor: TickProcessor = {
       Math.random,
     );
 
+    // 4b. Query active events at systems in this region for event-driven missions
+    const activeEvents = systemIds.length > 0
+      ? await ctx.tx.gameEvent.findMany({
+          where: { systemId: { in: systemIds } },
+          select: { id: true, type: true, systemId: true, severity: true },
+        })
+      : [];
+
+    const eventContexts: EventMissionContext[] = activeEvents
+      .filter((e): e is typeof e & { systemId: string } => e.systemId !== null)
+      .map((e) => ({
+        eventId: e.id,
+        eventType: toEventTypeId(e.type),
+        systemId: e.systemId,
+        severity: e.severity,
+      }));
+
+    const eventCandidates = selectEventOpMissionCandidates(
+      eventContexts,
+      EVENT_OP_MISSIONS,
+      dangerLevels,
+      ctx.tick,
+      Math.random,
+    );
+
+    // Merge event candidates into normal candidates
+    for (const c of eventCandidates) candidates.push(c);
+
     // 5. Cap check scoped to the target region's systems
     let created = 0;
     if (candidates.length > 0) {
@@ -246,17 +301,19 @@ export const missionsProcessor: TickProcessor = {
         enemyTier: string | null;
         statRequirements: string;
         createdAtTick: number;
+        eventId: string | null;
       }> = [];
+
+      const pendingBySystem = new Map<string, number>();
 
       for (const c of candidates) {
         const currentCount = countBySystem.get(c.systemId) ?? 0;
-        if (
-          currentCount + toCreate.filter((t) => t.systemId === c.systemId).length >=
-          OP_MISSION_CAP_PER_SYSTEM
-        ) {
+        const pendingCount = pendingBySystem.get(c.systemId) ?? 0;
+        if (currentCount + pendingCount >= OP_MISSION_CAP_PER_SYSTEM) {
           continue;
         }
 
+        pendingBySystem.set(c.systemId, pendingCount + 1);
         toCreate.push({
           type: c.type,
           systemId: c.systemId,
@@ -267,6 +324,7 @@ export const missionsProcessor: TickProcessor = {
           enemyTier: c.enemyTier,
           statRequirements: JSON.stringify(c.statRequirements),
           createdAtTick: ctx.tick,
+          eventId: c.eventId ?? null,
         });
       }
 

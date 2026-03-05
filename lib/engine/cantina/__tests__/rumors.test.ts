@@ -5,10 +5,12 @@ import type { ActiveEvent } from "@/lib/types/game";
 function makeEvent(overrides: Partial<ActiveEvent>): ActiveEvent {
   return {
     id: "ev1",
-    type: "war",
-    name: "War",
+    type: "inner_system_conflict",
+    name: "Inner System Conflict",
+    description: "Military conflict erupts, disrupting production and spiking demand for fuel and machinery.",
     phase: "active",
     phaseDisplayName: "Active",
+    effects: "Fuel, Machinery demand up · Production slowed · Danger increased",
     systemId: "sys1",
     systemName: "Alpha Prime",
     regionId: "reg1",
@@ -29,11 +31,11 @@ describe("generateRumors", () => {
   });
 
   it("generates rumors from active events", () => {
-    const events = [makeEvent({ type: "war", systemName: "Alpha Prime" })];
+    const events = [makeEvent({ type: "inner_system_conflict", systemName: "Alpha Prime" })];
     const rumors = generateRumors(events);
 
     expect(rumors).toHaveLength(1);
-    expect(rumors[0].eventType).toBe("war");
+    expect(rumors[0].eventType).toBe("inner_system_conflict");
     expect(rumors[0].text).toContain("Alpha Prime");
   });
 

@@ -23,6 +23,7 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["**/*.integration.test.ts"],
+          exclude: [".claude/**"],
           globalSetup: ["./vitest.integration.setup.ts"],
           env: {
             DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/stellar_trader_test",

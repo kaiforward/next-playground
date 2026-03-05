@@ -61,6 +61,8 @@ interface SystemShock {
   goodId: string;
   parameter: "supply" | "demand";
   value: number;
+  /** "absolute" = raw delta, "percentage" = fraction of current value. */
+  mode: "absolute" | "percentage";
 }
 
 /**
@@ -77,6 +79,7 @@ function expandShocks(
     goodId: s.goodId,
     parameter: s.parameter,
     value: s.value,
+    mode: s.mode,
   }));
 }
 
@@ -120,15 +123,20 @@ async function applyShocksBulk(
     });
   }
 
-  // 4. Aggregate shock deltas
+  // 4. Aggregate shock deltas (absolute = raw delta, percentage = fraction of current value)
   const touchedIds = new Set<string>();
   for (const shock of shocks) {
     const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
     if (!market) continue;
+
+    const delta = shock.mode === "percentage"
+      ? Math.round((shock.parameter === "supply" ? market.supply : market.demand) * shock.value)
+      : shock.value;
+
     if (shock.parameter === "supply") {
-      market.supply += shock.value;
+      market.supply += delta;
     } else {
-      market.demand += shock.value;
+      market.demand += delta;
     }
     touchedIds.add(market.id);
   }

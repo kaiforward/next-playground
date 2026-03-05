@@ -116,8 +116,8 @@ export const NO_TIPS_LINES = [
 // ── Rumor message templates ─────────────────────────────────────
 
 export const RUMOR_TEMPLATES: Partial<Record<EventTypeId, readonly string[]>> = {
-  war: [
-    "There's fighting at {system}. War's bad for business, but good for arms dealers.",
+  inner_system_conflict: [
+    "There's fighting at {system}. Conflict's bad for business, but good for arms dealers.",
     "Heard shots fired near {system}. People are getting nervous.",
   ],
   plague: [

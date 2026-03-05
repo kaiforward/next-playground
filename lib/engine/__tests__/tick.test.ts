@@ -278,21 +278,21 @@ describe("simulateEconomyTick", () => {
 // ── Modifier integration ────────────────────────────────────────
 
 describe("modifier integration", () => {
-  it("shifts supply target upward via supplyTargetShift", () => {
-    // Neutral entry: base target supply=60. Shift +40 → effective target 100.
-    // Supply at 60, reversion pulls toward 100: (100-60)*0.05 = +2
-    const entry = makeEntry({ supply: 60, demand: 60, supplyTargetShift: 40 });
+  it("scales supply target via supplyTargetMult", () => {
+    // Neutral entry: base target supply=60. Mult ×2.0 → effective target 120.
+    // Supply at 60, reversion pulls toward 120: (120-60)*0.05 = +3
+    const entry = makeEntry({ supply: 60, demand: 60, supplyTargetMult: 2.0 });
     const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    // Without shift: (60-60)*0.05 = 0, supply stays at 60
-    // With shift: (100-60)*0.05 = +2, supply becomes 62
-    expect(result.supply).toBe(62);
+    // Without mult: (60-60)*0.05 = 0, supply stays at 60
+    // With mult: (120-60)*0.05 = +3, supply becomes 63
+    expect(result.supply).toBe(63);
   });
 
-  it("shifts demand target upward via demandTargetShift", () => {
-    const entry = makeEntry({ supply: 60, demand: 60, demandTargetShift: 80 });
+  it("scales demand target via demandTargetMult", () => {
+    const entry = makeEntry({ supply: 60, demand: 60, demandTargetMult: 2.0 });
     const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    // demand target: 60 + 80 = 140. reversion: (140-60)*0.05 = +4 → 64
-    expect(result.demand).toBe(64);
+    // demand target: 60 × 2.0 = 120. reversion: (120-60)*0.05 = +3 → 63
+    expect(result.demand).toBe(63);
   });
 
   it("scales production via productionMult", () => {
@@ -359,8 +359,8 @@ describe("modifier integration", () => {
     const plain = makeEntry({ supply: 80, demand: 50, produces: ["ore"] });
     const withDefaults = makeEntry({
       supply: 80, demand: 50, produces: ["ore"],
-      supplyTargetShift: 0,
-      demandTargetShift: 0,
+      supplyTargetMult: 1,
+      demandTargetMult: 1,
       productionMult: 1.0,
       consumptionMult: 1.0,
       reversionMult: 1.0,
@@ -373,11 +373,11 @@ describe("modifier integration", () => {
     expect(r1.demand).toBe(r2.demand);
   });
 
-  it("combined modifiers converge toward shifted equilibrium", () => {
-    // Large demand shift + dampened reversion: run many ticks
+  it("combined modifiers converge toward scaled equilibrium", () => {
+    // Large demand multiplier + dampened reversion: run many ticks
     let entries = [makeEntry({
       supply: 60, demand: 60,
-      demandTargetShift: 60, // target demand: 60 + 60 = 120
+      demandTargetMult: 2.0, // target demand: 60 × 2.0 = 120
       reversionMult: 0.5,
     })];
     for (let i = 0; i < 200; i++) {
@@ -385,7 +385,7 @@ describe("modifier integration", () => {
       // Re-apply modifiers each tick (they persist)
       entries = entries.map((e) => ({
         ...e,
-        demandTargetShift: 60,
+        demandTargetMult: 2.0,
         reversionMult: 0.5,
       }));
     }

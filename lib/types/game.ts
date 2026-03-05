@@ -303,8 +303,10 @@ export interface ActiveEvent {
   id: string;
   type: EventTypeId;
   name: string;
+  description: string;
   phase: string;
   phaseDisplayName: string;
+  effects: string;
   systemId: string | null;
   systemName: string | null;
   regionId: string | null;

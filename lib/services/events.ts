@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { EVENT_DEFINITIONS, getPhaseEffectSummary } from "@/lib/constants/events";
 import { toEventTypeId } from "@/lib/types/guards";
 import { getPlayerVisibility } from "./visibility-cache";
 import type { ActiveEvent } from "@/lib/types/game";
@@ -40,8 +40,10 @@ export async function getActiveEvents(playerId: string): Promise<ActiveEvent[]> 
       id: e.id,
       type: eventType,
       name: def?.name ?? e.type,
+      description: def?.description ?? "",
       phase: e.phase,
       phaseDisplayName: phaseDef?.displayName ?? e.phase,
+      effects: getPhaseEffectSummary(eventType, e.phase),
       systemId: e.systemId,
       systemName: e.system?.name ?? null,
       regionId: e.regionId,

@@ -51,8 +51,10 @@ export interface ModifierRow {
 
 /** Aggregated modifier effects for a single market entry. */
 export interface AggregatedModifiers {
-  supplyTargetShift: number;
-  demandTargetShift: number;
+  /** Compound multiplier on supply equilibrium target. Default 1. */
+  supplyTargetMult: number;
+  /** Compound multiplier on demand equilibrium target. Default 1. */
+  demandTargetMult: number;
   productionMult: number;
   consumptionMult: number;
   reversionMult: number;
@@ -70,7 +72,8 @@ export interface SpawnDecision {
 
 /** Caps applied during aggregation. */
 export interface ModifierCaps {
-  maxShift: number;
+  minTargetMult: number;
+  maxTargetMult: number;
   minMultiplier: number;
   maxMultiplier: number;
   minReversionMult: number;
@@ -110,17 +113,15 @@ export function checkPhaseTransition(
 /**
  * Scale a modifier template value by event severity.
  *
- * - Shifts: linear scaling (`value × severity`)
- * - Multipliers/dampening: lerp toward 1.0 (`1 + (value - 1) × severity`)
+ * All modifier types lerp toward 1.0: `1 + (value - 1) × severity`.
+ * For equilibrium_shift (now a multiplier), 2.0 at severity 0.5 → 1.5.
+ * For rate_multiplier/reversion_dampening, same formula.
  */
 function scaleValue(
   template: ModifierTemplate,
   severity: number,
 ): number {
-  if (template.type === "equilibrium_shift") {
-    return template.value * severity;
-  }
-  // rate_multiplier and reversion_dampening: lerp toward 1.0
+  // All types: lerp toward 1.0 (neutral)
   return 1 + (template.value - 1) * severity;
 }
 
@@ -155,16 +156,16 @@ export function buildModifiersForPhase(
  * Aggregate a list of active modifiers into a single effect bundle.
  *
  * Filters to modifiers matching `goodId` (including null goodId which applies
- * to all goods). Shifts sum, multipliers multiply, dampening takes min.
- * Safety caps applied at the end.
+ * to all goods). Equilibrium shifts compound (multiply), rate multipliers
+ * compound, dampening takes min. Safety caps applied at the end.
  */
 export function aggregateModifiers(
   modifiers: ModifierRow[],
   goodId: string,
   caps: ModifierCaps,
 ): AggregatedModifiers {
-  let supplyTargetShift = 0;
-  let demandTargetShift = 0;
+  let supplyTargetMult = 1;
+  let demandTargetMult = 1;
   let productionMult = 1;
   let consumptionMult = 1;
   let reversionMult = 1;
@@ -174,8 +175,8 @@ export function aggregateModifiers(
     if (mod.goodId !== null && mod.goodId !== goodId) continue;
 
     if (mod.type === "equilibrium_shift") {
-      if (mod.parameter === "supply_target") supplyTargetShift += mod.value;
-      else if (mod.parameter === "demand_target") demandTargetShift += mod.value;
+      if (mod.parameter === "supply_target") supplyTargetMult *= mod.value;
+      else if (mod.parameter === "demand_target") demandTargetMult *= mod.value;
     } else if (mod.type === "rate_multiplier") {
       if (mod.parameter === "production_rate") productionMult *= mod.value;
       else if (mod.parameter === "consumption_rate") consumptionMult *= mod.value;
@@ -185,8 +186,8 @@ export function aggregateModifiers(
   }
 
   return {
-    supplyTargetShift: clamp(supplyTargetShift, -caps.maxShift, caps.maxShift),
-    demandTargetShift: clamp(demandTargetShift, -caps.maxShift, caps.maxShift),
+    supplyTargetMult: clamp(supplyTargetMult, caps.minTargetMult, caps.maxTargetMult),
+    demandTargetMult: clamp(demandTargetMult, caps.minTargetMult, caps.maxTargetMult),
     productionMult: clamp(productionMult, caps.minMultiplier, caps.maxMultiplier),
     consumptionMult: clamp(consumptionMult, caps.minMultiplier, caps.maxMultiplier),
     reversionMult: clamp(reversionMult, caps.minReversionMult, 1.0),
@@ -427,22 +428,35 @@ export interface ShockRow {
   goodId: string;
   parameter: "supply" | "demand";
   value: number;
+  /** "absolute" = raw delta, "percentage" = fraction of current market value. */
+  mode: "absolute" | "percentage";
 }
 
 /**
  * Build severity-scaled shock deltas for a phase.
  * Returns empty array if the phase has no shocks.
+ *
+ * For absolute mode: value is rounded after severity scaling.
+ * For percentage mode: value is a fraction (e.g. -0.3), not rounded — applied at market level.
  */
 export function buildShocksForPhase(
   phase: EventPhaseDefinition,
   severity: number,
 ): ShockRow[] {
   if (!phase.shocks || phase.shocks.length === 0) return [];
-  return phase.shocks.map((s) => ({
-    goodId: s.goodId,
-    parameter: s.parameter,
-    value: Math.round(s.value * severity) || 0, // Avoid -0
-  }));
+  return phase.shocks.map((s) => {
+    const mode = s.mode ?? "absolute";
+    const scaledValue = mode === "percentage"
+      ? s.value * severity       // Fraction, not rounded
+      : Math.round(s.value * severity) || 0; // Avoid -0
+
+    return {
+      goodId: s.goodId,
+      parameter: s.parameter,
+      value: scaledValue,
+      mode,
+    };
+  });
 }
 
 // ── Spread evaluation ───────────────────────────────────────────

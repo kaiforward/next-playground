@@ -335,6 +335,7 @@ model GameEvent {
   spreadEvents  GameEvent[]    @relation("EventSpread")
   modifiers     EventModifier[]
   tradeMissions TradeMission[]
+  missions      Mission[]
 
   @@index([type])
   @@index([systemId])
@@ -401,6 +402,7 @@ model Mission {
   enemyTier        String?                       // Bounty: "weak" | "moderate" | "strong"
   statRequirements String   @default("{}")       // JSON: { firepower: 5 } etc.
   createdAtTick    Int
+  eventId          String?                       // Source event (event-spawned missions)
 
   // State
   status           String   @default("available") // available | accepted | in_progress | completed | failed
@@ -415,12 +417,14 @@ model Mission {
   targetSystem  StarSystem @relation("MissionTarget", fields: [targetSystemId], references: [id])
   player        Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   ship          Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
+  event         GameEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
   battle        Battle?
 
   @@index([systemId, status])
   @@index([playerId])
   @@index([deadlineTick])
   @@index([targetSystemId, status])
+  @@index([eventId])
 }
 
 // ── Battles ─────────────────────────────────────────────────────
