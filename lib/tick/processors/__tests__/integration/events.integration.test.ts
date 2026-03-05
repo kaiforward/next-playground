@@ -224,18 +224,18 @@ describe("eventsProcessor (integration)", () => {
   // ── Spread ─────────────────────────────────────────────────────
 
   it("event in peak phase with spread rules can create child GameEvent in neighbor system", async () => {
-    // "war" event: the "active" phase (index 2) has spread rules
+    // "inner_system_conflict" event: the "active" phase (index 2) has spread rules
     // for "conflict_spillover". We set up the event in "escalation" (index 1)
     // and let it advance to "active" which triggers spread.
-    const def = EVENT_DEFINITIONS["war"];
-    // war targets: industrial, tech, extraction, core
+    const def = EVENT_DEFINITIONS["inner_system_conflict"];
+    // inner_system_conflict targets: industrial, tech, extraction, core
     // Place at industrial system (corporate region) which has neighbors
 
     const phaseDuration = 1;
     const startTick = 10;
     const event = await prisma.gameEvent.create({
       data: {
-        type: "war",
+        type: "inner_system_conflict",
         phase: "escalation", // phase index 1
         systemId: universe.systems.industrial,
         regionId: universe.regions.corporate,

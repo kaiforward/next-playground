@@ -38,7 +38,7 @@ describe("ExperimentConfig", () => {
             {
               tick: 50,
               target: { economyType: "extraction" },
-              type: "war",
+              type: "inner_system_conflict",
               severity: 1.5,
             },
           ],
@@ -85,7 +85,7 @@ describe("ExperimentConfig", () => {
         bots: [{ strategy: "greedy" }],
         events: {
           inject: [
-            { tick: 10, target: { systemIndex: 5 }, type: "war" },
+            { tick: 10, target: { systemIndex: 5 }, type: "inner_system_conflict" },
           ],
         },
       });
@@ -106,7 +106,7 @@ describe("ExperimentConfig", () => {
         events: {
           disableRandom: true,
           inject: [
-            { tick: 50, target: { economyType: "extraction" }, type: "war", severity: 2.0 },
+            { tick: 50, target: { economyType: "extraction" }, type: "inner_system_conflict", severity: 2.0 },
           ],
         },
       });
@@ -119,7 +119,7 @@ describe("ExperimentConfig", () => {
       expect(config.bots).toEqual([{ strategy: "greedy", count: 2 }]);
       expect(config.disableRandomEvents).toBe(true);
       expect(config.eventInjections).toHaveLength(1);
-      expect(config.eventInjections![0].eventType).toBe("war");
+      expect(config.eventInjections![0].eventType).toBe("inner_system_conflict");
       expect(config.eventInjections![0].severity).toBe(2.0);
       expect(overrides.economy?.reversionRate).toBe(0.1);
     });

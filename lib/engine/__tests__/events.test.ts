@@ -20,7 +20,8 @@ type ModifierCaps = typeof MODIFIER_CAPS;
 // ── Helpers ─────────────────────────────────────────────────────
 
 const defaultCaps: ModifierCaps = {
-  maxShift: 100,
+  minTargetMult: 0.1,
+  maxTargetMult: 4.0,
   minMultiplier: 0.1,
   maxMultiplier: 3.0,
   minReversionMult: 0.2,
@@ -30,7 +31,7 @@ function makeDefinition(
   overrides: Partial<EventDefinition> = {},
 ): EventDefinition {
   return {
-    type: "war",
+    type: "inner_system_conflict",
     name: "Test Event",
     description: "A test event",
     cooldown: 50,
@@ -48,7 +49,7 @@ function makeDefinition(
             target: "system",
             goodId: "fuel",
             parameter: "demand_target",
-            value: 30,
+            value: 1.5,
           },
         ],
       },
@@ -77,7 +78,7 @@ function makeSnapshot(
 ): EventSnapshot {
   return {
     id: "evt-1",
-    type: "war",
+    type: "inner_system_conflict",
     phase: "phase_one",
     systemId: "sys-1",
     regionId: "reg-1",
@@ -141,7 +142,7 @@ describe("buildModifiersForPhase", () => {
       targetId: "sys-1",
       goodId: "fuel",
       parameter: "demand_target",
-      value: 30,
+      value: 1.5,
     });
   });
 
@@ -164,33 +165,34 @@ describe("buildModifiersForPhase", () => {
     expect(rows[0].targetId).toBe("reg-1");
   });
 
-  it("scales shift values linearly with severity", () => {
+  it("scales equilibrium_shift values by lerping toward 1.0", () => {
     const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0.5);
-    expect(rows[0].value).toBe(15); // 30 × 0.5
+    // value = 1.5, severity = 0.5 → 1 + (1.5 - 1) × 0.5 = 1.25
+    expect(rows[0].value).toBe(1.25);
   });
 
-  it("scales multiplier values by lerping toward 1.0", () => {
+  it("scales rate_multiplier values by lerping toward 1.0", () => {
     const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 0.5);
-    // value = 0.5, severity = 0.5 → 1 + (0.5 - 1) × 0.5 = 1 - 0.25 = 0.75
+    // value = 0.5, severity = 0.5 → 1 + (0.5 - 1) × 0.5 = 0.75
     expect(rows[0].value).toBe(0.75);
   });
 
-  it("returns full severity at 1.0 (shift)", () => {
+  it("returns full severity at 1.0 (equilibrium_shift)", () => {
     const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 1.0);
-    expect(rows[0].value).toBe(30);
+    expect(rows[0].value).toBe(1.5);
   });
 
-  it("returns full severity at 1.0 (multiplier)", () => {
+  it("returns full severity at 1.0 (rate_multiplier)", () => {
     const rows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 1.0);
     expect(rows[0].value).toBe(0.5);
   });
 
   it("returns neutral values at severity 0", () => {
     const shiftRows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0);
-    expect(shiftRows[0].value).toBe(0); // shift: 30 × 0 = 0
+    expect(shiftRows[0].value).toBe(1.0); // equilibrium_shift lerps to 1.0
 
     const multRows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 0);
-    expect(multRows[0].value).toBe(1.0); // multiplier lerps to 1.0
+    expect(multRows[0].value).toBe(1.0); // rate_multiplier lerps to 1.0
   });
 
   it("sets null goodId when template has null", () => {
@@ -205,37 +207,37 @@ describe("aggregateModifiers", () => {
   it("returns defaults when no modifiers match", () => {
     const result = aggregateModifiers([], "fuel", defaultCaps);
     expect(result).toEqual({
-      supplyTargetShift: 0,
-      demandTargetShift: 0,
+      supplyTargetMult: 1,
+      demandTargetMult: 1,
       productionMult: 1,
       consumptionMult: 1,
       reversionMult: 1,
     });
   });
 
-  it("sums equilibrium shifts for matching good", () => {
+  it("compounds equilibrium shift multipliers for matching good", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 30 },
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 20 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 1.5 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 1.4 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetShift).toBe(50);
+    expect(result.demandTargetMult).toBeCloseTo(2.1); // 1.5 × 1.4
   });
 
   it("includes null-goodId modifiers (applies to all goods)", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "demand_target", value: 15 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "demand_target", value: 1.3 },
     ];
     const result = aggregateModifiers(mods, "luxuries", defaultCaps);
-    expect(result.demandTargetShift).toBe(15);
+    expect(result.demandTargetMult).toBeCloseTo(1.3);
   });
 
   it("excludes modifiers for a different good", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "ore", parameter: "demand_target", value: 40 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "ore", parameter: "demand_target", value: 2.0 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetShift).toBe(0);
+    expect(result.demandTargetMult).toBe(1);
   });
 
   it("multiplies rate multipliers", () => {
@@ -256,21 +258,21 @@ describe("aggregateModifiers", () => {
     expect(result.reversionMult).toBe(0.5);
   });
 
-  it("caps shift to maxShift", () => {
+  it("caps multiplier to maxTargetMult", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 80 },
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 60 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 3.0 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 2.0 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetShift).toBe(100); // capped at maxShift
+    expect(result.demandTargetMult).toBe(4.0); // 3.0 × 2.0 = 6.0, capped at maxTargetMult 4.0
   });
 
-  it("caps negative shift to -maxShift", () => {
+  it("caps multiplier to minTargetMult", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "supply_target", value: -120 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "supply_target", value: 0.05 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.supplyTargetShift).toBe(-100);
+    expect(result.supplyTargetMult).toBe(0.1); // capped at minTargetMult
   });
 
   it("caps multiplier to minMultiplier", () => {
@@ -291,17 +293,17 @@ describe("aggregateModifiers", () => {
 
   it("handles combined modifiers from multiple events", () => {
     const mods: ModifierRow[] = [
-      // War: demand shift on fuel
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 80 },
-      // War: production halved
+      // Conflict: demand multiplier on fuel
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 1.8 },
+      // Conflict: production halved
       { domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "sys-1", goodId: null, parameter: "production_rate", value: 0.4 },
-      // War: reversion dampened
+      // Conflict: reversion dampened
       { domain: "economy", type: "reversion_dampening", targetType: "system", targetId: "sys-1", goodId: null, parameter: "reversion_rate", value: 0.5 },
       // Festival: all demand up
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "demand_target", value: 15 },
+      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "demand_target", value: 1.2 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetShift).toBe(95); // 80 + 15
+    expect(result.demandTargetMult).toBeCloseTo(2.16); // 1.8 × 1.2
     expect(result.productionMult).toBe(0.4);
     expect(result.reversionMult).toBe(0.5);
   });
@@ -337,7 +339,7 @@ describe("rollPhaseDuration", () => {
 
 describe("selectEventToSpawn", () => {
   const defs: Record<string, EventDefinition> = {
-    war: makeDefinition(),
+    inner_system_conflict: makeDefinition(),
   };
 
   const systems: SystemSnapshot[] = [
@@ -351,7 +353,7 @@ describe("selectEventToSpawn", () => {
   it("returns a spawn decision when eligible", () => {
     const result = selectEventToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("war");
+    expect(result!.type).toBe("inner_system_conflict");
   });
 
   it("returns null when global cap reached", () => {
@@ -364,7 +366,7 @@ describe("selectEventToSpawn", () => {
 
   it("returns null when per-type cap reached", () => {
     const events = Array.from({ length: 5 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, type: "war", systemId: `sys-other-${i}` }),
+      makeSnapshot({ id: `evt-${i}`, type: "inner_system_conflict", systemId: `sys-other-${i}` }),
     );
     const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).toBeNull();
@@ -384,9 +386,9 @@ describe("selectEventToSpawn", () => {
 
   it("respects cooldown", () => {
     // war at sys-1 started at tick 90, cooldown is 50
-    const events = [makeSnapshot({ startTick: 90, systemId: "sys-1", type: "war" })];
+    const events = [makeSnapshot({ startTick: 90, systemId: "sys-1", type: "inner_system_conflict" })];
     // At tick 100, cooldown not expired (90 + 50 > 100)
-    // Only sys-2 and sys-3 remain. The war def has no economy filter,
+    // Only sys-2 and sys-3 remain. The conflict def has no economy filter,
     // so it can spawn at either.
     const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
     if (result) {
@@ -396,7 +398,7 @@ describe("selectEventToSpawn", () => {
 
   it("respects economy type filter", () => {
     const filtered: Record<string, EventDefinition> = {
-      war: makeDefinition({
+      inner_system_conflict: makeDefinition({
         targetFilter: { economyTypes: ["core"] },
       }),
     };
@@ -407,7 +409,7 @@ describe("selectEventToSpawn", () => {
 
   it("returns null when no systems match filter", () => {
     const filtered: Record<string, EventDefinition> = {
-      war: makeDefinition({
+      inner_system_conflict: makeDefinition({
         targetFilter: { economyTypes: ["tech"] },
       }),
     };
@@ -470,7 +472,7 @@ describe("buildShocksForPhase", () => {
     };
     const shocks = buildShocksForPhase(phase, 0.5);
     expect(shocks).toHaveLength(1);
-    expect(shocks[0]).toEqual({ goodId: "food", parameter: "supply", value: -15 });
+    expect(shocks[0]).toEqual({ goodId: "food", parameter: "supply", value: -15, mode: "absolute" });
   });
 
   it("returns full value at severity 1.0", () => {
@@ -482,7 +484,7 @@ describe("buildShocksForPhase", () => {
       shocks: [{ target: "system", goodId: "fuel", parameter: "demand", value: 20 }],
     };
     const shocks = buildShocksForPhase(phase, 1.0);
-    expect(shocks[0]).toEqual({ goodId: "fuel", parameter: "demand", value: 20 });
+    expect(shocks[0]).toEqual({ goodId: "fuel", parameter: "demand", value: 20, mode: "absolute" });
   });
 
   it("returns zero-value shocks at severity 0", () => {
@@ -495,6 +497,7 @@ describe("buildShocksForPhase", () => {
     };
     const shocks = buildShocksForPhase(phase, 0);
     expect(shocks[0].value).toBe(0);
+    expect(shocks[0].mode).toBe("absolute");
   });
 
   it("returns correct goodId and parameter", () => {
@@ -515,6 +518,21 @@ describe("buildShocksForPhase", () => {
     expect(shocks[1].goodId).toBe("fuel");
     expect(shocks[1].parameter).toBe("demand");
   });
+
+  it("handles percentage mode shocks", () => {
+    const phase: EventPhaseDefinition = {
+      name: "test",
+      displayName: "Test",
+      durationRange: [10, 20],
+      modifiers: [],
+      shocks: [{ target: "system", goodId: "food", parameter: "supply", value: -0.5, mode: "percentage" }],
+    };
+    const shocks = buildShocksForPhase(phase, 0.8);
+    expect(shocks).toHaveLength(1);
+    expect(shocks[0].mode).toBe("percentage");
+    // Percentage mode: value × severity (not rounded)
+    expect(shocks[0].value).toBeCloseTo(-0.4); // -0.5 × 0.8
+  });
 });
 
 // ── evaluateSpreadTargets ───────────────────────────────────────
@@ -532,7 +550,7 @@ describe("evaluateSpreadTargets", () => {
   });
 
   const defs: Record<string, EventDefinition> = {
-    war: makeDefinition(),
+    inner_system_conflict: makeDefinition(),
     conflict_spillover: childDef,
   };
 
@@ -670,7 +688,7 @@ describe("evaluateSpreadTargets", () => {
 
 describe("selectEventsToSpawn", () => {
   const defs: Record<string, EventDefinition> = {
-    war: makeDefinition({ maxActive: 200 }),
+    inner_system_conflict: makeDefinition({ maxActive: 200 }),
   };
 
   const systems: SystemSnapshot[] = [
@@ -685,7 +703,7 @@ describe("selectEventsToSpawn", () => {
     const results = selectEventsToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5, 3);
     expect(results.length).toBe(3);
     for (const r of results) {
-      expect(r.type).toBe("war");
+      expect(r.type).toBe("inner_system_conflict");
     }
   });
 
@@ -699,15 +717,15 @@ describe("selectEventsToSpawn", () => {
   });
 
   it("respects per-type cap across batch", () => {
-    // maxActive for war is 5, start with 3 active → can only add 2
+    // maxActive for inner_system_conflict is 5, start with 3 active → can only add 2
     const typeDefs: Record<string, EventDefinition> = {
-      war: makeDefinition({ maxActive: 5 }),
+      inner_system_conflict: makeDefinition({ maxActive: 5 }),
     };
     const events = Array.from({ length: 3 }, (_, i) =>
-      makeSnapshot({ id: `evt-${i}`, type: "war", systemId: `sys-other-${i}` }),
+      makeSnapshot({ id: `evt-${i}`, type: "inner_system_conflict", systemId: `sys-other-${i}` }),
     );
     const results = selectEventsToSpawn(typeDefs, events, systems, 100, defaultCapsSpawn, () => 0.5, 10);
-    expect(results.length).toBe(2); // 5 - 3 = 2 more war events possible
+    expect(results.length).toBe(2); // 5 - 3 = 2 more conflict events possible
   });
 
   it("respects per-system cap across batch", () => {

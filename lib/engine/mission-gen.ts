@@ -33,6 +33,17 @@ export interface OpMissionCandidate {
   durationTicks: number | null;
   enemyTier: EnemyTier | null;
   statRequirements: Partial<Record<StatGateKey, number>>;
+  /** If spawned by an event, the event ID (for display/tracking). */
+  eventId?: string;
+}
+
+// ── Event mission context ────────────────────────────────────────
+
+export interface EventMissionContext {
+  eventId: string;
+  eventType: string;
+  systemId: string;
+  severity: number;
 }
 
 // ── Reward calculation ──────────────────────────────────────────
@@ -279,6 +290,73 @@ export function selectReconCandidates(
       enemyTier: null,
       statRequirements: { ...def.statGate },
     });
+  }
+
+  return candidates;
+}
+
+// ── Event-driven mission candidates ──────────────────────────────
+
+import type { EventOpMissionConfig } from "@/lib/constants/events";
+
+/**
+ * Generate operational mission candidates triggered by active events.
+ *
+ * Unlike normal mission generation, event missions bypass danger thresholds —
+ * the event itself is the justification. Spawn probability is scaled by
+ * event severity, and rewards are boosted by the config's rewardMult.
+ */
+export function selectEventOpMissionCandidates(
+  events: EventMissionContext[],
+  config: Partial<Record<string, EventOpMissionConfig>>,
+  dangerLevels: Map<string, number>,
+  tick: number,
+  rng: () => number,
+): OpMissionCandidate[] {
+  const candidates: OpMissionCandidate[] = [];
+
+  for (const event of events) {
+    const opConfig = config[event.eventType];
+    if (!opConfig) continue;
+
+    for (const missionType of opConfig.types) {
+      // Spawn probability scaled by severity
+      const adjustedProb = opConfig.spawnProbability * event.severity;
+      if (rng() >= adjustedProb) continue;
+
+      const def = MISSION_TYPE_DEFS[missionType];
+
+      // Duration
+      let durationTicks: number | null = null;
+      if (def.durationTicks) {
+        const [minDur, maxDur] = def.durationTicks;
+        durationTicks = minDur + Math.floor(rng() * (maxDur - minDur + 1));
+      }
+
+      // Reward: scale with danger if available, then apply event multiplier
+      const danger = dangerLevels.get(event.systemId) ?? 0.15;
+      const dangerFactor = Math.min(1, danger / 0.5);
+      const baseReward = interpolateReward(def.rewardRange, dangerFactor);
+      const reward = Math.round(baseReward * opConfig.rewardMult);
+
+      // Enemy tier for bounty missions
+      let enemyTier: EnemyTier | null = null;
+      if (missionType === "bounty") {
+        enemyTier = getEnemyTier(danger);
+      }
+
+      candidates.push({
+        type: missionType,
+        systemId: event.systemId,
+        targetSystemId: event.systemId,
+        reward,
+        deadlineTick: tick + OP_MISSION_DEADLINE_TICKS,
+        durationTicks,
+        enemyTier,
+        statRequirements: { ...def.statGate },
+        eventId: event.eventId,
+      });
+    }
   }
 
   return candidates;

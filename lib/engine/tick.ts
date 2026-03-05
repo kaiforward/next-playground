@@ -16,10 +16,10 @@ export interface MarketTickEntry {
   economyType: string;
   produces: string[];
   consumes: string[];
-  /** Additive shift to the supply equilibrium target. Default 0. */
-  supplyTargetShift?: number;
-  /** Additive shift to the demand equilibrium target. Default 0. */
-  demandTargetShift?: number;
+  /** Multiplier on the supply equilibrium target. Default 1. */
+  supplyTargetMult?: number;
+  /** Multiplier on the demand equilibrium target. Default 1. */
+  demandTargetMult?: number;
   /** Multiplier on production rate. Default 1.0. */
   productionMult?: number;
   /** Multiplier on consumption rate. Default 1.0. */
@@ -107,9 +107,9 @@ export function simulateEconomyTick(
   return markets.map((entry) => {
     const target = getEquilibrium(entry, params);
 
-    // Apply modifier shifts to equilibrium targets (default 0)
-    const effectiveSupplyTarget = target.supply + (entry.supplyTargetShift ?? 0);
-    const effectiveDemandTarget = target.demand + (entry.demandTargetShift ?? 0);
+    // Apply modifier multipliers to equilibrium targets (default 1)
+    const effectiveSupplyTarget = target.supply * (entry.supplyTargetMult ?? 1);
+    const effectiveDemandTarget = target.demand * (entry.demandTargetMult ?? 1);
 
     // Apply reversion dampening (default 1.0 = no change)
     const effectiveReversion = reversionRate * (entry.reversionMult ?? 1);

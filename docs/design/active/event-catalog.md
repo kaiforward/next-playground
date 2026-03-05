@@ -2,7 +2,7 @@
 
 Event arcs and shocks that work with the existing event system. Each entry is a new `EventDefinition` — no engine or processor changes required. Add to `lib/constants/events.ts` and they just work.
 
-Events with entries in `EVENT_MISSION_GOODS` (also in `events.ts`) automatically generate trade missions for their themed goods. Currently mapped: war, plague, trade_festival, mining_boom, supply_shortage, pirate_raid, solar_storm. New events get missions by adding a mapping entry.
+Events with entries in `EVENT_MISSION_GOODS` (also in `events.ts`) automatically generate trade missions for their themed goods. Currently mapped: war, plague, trade_festival, mining_boom, supply_shortage, pirate_raid, solar_storm, refugee_crisis, trade_embargo, tech_breakthrough, asteroid_strike. New events get missions by adding a mapping entry.
 
 For ideas that require new engine mechanics, see [simulation-enhancements.md](../archive/simulation-enhancements.md).
 
@@ -103,6 +103,54 @@ Spawned by Plague spread at neighbouring agricultural systems. Reduced severity 
 ### Ore Glut (child event)
 
 Spawned by Mining Boom spread. Reduced severity (0.4x). Ore supply surplus depresses local prices.
+
+### Refugee Crisis
+
+Target: Core, agricultural systems. Multi-phase arc with spread. Weight 8, cooldown 100.
+
+| Phase | Duration | Economy Modifiers | Navigation | Spread |
+|-------|----------|-------------------|------------|--------|
+| **Influx** | 20-40 | Food demand +60, medicine demand +40, food supply shock -30% | — | — |
+| **Overcrowding** | 40-80 | Food demand +100, medicine demand +80, production x0.7 | Danger 0.08 | plague_risk in region |
+| **Settlement** | 30-60 | Food demand +30, medicine demand +15 | — | — |
+
+Player opportunity: Rush food and medicine imports during influx/overcrowding. High demand creates premium prices. Watch for plague spreading to agricultural neighbors.
+
+### Trade Embargo
+
+Target: Core, industrial systems. Multi-phase arc. Weight 6, cooldown 120.
+
+| Phase | Duration | Economy Modifiers |
+|-------|----------|-------------------|
+| **Imposed** | 20-40 | All supply x0.6, all demand +40, production x0.7 |
+| **Enforcement** | 40-80 | All supply x0.4, all demand +70, production x0.5, reversion x0.4, electronics/machinery supply shock -50% |
+| **Easing** | 30-60 | All supply x0.8, all demand +20 |
+
+Player opportunity: Deliver electronics and machinery during enforcement for massive premiums. All goods are profitable due to blanket supply suppression.
+
+### Tech Breakthrough
+
+Target: Tech systems. Multi-phase arc (positive event). Weight 7, cooldown 120.
+
+| Phase | Duration | Economy Modifiers |
+|-------|----------|-------------------|
+| **Discovery** | 15-30 | Electronics production x1.5, machinery demand +40 |
+| **Innovation** | 40-80 | Electronics production x2.5, electronics supply +80, machinery demand +80 |
+| **Adoption** | 30-60 | Electronics production x1.5, electronics supply +30, machinery demand +20 |
+
+Player opportunity: Buy cheap electronics during innovation phase, sell to systems that need them. Deliver machinery to the tech system for good prices.
+
+### Asteroid Strike
+
+Target: Extraction systems. Multi-phase arc. Weight 5, cooldown 80.
+
+| Phase | Duration | Economy Modifiers | Navigation |
+|-------|----------|-------------------|------------|
+| **Impact** | 10-20 | All production x0.05, ore supply shock -70%, fuel supply shock -50% | Danger 0.25 |
+| **Aftermath** | 40-80 | All production x0.3, machinery demand +80 | — |
+| **Recovery** | 30-60 | All production x0.7 | — |
+
+Player opportunity: Avoid during impact (extreme danger). Deliver machinery during aftermath for high rewards. Salvage and recon missions spawn here.
 
 ## Ideas
 

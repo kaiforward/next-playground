@@ -30,16 +30,20 @@ const SORT_OPTIONS = [
 ];
 
 const TYPE_CATEGORY: Record<EventTypeId, string> = {
-  war: "conflict",
+  inner_system_conflict: "conflict",
   conflict_spillover: "conflict",
   pirate_raid: "conflict",
   plague: "environmental",
   plague_risk: "environmental",
   solar_storm: "environmental",
+  asteroid_strike: "environmental",
   trade_festival: "social",
+  refugee_crisis: "social",
   mining_boom: "economic",
   ore_glut: "economic",
   supply_shortage: "economic",
+  trade_embargo: "economic",
+  tech_breakthrough: "economic",
 };
 
 function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {

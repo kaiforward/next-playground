@@ -138,9 +138,9 @@ describe("SimConstants", () => {
 
     it("overrides events modifier caps", () => {
       const c = resolveConstants({
-        events: { modifierCaps: { maxShift: 200 } },
+        events: { modifierCaps: { maxTargetMult: 8.0 } },
       });
-      expect(c.events.modifierCaps.maxShift).toBe(200);
+      expect(c.events.modifierCaps.maxTargetMult).toBe(8.0);
       // Other cap fields preserved
       expect(c.events.modifierCaps.minMultiplier).toBe(MODIFIER_CAPS.minMultiplier);
     });

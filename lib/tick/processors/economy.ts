@@ -170,8 +170,8 @@ export const economyProcessor: TickProcessor = {
         equilibriumProduces,
         equilibriumConsumes,
         ...(agg && {
-          supplyTargetShift: agg.supplyTargetShift,
-          demandTargetShift: agg.demandTargetShift,
+          supplyTargetMult: agg.supplyTargetMult,
+          demandTargetMult: agg.demandTargetMult,
           productionMult: agg.productionMult,
           consumptionMult: agg.consumptionMult,
           reversionMult: agg.reversionMult,

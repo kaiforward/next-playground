@@ -507,8 +507,8 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       equilibriumProduces,
       equilibriumConsumes,
       ...(agg && {
-        supplyTargetShift: agg.supplyTargetShift,
-        demandTargetShift: agg.demandTargetShift,
+        supplyTargetMult: agg.supplyTargetMult,
+        demandTargetMult: agg.demandTargetMult,
         productionMult: agg.productionMult,
         consumptionMult: agg.consumptionMult,
         reversionMult: agg.reversionMult,

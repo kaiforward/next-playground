@@ -55,7 +55,8 @@ export interface SimConstants {
     maxGlobal: number;
     maxBatchSpawn: number;
     modifierCaps: {
-      maxShift: number;
+      minTargetMult: number;
+      maxTargetMult: number;
       minMultiplier: number;
       maxMultiplier: number;
       minReversionMult: number;
