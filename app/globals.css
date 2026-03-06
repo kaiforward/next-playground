@@ -13,21 +13,36 @@
   --color-surface-hover: #1c2129;
   --color-surface-active: #242a33;
 
-  /* Text hierarchy */
+  /* Text hierarchy — all tiers pass WCAG AA 4.5:1 on surface */
   --color-text-primary: #c9d1d9;
   --color-text-secondary: #8b949e;
-  --color-text-tertiary: #6e7681;
-  --color-text-muted: #545d68;
-  --color-text-faint: #3d444d;
+  --color-text-tertiary: #7d868e;
+  --color-text-accent: #e0845f; /* copper, lightened for 4.5:1 contrast on dark surfaces */
 
   /* Borders */
   --color-border: rgba(139, 148, 158, 0.15);
   --color-border-strong: rgba(139, 148, 158, 0.30);
 
-  /* Accent */
-  --color-accent: #c75b39;
+  /* Accent — brightened from #c75b39 to pass WCAG AA 4.5:1 on surface */
+  --color-accent: #d06a42;
   --color-accent-muted: #a04428;
   --color-secondary: #d4a04a;
+
+  /* Status colors — shared palette for Badge, ProgressBar, Button, InlineAlert, Tabs */
+  --color-status-green: #22c55e;
+  --color-status-green-light: #86efac;
+  --color-status-red: #ef4444;
+  --color-status-red-light: #fca5a5;
+  --color-status-amber: #f59e0b;
+  --color-status-amber-light: #fcd34d;
+  --color-status-blue: #3b82f6;
+  --color-status-blue-light: #93c5fd;
+  --color-status-purple: #a855f7;
+  --color-status-purple-light: #d8b4fe;
+  --color-status-cyan: #06b6d4;
+  --color-status-cyan-light: #67e8f9;
+  --color-status-slate: #64748b;
+  --color-status-slate-light: #cbd5e1;
 
   /* Layout */
   --sidebar-width: 256px;
@@ -64,7 +79,7 @@ body::after {
   z-index: -1;
   background: radial-gradient(
     ellipse 80% 50% at 50% 0%,
-    rgba(199, 91, 57, 0.04) 0%,
+    rgba(208, 106, 66, 0.04) 0%,
     transparent 70%
   );
 }

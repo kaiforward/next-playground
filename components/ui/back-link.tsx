@@ -9,7 +9,8 @@ export function BackLink({ href }: BackLinkProps) {
   return (
     <Link
       href={href}
-      className="text-text-muted hover:text-white transition-colors"
+      className="text-text-secondary hover:text-white transition-colors"
+      aria-label="Go back"
     >
       <ArrowLeft className="w-5 h-5" />
     </Link>

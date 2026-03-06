@@ -3,7 +3,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
-import type { BattleInfo } from "@/lib/types/game";
+import type { BattleInfo, BattleDetailInfo } from "@/lib/types/game";
 
 export function useActiveBattles() {
   const { data } = useSuspenseQuery({
@@ -17,7 +17,7 @@ export function useActiveBattles() {
 export function useBattleDetail(battleId: string) {
   const { data } = useSuspenseQuery({
     queryKey: queryKeys.battleDetail(battleId),
-    queryFn: () => apiFetch<BattleInfo>(`/api/game/battles/${battleId}`),
+    queryFn: () => apiFetch<BattleDetailInfo>(`/api/game/battles/${battleId}`),
   });
 
   return { battle: data };

@@ -83,7 +83,7 @@ function StatusCredits() {
   const { fleet } = useFleet();
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="text-text-muted">Credits</span>
+      <span className="text-text-secondary">Credits</span>
       <span className="font-mono text-secondary">{formatCredits(fleet.credits)}</span>
     </div>
   );
@@ -93,7 +93,7 @@ function StatusShipCount() {
   const { fleet } = useFleet();
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="text-text-muted">Ships</span>
+      <span className="text-text-secondary">Ships</span>
       <span className="font-mono text-text-primary">{fleet.ships.length}</span>
     </div>
   );
@@ -130,9 +130,9 @@ export function GameSidebar({
       <div className="h-[var(--topbar-height)] flex items-center px-3 border-b border-border shrink-0">
         <Link href="/" className="flex items-center gap-2 overflow-hidden">
           {collapsed ? (
-            <span className="font-display font-bold text-accent text-lg">ST</span>
+            <span className="font-display font-bold text-text-accent text-lg">ST</span>
           ) : (
-            <span className="font-display font-bold text-accent text-sm tracking-widest uppercase whitespace-nowrap">
+            <span className="font-display font-bold text-text-accent text-sm tracking-widest uppercase whitespace-nowrap">
               Stellar Trader
             </span>
           )}
@@ -148,7 +148,7 @@ export function GameSidebar({
 
       {/* Fleet section */}
       {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Fleet</SectionHeader>}
-      <nav className="flex flex-col gap-0.5">
+      <nav aria-label="Fleet navigation" className="flex flex-col gap-0.5">
         {FLEET_NAV.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
         ))}
@@ -158,7 +158,7 @@ export function GameSidebar({
 
       {/* Activity section */}
       {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Activity</SectionHeader>}
-      <nav className="flex flex-col gap-0.5">
+      <nav aria-label="Activity navigation" className="flex flex-col gap-0.5">
         {ACTIVITY_NAV.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
         ))}
@@ -172,8 +172,8 @@ export function GameSidebar({
           <QueryBoundary
             loadingFallback={
               <div className="flex items-center justify-between text-xs">
-                <span className="text-text-muted">Credits</span>
-                <span className="font-mono text-text-faint">---</span>
+                <span className="text-text-secondary">Credits</span>
+                <span className="font-mono text-text-tertiary">---</span>
               </div>
             }
           >
@@ -181,7 +181,7 @@ export function GameSidebar({
             <StatusShipCount />
           </QueryBoundary>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-text-muted">Tick</span>
+            <span className="text-text-secondary">Tick</span>
             <div className="flex items-center gap-1.5">
               <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="font-mono text-text-primary">{currentTick}</span>
@@ -196,7 +196,7 @@ export function GameSidebar({
       {/* Collapse toggle */}
       <button
         onClick={onToggle}
-        className="flex items-center justify-center h-9 border-t border-border text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
+        className="flex items-center justify-center h-9 border-t border-border text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -208,18 +208,18 @@ export function GameSidebar({
           <button
             onClick={() => signOut({ redirectTo: "/login" })}
             title={userEmail ?? "Sign Out"}
-            className="flex items-center justify-center w-full text-text-muted hover:text-text-primary transition-colors"
+            className="flex items-center justify-center w-full text-text-secondary hover:text-text-primary transition-colors"
           >
             <LogOut className="w-4.5 h-4.5 shrink-0" />
           </button>
         ) : (
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-muted truncate max-w-[140px]">
+            <span className="text-xs text-text-secondary truncate max-w-[140px]">
               {userEmail}
             </span>
             <button
               onClick={() => signOut({ redirectTo: "/login" })}
-              className="text-xs text-text-muted hover:text-text-primary transition-colors"
+              className="text-xs text-text-secondary hover:text-text-primary transition-colors"
             >
               Sign Out
             </button>

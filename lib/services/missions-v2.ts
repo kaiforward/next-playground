@@ -13,7 +13,7 @@ import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { derivePlayerCombatStats, deriveEnemyCombatStats } from "@/lib/engine/combat";
 import { toGovernmentType, toTraitId, toQualityTier, toOpMissionStatus, toBattleStatus, toEnemyTier, toMissionType, isStatGateKey, isStatGateMessage, toStatRequirements } from "@/lib/types/guards";
 import { getGameWorld } from "@/lib/services/world";
-import type { MissionInfo, BattleInfo, BattleRoundResult } from "@/lib/types/game";
+import type { MissionInfo, BattleInfo, BattleDetailInfo, BattleRoundResult, BattleShipStats } from "@/lib/types/game";
 import type {
   SystemAllMissionsData,
   AcceptOpMissionResult,
@@ -636,12 +636,19 @@ export async function getActiveBattles(
 export async function getBattleDetail(
   battleId: string,
   playerId: string,
-): Promise<BattleInfo> {
+): Promise<BattleDetailInfo> {
   const battle = await prisma.battle.findUnique({
     where: { id: battleId },
     include: {
       system: { select: { name: true } },
-      ship: { select: { name: true, hullMax: true, shieldMax: true, playerId: true } },
+      ship: {
+        select: {
+          name: true, playerId: true,
+          hullMax: true, hullCurrent: true,
+          shieldMax: true, shieldCurrent: true,
+          firepower: true, evasion: true,
+        },
+      },
     },
   });
 
@@ -649,9 +656,21 @@ export async function getBattleDetail(
     throw new ServiceError("Battle not found.", 404);
   }
 
-  if (battle.ship?.playerId !== playerId) {
+  if (!battle.ship || battle.ship.playerId !== playerId) {
     throw new ServiceError("Battle not found.", 404);
   }
 
-  return serializeBattle(battle);
+  const base = serializeBattle(battle);
+  const shipStats: BattleShipStats | null = battle.ship
+    ? {
+        hullMax: battle.ship.hullMax,
+        hullCurrent: battle.ship.hullCurrent,
+        shieldMax: battle.ship.shieldMax,
+        shieldCurrent: battle.ship.shieldCurrent,
+        firepower: battle.ship.firepower,
+        evasion: battle.ship.evasion,
+      }
+    : null;
+
+  return { ...base, shipStats };
 }

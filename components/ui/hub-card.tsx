@@ -18,8 +18,8 @@ export function HubCard({ href, title, description, icon, accentClass }: HubCard
             {icon}
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
-            <p className="text-sm text-text-muted mt-0.5">{description}</p>
+            <h3 className="text-lg font-display font-semibold text-text-primary">{title}</h3>
+            <p className="text-sm text-text-secondary mt-0.5">{description}</p>
           </div>
         </div>
       </Card>

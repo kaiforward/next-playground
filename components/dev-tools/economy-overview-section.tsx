@@ -16,7 +16,7 @@ export function EconomyOverviewSection() {
   return (
     <div className="space-y-3">
       {isLoading ? (
-        <p className="text-xs text-text-muted">Loading economy...</p>
+        <p className="text-xs text-text-secondary">Loading economy...</p>
       ) : (
         <>
           <div className="max-h-64 overflow-y-auto">
@@ -41,7 +41,7 @@ export function EconomyOverviewSection() {
                       <td className="py-1 pr-2 text-text-secondary truncate max-w-[100px]">
                         {sys.systemName}
                       </td>
-                      <td className="py-1 pr-2 text-text-muted">{sys.economyType}</td>
+                      <td className="py-1 pr-2 text-text-secondary">{sys.economyType}</td>
                       <td className="py-1 text-right text-text-tertiary">
                         avg {avgPrice}cr
                       </td>

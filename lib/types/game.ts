@@ -407,6 +407,19 @@ export interface BattleInfo {
   resolvedAtTick: number | null;
 }
 
+export interface BattleShipStats {
+  hullMax: number;
+  hullCurrent: number;
+  shieldMax: number;
+  shieldCurrent: number;
+  firepower: number;
+  evasion: number;
+}
+
+export interface BattleDetailInfo extends BattleInfo {
+  shipStats: BattleShipStats | null;
+}
+
 // ── Price history types ─────────────────────────────────────────
 
 export interface PriceSnapshotPoint {

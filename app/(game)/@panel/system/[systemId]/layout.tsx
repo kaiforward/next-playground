@@ -63,7 +63,7 @@ function SystemPanelContent({
       {systemInfo && <EconomyBadge economyType={systemInfo.economyType} />}
       {systemInfo?.isGateway && <Badge color="amber">Gateway</Badge>}
       {regionInfo && (
-        <span className="text-text-muted">{regionInfo.name}</span>
+        <span className="text-text-secondary">{regionInfo.name}</span>
       )}
     </span>
   );
@@ -88,7 +88,7 @@ function SystemPanelContent({
       size="xl"
     >
       {/* Tab bar */}
-      <TabList className="mb-6">
+      <TabList className="mb-6" aria-label="System tabs">
         {tabs.map((tab) => (
           <TabLink
             key={tab.href}

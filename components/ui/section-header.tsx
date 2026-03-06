@@ -6,7 +6,7 @@ const sectionHeaderVariants = tv({
     color: {
       default: "text-text-secondary",
       green: "text-green-400/70",
-      red: "text-red-400/70",
+      red: "text-red-400",
     },
   },
   defaultVariants: {

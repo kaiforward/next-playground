@@ -22,8 +22,7 @@ interface StatRowProps {
 export function StatRow({ label, children, className }: StatRowProps) {
   return (
     <div className={`flex items-center gap-2 ${className ?? ""}`}>
-      <dt className="text-sm text-text-tertiary shrink-0">{label}</dt>
-      <span className="flex-1 border-b border-dotted border-border" />
+      <dt className="text-sm text-text-tertiary shrink-0 flex-1 flex items-center gap-2 after:content-[''] after:flex-1 after:border-b after:border-dotted after:border-border">{label}</dt>
       <dd className="shrink-0">{children}</dd>
     </div>
   );

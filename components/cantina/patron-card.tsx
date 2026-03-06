@@ -38,7 +38,7 @@ export function PatronCard({
           </div>
 
           {/* Greeting */}
-          <p className="text-xs text-text-muted italic mt-1">
+          <p className="text-xs text-text-secondary italic mt-1">
             &ldquo;{greeting}&rdquo;
           </p>
 
@@ -50,7 +50,7 @@ export function PatronCard({
           )}
 
           {/* Flavor */}
-          <p className="text-[11px] text-text-faint mt-2">
+          <p className="text-[11px] text-text-tertiary mt-2">
             {NPC_FLAVOR[archetype]}
           </p>
         </div>

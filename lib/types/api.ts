@@ -16,6 +16,7 @@ import type {
   TradeMissionInfo,
   MissionInfo,
   BattleInfo,
+  BattleDetailInfo,
   TraitId,
   TraitCategory,
   QualityTier,
@@ -162,7 +163,7 @@ export type AbandonOpMissionResponse = ApiResponse<{ missionId: string }>;
 // ── Battle types ───────────────────────────────────────────────
 
 export type BattlesResponse = ApiResponse<BattleInfo[]>;
-export type BattleDetailResponse = ApiResponse<BattleInfo>;
+export type BattleDetailResponse = ApiResponse<BattleDetailInfo>;
 
 // ── Convoy types ────────────────────────────────────────────────
 

@@ -39,7 +39,7 @@ export function MarketTable({
               const qty = cargoByGoodId.get(row.goodId) ?? 0;
               return qty > 0
                 ? <span className="text-text-primary font-medium">{qty}</span>
-                : <span className="text-text-faint">0</span>;
+                : <span className="text-text-tertiary">0</span>;
             },
           },
         ]
@@ -100,7 +100,7 @@ export function MarketTable({
             </span>
           );
         }
-        return <span className="text-text-muted">--</span>;
+        return <span className="text-text-secondary">--</span>;
       },
     },
   ];

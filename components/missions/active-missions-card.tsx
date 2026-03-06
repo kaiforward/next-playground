@@ -39,10 +39,10 @@ export function ActiveMissionsCard() {
                     ~{formatCredits(m.estimatedGoodsValue + m.reward)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-text-muted">
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
                   <Link
                     href={`/system/${m.destinationId}/contracts`}
-                    className="text-accent hover:text-accent-muted transition-colors"
+                    className="text-text-accent hover:text-accent-muted transition-colors"
                   >
                     {m.destinationName}
                   </Link>
@@ -62,7 +62,7 @@ export function ActiveMissionsCard() {
             ))}
 
             {totalCount > 3 && (
-              <li className="text-center text-xs text-text-muted pt-1">
+              <li className="text-center text-xs text-text-secondary pt-1">
                 +{totalCount - 3} more mission{totalCount - 3 !== 1 ? "s" : ""}
               </li>
             )}
@@ -87,10 +87,10 @@ function OpMissionItem({ mission: m }: { mission: MissionInfo }) {
           {formatCredits(m.reward)}
         </span>
       </div>
-      <div className="flex items-center gap-2 text-xs text-text-muted">
+      <div className="flex items-center gap-2 text-xs text-text-secondary">
         <Link
           href={`/system/${m.targetSystemId}/contracts`}
-          className="text-accent hover:text-accent-muted transition-colors"
+          className="text-text-accent hover:text-accent-muted transition-colors"
         >
           {m.targetSystemName}
         </Link>

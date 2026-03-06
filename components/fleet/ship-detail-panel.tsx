@@ -9,7 +9,6 @@ import { EconomyBadge } from "@/components/ui/economy-badge";
 import { ShipStatusBadge } from "./ship-status-badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatList, StatRow } from "@/components/ui/stat-row";
-import { StatPair } from "@/components/ui/stat-pair";
 import { useDialog } from "@/components/ui/dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
@@ -46,7 +45,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>
                 {ship.role}
               </Badge>
-              <span className="capitalize text-text-muted">{ship.size}</span>
+              <span className="capitalize text-text-secondary">{ship.size}</span>
             </span>
           }
         />
@@ -67,7 +66,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
                 <span className="text-sm text-text-primary">{ship.system.name}</span>
                 <EconomyBadge economyType={ship.system.economyType} />
                 {regions && (
-                  <span className="text-xs text-text-muted">
+                  <span className="text-xs text-text-secondary">
                     {regions.find((r) => r.id === ship.system.regionId)?.name}
                   </span>
                 )}
@@ -117,14 +116,14 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
       <Card variant="bordered" padding="md">
         <CardHeader title="Ship Stats" />
         <CardContent>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-            <StatPair label="Speed" value={ship.speed} />
-            <StatPair label="Firepower" value={ship.firepower} />
-            <StatPair label="Evasion" value={ship.evasion} />
-            <StatPair label="Stealth" value={ship.stealth} />
-            <StatPair label="Sensors" value={ship.sensors} />
-            <StatPair label="Crew" value={ship.crewCapacity} />
-          </div>
+          <StatList className="grid grid-cols-2 gap-x-6 gap-y-2">
+            <StatRow label="Speed"><span>{ship.speed}</span></StatRow>
+            <StatRow label="Firepower"><span>{ship.firepower}</span></StatRow>
+            <StatRow label="Evasion"><span>{ship.evasion}</span></StatRow>
+            <StatRow label="Stealth"><span>{ship.stealth}</span></StatRow>
+            <StatRow label="Sensors"><span>{ship.sensors}</span></StatRow>
+            <StatRow label="Crew"><span>{ship.crewCapacity}</span></StatRow>
+          </StatList>
         </CardContent>
       </Card>
 
@@ -161,8 +160,8 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
         <CardContent>
           {ship.cargo.length === 0 ? (
             <div className="text-center py-6">
-              <p className="text-text-faint text-sm">Cargo hold is empty</p>
-              <p className="text-text-faint text-xs mt-1">Visit a station market to buy goods</p>
+              <p className="text-text-tertiary text-sm">Cargo hold is empty</p>
+              <p className="text-text-tertiary text-xs mt-1">Visit a station market to buy goods</p>
             </div>
           ) : (
             <ul className="space-y-2">
@@ -196,7 +195,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               {convoyName ? (
                 <Button
                   variant="action"
-                  color="indigo"
+                  color="accent"
                   className="flex-1 opacity-50 cursor-not-allowed"
                   disabled
                   title="Navigate via convoy"
@@ -207,7 +206,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
                 <Button
                   href={`/?navigateShipId=${ship.id}`}
                   variant="action"
-                  color="indigo"
+                  color="accent"
                   className="flex-1"
                 >
                   Navigate

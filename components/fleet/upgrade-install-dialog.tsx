@@ -50,7 +50,7 @@ export function UpgradeInstallDialog({
   return (
     <Dialog open={open} onClose={handleClose} modal size="sm" className="max-h-[80vh] overflow-y-auto">
       <h3 className="text-lg font-semibold text-text-primary mb-1">Install Module</h3>
-      <p className="text-xs text-text-muted mb-4 capitalize">{slot.slotType} slot</p>
+      <p className="text-xs text-text-secondary mb-4 capitalize">{slot.slotType} slot</p>
 
       <div className="space-y-3 mb-4">
         {modules.map((mod) => (
@@ -107,7 +107,7 @@ function ModuleOption({ mod, playerCredits, selected, onSelect }: ModuleOptionPr
           {mod.category === "tiered" ? "Tiered" : "Capability"}
         </Badge>
       </div>
-      <p className="text-xs text-text-muted mb-2">{mod.description}</p>
+      <p className="text-xs text-text-secondary mb-2">{mod.description}</p>
       <div className="flex gap-1.5">
         {mod.tiers.map((tier) => {
           const canAfford = playerCredits >= tier.cost;
@@ -122,7 +122,7 @@ function ModuleOption({ mod, playerCredits, selected, onSelect }: ModuleOptionPr
                   ? "bg-blue-500/30 text-blue-300 ring-1 ring-blue-500/50"
                   : canAfford
                     ? "bg-surface text-text-secondary hover:bg-surface-active"
-                    : "bg-surface text-text-faint cursor-not-allowed"
+                    : "bg-surface text-text-tertiary cursor-not-allowed"
               }`}
             >
               <div className="font-medium">

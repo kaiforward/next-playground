@@ -1,7 +1,7 @@
 import { tv, type VariantProps } from "tailwind-variants";
 
 const nativeSelect = tv({
-  base: "bg-surface border border-border rounded text-text-primary focus:outline-none focus:border-accent transition-colors",
+  base: "bg-surface border border-border text-text-primary focus:outline-none focus:border-accent transition-colors",
   variants: {
     size: {
       sm: "px-2 py-1 text-xs",
@@ -23,14 +23,16 @@ interface NativeSelectProps extends NativeSelectVariants {
   value?: string;
   onChange: (value: string) => void;
   className?: string;
+  "aria-label"?: string;
 }
 
-export function NativeSelect({ options, value, onChange, size, className }: NativeSelectProps) {
+export function NativeSelect({ options, value, onChange, size, className, "aria-label": ariaLabel }: NativeSelectProps) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={nativeSelect({ size, className })}
+      aria-label={ariaLabel}
     >
       {options.map((opt) => (
         <option key={opt.id} value={opt.id}>

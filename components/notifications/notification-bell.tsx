@@ -31,13 +31,13 @@ function NotificationList({ onOpenChange }: { onOpenChange: (open: boolean) => v
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <h3 className="text-xs font-display font-semibold uppercase tracking-widest text-text-muted">
+        <h3 className="text-xs font-display font-semibold uppercase tracking-widest text-text-secondary">
           Notifications
         </h3>
         {notifications.length > 0 && (
           <button
             onClick={handleMarkAllRead}
-            className="text-[11px] text-accent hover:text-accent/80 transition-colors"
+            className="text-[11px] text-text-accent hover:text-text-accent/80 transition-colors"
           >
             Mark all read
           </button>
@@ -45,7 +45,7 @@ function NotificationList({ onOpenChange }: { onOpenChange: (open: boolean) => v
       </div>
 
       {notifications.length === 0 ? (
-        <div className="px-3 py-6 text-center text-xs text-text-muted">
+        <div className="px-3 py-6 text-center text-xs text-text-secondary">
           No notifications yet.
         </div>
       ) : (
@@ -60,7 +60,7 @@ function NotificationList({ onOpenChange }: { onOpenChange: (open: boolean) => v
         <Link
           href="/log"
           onClick={() => onOpenChange(false)}
-          className="text-[11px] text-accent hover:text-accent/80 transition-colors"
+          className="text-[11px] text-text-accent hover:text-text-accent/80 transition-colors"
         >
           View Captain&apos;s Log
         </Link>
@@ -99,11 +99,11 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
           align="start"
           sideOffset={8}
           alignOffset={4}
-          className="w-80 bg-surface border border-border rounded-lg shadow-lg z-50 overflow-hidden"
+          className="w-80 bg-surface border border-border shadow-lg z-50 overflow-hidden"
         >
           <QueryBoundary
             loadingFallback={
-              <div className="px-3 py-6 text-center text-xs text-text-muted">Loading...</div>
+              <div className="px-3 py-6 text-center text-xs text-text-secondary">Loading...</div>
             }
           >
             <NotificationList onOpenChange={() => {}} />

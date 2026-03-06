@@ -81,7 +81,7 @@ function AvailableOperations({
       render: (row) => (
         <Link
           href={`/system/${row.targetSystemId}`}
-          className="text-accent hover:text-accent-muted transition-colors"
+          className="text-text-accent hover:text-accent-muted transition-colors"
         >
           {row.targetSystemName}
         </Link>
@@ -117,7 +117,7 @@ function AvailableOperations({
           <span className="text-text-secondary">
             {row.durationTicks != null ? `${row.durationTicks} ticks` : "Battle"}
           </span>
-          <div className="text-xs text-text-faint">
+          <div className="text-xs text-text-tertiary">
             {row.ticksRemaining}t left
           </div>
         </>
@@ -203,7 +203,7 @@ function ActiveOperations({
       render: (row) => (
         <Link
           href={`/system/${row.targetSystemId}`}
-          className="text-accent hover:text-accent-muted transition-colors"
+          className="text-text-accent hover:text-accent-muted transition-colors"
         >
           {row.targetSystemName}
         </Link>
@@ -298,7 +298,7 @@ function ActiveOperations({
                     </Button>
                   </>
                 ) : (
-                  <span className="text-xs text-text-faint">No ship at target</span>
+                  <span className="text-xs text-text-tertiary">No ship at target</span>
                 )}
               </>
             )}

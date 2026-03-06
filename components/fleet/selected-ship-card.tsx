@@ -34,7 +34,7 @@ export function SelectedShipCard({
             <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>
               {ship.role}
             </Badge>
-            <span className="capitalize text-text-muted">{ship.size}</span>
+            <span className="capitalize text-text-secondary">{ship.size}</span>
           </span>
         }
       />
@@ -44,7 +44,7 @@ export function SelectedShipCard({
         )}
 
         {ship.upgradeSlots.length === 0 ? (
-          <p className="text-text-faint text-sm text-center py-4">
+          <p className="text-text-tertiary text-sm text-center py-4">
             This ship has no upgrade slots.
           </p>
         ) : (

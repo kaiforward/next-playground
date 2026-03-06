@@ -62,7 +62,7 @@ export function ShipyardPanel({ systemId, playerCredits }: ShipyardPanelProps) {
         </p>
       )}
 
-      <p className="text-sm text-text-muted">
+      <p className="text-sm text-text-secondary">
         Your balance: <span className="text-text-secondary">{formatCredits(playerCredits)}</span>
       </p>
     </div>
@@ -93,7 +93,7 @@ function ShipTypeCard({
         <Badge color={ROLE_COLORS[def.role] ?? "slate"}>{def.role}</Badge>
       </div>
 
-      <p className="text-xs text-text-muted mb-3">{def.description}</p>
+      <p className="text-xs text-text-secondary mb-3">{def.description}</p>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3 text-xs">
         <StatMini label="Cargo" value={def.cargo} />
@@ -110,7 +110,7 @@ function ShipTypeCard({
 
       <div className="flex items-center justify-between mb-3">
         <Badge color="amber">{formatCredits(def.price)}</Badge>
-        <span className="text-[10px] text-text-faint font-mono">
+        <span className="text-[10px] text-text-tertiary font-mono">
           {def.slotLayout.engine}E {def.slotLayout.cargo}C {def.slotLayout.defence}D {def.slotLayout.systems}S
         </span>
       </div>
@@ -136,7 +136,7 @@ function ShipTypeCard({
 function StatMini({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex justify-between">
-      <span className="text-text-muted">{label}</span>
+      <span className="text-text-secondary">{label}</span>
       <span className="text-text-secondary font-medium">{value}</span>
     </div>
   );

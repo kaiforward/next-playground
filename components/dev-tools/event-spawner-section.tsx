@@ -58,7 +58,7 @@ export function EventSpawnerSection() {
 
       <Button
         variant="action"
-        color="indigo"
+        color="accent"
         size="xs"
         fullWidth
         onClick={() => {

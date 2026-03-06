@@ -70,13 +70,14 @@ export function DataTable<T extends object>({
             {columns.map((col) => (
               <th
                 key={col.key}
+                scope="col"
                 className={`px-4 py-3 text-xs font-display font-semibold text-text-tertiary uppercase tracking-wider ${
                   col.sortable ? "cursor-pointer select-none hover:text-text-primary" : ""
                 }`}
                 onClick={col.sortable ? () => handleSort(col.key) : undefined}
               >
                 <span className="inline-flex items-center gap-1">
-                  {col.label}
+                  {col.label || <span className="sr-only">Actions</span>}
                   {col.sortable && sortKey === col.key && (
                     <span className="text-text-secondary">
                       {sortDir === "asc" ? "\u25B2" : "\u25BC"}

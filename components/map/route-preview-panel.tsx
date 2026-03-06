@@ -71,7 +71,7 @@ export function RoutePreviewPanel({
         {/* Header */}
         <div className="px-4 py-3 border-b border-border">
           <h3 className="text-sm font-bold text-text-primary">Route Preview</h3>
-          <p className="text-xs text-text-muted mt-0.5">
+          <p className="text-xs text-text-secondary mt-0.5">
             {subtitle} &rarr; {destination.name}
           </p>
         </div>
@@ -102,7 +102,7 @@ export function RoutePreviewPanel({
                   {getName(systemId)}
                 </span>
                 {i < hops.length && (
-                  <span className="text-[10px] text-text-muted">
+                  <span className="text-[10px] text-text-secondary">
                     {hops[i].fuel} fuel &middot; {hops[i].ticks}t
                   </span>
                 )}
@@ -114,18 +114,18 @@ export function RoutePreviewPanel({
         {/* Totals */}
         <div className="mx-4 py-2.5 border-t border-border flex gap-4">
           <div className="flex-1">
-            <div className="text-[10px] text-text-muted uppercase tracking-wider">
+            <div className="text-[10px] text-text-secondary uppercase tracking-wider">
               Fuel
             </div>
             <div className="text-sm font-semibold text-text-primary">
               {route.totalFuelCost}
-              <span className="text-text-faint font-normal">
+              <span className="text-text-tertiary font-normal">
                 {" "}/ {Math.round(unit.fuel)}
               </span>
             </div>
           </div>
           <div className="flex-1">
-            <div className="text-[10px] text-text-muted uppercase tracking-wider">
+            <div className="text-[10px] text-text-secondary uppercase tracking-wider">
               Travel Time
             </div>
             <div className="text-sm font-semibold text-text-primary">
@@ -140,7 +140,7 @@ export function RoutePreviewPanel({
             onClick={onConfirm}
             disabled={isNavigating}
             variant="action"
-            color="indigo"
+            color="accent"
             size="md"
             className="flex-1"
           >

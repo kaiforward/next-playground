@@ -51,7 +51,7 @@ export function FilterBar({
               onClick={() => onChipToggle(chip.id)}
               className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
                 active
-                  ? "bg-accent/20 border-accent text-accent"
+                  ? "bg-accent/20 border-accent text-text-accent"
                   : "border-border text-text-secondary hover:text-text-primary hover:border-border-hover"
               }`}
             >
@@ -82,12 +82,13 @@ export function FilterBar({
           options={sortOptions}
           value={activeSort}
           onChange={onSortChange}
+          aria-label="Sort by"
         />
       )}
 
       {/* Result count */}
       {resultCount && (
-        <span className="text-xs text-text-muted ml-auto">
+        <span className="text-xs text-text-secondary ml-auto">
           {resultCount.shown} of {resultCount.total}
         </span>
       )}

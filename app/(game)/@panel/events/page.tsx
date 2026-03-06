@@ -101,7 +101,7 @@ function EventsContent() {
           {filtered.map((event) => (
             <li
               key={event.id}
-              className="flex items-start gap-3 py-3 px-3 rounded-lg bg-surface-hover/40 hover:bg-surface-hover transition-colors"
+              className="flex items-start gap-3 py-3 px-3 bg-surface-hover/40 hover:bg-surface-hover border-l-2 border-l-accent transition-colors"
             >
               <div className="pt-0.5 shrink-0 text-text-secondary">
                 <EventIcon eventType={event.type} className="w-4.5 h-4.5" />
@@ -129,7 +129,7 @@ function EventsContent() {
                 <div className="text-xs font-mono text-text-primary">
                   {event.ticksRemaining} ticks
                 </div>
-                <div className="text-[10px] text-text-muted mt-0.5">
+                <div className="text-[10px] text-text-secondary mt-0.5">
                   Sev: {event.severity.toFixed(1)}
                 </div>
               </div>

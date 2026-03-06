@@ -8,7 +8,7 @@ function QualityStars({ quality }: { quality: QualityTier }) {
   return (
     <span className="text-xs tracking-tight" aria-label={`Quality ${quality} of 3`}>
       <span className="text-amber-400">{"★".repeat(quality)}</span>
-      <span className="text-text-faint">{"☆".repeat(3 - quality)}</span>
+      <span className="text-text-tertiary">{"☆".repeat(3 - quality)}</span>
     </span>
   );
 }
@@ -85,7 +85,7 @@ export function TraitList({ traits, variant = "full", className }: TraitListProp
             </span>
           </div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-text-faint">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-text-tertiary">
               {t.qualityLabel}
             </span>
             {t.negative && (

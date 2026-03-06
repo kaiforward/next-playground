@@ -11,7 +11,7 @@ export function StatDisplay({ label, value, trend, icon }: StatDisplayProps) {
   return (
     <div className="flex items-start gap-3">
       {icon && (
-        <div className="mt-1 text-text-muted">{icon}</div>
+        <div className="mt-1 text-text-secondary">{icon}</div>
       )}
       <div>
         <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">

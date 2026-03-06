@@ -11,8 +11,8 @@ const emptySlotVariants = tv({
   base: "w-32 h-[10.5rem] rounded-lg border border-dashed flex items-center justify-center text-base",
   variants: {
     current: {
-      true: "border-border-strong text-text-faint",
-      false: "border-border text-text-faint/40",
+      true: "border-border-strong text-text-tertiary",
+      false: "border-border text-text-tertiary/40",
     },
   },
   defaultVariants: { current: false },
@@ -78,7 +78,7 @@ export function ManifestRow({
         })}
       </div>
       <div className="text-right min-w-[4rem]">
-        <div className="text-sm text-text-muted">{label}</div>
+        <div className="text-sm text-text-secondary">{label}</div>
         <div className="text-lg font-bold text-text-primary">{declaredTotal}</div>
       </div>
     </div>

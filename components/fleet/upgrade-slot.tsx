@@ -32,7 +32,7 @@ export function UpgradeSlot({ slot, onInstall, onRemove, disabled, readOnly }: U
   const tierLabel = mod && slot.moduleTier ? mod.tiers.find((t) => t.tier === slot.moduleTier)?.label : null;
 
   return (
-    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface">
+    <div className="flex items-center justify-between py-2 px-3 bg-surface-hover/40 border-l-2 border-l-accent">
       <div className="flex items-center gap-2 min-w-0">
         <Badge color={SLOT_TYPE_COLORS[slot.slotType] ?? "slate"}>
           {SLOT_TYPE_LABELS[slot.slotType] ?? slot.slotType}
@@ -42,7 +42,7 @@ export function UpgradeSlot({ slot, onInstall, onRemove, disabled, readOnly }: U
             {mod.name}{tierLabel ? ` ${tierLabel}` : ""}
           </span>
         ) : (
-          <span className="text-sm text-text-faint italic">Empty</span>
+          <span className="text-sm text-text-tertiary italic">Empty</span>
         )}
       </div>
       {!readOnly && (

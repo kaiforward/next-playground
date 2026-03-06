@@ -61,7 +61,7 @@ function UpgradesContent({ systemId }: { systemId: string }) {
   if (eligibleShips.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-text-muted text-sm">No eligible ships at this system.</p>
+        <p className="text-text-secondary text-sm">No eligible ships at this system.</p>
         <p className="text-white/20 text-xs mt-1">
           Ships must be docked and not disabled to install upgrades.
         </p>

@@ -35,7 +35,7 @@ export function LogEntry({ notification, compact }: LogEntryProps) {
           {notification.message}
         </p>
         <NotificationEntityLinks refs={notification.refs} />
-        <div className={`flex items-center gap-2 mt-1 text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
+        <div className={`flex items-center gap-2 mt-1 text-text-secondary ${compact ? "text-[10px]" : "text-xs"}`}>
           <span>Tick {notification.tick}</span>
           <span>&middot;</span>
           <span>{formatRelativeTime(new Date(notification.createdAt).getTime())}</span>

@@ -55,7 +55,7 @@ export function RefuelControls({
         </span>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-text-muted">
+      <div className="flex items-center justify-between text-xs text-text-secondary">
         <span>Balance</span>
         <span>{formatCredits(playerCredits)}</span>
       </div>

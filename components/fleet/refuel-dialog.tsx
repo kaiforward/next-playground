@@ -51,7 +51,7 @@ export function RefuelDialog({ ship, playerCredits, open, onClose }: RefuelDialo
       size="sm"
     >
       <h2 className="text-lg font-bold text-text-primary mb-1">Refuel {ship.name}</h2>
-      <p className="text-xs text-text-muted mb-5">{REFUEL_COST_PER_UNIT} CR per unit</p>
+      <p className="text-xs text-text-secondary mb-5">{REFUEL_COST_PER_UNIT} CR per unit</p>
 
       <RefuelControls
         ship={ship}

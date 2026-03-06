@@ -3,25 +3,27 @@ import Link from "next/link";
 import { tv, type VariantProps } from "tailwind-variants";
 
 const buttonVariants = tv({
-  base: "inline-flex items-center justify-center font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+  base: "inline-flex items-center justify-center font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
   variants: {
     variant: {
       primary:
-        "bg-accent hover:bg-accent-muted text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background",
+        "bg-accent hover:bg-accent-muted text-background font-semibold border border-accent/50 hover:border-accent",
       action:
-        "text-text-primary",
+        "text-text-primary border",
       ghost:
-        "text-text-secondary hover:text-text-primary hover:bg-surface-hover",
+        "text-text-secondary hover:text-text-primary hover:bg-surface-hover border border-transparent hover:border-border",
       pill:
-        "text-xs",
+        "text-xs border",
+      outline:
+        "bg-transparent text-text-accent border border-accent/40 hover:bg-accent/10 hover:border-accent/70",
       dismiss:
-        "text-red-400 hover:text-text-primary text-xs font-medium",
+        "text-status-red-light hover:text-status-red-light hover:bg-status-red/10 text-xs font-medium border border-transparent hover:border-status-red/20",
     },
     color: {
       blue: "",
       green: "",
       red: "",
-      indigo: "",
+      accent: "",
       cyan: "",
     },
     size: {
@@ -35,14 +37,15 @@ const buttonVariants = tv({
     },
   },
   compoundVariants: [
-    // Action button colors
-    { variant: "action", color: "green", className: "bg-green-600 hover:bg-green-500" },
-    { variant: "action", color: "red", className: "bg-red-600 hover:bg-red-500" },
-    { variant: "action", color: "indigo", className: "bg-accent hover:bg-accent-muted" },
+    // Action button colors — tinted backgrounds with matching borders (instrument panel style)
+    { variant: "action", color: "green", className: "bg-status-green/15 text-status-green-light border-status-green/30 hover:bg-status-green/25 hover:border-status-green/50" },
+    { variant: "action", color: "red", className: "bg-status-red/15 text-status-red-light border-status-red/30 hover:bg-status-red/25 hover:border-status-red/50" },
+    { variant: "action", color: "accent", className: "bg-accent/10 text-text-accent border-accent/30 hover:bg-accent/20 hover:border-accent/50" },
     // Pill button colors
-    { variant: "pill", color: "cyan", className: "bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30" },
-    { variant: "pill", color: "indigo", className: "bg-accent/20 text-accent hover:bg-accent/30" },
-    // Ghost size uses semibold for lg
+    { variant: "pill", color: "cyan", className: "bg-status-cyan/15 text-status-cyan-light border-status-cyan/25 hover:bg-status-cyan/25 hover:border-status-cyan/40" },
+    { variant: "pill", color: "accent", className: "bg-accent/10 text-text-accent border-accent/25 hover:bg-accent/20 hover:border-accent/40" },
+    { variant: "pill", color: "green", className: "bg-status-green/15 text-status-green-light border-status-green/25 hover:bg-status-green/25 hover:border-status-green/40" },
+    // Action semibold at larger sizes
     { variant: "action", size: "md", className: "font-semibold" },
     { variant: "action", size: "lg", className: "font-semibold" },
   ],
