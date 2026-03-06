@@ -38,6 +38,7 @@ function BattleDetailContent({ battleId }: { battleId: string }) {
         </span>
       }
       size="lg"
+      backPath="/battles"
     >
       <div className="space-y-6">
         {/* Summary card */}
@@ -59,8 +60,8 @@ function BattleDetailContent({ battleId }: { battleId: string }) {
                   <span className="text-text-secondary ml-1">({enemyTierDef.name})</span>
                 </StatRow>
                 <StatRow label="Damage Reduction">{Math.round(enemyTierDef.baseDamageReduction * 100)}%</StatRow>
-                <EnemyStrengthRow battle={battle} />
-                <EnemyMoraleRow battle={battle} />
+                <StrengthRow value={battle.enemyStrength} max={battle.enemyMaxStrength} lowColor="amber" highColor="red" />
+                <MoraleRow morale={battle.enemyMorale} />
               </StatList>
             </CardContent>
           </Card>
@@ -109,68 +110,47 @@ function ShipStatsCard({ battle }: { battle: BattleDetailInfo }) {
           <StatRow label="Evasion">
             <span>{shipStats.evasion}</span>
           </StatRow>
-          <PlayerStrengthRow battle={battle} />
-          <PlayerMoraleRow battle={battle} />
+          <StrengthRow value={battle.playerStrength} max={battle.playerMaxStrength} lowColor="red" highColor="green" />
+          <MoraleRow morale={battle.playerMorale} />
         </StatList>
       </CardContent>
     </Card>
   );
 }
 
-function PlayerStrengthRow({ battle }: { battle: BattleDetailInfo }) {
-  const pct = battle.playerMaxStrength > 0
-    ? Math.round((battle.playerStrength / battle.playerMaxStrength) * 100)
-    : 0;
+function StrengthRow({
+  value,
+  max,
+  lowColor,
+  highColor,
+}: {
+  value: number;
+  max: number;
+  lowColor: "red" | "amber";
+  highColor: "green" | "red";
+}) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
 
   return (
     <div>
       <ProgressBar
         label="Strength"
-        value={Math.round(battle.playerStrength)}
-        max={battle.playerMaxStrength}
-        color={pct < 30 ? "red" : "green"}
+        value={Math.round(value)}
+        max={max}
+        color={pct < 30 ? lowColor : highColor}
         size="sm"
       />
     </div>
   );
 }
 
-function PlayerMoraleRow({ battle }: { battle: BattleDetailInfo }) {
-  const morale = getMoraleLabel(battle.playerMorale);
+function MoraleRow({ morale }: { morale: number }) {
+  const info = getMoraleLabel(morale);
 
   return (
     <StatRow label="Morale">
-      <span className={morale.color}>{morale.label}</span>
-      <span className="text-text-secondary ml-1">({Math.round(battle.playerMorale)}%)</span>
-    </StatRow>
-  );
-}
-
-function EnemyStrengthRow({ battle }: { battle: BattleDetailInfo }) {
-  const pct = battle.enemyMaxStrength > 0
-    ? Math.round((battle.enemyStrength / battle.enemyMaxStrength) * 100)
-    : 0;
-
-  return (
-    <div>
-      <ProgressBar
-        label="Strength"
-        value={Math.round(battle.enemyStrength)}
-        max={battle.enemyMaxStrength}
-        color={pct < 30 ? "amber" : "red"}
-        size="sm"
-      />
-    </div>
-  );
-}
-
-function EnemyMoraleRow({ battle }: { battle: BattleDetailInfo }) {
-  const morale = getMoraleLabel(battle.enemyMorale);
-
-  return (
-    <StatRow label="Morale">
-      <span className={morale.color}>{morale.label}</span>
-      <span className="text-text-secondary ml-1">({Math.round(battle.enemyMorale)}%)</span>
+      <span className={info.color}>{info.label}</span>
+      <span className="text-text-secondary ml-1">({Math.round(morale)}%)</span>
     </StatRow>
   );
 }

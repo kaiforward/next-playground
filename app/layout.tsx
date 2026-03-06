@@ -36,7 +36,7 @@ export default function RootLayout({
     >
       <body className="antialiased">
         {children}
-        <AxeAccessibility />
+        {process.env.NODE_ENV === "development" && <AxeAccessibility />}
       </body>
     </html>
   );

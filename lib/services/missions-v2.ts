@@ -656,7 +656,7 @@ export async function getBattleDetail(
     throw new ServiceError("Battle not found.", 404);
   }
 
-  if (battle.ship?.playerId !== playerId) {
+  if (!battle.ship || battle.ship.playerId !== playerId) {
     throw new ServiceError("Battle not found.", 404);
   }
 

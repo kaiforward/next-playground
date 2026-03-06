@@ -1,6 +1,7 @@
 "use client";
 
 import type { ShipState } from "@/lib/types/game";
+import { ProgressBar } from "@/components/ui/progress-bar";
 
 interface ShipTransitIndicatorProps {
   ship: ShipState;
@@ -25,26 +26,17 @@ export function ShipTransitIndicator({ ship, currentTick }: ShipTransitIndicator
         <span className="text-text-secondary">{ship.destinationSystem.name}</span>
       </div>
 
-      {/* Progress bar */}
-      <div
-        className="h-1.5 rounded-full bg-surface-active overflow-hidden"
-        role="progressbar"
-        aria-valuenow={Math.round(progress * 100)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`Transit progress: ${Math.round(progress * 100)}%`}
-      >
-        <div
-          className="h-full rounded-full bg-amber-500 transition-all duration-500"
-          style={{ width: `${progress * 100}%` }}
-        />
-      </div>
+      <ProgressBar
+        label={`${Math.round(progress * 100)}%`}
+        value={Math.round(progress * 100)}
+        max={100}
+        color="amber"
+        size="sm"
+        ariaLabel={`Transit progress: ${Math.round(progress * 100)}%`}
+      />
 
-      <div className="flex justify-between text-[10px] text-text-secondary">
-        <span>{Math.round(progress * 100)}%</span>
-        <span>
-          ETA: {ticksRemaining} tick{ticksRemaining !== 1 ? "s" : ""}
-        </span>
+      <div className="text-[10px] text-text-secondary text-right">
+        ETA: {ticksRemaining} tick{ticksRemaining !== 1 ? "s" : ""}
       </div>
     </div>
   );

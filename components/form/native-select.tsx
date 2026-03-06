@@ -1,7 +1,7 @@
 import { tv, type VariantProps } from "tailwind-variants";
 
 const nativeSelect = tv({
-  base: "bg-surface border border-border rounded text-text-primary focus:outline-none focus:border-accent transition-colors",
+  base: "bg-surface border border-border text-text-primary focus:outline-none focus:border-accent transition-colors",
   variants: {
     size: {
       sm: "px-2 py-1 text-xs",

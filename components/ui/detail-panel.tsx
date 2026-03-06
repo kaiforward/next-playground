@@ -94,6 +94,7 @@ export function DetailPanel({ title, subtitle, headerAction, size, backPath = "/
           transform: mounted ? "scale(1)" : "scale(0.97)",
         }}
         role="dialog"
+        aria-modal="true"
         aria-label={title}
       >
         {/* Header */}

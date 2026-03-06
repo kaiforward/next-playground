@@ -99,7 +99,7 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
           align="start"
           sideOffset={8}
           alignOffset={4}
-          className="w-80 bg-surface border border-border rounded-lg shadow-lg z-50 overflow-hidden"
+          className="w-80 bg-surface border border-border shadow-lg z-50 overflow-hidden"
         >
           <QueryBoundary
             loadingFallback={

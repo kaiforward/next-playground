@@ -23,7 +23,7 @@ interface InlineAlertProps extends InlineAlertVariants {
 
 export function InlineAlert({ children, variant, className }: InlineAlertProps) {
   return (
-    <div className={inlineAlertVariants({ variant, className })}>
+    <div role="alert" className={inlineAlertVariants({ variant, className })}>
       {children}
     </div>
   );

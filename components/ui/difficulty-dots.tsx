@@ -29,13 +29,13 @@ export function DifficultyDots({ level, showLabel = false }: DifficultyDotsProps
         <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
           Difficulty
         </span>
-        <span className="inline-flex gap-0.5" aria-label={`level ${level} of 3`}>{dots}</span>
+        <span className="inline-flex gap-0.5" aria-label={`Difficulty ${level} of 3`}>{dots}</span>
       </div>
     );
   }
 
   return (
-    <span className="inline-flex gap-0.5" aria-label={`Difficulty ${level}`}>
+    <span className="inline-flex gap-0.5" aria-label={`Difficulty ${level} of 3`}>
       {dots}
     </span>
   );
