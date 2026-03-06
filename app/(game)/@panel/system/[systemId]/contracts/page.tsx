@@ -22,7 +22,7 @@ function ContractsContent({ systemId }: { systemId: string }) {
   return (
     <div>
       {/* Sub-tabs */}
-      <TabList className="mb-6">
+      <TabList className="mb-6" aria-label="Contract type">
         <Tab
           active={subTab === "delivery"}
           onClick={() => setSubTab("delivery")}

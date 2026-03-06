@@ -60,7 +60,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
           <div className="flex items-center gap-2 shrink-0">
             <ShipStatusBadge ship={ship} inBattle={inBattle} />
             <Button href={`/?systemId=${ship.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
-              <MapPinIcon />
+              <MapPinIcon className="w-3.5 h-3.5" />
             </Button>
             <Button href={detailHref} variant="ghost" size="xs">
               Details &rarr;
@@ -75,7 +75,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
             {" — "}
             {ship.system.economyType}
             {regions && (
-              <span className="text-text-faint">
+              <span className="text-text-tertiary">
                 {" "}({regions.find((r) => r.id === ship.system.regionId)?.name})
               </span>
             )}
@@ -125,7 +125,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
                 <Button
                   href={`/?navigateShipId=${ship.id}`}
                   variant="action"
-                  color="indigo"
+                  color="accent"
                   size="sm"
                 >
                   Navigate

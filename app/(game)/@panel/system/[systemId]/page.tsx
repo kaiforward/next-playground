@@ -31,7 +31,7 @@ import type { GovernmentType } from "@/lib/types/game";
 
 function GoodsList({ goods }: { goods: { name: string; rate: number }[] }) {
   if (goods.length === 0) {
-    return <p className="text-sm text-text-faint">None</p>;
+    return <p className="text-sm text-text-tertiary">None</p>;
   }
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -41,7 +41,7 @@ function GoodsList({ goods }: { goods: { name: string; rate: number }[] }) {
           className="inline-flex items-center gap-1 bg-surface px-2 py-0.5 text-sm text-text-primary"
         >
           {g.name}
-          <span className="text-text-faint text-xs">({g.rate}/t)</span>
+          <span className="text-text-tertiary text-xs">({g.rate}/t)</span>
         </span>
       ))}
     </div>
@@ -58,7 +58,7 @@ function PriceRow({ name, price, pct }: { name: string; price: number; pct: numb
         <span className="text-sm font-medium text-text-primary">{formatCredits(price)}</span>
         <span
           className={`text-xs font-medium w-14 text-right ${
-            pct > 0 ? "text-green-400" : pct < 0 ? "text-red-400" : "text-text-muted"
+            pct > 0 ? "text-green-400" : pct < 0 ? "text-red-400" : "text-text-secondary"
           }`}
         >
           {pct > 0 ? "+" : ""}{pct.toFixed(0)}%
@@ -210,11 +210,11 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
               <div className="border-t border-border pt-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-text-tertiary">Trade contracts</span>
-                  <span className="text-sm text-accent">{tradeAvailable} avail</span>
+                  <span className="text-sm text-text-accent">{tradeAvailable} avail</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-text-tertiary">Operations</span>
-                  <span className="text-sm text-accent">{opAvailable} avail</span>
+                  <span className="text-sm text-text-accent">{opAvailable} avail</span>
                 </div>
               </div>
             </div>

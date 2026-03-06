@@ -18,7 +18,7 @@ export function ActiveEventsSection({ events, compact }: ActiveEventsSectionProp
         {events.map((event) => (
           <li
             key={event.id}
-            className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface"
+            className="flex items-center justify-between py-2 px-3 bg-surface border-l-2 border-l-accent"
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
@@ -37,7 +37,7 @@ export function ActiveEventsSection({ events, compact }: ActiveEventsSectionProp
                 </p>
               )}
             </div>
-            <span className="text-xs text-text-muted whitespace-nowrap ml-2">
+            <span className="text-xs text-text-secondary whitespace-nowrap ml-2">
               {compact ? event.phaseDisplayName : `${event.ticksRemaining} ticks`}
             </span>
           </li>

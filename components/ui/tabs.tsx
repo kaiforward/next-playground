@@ -24,11 +24,12 @@ type TabListVariants = VariantProps<typeof tabListVariants>;
 interface TabListProps extends TabListVariants {
   children: React.ReactNode;
   className?: string;
+  "aria-label"?: string;
 }
 
-export function TabList({ variant, className, children }: TabListProps) {
+export function TabList({ variant, className, children, "aria-label": ariaLabel }: TabListProps) {
   return (
-    <nav className={tabListVariants({ variant, className })}>
+    <nav className={tabListVariants({ variant, className })} aria-label={ariaLabel}>
       {children}
     </nav>
   );
@@ -58,9 +59,9 @@ const tabVariants = tv({
     { variant: "underline", active: true, class: "border-accent text-text-primary" },
     { variant: "underline", active: false, class: "border-transparent text-text-tertiary hover:text-text-secondary" },
     // pill active — accent (default)
-    { variant: "pill", active: true, activeColor: "accent", class: "bg-accent/20 text-accent" },
-    { variant: "pill", active: true, activeColor: "green", class: "bg-green-500/20 text-green-300" },
-    { variant: "pill", active: true, activeColor: "red", class: "bg-red-500/20 text-red-300" },
+    { variant: "pill", active: true, activeColor: "accent", class: "bg-accent/20 text-text-accent" },
+    { variant: "pill", active: true, activeColor: "green", class: "bg-status-green/20 text-status-green-light" },
+    { variant: "pill", active: true, activeColor: "red", class: "bg-status-red/20 text-status-red-light" },
     { variant: "pill", active: false, class: "bg-surface text-text-tertiary hover:text-text-secondary" },
   ],
   defaultVariants: {

@@ -5,7 +5,7 @@ const cardVariants = tv({
   variants: {
     variant: {
       default: "",
-      bordered: "border border-border",
+      bordered: "border border-border border-l-2 border-l-accent",
     },
     padding: {
       sm: "p-3",

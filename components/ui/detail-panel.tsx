@@ -20,7 +20,7 @@ const panel = tv({
     title: "text-lg font-bold font-display text-text-primary",
     subtitle: "text-sm text-text-secondary mt-0.5",
     closeBtn:
-      "p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors",
+      "p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors",
     body: "flex-1 overflow-y-auto p-6",
   },
   variants: {

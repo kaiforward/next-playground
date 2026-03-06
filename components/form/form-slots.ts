@@ -6,7 +6,7 @@
 export const formSlots = {
   label: "block font-medium mb-1",
   error: "mt-1 text-red-400",
-  hint: "mt-1 text-text-muted",
+  hint: "mt-1 text-text-secondary",
 } as const;
 
 export const formSizeVariants = {

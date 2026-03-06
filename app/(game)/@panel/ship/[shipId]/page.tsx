@@ -8,7 +8,7 @@ import { usePlayerMissions } from "@/lib/hooks/use-player-missions";
 import { useActiveBattles } from "@/lib/hooks/use-battles";
 import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
-import { BattleViewer } from "@/components/fleet/battle-viewer";
+import { BattleCard } from "@/components/fleet/battle-card";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -56,7 +56,7 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
     >
       {shipBattle && (
         <div className="mb-6">
-          <BattleViewer battle={shipBattle} />
+          <BattleCard battle={shipBattle} detailHref={`/battle/${shipBattle.id}`} />
         </div>
       )}
 

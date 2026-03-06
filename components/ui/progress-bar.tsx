@@ -10,7 +10,7 @@ const progressBarVariants = tv({
     size: {
       sm: {
         track: "h-1.5",
-        labelRow: "text-[10px] text-text-muted",
+        labelRow: "text-[10px] text-text-secondary",
       },
       md: {
         track: "h-2.5",
@@ -19,11 +19,12 @@ const progressBarVariants = tv({
     },
     color: {
       copper: { fill: "bg-accent" },
-      blue: { fill: "bg-blue-500" },
-      amber: { fill: "bg-amber-500" },
-      red: { fill: "bg-red-500" },
-      green: { fill: "bg-green-500" },
-      purple: { fill: "bg-purple-500" },
+      blue: { fill: "bg-status-blue" },
+      amber: { fill: "bg-status-amber" },
+      red: { fill: "bg-status-red" },
+      green: { fill: "bg-status-green" },
+      purple: { fill: "bg-status-purple" },
+      cyan: { fill: "bg-status-cyan" },
     },
   },
   defaultVariants: {

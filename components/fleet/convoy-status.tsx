@@ -16,7 +16,7 @@ export function ConvoyStatus({ convoys }: ConvoyStatusProps) {
     <div>
       <h2 className="text-lg font-semibold text-text-primary mb-4">
         Convoys
-        <span className="text-sm font-normal text-text-muted ml-2">{convoys.length}</span>
+        <span className="text-sm font-normal text-text-secondary ml-2">{convoys.length}</span>
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -45,7 +45,7 @@ export function ConvoyStatus({ convoys }: ConvoyStatusProps) {
                 ))}
               </div>
 
-              <div className="flex justify-between text-[10px] text-text-faint">
+              <div className="flex justify-between text-[10px] text-text-tertiary">
                 <span>{convoy.members.length} ships</span>
                 <span>Cargo: {convoy.combinedCargoUsed}/{convoy.combinedCargoMax}</span>
               </div>

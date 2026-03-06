@@ -34,7 +34,7 @@ function BackNav({
   return (
     <button
       onClick={onClick}
-      className="text-xs text-text-faint hover:text-text-secondary transition-colors"
+      className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
     >
       {children}
     </button>
@@ -184,7 +184,7 @@ function CantinaContent({ systemId }: { systemId: string }) {
       <div>
         <Link
           href={`/system/${systemId}/explore`}
-          className="text-xs text-text-faint hover:text-text-secondary transition-colors"
+          className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
         >
           &larr; Back to Locations
         </Link>

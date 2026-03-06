@@ -117,7 +117,7 @@ function DeliveryMissionRow({
   return (
     <div className="space-y-1">
       {error && <InlineAlert className="text-xs">{error}</InlineAlert>}
-      <div className="flex items-start gap-3 py-3 px-3 rounded-lg bg-surface-hover/40">
+      <div className="flex items-start gap-3 py-3 px-3 bg-surface-hover/40 border-l-2 border-l-accent">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-text-primary">
@@ -135,7 +135,7 @@ function DeliveryMissionRow({
           className="text-xs text-blue-400 hover:text-blue-300 transition-colors mt-0.5 inline-block"
         >
           &rarr; {mission.destinationName}
-          <span className="text-text-muted ml-1">({mission.hops}h)</span>
+          <span className="text-text-secondary ml-1">({mission.hops}h)</span>
         </Link>
       </div>
 
@@ -143,7 +143,7 @@ function DeliveryMissionRow({
         <div className="text-xs font-mono text-green-400">
           ~{formatCredits(mission.estimatedGoodsValue + mission.reward)}
         </div>
-        <div className="text-[10px] text-text-muted mt-0.5">
+        <div className="text-[10px] text-text-secondary mt-0.5">
           {mission.ticksRemaining} ticks left
         </div>
       </div>
@@ -302,7 +302,7 @@ function OperationMissionRow({
   return (
     <div className="space-y-1">
       {error && <InlineAlert className="text-xs">{error}</InlineAlert>}
-      <div className="flex items-start gap-3 py-3 px-3 rounded-lg bg-surface-hover/40">
+      <div className="flex items-start gap-3 py-3 px-3 bg-surface-hover/40 border-l-2 border-l-accent">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge color={typeColor ?? "slate"}>
@@ -320,7 +320,7 @@ function OperationMissionRow({
         >
           &rarr; {mission.targetSystemName}
         </Link>
-        <div className="text-xs text-text-muted mt-0.5">
+        <div className="text-xs text-text-secondary mt-0.5">
           {getStatusText()}
         </div>
       </div>
@@ -329,7 +329,7 @@ function OperationMissionRow({
         <div className="text-xs font-mono text-green-400">
           {formatCredits(mission.reward)}
         </div>
-        <div className="text-[10px] text-text-muted mt-0.5">
+        <div className="text-[10px] text-text-secondary mt-0.5">
           {mission.ticksRemaining}t left
         </div>
       </div>

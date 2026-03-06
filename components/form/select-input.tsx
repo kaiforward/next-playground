@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import Select, { type StylesConfig } from "react-select";
 import { tv, type VariantProps } from "tailwind-variants";
 import { formSlots, formSizeVariants } from "./form-slots";
@@ -138,6 +138,8 @@ export function SelectInput<T = string>({
   size,
   id,
 }: SelectInputProps<T>) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
   const toKey = valueKey ?? ((v: T) => String(v));
   const currentKey = toKey(value);
   const styles = selectInputVariants({ size });
@@ -147,12 +149,13 @@ export function SelectInput<T = string>({
   return (
     <div>
       {label && (
-        <label htmlFor={id} className={styles.label()}>
+        <label htmlFor={inputId} className={styles.label()}>
           {label}
         </label>
       )}
       <Select<SelectOption<T>, false>
-        inputId={id}
+        inputId={inputId}
+        aria-label={label}
         options={options}
         value={selected}
         onChange={(opt) => {

@@ -21,7 +21,7 @@ export function ShipTransitIndicator({ ship, currentTick }: ShipTransitIndicator
     <div className="space-y-1.5">
       <div className="flex items-center gap-2 text-xs">
         <span className="text-text-tertiary">{ship.system.name}</span>
-        <span className="text-text-faint">→</span>
+        <span className="text-text-tertiary">→</span>
         <span className="text-text-secondary">{ship.destinationSystem.name}</span>
       </div>
 
@@ -40,7 +40,7 @@ export function ShipTransitIndicator({ ship, currentTick }: ShipTransitIndicator
         />
       </div>
 
-      <div className="flex justify-between text-[10px] text-text-muted">
+      <div className="flex justify-between text-[10px] text-text-secondary">
         <span>{Math.round(progress * 100)}%</span>
         <span>
           ETA: {ticksRemaining} tick{ticksRemaining !== 1 ? "s" : ""}

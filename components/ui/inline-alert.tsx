@@ -4,9 +4,9 @@ const inlineAlertVariants = tv({
   base: "px-4 py-2 text-sm",
   variants: {
     variant: {
-      error: "bg-red-500/10 border border-red-500/20 text-red-300",
-      warning: "bg-amber-500/10 border border-amber-500/20 text-amber-300",
-      info: "bg-blue-500/10 border border-blue-500/20 text-blue-300",
+      error: "bg-status-red/10 border border-status-red/20 text-status-red-light",
+      warning: "bg-status-amber/10 border border-status-amber/20 text-status-amber-light",
+      info: "bg-status-blue/10 border border-status-blue/20 text-status-blue-light",
     },
   },
   defaultVariants: {

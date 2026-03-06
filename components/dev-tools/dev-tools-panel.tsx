@@ -33,7 +33,7 @@ export function DevToolsPanel() {
         <div className="mb-12 w-[400px] max-h-[500px] bg-surface border border-border shadow-2xl flex flex-col overflow-hidden">
           {/* Header */}
           <div className="px-3 py-2 border-b border-border flex items-center gap-2">
-            <span className="text-xs font-display font-semibold text-accent uppercase tracking-wider">
+            <span className="text-xs font-display font-semibold text-text-accent uppercase tracking-wider">
               Dev Tools
             </span>
           </div>

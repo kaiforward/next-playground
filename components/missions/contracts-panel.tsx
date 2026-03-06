@@ -78,14 +78,14 @@ function AvailableContracts({
       label: "Destination",
       render: (row) =>
         row.isImport ? (
-          <span className="text-text-muted">Here</span>
+          <span className="text-text-secondary">Here</span>
         ) : (
           <Link
             href={`/system/${row.destinationId}/contracts`}
-            className="text-accent hover:text-accent-muted transition-colors"
+            className="text-text-accent hover:text-accent-muted transition-colors"
           >
             {row.destinationName}
-            <span className="text-text-muted ml-1">({row.hops}h)</span>
+            <span className="text-text-secondary ml-1">({row.hops}h)</span>
           </Link>
         ),
     },
@@ -97,7 +97,7 @@ function AvailableContracts({
           <div className="text-green-400 font-medium">
             ~{formatCredits(row.estimatedGoodsValue + row.reward)}
           </div>
-          <div className="text-xs text-text-faint">
+          <div className="text-xs text-text-tertiary">
             {formatCredits(row.estimatedGoodsValue)} sale + {formatCredits(row.reward)} bonus
           </div>
         </div>
@@ -214,11 +214,11 @@ function ActiveMissions({
       render: (row) => (
         <Link
           href={`/system/${row.destinationId}/contracts`}
-          className="text-accent hover:text-accent-muted transition-colors"
+          className="text-text-accent hover:text-accent-muted transition-colors"
         >
           {row.destinationName}
           {row.destinationId !== row.systemId && (
-            <span className="text-text-muted ml-1">({row.hops}h)</span>
+            <span className="text-text-secondary ml-1">({row.hops}h)</span>
           )}
         </Link>
       ),
@@ -231,7 +231,7 @@ function ActiveMissions({
           <div className="text-green-400 font-medium">
             ~{formatCredits(row.estimatedGoodsValue + row.reward)}
           </div>
-          <div className="text-xs text-text-faint">
+          <div className="text-xs text-text-tertiary">
             {formatCredits(row.estimatedGoodsValue)} sale + {formatCredits(row.reward)} bonus
           </div>
         </div>

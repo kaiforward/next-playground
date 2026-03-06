@@ -43,7 +43,7 @@ Functional spec: `docs/SPEC.md` — master game spec with system interaction map
 Module index: `docs/MODULE_INDEX.md` — auto-generated inventory of all shared exports (utils, hooks, components, constants). Regenerate with `npm run index`.
 
 Design docs:
-- `docs/design/active/` — Implemented systems (economy, events, trading, navigation, universe, tick-engine, event-catalog)
+- `docs/design/active/` — Implemented systems (economy, events, trading, navigation, universe, tick-engine, event-catalog, **theme**)
 - `docs/design/planned/` — Designed but not yet built (faction-system, player-progression, system-enrichment, multiplayer-infrastructure, simulation-enhancements)
 - `docs/design/archive/` — Historical design docs (may be outdated)
 - `docs/design/BACKLOG.md` — Actionable work items (delete when shipped)
@@ -74,6 +74,8 @@ These apply to every layer — components, hooks, services, engine, processors, 
 - Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput`/`SelectInput` from `components/form/`, never raw `<input>` or `<select>`.
 
 ## UI Components
+
+**Theme**: "Foundry" — industrial, sharp-edged, copper/amber accents. Full reference: `docs/design/active/theme.md`. Key rules: no rounded corners on cards/buttons/badges (only DetailPanel modal and FilterBar chips get rounding), copper left-accent stripe on all cards, `font-display` (Chakra Petch) for headings, `font-mono` (Geist Mono) for numeric values.
 
 Use existing components instead of inline markup. Never duplicate markup that already has a component. Use `tv()` variants, typed props, and semantic HTML (`<dl>` for key-value, `<button>` for actions). Keep variant counts small and intentional.
 

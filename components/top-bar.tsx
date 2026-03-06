@@ -80,7 +80,7 @@ function BreadcrumbsInner() {
         const isLast = i === crumbs.length - 1;
         return (
           <span key={i} className="flex items-center gap-1.5 min-w-0">
-            {i > 0 && <span className="text-text-faint">/</span>}
+            {i > 0 && <span className="text-text-tertiary">/</span>}
             {isLast || !crumb.href ? (
               <span className="text-text-primary truncate">{crumb.label}</span>
             ) : (
@@ -114,6 +114,7 @@ function BreadcrumbsFallback() {
 export function TopBar() {
   return (
     <header className="h-[var(--topbar-height)] flex items-center px-4 bg-background border-b border-border shrink-0">
+      <h1 className="sr-only">Stellar Trader</h1>
       <QueryBoundary loadingFallback={<BreadcrumbsFallback />}>
         <BreadcrumbsInner />
       </QueryBoundary>

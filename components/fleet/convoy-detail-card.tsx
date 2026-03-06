@@ -89,14 +89,14 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
             <Badge color={isDocked ? "green" : "amber"}>
               {isDocked ? "Docked" : "In Transit"}
             </Badge>
-            <span className="text-text-muted">{convoy.system.name}</span>
+            <span className="text-text-secondary">{convoy.system.name}</span>
           </span>
         }
         action={
           variant === "summary" ? (
             <div className="flex items-center gap-2">
               <Button href={`/?systemId=${convoy.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
-                <MapPinIcon />
+                <MapPinIcon className="w-3.5 h-3.5" />
               </Button>
               <Button href={`/convoy/${convoy.id}`} variant="ghost" size="xs">
                 Details &rarr;
@@ -192,7 +192,7 @@ export function ConvoyDetailCard({ convoy, playerCredits, ships, variant = "full
               <Button
                 href={`/?navigateConvoyId=${convoy.id}`}
                 variant="action"
-                color="indigo"
+                color="accent"
                 size="sm"
               >
                 Navigate

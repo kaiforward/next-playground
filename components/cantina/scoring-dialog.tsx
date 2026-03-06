@@ -129,7 +129,7 @@ export function ScoringDialog({
 
         {/* NPC dialogue */}
         {npcDialogue && (
-          <p className="text-sm text-text-muted italic text-center">
+          <p className="text-sm text-text-secondary italic text-center">
             {npcIdentity.displayName}: &ldquo;{npcDialogue}&rdquo;
           </p>
         )}
@@ -214,12 +214,12 @@ function CardRow({ detail }: { detail: ResolvedCardDetail }) {
 
   return (
     <div className={cardRowVariants({ caught })}>
-      <span className="text-text-faint w-5 text-center">{round}</span>
+      <span className="text-text-tertiary w-5 text-center">{round}</span>
       <SuitBadge suit={declaration.suit} className="text-[10px] px-1.5 py-0" />
       <span className={cardValueVariants({ caught })}>
         {declaration.value}
       </span>
-      <span className="ml-auto text-text-faint text-[11px]">
+      <span className="ml-auto text-text-tertiary text-[11px]">
         {caught ? "caught" : honest ? "honest" : "bluff"}
       </span>
       <span className={scoredValueVariants({ caught })}>

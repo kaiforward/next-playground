@@ -114,10 +114,10 @@ export function CantinaLobby({
                   </Badge>
                 </div>
                 <DifficultyDots level={difficulty} showLabel />
-                <p className="text-sm text-text-muted mt-3">
+                <p className="text-sm text-text-secondary mt-3">
                   {NPC_FLAVOR[key]}
                 </p>
-                <p className="text-xs text-text-faint mt-1">
+                <p className="text-xs text-text-tertiary mt-1">
                   Wager: {wagerLimits.min}–{wagerLimits.max} CR
                 </p>
               </Card>

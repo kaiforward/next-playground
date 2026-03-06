@@ -23,14 +23,16 @@ interface NativeSelectProps extends NativeSelectVariants {
   value?: string;
   onChange: (value: string) => void;
   className?: string;
+  "aria-label"?: string;
 }
 
-export function NativeSelect({ options, value, onChange, size, className }: NativeSelectProps) {
+export function NativeSelect({ options, value, onChange, size, className, "aria-label": ariaLabel }: NativeSelectProps) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={nativeSelect({ size, className })}
+      aria-label={ariaLabel}
     >
       {options.map((opt) => (
         <option key={opt.id} value={opt.id}>

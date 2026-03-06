@@ -93,7 +93,7 @@ export function ConvoyActionDialog({
       <h2 className="text-lg font-bold text-text-primary mb-1">
         {title}
       </h2>
-      <p className="text-xs text-text-muted mb-5">
+      <p className="text-xs text-text-secondary mb-5">
         {convoy.name ?? "Convoy"} &mdash; {convoy.members.length} ships
       </p>
 
@@ -119,7 +119,7 @@ export function ConvoyActionDialog({
               <div key={entry.shipId} className="py-1.5 px-3 rounded bg-surface">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-text-primary font-medium">{entry.shipName}</span>
-                  <span className="text-[10px] text-text-muted">
+                  <span className="text-[10px] text-text-secondary">
                     +{entry.amount} {unitLabel} &middot; {formatCredits(entry.cost)}
                   </span>
                 </div>
@@ -143,7 +143,7 @@ export function ConvoyActionDialog({
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-text-muted">
+        <div className="flex items-center justify-between text-xs text-text-secondary">
           <span>Balance</span>
           <span className={!canAfford && hasWork ? "text-red-400" : ""}>
             {formatCredits(playerCredits)}

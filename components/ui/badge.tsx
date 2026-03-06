@@ -4,13 +4,13 @@ const badgeVariants = tv({
   base: "inline-flex items-center px-2 py-0.5 text-xs font-medium",
   variants: {
     color: {
-      green: "bg-green-500/20 text-green-300",
-      amber: "bg-amber-500/20 text-amber-300",
-      blue: "bg-blue-500/20 text-blue-300",
-      purple: "bg-purple-500/20 text-purple-300",
-      slate: "bg-slate-500/20 text-slate-300",
-      red: "bg-red-500/20 text-red-300",
-      cyan: "bg-cyan-500/20 text-cyan-300",
+      green: "bg-status-green/20 text-status-green-light",
+      amber: "bg-status-amber/20 text-status-amber-light",
+      blue: "bg-status-blue/20 text-status-blue-light",
+      purple: "bg-status-purple/20 text-status-purple-light",
+      slate: "bg-status-slate/20 text-status-slate-light",
+      red: "bg-status-red/20 text-status-red-light",
+      cyan: "bg-status-cyan/20 text-status-cyan-light",
     },
   },
   defaultVariants: {

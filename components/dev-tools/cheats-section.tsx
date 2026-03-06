@@ -93,7 +93,7 @@ export function CheatsSection() {
 
         <Button
           variant="action"
-          color="indigo"
+          color="accent"
           size="xs"
           fullWidth
           onClick={() => {

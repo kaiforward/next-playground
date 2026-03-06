@@ -116,7 +116,7 @@ export function GameCard({
         {declaration ? (
           <DeclarationOverlay declaration={declaration} isCaught={isCaught} />
         ) : (
-          <div className="text-text-faint text-xs font-bold">?</div>
+          <div className="text-text-tertiary text-xs font-bold">?</div>
         )}
       </CardShell>
     );

@@ -90,7 +90,7 @@ export function SystemDetailPanel({
           /* Unknown system — limited info */
           <div className="rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-6 text-center">
             <p className="text-sm text-text-tertiary">No current intel</p>
-            <p className="mt-1 text-xs text-text-faint">
+            <p className="mt-1 text-xs text-text-tertiary">
               Move a ship closer to scan this system.
             </p>
           </div>
@@ -174,7 +174,7 @@ export function SystemDetailPanel({
                     )}
                     <Link
                       href={`/system/${system.id}/market`}
-                      className="text-xs font-medium text-accent hover:text-accent-muted transition-colors"
+                      className="text-xs font-medium text-text-accent hover:text-accent-muted transition-colors"
                     >
                       Market
                     </Link>
@@ -202,10 +202,10 @@ export function SystemDetailPanel({
           <Button
             href={`/system/${system.id}`}
             variant="action"
-            color="indigo"
+            color="accent"
             size="md"
             fullWidth
-            className="shadow-lg shadow-indigo-900/30 active:scale-[0.98]"
+            className="active:scale-[0.98]"
           >
             View System
           </Button>

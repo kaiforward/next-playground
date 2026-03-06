@@ -42,7 +42,7 @@ export function UpgradeSlot({ slot, onInstall, onRemove, disabled, readOnly }: U
             {mod.name}{tierLabel ? ` ${tierLabel}` : ""}
           </span>
         ) : (
-          <span className="text-sm text-text-faint italic">Empty</span>
+          <span className="text-sm text-text-tertiary italic">Empty</span>
         )}
       </div>
       {!readOnly && (

@@ -115,7 +115,7 @@ function ShipyardContent({ systemId }: { systemId: string }) {
 
   return (
     <>
-      <TabList className="mb-4">
+      <TabList className="mb-4" aria-label="Shipyard sections">
         <Tab active={tab === "purchase"} onClick={() => setTab("purchase")}>
           Ship Dealer
         </Tab>

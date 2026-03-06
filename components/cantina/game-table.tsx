@@ -150,7 +150,7 @@ export function GameTable({
           </span>
           {currentDemand && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-text-muted">Demand:</span>
+              <span className="text-sm text-text-secondary">Demand:</span>
               <SuitBadge suit={currentDemand} />
             </div>
           )}
@@ -159,7 +159,7 @@ export function GameTable({
         {/* Demand history */}
         {demandHistory.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-text-faint uppercase tracking-wider">
+            <span className="text-xs text-text-tertiary uppercase tracking-wider">
               History:
             </span>
             {demandHistory.map((suit, i) => (

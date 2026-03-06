@@ -14,13 +14,13 @@ const textInputVariants = tv({
       sm: {
         label: formSizeVariants.sm.label,
         input:
-          "border-border text-sm placeholder-text-faint",
+          "border-border text-sm placeholder-text-tertiary",
         error: formSizeVariants.sm.error,
       },
       md: {
         label: formSizeVariants.md.label,
         input:
-          "border-border text-sm placeholder-text-faint",
+          "border-border text-sm placeholder-text-tertiary",
         error: formSizeVariants.md.error,
       },
     },

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Chakra_Petch, Geist, Geist_Mono } from "next/font/google";
+import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
 import "./globals.css";
 
 const chakraPetch = Chakra_Petch({
@@ -35,6 +36,7 @@ export default function RootLayout({
     >
       <body className="antialiased">
         {children}
+        <AxeAccessibility />
       </body>
     </html>
   );

@@ -25,7 +25,7 @@ export function Disclosure({
         <SectionHeader as="h3">
           {summary}
           {count != null && (
-            <span className="ml-1 text-text-faint">({count})</span>
+            <span className="ml-1 text-text-tertiary">({count})</span>
           )}
         </SectionHeader>
       </summary>

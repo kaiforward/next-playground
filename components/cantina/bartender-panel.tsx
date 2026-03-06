@@ -22,7 +22,7 @@ export function BartenderPanel({ data }: BartenderPanelProps) {
             <span className="font-semibold text-text-primary">Bartender</span>
             <Badge color="green">Tips</Badge>
           </div>
-          <p className="text-sm text-text-muted italic mt-1">
+          <p className="text-sm text-text-secondary italic mt-1">
             &ldquo;{greeting}&rdquo;
           </p>
         </div>
