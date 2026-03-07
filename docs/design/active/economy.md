@@ -131,8 +131,8 @@ Each good at each station is updated:
 2. **Apply event modifiers** — active events shift supply/demand targets, multiply production/consumption rates, and dampen reversion speed
 3. **Apply government modifiers** — scale volatility, adjust equilibrium spread, add consumption boosts
 4. **Mean reversion** — supply and demand are pulled 2% of the gap toward their equilibrium target each tick
-5. **Self-limiting production** — producing systems add goods to supply, scaled by `sqrt((MAX - supply) / (MAX - MIN))`. Near ceiling, production approaches zero (warehouses full).
-6. **Self-limiting consumption** — consuming systems remove goods from supply, scaled by `sqrt((supply - MIN) / (MAX - MIN))`. Near floor, consumption approaches zero (nothing left to consume).
+5. **Self-limiting production** — producing systems add supply, scaled by `sqrt((MAX - supply) / (MAX - MIN))`. Near ceiling, production approaches zero (warehouses full). Only affects supply — demand is driven by equilibrium targets.
+6. **Self-limiting consumption** — consuming systems remove supply, scaled by `sqrt((supply - MIN) / (MAX - MIN))`. Near floor, consumption approaches zero (nothing left to consume). Only affects supply — demand is driven by equilibrium targets.
 7. **Prosperity multiplier** — both production and consumption rates are scaled by the system's prosperity multiplier (0.3x crisis to 1.3x booming)
 8. **Noise** — random walk scaled by good volatility and government modifier (base amplitude +/-3 units)
 9. **Clamp** — supply and demand bounded to [5, 200]

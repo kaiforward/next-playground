@@ -22,10 +22,10 @@ Every tick, one region's markets update (round-robin). Each market has two value
   |  ECONOMY ENGINE  |  Runs SECOND
   |                  |
   |  For each market:|
-  |  1. Mean revert  |  Pull supply/demand toward equilibrium targets
+  |  1. Mean revert  |  Pull supply AND demand toward equilibrium
   |  2. Add noise    |  Small random drift (volatility-scaled)
-  |  3. Produce      |  Self-limiting: slows near ceiling
-  |  4. Consume      |  Self-limiting: slows near floor
+  |  3. Produce      |  Supply increases, self-limiting near ceiling
+  |  4. Consume      |  Supply decreases, self-limiting near floor
   |  5. Prosperity   |  Scale production + consumption equally
   |  6. Clamp        |  Keep within [min, max] bounds
   +--------+---------+

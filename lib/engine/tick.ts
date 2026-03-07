@@ -145,22 +145,18 @@ export function simulateEconomyTick(
     const effectiveProduction = (entry.productionRate ?? productionRate) * (entry.productionMult ?? 1);
     const effectiveConsumption = (entry.consumptionRate ?? consumptionRate) * (entry.consumptionMult ?? 1);
 
-    // Production effect: producers generate supply, slightly reduce demand
-    // Self-limiting: production scales down as supply approaches ceiling (warehouses full)
+    // Production: producers generate supply
+    // Self-limiting: scales down as supply approaches ceiling (warehouses full)
     if (entry.produces.includes(entry.goodId)) {
       const prodScale = selfLimitingFactor(supply, minLevel, maxLevel, "produce");
-      const scaledProduction = effectiveProduction * prodScale;
-      supply = clamp(supply + scaledProduction, minLevel, maxLevel);
-      demand = clamp(demand - Math.round(scaledProduction * 0.3), minLevel, maxLevel);
+      supply = clamp(supply + effectiveProduction * prodScale, minLevel, maxLevel);
     }
 
-    // Consumption effect: consumers deplete supply, generate demand
-    // Self-limiting: consumption scales down as supply approaches floor (nothing to consume)
+    // Consumption: consumers deplete supply
+    // Self-limiting: scales down as supply approaches floor (nothing to consume)
     if (entry.consumes.includes(entry.goodId)) {
       const consScale = selfLimitingFactor(supply, minLevel, maxLevel, "consume");
-      const scaledConsumption = effectiveConsumption * consScale;
-      supply = clamp(supply - scaledConsumption, minLevel, maxLevel);
-      demand = clamp(demand + Math.round(scaledConsumption * 0.5), minLevel, maxLevel);
+      supply = clamp(supply - effectiveConsumption * consScale, minLevel, maxLevel);
     }
 
     return { ...entry, supply, demand };

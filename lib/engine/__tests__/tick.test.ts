@@ -128,16 +128,14 @@ describe("simulateEconomyTick", () => {
       expect(result.supply).toBeCloseTo(120 + 3 * prodScale, 5);
     });
 
-    it("producers slightly reduce demand", () => {
+    it("producers do not affect demand", () => {
       const entry = makeEntry({
         supply: 120,
         demand: 40,
         produces: ["ore"],
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // scaledProduction ≈ 1.9215, round(1.9215 * 0.3) = round(0.576) = 1
-      // demand: 40 - 1 = 39
-      expect(result.demand).toBe(39);
+      expect(result.demand).toBe(40);
     });
 
     it("consumers decrease supply by scaled consumptionRate", () => {
@@ -154,15 +152,13 @@ describe("simulateEconomyTick", () => {
       expect(result.supply).toBeCloseTo(40 - 2 * consScale, 5);
     });
 
-    it("consumers increase demand", () => {
+    it("consumers do not affect demand", () => {
       const entry = makeEntry({
         supply: 40,
         demand: 120,
         consumes: ["ore"],
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // scaledConsumption ≈ 0.8474, round(0.8474 * 0.5) = round(0.4237) = 0
-      // demand: 120 + 0 = 120 (self-limiting reduces effect near floor)
       expect(result.demand).toBe(120);
     });
   });
@@ -232,8 +228,8 @@ describe("simulateEconomyTick", () => {
       // prodScale = sqrt((200-80)/195) ≈ 0.7845, scaledProduction = 3 * 0.7845 ≈ 2.3534
       const prodScale = Math.sqrt((200 - 80) / 195);
       expect(result.supply).toBeCloseTo(80 + 3 * prodScale, 5);
-      // demand: 60 - round(2.3534*0.3) = 60 - round(0.706) = 60 - 1 = 59
-      expect(result.demand).toBe(59);
+      // Demand unchanged — production only affects supply
+      expect(result.demand).toBe(60);
     });
 
     it("uses equilibriumConsumes when present", () => {
