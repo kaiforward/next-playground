@@ -3,7 +3,7 @@ import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { GOODS } from "@/lib/constants/goods";
 import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
-import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
+import { EQUILIBRIUM_TARGETS, getConsumeEquilibrium } from "@/lib/constants/economy";
 import {
   UNIVERSE_GEN,
   REGION_NAMES,
@@ -154,7 +154,9 @@ async function main() {
       const target = isProduced
         ? (goodEq?.produces ?? EQUILIBRIUM_TARGETS.produces)
         : isConsumed
-          ? (goodEq?.consumes ?? EQUILIBRIUM_TARGETS.consumes)
+          ? (goodEq
+              ? getConsumeEquilibrium(econ, goodKey, goodEq)
+              : EQUILIBRIUM_TARGETS.consumes)
           : EQUILIBRIUM_TARGETS.neutral;
 
       await prisma.stationMarket.create({

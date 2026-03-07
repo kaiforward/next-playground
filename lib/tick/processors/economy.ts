@@ -1,18 +1,41 @@
 import type { TickProcessor, TickProcessorResult, TxClient } from "../types";
-import { simulateEconomyTick, type EconomySimParams } from "@/lib/engine/tick";
+import { simulateEconomyTick, updateProsperity, buildMarketTickEntry, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
 import {
   getProducedGoods,
   getConsumedGoods,
   getProductionRate,
   getConsumptionRate,
 } from "@/lib/constants/universe";
-import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
+import {
+  ECONOMY_CONSTANTS,
+  EQUILIBRIUM_TARGETS,
+  getConsumeEquilibrium,
+  PROSPERITY_DECAY_RATE,
+  PROSPERITY_MAX_GAIN,
+  PROSPERITY_TARGET_VOLUME,
+  PROSPERITY_MIN,
+  PROSPERITY_MAX,
+  PROSPERITY_MULT_AT_MIN,
+  PROSPERITY_MULT_AT_ZERO,
+  PROSPERITY_MULT_AT_MAX,
+} from "@/lib/constants/economy";
 import { GOODS, GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
-import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
+
+/** Prosperity params built from constants (done once, reused every tick). */
+const prosperityParams: ProsperityParams = {
+  decayRate: PROSPERITY_DECAY_RATE,
+  maxGain: PROSPERITY_MAX_GAIN,
+  targetVolume: PROSPERITY_TARGET_VOLUME,
+  min: PROSPERITY_MIN,
+  max: PROSPERITY_MAX,
+  multAtMin: PROSPERITY_MULT_AT_MIN,
+  multAtZero: PROSPERITY_MULT_AT_ZERO,
+  multAtMax: PROSPERITY_MULT_AT_MAX,
+};
 
 /** Build EconomySimParams from constants (done once, reused every tick). */
 const simParams: EconomySimParams = {
@@ -42,6 +65,30 @@ async function batchUpdateMarkets(
     FROM unnest(${ids}::text[], ${supplies}::double precision[], ${demands}::double precision[])
       AS batch("id", "supply", "demand")
     WHERE sm."id" = batch."id"`;
+}
+
+/**
+ * Bulk-update system prosperity and subtract captured trade volume.
+ * Uses relative subtraction (not hard-reset to 0) so trades committed
+ * between the read and this write aren't silently lost.
+ */
+async function batchUpdateProsperity(
+  tx: TxClient,
+  updates: { id: string; prosperity: number; capturedVolume: number }[],
+): Promise<void> {
+  if (updates.length === 0) return;
+
+  const ids = updates.map((u) => u.id);
+  const prosperities = updates.map((u) => isFinite(u.prosperity) ? u.prosperity : 0);
+  const volumes = updates.map((u) => u.capturedVolume);
+
+  await tx.$executeRaw`
+    UPDATE "StarSystem" AS ss
+    SET "prosperity" = batch."prosperity",
+        "tradeVolumeAccum" = GREATEST(0, ss."tradeVolumeAccum" - batch."capturedVolume")
+    FROM unnest(${ids}::text[], ${prosperities}::double precision[], ${volumes}::integer[])
+      AS batch("id", "prosperity", "capturedVolume")
+    WHERE ss."id" = batch."id"`;
 }
 
 export const economyProcessor: TickProcessor = {
@@ -109,6 +156,26 @@ export const economyProcessor: TickProcessor = {
     // Look up government modifiers for this region
     const govDef = GOVERNMENT_TYPES[toGovernmentType(targetRegion.governmentType)];
 
+    // ── Prosperity: compute per system ──────────────────────────────
+    // Fetch prosperity + trade volume for systems in this region
+    const systemProsperityData = await ctx.tx.starSystem.findMany({
+      where: { id: { in: systemIds } },
+      select: { id: true, prosperity: true, tradeVolumeAccum: true },
+    });
+
+    const prosperityBySystem = new Map<string, number>();
+    const prosperityUpdates: { id: string; prosperity: number; capturedVolume: number }[] = [];
+
+    for (const sys of systemProsperityData) {
+      const newProsperity = updateProsperity(
+        sys.prosperity,
+        sys.tradeVolumeAccum,
+        prosperityParams,
+      );
+      prosperityBySystem.set(sys.id, newProsperity);
+      prosperityUpdates.push({ id: sys.id, prosperity: newProsperity, capturedVolume: sys.tradeVolumeAccum });
+    }
+
     // Build tick entries for the simulation engine
     const tickEntries = markets.map((m) => {
       const econ = toEconomyType(m.station.system.economyType);
@@ -126,9 +193,11 @@ export const economyProcessor: TickProcessor = {
         ? baseVolatility * govDef.volatilityModifier
         : baseVolatility;
 
-      // Government: adjust equilibrium spread
+      // Self-sufficiency: adjust consume targets per economy type
       let equilibriumProduces = goodDef?.equilibrium.produces;
-      let equilibriumConsumes = goodDef?.equilibrium.consumes;
+      let equilibriumConsumes = goodDef
+        ? getConsumeEquilibrium(econ, goodKey, goodDef.equilibrium)
+        : undefined;
       if (govDef && govDef.equilibriumSpreadPct !== 0) {
         if (equilibriumProduces) {
           equilibriumProduces = adjustEquilibriumSpread(equilibriumProduces, govDef.equilibriumSpreadPct);
@@ -138,25 +207,7 @@ export const economyProcessor: TickProcessor = {
         }
       }
 
-      // Government: boost consumption
-      const baseConsumption = getConsumptionRate(econ, goodKey);
-      const govBoost = govDef?.consumptionBoosts[goodKey] ?? 0;
-      const consumptionRate = baseConsumption != null
-        ? baseConsumption + govBoost
-        : govBoost > 0 ? govBoost : undefined;
-
-      // Trait production bonus: effectiveRate = baseRate × (1 + traitBonus)
-      const systemTraits = m.station.system.traits.map((t) => ({
-        traitId: toTraitId(t.traitId),
-        quality: toQualityTier(t.quality),
-      }));
-      const baseProductionRate = getProductionRate(econ, goodKey);
-      const traitBonus = computeTraitProductionBonus(systemTraits, goodKey);
-      const productionRate = baseProductionRate != null
-        ? baseProductionRate * (1 + traitBonus)
-        : undefined;
-
-      return {
+      const entry = buildMarketTickEntry({
         goodId: goodKey,
         supply: m.supply,
         demand: m.demand,
@@ -164,19 +215,29 @@ export const economyProcessor: TickProcessor = {
         economyType: econ,
         produces: getProducedGoods(econ),
         consumes: getConsumedGoods(econ),
-        productionRate,
-        consumptionRate,
         volatility,
         equilibriumProduces,
         equilibriumConsumes,
-        ...(agg && {
-          supplyTargetMult: agg.supplyTargetMult,
-          demandTargetMult: agg.demandTargetMult,
-          productionMult: agg.productionMult,
-          consumptionMult: agg.consumptionMult,
-          reversionMult: agg.reversionMult,
-        }),
-      };
+        baseProductionRate: getProductionRate(econ, goodKey),
+        baseConsumptionRate: getConsumptionRate(econ, goodKey),
+        govConsumptionBoost: govDef?.consumptionBoosts[goodKey] ?? 0,
+        traits: m.station.system.traits.map((t) => ({
+          traitId: toTraitId(t.traitId),
+          quality: toQualityTier(t.quality),
+        })),
+        prosperity: prosperityBySystem.get(m.station.system.id) ?? 0,
+      }, prosperityParams);
+
+      return agg
+        ? {
+            ...entry,
+            supplyTargetMult: agg.supplyTargetMult,
+            demandTargetMult: agg.demandTargetMult,
+            productionMult: agg.productionMult,
+            consumptionMult: agg.consumptionMult,
+            reversionMult: agg.reversionMult,
+          }
+        : entry;
     });
 
     // Run simulation
@@ -190,6 +251,7 @@ export const economyProcessor: TickProcessor = {
     }));
 
     await batchUpdateMarkets(ctx.tx, updates);
+    await batchUpdateProsperity(ctx.tx, prosperityUpdates);
 
     const modCount = rawModifiers.length;
     console.log(

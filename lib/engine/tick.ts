@@ -7,6 +7,8 @@
  */
 
 import { clamp } from "@/lib/utils/math";
+import type { GeneratedTrait } from "@/lib/engine/trait-gen";
+import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
 
 export interface MarketTickEntry {
   goodId: string;
@@ -84,13 +86,27 @@ function driftValue(
 }
 
 /**
+ * Self-limiting scale factor (sqrt curve).
+ * Returns 0 at the boundary and 1 at the opposite extreme.
+ * Uses sqrt to keep rates active through mid-range — only drops sharply near extremes.
+ */
+function selfLimitingFactor(value: number, min: number, max: number, direction: "produce" | "consume"): number {
+  const range = max - min;
+  if (range <= 0) return 0;
+  const ratio = direction === "produce"
+    ? (max - value) / range   // production slows as supply approaches ceiling
+    : (value - min) / range;  // consumption slows as supply approaches floor
+  return Math.sqrt(Math.max(0, Math.min(1, ratio)));
+}
+
+/**
  * Simulate one economy tick across all market entries using mean-reverting drift.
  *
  * For each entry:
  *   1. Compute equilibrium target based on economy type relationship to good
  *   2. Apply mean-reversion pull toward target (reversionRate × gap)
- *   3. Apply production effect (producers generate supply, reduce demand slightly)
- *   4. Apply consumption effect (consumers deplete supply, generate demand)
+ *   3. Apply self-limiting production effect (scales down near ceiling)
+ *   4. Apply self-limiting consumption effect (scales down near floor)
  *   5. Add random noise
  *   6. Clamp to [minLevel, maxLevel]
  *
@@ -130,19 +146,174 @@ export function simulateEconomyTick(
     const effectiveConsumption = (entry.consumptionRate ?? consumptionRate) * (entry.consumptionMult ?? 1);
 
     // Production effect: producers generate supply, slightly reduce demand
+    // Self-limiting: production scales down as supply approaches ceiling (warehouses full)
     if (entry.produces.includes(entry.goodId)) {
-      supply = clamp(supply + effectiveProduction, minLevel, maxLevel);
-      demand = clamp(demand - Math.round(effectiveProduction * 0.3), minLevel, maxLevel);
+      const prodScale = selfLimitingFactor(supply, minLevel, maxLevel, "produce");
+      const scaledProduction = effectiveProduction * prodScale;
+      supply = clamp(supply + scaledProduction, minLevel, maxLevel);
+      demand = clamp(demand - Math.round(scaledProduction * 0.3), minLevel, maxLevel);
     }
 
     // Consumption effect: consumers deplete supply, generate demand
+    // Self-limiting: consumption scales down as supply approaches floor (nothing to consume)
     if (entry.consumes.includes(entry.goodId)) {
-      supply = clamp(supply - effectiveConsumption, minLevel, maxLevel);
-      demand = clamp(demand + Math.round(effectiveConsumption * 0.5), minLevel, maxLevel);
+      const consScale = selfLimitingFactor(supply, minLevel, maxLevel, "consume");
+      const scaledConsumption = effectiveConsumption * consScale;
+      supply = clamp(supply - scaledConsumption, minLevel, maxLevel);
+      demand = clamp(demand + Math.round(scaledConsumption * 0.5), minLevel, maxLevel);
     }
 
     return { ...entry, supply, demand };
   });
+}
+
+// ── Tick entry builder ──────────────────────────────────────────
+
+/**
+ * Pre-resolved inputs for building a MarketTickEntry.
+ * Callers resolve data-source-specific values (DB vs SimWorld)
+ * into this common shape; the builder handles shared computation
+ * (trait bonus, prosperity scaling, rate assembly).
+ */
+export interface TickEntryInput {
+  goodId: string;
+  supply: number;
+  demand: number;
+  basePrice: number;
+  economyType: string;
+  produces: string[];
+  consumes: string[];
+  /** Volatility after government scaling. */
+  volatility: number;
+  /** Per-good equilibrium overrides (after gov spread adjustment). */
+  equilibriumProduces?: { supply: number; demand: number };
+  equilibriumConsumes?: { supply: number; demand: number };
+  /** Base production rate from economy type (undefined = not a producer). */
+  baseProductionRate?: number;
+  /** Base consumption rate from economy type (undefined = not a consumer). */
+  baseConsumptionRate?: number;
+  /** Government consumption boost for this good. */
+  govConsumptionBoost: number;
+  /** System traits (already validated). */
+  traits: GeneratedTrait[];
+  /** System prosperity value. */
+  prosperity: number;
+}
+
+/**
+ * Build a MarketTickEntry from pre-resolved inputs.
+ *
+ * Computes: trait production bonus, consumption with gov boost,
+ * prosperity multiplier on both rates. Callers spread event
+ * modifier fields (supplyTargetMult, etc.) on top if present.
+ */
+export function buildMarketTickEntry(
+  input: TickEntryInput,
+  prosperityParams: ProsperityParams,
+): MarketTickEntry {
+  const prosperityMult = getProsperityMultiplier(input.prosperity, prosperityParams);
+
+  // Trait production bonus: effectiveRate = baseRate × (1 + traitBonus)
+  const traitBonus = computeTraitProductionBonus(input.traits, input.goodId);
+  const productionBeforeProsperity = input.baseProductionRate != null
+    ? input.baseProductionRate * (1 + traitBonus)
+    : undefined;
+
+  // Consumption with government boost
+  const consumptionBeforeProsperity = input.baseConsumptionRate != null
+    ? input.baseConsumptionRate + input.govConsumptionBoost
+    : input.govConsumptionBoost > 0 ? input.govConsumptionBoost : undefined;
+
+  // Apply prosperity multiplier to both production and consumption equally
+  const productionRate = productionBeforeProsperity != null
+    ? productionBeforeProsperity * prosperityMult
+    : undefined;
+  const consumptionRate = consumptionBeforeProsperity != null
+    ? consumptionBeforeProsperity * prosperityMult
+    : undefined;
+
+  return {
+    goodId: input.goodId,
+    supply: input.supply,
+    demand: input.demand,
+    basePrice: input.basePrice,
+    economyType: input.economyType,
+    produces: input.produces,
+    consumes: input.consumes,
+    productionRate,
+    consumptionRate,
+    volatility: input.volatility,
+    equilibriumProduces: input.equilibriumProduces,
+    equilibriumConsumes: input.equilibriumConsumes,
+  };
+}
+
+// ── Prosperity system ───────────────────────────────────────────
+
+export interface ProsperityParams {
+  decayRate: number;
+  maxGain: number;
+  targetVolume: number;
+  min: number;
+  max: number;
+  multAtMin: number;
+  multAtZero: number;
+  multAtMax: number;
+}
+
+/**
+ * Compute new prosperity value after one processor run.
+ * Trade volume pushes toward +1, decay pulls toward 0.
+ * Only events (not modeled here) can push below 0.
+ */
+export function updateProsperity(
+  current: number,
+  tradeVolume: number,
+  params: ProsperityParams,
+): number {
+  // Gain from trade: proportional to volume, capped at maxGain
+  const volumeRatio = Math.min(tradeVolume / params.targetVolume, 1);
+  const gain = volumeRatio * params.maxGain;
+
+  // Decay toward 0 (at most decayRate per run, never overshooting past 0)
+  const absCurrent = Math.abs(current);
+  const decay = absCurrent > 0
+    ? Math.sign(current) * Math.min(params.decayRate, absCurrent)
+    : 0;
+
+  const next = current - decay + gain;
+  return clamp(next, params.min, params.max);
+}
+
+/**
+ * Get the production/consumption multiplier from a prosperity value.
+ * Both production and consumption get the SAME multiplier (no opposing tug-of-war).
+ *
+ * Piecewise linear:
+ *   [-1, 0] → [multAtMin, multAtZero]
+ *   [0, +1] → [multAtZero, multAtMax]
+ */
+export function getProsperityMultiplier(prosperity: number, params: ProsperityParams): number {
+  if (prosperity <= 0) {
+    // Interpolate between multAtMin (-1) and multAtZero (0)
+    const t = (prosperity + 1); // 0 at -1, 1 at 0
+    return params.multAtMin + t * (params.multAtZero - params.multAtMin);
+  }
+  // Interpolate between multAtZero (0) and multAtMax (+1)
+  return params.multAtZero + prosperity * (params.multAtMax - params.multAtZero);
+}
+
+export type ProsperityLabel = "Crisis" | "Disrupted" | "Stagnant" | "Active" | "Booming";
+
+/**
+ * Get the human-readable label for a prosperity value.
+ */
+export function getProsperityLabel(prosperity: number): ProsperityLabel {
+  if (prosperity <= -0.5) return "Crisis";
+  if (prosperity <= -0.1) return "Disrupted";
+  if (prosperity <= 0.3) return "Stagnant";
+  if (prosperity <= 0.7) return "Active";
+  return "Booming";
 }
 
 // ── Ship arrival processing ─────────────────────────────────────
