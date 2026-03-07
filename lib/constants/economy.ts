@@ -10,13 +10,20 @@ export const ECONOMY_CONSTANTS = {
   MIN_LEVEL: 5,
   /** Supply/demand ceiling. */
   MAX_LEVEL: 200,
+  /**
+   * Reference market level for noise scaling.
+   * Noise amplitude is proportional to (target / reference) so that
+   * small markets (neutral goods) get less absolute noise and large
+   * markets (producers) get proportionally more.
+   */
+  NOISE_REFERENCE_LEVEL: 75,
 } as const;
 
 /** Equilibrium targets by good relationship to economy type. */
 export const EQUILIBRIUM_TARGETS = {
   produces: { supply: 90, demand: 60 },
   consumes: { supply: 60, demand: 85 },
-  neutral: { supply: 20, demand: 30 },
+  neutral: { supply: 20, demand: 23 },
 } as const;
 
 // ── Prosperity constants ────────────────────────────────────────

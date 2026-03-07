@@ -43,6 +43,7 @@ export interface MarketTickEntry {
 export interface EconomySimParams {
   reversionRate: number;
   noiseAmplitude: number;
+  noiseReferenceLevel: number;
   minLevel: number;
   maxLevel: number;
   equilibrium: {
@@ -80,7 +81,7 @@ function driftValue(
   max: number,
 ): number {
   const reversion = (target - current) * reversionRate;
-  return clamp(Math.round(current + reversion + noise), min, max);
+  return clamp(current + reversion + noise, min, max);
 }
 
 /**
@@ -116,7 +117,7 @@ export function simulateEconomyTick(
   params: EconomySimParams,
   rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { reversionRate, noiseAmplitude, minLevel, maxLevel } = params;
+  const { reversionRate, noiseAmplitude, noiseReferenceLevel, minLevel, maxLevel } = params;
 
   return markets.map((entry) => {
     const target = getEquilibrium(entry, params);
@@ -129,11 +130,12 @@ export function simulateEconomyTick(
     const effectiveReversion = reversionRate * (entry.reversionMult ?? 1);
 
     // Per-good volatility scales noise amplitude (default 1.0)
-    const effectiveNoise = noiseAmplitude * (entry.volatility ?? 1);
+    const baseNoise = noiseAmplitude * (entry.volatility ?? 1);
 
-    // Random noise for supply and demand (independent draws)
-    const supplyNoise = (rng() * 2 - 1) * effectiveNoise;
-    const demandNoise = (rng() * 2 - 1) * effectiveNoise;
+    // Scale noise proportionally to target level so small markets (neutral goods)
+    // get less absolute noise and large markets (producers) get more.
+    const supplyNoise = (rng() * 2 - 1) * baseNoise * (effectiveSupplyTarget / noiseReferenceLevel);
+    const demandNoise = (rng() * 2 - 1) * baseNoise * (effectiveDemandTarget / noiseReferenceLevel);
 
     // Start with mean-reverting drift toward modified targets
     let supply = driftValue(entry.supply, effectiveSupplyTarget, effectiveReversion, supplyNoise, minLevel, maxLevel);

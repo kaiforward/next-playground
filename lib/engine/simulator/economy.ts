@@ -50,6 +50,7 @@ function buildSimParams(constants: SimConstants): EconomySimParams {
   return {
     reversionRate: constants.economy.reversionRate,
     noiseAmplitude: constants.economy.noiseAmplitude,
+    noiseReferenceLevel: constants.economy.noiseReferenceLevel,
     minLevel: constants.economy.minLevel,
     maxLevel: constants.economy.maxLevel,
     equilibrium: constants.equilibrium,
