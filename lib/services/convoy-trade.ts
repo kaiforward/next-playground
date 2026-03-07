@@ -237,6 +237,12 @@ export async function executeConvoyTrade(
         data: { stationId, goodId, price: unitPrice, quantity, type, playerId: player.id },
       });
 
+      // Increment trade volume accumulator on the system for prosperity computation
+      await tx.starSystem.update({
+        where: { id: convoy.systemId },
+        data: { tradeVolumeAccum: { increment: quantity } },
+      });
+
       return market;
     });
   } catch (error) {

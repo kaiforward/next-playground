@@ -111,16 +111,21 @@ describe("simulateEconomyTick", () => {
   });
 
   describe("production and consumption effects", () => {
-    it("producers increase supply by productionRate", () => {
+    // Self-limiting sqrt curve: production scales by sqrt((max-supply)/range),
+    // consumption scales by sqrt((supply-min)/range). range = 200 - 5 = 195.
+
+    it("producers increase supply by scaled productionRate", () => {
       // At equilibrium (supply=120, target=120): reversion=0, noise=0
-      // Only production effect: +3 supply
+      // prodScale = sqrt((200-120)/195) ≈ 0.6405
+      // scaledProduction = 3 * 0.6405 ≈ 1.9215
       const entry = makeEntry({
         supply: 120,
         demand: 40,
         produces: ["ore"],
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.supply).toBe(123); // 120 + 0 reversion + 0 noise + 3 production
+      const prodScale = Math.sqrt((200 - 120) / 195);
+      expect(result.supply).toBeCloseTo(120 + 3 * prodScale, 5);
     });
 
     it("producers slightly reduce demand", () => {
@@ -130,19 +135,23 @@ describe("simulateEconomyTick", () => {
         produces: ["ore"],
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // demand: 40 + 0 reversion + 0 noise - round(3*0.3)=1 → 39
+      // scaledProduction ≈ 1.9215, round(1.9215 * 0.3) = round(0.576) = 1
+      // demand: 40 - 1 = 39
       expect(result.demand).toBe(39);
     });
 
-    it("consumers decrease supply by consumptionRate", () => {
+    it("consumers decrease supply by scaled consumptionRate", () => {
+      // At equilibrium (supply=40, target=40): reversion=0, noise=0
+      // consScale = sqrt((40-5)/195) ≈ 0.4237
+      // scaledConsumption = 2 * 0.4237 ≈ 0.8474
       const entry = makeEntry({
         supply: 40,
         demand: 120,
         consumes: ["ore"],
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // supply: 40 + 0 reversion + 0 noise - 2 consumption → 38
-      expect(result.supply).toBe(38);
+      const consScale = Math.sqrt((40 - 5) / 195);
+      expect(result.supply).toBeCloseTo(40 - 2 * consScale, 5);
     });
 
     it("consumers increase demand", () => {
@@ -152,8 +161,9 @@ describe("simulateEconomyTick", () => {
         consumes: ["ore"],
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // demand: 120 + 0 reversion + 0 noise + round(2*0.5)=1 → 121
-      expect(result.demand).toBe(121);
+      // scaledConsumption ≈ 0.8474, round(0.8474 * 0.5) = round(0.4237) = 0
+      // demand: 120 + 0 = 120 (self-limiting reduces effect near floor)
+      expect(result.demand).toBe(120);
     });
   });
 
@@ -218,10 +228,11 @@ describe("simulateEconomyTick", () => {
         equilibriumProduces: { supply: 80, demand: 60 },
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // At custom equilibrium: reversion = 0 for both, only production effect
-      // supply: 80 + 0 reversion + 0 noise + 3 production = 83
-      expect(result.supply).toBe(83);
-      // demand: 60 + 0 reversion + 0 noise - round(3*0.3)=1 = 59
+      // At custom equilibrium: reversion = 0, only production effect
+      // prodScale = sqrt((200-80)/195) ≈ 0.7845, scaledProduction = 3 * 0.7845 ≈ 2.3534
+      const prodScale = Math.sqrt((200 - 80) / 195);
+      expect(result.supply).toBeCloseTo(80 + 3 * prodScale, 5);
+      // demand: 60 - round(2.3534*0.3) = 60 - round(0.706) = 60 - 1 = 59
       expect(result.demand).toBe(59);
     });
 
@@ -235,10 +246,11 @@ describe("simulateEconomyTick", () => {
       });
       const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
       // At custom equilibrium: reversion = 0, only consumption effect
-      // supply: 50 - 2 = 48
-      expect(result.supply).toBe(48);
-      // demand: 100 + round(2*0.5) = 101
-      expect(result.demand).toBe(101);
+      // consScale = sqrt((50-5)/195) ≈ 0.4804, scaledConsumption = 2 * 0.4804 ≈ 0.9608
+      const consScale = Math.sqrt((50 - 5) / 195);
+      expect(result.supply).toBeCloseTo(50 - 2 * consScale, 5);
+      // demand: 100 + round(0.9608*0.5) = 100 + round(0.4804) = 100 + 0 = 100
+      expect(result.demand).toBe(100);
     });
 
     it("falls back to global equilibrium when per-good not set", () => {
@@ -297,45 +309,44 @@ describe("modifier integration", () => {
 
   it("scales production via productionMult", () => {
     // Producer at equilibrium: supply=120, target=120
-    // productionMult=0.5 → effective production = 3 * 0.5 = 1.5
+    // prodScale = sqrt((200-120)/195) ≈ 0.6405
+    // productionMult=0.5 → effective = 3 * 0.5 = 1.5, scaled = 1.5 * 0.6405 ≈ 0.9608
     const entry = makeEntry({
       supply: 120, demand: 40,
       produces: ["ore"],
       productionMult: 0.5,
     });
     const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    // supply: 120 + 0 reversion + 0 noise + 1.5 production = 121.5 → clamped/rounded?
-    // driftValue rounds: clamp(round(120 + 0 + 0), 5, 200) = 120, then + 1.5 = 121.5
-    // But supply is not rounded after production — it's clamped. Let's check.
-    // Actually: driftValue returns Math.round(120 + 0 + 0) = 120
-    // then supply = clamp(120 + 1.5, 5, 200) = 121.5
-    expect(result.supply).toBe(121.5);
-    // With full production (no mult): 120 + 3 = 123
+    const prodScale = Math.sqrt((200 - 120) / 195);
+    expect(result.supply).toBeCloseTo(120 + 3 * 0.5 * prodScale, 5);
+    // With full production (no mult): scaled = 3 * 0.6405 ≈ 1.9215
     const [full] = simulateEconomyTick(
       [makeEntry({ supply: 120, demand: 40, produces: ["ore"] })],
       defaultParams,
       zeroNoiseRng,
     );
-    expect(full.supply).toBe(123);
+    expect(full.supply).toBeCloseTo(120 + 3 * prodScale, 5);
     expect(result.supply).toBeLessThan(full.supply);
   });
 
   it("scales consumption via consumptionMult", () => {
+    // consScale = sqrt((40-5)/195) ≈ 0.4237
+    // consumptionMult=0.5 → effective = 2 * 0.5 = 1, scaled = 1 * 0.4237 ≈ 0.4237
     const entry = makeEntry({
       supply: 40, demand: 120,
       consumes: ["ore"],
       consumptionMult: 0.5,
     });
     const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    // consumption = 2 * 0.5 = 1. supply: 40 - 1 = 39
-    expect(result.supply).toBe(39);
-    // Without mult: 40 - 2 = 38
+    const consScale = Math.sqrt((40 - 5) / 195);
+    expect(result.supply).toBeCloseTo(40 - 2 * 0.5 * consScale, 5);
+    // Without mult: scaled = 2 * 0.4237 ≈ 0.8474
     const [full] = simulateEconomyTick(
       [makeEntry({ supply: 40, demand: 120, consumes: ["ore"] })],
       defaultParams,
       zeroNoiseRng,
     );
-    expect(full.supply).toBe(38);
+    expect(full.supply).toBeCloseTo(40 - 2 * consScale, 5);
     expect(result.supply).toBeGreaterThan(full.supply);
   });
 
