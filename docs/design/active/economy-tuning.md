@@ -30,25 +30,17 @@ In a 600-system universe, each system stocks 12 goods but only produces 1-2 and 
 
 Recommendation: (a) for a clean system, or (b) if we want every station to stock everything for UI simplicity.
 
-### 3. Simulator doesn't match live game rates
-
-The simulator uses global `PRODUCTION_RATE` (1.5) and `CONSUMPTION_RATE` (1.0) for all goods. The live game uses per-good per-economy rates from `ECONOMY_PRODUCTION`/`ECONOMY_CONSUMPTION` (1-5 per good). The global rates are effectively dead code in the live game — they only apply as fallbacks when no per-good rate exists, which never happens for produced/consumed goods.
-
-This means simulation results may not be representative of actual game behavior. An Agricultural system producing food at 5/tick behaves very differently from the simulator's flat 1.5/tick.
-
-**Fix:** Update the simulator's `SimWorld` to use per-good rates from `ECONOMY_PRODUCTION`/`ECONOMY_CONSUMPTION`, matching the live game's `buildMarketTickEntry` logic.
-
-### 4. All systems start stagnant
+### 3. All systems start stagnant
 
 New systems start at prosperity 0 (stagnant, 0.7x multiplier). Without player trade, they stay stagnant forever — 70% of normal activity. This is correct for the game design (reward trading), but it means the entire universe starts sluggish.
 
 Trade flow (see below) should also contribute to prosperity, or systems should start at a small positive prosperity value so the universe feels alive before players arrive.
 
-### 5. Global rate constants are misleading
+### 4. Global rate constants are misleading
 
-`ECONOMY_CONSTANTS.PRODUCTION_RATE` (1.5) and `CONSUMPTION_RATE` (1.0) appear important but are never used in the live game. They only serve as fallbacks in `simulateEconomyTick` when `entry.productionRate` is undefined — which the processor always provides via `buildMarketTickEntry`.
+`ECONOMY_CONSTANTS.PRODUCTION_RATE` (1.5) and `CONSUMPTION_RATE` (1.0) appear important but are never used in the live game. They only serve as fallbacks in `simulateEconomyTick` when `entry.productionRate` is undefined — which both the processor and simulator always provide via `resolveMarketTickEntry`.
 
-**Fix:** Either remove global rate constants (breaking change for simulator) or explicitly document them as simulator-only fallbacks.
+**Fix:** Either remove global rate constants or explicitly document them as fallbacks for goods with no per-economy-type rate.
 
 ## Planned Feature: Trade Flow
 

@@ -1,5 +1,5 @@
 import type { TickProcessor, TickProcessorResult, TxClient } from "../types";
-import { simulateEconomyTick, updateProsperity, buildMarketTickEntry, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
+import { simulateEconomyTick, updateProsperity, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
 import {
   getProducedGoods,
   getConsumedGoods,
@@ -9,7 +9,6 @@ import {
 import {
   ECONOMY_CONSTANTS,
   EQUILIBRIUM_TARGETS,
-  getConsumeEquilibrium,
   PROSPERITY_DECAY_RATE,
   PROSPERITY_MAX_GAIN,
   PROSPERITY_TARGET_VOLUME,
@@ -19,10 +18,11 @@ import {
   PROSPERITY_MULT_AT_ZERO,
   PROSPERITY_MULT_AT_MAX,
 } from "@/lib/constants/economy";
-import { GOODS, GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
-import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
-import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
+import type { ModifierRow } from "@/lib/engine/events";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 
 /** Prosperity params built from constants (done once, reused every tick). */
@@ -180,34 +180,8 @@ export const economyProcessor: TickProcessor = {
     const tickEntries = markets.map((m) => {
       const econ = toEconomyType(m.station.system.economyType);
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-      const sysMods = modifiersBySystem.get(m.station.system.id) ?? [];
-      const agg = sysMods.length > 0
-        ? aggregateModifiers(sysMods, goodKey, MODIFIER_CAPS)
-        : undefined;
 
-      const goodDef = GOODS[goodKey];
-
-      // Government: scale volatility
-      const baseVolatility = goodDef?.volatility ?? 1;
-      const volatility = govDef
-        ? baseVolatility * govDef.volatilityModifier
-        : baseVolatility;
-
-      // Self-sufficiency: adjust consume targets per economy type
-      let equilibriumProduces = goodDef?.equilibrium.produces;
-      let equilibriumConsumes = goodDef
-        ? getConsumeEquilibrium(econ, goodKey, goodDef.equilibrium)
-        : undefined;
-      if (govDef && govDef.equilibriumSpreadPct !== 0) {
-        if (equilibriumProduces) {
-          equilibriumProduces = adjustEquilibriumSpread(equilibriumProduces, govDef.equilibriumSpreadPct);
-        }
-        if (equilibriumConsumes) {
-          equilibriumConsumes = adjustEquilibriumSpread(equilibriumConsumes, govDef.equilibriumSpreadPct);
-        }
-      }
-
-      const entry = buildMarketTickEntry({
+      return resolveMarketTickEntry({
         goodId: goodKey,
         supply: m.supply,
         demand: m.demand,
@@ -215,29 +189,17 @@ export const economyProcessor: TickProcessor = {
         economyType: econ,
         produces: getProducedGoods(econ),
         consumes: getConsumedGoods(econ),
-        volatility,
-        equilibriumProduces,
-        equilibriumConsumes,
         baseProductionRate: getProductionRate(econ, goodKey),
         baseConsumptionRate: getConsumptionRate(econ, goodKey),
-        govConsumptionBoost: govDef?.consumptionBoosts[goodKey] ?? 0,
+        govDef: govDef ?? undefined,
         traits: m.station.system.traits.map((t) => ({
           traitId: toTraitId(t.traitId),
           quality: toQualityTier(t.quality),
         })),
         prosperity: prosperityBySystem.get(m.station.system.id) ?? 0,
+        modifiers: modifiersBySystem.get(m.station.system.id) ?? [],
+        modifierCaps: MODIFIER_CAPS,
       }, prosperityParams);
-
-      return agg
-        ? {
-            ...entry,
-            supplyTargetMult: agg.supplyTargetMult,
-            demandTargetMult: agg.demandTargetMult,
-            productionMult: agg.productionMult,
-            consumptionMult: agg.consumptionMult,
-            reversionMult: agg.reversionMult,
-          }
-        : entry;
     });
 
     // Run simulation

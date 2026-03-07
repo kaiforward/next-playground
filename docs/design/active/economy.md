@@ -74,7 +74,7 @@ Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in 
 
 This creates natural supply chains: Extraction produces ore, Refinery consumes ore and produces metals, Industrial consumes metals and produces machinery. Disrupting any link cascades through the chain.
 
-**Note**: These per-good rates (1-5/tick) are the actual rates used in the live game. The global `PRODUCTION_RATE` (1.5) and `CONSUMPTION_RATE` (1.0) in `ECONOMY_CONSTANTS` are only used as fallbacks when no per-good rate exists — which never happens for produced/consumed goods. See [known issues](./economy-tuning.md).
+**Note**: These per-good rates (1-5/tick) are the actual rates used by both the live game and the simulator via `resolveMarketTickEntry` (`lib/engine/market-tick-builder.ts`). The global `PRODUCTION_RATE` (1.5) and `CONSUMPTION_RATE` (1.0) in `ECONOMY_CONSTANTS` are only fallbacks when no per-good rate exists.
 
 ### Self-Sufficiency Factors
 
