@@ -96,15 +96,15 @@ describe("SimConstants", () => {
 
     it("pricing has correct read-only values", () => {
       const c = resolveConstants();
-      expect(c.pricing.minMultiplier).toBe(0.2);
-      expect(c.pricing.maxMultiplier).toBe(5.0);
+      expect(c.pricing.minMultiplier).toBe(0.5);
+      expect(c.pricing.maxMultiplier).toBe(3.0);
     });
 
     it("bots has expected defaults", () => {
       const c = resolveConstants();
       expect(c.bots.startingCredits).toBe(500);
       expect(c.bots.refuelThreshold).toBe(0.5);
-      expect(c.bots.tradeImpactFactor).toBe(0.1);
+      expect(c.bots.tradeImpactFactor).toBe(0.5);
     });
 
     it("every section is populated (no undefined)", () => {
@@ -153,8 +153,8 @@ describe("SimConstants", () => {
 
     it("preserves pricing (read-only) even if passed", () => {
       const c = resolveConstants({});
-      expect(c.pricing.minMultiplier).toBe(0.2);
-      expect(c.pricing.maxMultiplier).toBe(5.0);
+      expect(c.pricing.minMultiplier).toBe(0.5);
+      expect(c.pricing.maxMultiplier).toBe(3.0);
     });
   });
 
