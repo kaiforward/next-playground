@@ -180,13 +180,13 @@ describe("Simulator Integration", () => {
       }
     });
 
-    it("government consumption boosts affect demand", { timeout: 60_000 }, () => {
+    it("government consumption boosts deplete supply faster", { timeout: 60_000 }, () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
       const ctx = defaultCtx({ disableRandomEvents: true });
 
-      // Run 500 ticks so consumption boosts shift demand clearly
+      // Run 500 ticks so consumption boosts deplete supply clearly
       for (let i = 0; i < 500; i++) {
         world = simulateWorldTick(world, rng, ctx);
       }
@@ -199,7 +199,7 @@ describe("Simulator Integration", () => {
         if (region) systemInfo.set(sys.id, { gov: region.governmentType, econ: sys.economyType });
       }
 
-      // Group medicine demand by economy type, then compare fed vs non-fed
+      // Group medicine supply by economy type, then compare fed vs non-fed
       const byEcon: Record<string, { fed: number[]; other: number[] }> = {};
       for (const m of world.markets) {
         if (m.goodId !== "medicine") continue;
@@ -207,28 +207,29 @@ describe("Simulator Integration", () => {
         if (!info) continue;
         if (!byEcon[info.econ]) byEcon[info.econ] = { fed: [], other: [] };
         if (info.gov === "federation") {
-          byEcon[info.econ].fed.push(m.demand);
+          byEcon[info.econ].fed.push(m.supply);
         } else {
-          byEcon[info.econ].other.push(m.demand);
+          byEcon[info.econ].other.push(m.supply);
         }
       }
 
-      // For economy types with both fed and non-fed systems, fed should average higher
+      // For economy types with both fed and non-fed systems,
+      // federation should have lower supply (boosted consumption depletes more)
       let comparisons = 0;
-      let fedWins = 0;
+      let fedLower = 0;
       for (const { fed, other } of Object.values(byEcon)) {
         if (fed.length === 0 || other.length === 0) continue;
         comparisons++;
         const fedAvg = fed.reduce((a, b) => a + b, 0) / fed.length;
         const otherAvg = other.reduce((a, b) => a + b, 0) / other.length;
-        if (fedAvg > otherAvg) fedWins++;
+        if (fedAvg < otherAvg) fedLower++;
       }
 
       // Federation should win some per-economy-type comparisons.
       // Self-limiting sqrt curve dampens consumption effects near the floor,
       // so the signal is weaker — require at least 1/3 of comparisons.
       if (comparisons > 0) {
-        expect(fedWins / comparisons).toBeGreaterThanOrEqual(1 / 3);
+        expect(fedLower / comparisons).toBeGreaterThanOrEqual(1 / 3);
       }
     });
 

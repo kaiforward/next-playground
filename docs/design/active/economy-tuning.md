@@ -4,20 +4,7 @@ Status: **Active** — structural issues identified, trade flow feature planned.
 
 ## Structural Issues
 
-### 1. Demand is effectively static
-
-Production and consumption modify demand as a side-effect (`demand -= 0.3 * production`, `demand += 0.5 * consumption`), but mean reversion pulls demand back toward its equilibrium target at 2%/tick. Reversion always wins — demand hovers within ~2% of its target regardless of production/consumption activity.
-
-This means prices are driven almost entirely by supply movement. Demand is decorative noise. The per-good equilibrium targets already set demand where it needs to be, so the side-effects are wasted computation fighting reversion.
-
-**Options:**
-- (a) Remove demand side-effects from production/consumption — simplifies the system, makes behavior more predictable
-- (b) Lower demand reversion rate so side-effects have impact — adds complexity, harder to reason about
-- (c) Accept it — demand stability via targets is arguably fine, just acknowledge it
-
-Recommendation: (a). The per-good targets already create the right demand levels per economy type. Let reversion handle demand, let production/consumption handle supply.
-
-### 2. Neutral goods are dead markets
+### 1. Neutral goods are dead markets
 
 For goods a system neither produces nor consumes, equilibrium is `{ supply: 75, demand: 75 }`. With 2% reversion, price = `basePrice * (75/75)` = exactly basePrice. Only noise creates any variation (+/-3 random walk).
 
@@ -30,13 +17,13 @@ In a 600-system universe, each system stocks 12 goods but only produces 1-2 and 
 
 Recommendation: (a) for a clean system, or (b) if we want every station to stock everything for UI simplicity.
 
-### 3. All systems start stagnant
+### 2. All systems start stagnant
 
 New systems start at prosperity 0 (stagnant, 0.7x multiplier). Without player trade, they stay stagnant forever — 70% of normal activity. This is correct for the game design (reward trading), but it means the entire universe starts sluggish.
 
 Trade flow (see below) should also contribute to prosperity, or systems should start at a small positive prosperity value so the universe feels alive before players arrive.
 
-### 4. Global rate constants are misleading
+### 3. Global rate constants are misleading
 
 `ECONOMY_CONSTANTS.PRODUCTION_RATE` (1.5) and `CONSUMPTION_RATE` (1.0) appear important but are never used in the live game. They only serve as fallbacks in `simulateEconomyTick` when `entry.productionRate` is undefined — which both the processor and simulator always provide via `resolveMarketTickEntry`.
 
