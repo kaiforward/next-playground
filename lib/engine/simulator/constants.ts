@@ -33,8 +33,6 @@ export interface SimConstants {
     noiseAmplitude: number;
     minLevel: number;
     maxLevel: number;
-    productionRate: number;
-    consumptionRate: number;
   };
   equilibrium: {
     produces: { supply: number; demand: number };
@@ -158,8 +156,6 @@ function buildDefaults(): SimConstants {
       noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
       minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
       maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
-      productionRate: ECONOMY_CONSTANTS.PRODUCTION_RATE,
-      consumptionRate: ECONOMY_CONSTANTS.CONSUMPTION_RATE,
     },
     equilibrium: {
       produces: { ...EQUILIBRIUM_TARGETS.produces },

@@ -52,8 +52,6 @@ function buildSimParams(constants: SimConstants): EconomySimParams {
     noiseAmplitude: constants.economy.noiseAmplitude,
     minLevel: constants.economy.minLevel,
     maxLevel: constants.economy.maxLevel,
-    productionRate: constants.economy.productionRate,
-    consumptionRate: constants.economy.consumptionRate,
     equilibrium: constants.equilibrium,
   };
 }
