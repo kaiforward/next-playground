@@ -3,12 +3,12 @@
  * Mirrors the real tick processors (events → economy) but operates on SimWorld.
  */
 
-import { simulateEconomyTick, updateProsperity, buildMarketTickEntry, type MarketTickEntry, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
+import { simulateEconomyTick, updateProsperity, type MarketTickEntry, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
 import { scaleEventCaps } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
-import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { getConsumeEquilibrium } from "@/lib/constants/economy";
+import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
 import {
@@ -25,7 +25,6 @@ import {
   evaluateSpreadTargets,
   selectEventsToSpawn,
   rollPhaseDuration,
-  aggregateModifiers,
   type EventSnapshot,
   type SystemSnapshot,
   type ModifierRow,
@@ -466,34 +465,8 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
   // Build tick entries
   const tickEntries: MarketTickEntry[] = regionMarkets.map((m) => {
     const sys = world.systems.find((s) => s.id === m.systemId)!;
-    const sysMods = modsBySystem.get(m.systemId) ?? [];
-    const agg = sysMods.length > 0
-      ? aggregateModifiers(sysMods, m.goodId, modifierCaps)
-      : undefined;
 
-    const goodConst = constants.goods[m.goodId];
-
-    // Government: scale volatility
-    const baseVolatility = goodConst?.volatility ?? 1;
-    const volatility = govDef
-      ? baseVolatility * govDef.volatilityModifier
-      : baseVolatility;
-
-    // Self-sufficiency: adjust consume targets per economy type
-    let equilibriumProduces = goodConst?.equilibrium.produces;
-    let equilibriumConsumes = goodConst
-      ? getConsumeEquilibrium(sys.economyType, m.goodId, goodConst.equilibrium)
-      : undefined;
-    if (govDef && govDef.equilibriumSpreadPct !== 0) {
-      if (equilibriumProduces) {
-        equilibriumProduces = adjustEquilibriumSpread(equilibriumProduces, govDef.equilibriumSpreadPct);
-      }
-      if (equilibriumConsumes) {
-        equilibriumConsumes = adjustEquilibriumSpread(equilibriumConsumes, govDef.equilibriumSpreadPct);
-      }
-    }
-
-    const entry = buildMarketTickEntry({
+    return resolveMarketTickEntry({
       goodId: m.goodId,
       supply: m.supply,
       demand: m.demand,
@@ -501,29 +474,17 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       economyType: sys.economyType,
       produces: Object.keys(sys.produces),
       consumes: Object.keys(sys.consumes),
-      volatility,
-      equilibriumProduces,
-      equilibriumConsumes,
       baseProductionRate: sys.produces[m.goodId],
       baseConsumptionRate: sys.consumes[m.goodId],
-      govConsumptionBoost: govDef?.consumptionBoosts[m.goodId] ?? 0,
+      govDef: govDef ?? undefined,
       traits: sys.traits.map((t) => ({
         traitId: toTraitId(t.traitId),
         quality: toQualityTier(t.quality),
       })),
       prosperity: prosperityBySystem.get(m.systemId) ?? 0,
+      modifiers: modsBySystem.get(m.systemId) ?? [],
+      modifierCaps,
     }, prosperityParams);
-
-    return agg
-      ? {
-          ...entry,
-          supplyTargetMult: agg.supplyTargetMult,
-          demandTargetMult: agg.demandTargetMult,
-          productionMult: agg.productionMult,
-          consumptionMult: agg.consumptionMult,
-          reversionMult: agg.reversionMult,
-        }
-      : entry;
   });
 
   // Run simulation
