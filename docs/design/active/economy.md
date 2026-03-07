@@ -6,43 +6,51 @@ The economy is a self-limiting market simulation where supply and demand drift t
 
 ## Goods
 
-12 goods organized in 3 tiers. Tier determines price volatility, clamp ranges, and mission reward multipliers.
+12 goods organized in 3 tiers. Tiers create a natural progression: cheap high-volume goods for early game, expensive scarce goods for late game.
 
 ### Tier 0 — Raw Materials
-| Good | Base Price | Volatility | Hazard |
-|---|---|---|---|
-| Water | 25 | 0.5 | none |
-| Food | 30 | 0.7 | none |
-| Ore | 35 | 0.6 | none |
-| Textiles | 35 | 0.8 | none |
 
-Price range: 0.1x to 8.0x base. Wide equilibrium spreads. Cheap, high volume, low risk.
+High volume (150-160 supply), widest ratio spread (~20%). Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these.
+
+| Good | Base Price | Volatility | Hazard | Price Range |
+|---|---|---|---|---|
+| Water | 25 | 0.5 | none | 0.5x-2.0x |
+| Food | 30 | 0.7 | none | 0.5x-2.0x |
+| Ore | 35 | 0.6 | none | 0.5x-2.0x |
+| Textiles | 35 | 0.8 | none | 0.5x-2.0x |
 
 ### Tier 1 — Processed Goods
-| Good | Base Price | Volatility | Hazard |
-|---|---|---|---|
-| Fuel | 35 | 1.0 | low |
-| Metals | 45 | 0.8 | none |
-| Chemicals | 55 | 1.2 | low |
-| Medicine | 65 | 1.5 | none |
 
-Price range: 0.15x to 6.0x base. Medium equilibrium spreads. Moderate margins, some hazard risk.
+Medium volume (78-90 supply), moderate ratio spread (~17-20%). Better per-unit margin but needs more capital. Mid-game income.
+
+| Good | Base Price | Volatility | Hazard | Price Range |
+|---|---|---|---|---|
+| Fuel | 35 | 1.0 | low | 0.5x-2.5x |
+| Metals | 45 | 0.8 | none | 0.5x-2.5x |
+| Chemicals | 55 | 1.2 | low | 0.5x-2.5x |
+| Medicine | 65 | 1.5 | none | 0.5x-2.5x |
 
 ### Tier 2 — Advanced Goods
-| Good | Base Price | Volatility | Hazard |
-|---|---|---|---|
-| Electronics | 80 | 1.0 | none |
-| Machinery | 100 | 0.8 | none |
-| Weapons | 120 | 2.0 | high |
-| Luxuries | 150 | 1.8 | none |
 
-Price range: 0.2x to 4.0x base (Luxuries: 0.15x to 4.5x). Tighter equilibrium spreads. High value per unit, requires capital to trade.
+Scarce (38-45 supply), tightest ratio spread (~12-17%). Highest absolute margin per unit but can't fill cargo from one system. Late-game income — needs big capital AND multi-system routes.
+
+| Good | Base Price | Volatility | Hazard | Price Range |
+|---|---|---|---|---|
+| Electronics | 80 | 1.0 | none | 0.5x-3.0x |
+| Machinery | 100 | 0.8 | none | 0.5x-3.0x |
+| Weapons | 120 | 2.0 | high | 0.5x-3.0x |
+| Luxuries | 150 | 1.8 | none | 0.5x-3.0x |
 
 ### Per-Good Equilibrium Targets
 
 Each good has custom supply/demand equilibrium targets for producing and consuming systems. These determine the natural price spread between where a good is made and where it's needed.
 
-Example (Water): produces `{ supply: 150, demand: 25 }`, consumes `{ supply: 25, demand: 140 }`. A producing system has high supply + low demand = cheap. A consuming system has low supply + high demand = expensive.
+Example (Water):
+- Produces: `{ supply: 160, demand: 136 }` — high supply relative to demand = cheap
+- Consumes: `{ supply: 110, demand: 116 }` — lower supply, higher demand = expensive
+- Buy price ~21cr, sell price ~26cr, margin ~5cr/unit
+
+The ratio spread is inverted by tier: T0 has the widest % margin (~20%), T2 has the tightest (~12%). But because T2 has much higher base prices, the absolute margin per unit is still higher (T0: ~5cr vs T2: ~16cr). This creates a natural capital gate — you earn more per unit with luxuries, but you need 150cr/unit to buy them vs 25cr/unit for water.
 
 Full values in `lib/constants/goods.ts`.
 
@@ -65,6 +73,8 @@ Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in 
 | Core | Luxuries (1) | Food (3), Textiles (2), Electronics (2), Medicine (2), Water (2), Weapons (1) |
 
 This creates natural supply chains: Extraction produces ore, Refinery consumes ore and produces metals, Industrial consumes metals and produces machinery. Disrupting any link cascades through the chain.
+
+**Note**: These per-good rates (1-5/tick) are the actual rates used in the live game. The global `PRODUCTION_RATE` (1.5) and `CONSUMPTION_RATE` (1.0) in `ECONOMY_CONSTANTS` are only used as fallbacks when no per-good rate exists — which never happens for produced/consumed goods. See [known issues](./economy-tuning.md).
 
 ### Self-Sufficiency Factors
 
@@ -94,7 +104,7 @@ This creates price variety between systems consuming the same good. Full factor 
 | Militarist | TBD | TBD | TBD | TBD | TBD | War economy, resource hungry |
 | Theocratic | TBD | TBD | TBD | TBD | TBD | Premium on basics, vice banned |
 
-(4 new types designed, modifiers to be defined during implementation — see [faction-system.md](../planned/faction-system.md) §1)
+(4 new types designed, modifiers to be defined during implementation — see [faction-system.md](../planned/faction-system.md) S1)
 
 ### Government Effects on Gameplay
 - **Volatility modifier**: Scales price noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
@@ -117,24 +127,24 @@ Clamped to tier-specific floor/ceiling. If supply = 0, price hits the ceiling (m
 ### Per-Tick Simulation (runs once per region per tick, round-robin)
 Each good at each station is updated:
 
-1. **Determine equilibrium target** — per-good targets for producing/consuming systems, adjusted by self-sufficiency factors for the system's economy type. Neutral systems use balanced defaults (supply 60/demand 60). Government equilibrium spread adjustments scale these targets.
+1. **Determine equilibrium target** — per-good targets for producing/consuming systems, adjusted by self-sufficiency factors for the system's economy type. Neutral systems use balanced defaults (supply 75/demand 75). Government equilibrium spread adjustments scale these targets.
 2. **Apply event modifiers** — active events shift supply/demand targets, multiply production/consumption rates, and dampen reversion speed
 3. **Apply government modifiers** — scale volatility, adjust equilibrium spread, add consumption boosts
 4. **Mean reversion** — supply and demand are pulled 2% of the gap toward their equilibrium target each tick
 5. **Self-limiting production** — producing systems add goods to supply, scaled by `sqrt((MAX - supply) / (MAX - MIN))`. Near ceiling, production approaches zero (warehouses full).
 6. **Self-limiting consumption** — consuming systems remove goods from supply, scaled by `sqrt((supply - MIN) / (MAX - MIN))`. Near floor, consumption approaches zero (nothing left to consume).
 7. **Prosperity multiplier** — both production and consumption rates are scaled by the system's prosperity multiplier (0.3x crisis to 1.3x booming)
-8. **Noise** — random walk scaled by good volatility and government modifier (base amplitude ±3 units)
+8. **Noise** — random walk scaled by good volatility and government modifier (base amplitude +/-3 units)
 9. **Clamp** — supply and demand bounded to [5, 200]
 
 ### Key Parameters
 | Parameter | Value | Effect |
 |---|---|---|
 | Reversion rate | 2% per tick | ~35 ticks to move halfway to equilibrium |
-| Noise amplitude | ±3 base | Micro-volatility within trends |
+| Noise amplitude | +/-3 base | Micro-volatility within trends |
 | Min/max levels | 5 / 200 | Supply/demand bounds |
-| Production rate | 3 base | Scaled by self-limiting + prosperity |
-| Consumption rate | 2 base | Scaled by self-limiting + prosperity |
+| Production rate | 1-5 per good | Per economy type, scaled by self-limiting + prosperity |
+| Consumption rate | 1-4 per good | Per economy type, scaled by self-limiting + prosperity |
 | Snapshot interval | Every 20 ticks | Price history recorded for charts |
 | Max snapshots | 50 per system | Rolling window of ~1000 ticks |
 
@@ -160,6 +170,31 @@ Each system has a `prosperity` value from -1.0 (crisis) to +1.0 (booming). Repla
 
 Boom amplifies both sides equally — no corrective tug-of-war. A booming system has more goods flowing in and out, not a directional correction.
 
+**Timing**: With 24 regions and round-robin, each system is processed every ~24 ticks. At 0.03 decay/run, prosperity goes from 1.0 to ~0 in ~33 runs (~800 ticks).
+
+---
+
+## Ship Prices & Progression
+
+Ship prices are calibrated relative to trade margins to create a multi-stage progression:
+
+| Ship | Price | Cargo | Role |
+|---|---|---|---|
+| Shuttle | 0 (starter) | 50 | Early T0 trading |
+| Light Freighter | 25,000 | 80 | Upgraded T0/early T1 |
+| Scout Skiff | 20,000 | 10 | Exploration |
+| Interceptor | 35,000 | 15 | Combat |
+| Bulk Freighter | 120,000 | 200 | Serious T1/T2 hauling |
+| Corvette | 150,000 | 40 | Combat + opportunistic trade |
+| Blockade Runner | 175,000 | 60 | Smuggling |
+| Survey Vessel | 90,000 | 50 | Support |
+| Heavy Freighter | 350,000 | 400 | Endgame hauling |
+| Frigate | 450,000 | 30 | Fleet escort |
+| Stealth Transport | 400,000 | 150 | Covert hauling |
+| Command Vessel | 500,000 | 80 | Endgame support |
+
+With T0 margins of ~5cr/unit and 50 cargo, a shuttle earns ~250cr/trip. Light Freighter at 25,000cr takes ~100 trips of pure T0 trading. Mixing in T1 goods as capital grows shortens this significantly.
+
 ---
 
 ## System Interactions
@@ -171,6 +206,6 @@ Boom amplifies both sides equally — no corrective tug-of-war. A booming system
 
 ---
 
-## Known Issues
+## Known Issues & Next Steps
 
-Trade margins are currently far too generous — see [economy-tuning.md](./economy-tuning.md) for the active design discussion on progression curve and margin balancing.
+See [economy-tuning.md](./economy-tuning.md) for structural issues and planned improvements.

@@ -35,8 +35,8 @@ Every tick, one region's markets update (round-robin). Each market has two value
   +------------------+
   |  PROSPERITY      |  Also during economy tick
   |  UPDATE          |
-  |  Trade volume    |  High trade → prosperity rises (→ booming)
-  |  drives          |  No trade → prosperity decays (→ stagnant)
+  |  Trade volume    |  High trade -> prosperity rises (-> booming)
+  |  drives          |  No trade -> prosperity decays (-> stagnant)
   |  prosperity      |  Events can push into crisis (below zero)
   +--------+---------+
            |
@@ -57,9 +57,9 @@ Every tick, one region's markets update (round-robin). Each market has two value
 Every market has an equilibrium target (where supply/demand "wants" to be). Each tick, the gap closes by 2%. This is a gentle stabilizing force representing local commerce — not the main correction mechanism.
 
 ```
-  current supply: 50          target: 150
-  |---------X----------------------------------------T---------|
-            ^                                        ^
+  current supply: 50          target: 160
+  |---------X--------------------------------------------------T---|
+            ^                                                  ^
             supply pulls toward target each tick (2% of gap)
 ```
 
@@ -87,14 +87,14 @@ This prevents floor/ceiling railing without relying on reversion. Markets find t
 
 ### Production & Consumption — "The push and pull"
 
-Each economy type (Agricultural, Extraction, Refinery, etc.) produces specific goods and consumes others. Rates are applied every tick, scaled by self-limiting and prosperity.
+Each economy type (Agricultural, Extraction, Refinery, etc.) produces specific goods and consumes others. Per-good rates (1-5 units/tick) are applied every tick, scaled by self-limiting and prosperity.
 
 ```
   AGRICULTURAL SYSTEM
   ===================
-  Produces: food, textiles      -> supply goes UP each tick
-  Consumes: water, machinery,   -> supply goes DOWN each tick
-            chemicals, medicine
+  Produces: food (5/tick), textiles (4/tick)  -> supply goes UP
+  Consumes: water (4/tick), machinery (1/tick),
+            chemicals (3/tick), medicine (1/tick)  -> supply goes DOWN
 
   What this creates:
   - Produced goods: high supply, low demand -> LOW prices (cheap here)
@@ -111,9 +111,9 @@ Different economy types have different self-sufficiency levels for goods they co
 ```
   WATER PRICES AT DIFFERENT CONSUMERS
   ====================================
-  Agricultural (s=0.5):  has irrigation → moderate water prices
-  Refinery (s=0.2):      some recycling → expensive but not desperate
-  Tech (s=0.05):         imports nearly everything → very expensive
+  Agricultural (s=0.5):  has irrigation -> moderate water prices
+  Refinery (s=0.2):      some recycling -> expensive but not desperate
+  Tech (s=0.05):         imports nearly everything -> very expensive
 
   Traders must decide WHICH consumers to serve — not all are equally profitable.
 ```
@@ -165,7 +165,7 @@ Events inject chaos into the system in two ways:
        |     Directly modifies supply or demand values right now
        |
        +---> MODIFIERS: Ongoing effects while event is active
-             "Trade route disrupted — reversion dampened, production slowed"
+             "Trade route disrupted -- reversion dampened, production slowed"
              Multipliers that compound with other modifiers each tick:
                - Shift equilibrium targets (what "normal" means)
                - Scale production/consumption rates
@@ -199,7 +199,10 @@ Price is calculated on-read, not stored. It's just:
   High demand + low supply  = expensive
   Low demand  + high supply = cheap
 
-  Clamped to [floor, ceiling] per good (typically 10%-800% of base price)
+  Clamped per tier:
+    T0: 0.5x - 2.0x base price
+    T1: 0.5x - 2.5x base price
+    T2: 0.5x - 3.0x base price
 ```
 
 ## How Systems Layer Together
@@ -216,8 +219,8 @@ Price is calculated on-read, not stored. It's just:
   ====================================
   Mean reversion     -> gentle pull toward equilibrium (2%/tick)
   Noise              -> small random variation (life)
-  Production         -> supply grows, self-limiting near ceiling
-  Consumption        -> supply shrinks, self-limiting near floor
+  Production         -> supply grows, self-limiting near ceiling (1-5/tick)
+  Consumption        -> supply shrinks, self-limiting near floor (1-4/tick)
   Prosperity         -> scales both production + consumption (0.3x to 1.3x)
 
   LAYER 3: Disruptions (unpredictable)
@@ -232,7 +235,3 @@ Price is calculated on-read, not stored. It's just:
                         (the inter-system trade the simulation lacks)
   Prosperity impact  -> sustained trade boosts system activity
 ```
-
-## Active Design Work
-
-Trade margins are currently too generous — see [economy-tuning.md](./economy-tuning.md) for the progression curve discussion.
