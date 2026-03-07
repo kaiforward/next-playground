@@ -31,6 +31,7 @@ export interface SimConstants {
   economy: {
     reversionRate: number;
     noiseAmplitude: number;
+    noiseReferenceLevel: number;
     minLevel: number;
     maxLevel: number;
   };
@@ -154,6 +155,7 @@ function buildDefaults(): SimConstants {
     economy: {
       reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
       noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
+      noiseReferenceLevel: ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL,
       minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
       maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
     },

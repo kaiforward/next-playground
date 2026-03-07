@@ -41,6 +41,7 @@ const prosperityParams: ProsperityParams = {
 const simParams: EconomySimParams = {
   reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
+  noiseReferenceLevel: ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL,
   minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
   maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
   equilibrium: EQUILIBRIUM_TARGETS,

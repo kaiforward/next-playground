@@ -18,6 +18,7 @@ describe("SimConstants", () => {
       const c = resolveConstants();
       expect(c.economy.reversionRate).toBe(ECONOMY_CONSTANTS.REVERSION_RATE);
       expect(c.economy.noiseAmplitude).toBe(ECONOMY_CONSTANTS.NOISE_AMPLITUDE);
+      expect(c.economy.noiseReferenceLevel).toBe(ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL);
       expect(c.economy.minLevel).toBe(ECONOMY_CONSTANTS.MIN_LEVEL);
       expect(c.economy.maxLevel).toBe(ECONOMY_CONSTANTS.MAX_LEVEL);
     });

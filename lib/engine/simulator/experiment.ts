@@ -30,6 +30,7 @@ const ConstantOverridesSchema = z.object({
   economy: z.object({
     reversionRate: z.number().optional(),
     noiseAmplitude: z.number().optional(),
+    noiseReferenceLevel: z.number().optional(),
     minLevel: z.number().optional(),
     maxLevel: z.number().optional(),
   }).optional(),

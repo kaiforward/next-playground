@@ -6,7 +6,7 @@ Status: **Active** — structural issues identified, trade flow feature planned.
 
 ### 1. ~~Neutral goods are dead markets~~ — FIXED
 
-Changed neutral equilibrium from `{ supply: 75, demand: 75 }` to `{ supply: 20, demand: 30 }`. Low volumes reflect that transit stations don't stockpile goods they don't produce/consume. Slight consumer lean (ratio 1.5) creates a small markup. Lower absolute values make neutral markets more responsive to player trades.
+Changed neutral equilibrium from `{ supply: 75, demand: 75 }` to `{ supply: 20, demand: 23 }`. Low volumes reflect that transit stations don't stockpile goods they don't produce/consume. Slight consumer lean (ratio 1.15) creates a subtle markup. Noise amplitude now scales proportionally to target level (`target / 75`), preventing the random walk drift that occurred when fixed ±3 noise overwhelmed the 2% reversion at low absolute values. `driftValue` no longer rounds to integers (DB columns are Float).
 
 ### 2. All systems start stagnant
 
