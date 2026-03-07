@@ -32,8 +32,6 @@ const ConstantOverridesSchema = z.object({
     noiseAmplitude: z.number().optional(),
     minLevel: z.number().optional(),
     maxLevel: z.number().optional(),
-    productionRate: z.number().optional(),
-    consumptionRate: z.number().optional(),
   }).optional(),
   equilibrium: z.object({
     produces: z.object({ supply: z.number().optional(), demand: z.number().optional() }).optional(),

@@ -10,17 +10,13 @@ export const ECONOMY_CONSTANTS = {
   MIN_LEVEL: 5,
   /** Supply/demand ceiling. */
   MAX_LEVEL: 200,
-  /** Units of supply generated per tick by producers. */
-  PRODUCTION_RATE: 1.5,
-  /** Units of supply consumed per tick by consumers. */
-  CONSUMPTION_RATE: 1,
 } as const;
 
 /** Equilibrium targets by good relationship to economy type. */
 export const EQUILIBRIUM_TARGETS = {
   produces: { supply: 90, demand: 60 },
   consumes: { supply: 60, demand: 85 },
-  neutral: { supply: 75, demand: 75 },
+  neutral: { supply: 20, demand: 30 },
 } as const;
 
 // ── Prosperity constants ────────────────────────────────────────

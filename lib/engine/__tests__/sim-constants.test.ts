@@ -20,8 +20,6 @@ describe("SimConstants", () => {
       expect(c.economy.noiseAmplitude).toBe(ECONOMY_CONSTANTS.NOISE_AMPLITUDE);
       expect(c.economy.minLevel).toBe(ECONOMY_CONSTANTS.MIN_LEVEL);
       expect(c.economy.maxLevel).toBe(ECONOMY_CONSTANTS.MAX_LEVEL);
-      expect(c.economy.productionRate).toBe(ECONOMY_CONSTANTS.PRODUCTION_RATE);
-      expect(c.economy.consumptionRate).toBe(ECONOMY_CONSTANTS.CONSUMPTION_RATE);
     });
 
     it("equilibrium matches EQUILIBRIUM_TARGETS", () => {

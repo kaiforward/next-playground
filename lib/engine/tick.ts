@@ -45,8 +45,6 @@ export interface EconomySimParams {
   noiseAmplitude: number;
   minLevel: number;
   maxLevel: number;
-  productionRate: number;
-  consumptionRate: number;
   equilibrium: {
     produces: { supply: number; demand: number };
     consumes: { supply: number; demand: number };
@@ -118,7 +116,7 @@ export function simulateEconomyTick(
   params: EconomySimParams,
   rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { reversionRate, noiseAmplitude, minLevel, maxLevel, productionRate, consumptionRate } = params;
+  const { reversionRate, noiseAmplitude, minLevel, maxLevel } = params;
 
   return markets.map((entry) => {
     const target = getEquilibrium(entry, params);
@@ -141,9 +139,9 @@ export function simulateEconomyTick(
     let supply = driftValue(entry.supply, effectiveSupplyTarget, effectiveReversion, supplyNoise, minLevel, maxLevel);
     let demand = driftValue(entry.demand, effectiveDemandTarget, effectiveReversion, demandNoise, minLevel, maxLevel);
 
-    // Apply per-good base rates (override global params) with modifier multipliers
-    const effectiveProduction = (entry.productionRate ?? productionRate) * (entry.productionMult ?? 1);
-    const effectiveConsumption = (entry.consumptionRate ?? consumptionRate) * (entry.consumptionMult ?? 1);
+    // Apply per-good base rates with modifier multipliers
+    const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
+    const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
 
     // Production: producers generate supply
     // Self-limiting: scales down as supply approaches ceiling (warehouses full)

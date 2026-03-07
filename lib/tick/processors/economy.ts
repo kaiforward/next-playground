@@ -43,8 +43,6 @@ const simParams: EconomySimParams = {
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
   minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
   maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
-  productionRate: ECONOMY_CONSTANTS.PRODUCTION_RATE,
-  consumptionRate: ECONOMY_CONSTANTS.CONSUMPTION_RATE,
   equilibrium: EQUILIBRIUM_TARGETS,
 };
 
