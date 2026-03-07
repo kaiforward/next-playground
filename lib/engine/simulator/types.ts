@@ -28,6 +28,10 @@ export interface SimSystem {
   consumes: Record<string, number>;
   /** System traits from generation (used for production modifiers). */
   traits: { traitId: string; quality: number }[];
+  /** Prosperity value (-1 to +1). Trade-driven, amplifies production and consumption equally. */
+  prosperity: number;
+  /** Accumulated trade volume (quantity bought+sold) since last economy processor run. */
+  tradeVolumeAccum: number;
 }
 
 export interface SimConnection {
@@ -296,6 +300,27 @@ export interface EventImpact {
   tradeProfitDuring: number;
 }
 
+// ── Strategy aggregates ─────────────────────────────────────
+
+export interface StrategyAggregate {
+  strategy: string;
+  botCount: number;
+  avgCredits: number;
+  minCredits: number;
+  maxCredits: number;
+  avgTrades: number;
+  avgCreditsPerTick: number;
+  avgProfitPerTrade: number;
+  avgIdleRate: number;
+  avgExplorationRate: number;
+  avgFuelSpent: number;
+  avgProfitPerFuel: number;
+  /** Aggregated goods breakdown across all bots of this strategy. */
+  goodBreakdown: GoodBreakdownEntry[];
+  /** Aggregated government sell breakdown across all bots. */
+  governmentSellBreakdown: GovernmentSellEntry[];
+}
+
 // ── Results ─────────────────────────────────────────────────────
 
 export interface SimResults {
@@ -303,6 +328,8 @@ export interface SimResults {
   constants: SimConstants;
   overrides: SimConstantOverrides;
   summaries: PlayerSummary[];
+  /** Per-strategy aggregate metrics (one row per strategy). */
+  strategyAggregates: StrategyAggregate[];
   /** Market state sampled at regular intervals. */
   marketSnapshots: { tick: number; markets: MarketSnapshot[] }[];
   /** Derived market health metrics. */

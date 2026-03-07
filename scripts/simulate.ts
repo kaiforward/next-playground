@@ -66,8 +66,14 @@ function rpad(str: string, width: number): string {
   return str.padStart(width);
 }
 
+function fmtNum(n: number): string {
+  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return n.toFixed(0);
+}
+
 function formatTable(results: SimResults): string {
-  const { summaries, marketHealth, eventImpacts, regionOverview, elapsedMs } = results;
+  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs } = results;
 
   const lines: string[] = [];
 
@@ -93,38 +99,34 @@ function formatTable(results: SimResults): string {
     lines.push("");
   }
 
-  // Summary table
+  // Strategy aggregate summary
   const headers = [
     "Strategy",
-    "Final Credits",
-    "Trades",
+    "Bots",
+    "Avg Credits",
+    "Min / Max",
+    "Avg Trades",
     "Cr/Tick",
-    "Avg Profit",
-    "Freighter @",
-    "Fuel Spent",
-    "Profit/Fuel",
-    "Idle",
+    "Profit/Trade",
     "Idle %",
+    "Explore %",
   ];
-  const widths = [12, 14, 8, 10, 12, 12, 11, 12, 6, 7];
+  const widths = [12, 5, 14, 22, 10, 10, 12, 7, 10];
 
-  // Header
   lines.push(headers.map((h, i) => pad(h, widths[i])).join(" | "));
   lines.push(widths.map((w) => "-".repeat(w)).join("-+-"));
 
-  // Rows
-  for (const s of summaries) {
+  for (const a of strategyAggregates) {
     const row = [
-      pad(s.strategy, widths[0]),
-      rpad(s.finalCredits.toLocaleString(), widths[1]),
-      rpad(s.totalTrades.toLocaleString(), widths[2]),
-      rpad(s.creditsPerTick.toFixed(1), widths[3]),
-      rpad(s.avgProfitPerTrade.toFixed(1), widths[4]),
-      rpad(s.freighterTick !== null ? `tick ${s.freighterTick}` : "never", widths[5]),
-      rpad(s.totalFuelSpent.toLocaleString(), widths[6]),
-      rpad(s.profitPerFuel.toFixed(1), widths[7]),
-      rpad(String(s.idleTicks), widths[8]),
-      rpad((s.idleRate * 100).toFixed(1) + "%", widths[9]),
+      pad(a.strategy, widths[0]),
+      rpad(String(a.botCount), widths[1]),
+      rpad(fmtNum(a.avgCredits), widths[2]),
+      rpad(`${fmtNum(a.minCredits)} / ${fmtNum(a.maxCredits)}`, widths[3]),
+      rpad(a.avgTrades.toFixed(0), widths[4]),
+      rpad(a.avgCreditsPerTick.toFixed(1), widths[5]),
+      rpad(a.avgProfitPerTrade.toFixed(1), widths[6]),
+      rpad((a.avgIdleRate * 100).toFixed(1) + "%", widths[7]),
+      rpad((a.avgExplorationRate * 100).toFixed(1) + "%", widths[8]),
     ];
     lines.push(row.join(" | "));
   }
@@ -132,57 +134,34 @@ function formatTable(results: SimResults): string {
   lines.push("");
   lines.push(`Simulation completed in ${elapsedMs.toFixed(0)}ms`);
 
-  // Goods breakdown per strategy
-  for (const s of summaries) {
-    if (s.goodBreakdown.length === 0) continue;
+  // Goods breakdown per strategy (aggregated across all bots)
+  for (const a of strategyAggregates) {
+    if (a.goodBreakdown.length === 0) continue;
 
-    const totalProfit = s.goodBreakdown.reduce((sum, g) => sum + Math.max(0, g.netProfit), 0);
+    const totalProfit = a.goodBreakdown.reduce((sum, g) => sum + Math.max(0, g.netProfit), 0);
 
     lines.push("");
-    lines.push(`Goods Breakdown (${s.strategy}):`);
+    lines.push(`Goods Breakdown (${a.strategy}, ${a.botCount} bots aggregated):`);
 
     const gHeaders = ["Good", "Bought", "Sold", "Spent", "Revenue", "Net Profit", "% of Profit"];
-    const gWidths = [12, 8, 8, 12, 12, 12, 12];
+    const gWidths = [12, 10, 10, 14, 14, 14, 12];
 
     lines.push(gHeaders.map((h, i) => pad(h, gWidths[i])).join(" | "));
     lines.push(gWidths.map((w) => "-".repeat(w)).join("-+-"));
 
-    for (const g of s.goodBreakdown) {
+    for (const g of a.goodBreakdown) {
       const pctOfProfit = totalProfit > 0 ? (Math.max(0, g.netProfit) / totalProfit) * 100 : 0;
       const row = [
         pad(g.goodId, gWidths[0]),
-        rpad(g.totalQuantityBought.toLocaleString(), gWidths[1]),
-        rpad(g.totalQuantitySold.toLocaleString(), gWidths[2]),
-        rpad(g.totalSpent.toLocaleString(), gWidths[3]),
-        rpad(g.totalRevenue.toLocaleString(), gWidths[4]),
-        rpad(g.netProfit.toLocaleString(), gWidths[5]),
+        rpad(fmtNum(g.totalQuantityBought), gWidths[1]),
+        rpad(fmtNum(g.totalQuantitySold), gWidths[2]),
+        rpad(fmtNum(g.totalSpent), gWidths[3]),
+        rpad(fmtNum(g.totalRevenue), gWidths[4]),
+        rpad(fmtNum(g.netProfit), gWidths[5]),
         rpad(pctOfProfit.toFixed(1) + "%", gWidths[6]),
       ];
       lines.push(row.join(" | "));
     }
-  }
-
-  // Route diversity
-  lines.push("");
-  lines.push("Route Diversity:");
-
-  const rHeaders = ["Strategy", "Unique", "Exploration", "Top 3 Systems (visits)"];
-  const rWidths = [12, 8, 12, 50];
-
-  lines.push(rHeaders.map((h, i) => pad(h, rWidths[i])).join(" | "));
-  lines.push(rWidths.map((w) => "-".repeat(w)).join("-+-"));
-
-  for (const s of summaries) {
-    const topStr = s.topSystems.length > 0
-      ? s.topSystems.slice(0, 3).map((t) => `${t.systemName} (${t.visits})`).join(", ")
-      : "none";
-    const row = [
-      pad(s.strategy, rWidths[0]),
-      rpad(String(s.uniqueSystemsVisited), rWidths[1]),
-      rpad((s.explorationRate * 100).toFixed(1) + "%", rWidths[2]),
-      pad(topStr, rWidths[3]),
-    ];
-    lines.push(row.join(" | "));
   }
 
   // Market health summary
@@ -196,7 +175,6 @@ function formatTable(results: SimResults): string {
     lines.push(dHeaders.map((h, i) => pad(h, dWidths[i])).join(" | "));
     lines.push(dWidths.map((w) => "-".repeat(w)).join("-+-"));
 
-    // Merge dispersion and drift by goodId
     const dispMap = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d]));
     const driftMap = new Map(marketHealth.equilibriumDrift.map((d) => [d.goodId, d]));
     const allGoods = [...new Set([
@@ -204,7 +182,6 @@ function formatTable(results: SimResults): string {
       ...marketHealth.equilibriumDrift.map((d) => d.goodId),
     ])];
 
-    // Sort by price dispersion descending
     allGoods.sort((a, b) => (dispMap.get(b)?.avgStdDev ?? 0) - (dispMap.get(a)?.avgStdDev ?? 0));
 
     for (const goodId of allGoods) {
@@ -220,10 +197,11 @@ function formatTable(results: SimResults): string {
     }
   }
 
-  // Event impact
+  // Event impact (top 20 only — full list in JSON output)
   if (eventImpacts.length > 0) {
+    const topEvents = eventImpacts.slice(0, 20);
     lines.push("");
-    lines.push("Event Impact:");
+    lines.push(`Event Impact (top ${topEvents.length} of ${eventImpacts.length}):`);
 
     const eHeaders = ["Type", "System", "Ticks", "Sev", "Price Δ", "Top Movers", "Trades", "Profit"];
     const eWidths = [20, 16, 12, 5, 9, 30, 7, 10];
@@ -231,12 +209,11 @@ function formatTable(results: SimResults): string {
     lines.push(eHeaders.map((h, i) => pad(h, eWidths[i])).join(" | "));
     lines.push(eWidths.map((w) => "-".repeat(w)).join("-+-"));
 
-    for (const e of eventImpacts) {
+    for (const e of topEvents) {
       const isChild = e.parentEventType !== null;
       const typeLabel = isChild ? `  └ ${e.eventType}` : e.eventType;
       const priceSign = e.weightedPriceImpactPct >= 0 ? "+" : "";
 
-      // Top 2 movers by absolute change
       const topMovers = [...e.goodPriceChanges]
         .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct))
         .slice(0, 2)
@@ -267,14 +244,14 @@ function formatTable(results: SimResults): string {
     lines.push("Event Impact: no events occurred during simulation");
   }
 
-  // Government trade — sells by destination government type
+  // Government trade — sells by destination government type (aggregated)
   const allGovTypes = [
-    ...new Set(summaries.flatMap((s) => s.governmentSellBreakdown.map((g) => g.governmentType))),
+    ...new Set(strategyAggregates.flatMap((a) => a.governmentSellBreakdown.map((g) => g.governmentType))),
   ].sort();
 
   if (allGovTypes.length > 0) {
     lines.push("");
-    lines.push("Government Trade (sells by destination):");
+    lines.push("Government Trade (sells by destination, all bots per strategy):");
 
     const gtWidths = [12, ...allGovTypes.map(() => 18)];
     const gtHeaders = ["Strategy", ...allGovTypes];
@@ -282,16 +259,16 @@ function formatTable(results: SimResults): string {
     lines.push(gtHeaders.map((h, i) => pad(h, gtWidths[i])).join(" | "));
     lines.push(gtWidths.map((w) => "-".repeat(w)).join("-+-"));
 
-    for (const s of summaries) {
-      const totalSold = s.governmentSellBreakdown.reduce((sum, g) => sum + g.totalSold, 0);
-      const govMap = new Map(s.governmentSellBreakdown.map((g) => [g.governmentType, g]));
+    for (const a of strategyAggregates) {
+      const totalSold = a.governmentSellBreakdown.reduce((sum, g) => sum + g.totalSold, 0);
+      const govMap = new Map(a.governmentSellBreakdown.map((g) => [g.governmentType, g]));
       const cells = allGovTypes.map((gov) => {
         const entry = govMap.get(gov);
         if (!entry || totalSold === 0) return rpad("-", 18);
         const pct = ((entry.totalSold / totalSold) * 100).toFixed(1);
-        return rpad(`${entry.totalSold} (${pct}%)`, 18);
+        return rpad(`${fmtNum(entry.totalSold)} (${pct}%)`, 18);
       });
-      lines.push([pad(s.strategy, 12), ...cells].join(" | "));
+      lines.push([pad(a.strategy, 12), ...cells].join(" | "));
     }
   }
 

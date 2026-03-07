@@ -13,6 +13,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
+import { getConsumeEquilibrium } from "@/lib/constants/economy";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -73,6 +74,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       produces: ECONOMY_PRODUCTION[econ] ?? {},
       consumes: ECONOMY_CONSUMPTION[econ] ?? {},
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
+      prosperity: 0,
+      tradeVolumeAccum: 0,
     };
   });
 
@@ -97,7 +100,9 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       const target = isProduced
         ? (goodEq?.produces ?? constants.equilibrium.produces)
         : isConsumed
-          ? (goodEq?.consumes ?? constants.equilibrium.consumes)
+          ? (goodEq
+              ? getConsumeEquilibrium(sys.economyType, goodKey, goodEq)
+              : constants.equilibrium.consumes)
           : constants.equilibrium.neutral;
 
       // Use overridden base price if available, otherwise the good definition's price
@@ -115,8 +120,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     }
   }
 
-  // Build bot players and ships
-  const startingSystemId = `system-${universe.startingSystemIndex}`;
+  // Build bot players and ships — spread across systems for realistic distribution
   const players: SimPlayer[] = [];
   const ships: SimShip[] = [];
   let nextId = 0;
@@ -127,6 +131,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     for (let i = 0; i < botCfg.count; i++) {
       const playerId = `player-${nextId}`;
       const shipId = `ship-${nextId}`;
+      const startSystem = systems[nextId % systems.length];
 
       players.push({
         id: playerId,
@@ -152,7 +157,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         stealth: shuttleStats.stealth,
         disabled: false,
         status: "docked",
-        systemId: startingSystemId,
+        systemId: startSystem.id,
         destinationSystemId: null,
         arrivalTick: null,
       });
