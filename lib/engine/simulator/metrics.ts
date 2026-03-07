@@ -5,6 +5,7 @@
 import type {
   TickMetrics,
   PlayerSummary,
+  StrategyAggregate,
   SimPlayer,
   GoodTradeRecord,
   GoodBreakdownEntry,
@@ -125,6 +126,74 @@ function aggregateGovernmentSellBreakdown(metrics: TickMetrics[]): GovernmentSel
   return [...map.entries()]
     .map(([governmentType, data]) => ({ governmentType, ...data }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
+}
+
+/** Compute per-strategy aggregates from individual player summaries. */
+export function computeStrategyAggregates(summaries: PlayerSummary[]): StrategyAggregate[] {
+  const grouped = new Map<string, PlayerSummary[]>();
+  for (const s of summaries) {
+    const list = grouped.get(s.strategy) ?? [];
+    list.push(s);
+    grouped.set(s.strategy, list);
+  }
+
+  const aggregates: StrategyAggregate[] = [];
+  for (const [strategy, bots] of grouped) {
+    const n = bots.length;
+    const avg = (fn: (s: PlayerSummary) => number) => bots.reduce((sum, s) => sum + fn(s), 0) / n;
+
+    // Merge goods breakdowns across all bots
+    const goodsMap = new Map<string, GoodBreakdownEntry>();
+    for (const bot of bots) {
+      for (const g of bot.goodBreakdown) {
+        const existing = goodsMap.get(g.goodId);
+        if (existing) {
+          existing.timesBought += g.timesBought;
+          existing.timesSold += g.timesSold;
+          existing.totalQuantityBought += g.totalQuantityBought;
+          existing.totalQuantitySold += g.totalQuantitySold;
+          existing.totalSpent += g.totalSpent;
+          existing.totalRevenue += g.totalRevenue;
+          existing.netProfit += g.netProfit;
+        } else {
+          goodsMap.set(g.goodId, { ...g });
+        }
+      }
+    }
+
+    // Merge government sell breakdowns
+    const govMap = new Map<string, GovernmentSellEntry>();
+    for (const bot of bots) {
+      for (const g of bot.governmentSellBreakdown) {
+        const existing = govMap.get(g.governmentType);
+        if (existing) {
+          existing.totalSold += g.totalSold;
+          existing.totalRevenue += g.totalRevenue;
+        } else {
+          govMap.set(g.governmentType, { ...g });
+        }
+      }
+    }
+
+    aggregates.push({
+      strategy,
+      botCount: n,
+      avgCredits: avg((s) => s.finalCredits),
+      minCredits: Math.min(...bots.map((s) => s.finalCredits)),
+      maxCredits: Math.max(...bots.map((s) => s.finalCredits)),
+      avgTrades: avg((s) => s.totalTrades),
+      avgCreditsPerTick: avg((s) => s.creditsPerTick),
+      avgProfitPerTrade: avg((s) => s.avgProfitPerTrade),
+      avgIdleRate: avg((s) => s.idleRate),
+      avgExplorationRate: avg((s) => s.explorationRate),
+      avgFuelSpent: avg((s) => s.totalFuelSpent),
+      avgProfitPerFuel: avg((s) => s.profitPerFuel),
+      goodBreakdown: [...goodsMap.values()].sort((a, b) => b.netProfit - a.netProfit),
+      governmentSellBreakdown: [...govMap.values()].sort((a, b) => b.totalRevenue - a.totalRevenue),
+    });
+  }
+
+  return aggregates;
 }
 
 /** Compute a player summary from their full metrics history. */

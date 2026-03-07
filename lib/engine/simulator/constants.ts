@@ -3,7 +3,18 @@
  * resolveConstants() builds a complete snapshot from imported defaults + optional overrides.
  */
 
-import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
+import {
+  ECONOMY_CONSTANTS,
+  EQUILIBRIUM_TARGETS,
+  PROSPERITY_DECAY_RATE,
+  PROSPERITY_MAX_GAIN,
+  PROSPERITY_TARGET_VOLUME,
+  PROSPERITY_MIN,
+  PROSPERITY_MAX,
+  PROSPERITY_MULT_AT_MIN,
+  PROSPERITY_MULT_AT_ZERO,
+  PROSPERITY_MULT_AT_MAX,
+} from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
 import {
@@ -71,6 +82,16 @@ export interface SimConstants {
     gatewaysPerBorder: number;
     intraRegionExtraEdges: number;
   };
+  prosperity: {
+    decayRate: number;
+    maxGain: number;
+    targetVolume: number;
+    min: number;
+    max: number;
+    multAtMin: number;
+    multAtZero: number;
+    multAtMax: number;
+  };
   bots: {
     startingCredits: number;
     refuelThreshold: number;
@@ -94,6 +115,7 @@ export type SimConstantOverrides = {
   };
   ships?: Record<string, Partial<SimConstants["ships"][string]>>;
   universe?: Partial<SimConstants["universe"]>;
+  prosperity?: Partial<SimConstants["prosperity"]>;
   bots?: Partial<SimConstants["bots"]>;
 };
 
@@ -145,8 +167,8 @@ function buildDefaults(): SimConstants {
       neutral: { ...EQUILIBRIUM_TARGETS.neutral },
     },
     pricing: {
-      minMultiplier: 0.2,
-      maxMultiplier: 5.0,
+      minMultiplier: 0.5,
+      maxMultiplier: 3.0,
     },
     goods,
     fuel: {
@@ -171,10 +193,20 @@ function buildDefaults(): SimConstants {
       gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
       intraRegionExtraEdges: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     },
+    prosperity: {
+      decayRate: PROSPERITY_DECAY_RATE,
+      maxGain: PROSPERITY_MAX_GAIN,
+      targetVolume: PROSPERITY_TARGET_VOLUME,
+      min: PROSPERITY_MIN,
+      max: PROSPERITY_MAX,
+      multAtMin: PROSPERITY_MULT_AT_MIN,
+      multAtZero: PROSPERITY_MULT_AT_ZERO,
+      multAtMax: PROSPERITY_MULT_AT_MAX,
+    },
     bots: {
       startingCredits: 500,
       refuelThreshold: 0.5,
-      tradeImpactFactor: 0.1,
+      tradeImpactFactor: 0.5,
     },
   };
 }
@@ -200,6 +232,7 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
     events: mergeEvents(base.events, overrides.events),
     ships: mergeRecord(base.ships, overrides.ships),
     universe: { ...base.universe, ...overrides.universe },
+    prosperity: { ...base.prosperity, ...overrides.prosperity },
     bots: { ...base.bots, ...overrides.bots },
   };
 }

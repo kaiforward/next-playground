@@ -7,7 +7,7 @@ import { mulberry32 } from "@/lib/engine/universe-gen";
 import { createSimWorld } from "./world";
 import { simulateWorldTick } from "./economy";
 import { executeBotTick } from "./bot";
-import { computeSummary } from "./metrics";
+import { computeSummary, computeStrategyAggregates } from "./metrics";
 import { resolveConstants } from "./constants";
 import { buildSimAdjacencyList } from "./pathfinding-cache";
 import { takeMarketSnapshot, computeMarketHealth, SNAPSHOT_INTERVAL } from "./market-analysis";
@@ -134,6 +134,9 @@ export function runSimulation(
     return computeSummary(player, metrics, totalSystems, systemNames);
   });
 
+  // Compute strategy aggregates
+  const strategyAggregates = computeStrategyAggregates(summaries);
+
   // Compute market health from final state
   const marketHealth = computeMarketHealth(world, constants);
 
@@ -149,6 +152,7 @@ export function runSimulation(
     constants,
     overrides: overrides ?? {},
     summaries,
+    strategyAggregates,
     marketSnapshots,
     marketHealth,
     eventImpacts,

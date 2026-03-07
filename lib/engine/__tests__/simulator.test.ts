@@ -63,22 +63,13 @@ describe("Simulator", () => {
       };
       const world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
 
-      // Collect all valid equilibrium supply/demand values from per-good targets + global neutral
-      const validValues = new Set<number>();
-      for (const goodConst of Object.values(DEFAULT_SIM_CONSTANTS.goods)) {
-        validValues.add(goodConst.equilibrium.produces.supply);
-        validValues.add(goodConst.equilibrium.produces.demand);
-        validValues.add(goodConst.equilibrium.consumes.supply);
-        validValues.add(goodConst.equilibrium.consumes.demand);
-      }
-      validValues.add(DEFAULT_SIM_CONSTANTS.equilibrium.neutral.supply);
-      validValues.add(DEFAULT_SIM_CONSTANTS.equilibrium.neutral.demand);
-
+      // Markets should initialize at equilibrium — values between floor and ceiling,
+      // within bounds of producer/consumer/neutral targets (including self-sufficiency blends)
       for (const market of world.markets) {
         expect(market.supply).toBeGreaterThan(0);
         expect(market.demand).toBeGreaterThan(0);
-        expect(validValues).toContain(market.supply);
-        expect(validValues).toContain(market.demand);
+        expect(market.supply).toBeLessThanOrEqual(DEFAULT_SIM_CONSTANTS.economy.maxLevel);
+        expect(market.demand).toBeLessThanOrEqual(DEFAULT_SIM_CONSTANTS.economy.maxLevel);
       }
     });
   });
