@@ -161,12 +161,23 @@ export function executeBotTick(
     }
   }
 
+  // Track trade volume on the system where the bot is docked
+  const totalTraded = goodsTraded.reduce((sum, g) => sum + g.bought + g.sold, 0);
+  const updatedSystems = totalTraded > 0
+    ? world.systems.map((s) =>
+        s.id === ship.systemId
+          ? { ...s, tradeVolumeAccum: s.tradeVolumeAccum + totalTraded }
+          : s,
+      )
+    : world.systems;
+
   // Build updated world
   const updatedWorld: SimWorld = {
     ...world,
     players: world.players.map((p) => (p.id === playerId ? player : p)),
     ships: world.ships.map((s) => (s.playerId === playerId ? ship : s)),
     markets,
+    systems: updatedSystems,
   };
 
   return {

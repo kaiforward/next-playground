@@ -3,12 +3,13 @@
  * Mirrors the real tick processors (events → economy) but operates on SimWorld.
  */
 
-import { simulateEconomyTick, type MarketTickEntry, type EconomySimParams } from "@/lib/engine/tick";
+import { simulateEconomyTick, updateProsperity, buildMarketTickEntry, type MarketTickEntry, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
 import { scaleEventCaps } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { GOVERNMENT_TYPES, adjustEquilibriumSpread } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { computeTraitProductionBonus, computeTraitDanger } from "@/lib/engine/trait-gen";
+import { getConsumeEquilibrium } from "@/lib/constants/economy";
+import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
 import {
   computeSystemDanger,
@@ -122,7 +123,8 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
       return ship;
     }
 
-    const destSystemId = ship.destinationSystemId!;
+    const destSystemId = ship.destinationSystemId;
+    if (!destSystemId) return ship;
     let cargo = [...(ship.cargo ?? []).map((c) => ({ ...c }))];
 
     // Look up destination system → region → government
@@ -447,6 +449,20 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
   // Look up government modifiers for this region
   const govDef = GOVERNMENT_TYPES[targetRegion.governmentType];
 
+  // ── Prosperity: update per system ──────────────────────────────
+  const prosperityParams: ProsperityParams = constants.prosperity;
+  const prosperityBySystem = new Map<string, number>();
+
+  for (const sysId of regionSystemIds) {
+    const sys = world.systems.find((s) => s.id === sysId)!;
+    const newProsperity = updateProsperity(
+      sys.prosperity,
+      sys.tradeVolumeAccum,
+      prosperityParams,
+    );
+    prosperityBySystem.set(sysId, newProsperity);
+  }
+
   // Build tick entries
   const tickEntries: MarketTickEntry[] = regionMarkets.map((m) => {
     const sys = world.systems.find((s) => s.id === m.systemId)!;
@@ -463,9 +479,11 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       ? baseVolatility * govDef.volatilityModifier
       : baseVolatility;
 
-    // Government: adjust equilibrium spread
+    // Self-sufficiency: adjust consume targets per economy type
     let equilibriumProduces = goodConst?.equilibrium.produces;
-    let equilibriumConsumes = goodConst?.equilibrium.consumes;
+    let equilibriumConsumes = goodConst
+      ? getConsumeEquilibrium(sys.economyType, m.goodId, goodConst.equilibrium)
+      : undefined;
     if (govDef && govDef.equilibriumSpreadPct !== 0) {
       if (equilibriumProduces) {
         equilibriumProduces = adjustEquilibriumSpread(equilibriumProduces, govDef.equilibriumSpreadPct);
@@ -475,25 +493,7 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       }
     }
 
-    // Government: boost consumption
-    const baseConsumption = sys.consumes[m.goodId];
-    const govBoost = govDef?.consumptionBoosts[m.goodId] ?? 0;
-    const consumptionRate = baseConsumption != null
-      ? baseConsumption + govBoost
-      : govBoost > 0 ? govBoost : undefined;
-
-    // Trait production bonus: effectiveRate = baseRate × (1 + traitBonus)
-    const baseProductionRate = sys.produces[m.goodId];
-    const validatedTraits = sys.traits.map((t) => ({
-      traitId: toTraitId(t.traitId),
-      quality: toQualityTier(t.quality),
-    }));
-    const traitBonus = computeTraitProductionBonus(validatedTraits, m.goodId);
-    const productionRate = baseProductionRate != null
-      ? baseProductionRate * (1 + traitBonus)
-      : undefined;
-
-    return {
+    const entry = buildMarketTickEntry({
       goodId: m.goodId,
       supply: m.supply,
       demand: m.demand,
@@ -501,19 +501,29 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
       economyType: sys.economyType,
       produces: Object.keys(sys.produces),
       consumes: Object.keys(sys.consumes),
-      productionRate,
-      consumptionRate,
       volatility,
       equilibriumProduces,
       equilibriumConsumes,
-      ...(agg && {
-        supplyTargetMult: agg.supplyTargetMult,
-        demandTargetMult: agg.demandTargetMult,
-        productionMult: agg.productionMult,
-        consumptionMult: agg.consumptionMult,
-        reversionMult: agg.reversionMult,
-      }),
-    };
+      baseProductionRate: sys.produces[m.goodId],
+      baseConsumptionRate: sys.consumes[m.goodId],
+      govConsumptionBoost: govDef?.consumptionBoosts[m.goodId] ?? 0,
+      traits: sys.traits.map((t) => ({
+        traitId: toTraitId(t.traitId),
+        quality: toQualityTier(t.quality),
+      })),
+      prosperity: prosperityBySystem.get(m.systemId) ?? 0,
+    }, prosperityParams);
+
+    return agg
+      ? {
+          ...entry,
+          supplyTargetMult: agg.supplyTargetMult,
+          demandTargetMult: agg.demandTargetMult,
+          productionMult: agg.productionMult,
+          consumptionMult: agg.consumptionMult,
+          reversionMult: agg.reversionMult,
+        }
+      : entry;
   });
 
   // Run simulation
@@ -535,7 +545,14 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
     return { ...m, supply: simulated[idx].supply, demand: simulated[idx].demand };
   });
 
-  return { ...world, markets: updatedMarkets };
+  // Patch system prosperity values and reset trade volume accumulators
+  const updatedSystems = world.systems.map((s) => {
+    const newProsperity = prosperityBySystem.get(s.id);
+    if (newProsperity === undefined) return s;
+    return { ...s, prosperity: newProsperity, tradeVolumeAccum: 0 };
+  });
+
+  return { ...world, systems: updatedSystems, markets: updatedMarkets };
 }
 
 // ── Main entry point ────────────────────────────────────────────

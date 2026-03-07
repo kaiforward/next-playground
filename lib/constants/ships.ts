@@ -95,7 +95,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 3,
     crewCapacity: 3,
     slotLayout: { engine: 1, cargo: 1, defence: 0, systems: 0 },
-    price: 3000,
+    price: 25000,
   },
 
   interceptor: {
@@ -115,7 +115,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 5,
     crewCapacity: 2,
     slotLayout: { engine: 1, cargo: 0, defence: 1, systems: 0 },
-    price: 4000,
+    price: 35000,
   },
 
   scout_skiff: {
@@ -135,7 +135,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 10,
     crewCapacity: 1,
     slotLayout: { engine: 1, cargo: 0, defence: 0, systems: 1 },
-    price: 2500,
+    price: 20000,
   },
 
   // ── Medium ships ─────────────────────────────────────────────────
@@ -157,7 +157,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 3,
     crewCapacity: 6,
     slotLayout: { engine: 1, cargo: 2, defence: 1, systems: 0 },
-    price: 12000,
+    price: 120000,
   },
 
   corvette: {
@@ -177,7 +177,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 6,
     crewCapacity: 8,
     slotLayout: { engine: 1, cargo: 0, defence: 2, systems: 1 },
-    price: 15000,
+    price: 150000,
   },
 
   blockade_runner: {
@@ -197,7 +197,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 5,
     crewCapacity: 4,
     slotLayout: { engine: 1, cargo: 1, defence: 1, systems: 1 },
-    price: 18000,
+    price: 175000,
   },
 
   survey_vessel: {
@@ -217,7 +217,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 12,
     crewCapacity: 6,
     slotLayout: { engine: 1, cargo: 1, defence: 0, systems: 2 },
-    price: 10000,
+    price: 90000,
   },
 
   // ── Large ships ──────────────────────────────────────────────────
@@ -239,7 +239,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 3,
     crewCapacity: 10,
     slotLayout: { engine: 1, cargo: 3, defence: 1, systems: 1 },
-    price: 35000,
+    price: 350000,
   },
 
   frigate: {
@@ -259,7 +259,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 7,
     crewCapacity: 15,
     slotLayout: { engine: 1, cargo: 0, defence: 3, systems: 2 },
-    price: 45000,
+    price: 450000,
   },
 
   stealth_transport: {
@@ -279,7 +279,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 6,
     crewCapacity: 8,
     slotLayout: { engine: 1, cargo: 2, defence: 1, systems: 2 },
-    price: 40000,
+    price: 400000,
   },
 
   command_vessel: {
@@ -299,7 +299,7 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     sensors: 14,
     crewCapacity: 20,
     slotLayout: { engine: 2, cargo: 1, defence: 1, systems: 2 },
-    price: 50000,
+    price: 500000,
   },
 };
 
