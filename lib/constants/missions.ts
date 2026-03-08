@@ -115,9 +115,9 @@ const REWARD_TIER_MULT: Readonly<Record<number, number>> = { 0: 1.0, 1: 4.0, 2: 
 export const MISSION_CONSTANTS = {
   MAX_ACTIVE_PER_PLAYER: 10,
   MAX_AVAILABLE_PER_STATION: 8,
-  HIGH_PRICE_THRESHOLD: 2.0,     // price/basePrice ratio -> import mission
-  LOW_PRICE_THRESHOLD: 0.5,      // price/basePrice ratio -> export mission
-  ECONOMY_GEN_PROBABILITY: 0.08, // per qualifying market per generation tick
+  HIGH_PRICE_THRESHOLD: 1.4,     // price/basePrice ratio -> import mission
+  LOW_PRICE_THRESHOLD: 0.7,      // price/basePrice ratio -> export mission
+  ECONOMY_GEN_PROBABILITY: 0.12, // per qualifying market per generation tick
   DEADLINE_TICKS: 300,
   QUANTITY_RANGE: [20, 60] as const,
   REWARD_PER_UNIT: 3,
