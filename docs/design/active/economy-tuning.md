@@ -1,6 +1,6 @@
 # Economy Tuning — Known Issues & Next Steps
 
-Status: **Active** — structural issues identified, trade flow feature planned.
+Status: **Active** — structural issues identified, trade simulation feature planned.
 
 ## Structural Issues
 
@@ -12,17 +12,27 @@ Changed neutral equilibrium from `{ supply: 75, demand: 75 }` to `{ supply: 20, 
 
 New systems start at prosperity 0 (stagnant, 0.7x multiplier). Without player trade, they stay stagnant forever — 70% of normal activity. This is correct for the game design (reward trading), but it means the entire universe starts sluggish.
 
-Trade flow (see below) should also contribute to prosperity, or systems should start at a small positive prosperity value so the universe feels alive before players arrive.
+Trade simulation (see below) will contribute to prosperity via the same `tradeVolumeAccum` channel as player trades, lifting systems out of stagnant baseline without players present.
 
 ### 3. ~~Global rate constants are misleading~~ — FIXED
 
 Removed `ECONOMY_CONSTANTS.PRODUCTION_RATE` and `CONSUMPTION_RATE`. These were never used — both the processor and simulator always provide per-economy-type rates via `resolveMarketTickEntry`. The fallback in `simulateEconomyTick` now defaults to 0 (no production/consumption) for goods without explicit rates, which is correct for neutral goods.
 
-## Planned Feature: NPC Trade Bots
+### 4. No spatial restoring force between markets
 
-Replaced the original virtual trade flow design with stateful NPC traders. Full design: `docs/design/planned/npc-trade-bots.md`.
+Markets evolve in isolation — production/consumption + random walk per system, with no mechanism for goods to flow between systems based on price gradients. Without sustained trade pressure, supply/demand drifts to clamp boundaries because the only restoring force is local equilibrium reversion. Player density (10-50 players across 10K systems) is far too sparse to provide this pressure.
 
-**Why NPCs over diffusion:** Stateful bots that travel and trade create emergent trade routes that shift naturally with market conditions. Virtual diffusion would homogenize prices; NPCs create localized, realistic competitive pressure that scales down as players arrive.
+Trade simulation (see below) addresses this directly.
+
+## Planned Feature: Trade Simulation (Edge Flow)
+
+Replaces an earlier NPC-entity design with a pure-math edge-flow simulation: goods flow along graph edges based on local price gradients, rate-limited per edge per tick. No entities — flow is aggregate math, with per-system and per-edge metrics stored as first-class data.
+
+Full design: `docs/design/planned/trade-simulation.md`.
+
+**Why edge flow over NPC entities:** ~80% of the economic value at ~10-20% of the runtime cost at 10K-system scale. Trade route data becomes a first-class queryable table (deterministic, not inferred from entity movements), which enables trade-skill-tiered route visibility, mission hooks, and predictive analytics for high-skill players. Interactable entities (pirate prey, escort targets) can be added as a smaller named-convoy layer on top if gameplay demands it.
+
+**Depends on:** Processor architecture refactor — see `docs/design/planned/processor-architecture.md`. Eliminates orchestration drift between simulator and live game before adding more processors.
 
 ## Simulation Tools
 

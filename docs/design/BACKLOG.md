@@ -20,7 +20,6 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
-- **[M] Inter-region trade flows** — Goods flowing between regions via gateways based on regional surplus/deficit. Creates visible trade volume and regional price gradients. Depends on economy work to determine flow mechanics.
 - **[M] Reversion rate tuning** — Current 5% base reversion may be too aggressive. Slower reversion means player trades leave a bigger, longer-lasting mark. Per-good rates now in place — see simulator metrics for balance data.
 
 ## Future

@@ -15,6 +15,9 @@ Browser-based multiplayer space trading game.
 - `npx vitest run` — Run unit tests
 - `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). **Main game economy only** — does not simulate mini-games.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`). Main game economy only.
+
+The simulator is a **calibration harness**, not a game feature — it runs the same economy tick the live game does, with synthetic "bots" providing trading pressure (`lib/engine/simulator/bot.ts`). There are no NPC bots in the live game; the simulator is for validating economy changes against equilibrium targets before they hit players.
+
 - `npm run index` — Regenerate `docs/MODULE_INDEX.md` (shared module export inventory)
 - `npx prisma db seed` — Seed database (scale controlled by `UNIVERSE_SCALE` in `.env`: `"default"` = 600 systems/7K map, `"10k"` = 10,000 systems/25K map)
 - `npx prisma db push` — Push schema changes to SQLite

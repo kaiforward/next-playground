@@ -190,13 +190,9 @@ Implemented. 12 ship classes with 10 stats, upgrade modules, convoys, speed-base
 
 ---
 
-### 5. Universe Scale: 200 → 1,000-2,000 Systems
+### ~~5. Universe Scale: 200 → 1,000-2,000 Systems~~ — **Resolved**
 
-**Active** (universe.md): 600 systems, 24 regions, 25 per region.
-
-**Planned** (faction-system.md §7): 1,000-2,000 systems across faction territories.
-
-**Key deltas**: Region count increases significantly. Cascading impacts on tick engine (round-robin processing frequency), map rendering (60+ regions), connection generation (scaling MST), and seed generation time.
+Implemented and exceeded. `UNIVERSE_SCALE` env var supports `"default"` (600 systems, 7K map) and `"10k"` (10,000 systems, 25K map). Tick engine, map rendering, and MST generation hold up at 10K scale. PostgreSQL migration unlocked the throughput needed.
 
 ---
 
