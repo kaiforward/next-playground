@@ -1,13 +1,15 @@
-import type { TickProcessor, TickProcessorResult, EventNotificationPayload } from "../types";
-import type { TxClient } from "../types";
+import type {
+  TickContext,
+  TickProcessor,
+  TickProcessorResult,
+  EventNotificationPayload,
+} from "../types";
 import {
   EVENT_SPAWN_INTERVAL,
   scaleEventCaps,
   type EventPhaseDefinition,
-  type EventTypeId,
 } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import {
   checkPhaseTransition,
   buildModifiersForPhase,
@@ -15,433 +17,181 @@ import {
   evaluateSpreadTargets,
   selectEventsToSpawn,
   rollPhaseDuration,
-  type EventSnapshot,
   type SystemSnapshot,
   type ShockRow,
-  type ModifierRow,
-  type NeighborSnapshot,
 } from "@/lib/engine/events";
-import { toEventTypeId } from "@/lib/types/guards";
-
-const { maxEventsGlobal, maxEventsPerSystem, batchSize, definitions: SCALED_DEFINITIONS } =
-  scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-/** Map a DB event row to an EventSnapshot. Validates type at the Prisma boundary. */
-function toSnapshot(e: {
-  id: string;
-  type: string;
-  phase: string;
-  systemId: string | null;
-  regionId: string | null;
-  startTick: number;
-  phaseStartTick: number;
-  phaseDuration: number;
-  severity: number;
-  sourceEventId: string | null;
-}): EventSnapshot {
-  return {
-    id: e.id,
-    type: toEventTypeId(e.type),
-    phase: e.phase,
-    systemId: e.systemId,
-    regionId: e.regionId,
-    startTick: e.startTick,
-    phaseStartTick: e.phaseStartTick,
-    phaseDuration: e.phaseDuration,
-    severity: e.severity,
-    sourceEventId: e.sourceEventId,
-  };
-}
-
-/** A shock targeting a specific system's market. */
-interface SystemShock {
-  systemId: string;
-  goodId: string;
-  parameter: "supply" | "demand";
-  value: number;
-  /** "absolute" = raw delta, "percentage" = fraction of current value. */
-  mode: "absolute" | "percentage";
-}
+import { PrismaEventsWorld } from "@/lib/tick/adapters/prisma/events";
+import type {
+  EventCreate,
+  EventsProcessorParams,
+  EventsWorld,
+  EventWithName,
+  NeighborWithName,
+  PhaseAdvance,
+  SystemShock,
+} from "@/lib/tick/world/events-world";
 
 /**
- * Expand ShockRow[] for a system into SystemShock[].
- * Skips when systemId is null (region-only events have no market to shock).
+ * Expand ShockRow[] for a single system into SystemShock[]. The processor
+ * body owns shock-mode handling now — the live adapter used to expand inline,
+ * the sim used to drop the mode entirely. Both bugs go away once the work
+ * happens here.
  */
-function expandShocks(
-  shocks: ShockRow[],
-  systemId: string | null,
-): SystemShock[] {
-  if (!systemId || shocks.length === 0) return [];
-  return shocks.map((s) => ({
+function expandShocks(rows: ShockRow[], systemId: string | null): SystemShock[] {
+  if (!systemId || rows.length === 0) return [];
+  return rows.map((r) => ({
     systemId,
-    goodId: s.goodId,
-    parameter: s.parameter,
-    value: s.value,
-    mode: s.mode,
+    goodId: r.goodId,
+    parameter: r.parameter,
+    value: r.value,
+    mode: r.mode,
   }));
 }
 
 /**
- * Bulk-apply one-time shocks to station markets across multiple systems.
- * Finds all affected markets in a single Prisma query, aggregates shock
- * deltas in JS, then batch-updates with unnest(). Returns count of markets updated.
+ * Pure processor body. Same logic runs against the Prisma adapter (live game)
+ * or the in-memory adapter (simulator + unit tests). All knobs that differ
+ * between live and sim (RNG, caps, batch size, definitions, spawn gating,
+ * pending injections) come in via `params`.
  */
-async function applyShocksBulk(
-  tx: TxClient,
-  shocks: SystemShock[],
-): Promise<number> {
-  if (shocks.length === 0) return 0;
+export async function runEventsProcessor(
+  world: EventsWorld,
+  ctx: TickContext,
+  params: EventsProcessorParams,
+): Promise<TickProcessorResult> {
+  const { rng, caps, batchSize, spawnInterval, definitions, spawnEnabled, injections } =
+    params;
 
-  const { MIN_LEVEL, MAX_LEVEL } = ECONOMY_CONSTANTS;
+  const notifications: EventNotificationPayload[] = [];
 
-  // 1. Unique system IDs targeted by shocks
-  const systemIds = [...new Set(shocks.map((s) => s.systemId))];
+  // ── 1. Fetch active events ────────────────────────────────────
+  const events = await world.getEvents();
 
-  // 2. Single query: fetch all markets at affected systems
-  const allMarkets = await tx.stationMarket.findMany({
-    where: { station: { systemId: { in: systemIds } } },
-    select: {
-      id: true,
-      supply: true,
-      demand: true,
-      goodId: true,
-      station: { select: { systemId: true } },
-    },
-  });
-
-  if (allMarkets.length === 0) return 0;
-
-  // 3. Lookup: "systemId|goodId" → mutable market snapshot
-  const marketByKey = new Map<string, { id: string; supply: number; demand: number }>();
-  for (const m of allMarkets) {
-    marketByKey.set(`${m.station.systemId}|${m.goodId}`, {
-      id: m.id,
-      supply: m.supply,
-      demand: m.demand,
-    });
+  // ── 2. Phase transitions ──────────────────────────────────────
+  interface AdvancingEvent {
+    snap: EventWithName;
+    nextPhase: EventPhaseDefinition;
+    duration: number;
   }
+  const advancing: AdvancingEvent[] = [];
+  const expiredIds: string[] = [];
 
-  // 4. Aggregate shock deltas (absolute = raw delta, percentage = fraction of current value)
-  const touchedIds = new Set<string>();
-  for (const shock of shocks) {
-    const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
-    if (!market) continue;
-
-    const delta = shock.mode === "percentage"
-      ? Math.round((shock.parameter === "supply" ? market.supply : market.demand) * shock.value)
-      : shock.value;
-
-    if (shock.parameter === "supply") {
-      market.supply += delta;
-    } else {
-      market.demand += delta;
-    }
-    touchedIds.add(market.id);
-  }
-
-  if (touchedIds.size === 0) return 0;
-
-  // 5. Clamp and build update arrays
-  const ids: string[] = [];
-  const supplies: number[] = [];
-  const demands: number[] = [];
-
-  for (const market of marketByKey.values()) {
-    if (!touchedIds.has(market.id)) continue;
-    ids.push(market.id);
-    const s = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.supply));
-    const d = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.demand));
-    supplies.push(isFinite(s) ? s : 0);
-    demands.push(isFinite(d) ? d : 0);
-  }
-
-  // 6. Batch update with unnest()
-  await tx.$executeRaw`
-    UPDATE "StationMarket" AS sm
-    SET "supply" = batch."supply", "demand" = batch."demand"
-    FROM unnest(${ids}::text[], ${supplies}::double precision[], ${demands}::double precision[])
-      AS batch("id", "supply", "demand")
-    WHERE sm."id" = batch."id"`;
-
-  return ids.length;
-}
-
-/**
- * Collect modifier rows for a set of (eventId, phase, decision) tuples.
- * Returns flat array ready for a single createMany call.
- */
-function collectModifierRows(
-  entries: Array<{
-    eventId: string;
-    phase: EventPhaseDefinition;
-    systemId: string | null;
-    regionId: string | null;
-    severity: number;
-  }>,
-): Array<ModifierRow & { eventId: string }> {
-  const rows: Array<ModifierRow & { eventId: string }> = [];
-  for (const entry of entries) {
-    const modifiers = buildModifiersForPhase(
-      entry.phase,
-      entry.systemId,
-      entry.regionId,
-      entry.severity,
-    );
-    for (const row of modifiers) {
-      rows.push({ eventId: entry.eventId, ...row });
-    }
-  }
-  return rows;
-}
-
-/**
- * Collect SystemShock tuples for a set of (phase, severity, systemId) entries.
- */
-function collectSystemShocks(
-  entries: Array<{
-    phase: EventPhaseDefinition;
-    severity: number;
-    systemId: string | null;
-  }>,
-): SystemShock[] {
-  const result: SystemShock[] = [];
-  for (const entry of entries) {
-    const shocks = buildShocksForPhase(entry.phase, entry.severity);
-    const expanded = expandShocks(shocks, entry.systemId);
-    for (const s of expanded) result.push(s);
-  }
-  return result;
-}
-
-// ── Processor ────────────────────────────────────────────────────
-
-export const eventsProcessor: TickProcessor = {
-  name: "events",
-  frequency: 1,
-
-  async process(ctx): Promise<TickProcessorResult> {
-    const notifications: EventNotificationPayload[] = [];
-
-    // ── 1. Fetch all active events ────────────────────────────────
-    const dbEvents = await ctx.tx.gameEvent.findMany({
-      select: {
-        id: true,
-        type: true,
-        phase: true,
-        systemId: true,
-        regionId: true,
-        startTick: true,
-        phaseStartTick: true,
-        phaseDuration: true,
-        severity: true,
-        sourceEventId: true,
-        system: { select: { name: true } },
-      },
-    });
-
-    const snapshots: EventSnapshot[] = dbEvents.map(toSnapshot);
-
-    // Map id→systemName for notifications
-    const systemNameById = new Map(
-      dbEvents
-        .filter((e) => e.systemId && e.system)
-        .map((e) => [e.id, e.system!.name]),
-    );
-
-    // ── 2. Phase transitions (batched) ─────────────────────────────
-    const expiredIds: string[] = [];
-
-    // Collect all advancing events in one pass
-    interface AdvancingEvent {
-      snap: EventSnapshot;
-      nextPhase: EventPhaseDefinition;
-      duration: number;
-    }
-    const advancing: AdvancingEvent[] = [];
-
-    for (const snap of snapshots) {
-      const def = SCALED_DEFINITIONS[snap.type];
-      if (!def) {
-        expiredIds.push(snap.id);
-        continue;
-      }
-
-      const result = checkPhaseTransition(snap, ctx.tick, def);
-
-      if (result === "expire") {
-        expiredIds.push(snap.id);
-        const sysName = systemNameById.get(snap.id) ?? "Unknown";
-        notifications.push({
-          message: `${def.name} at ${sysName} has ended.`,
-          type: snap.type,
-          refs: snap.systemId ? { system: { id: snap.systemId, label: sysName } } : {},
-        });
-        continue;
-      }
-
-      if (result === "advance") {
-        const currentIndex = def.phases.findIndex((p) => p.name === snap.phase);
-        const nextPhase = def.phases[currentIndex + 1];
-        const duration = rollPhaseDuration(nextPhase.durationRange, Math.random);
-        advancing.push({ snap, nextPhase, duration });
-      }
+  for (const ev of events) {
+    const def = definitions[ev.type];
+    if (!def) {
+      expiredIds.push(ev.id);
+      continue;
     }
 
-    // Batch process all advancing events
-    if (advancing.length > 0) {
-      const advancingIds = advancing.map((a) => a.snap.id);
-
-      // Batch delete old modifiers (1 query instead of N)
-      await ctx.tx.eventModifier.deleteMany({
-        where: { eventId: { in: advancingIds } },
+    const result = checkPhaseTransition(ev, ctx.tick, def);
+    if (result === "expire") {
+      expiredIds.push(ev.id);
+      const sysName = ev.systemName ?? "Unknown";
+      notifications.push({
+        message: `${def.name} at ${sysName} has ended.`,
+        type: ev.type,
+        refs: ev.systemId ? { system: { id: ev.systemId, label: sysName } } : {},
       });
+      continue;
+    }
 
-      // Batch create new modifiers (1 query instead of N)
-      const modifierEntries = advancing.map((a) => ({
-        eventId: a.snap.id,
-        phase: a.nextPhase,
-        systemId: a.snap.systemId,
-        regionId: a.snap.regionId,
-        severity: a.snap.severity,
-      }));
-      const allModifierRows = collectModifierRows(modifierEntries);
-      if (allModifierRows.length > 0) {
-        await ctx.tx.eventModifier.createMany({ data: allModifierRows });
-      }
+    if (result === "advance") {
+      const currentIndex = def.phases.findIndex((p) => p.name === ev.phase);
+      const nextPhase = def.phases[currentIndex + 1];
+      const duration = rollPhaseDuration(nextPhase.durationRange, rng);
+      advancing.push({ snap: ev, nextPhase, duration });
+    }
+  }
 
-      // Batch apply shocks (2-3 queries instead of N×M)
-      const transitionShocks = collectSystemShocks(
-        advancing.map((a) => ({
-          phase: a.nextPhase,
-          severity: a.snap.severity,
-          systemId: a.snap.systemId,
-        })),
+  // Apply advances + transition shocks + spread, in that order
+  if (advancing.length > 0) {
+    const advances: PhaseAdvance[] = advancing.map((a) => ({
+      eventId: a.snap.id,
+      nextPhaseName: a.nextPhase.name,
+      phaseStartTick: ctx.tick,
+      phaseDuration: a.duration,
+      modifiers: buildModifiersForPhase(
+        a.nextPhase,
+        a.snap.systemId,
+        a.snap.regionId,
+        a.snap.severity,
+      ),
+    }));
+    await world.advancePhases(advances);
+
+    const transitionShocks: SystemShock[] = [];
+    for (const a of advancing) {
+      transitionShocks.push(
+        ...expandShocks(
+          buildShocksForPhase(a.nextPhase, a.snap.severity),
+          a.snap.systemId,
+        ),
       );
-      await applyShocksBulk(ctx.tx, transitionShocks);
+    }
+    await world.applyShocks(transitionShocks);
 
-      // Batch update event phases with unnest() (1 query instead of N)
-      const phaseNames = advancing.map((a) => a.nextPhase.name);
-      const phaseTicks = advancing.map(() => ctx.tick);
-      const phaseDurations = advancing.map((a) => a.duration);
+    // Notifications + logging for advancing events
+    for (const { snap, nextPhase, duration } of advancing) {
+      const def = definitions[snap.type]!;
+      const sysName = snap.systemName ?? "Unknown";
+      if (nextPhase.notification) {
+        notifications.push({
+          message: nextPhase.notification.replace("{systemName}", sysName),
+          type: snap.type,
+          refs: snap.systemId
+            ? { system: { id: snap.systemId, label: sysName } }
+            : {},
+        });
+      }
+      console.log(
+        `[events] ${def.name} at ${sysName}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
+      );
+    }
 
-      await ctx.tx.$executeRaw`
-        UPDATE "GameEvent" AS ge
-        SET "phase" = batch."phase",
-            "phaseStartTick" = batch."phaseStartTick",
-            "phaseDuration" = batch."phaseDuration"
-        FROM unnest(
-          ${advancingIds}::text[],
-          ${phaseNames}::text[],
-          ${phaseTicks}::int[],
-          ${phaseDurations}::int[]
-        ) AS batch("id", "phase", "phaseStartTick", "phaseDuration")
-        WHERE ge."id" = batch."id"`;
+    // Spread — only for root events (no sourceEventId) that have spread rules.
+    const spreadSources = advancing.filter(
+      (a) =>
+        a.nextPhase.spread &&
+        a.nextPhase.spread.length > 0 &&
+        !a.snap.sourceEventId &&
+        a.snap.systemId,
+    );
 
-      // Notifications and logging
-      for (const { snap, nextPhase, duration } of advancing) {
-        const def = SCALED_DEFINITIONS[snap.type]!;
-        const sysName = systemNameById.get(snap.id) ?? "Unknown";
+    if (spreadSources.length > 0) {
+      const sourceSystemIds = spreadSources.map((a) => a.snap.systemId!);
+      const neighborMap = await world.getNeighborsBySystem(sourceSystemIds);
 
-        if (nextPhase.notification) {
-          notifications.push({
-            message: nextPhase.notification.replace("{systemName}", sysName),
-            type: snap.type,
-            refs: snap.systemId ? { system: { id: snap.systemId, label: sysName } } : {},
-          });
-        }
+      // Re-snapshot active events post-advance for accurate cap checks
+      const currentEvents = await world.getEvents();
 
-        console.log(
-          `[events] ${def.name} at ${sysName}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
+      interface SpreadCreate {
+        create: EventCreate;
+        nameForLog: string;
+        parentName: string;
+      }
+      const spreadCreates: SpreadCreate[] = [];
+
+      for (const { snap, nextPhase } of spreadSources) {
+        const neighbors: NeighborWithName[] =
+          neighborMap.get(snap.systemId!) ?? [];
+
+        const decisions = evaluateSpreadTargets(
+          nextPhase.spread!,
+          snap,
+          neighbors,
+          currentEvents,
+          { maxEventsGlobal: caps.maxEventsGlobal, maxEventsPerSystem: caps.maxEventsPerSystem },
+          definitions,
+          rng,
         );
-      }
 
-      // ── Spread: batch-create child events at neighboring systems ──
-      const spreadSources = advancing.filter(
-        (a) => a.nextPhase.spread && a.nextPhase.spread.length > 0 && !a.snap.sourceEventId,
-      );
-
-      if (spreadSources.length > 0) {
-        // Re-fetch active events once (not per-source)
-        const currentEvents = await ctx.tx.gameEvent.findMany({
-          select: {
-            id: true, type: true, phase: true,
-            systemId: true, regionId: true,
-            startTick: true, phaseStartTick: true,
-            phaseDuration: true, severity: true,
-            sourceEventId: true,
-          },
-        });
-        const currentSnapshots = currentEvents.map(toSnapshot);
-
-        // Batch fetch all neighbors for all spread-source systems (1 query instead of N)
-        const sourceSystemIds = spreadSources
-          .map((s) => s.snap.systemId)
-          .filter((id): id is string => id !== null);
-
-        const allConnections = await ctx.tx.systemConnection.findMany({
-          where: { fromSystemId: { in: sourceSystemIds } },
-          select: {
-            fromSystemId: true,
-            toSystem: { select: { id: true, name: true, economyType: true, regionId: true } },
-          },
-        });
-
-        // Group by source system
-        const connectionsBySystem = new Map<string, typeof allConnections>();
-        for (const conn of allConnections) {
-          let list = connectionsBySystem.get(conn.fromSystemId);
-          if (!list) {
-            list = [];
-            connectionsBySystem.set(conn.fromSystemId, list);
-          }
-          list.push(conn);
-        }
-
-        // Evaluate spread targets and collect all decisions
-        interface SpreadDecisionWithSource {
-          type: EventTypeId;
-          phase: string;
-          systemId: string;
-          regionId: string;
-          phaseDuration: number;
-          severity: number;
-          sourceEventId: string;
-        }
-        const allSpreadDecisions: SpreadDecisionWithSource[] = [];
-        const spreadNameMap = new Map<string, string>(); // systemId → name
-
-        for (const { snap, nextPhase } of spreadSources) {
-          if (!snap.systemId) continue;
-
-          const conns = connectionsBySystem.get(snap.systemId) ?? [];
-          const neighbors: NeighborSnapshot[] = conns.map((c) => ({
-            id: c.toSystem.id,
-            economyType: c.toSystem.economyType,
-            regionId: c.toSystem.regionId,
-          }));
-          for (const c of conns) spreadNameMap.set(c.toSystem.id, c.toSystem.name);
-
-          const decisions = evaluateSpreadTargets(
-            nextPhase.spread!,
-            snap,
-            neighbors,
-            currentSnapshots,
-            { maxEventsGlobal, maxEventsPerSystem },
-            SCALED_DEFINITIONS,
-            Math.random,
-          );
-
-          for (const d of decisions) {
-            allSpreadDecisions.push({ ...d, sourceEventId: snap.id });
-          }
-        }
-
-        if (allSpreadDecisions.length > 0) {
-          // Bulk create spread events (1 query instead of N)
-          const createdSpread = await ctx.tx.gameEvent.createManyAndReturn({
-            data: allSpreadDecisions.map((d) => ({
+        for (const d of decisions) {
+          const childDef = definitions[d.type]!;
+          const childPhase = childDef.phases[0];
+          const neighborName =
+            neighbors.find((n) => n.id === d.systemId)?.name ?? "Unknown";
+          spreadCreates.push({
+            create: {
               type: d.type,
               phase: d.phase,
               systemId: d.systemId,
@@ -450,200 +200,218 @@ export const eventsProcessor: TickProcessor = {
               phaseStartTick: ctx.tick,
               phaseDuration: d.phaseDuration,
               severity: d.severity,
-              sourceEventId: d.sourceEventId,
-            })),
-            select: { id: true },
+              sourceEventId: snap.id,
+              modifiers: buildModifiersForPhase(
+                childPhase,
+                d.systemId,
+                d.regionId,
+                d.severity,
+              ),
+            },
+            nameForLog: neighborName,
+            parentName: snap.systemName ?? "Unknown",
           });
-
-          // Bulk create spread modifiers (1 query instead of N)
-          const spreadModifierEntries = allSpreadDecisions.map((d, i) => {
-            const def = SCALED_DEFINITIONS[d.type]!;
-            return {
-              eventId: createdSpread[i].id,
-              phase: def.phases[0],
-              systemId: d.systemId,
-              regionId: d.regionId,
-              severity: d.severity,
-            };
-          });
-          const spreadModifierRows = collectModifierRows(spreadModifierEntries);
-          if (spreadModifierRows.length > 0) {
-            await ctx.tx.eventModifier.createMany({ data: spreadModifierRows });
-          }
-
-          // Bulk apply spread shocks (2-3 queries instead of N×M)
-          const spreadShocks = collectSystemShocks(
-            allSpreadDecisions.map((d) => {
-              const def = SCALED_DEFINITIONS[d.type]!;
-              return {
-                phase: def.phases[0],
-                severity: d.severity,
-                systemId: d.systemId,
-              };
-            }),
-          );
-          await applyShocksBulk(ctx.tx, spreadShocks);
-
-          // Notifications and logging
-          for (const d of allSpreadDecisions) {
-            const childDef = SCALED_DEFINITIONS[d.type]!;
-            const childPhase = childDef.phases[0];
-            const childSysName = spreadNameMap.get(d.systemId) ?? "Unknown";
-
-            if (childPhase.notification) {
-              notifications.push({
-                message: childPhase.notification.replace("{systemName}", childSysName),
-                type: d.type,
-                refs: { system: { id: d.systemId, label: childSysName } },
-              });
-            }
-
-            // Find the parent system name for logging
-            const parentSnap = spreadSources.find((s) => s.snap.id === d.sourceEventId)?.snap;
-            const parentSysName = parentSnap ? (systemNameById.get(parentSnap.id) ?? "Unknown") : "Unknown";
-            console.log(
-              `[events] Spread ${childDef.name} to ${childSysName} from ${parentSysName} (severity: ${d.severity.toFixed(2)})`,
-            );
-          }
         }
       }
-    }
 
-    // ── 3. Expire completed events ────────────────────────────────
-    if (expiredIds.length > 0) {
-      // Modifiers cascade-deleted via onDelete: Cascade
-      await ctx.tx.gameEvent.deleteMany({
-        where: { id: { in: expiredIds } },
-      });
-      console.log(`[events] Expired ${expiredIds.length} event(s)`);
-    }
+      if (spreadCreates.length > 0) {
+        await world.createEvents(spreadCreates.map((s) => s.create));
 
-    // ── 4. Spawn new events (batched) ─────────────────────────────
-    const isSpawnTick = ctx.tick % EVENT_SPAWN_INTERVAL === 0;
-
-    if (isSpawnTick) {
-      // Re-fetch active events (post-expiry) for accurate cap checking
-      const currentEvents = await ctx.tx.gameEvent.findMany({
-        select: {
-          id: true, type: true, phase: true,
-          systemId: true, regionId: true,
-          startTick: true, phaseStartTick: true,
-          phaseDuration: true, severity: true,
-          sourceEventId: true,
-        },
-      });
-
-      const currentSnapshots: EventSnapshot[] = currentEvents.map(toSnapshot);
-
-      // Fetch all systems for spawn selection (include name to avoid N+1 lookup)
-      const allSystems = await ctx.tx.starSystem.findMany({
-        select: { id: true, name: true, economyType: true, regionId: true },
-      });
-
-      const systemNameMap = new Map(allSystems.map((s) => [s.id, s.name]));
-
-      const systemSnapshots: SystemSnapshot[] = allSystems.map((s) => ({
-        id: s.id,
-        economyType: s.economyType,
-        regionId: s.regionId,
-      }));
-
-      const selectStart = performance.now();
-      const decisions = selectEventsToSpawn(
-        SCALED_DEFINITIONS,
-        currentSnapshots,
-        systemSnapshots,
-        ctx.tick,
-        { maxEventsGlobal, maxEventsPerSystem },
-        Math.random,
-        batchSize,
-      );
-      const selectMs = performance.now() - selectStart;
-
-      if (decisions.length > 0) {
-        const createStart = performance.now();
-
-        // Bulk create all events (1 query instead of N)
-        const createdEvents = await ctx.tx.gameEvent.createManyAndReturn({
-          data: decisions.map((d) => ({
-            type: d.type,
-            phase: d.phase,
-            systemId: d.systemId,
-            regionId: d.regionId,
-            startTick: ctx.tick,
-            phaseStartTick: ctx.tick,
-            phaseDuration: d.phaseDuration,
-            severity: d.severity,
-          })),
-          select: { id: true },
-        });
-
-        // Bulk create all modifiers (1 query instead of N)
-        const modifierEntries = decisions.map((d, i) => {
-          const def = SCALED_DEFINITIONS[d.type]!;
-          return {
-            eventId: createdEvents[i].id,
-            phase: def.phases[0],
-            systemId: d.systemId,
-            regionId: d.regionId,
-            severity: d.severity,
-          };
-        });
-        const allModifierRows = collectModifierRows(modifierEntries);
-        if (allModifierRows.length > 0) {
-          await ctx.tx.eventModifier.createMany({ data: allModifierRows });
+        // Apply spread shocks (first-phase shocks for each new child).
+        const spreadShocks: SystemShock[] = [];
+        for (const { create } of spreadCreates) {
+          const childDef = definitions[create.type]!;
+          spreadShocks.push(
+            ...expandShocks(
+              buildShocksForPhase(childDef.phases[0], create.severity),
+              create.systemId,
+            ),
+          );
         }
+        await world.applyShocks(spreadShocks);
 
-        // Bulk apply all shocks (2-3 queries instead of N×M)
-        const allShocks = collectSystemShocks(
-          decisions.map((d) => {
-            const def = SCALED_DEFINITIONS[d.type]!;
-            return {
-              phase: def.phases[0],
-              severity: d.severity,
-              systemId: d.systemId,
-            };
-          }),
-        );
-        const shocksApplied = await applyShocksBulk(ctx.tx, allShocks);
-
-        const createMs = performance.now() - createStart;
-
-        // Notifications
-        for (let i = 0; i < decisions.length; i++) {
-          const decision = decisions[i];
-          const def = SCALED_DEFINITIONS[decision.type]!;
-          const firstPhase = def.phases[0];
-          const sysName = systemNameMap.get(decision.systemId) ?? "Unknown";
-
-          if (firstPhase.notification) {
+        for (const { create, nameForLog, parentName } of spreadCreates) {
+          const childDef = definitions[create.type]!;
+          const childPhase = childDef.phases[0];
+          if (childPhase.notification) {
             notifications.push({
-              message: firstPhase.notification.replace("{systemName}", sysName),
-              type: decision.type,
-              refs: { system: { id: decision.systemId, label: sysName } },
+              message: childPhase.notification.replace("{systemName}", nameForLog),
+              type: create.type,
+              refs: { system: { id: create.systemId, label: nameForLog } },
             });
           }
+          console.log(
+            `[events] Spread ${childDef.name} to ${nameForLog} from ${parentName} (severity: ${create.severity.toFixed(2)})`,
+          );
         }
-
-        console.log(
-          `[events] Spawn tick ${ctx.tick}: ${currentSnapshots.length} active, ${allSystems.length} systems, ` +
-          `caps={global:${maxEventsGlobal},batch:${batchSize}}, ` +
-          `selected ${decisions.length} in ${selectMs.toFixed(0)}ms, ` +
-          `created ${decisions.length} events + ${allModifierRows.length} modifiers + ${shocksApplied} shocks in ${createMs.toFixed(0)}ms`,
-        );
-      } else {
-        console.log(
-          `[events] Spawn tick ${ctx.tick}: ${currentSnapshots.length} active, ${allSystems.length} systems, ` +
-          `caps={global:${maxEventsGlobal},batch:${batchSize}}, selected 0 in ${selectMs.toFixed(0)}ms`,
-        );
       }
     }
+  }
 
-    // ── 5. Emit results ───────────────────────────────────────────
-    return {
-      globalEvents: notifications.length > 0
-        ? { eventNotifications: notifications }
-        : {},
-    };
+  // ── 3. Expire completed events ────────────────────────────────
+  if (expiredIds.length > 0) {
+    await world.expireEvents(expiredIds);
+    console.log(`[events] Expired ${expiredIds.length} event(s)`);
+  }
+
+  // ── 4. Injections (sim-only; live passes [] / undefined) ──────
+  if (injections && injections.length > 0) {
+    const injectionCreates: EventCreate[] = [];
+    for (const inj of injections) {
+      const def = definitions[inj.type];
+      if (!def) continue;
+      const firstPhase = def.phases[0];
+      const duration = rollPhaseDuration(firstPhase.durationRange, rng);
+      injectionCreates.push({
+        type: inj.type,
+        phase: firstPhase.name,
+        systemId: inj.systemId,
+        regionId: inj.regionId,
+        startTick: ctx.tick,
+        phaseStartTick: ctx.tick,
+        phaseDuration: duration,
+        severity: inj.severity,
+        sourceEventId: null,
+        modifiers: buildModifiersForPhase(
+          firstPhase,
+          inj.systemId,
+          inj.regionId,
+          inj.severity,
+        ),
+      });
+    }
+
+    if (injectionCreates.length > 0) {
+      await world.createEvents(injectionCreates);
+      const injectionShocks: SystemShock[] = [];
+      for (const c of injectionCreates) {
+        const def = definitions[c.type]!;
+        injectionShocks.push(
+          ...expandShocks(buildShocksForPhase(def.phases[0], c.severity), c.systemId),
+        );
+      }
+      await world.applyShocks(injectionShocks);
+    }
+  }
+
+  // ── 5. Spawn new events on spawn ticks ─────────────────────────
+  const isSpawnTick = ctx.tick % spawnInterval === 0;
+  if (isSpawnTick && spawnEnabled) {
+    // Re-snapshot post-expiry for accurate cap checking
+    const currentEvents = await world.getEvents();
+    const systems = await world.getSystems();
+    const systemSnapshots: SystemSnapshot[] = systems.map((s) => ({
+      id: s.id,
+      economyType: s.economyType,
+      regionId: s.regionId,
+    }));
+    const nameMap = new Map(systems.map((s) => [s.id, s.name]));
+
+    const selectStart = performance.now();
+    const decisions = selectEventsToSpawn(
+      definitions,
+      currentEvents,
+      systemSnapshots,
+      ctx.tick,
+      { maxEventsGlobal: caps.maxEventsGlobal, maxEventsPerSystem: caps.maxEventsPerSystem },
+      rng,
+      batchSize,
+    );
+    const selectMs = performance.now() - selectStart;
+
+    if (decisions.length > 0) {
+      const createStart = performance.now();
+      const spawnCreates: EventCreate[] = decisions.map((d) => {
+        const def = definitions[d.type]!;
+        const firstPhase = def.phases[0];
+        return {
+          type: d.type,
+          phase: d.phase,
+          systemId: d.systemId,
+          regionId: d.regionId,
+          startTick: ctx.tick,
+          phaseStartTick: ctx.tick,
+          phaseDuration: d.phaseDuration,
+          severity: d.severity,
+          sourceEventId: null,
+          modifiers: buildModifiersForPhase(
+            firstPhase,
+            d.systemId,
+            d.regionId,
+            d.severity,
+          ),
+        };
+      });
+
+      await world.createEvents(spawnCreates);
+
+      const spawnShocks: SystemShock[] = [];
+      for (const c of spawnCreates) {
+        const def = definitions[c.type]!;
+        spawnShocks.push(
+          ...expandShocks(buildShocksForPhase(def.phases[0], c.severity), c.systemId),
+        );
+      }
+      const shocksApplied = await world.applyShocks(spawnShocks);
+
+      const createMs = performance.now() - createStart;
+
+      for (const c of spawnCreates) {
+        const def = definitions[c.type]!;
+        const firstPhase = def.phases[0];
+        const sysName = nameMap.get(c.systemId) ?? "Unknown";
+        if (firstPhase.notification) {
+          notifications.push({
+            message: firstPhase.notification.replace("{systemName}", sysName),
+            type: c.type,
+            refs: { system: { id: c.systemId, label: sysName } },
+          });
+        }
+      }
+
+      const modifierCount = spawnCreates.reduce((n, c) => n + c.modifiers.length, 0);
+      console.log(
+        `[events] Spawn tick ${ctx.tick}: ${currentEvents.length} active, ${systems.length} systems, ` +
+          `caps={global:${caps.maxEventsGlobal},batch:${batchSize}}, ` +
+          `selected ${decisions.length} in ${selectMs.toFixed(0)}ms, ` +
+          `created ${decisions.length} events + ${modifierCount} modifiers + ${shocksApplied} shocks in ${createMs.toFixed(0)}ms`,
+      );
+    } else {
+      console.log(
+        `[events] Spawn tick ${ctx.tick}: ${currentEvents.length} active, ${systems.length} systems, ` +
+          `caps={global:${caps.maxEventsGlobal},batch:${batchSize}}, selected 0 in ${selectMs.toFixed(0)}ms`,
+      );
+    }
+  }
+
+  return {
+    globalEvents:
+      notifications.length > 0 ? { eventNotifications: notifications } : {},
+  };
+}
+
+// ── Live-game wiring ──────────────────────────────────────────────
+
+const {
+  maxEventsGlobal,
+  maxEventsPerSystem,
+  batchSize,
+  definitions: SCALED_DEFINITIONS,
+} = scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
+
+export const eventsProcessor: TickProcessor = {
+  name: "events",
+  frequency: 1,
+
+  async process(ctx): Promise<TickProcessorResult> {
+    const world = new PrismaEventsWorld(ctx.tx);
+    return runEventsProcessor(world, ctx, {
+      rng: Math.random,
+      caps: { maxEventsGlobal, maxEventsPerSystem },
+      batchSize,
+      spawnInterval: EVENT_SPAWN_INTERVAL,
+      definitions: SCALED_DEFINITIONS,
+      spawnEnabled: true,
+    });
   },
 };

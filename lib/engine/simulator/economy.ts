@@ -1,9 +1,16 @@
 /**
- * In-memory economy tick simulation.
- * Mirrors the real tick processors (events → economy) but operates on SimWorld.
+ * In-memory economy tick simulation. Ship arrivals and economy still live
+ * here; events now run through the unified `runEventsProcessor` (Phase 2 of
+ * the processor refactor — `docs/design/planned/processor-architecture.md`).
  */
 
-import { simulateEconomyTick, updateProsperity, type MarketTickEntry, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
+import {
+  simulateEconomyTick,
+  updateProsperity,
+  type MarketTickEntry,
+  type EconomySimParams,
+  type ProsperityParams,
+} from "@/lib/engine/tick";
 import { scaleEventCaps } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -18,24 +25,15 @@ import {
   applyImportDuty,
   rollContrabandInspection,
 } from "@/lib/engine/danger";
-import {
-  checkPhaseTransition,
-  buildModifiersForPhase,
-  buildShocksForPhase,
-  evaluateSpreadTargets,
-  selectEventsToSpawn,
-  rollPhaseDuration,
-  type EventSnapshot,
-  type SystemSnapshot,
-  type ModifierRow,
-  type NeighborSnapshot,
-} from "@/lib/engine/events";
+import type { ModifierRow } from "@/lib/engine/events";
 import type { RNG } from "@/lib/engine/universe-gen";
+import { runEventsProcessor } from "@/lib/tick/processors/events";
+import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
+import type { InjectionRequest } from "@/lib/tick/world/events-world";
+import type { TickContext } from "@/lib/tick/types";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
-  SimEvent,
-  SimMarketEntry,
   SimRunContext,
   InjectionTarget,
 } from "./types";
@@ -43,9 +41,6 @@ import type {
 const SCALED = scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
 const EVENT_DEFINITIONS = SCALED.definitions;
 
-/**
- * Build EconomySimParams from resolved constants.
- */
 function buildSimParams(constants: SimConstants): EconomySimParams {
   return {
     reversionRate: constants.economy.reversionRate,
@@ -57,45 +52,7 @@ function buildSimParams(constants: SimConstants): EconomySimParams {
   };
 }
 
-// ── Helpers ─────────────────────────────────────────────────────
-
-function toEventSnapshot(e: SimEvent): EventSnapshot {
-  return {
-    id: e.id,
-    type: e.type,
-    phase: e.phase,
-    systemId: e.systemId,
-    regionId: e.regionId,
-    startTick: e.startTick,
-    phaseStartTick: e.phaseStartTick,
-    phaseDuration: e.phaseDuration,
-    severity: e.severity,
-    sourceEventId: e.sourceEventId,
-  };
-}
-
-function applyShocksToMarkets(
-  markets: SimMarketEntry[],
-  shocks: { goodId: string; parameter: "supply" | "demand"; value: number }[],
-  systemId: string,
-  constants: SimConstants,
-): SimMarketEntry[] {
-  if (shocks.length === 0) return markets;
-
-  const { minLevel, maxLevel } = constants.economy;
-  return markets.map((m) => {
-    if (m.systemId !== systemId) return m;
-    const shock = shocks.find((s) => s.goodId === m.goodId);
-    if (!shock) return m;
-    const current = shock.parameter === "supply" ? m.supply : m.demand;
-    const newValue = Math.max(minLevel, Math.min(maxLevel, current + shock.value));
-    return { ...m, [shock.parameter]: newValue };
-  });
-}
-
-/**
- * Resolve an injection target to a system ID.
- */
+/** Resolve an injection target to a system ID. */
 function resolveInjectionTarget(
   target: InjectionTarget,
   systems: { id: string; economyType: string }[],
@@ -125,7 +82,6 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
     if (!destSystemId) return ship;
     let cargo = [...(ship.cargo ?? []).map((c) => ({ ...c }))];
 
-    // Look up destination system → region → government
     const destSystem = world.systems.find((s) => s.id === destSystemId);
     const destRegion = destSystem
       ? world.regions.find((r) => r.id === destSystem.regionId)
@@ -134,7 +90,6 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
       ? GOVERNMENT_TYPES[destRegion.governmentType]
       : undefined;
 
-    // Compute danger level from navigation modifiers + government baseline + trait modifiers
     const navMods = world.modifiers.filter(
       (m) => m.domain === "navigation" && m.targetType === "system" && m.targetId === destSystemId,
     );
@@ -198,7 +153,6 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
       }
     }
 
-    // Remove empty cargo stacks
     cargo = cargo.filter((c) => c.quantity > 0);
 
     return {
@@ -213,196 +167,72 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
   return { ...world, ships };
 }
 
-// ── Event lifecycle ─────────────────────────────────────────────
+// ── Event lifecycle (delegates to the unified processor) ─────────
 
-function processSimEvents(world: SimWorld, rng: RNG, ctx: SimRunContext): SimWorld {
-  const snapshots = world.events.map(toEventSnapshot);
-  let events = [...world.events];
-  let modifiers = [...world.modifiers];
-  let markets = [...world.markets];
-  let nextId = world.nextId;
-
-  const { constants } = ctx;
-  const expiredIds: string[] = [];
-  const newEvents: SimEvent[] = [];
-
-  // Phase transitions
-  for (const snap of snapshots) {
-    const def = EVENT_DEFINITIONS[snap.type];
-    if (!def) {
-      expiredIds.push(snap.id);
-      continue;
-    }
-
-    const result = checkPhaseTransition(snap, world.tick, def);
-
-    if (result === "expire") {
-      expiredIds.push(snap.id);
-      continue;
-    }
-
-    if (result === "advance") {
-      const currentIndex = def.phases.findIndex((p) => p.name === snap.phase);
-      const nextPhase = def.phases[currentIndex + 1];
-      const duration = rollPhaseDuration(nextPhase.durationRange, rng);
-
-      // Update the event in-place
-      const eventIdx = events.findIndex((e) => e.id === snap.id);
-      if (eventIdx >= 0) {
-        events[eventIdx] = {
-          ...events[eventIdx],
-          phase: nextPhase.name,
-          phaseStartTick: world.tick,
-          phaseDuration: duration,
-        };
-      }
-
-      // Apply shocks for the new phase
-      const shocks = buildShocksForPhase(nextPhase, snap.severity);
-      markets = applyShocksToMarkets(markets, shocks, snap.systemId!, constants);
-
-      // Spread: spawn child events at neighboring systems
-      if (nextPhase.spread && nextPhase.spread.length > 0 && !snap.sourceEventId) {
-        const neighbors = getNeighbors(world, snap.systemId!);
-        const currentSnapshots = events.map(toEventSnapshot);
-
-        const spreadDecisions = evaluateSpreadTargets(
-          nextPhase.spread,
-          snap,
-          neighbors,
-          currentSnapshots,
-          { maxEventsGlobal: constants.events.maxGlobal, maxEventsPerSystem: constants.events.maxPerSystem },
-          EVENT_DEFINITIONS,
-          rng,
-        );
-
-        for (const decision of spreadDecisions) {
-          const childId = `sim-${nextId++}`;
-          newEvents.push({
-            id: childId,
-            type: decision.type,
-            phase: decision.phase,
-            systemId: decision.systemId,
-            regionId: decision.regionId,
-            startTick: world.tick,
-            phaseStartTick: world.tick,
-            phaseDuration: decision.phaseDuration,
-            severity: decision.severity,
-            sourceEventId: snap.id,
-          });
-
-          // Apply first-phase shocks for child
-          const childDef = EVENT_DEFINITIONS[decision.type]!;
-          const childShocks = buildShocksForPhase(childDef.phases[0], decision.severity);
-          markets = applyShocksToMarkets(markets, childShocks, decision.systemId, constants);
-        }
-      }
-    }
-  }
-
-  // Remove expired events
-  events = events.filter((e) => !expiredIds.includes(e.id));
-
-  // Add new spread events
-  events = [...events, ...newEvents];
-
-  // Process event injections for this tick
-  const tickInjections = ctx.eventInjections.filter((inj) => inj.tick === world.tick);
-  for (const inj of tickInjections) {
+async function processSimEvents(
+  world: SimWorld,
+  rng: RNG,
+  ctx: SimRunContext,
+): Promise<SimWorld> {
+  // Resolve injection targets *outside* the processor body (sim concern).
+  const injections: InjectionRequest[] = [];
+  for (const inj of ctx.eventInjections.filter((i) => i.tick === world.tick)) {
     const targetId = resolveInjectionTarget(inj.target, world.systems);
     if (!targetId) continue;
-
-    const def = EVENT_DEFINITIONS[inj.eventType];
-    if (!def) continue;
-
-    const system = world.systems.find((s) => s.id === targetId);
-    if (!system) continue;
-
-    const firstPhase = def.phases[0];
-    const duration = rollPhaseDuration(firstPhase.durationRange, rng);
-    const eventId = `sim-${nextId++}`;
-    const severity = inj.severity ?? 1.0;
-
-    events.push({
-      id: eventId,
+    const sys = world.systems.find((s) => s.id === targetId);
+    if (!sys) continue;
+    injections.push({
       type: inj.eventType,
-      phase: firstPhase.name,
       systemId: targetId,
-      regionId: system.regionId,
-      startTick: world.tick,
-      phaseStartTick: world.tick,
-      phaseDuration: duration,
-      severity,
-      sourceEventId: null,
+      regionId: sys.regionId,
+      severity: inj.severity ?? 1.0,
     });
-
-    // Apply first-phase shocks
-    const shocks = buildShocksForPhase(firstPhase, severity);
-    markets = applyShocksToMarkets(markets, shocks, targetId, constants);
   }
 
-  // Spawn new events on spawn ticks (gated by disableRandomEvents)
-  if (!ctx.disableRandomEvents && world.tick % constants.events.spawnInterval === 0) {
-    const currentSnapshots = events.map(toEventSnapshot);
-    const systemSnapshots: SystemSnapshot[] = world.systems.map((s) => ({
-      id: s.id,
-      economyType: s.economyType,
-      regionId: s.regionId,
-    }));
+  const eventsWorld = new InMemoryEventsWorld(
+    {
+      events: world.events,
+      modifiers: world.modifiers,
+      markets: world.markets,
+      nextId: world.nextId,
+    },
+    world.systems,
+    world.connections,
+    EVENT_DEFINITIONS,
+    {
+      minLevel: ctx.constants.economy.minLevel,
+      maxLevel: ctx.constants.economy.maxLevel,
+    },
+  );
 
-    const decisions = selectEventsToSpawn(
-      EVENT_DEFINITIONS,
-      currentSnapshots,
-      systemSnapshots,
-      world.tick,
-      { maxEventsGlobal: constants.events.maxGlobal, maxEventsPerSystem: constants.events.maxPerSystem },
-      rng,
-      constants.events.maxBatchSpawn,
-    );
+  const tickCtx: TickContext = {
+    // Processor body never reads `tx` — the in-memory adapter handles
+    // mutation. Cast via never so we don't have to stub TxClient.
+    tx: undefined as never,
+    tick: world.tick,
+    results: new Map(),
+  };
 
-    for (const decision of decisions) {
-      const eventId = `sim-${nextId++}`;
-      events.push({
-        id: eventId,
-        type: decision.type,
-        phase: decision.phase,
-        systemId: decision.systemId,
-        regionId: decision.regionId,
-        startTick: world.tick,
-        phaseStartTick: world.tick,
-        phaseDuration: decision.phaseDuration,
-        severity: decision.severity,
-        sourceEventId: null,
-      });
+  await runEventsProcessor(eventsWorld, tickCtx, {
+    rng,
+    caps: {
+      maxEventsGlobal: ctx.constants.events.maxGlobal,
+      maxEventsPerSystem: ctx.constants.events.maxPerSystem,
+    },
+    batchSize: ctx.constants.events.maxBatchSpawn,
+    spawnInterval: ctx.constants.events.spawnInterval,
+    definitions: EVENT_DEFINITIONS,
+    spawnEnabled: !ctx.disableRandomEvents,
+    injections,
+  });
 
-      // Apply first-phase shocks
-      const def = EVENT_DEFINITIONS[decision.type]!;
-      const shocks = buildShocksForPhase(def.phases[0], decision.severity);
-      markets = applyShocksToMarkets(markets, shocks, decision.systemId, constants);
-    }
-  }
-
-  // Rebuild all modifiers from active events
-  modifiers = [];
-  for (const event of events) {
-    const def = EVENT_DEFINITIONS[event.type];
-    if (!def) continue;
-    const phase = def.phases.find((p) => p.name === event.phase);
-    if (!phase) continue;
-    const rows = buildModifiersForPhase(phase, event.systemId, event.regionId, event.severity);
-    modifiers.push(...rows);
-  }
-
-  return { ...world, events, modifiers, markets, nextId };
-}
-
-function getNeighbors(world: SimWorld, systemId: string): NeighborSnapshot[] {
-  return world.connections
-    .filter((c) => c.fromSystemId === systemId)
-    .map((c) => {
-      const sys = world.systems.find((s) => s.id === c.toSystemId)!;
-      return { id: sys.id, economyType: sys.economyType, regionId: sys.regionId };
-    });
+  return {
+    ...world,
+    events: eventsWorld.events,
+    modifiers: eventsWorld.modifiers,
+    markets: eventsWorld.markets,
+    nextId: eventsWorld.nextId,
+  };
 }
 
 // ── Economy simulation ──────────────────────────────────────────
@@ -411,22 +241,18 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
   const regionNames = [...world.regions].sort((a, b) => a.name.localeCompare(b.name));
   if (regionNames.length === 0) return world;
 
-  // Round-robin: one region per tick (matches real processor)
   const regionIndex = world.tick % regionNames.length;
   const targetRegion = regionNames[regionIndex];
 
-  // Get systems in this region
   const regionSystemIds = new Set(
     world.systems
       .filter((s) => s.regionId === targetRegion.id)
       .map((s) => s.id),
   );
 
-  // Filter markets to this region
   const regionMarkets = world.markets.filter((m) => regionSystemIds.has(m.systemId));
   if (regionMarkets.length === 0) return world;
 
-  // Index modifiers by system
   const regionMods = world.modifiers.filter(
     (m) => m.domain === "economy" && m.targetType === "region" && m.targetId === targetRegion.id,
   );
@@ -443,11 +269,8 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
   }
 
   const modifierCaps = constants.events.modifierCaps;
-
-  // Look up government modifiers for this region
   const govDef = GOVERNMENT_TYPES[targetRegion.governmentType];
 
-  // ── Prosperity: update per system ──────────────────────────────
   const prosperityParams: ProsperityParams = constants.prosperity;
   const prosperityBySystem = new Map<string, number>();
 
@@ -461,7 +284,6 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
     prosperityBySystem.set(sysId, newProsperity);
   }
 
-  // Build tick entries
   const tickEntries: MarketTickEntry[] = regionMarkets.map((m) => {
     const sys = world.systems.find((s) => s.id === m.systemId)!;
 
@@ -486,11 +308,9 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
     }, prosperityParams);
   });
 
-  // Run simulation
   const simParams = buildSimParams(constants);
   const simulated = simulateEconomyTick(tickEntries, simParams, rng);
 
-  // Patch markets with new values
   const regionMarketKeys = new Set(
     regionMarkets.map((m) => `${m.systemId}:${m.goodId}`),
   );
@@ -505,7 +325,6 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
     return { ...m, supply: simulated[idx].supply, demand: simulated[idx].demand };
   });
 
-  // Patch system prosperity values and reset trade volume accumulators
   const updatedSystems = world.systems.map((s) => {
     const newProsperity = prosperityBySystem.get(s.id);
     if (newProsperity === undefined) return s;
@@ -519,12 +338,18 @@ function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): 
 
 /**
  * Simulate one world tick: ship arrivals → events → economy.
- * Returns a new SimWorld (immutable).
+ * Returns a new SimWorld. Async because the unified events processor
+ * is async (the in-memory adapter resolves immediately, but `await`
+ * still requires an async caller).
  */
-export function simulateWorldTick(world: SimWorld, rng: RNG, ctx: SimRunContext): SimWorld {
+export async function simulateWorldTick(
+  world: SimWorld,
+  rng: RNG,
+  ctx: SimRunContext,
+): Promise<SimWorld> {
   let w = { ...world, tick: world.tick + 1 };
   w = processSimShipArrivals(w, rng);
-  w = processSimEvents(w, rng, ctx);
+  w = await processSimEvents(w, rng, ctx);
   w = processSimEconomy(w, rng, ctx.constants);
   return w;
 }
