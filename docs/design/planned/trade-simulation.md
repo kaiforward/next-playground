@@ -207,7 +207,7 @@ Master-tier predictions are computed by running the flow math forward a few tick
 
 ## Implementation Phases
 
-Depends on processor architecture refactor landing first — see `docs/design/planned/processor-architecture.md`.
+Built on top of the processor architecture — see `docs/design/active/processor-architecture.md`.
 
 ### Phase 1: Core flow processor
 - `TradeFlow` Prisma model + indexes
