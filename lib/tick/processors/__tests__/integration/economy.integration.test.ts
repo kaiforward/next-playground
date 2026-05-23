@@ -2,10 +2,46 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse } from "@/lib/test-utils/fixtures";
 import type { TestUniverse } from "@/lib/test-utils/fixtures";
-import { economyProcessor } from "@/lib/tick/processors/economy";
+import { runEconomyProcessor } from "@/lib/tick/processors/economy";
+import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
+import {
+  ECONOMY_CONSTANTS,
+  EQUILIBRIUM_TARGETS,
+  PROSPERITY_DECAY_RATE,
+  PROSPERITY_MAX_GAIN,
+  PROSPERITY_TARGET_VOLUME,
+  PROSPERITY_MIN,
+  PROSPERITY_MAX,
+  PROSPERITY_MULT_AT_MIN,
+  PROSPERITY_MULT_AT_ZERO,
+  PROSPERITY_MULT_AT_MAX,
+} from "@/lib/constants/economy";
+import { MODIFIER_CAPS } from "@/lib/constants/events";
+import { mulberry32 } from "@/lib/engine/universe-gen";
+import type { EconomySimParams, ProsperityParams } from "@/lib/engine/tick";
 import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
 
 const { prisma } = useIntegrationDb();
+
+const simParams: EconomySimParams = {
+  reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
+  noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
+  noiseReferenceLevel: ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL,
+  minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
+  maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
+  equilibrium: EQUILIBRIUM_TARGETS,
+};
+
+const prosperityParams: ProsperityParams = {
+  decayRate: PROSPERITY_DECAY_RATE,
+  maxGain: PROSPERITY_MAX_GAIN,
+  targetVolume: PROSPERITY_TARGET_VOLUME,
+  min: PROSPERITY_MIN,
+  max: PROSPERITY_MAX,
+  multAtMin: PROSPERITY_MULT_AT_MIN,
+  multAtZero: PROSPERITY_MULT_AT_ZERO,
+  multAtMax: PROSPERITY_MULT_AT_MAX,
+};
 
 describe("economyProcessor (integration)", () => {
   let universe: TestUniverse;
@@ -14,35 +50,47 @@ describe("economyProcessor (integration)", () => {
     universe = await seedTestUniverse(prisma);
   });
 
-  async function runProcessor(tick: number): Promise<TickProcessorResult> {
-    // The economy processor uses $executeRaw for bulk market updates.
-    // Wrapping in $transaction ensures all writes are atomic, matching
-    // how the tick worker runs processors in production.
-    return prisma.$transaction(async (tx) => {
-      const ctx: TickContext = { tx, tick, results: new Map() };
-      const result = await economyProcessor.process(ctx);
-      return result;
-    }, { timeout: 15_000 });
+  /**
+   * Run the processor body directly with a seeded RNG. Per-tick noise (±3-5
+   * units) is larger than per-tick reversion (~1-3 units), so behavioral
+   * assertions against `Math.random` were flaky. A fixed seed pins the
+   * outcome — assertions still check direction-of-travel, not exact values.
+   */
+  async function runProcessor(
+    tick: number,
+    seed = 42,
+  ): Promise<TickProcessorResult> {
+    return prisma.$transaction(
+      async (tx) => {
+        const ctx: TickContext = { tx, tick, results: new Map() };
+        const world = new PrismaEconomyWorld(tx);
+        return runEconomyProcessor(world, ctx, {
+          rng: mulberry32(seed),
+          simParams,
+          prosperityParams,
+          modifierCaps: MODIFIER_CAPS,
+        });
+      },
+      { timeout: 15_000 },
+    );
   }
 
   it("markets with extreme supply/demand drift toward equilibrium", async () => {
-    // Set one market to extreme values
+    // Agricultural produces food (target supply ~160, demand ~136). Start
+    // both supply and demand far from target. With a seeded RNG (default
+    // seed 42) the per-tick reversion pull beats noise and both values
+    // move toward equilibrium.
     const foodGoodId = universe.goodIds["food"];
     const stationId = universe.stations.agricultural;
 
-    // Use extreme low supply / high demand — agricultural produces food, so
-    // supply target is ~145 and demand target is ~30. With supply=5, the
-    // reversion pull (+7) and production (+5) guarantee supply will increase.
-    // With demand=200, reversion pull (-8.5) guarantees demand will decrease.
     const extremeSupply = 5;
-    const extremeDemand = 200;
+    const extremeDemand = 195;
 
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId, goodId: foodGoodId } },
       data: { supply: extremeSupply, demand: extremeDemand },
     });
 
-    // Find a tick that targets the federation region (which contains the agricultural system)
     const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
     const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
 
@@ -56,9 +104,7 @@ describe("economyProcessor (integration)", () => {
     });
 
     expect(marketAfter).not.toBeNull();
-    // Supply must increase from 5 (target 145, +reversion +production)
     expect(marketAfter!.supply).toBeGreaterThan(extremeSupply);
-    // Demand must decrease from 200 (target 30, strong reversion pull)
     expect(marketAfter!.demand).toBeLessThan(extremeDemand);
   });
 
