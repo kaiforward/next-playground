@@ -1,13 +1,11 @@
 /**
- * In-memory economy tick simulation. Ship arrivals and economy still live
- * here; events now run through the unified `runEventsProcessor` (Phase 2 of
- * the processor refactor — `docs/design/planned/processor-architecture.md`).
+ * In-memory world tick orchestration. Ship arrivals stay here; events and
+ * the economy now run through unified processors against in-memory adapters
+ * (Phase 2 + Phase 3 of the processor refactor —
+ * `docs/design/planned/processor-architecture.md`).
  */
 
 import {
-  simulateEconomyTick,
-  updateProsperity,
-  type MarketTickEntry,
   type EconomySimParams,
   type ProsperityParams,
 } from "@/lib/engine/tick";
@@ -15,7 +13,6 @@ import { scaleEventCaps } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
-import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
 import {
@@ -25,10 +22,11 @@ import {
   applyImportDuty,
   rollContrabandInspection,
 } from "@/lib/engine/danger";
-import type { ModifierRow } from "@/lib/engine/events";
 import type { RNG } from "@/lib/engine/universe-gen";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
+import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
+import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import type { InjectionRequest } from "@/lib/tick/world/events-world";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimConstants } from "./constants";
@@ -235,112 +233,51 @@ async function processSimEvents(
   };
 }
 
-// ── Economy simulation ──────────────────────────────────────────
+// ── Economy (delegates to the unified processor) ────────────────
 
-function processSimEconomy(world: SimWorld, rng: RNG, constants: SimConstants): SimWorld {
-  const regionNames = [...world.regions].sort((a, b) => a.name.localeCompare(b.name));
-  if (regionNames.length === 0) return world;
-
-  const regionIndex = world.tick % regionNames.length;
-  const targetRegion = regionNames[regionIndex];
-
-  const regionSystemIds = new Set(
-    world.systems
-      .filter((s) => s.regionId === targetRegion.id)
-      .map((s) => s.id),
+async function processSimEconomy(
+  world: SimWorld,
+  rng: RNG,
+  constants: SimConstants,
+): Promise<SimWorld> {
+  const economyWorld = new InMemoryEconomyWorld(
+    {
+      systems: world.systems,
+      markets: world.markets,
+      modifiers: world.modifiers,
+    },
+    world.regions,
   );
-
-  const regionMarkets = world.markets.filter((m) => regionSystemIds.has(m.systemId));
-  if (regionMarkets.length === 0) return world;
-
-  const regionMods = world.modifiers.filter(
-    (m) => m.domain === "economy" && m.targetType === "region" && m.targetId === targetRegion.id,
-  );
-  const systemMods = world.modifiers.filter(
-    (m) => m.domain === "economy" && m.targetType === "system" && m.targetId && regionSystemIds.has(m.targetId),
-  );
-
-  const modsBySystem = new Map<string, ModifierRow[]>();
-  for (const sysId of regionSystemIds) {
-    modsBySystem.set(sysId, [...regionMods]);
-  }
-  for (const mod of systemMods) {
-    modsBySystem.get(mod.targetId!)?.push(mod);
-  }
-
-  const modifierCaps = constants.events.modifierCaps;
-  const govDef = GOVERNMENT_TYPES[targetRegion.governmentType];
 
   const prosperityParams: ProsperityParams = constants.prosperity;
-  const prosperityBySystem = new Map<string, number>();
 
-  for (const sysId of regionSystemIds) {
-    const sys = world.systems.find((s) => s.id === sysId)!;
-    const newProsperity = updateProsperity(
-      sys.prosperity,
-      sys.tradeVolumeAccum,
-      prosperityParams,
-    );
-    prosperityBySystem.set(sysId, newProsperity);
-  }
+  const tickCtx: TickContext = {
+    tx: undefined as never,
+    tick: world.tick,
+    results: new Map(),
+  };
 
-  const tickEntries: MarketTickEntry[] = regionMarkets.map((m) => {
-    const sys = world.systems.find((s) => s.id === m.systemId)!;
-
-    return resolveMarketTickEntry({
-      goodId: m.goodId,
-      supply: m.supply,
-      demand: m.demand,
-      basePrice: m.basePrice,
-      economyType: sys.economyType,
-      produces: Object.keys(sys.produces),
-      consumes: Object.keys(sys.consumes),
-      baseProductionRate: sys.produces[m.goodId],
-      baseConsumptionRate: sys.consumes[m.goodId],
-      govDef: govDef ?? undefined,
-      traits: sys.traits.map((t) => ({
-        traitId: toTraitId(t.traitId),
-        quality: toQualityTier(t.quality),
-      })),
-      prosperity: prosperityBySystem.get(m.systemId) ?? 0,
-      modifiers: modsBySystem.get(m.systemId) ?? [],
-      modifierCaps,
-    }, prosperityParams);
+  await runEconomyProcessor(economyWorld, tickCtx, {
+    rng,
+    simParams: buildSimParams(constants),
+    prosperityParams,
+    modifierCaps: constants.events.modifierCaps,
   });
 
-  const simParams = buildSimParams(constants);
-  const simulated = simulateEconomyTick(tickEntries, simParams, rng);
-
-  const regionMarketKeys = new Set(
-    regionMarkets.map((m) => `${m.systemId}:${m.goodId}`),
-  );
-
-  const updatedMarkets = world.markets.map((m) => {
-    const key = `${m.systemId}:${m.goodId}`;
-    if (!regionMarketKeys.has(key)) return m;
-    const idx = regionMarkets.findIndex(
-      (rm) => rm.systemId === m.systemId && rm.goodId === m.goodId,
-    );
-    if (idx < 0) return m;
-    return { ...m, supply: simulated[idx].supply, demand: simulated[idx].demand };
-  });
-
-  const updatedSystems = world.systems.map((s) => {
-    const newProsperity = prosperityBySystem.get(s.id);
-    if (newProsperity === undefined) return s;
-    return { ...s, prosperity: newProsperity, tradeVolumeAccum: 0 };
-  });
-
-  return { ...world, systems: updatedSystems, markets: updatedMarkets };
+  return {
+    ...world,
+    systems: economyWorld.systems,
+    markets: economyWorld.markets,
+  };
 }
 
 // ── Main entry point ────────────────────────────────────────────
 
 /**
  * Simulate one world tick: ship arrivals → events → economy.
- * Returns a new SimWorld. Async because the unified events processor
- * is async (the in-memory adapter resolves immediately, but `await`
- * still requires an async caller).
+ * Returns a new SimWorld. Async because the unified events and economy
+ * processors are async (the in-memory adapters resolve immediately, but
+ * `await` still requires an async caller).
  */
 export async function simulateWorldTick(
   world: SimWorld,
@@ -350,6 +287,6 @@ export async function simulateWorldTick(
   let w = { ...world, tick: world.tick + 1 };
   w = processSimShipArrivals(w, rng);
   w = await processSimEvents(w, rng, ctx);
-  w = processSimEconomy(w, rng, ctx.constants);
+  w = await processSimEconomy(w, rng, ctx.constants);
   return w;
 }
