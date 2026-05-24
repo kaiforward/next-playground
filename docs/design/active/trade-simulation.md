@@ -205,44 +205,16 @@ Master-tier predictions are computed by running the flow math forward a few tick
 
 ---
 
-## Implementation Phases
+## Status
 
-Built on top of the processor architecture — see `docs/design/active/processor-architecture.md`.
+| Phase | What it delivers | State |
+|---|---|---|
+| 1 — Core flow processor | `TradeFlow` model, gradient/budget math, prune | **Shipped** |
+| 2 — Map overlay | Aggregate flow API, Pixi particle layer | Planned |
+| 3 — System surfaces | Per-system imports/exports + sparkline | Planned |
+| 4 — Gameplay hooks | Trade-skill tiering, mission generation, sweep tuning | Planned |
 
-### Phase 1 (shipped): Core flow processor
-
-Files landed:
-- `prisma/schema.prisma` — `TradeFlow` model + indexes, `tradeFlowsFrom` / `tradeFlowsTo` relations on `StarSystem`.
-- `lib/constants/trade-simulation.ts` — `TRADE_SIMULATION` tunables.
-- `lib/tick/world/trade-flow-world.ts` — typed `TradeFlowWorld` interface.
-- `lib/tick/adapters/prisma/trade-flow.ts` — bulk-write via `unnest()` for market deltas + volume increments, `createMany` for flow events, `deleteMany` for rolling-window prune.
-- `lib/tick/adapters/memory/trade-flow.ts` — in-memory adapter for sim + unit tests; supports test-time injection of player pressure.
-- `lib/tick/processors/trade-flow.ts` — pure `runTradeFlowProcessor` body + `tradeFlowProcessor` `TickProcessor` wrapper (`dependsOn: ["economy"]`, internal every-N-ticks gating).
-- Registered in `lib/tick/registry.ts`. Simulator wires `InMemoryTradeFlowWorld` in `lib/engine/simulator/economy.ts`; `lib/engine/simulator/types.ts` adds `SimFlowEvent` + `SimWorld.flowEvents`.
-- YAML overrides in `lib/engine/simulator/{constants,experiment}.ts` so the simulator can sweep `processEveryNTicks` × `flowBudget` × `gradientThreshold`.
-- Tests: `lib/tick/processors/__tests__/trade-flow.test.ts` (gradient/budget/displacement/gating/prune/inter-region skip) and `lib/engine/__tests__/trade-flow-integration.test.ts` (seeded RNG, two-run with/without-flow comparison).
-
-Decisions resolved in build:
-- **Per-system aggregate counters deferred**: read from `TradeFlow` on demand via the `(toSystemId, tick)` / `(fromSystemId, tick)` indexes. Promote to columns only if profiling shows the queries dominate.
-- **Inter-region edges deferred**: PR 1 processes intra-region edges only (the adapter filters them). Cross-region flow is a later pass.
-- **Steepest-gradient good wins per edge per run**: per the design's "one good per edge" rule — deterministic, multi-tick coverage of all goods.
-- **Live player pressure**: Prisma adapter sums `TradeHistory.quantity` over a 60 s sliding window (no tick column on `TradeHistory`); sim adapter returns 0 unless the test injects a value.
-
-### Phase 2: Tick-scoped flow API + map overlay
-- `GET /api/game/systems/trade-flow` — aggregate per edge over the last `FLOW_HISTORY_TICKS`.
-- `useTradeFlow` hook (tick-scoped, no viewport in key).
-- Pixi `TradeFlowLayer` — flowing particles, frustum-gated, LOD-gated.
-- `useTickInvalidation` invalidates flow on ship arrivals.
-
-### Phase 3: Route inference + system detail surfaces
-- `GET /api/game/systems/[systemId]/trade-flow` — top imports/exports + volume sparkline.
-- `TradeActivityPanel` in the system detail panel.
-- Route stitching for the optional route browser screen (deferred until needed).
-
-### Phase 4: Gameplay integration
-- Trade skill visibility tiers (depends on player progression doc).
-- Mission generation hooks (depends on Layer 2/3 mission system).
-- Tuning sweep across `PROCESS_EVERY_N_TICKS`, `FLOW_BUDGET`, `GRADIENT_THRESHOLD` against `economy-tuning.md` targets.
+Built on the processor architecture (see `docs/design/active/processor-architecture.md`). PR-by-PR rollout, files-touched, and verification steps live in the working build plan at `docs/design/implementation/trade-simulation.md` (delete when fully shipped).
 
 ---
 
@@ -257,6 +229,6 @@ Decisions resolved in build:
 
 ## Open Questions
 
-- Whether per-system aggregate counters live as columns on `Market` or are computed from `TradeFlow` on demand. Depends on read frequency in UI.
 - Whether flow processes goods individually or batches them per edge. Individual is simpler; batched might be more efficient.
 - Whether the named-convoy interaction layer ships in v1 or waits for explicit demand from gameplay (recommended: wait — ship the cheap thing first, see what's missing).
+- Whether per-system aggregate counters get promoted to columns on `Market` later. PR 1 reads from `TradeFlow` on demand; promote only if profiling shows the queries dominate.
