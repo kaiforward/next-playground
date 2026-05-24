@@ -32,7 +32,7 @@ Full design: `docs/design/planned/trade-simulation.md`.
 
 **Why edge flow over NPC entities:** ~80% of the economic value at ~10-20% of the runtime cost at 10K-system scale. Trade route data becomes a first-class queryable table (deterministic, not inferred from entity movements), which enables trade-skill-tiered route visibility, mission hooks, and predictive analytics for high-skill players. Interactable entities (pirate prey, escort targets) can be added as a smaller named-convoy layer on top if gameplay demands it.
 
-**Depends on:** Processor architecture refactor — see `docs/design/planned/processor-architecture.md`. Eliminates orchestration drift between simulator and live game before adding more processors.
+**Builds on:** Processor architecture — see `docs/design/active/processor-architecture.md`. The unified processor pattern eliminates orchestration drift between simulator and live game.
 
 ## Simulation Tools
 

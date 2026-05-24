@@ -77,24 +77,24 @@ describe("Simulator", () => {
   // ── Economy simulation ──────────────────────────────────────────
 
   describe("simulateWorldTick", () => {
-    it("advances tick by 1", () => {
+    it("advances tick by 1", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       const world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
-      const next = simulateWorldTick(world, mulberry32(42), defaultCtx());
+      const next = await simulateWorldTick(world, mulberry32(42), defaultCtx());
 
       expect(next.tick).toBe(1);
     });
 
-    it("does not mutate the original world", () => {
+    it("does not mutate the original world", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       const world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const originalTick = world.tick;
-      simulateWorldTick(world, mulberry32(42), defaultCtx());
+      await simulateWorldTick(world, mulberry32(42), defaultCtx());
 
       expect(world.tick).toBe(originalTick);
     });
 
-    it("markets drift after 100 ticks", () => {
+    it("markets drift after 100 ticks", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -105,7 +105,7 @@ describe("Simulator", () => {
 
       // Run 100 ticks
       for (let i = 0; i < 100; i++) {
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
       }
 
       // At least some markets should have changed
@@ -114,7 +114,7 @@ describe("Simulator", () => {
       expect(anyChanged).toBe(true);
     });
 
-    it("docks ships that have arrived", () => {
+    it("docks ships that have arrived", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
 
@@ -132,11 +132,11 @@ describe("Simulator", () => {
       // Tick 1: still in transit
       const rng = mulberry32(1);
       const ctx = defaultCtx();
-      let w = simulateWorldTick(world, rng, ctx);
+      let w = await simulateWorldTick(world, rng, ctx);
       expect(w.ships[0].status).toBe("in_transit");
 
       // Tick 2: should dock
-      w = simulateWorldTick(w, rng, ctx);
+      w = await simulateWorldTick(w, rng, ctx);
       expect(w.ships[0].status).toBe("docked");
       expect(w.ships[0].systemId).toBe(world.systems[5].id);
     });
@@ -145,20 +145,20 @@ describe("Simulator", () => {
   // ── Event injection ───────────────────────────────────────────
 
   describe("event injection", () => {
-    it("disableRandomEvents: true → no events spawn over 100 ticks", () => {
+    it("disableRandomEvents: true → no events spawn over 100 ticks", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
       const ctx = defaultCtx({ disableRandomEvents: true });
 
       for (let i = 0; i < 100; i++) {
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
       }
 
       expect(world.events).toHaveLength(0);
     });
 
-    it("injects a war at an extraction system via economyType target", () => {
+    it("injects a war at an extraction system via economyType target", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -172,7 +172,7 @@ describe("Simulator", () => {
 
       // Run to tick 10
       for (let i = 0; i < 10; i++) {
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
       }
 
       expect(world.events).toHaveLength(1);
@@ -183,7 +183,7 @@ describe("Simulator", () => {
       expect(targetSystem?.economyType).toBe("extraction");
     });
 
-    it("injects with custom severity", () => {
+    it("injects with custom severity", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -196,13 +196,13 @@ describe("Simulator", () => {
       });
 
       for (let i = 0; i < 5; i++) {
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
       }
 
       expect(world.events[0].severity).toBe(2.0);
     });
 
-    it("skips injection targeting non-existent system without crashing", () => {
+    it("skips injection targeting non-existent system without crashing", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -215,13 +215,13 @@ describe("Simulator", () => {
       });
 
       for (let i = 0; i < 10; i++) {
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
       }
 
       expect(world.events).toHaveLength(0);
     });
 
-    it("fires multiple injections at the same tick", () => {
+    it("fires multiple injections at the same tick", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -235,7 +235,7 @@ describe("Simulator", () => {
       });
 
       for (let i = 0; i < 5; i++) {
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
       }
 
       expect(world.events).toHaveLength(2);

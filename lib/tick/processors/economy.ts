@@ -1,11 +1,15 @@
-import type { TickProcessor, TickProcessorResult, TxClient } from "../types";
-import { simulateEconomyTick, updateProsperity, type EconomySimParams, type ProsperityParams } from "@/lib/engine/tick";
+import type {
+  TickContext,
+  TickProcessor,
+  TickProcessorResult,
+} from "../types";
 import {
-  getProducedGoods,
-  getConsumedGoods,
-  getProductionRate,
-  getConsumptionRate,
-} from "@/lib/constants/universe";
+  simulateEconomyTick,
+  updateProsperity,
+  type EconomySimParams,
+  type MarketTickEntry,
+  type ProsperityParams,
+} from "@/lib/engine/tick";
 import {
   ECONOMY_CONSTANTS,
   EQUILIBRIUM_TARGETS,
@@ -18,14 +22,150 @@ import {
   PROSPERITY_MULT_AT_ZERO,
   PROSPERITY_MULT_AT_MAX,
 } from "@/lib/constants/economy";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
-import { toEconomyType, toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
+import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
+import type {
+  EconomyProcessorParams,
+  EconomyWorld,
+  MarketUpdate,
+  ProsperityUpdate,
+} from "@/lib/tick/world/economy-world";
 
-/** Prosperity params built from constants (done once, reused every tick). */
+/**
+ * Pure processor body. Same logic runs against the Prisma adapter (live game)
+ * or the in-memory adapter (simulator + unit tests). All knobs that differ
+ * between live and sim (RNG, sim params, prosperity params) come in via
+ * `params`.
+ *
+ * Round-robin: one region per tick, picked from the adapter's region list.
+ */
+export async function runEconomyProcessor(
+  world: EconomyWorld,
+  ctx: TickContext,
+  params: EconomyProcessorParams,
+): Promise<TickProcessorResult> {
+  const { rng, simParams, prosperityParams, modifierCaps } = params;
+
+  const regions = await world.getRegions();
+  if (regions.length === 0) {
+    return {
+      globalEvents: {
+        economyTick: [{ regionId: "", regionName: "", marketCount: 0 }],
+      },
+    };
+  }
+
+  const regionIndex = ctx.tick % regions.length;
+  const targetRegion = regions[regionIndex];
+
+  const markets = await world.getMarketsForRegion(targetRegion.id);
+  if (markets.length === 0) {
+    return {
+      globalEvents: {
+        economyTick: [
+          {
+            regionId: targetRegion.id,
+            regionName: targetRegion.name,
+            marketCount: 0,
+          },
+        ],
+      },
+    };
+  }
+
+  // Index modifiers: region-scoped apply to all systems; system-scoped target one.
+  const systemIds = [...new Set(markets.map((m) => m.systemId))];
+  const rawModifiers = await world.getModifiers(systemIds, targetRegion.id);
+  const regionMods = rawModifiers.filter((m) => m.targetType === "region");
+  const modifiersBySystem = new Map<string, ModifierRow[]>();
+  for (const sysId of systemIds) {
+    modifiersBySystem.set(sysId, [...regionMods]);
+  }
+  for (const mod of rawModifiers) {
+    if (mod.targetType === "system" && mod.targetId) {
+      modifiersBySystem.get(mod.targetId)?.push(mod);
+    }
+  }
+
+  const govDef = GOVERNMENT_TYPES[targetRegion.governmentType];
+
+  // Prosperity: compute next value per system using current accum volume.
+  const prosperityViews = await world.getProsperity(systemIds);
+  const prosperityBySystem = new Map<string, number>();
+  const prosperityUpdates: ProsperityUpdate[] = [];
+
+  for (const view of prosperityViews) {
+    const newProsperity = updateProsperity(
+      view.prosperity,
+      view.tradeVolumeAccum,
+      prosperityParams,
+    );
+    prosperityBySystem.set(view.systemId, newProsperity);
+    prosperityUpdates.push({
+      systemId: view.systemId,
+      prosperity: newProsperity,
+      capturedVolume: view.tradeVolumeAccum,
+    });
+  }
+
+  // Build tick entries via the shared market-tick builder.
+  const tickEntries: MarketTickEntry[] = markets.map((m) =>
+    resolveMarketTickEntry(
+      {
+        goodId: m.goodId,
+        supply: m.supply,
+        demand: m.demand,
+        basePrice: m.basePrice,
+        economyType: m.economyType,
+        produces: m.produces,
+        consumes: m.consumes,
+        baseProductionRate: m.baseProductionRate,
+        baseConsumptionRate: m.baseConsumptionRate,
+        govDef: govDef ?? undefined,
+        traits: m.traits,
+        prosperity: prosperityBySystem.get(m.systemId) ?? 0,
+        modifiers: modifiersBySystem.get(m.systemId) ?? [],
+        modifierCaps,
+      },
+      prosperityParams,
+    ),
+  );
+
+  const simulated = simulateEconomyTick(tickEntries, simParams, rng);
+
+  const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
+    id: m.id,
+    supply: simulated[i].supply,
+    demand: simulated[i].demand,
+  }));
+
+  await world.applyMarketUpdates(marketUpdates);
+  await world.applyProsperityUpdates(prosperityUpdates);
+
+  const modCount = rawModifiers.length;
+  console.log(
+    `[economy] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${markets.length} markets` +
+      (modCount > 0 ? `, ${modCount} active modifier(s)` : ""),
+  );
+
+  return {
+    globalEvents: {
+      economyTick: [
+        {
+          regionId: targetRegion.id,
+          regionName: targetRegion.name,
+          marketCount: markets.length,
+        },
+      ],
+    },
+  };
+}
+
+// ── Live-game wiring ──────────────────────────────────────────────
+
 const prosperityParams: ProsperityParams = {
   decayRate: PROSPERITY_DECAY_RATE,
   maxGain: PROSPERITY_MAX_GAIN,
@@ -37,7 +177,6 @@ const prosperityParams: ProsperityParams = {
   multAtMax: PROSPERITY_MULT_AT_MAX,
 };
 
-/** Build EconomySimParams from constants (done once, reused every tick). */
 const simParams: EconomySimParams = {
   reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
@@ -47,187 +186,19 @@ const simParams: EconomySimParams = {
   equilibrium: EQUILIBRIUM_TARGETS,
 };
 
-/** Bulk-update market supply/demand in a single SQL round-trip. */
-async function batchUpdateMarkets(
-  tx: TxClient,
-  updates: { id: string; supply: number; demand: number }[],
-): Promise<void> {
-  if (updates.length === 0) return;
-
-  const ids = updates.map((u) => u.id);
-  const supplies = updates.map((u) => isFinite(u.supply) ? u.supply : 0);
-  const demands = updates.map((u) => isFinite(u.demand) ? u.demand : 0);
-
-  await tx.$executeRaw`
-    UPDATE "StationMarket" AS sm
-    SET "supply" = batch."supply", "demand" = batch."demand"
-    FROM unnest(${ids}::text[], ${supplies}::double precision[], ${demands}::double precision[])
-      AS batch("id", "supply", "demand")
-    WHERE sm."id" = batch."id"`;
-}
-
-/**
- * Bulk-update system prosperity and subtract captured trade volume.
- * Uses relative subtraction (not hard-reset to 0) so trades committed
- * between the read and this write aren't silently lost.
- */
-async function batchUpdateProsperity(
-  tx: TxClient,
-  updates: { id: string; prosperity: number; capturedVolume: number }[],
-): Promise<void> {
-  if (updates.length === 0) return;
-
-  const ids = updates.map((u) => u.id);
-  const prosperities = updates.map((u) => isFinite(u.prosperity) ? u.prosperity : 0);
-  const volumes = updates.map((u) => u.capturedVolume);
-
-  await tx.$executeRaw`
-    UPDATE "StarSystem" AS ss
-    SET "prosperity" = batch."prosperity",
-        "tradeVolumeAccum" = GREATEST(0, ss."tradeVolumeAccum" - batch."capturedVolume")
-    FROM unnest(${ids}::text[], ${prosperities}::double precision[], ${volumes}::integer[])
-      AS batch("id", "prosperity", "capturedVolume")
-    WHERE ss."id" = batch."id"`;
-}
-
 export const economyProcessor: TickProcessor = {
   name: "economy",
-  // Runs every tick; round-robin region selection happens inside process()
+  // Runs every tick; round-robin region selection happens inside runEconomyProcessor.
   frequency: 1,
   dependsOn: ["events"],
 
   async process(ctx): Promise<TickProcessorResult> {
-    // Get all regions to determine round-robin target
-    const regions = await ctx.tx.region.findMany({
-      select: { id: true, name: true, governmentType: true },
-      orderBy: { name: "asc" },
+    const world = new PrismaEconomyWorld(ctx.tx);
+    return runEconomyProcessor(world, ctx, {
+      rng: Math.random,
+      simParams,
+      prosperityParams,
+      modifierCaps: MODIFIER_CAPS,
     });
-
-    if (regions.length === 0) {
-      return { globalEvents: { economyTick: [{ regionId: "", regionName: "", marketCount: 0 }] } };
-    }
-
-    // Round-robin: one region per tick
-    const regionIndex = ctx.tick % regions.length;
-    const targetRegion = regions[regionIndex];
-
-    // Fetch markets for this region only
-    const markets = await ctx.tx.stationMarket.findMany({
-      where: {
-        station: {
-          system: { regionId: targetRegion.id },
-        },
-      },
-      include: {
-        good: true,
-        station: { include: { system: { include: { traits: true } } } },
-      },
-    });
-
-    // Collect system IDs in this region for modifier querying
-    const systemIds = [...new Set(markets.map((m) => m.station.system.id))];
-
-    // Query active economy modifiers targeting systems in this region or the region itself
-    const rawModifiers = systemIds.length > 0
-      ? await ctx.tx.eventModifier.findMany({
-          where: {
-            domain: "economy",
-            OR: [
-              { targetType: "system", targetId: { in: systemIds } },
-              { targetType: "region", targetId: targetRegion.id },
-            ],
-          },
-        })
-      : [];
-
-    // Index modifiers by system ID (region-scoped modifiers apply to all systems)
-    const regionMods = rawModifiers.filter((m) => m.targetType === "region");
-    const modifiersBySystem = new Map<string, ModifierRow[]>();
-    for (const sysId of systemIds) {
-      modifiersBySystem.set(sysId, [...regionMods]);
-    }
-    for (const mod of rawModifiers) {
-      if (mod.targetType === "system" && mod.targetId) {
-        modifiersBySystem.get(mod.targetId)?.push(mod);
-      }
-    }
-
-    // Look up government modifiers for this region
-    const govDef = GOVERNMENT_TYPES[toGovernmentType(targetRegion.governmentType)];
-
-    // ── Prosperity: compute per system ──────────────────────────────
-    // Fetch prosperity + trade volume for systems in this region
-    const systemProsperityData = await ctx.tx.starSystem.findMany({
-      where: { id: { in: systemIds } },
-      select: { id: true, prosperity: true, tradeVolumeAccum: true },
-    });
-
-    const prosperityBySystem = new Map<string, number>();
-    const prosperityUpdates: { id: string; prosperity: number; capturedVolume: number }[] = [];
-
-    for (const sys of systemProsperityData) {
-      const newProsperity = updateProsperity(
-        sys.prosperity,
-        sys.tradeVolumeAccum,
-        prosperityParams,
-      );
-      prosperityBySystem.set(sys.id, newProsperity);
-      prosperityUpdates.push({ id: sys.id, prosperity: newProsperity, capturedVolume: sys.tradeVolumeAccum });
-    }
-
-    // Build tick entries for the simulation engine
-    const tickEntries = markets.map((m) => {
-      const econ = toEconomyType(m.station.system.economyType);
-      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-
-      return resolveMarketTickEntry({
-        goodId: goodKey,
-        supply: m.supply,
-        demand: m.demand,
-        basePrice: m.good.basePrice,
-        economyType: econ,
-        produces: getProducedGoods(econ),
-        consumes: getConsumedGoods(econ),
-        baseProductionRate: getProductionRate(econ, goodKey),
-        baseConsumptionRate: getConsumptionRate(econ, goodKey),
-        govDef: govDef ?? undefined,
-        traits: m.station.system.traits.map((t) => ({
-          traitId: toTraitId(t.traitId),
-          quality: toQualityTier(t.quality),
-        })),
-        prosperity: prosperityBySystem.get(m.station.system.id) ?? 0,
-        modifiers: modifiersBySystem.get(m.station.system.id) ?? [],
-        modifierCaps: MODIFIER_CAPS,
-      }, prosperityParams);
-    });
-
-    // Run simulation
-    const simulated = simulateEconomyTick(tickEntries, simParams);
-
-    // Batch write results
-    const updates = markets.map((m, i) => ({
-      id: m.id,
-      supply: simulated[i].supply,
-      demand: simulated[i].demand,
-    }));
-
-    await batchUpdateMarkets(ctx.tx, updates);
-    await batchUpdateProsperity(ctx.tx, prosperityUpdates);
-
-    const modCount = rawModifiers.length;
-    console.log(
-      `[economy] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${markets.length} markets` +
-      (modCount > 0 ? `, ${modCount} active modifier(s)` : ""),
-    );
-
-    return {
-      globalEvents: {
-        economyTick: [{
-          regionId: targetRegion.id,
-          regionName: targetRegion.name,
-          marketCount: markets.length,
-        }],
-      },
-    };
   },
 };

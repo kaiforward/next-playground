@@ -26,11 +26,11 @@ import type { TradeStrategy } from "./strategies/types";
  * Overrides are optional — when provided, they're merged with defaults
  * and the delta is recorded in the result for reproducibility.
  */
-export function runSimulation(
+export async function runSimulation(
   config: SimConfig,
   overrides?: SimConstantOverrides,
   label?: string,
-): SimResults {
+): Promise<SimResults> {
   const start = performance.now();
   const rng = mulberry32(config.seed);
   const constants = resolveConstants(overrides);
@@ -97,7 +97,7 @@ export function runSimulation(
     const preTickMarkets = world.markets;
 
     // 2. Simulate world tick (ship arrivals → events → economy)
-    world = simulateWorldTick(world, rng, ctx);
+    world = await simulateWorldTick(world, rng, ctx);
 
     // 3. Execute bot ticks (deterministic order by ID)
     const sortedPlayers = [...world.players].sort((a, b) => a.id.localeCompare(b.id));

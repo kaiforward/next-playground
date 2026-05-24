@@ -23,22 +23,22 @@ describe("Simulator Integration", () => {
   // ── Determinism ─────────────────────────────────────────────────
 
   describe("determinism", () => {
-    it("same seed produces identical results", { timeout: 60_000 }, () => {
+    it("same seed produces identical results", { timeout: 60_000 }, async () => {
       const config: SimConfig = {
         tickCount: 100,
         bots: [{ strategy: "greedy", count: 1 }],
         seed: 42,
       };
 
-      const results1 = runSimulation(config);
-      const results2 = runSimulation(config);
+      const results1 = await runSimulation(config);
+      const results2 = await runSimulation(config);
 
       expect(results1.summaries[0].finalCredits).toBe(results2.summaries[0].finalCredits);
       expect(results1.summaries[0].totalTrades).toBe(results2.summaries[0].totalTrades);
       expect(results1.summaries[0].creditsCurve).toEqual(results2.summaries[0].creditsCurve);
     });
 
-    it("different seeds produce different results", { timeout: 60_000 }, () => {
+    it("different seeds produce different results", { timeout: 60_000 }, async () => {
       const config1: SimConfig = {
         tickCount: 100,
         bots: [{ strategy: "greedy", count: 1 }],
@@ -46,8 +46,8 @@ describe("Simulator Integration", () => {
       };
       const config2: SimConfig = { ...config1, seed: 99 };
 
-      const results1 = runSimulation(config1);
-      const results2 = runSimulation(config2);
+      const results1 = await runSimulation(config1);
+      const results2 = await runSimulation(config2);
 
       // Very unlikely to be identical with different seeds
       expect(results1.summaries[0].creditsCurve).not.toEqual(
@@ -59,7 +59,7 @@ describe("Simulator Integration", () => {
   // ── Full simulation ─────────────────────────────────────────────
 
   describe("runSimulation", () => {
-    it("runs a basic simulation and returns results with constants", { timeout: 30_000 }, () => {
+    it("runs a basic simulation and returns results with constants", { timeout: 30_000 }, async () => {
       const config: SimConfig = {
         tickCount: 50,
         bots: [
@@ -69,7 +69,7 @@ describe("Simulator Integration", () => {
         seed: 42,
       };
 
-      const results = runSimulation(config);
+      const results = await runSimulation(config);
 
       expect(results.summaries).toHaveLength(2);
       expect(results.elapsedMs).toBeGreaterThan(0);
@@ -83,7 +83,7 @@ describe("Simulator Integration", () => {
       }
     });
 
-    it("includes overrides in results when provided", () => {
+    it("includes overrides in results when provided", async () => {
       const config: SimConfig = {
         tickCount: 20,
         bots: [{ strategy: "greedy", count: 1 }],
@@ -91,24 +91,24 @@ describe("Simulator Integration", () => {
       };
 
       const overrides = { economy: { reversionRate: 0.1 } };
-      const results = runSimulation(config, overrides);
+      const results = await runSimulation(config, overrides);
 
       expect(results.overrides).toEqual(overrides);
       expect(results.constants.economy.reversionRate).toBe(0.1);
     });
 
-    it("includes label in results when provided", () => {
+    it("includes label in results when provided", async () => {
       const config: SimConfig = {
         tickCount: 20,
         bots: [{ strategy: "greedy", count: 1 }],
         seed: 42,
       };
 
-      const results = runSimulation(config, {}, "test-label");
+      const results = await runSimulation(config, {}, "test-label");
       expect(results.label).toBe("test-label");
     });
 
-    it("frontier regions have higher price volatility than federation", () => {
+    it("frontier regions have higher price volatility than federation", async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -137,7 +137,7 @@ describe("Simulator Integration", () => {
           );
         }
 
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
 
         for (const m of world.markets) {
           const mKey = `${m.systemId}:${m.goodId}`;
@@ -180,7 +180,7 @@ describe("Simulator Integration", () => {
       }
     });
 
-    it("government consumption boosts deplete supply faster", { timeout: 60_000 }, () => {
+    it("government consumption boosts deplete supply faster", { timeout: 60_000 }, async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -188,7 +188,7 @@ describe("Simulator Integration", () => {
 
       // Run 500 ticks so consumption boosts deplete supply clearly
       for (let i = 0; i < 500; i++) {
-        world = simulateWorldTick(world, rng, ctx);
+        world = await simulateWorldTick(world, rng, ctx);
       }
 
       // Federation has consumptionBoosts: { medicine: 1 }
@@ -233,7 +233,7 @@ describe("Simulator Integration", () => {
       }
     });
 
-    it("greedy outperforms random over 200 ticks", { timeout: 60_000 }, () => {
+    it("greedy outperforms random over 200 ticks", { timeout: 60_000 }, async () => {
       const config: SimConfig = {
         tickCount: 200,
         bots: [
@@ -243,14 +243,14 @@ describe("Simulator Integration", () => {
         seed: 42,
       };
 
-      const results = runSimulation(config);
+      const results = await runSimulation(config);
       const randomSummary = results.summaries.find((s) => s.strategy === "random")!;
       const greedySummary = results.summaries.find((s) => s.strategy === "greedy")!;
 
       expect(greedySummary.finalCredits).toBeGreaterThan(randomSummary.finalCredits);
     });
 
-    it("all strategies produce valid metrics", { timeout: 60_000 }, () => {
+    it("all strategies produce valid metrics", { timeout: 60_000 }, async () => {
       const config: SimConfig = {
         tickCount: 20,
         bots: [
@@ -262,7 +262,7 @@ describe("Simulator Integration", () => {
         seed: 42,
       };
 
-      const results = runSimulation(config);
+      const results = await runSimulation(config);
 
       for (const summary of results.summaries) {
         expect(summary.totalTrades).toBeGreaterThanOrEqual(0);

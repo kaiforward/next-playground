@@ -277,7 +277,7 @@ function formatTable(results: SimResults): string {
 
 // ── Experiment runner ───────────────────────────────────────────
 
-function runExperiment(configPath: string, jsonOutput: boolean): void {
+async function runExperiment(configPath: string, jsonOutput: boolean): Promise<void> {
   const resolved = path.resolve(configPath);
   if (!fs.existsSync(resolved)) {
     console.error(`Config file not found: ${resolved}`);
@@ -307,7 +307,7 @@ function runExperiment(configPath: string, jsonOutput: boolean): void {
     "\n",
   );
 
-  const results = runSimulation(config, overrides, label);
+  const results = await runSimulation(config, overrides, label);
 
   if (jsonOutput) {
     console.log(JSON.stringify(results, null, 2));
@@ -363,9 +363,12 @@ Examples:
 }
 
 // Config mode vs quick-run mode
-if (args.config) {
-  runExperiment(args.config, args.json);
-} else {
+async function main(): Promise<void> {
+  if (args.config) {
+    await runExperiment(args.config, args.json);
+    return;
+  }
+
   // Hardcoded quick-run: all strategies, 1 bot each, 500 ticks, seed 42
   const botConfigs: BotConfig[] = STRATEGY_NAMES.map((strategy) => ({
     strategy,
@@ -382,7 +385,7 @@ if (args.config) {
     `Running quick-run: 500 ticks, seed 42, strategies: ${STRATEGY_NAMES.join(", ")}, 1 bot each\n`,
   );
 
-  const results = runSimulation(config);
+  const results = await runSimulation(config);
 
   if (args.json) {
     console.log(JSON.stringify(results, null, 2));
@@ -390,3 +393,8 @@ if (args.config) {
     console.log(formatTable(results));
   }
 }
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -1,0 +1,240 @@
+import { describe, it, expect } from "vitest";
+import { runEventsProcessor } from "../events";
+import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
+import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { mulberry32 } from "@/lib/engine/universe-gen";
+import type { EventsProcessorParams } from "@/lib/tick/world/events-world";
+import type { TickContext } from "@/lib/tick/types";
+import type {
+  SimConnection,
+  SimEvent,
+  SimMarketEntry,
+  SimSystem,
+} from "@/lib/engine/simulator/types";
+import type { ModifierRow } from "@/lib/engine/events";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+
+function makeCtx(tick: number): TickContext {
+  return { tx: undefined as never, tick, results: new Map() };
+}
+
+function makeParams(
+  overrides: Partial<EventsProcessorParams> = {},
+): EventsProcessorParams {
+  return {
+    rng: mulberry32(1),
+    caps: { maxEventsGlobal: 100, maxEventsPerSystem: 3 },
+    batchSize: 3,
+    spawnInterval: 5,
+    definitions: EVENT_DEFINITIONS,
+    spawnEnabled: false,
+    ...overrides,
+  };
+}
+
+function makeSystem(id: string, regionId: string): SimSystem {
+  return {
+    id,
+    name: id.toUpperCase(),
+    economyType: "extraction",
+    regionId,
+    produces: {},
+    consumes: {},
+    traits: [],
+    prosperity: 0,
+    tradeVolumeAccum: 0,
+  };
+}
+
+function makeMarket(
+  systemId: string,
+  goodId: string,
+  supply: number,
+  demand: number,
+): SimMarketEntry {
+  return {
+    systemId,
+    goodId,
+    basePrice: 100,
+    supply,
+    demand,
+    priceFloor: 0.2,
+    priceCeiling: 5.0,
+  };
+}
+
+function makeWorld(opts: {
+  systems: SimSystem[];
+  connections?: SimConnection[];
+  events?: SimEvent[];
+  markets?: SimMarketEntry[];
+  modifiers?: ModifierRow[];
+}) {
+  return new InMemoryEventsWorld(
+    {
+      events: opts.events ?? [],
+      modifiers: opts.modifiers ?? [],
+      markets: opts.markets ?? [],
+      nextId: 0,
+    },
+    opts.systems,
+    opts.connections ?? [],
+    EVENT_DEFINITIONS,
+    { minLevel: ECONOMY_CONSTANTS.MIN_LEVEL, maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL },
+  );
+}
+
+describe("runEventsProcessor", () => {
+  it("does nothing when there are no events and spawn is disabled", async () => {
+    const world = makeWorld({ systems: [makeSystem("s1", "r1")] });
+
+    const result = await runEventsProcessor(world, makeCtx(1), makeParams());
+
+    expect(world.events).toEqual([]);
+    expect(world.modifiers).toEqual([]);
+    expect(result.globalEvents?.eventNotifications).toBeUndefined();
+  });
+
+  it("spawns events on spawn ticks when spawn is enabled", async () => {
+    const systems = Array.from({ length: 10 }, (_, i) =>
+      makeSystem(`s${i}`, "r1"),
+    );
+    const world = makeWorld({ systems });
+
+    await runEventsProcessor(
+      world,
+      makeCtx(5),
+      makeParams({ spawnEnabled: true }),
+    );
+
+    expect(world.events.length).toBeGreaterThan(0);
+    // Each spawned event should sit in the first phase of its definition.
+    for (const e of world.events) {
+      const def = EVENT_DEFINITIONS[e.type];
+      expect(def.phases[0].name).toBe(e.phase);
+      expect(e.startTick).toBe(5);
+    }
+  });
+
+  it("respects spawnEnabled=false even on spawn ticks", async () => {
+    const systems = Array.from({ length: 10 }, (_, i) =>
+      makeSystem(`s${i}`, "r1"),
+    );
+    const world = makeWorld({ systems });
+
+    await runEventsProcessor(
+      world,
+      makeCtx(5),
+      makeParams({ spawnEnabled: false }),
+    );
+
+    expect(world.events).toEqual([]);
+  });
+
+  it("expires an event whose final phase has elapsed", async () => {
+    const ev: SimEvent = {
+      id: "ev1",
+      type: "trade_festival",
+      // trade_festival has phases [setup, festival]; "festival" is the last.
+      phase: EVENT_DEFINITIONS.trade_festival.phases.at(-1)!.name,
+      systemId: "s1",
+      regionId: "r1",
+      startTick: 0,
+      phaseStartTick: 0,
+      phaseDuration: 1,
+      severity: 1,
+      sourceEventId: null,
+    };
+
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      events: [ev],
+    });
+
+    const result = await runEventsProcessor(world, makeCtx(10), makeParams());
+
+    expect(world.events).toEqual([]);
+    expect(result.globalEvents?.eventNotifications?.length).toBeGreaterThan(0);
+  });
+
+  it("applies percentage-mode shocks (sim used to ignore mode)", async () => {
+    // Build a synthetic event whose next-phase shock is percentage-mode.
+    // We construct it manually rather than waiting for a real spawn so the
+    // test stays focused on shock-mode handling.
+    const def = EVENT_DEFINITIONS.trade_festival;
+    const firstPhase = def.phases[0];
+
+    const ev: SimEvent = {
+      id: "ev1",
+      type: "trade_festival",
+      phase: firstPhase.name,
+      systemId: "s1",
+      regionId: "r1",
+      startTick: 0,
+      phaseStartTick: 0,
+      phaseDuration: 0, // expire-or-advance immediately on tick 1
+      severity: 1,
+      sourceEventId: null,
+    };
+
+    const market = makeMarket("s1", "food", 100, 100);
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      events: [ev],
+      markets: [market],
+    });
+
+    await runEventsProcessor(world, makeCtx(1), makeParams());
+
+    // Whether shocks fired depends on the canonical event def's shock list.
+    // What we're asserting here is that the processor completes without
+    // crashing on percentage-mode shocks (the old sim used to silently
+    // mis-apply them). Market values must be within MIN/MAX clamps.
+    for (const m of world.markets) {
+      expect(m.supply).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
+      expect(m.supply).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+      expect(m.demand).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
+      expect(m.demand).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+    }
+  });
+
+  it("creates injected events at the requested system", async () => {
+    const systems = [
+      makeSystem("s1", "r1"),
+      makeSystem("s2", "r1"),
+    ];
+    const world = makeWorld({ systems });
+
+    await runEventsProcessor(
+      world,
+      makeCtx(1),
+      makeParams({
+        injections: [
+          { type: "trade_festival", systemId: "s2", regionId: "r1", severity: 1 },
+        ],
+      }),
+    );
+
+    expect(world.events).toHaveLength(1);
+    expect(world.events[0].type).toBe("trade_festival");
+    expect(world.events[0].systemId).toBe("s2");
+  });
+
+  it("skips unknown event types in injections without crashing", async () => {
+    const world = makeWorld({ systems: [makeSystem("s1", "r1")] });
+
+    await runEventsProcessor(
+      world,
+      makeCtx(1),
+      makeParams({
+        injections: [
+          // Deliberately invalid — cast through unknown to bypass the type
+          // check, mirroring what a malformed sim config could submit.
+          { type: "not_a_real_type" as never, systemId: "s1", regionId: "r1", severity: 1 },
+        ],
+      }),
+    );
+
+    expect(world.events).toEqual([]);
+  });
+});
