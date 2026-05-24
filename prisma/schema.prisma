@@ -220,6 +220,8 @@ model StarSystem {
   missions          Mission[]          @relation("MissionSystem")
   missionTargets    Mission[]          @relation("MissionTarget")
   battles           Battle[]
+  tradeFlowsFrom    TradeFlow[]        @relation("TradeFlowsFrom")
+  tradeFlowsTo      TradeFlow[]        @relation("TradeFlowsTo")
 
   @@index([regionId])
   @@index([x, y])
@@ -314,6 +316,25 @@ model PriceHistory {
   entries  String @default("[]") // JSON: { tick: number, prices: Record<goodId, price> }[]
 
   system StarSystem @relation(fields: [systemId], references: [id])
+}
+
+// ── Trade Flow ─────────────────────────────────────────────────
+
+model TradeFlow {
+  id           String @id @default(cuid())
+  tick         Int
+  fromSystemId String
+  toSystemId   String
+  goodId       String
+  quantity     Int
+
+  fromSystem StarSystem @relation("TradeFlowsFrom", fields: [fromSystemId], references: [id])
+  toSystem   StarSystem @relation("TradeFlowsTo", fields: [toSystemId], references: [id])
+
+  @@index([tick])
+  @@index([fromSystemId, tick])
+  @@index([toSystemId, tick])
+  @@index([goodId, tick])
 }
 
 // ── Events ──────────────────────────────────────────────────────

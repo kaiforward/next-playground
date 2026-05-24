@@ -176,6 +176,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     modifiers: [],
     ships,
     players,
+    flowEvents: [],
     nextId,
   };
 }

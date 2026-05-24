@@ -46,7 +46,7 @@ Functional spec: `docs/SPEC.md` — master game spec with system interaction map
 Module index: `docs/MODULE_INDEX.md` — auto-generated inventory of all shared exports (utils, hooks, components, constants). Regenerate with `npm run index`.
 
 Design docs:
-- `docs/design/active/` — Implemented systems (economy, events, trading, navigation, universe, tick-engine, processor-architecture, event-catalog, **theme**)
+- `docs/design/active/` — Implemented systems (economy, events, trading, trade-simulation, navigation, universe, tick-engine, processor-architecture, event-catalog, **theme**)
 - `docs/design/planned/` — Designed but not yet built (faction-system, player-progression, system-enrichment, multiplayer-infrastructure, simulation-enhancements)
 - `docs/design/archive/` — Historical design docs (may be outdated)
 - `docs/design/BACKLOG.md` — Actionable work items (delete when shipped)

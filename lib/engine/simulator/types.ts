@@ -63,6 +63,14 @@ export interface SimEvent {
   sourceEventId: string | null;
 }
 
+export interface SimFlowEvent {
+  tick: number;
+  fromSystemId: string;
+  toSystemId: string;
+  goodId: string;
+  quantity: number;
+}
+
 export interface SimShip {
   id: string;
   playerId: string;
@@ -107,6 +115,8 @@ export interface SimWorld {
   modifiers: ModifierRow[];
   ships: SimShip[];
   players: SimPlayer[];
+  /** Rolling window of edge-flow events; pruned by the trade-flow processor. */
+  flowEvents: SimFlowEvent[];
   /** Monotonic counter for generating unique IDs. */
   nextId: number;
 }

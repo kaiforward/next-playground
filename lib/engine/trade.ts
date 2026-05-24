@@ -6,7 +6,7 @@
 import type { ShipStatus } from "../types/game";
 
 /** Fraction of traded quantity that affects market demand (e.g. 0.1 = 10%). */
-const TRADE_DEMAND_IMPACT_FACTOR = 0.1;
+export const TRADE_DEMAND_IMPACT_FACTOR = 0.1;
 
 export interface TradeDelta {
   creditsDelta: number; // positive = player gains credits (sell), negative = player spends (buy)

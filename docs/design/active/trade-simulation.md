@@ -1,6 +1,6 @@
 # Trade Simulation (Edge Flow)
 
-Status: **Planned** — design complete, depends on processor architecture refactor.
+Status: **Active** — Phase 1 (core flow processor) shipped on `feat/trade-flow`.
 
 Replaces the earlier `npc-trade-bots.md` design. See "Why not NPC entities?" below for rationale.
 
@@ -209,29 +209,40 @@ Master-tier predictions are computed by running the flow math forward a few tick
 
 Built on top of the processor architecture — see `docs/design/active/processor-architecture.md`.
 
-### Phase 1: Core flow processor
-- `TradeFlow` Prisma model + indexes
-- `lib/constants/trade-simulation.ts`
-- Flow processor written against the new processor interface — pure math, operates on adapter
-- Edge enumeration + gradient calculation + budget-limited movement
-- Reuse existing trade math (supply/demand impact, prosperity contribution)
-- Flow event logging + rolling window prune
+### Phase 1 (shipped): Core flow processor
 
-### Phase 2: Aggregate metrics + prosperity wiring
-- Per-system import/export volume (column or derived view, decide during build)
-- Wire into existing prosperity calculation (treat flow volume same as player trade volume)
-- Expose in dynamic tiles API for map visualization
-- "Trade Activity" label on system detail panel
+Files landed:
+- `prisma/schema.prisma` — `TradeFlow` model + indexes, `tradeFlowsFrom` / `tradeFlowsTo` relations on `StarSystem`.
+- `lib/constants/trade-simulation.ts` — `TRADE_SIMULATION` tunables.
+- `lib/tick/world/trade-flow-world.ts` — typed `TradeFlowWorld` interface.
+- `lib/tick/adapters/prisma/trade-flow.ts` — bulk-write via `unnest()` for market deltas + volume increments, `createMany` for flow events, `deleteMany` for rolling-window prune.
+- `lib/tick/adapters/memory/trade-flow.ts` — in-memory adapter for sim + unit tests; supports test-time injection of player pressure.
+- `lib/tick/processors/trade-flow.ts` — pure `runTradeFlowProcessor` body + `tradeFlowProcessor` `TickProcessor` wrapper (`dependsOn: ["economy"]`, internal every-N-ticks gating).
+- Registered in `lib/tick/registry.ts`. Simulator wires `InMemoryTradeFlowWorld` in `lib/engine/simulator/economy.ts`; `lib/engine/simulator/types.ts` adds `SimFlowEvent` + `SimWorld.flowEvents`.
+- YAML overrides in `lib/engine/simulator/{constants,experiment}.ts` so the simulator can sweep `processEveryNTicks` × `flowBudget` × `gradientThreshold`.
+- Tests: `lib/tick/processors/__tests__/trade-flow.test.ts` (gradient/budget/displacement/gating/prune/inter-region skip) and `lib/engine/__tests__/trade-flow-integration.test.ts` (seeded RNG, two-run with/without-flow comparison).
 
-### Phase 3: Route inference + map visualization
-- Route query: stitch flow events into chains, score by volume
-- Map overlay for edge flow (thickness, color)
-- System detail "top imports/exports" list
+Decisions resolved in build:
+- **Per-system aggregate counters deferred**: read from `TradeFlow` on demand via the `(toSystemId, tick)` / `(fromSystemId, tick)` indexes. Promote to columns only if profiling shows the queries dominate.
+- **Inter-region edges deferred**: PR 1 processes intra-region edges only (the adapter filters them). Cross-region flow is a later pass.
+- **Steepest-gradient good wins per edge per run**: per the design's "one good per edge" rule — deterministic, multi-tick coverage of all goods.
+- **Live player pressure**: Prisma adapter sums `TradeHistory.quantity` over a 60 s sliding window (no tick column on `TradeHistory`); sim adapter returns 0 unless the test injects a value.
+
+### Phase 2: Tick-scoped flow API + map overlay
+- `GET /api/game/systems/trade-flow` — aggregate per edge over the last `FLOW_HISTORY_TICKS`.
+- `useTradeFlow` hook (tick-scoped, no viewport in key).
+- Pixi `TradeFlowLayer` — flowing particles, frustum-gated, LOD-gated.
+- `useTickInvalidation` invalidates flow on ship arrivals.
+
+### Phase 3: Route inference + system detail surfaces
+- `GET /api/game/systems/[systemId]/trade-flow` — top imports/exports + volume sparkline.
+- `TradeActivityPanel` in the system detail panel.
+- Route stitching for the optional route browser screen (deferred until needed).
 
 ### Phase 4: Gameplay integration
-- Trade skill visibility tiers (depends on player progression doc)
-- Mission generation hooks (depends on Layer 2/3 mission system)
-- Tuning sweep across `PROCESS_EVERY_N_TICKS`, `FLOW_BUDGET`, `GRADIENT_THRESHOLD`
+- Trade skill visibility tiers (depends on player progression doc).
+- Mission generation hooks (depends on Layer 2/3 mission system).
+- Tuning sweep across `PROCESS_EVERY_N_TICKS`, `FLOW_BUDGET`, `GRADIENT_THRESHOLD` against `economy-tuning.md` targets.
 
 ---
 

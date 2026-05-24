@@ -23,6 +23,7 @@ import {
   scaleEventCaps,
 } from "@/lib/constants/events";
 import { SHIP_TYPES } from "@/lib/constants/ships";
+import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -91,6 +92,14 @@ export interface SimConstants {
     multAtZero: number;
     multAtMax: number;
   };
+  tradeFlow: {
+    processEveryNTicks: number;
+    flowBudget: number;
+    gradientThreshold: number;
+    gradientSensitivity: number;
+    flowHistoryTicks: number;
+    playerDisplacementFactor: number;
+  };
   bots: {
     startingCredits: number;
     refuelThreshold: number;
@@ -115,6 +124,7 @@ export type SimConstantOverrides = {
   ships?: Record<string, Partial<SimConstants["ships"][string]>>;
   universe?: Partial<SimConstants["universe"]>;
   prosperity?: Partial<SimConstants["prosperity"]>;
+  tradeFlow?: Partial<SimConstants["tradeFlow"]>;
   bots?: Partial<SimConstants["bots"]>;
 };
 
@@ -201,6 +211,14 @@ function buildDefaults(): SimConstants {
       multAtZero: PROSPERITY_MULT_AT_ZERO,
       multAtMax: PROSPERITY_MULT_AT_MAX,
     },
+    tradeFlow: {
+      processEveryNTicks: TRADE_SIMULATION.PROCESS_EVERY_N_TICKS,
+      flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
+      gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
+      gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
+      flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
+      playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
+    },
     bots: {
       startingCredits: 500,
       refuelThreshold: 0.5,
@@ -231,6 +249,7 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
     ships: mergeRecord(base.ships, overrides.ships),
     universe: { ...base.universe, ...overrides.universe },
     prosperity: { ...base.prosperity, ...overrides.prosperity },
+    tradeFlow: { ...base.tradeFlow, ...overrides.tradeFlow },
     bots: { ...base.bots, ...overrides.bots },
   };
 }

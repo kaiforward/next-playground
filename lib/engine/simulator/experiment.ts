@@ -68,6 +68,14 @@ const ConstantOverridesSchema = z.object({
     gatewaysPerBorder: z.number().int().min(1).optional(),
     intraRegionExtraEdges: z.number().optional(),
   }).optional(),
+  tradeFlow: z.object({
+    processEveryNTicks: z.number().int().min(1).optional(),
+    flowBudget: z.number().min(0).optional(),
+    gradientThreshold: z.number().min(0).optional(),
+    gradientSensitivity: z.number().min(0).optional(),
+    flowHistoryTicks: z.number().int().min(1).optional(),
+    playerDisplacementFactor: z.number().min(0).optional(),
+  }).optional(),
   bots: z.object({
     startingCredits: z.number().optional(),
     refuelThreshold: z.number().optional(),
