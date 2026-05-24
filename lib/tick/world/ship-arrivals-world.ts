@@ -1,12 +1,12 @@
 /**
  * ShipArrivalsWorld — data interface for the ship-arrivals processor.
  *
- * Phase 4 of the processor refactor. The simulator has its own ship-arrival
- * path (`processSimShipArrivals` in `lib/engine/simulator/economy.ts`); it
- * is *not* migrated to this interface in this phase. Doing so would expand
- * the SimWorld shape (cargo IDs, convoys, upgrade slots) more than the
- * Phase 4 consistency goal requires. This file just makes the live
- * orchestration follow the same World pattern as the rest.
+ * The simulator has its own ship-arrival path
+ * (`processSimShipArrivals` in `lib/engine/simulator/economy.ts`) and is
+ * *not* migrated to this interface — doing so would require expanding the
+ * SimWorld shape with cargo IDs, convoys, and upgrade slots. The live
+ * orchestration follows the same World pattern as the rest. See
+ * `docs/design/active/processor-architecture.md` for the broader pattern.
  */
 
 import type { GovernmentType } from "@/lib/types/game";

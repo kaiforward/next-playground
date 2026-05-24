@@ -1,12 +1,8 @@
 /**
  * EventsWorld — data interface for the events processor.
  *
- * Phase 2 of the processor refactor. The events processor was the first case
- * with real drift: live and simulator each had their own orchestrator over the
- * same pure-engine math. This interface is the common contract — adapters in
- * `lib/tick/adapters/{prisma,memory}/events.ts` implement it.
- *
- * See `docs/design/planned/processor-architecture.md` and
+ * Adapters in `lib/tick/adapters/{prisma,memory}/events.ts` implement it.
+ * See `docs/design/active/processor-architecture.md` and
  * `lib/tick/world/snapshots-world.ts` for the broader pattern.
  */
 

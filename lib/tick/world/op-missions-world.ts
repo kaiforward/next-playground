@@ -1,10 +1,8 @@
 /**
  * OpMissionsWorld — data interface for the operational-missions processor.
  *
- * Phase 4 of the processor refactor. No sim counterpart yet — pattern-only
- * change for consistency with the other processors.
- *
- * See `lib/tick/world/snapshots-world.ts` for the broader pattern.
+ * No sim counterpart yet. See `docs/design/active/processor-architecture.md`
+ * for the broader pattern.
  */
 
 import type { EventTypeId } from "@/lib/constants/events";

@@ -1,17 +1,11 @@
 /**
  * EconomyWorld — data interface for the economy processor.
  *
- * Phase 3 of the processor refactor. The economy processor is the biggest
- * drift surface today: live runs in `lib/tick/processors/economy.ts` and sim
- * runs in `lib/engine/simulator/economy.ts`, both shaped around the same
- * pure-engine math but with separate orchestrators.
- *
  * Adapters in `lib/tick/adapters/{prisma,memory}/economy.ts` implement this
  * interface. Round-robin region selection and the simulate→write loop live in
  * the shared processor body (`runEconomyProcessor`).
  *
- * See `docs/design/planned/processor-architecture.md` and
- * `lib/tick/world/snapshots-world.ts` for the broader pattern.
+ * See `docs/design/active/processor-architecture.md` for the broader pattern.
  */
 
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";

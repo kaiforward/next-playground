@@ -1,8 +1,8 @@
 /**
  * BattlesWorld — data interface for the battles processor.
  *
- * Phase 4 of the processor refactor. No sim counterpart yet — combat does
- * not run in the simulator. Pattern-only change.
+ * No sim counterpart — combat does not run in the simulator. See
+ * `docs/design/active/processor-architecture.md` for the broader pattern.
  */
 
 import type { BattleOutcome, RoundResult } from "@/lib/engine/combat";

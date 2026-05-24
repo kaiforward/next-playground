@@ -1,8 +1,7 @@
 /**
  * In-memory world tick orchestration. Ship arrivals stay here; events and
- * the economy now run through unified processors against in-memory adapters
- * (Phase 2 + Phase 3 of the processor refactor —
- * `docs/design/planned/processor-architecture.md`).
+ * the economy run through unified processors against in-memory adapters.
+ * See `docs/design/active/processor-architecture.md`.
  */
 
 import {

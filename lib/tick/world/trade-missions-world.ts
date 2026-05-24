@@ -1,10 +1,10 @@
 /**
  * TradeMissionsWorld — data interface for the trade-missions processor.
  *
- * Phase 4 of the processor refactor. No sim counterpart yet — the goal here
- * is structural consistency so future sim integration drops in cleanly.
+ * No sim counterpart yet — the abstraction is in place so future sim
+ * integration (or in-memory unit tests) drops in cleanly.
  *
- * See `lib/tick/world/snapshots-world.ts` for the broader pattern.
+ * See `docs/design/active/processor-architecture.md` for the broader pattern.
  */
 
 import type { EventTypeId } from "@/lib/constants/events";

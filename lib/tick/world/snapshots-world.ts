@@ -20,7 +20,7 @@
  *     processor from schema changes.
  *   - Mutations are explicit method calls. No exposing transactions.
  *
- * See `docs/design/planned/processor-architecture.md` for the full rationale.
+ * See `docs/design/active/processor-architecture.md` for the full rationale.
  */
 
 import type { PriceHistoryEntry } from "@/lib/engine/snapshot";
