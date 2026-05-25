@@ -247,7 +247,7 @@ export function StarMap({
         onViewportChange={onViewportChange}
       />
 
-      {/* Map overlay toggle cluster (top-right) */}
+      {/* Map overlay toggle cluster (bottom-left) */}
       <MapOverlayControls overlays={overlays} toggle={toggle} />
 
       {/* Navigation mode banner */}

@@ -45,11 +45,6 @@ export interface LODState {
   showFleetDots: boolean;
   /** Alpha for fleet presence dots */
   fleetDotAlpha: number;
-  /**
-   * Whether the trade-flow overlay should render at this zoom. Final visibility
-   * is `showTradeFlow && overlays.tradeFlow` — LOD only governs zoom fade.
-   */
-  showTradeFlow: boolean;
   /** Alpha for trade-flow particles (smooth fade in 0.4 → 0.6). */
   tradeFlowAlpha: number;
 }
@@ -117,7 +112,6 @@ export function computeLOD(zoom: number): LODState {
     fleetDotAlpha: 1 - smoothStep(0.3, 0.5, zoom),
 
     // Trade-flow overlay fades in across the crossfade-to-system band
-    showTradeFlow: zoom > 0.4,
     tradeFlowAlpha: smoothStep(0.4, 0.6, zoom),
   };
 }

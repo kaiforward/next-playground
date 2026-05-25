@@ -1,39 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getPlayerVisibility } from "./visibility-cache";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-
-/**
- * Aggregated trade flow on one undirected edge over the rolling history window.
- *
- * The Pixi overlay renders one stream of particles per active edge flowing from
- * the net source to the net destination of the dominant good. `fromSystemId`
- * and `toSystemId` reflect that net direction (NOT canonical sort order), so
- * the renderer can use them directly without recomputing direction.
- *
- * `totalVolume` is the sum of magnitudes across both directions and all goods
- * — used by the renderer for thickness/density. `perGood` is the per-good
- * magnitude (both directions summed), useful for tooltips and future colour
- * mixing.
- *
- * Callers that need a stable lookup key (e.g. matching a flow edge to a
- * seed-ordered connection) should use the canonical key
- * `${min(fromId,toId)}|${max(fromId,toId)}`.
- */
-export interface TradeFlowEdge {
-  /** Net source system for the dominant good (where particles spawn). */
-  fromSystemId: string;
-  /** Net destination system for the dominant good (where particles terminate). */
-  toSystemId: string;
-  /** Sum of magnitudes across both directions and all goods. */
-  totalVolume: number;
-  dominantGoodId: string;
-  /** Per-good magnitude (both directions summed, unsigned). */
-  perGood: Record<string, number>;
-}
-
-export interface TradeFlowData {
-  edges: TradeFlowEdge[];
-}
+import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 
 interface DirectionalGoodTally {
   /** Volume in canonical-from → canonical-to direction. */
@@ -50,7 +18,7 @@ interface DirectionalGoodTally {
  */
 export async function getTradeFlowEdges(
   playerId: string,
-): Promise<TradeFlowData> {
+): Promise<{ edges: TradeFlowEdgeInfo[] }> {
   const { visibleSet, currentTick } = await getPlayerVisibility(playerId);
 
   if (visibleSet.size === 0) {
@@ -104,7 +72,7 @@ export async function getTradeFlowEdges(
     else tally.reverse += qty;
   }
 
-  const edges: TradeFlowEdge[] = [];
+  const edges: TradeFlowEdgeInfo[] = [];
   for (const { canonicalFrom, canonicalTo, perGood } of byEdge.values()) {
     let totalVolume = 0;
     let dominantGoodId = "";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getMapSessionState,
   setOverlaysInSession,
@@ -36,45 +36,31 @@ function hydrateFromSession(): MapOverlays {
 export function useMapOverlays(): {
   overlays: MapOverlays;
   toggle: (key: MapOverlayKey) => void;
-  set: (key: MapOverlayKey, value: boolean) => void;
 } {
   // SSR: render with defaults; hydrate from session storage after mount so we
   // don't introduce a hydration mismatch on the first paint.
   const [overlays, setOverlays] = useState<MapOverlays>(DEFAULT_OVERLAYS);
+  // Skip persisting on the initial mount — overlays starts as DEFAULT and
+  // would otherwise overwrite a previously-stored value before hydration.
+  const skipPersist = useRef(true);
 
   useEffect(() => {
     setOverlays(hydrateFromSession());
   }, []);
 
-  const persist = useCallback((next: MapOverlays) => {
-    // Strip false values from the persisted payload so the session only stores
-    // the active overlays. Restored state interprets missing keys as off.
+  useEffect(() => {
+    if (skipPersist.current) {
+      skipPersist.current = false;
+      return;
+    }
     const stored: MapOverlaysState = {};
-    if (next.tradeFlow) stored.tradeFlow = true;
+    if (overlays.tradeFlow) stored.tradeFlow = true;
     setOverlaysInSession(stored);
+  }, [overlays]);
+
+  const toggle = useCallback((key: MapOverlayKey) => {
+    setOverlays((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  const set = useCallback(
-    (key: MapOverlayKey, value: boolean) => {
-      setOverlays((prev) => {
-        const next = { ...prev, [key]: value };
-        persist(next);
-        return next;
-      });
-    },
-    [persist],
-  );
-
-  const toggle = useCallback(
-    (key: MapOverlayKey) => {
-      setOverlays((prev) => {
-        const next = { ...prev, [key]: !prev[key] };
-        persist(next);
-        return next;
-      });
-    },
-    [persist],
-  );
-
-  return { overlays, toggle, set };
+  return { overlays, toggle };
 }

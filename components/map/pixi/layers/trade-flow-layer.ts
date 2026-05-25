@@ -42,14 +42,12 @@ export class TradeFlowLayer {
 
     // Iterate flowEdges directly (not connections) because the data is the
     // source of truth — what's in the flow set is what we render.
-    const incoming = new Set<string>();
     const wanted: Array<{ key: string; edge: TradeFlowEdgeInfo }> = [];
 
     for (const [key, edge] of flowEdges) {
       const from = posById.get(edge.fromSystemId);
       const to = posById.get(edge.toSystemId);
       if (!from || !to) continue;
-      incoming.add(key);
       wanted.push({ key, edge });
     }
 
@@ -69,9 +67,17 @@ export class TradeFlowLayer {
       keepKeys.add(key);
 
       let obj = this.edges.get(key);
-      // Recreate if particle count changed — TradeFlowEdge bakes the count at
-      // construction; simpler than per-particle add/remove for v1.
-      if (obj && obj.particleCount !== allotted) {
+      // Recreate if particle count, net direction, or dominant good changed —
+      // TradeFlowEdge bakes all of these at construction (endpoints determine
+      // direction, dominant good determines colour). Per-particle mutation
+      // would be a v2 optimisation.
+      if (
+        obj &&
+        (obj.particleCount !== allotted ||
+          obj.fromSystemId !== edge.fromSystemId ||
+          obj.toSystemId !== edge.toSystemId ||
+          obj.dominantGoodId !== edge.dominantGoodId)
+      ) {
         this.disposeEdge(key);
         obj = undefined;
       }
@@ -81,12 +87,11 @@ export class TradeFlowLayer {
         // Both lookups succeeded in the wanted-collection pass above; this
         // guard satisfies the type narrowing for the constructor call.
         if (!from || !to) continue;
-        obj = new TradeFlowEdge(
-          from,
-          to,
-          allotted,
-          getGoodColor(edge.dominantGoodId),
-        );
+        obj = new TradeFlowEdge(from, to, allotted, getGoodColor(edge.dominantGoodId), {
+          fromSystemId: edge.fromSystemId,
+          toSystemId: edge.toSystemId,
+          dominantGoodId: edge.dominantGoodId,
+        });
         this.edges.set(key, obj);
         this.container.addChild(obj.container);
       }

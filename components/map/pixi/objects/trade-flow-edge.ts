@@ -25,6 +25,14 @@ export class TradeFlowEdge {
   readonly container = new Container();
   /** Number of particles baked into this edge — used by the layer's diff. */
   readonly particleCount: number;
+  /**
+   * Identity fields used by the layer to detect when an edge needs to be
+   * recreated (direction flip or dominant-good swap won't change the key,
+   * but the visual baked here would go stale).
+   */
+  readonly fromSystemId: string;
+  readonly toSystemId: string;
+  readonly dominantGoodId: string;
   private particles: Particle[] = [];
   private fromX: number;
   private fromY: number;
@@ -37,8 +45,16 @@ export class TradeFlowEdge {
     to: { x: number; y: number },
     particleCount: number,
     color: number,
+    identity: {
+      fromSystemId: string;
+      toSystemId: string;
+      dominantGoodId: string;
+    },
   ) {
     this.particleCount = particleCount;
+    this.fromSystemId = identity.fromSystemId;
+    this.toSystemId = identity.toSystemId;
+    this.dominantGoodId = identity.dominantGoodId;
     this.fromX = from.x;
     this.fromY = from.y;
     this.toX = to.x;
@@ -94,9 +110,6 @@ export class TradeFlowEdge {
   }
 
   destroy() {
-    for (const p of this.particles) {
-      p.gfx.destroy();
-    }
     this.particles = [];
     this.container.destroy({ children: true });
   }
