@@ -1,7 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { getPlayerVisibility } from "./visibility-cache";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import type { TradeFlowEdgeInfo } from "@/lib/types/api";
+import {
+  bucketizeVolumeHistory,
+  rankGoodFlows,
+} from "@/lib/engine/system-trade-flow";
+import type {
+  SystemTradeFlowData,
+  TradeFlowEdgeInfo,
+} from "@/lib/types/api";
 
 interface DirectionalGoodTally {
   /** Volume in canonical-from → canonical-to direction. */
@@ -108,4 +115,71 @@ export async function getTradeFlowEdges(
   }
 
   return { edges };
+}
+
+// ── Per-system trade flow detail (PR 3) ──────────────────────────
+
+/**
+ * Returns top imports / exports and a bucketed volume sparkline for one
+ * system. Visibility-gated: an invisible system returns empty data instead
+ * of leaking activity intel.
+ */
+export async function getSystemTradeFlow(
+  playerId: string,
+  systemId: string,
+): Promise<SystemTradeFlowData> {
+  const { visibleSet, currentTick } = await getPlayerVisibility(playerId);
+
+  const EMPTY: SystemTradeFlowData = {
+    topImports: [],
+    topExports: [],
+    volumeHistory: bucketizeVolumeHistory([], systemId, currentTick),
+  };
+
+  if (!visibleSet.has(systemId)) return EMPTY;
+
+  const minTick = currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
+
+  const flows = await prisma.tradeFlow.findMany({
+    where: {
+      tick: { gt: minTick },
+      OR: [{ fromSystemId: systemId }, { toSystemId: systemId }],
+    },
+    select: {
+      tick: true,
+      fromSystemId: true,
+      toSystemId: true,
+      goodId: true,
+      quantity: true,
+    },
+  });
+
+  if (flows.length === 0) return EMPTY;
+
+  // Resolve partner system names in one batched query so the rendered
+  // imports/exports lists can show real names without N+1 lookups.
+  const partnerIds = new Set<string>();
+  for (const f of flows) {
+    partnerIds.add(f.fromSystemId === systemId ? f.toSystemId : f.fromSystemId);
+  }
+  const partnerRows = await prisma.starSystem.findMany({
+    where: { id: { in: [...partnerIds] } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(partnerRows.map((r) => [r.id, r.name]));
+  const resolveName = (id: string): string => nameById.get(id) ?? id;
+
+  return {
+    topImports: rankGoodFlows(
+      flows.filter((f) => f.toSystemId === systemId),
+      (f) => f.fromSystemId,
+      resolveName,
+    ),
+    topExports: rankGoodFlows(
+      flows.filter((f) => f.fromSystemId === systemId),
+      (f) => f.toSystemId,
+      resolveName,
+    ),
+    volumeHistory: bucketizeVolumeHistory(flows, systemId, currentTick),
+  };
 }

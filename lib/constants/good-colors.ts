@@ -22,6 +22,13 @@ export const TIER_COLOR: Readonly<Record<GoodTier, number>> = {
   2: 0x22d3ee, // cyan-400  — advanced
 };
 
+/** Player-facing label for each tier — shared with the map legend. */
+export const TIER_LABEL: Readonly<Record<GoodTier, string>> = {
+  0: "Raw",
+  1: "Processed",
+  2: "Advanced",
+};
+
 /** Fallback when a goodId isn't in the tier map (shouldn't happen in practice). */
 export const GOOD_COLOR_NEUTRAL = 0x94a3b8; // slate-400
 
@@ -29,4 +36,9 @@ export function getGoodColor(goodId: string): number {
   const tier = GOOD_TIER_BY_KEY[goodId];
   if (tier === undefined) return GOOD_COLOR_NEUTRAL;
   return TIER_COLOR[tier];
+}
+
+/** Convert a Pixi hex int (0xRRGGBB) to a CSS color (#rrggbb). */
+export function pixiHexToCss(hex: number): string {
+  return `#${hex.toString(16).padStart(6, "0")}`;
 }
