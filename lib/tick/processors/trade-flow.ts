@@ -23,6 +23,14 @@ import type {
 const DEBUG = process.env.DEBUG_TRADE_FLOW === "1";
 
 /**
+ * Tracks whether the invariant warning has fired this process so the log
+ * stays a single line. The invariant: `regions × PROCESS_EVERY_N_TICKS <
+ * FLOW_HISTORY_TICKS`. If it fails, the round-robin can't refill a region's
+ * data before pruning evicts it, so the overlay shows permanent gaps.
+ */
+let invariantWarned = false;
+
+/**
  * Pure processor body. Same logic runs against the Prisma adapter (live game)
  * or the in-memory adapter (simulator + unit tests).
  *
@@ -43,6 +51,18 @@ export async function runTradeFlowProcessor(
 
   const regions = await world.getRegions();
   if (regions.length === 0) return {};
+
+  if (
+    !invariantWarned &&
+    regions.length * params.processEveryNTicks >= params.flowHistoryTicks
+  ) {
+    invariantWarned = true;
+    console.warn(
+      `[tradeFlow] INVARIANT: regions (${regions.length}) × PROCESS_EVERY_N_TICKS (${params.processEveryNTicks}) = ${regions.length * params.processEveryNTicks} ≥ FLOW_HISTORY_TICKS (${params.flowHistoryTicks}). ` +
+        `Each region's events will be pruned before the round-robin returns — overlay will show permanent gaps. ` +
+        `Either lower PROCESS_EVERY_N_TICKS or raise FLOW_HISTORY_TICKS.`,
+    );
+  }
 
   const regionIndex =
     Math.floor(ctx.tick / params.processEveryNTicks) % regions.length;
