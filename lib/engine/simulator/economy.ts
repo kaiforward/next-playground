@@ -24,8 +24,11 @@ import {
 import type { RNG } from "@/lib/engine/universe-gen";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
+import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
+import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
+import { TRADE_DEMAND_IMPACT_FACTOR } from "@/lib/engine/trade";
 import type { InjectionRequest } from "@/lib/tick/world/events-world";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimConstants } from "./constants";
@@ -270,13 +273,56 @@ async function processSimEconomy(
   };
 }
 
+// ── Trade flow (delegates to the unified processor) ─────────────
+
+async function processSimTradeFlow(
+  world: SimWorld,
+  constants: SimConstants,
+): Promise<SimWorld> {
+  const flowWorld = new InMemoryTradeFlowWorld(
+    {
+      systems: world.systems,
+      markets: world.markets,
+      flowEvents: world.flowEvents,
+    },
+    world.regions,
+    world.connections,
+  );
+
+  const tickCtx: TickContext = {
+    tx: undefined as never,
+    tick: world.tick,
+    results: new Map(),
+  };
+
+  await runTradeFlowProcessor(flowWorld, tickCtx, {
+    processEveryNTicks: constants.tradeFlow.processEveryNTicks,
+    flowBudget: constants.tradeFlow.flowBudget,
+    gradientThreshold: constants.tradeFlow.gradientThreshold,
+    gradientSensitivity: constants.tradeFlow.gradientSensitivity,
+    flowHistoryTicks: constants.tradeFlow.flowHistoryTicks,
+    playerDisplacementFactor: constants.tradeFlow.playerDisplacementFactor,
+    prosperityTargetVolume: constants.prosperity.targetVolume,
+    minLevel: constants.economy.minLevel,
+    maxLevel: constants.economy.maxLevel,
+    tradeDemandImpactFactor: TRADE_DEMAND_IMPACT_FACTOR,
+  });
+
+  return {
+    ...world,
+    systems: flowWorld.systems,
+    markets: flowWorld.markets,
+    flowEvents: flowWorld.flowEvents,
+  };
+}
+
 // ── Main entry point ────────────────────────────────────────────
 
 /**
- * Simulate one world tick: ship arrivals → events → economy.
- * Returns a new SimWorld. Async because the unified events and economy
- * processors are async (the in-memory adapters resolve immediately, but
- * `await` still requires an async caller).
+ * Simulate one world tick: ship arrivals → events → economy → trade flow.
+ * Returns a new SimWorld. Async because the unified processors are async
+ * (the in-memory adapters resolve immediately, but `await` still requires
+ * an async caller).
  */
 export async function simulateWorldTick(
   world: SimWorld,
@@ -287,5 +333,6 @@ export async function simulateWorldTick(
   w = processSimShipArrivals(w, rng);
   w = await processSimEvents(w, rng, ctx);
   w = await processSimEconomy(w, rng, ctx.constants);
+  w = await processSimTradeFlow(w, ctx.constants);
   return w;
 }

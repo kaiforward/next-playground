@@ -1,6 +1,6 @@
 # Trade Simulation (Edge Flow)
 
-Status: **Planned** — design complete, depends on processor architecture refactor.
+Status: **Active** — Phase 1 (core flow processor) shipped on `feat/trade-flow`.
 
 Replaces the earlier `npc-trade-bots.md` design. See "Why not NPC entities?" below for rationale.
 
@@ -66,7 +66,9 @@ Flow is **slow** — not every tick. Two reasons:
 1. Trade should feel deliberate, not jittery. Realistic merchant traffic is on the order of hours, not seconds.
 2. Performance: a 10K-system universe has ~30-60K edges. Processing all per tick is unnecessary and expensive.
 
-Approach: process flow in a **round-robin per region** (matching the existing economy processor pattern), every N ticks. With ~25 systems per region and ~3 edges per system, that's ~75 edge evaluations per processor run.
+Approach: process flow in a **round-robin per region** (matching the existing economy processor's per-region selection), every N ticks. With ~25 systems per region and ~3 edges per system, that's ~75 edge evaluations per processor run.
+
+The pick formula is `floor(tick / N) % regions.length`, not `tick % regions.length`. The latter — what `runEconomyProcessor` currently uses — can starve regions when `gcd(N, regions.length) > 1`, because the active ticks `0, N, 2N, …` land on a sub-lattice of region indices. The floor form picks each region in turn regardless of pairing. Worth folding back into the economy processor as a follow-up.
 
 Exact frequency is a tuning parameter (`FLOW_PROCESS_EVERY_N_TICKS`, default candidate: 3-5). The simulator will sweep this to find the value that produces healthy equilibrium without overshoot.
 
@@ -205,33 +207,16 @@ Master-tier predictions are computed by running the flow math forward a few tick
 
 ---
 
-## Implementation Phases
+## Status
 
-Built on top of the processor architecture — see `docs/design/active/processor-architecture.md`.
+| Phase | What it delivers | State |
+|---|---|---|
+| 1 — Core flow processor | `TradeFlow` model, gradient/budget math, prune | **Shipped** |
+| 2 — Map overlay | Aggregate flow API, Pixi particle layer | Planned |
+| 3 — System surfaces | Per-system imports/exports + sparkline | Planned |
+| 4 — Gameplay hooks | Trade-skill tiering, mission generation, sweep tuning | Planned |
 
-### Phase 1: Core flow processor
-- `TradeFlow` Prisma model + indexes
-- `lib/constants/trade-simulation.ts`
-- Flow processor written against the new processor interface — pure math, operates on adapter
-- Edge enumeration + gradient calculation + budget-limited movement
-- Reuse existing trade math (supply/demand impact, prosperity contribution)
-- Flow event logging + rolling window prune
-
-### Phase 2: Aggregate metrics + prosperity wiring
-- Per-system import/export volume (column or derived view, decide during build)
-- Wire into existing prosperity calculation (treat flow volume same as player trade volume)
-- Expose in dynamic tiles API for map visualization
-- "Trade Activity" label on system detail panel
-
-### Phase 3: Route inference + map visualization
-- Route query: stitch flow events into chains, score by volume
-- Map overlay for edge flow (thickness, color)
-- System detail "top imports/exports" list
-
-### Phase 4: Gameplay integration
-- Trade skill visibility tiers (depends on player progression doc)
-- Mission generation hooks (depends on Layer 2/3 mission system)
-- Tuning sweep across `PROCESS_EVERY_N_TICKS`, `FLOW_BUDGET`, `GRADIENT_THRESHOLD`
+Built on the processor architecture (see `docs/design/active/processor-architecture.md`). PR-by-PR rollout, files-touched, and verification steps live in the working build plan at `docs/design/implementation/trade-simulation.md` (delete when fully shipped).
 
 ---
 
@@ -246,6 +231,6 @@ Built on top of the processor architecture — see `docs/design/active/processor
 
 ## Open Questions
 
-- Whether per-system aggregate counters live as columns on `Market` or are computed from `TradeFlow` on demand. Depends on read frequency in UI.
 - Whether flow processes goods individually or batches them per edge. Individual is simpler; batched might be more efficient.
 - Whether the named-convoy interaction layer ships in v1 or waits for explicit demand from gameplay (recommended: wait — ship the cheap thing first, see what's missing).
+- Whether per-system aggregate counters get promoted to columns on `Market` later. PR 1 reads from `TradeFlow` on demand; promote only if profiling shows the queries dominate.
