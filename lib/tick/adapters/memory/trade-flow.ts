@@ -31,6 +31,12 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
   systems: SimSystem[];
   markets: SimMarketEntry[];
   flowEvents: SimFlowEvent[];
+  /**
+   * Cached systemId → regionId map. Built lazily on first read. Safe to
+   * memoize for the world's lifetime: `applyVolumeIncrements` rewrites the
+   * systems array but preserves every (id, regionId) pair.
+   */
+  private sysRegionCache: Map<string, string> | null = null;
 
   constructor(
     initial: {
@@ -51,21 +57,24 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
     this.flowEvents = [...initial.flowEvents];
   }
 
+  private getSysRegion(): Map<string, string> {
+    if (!this.sysRegionCache) {
+      this.sysRegionCache = new Map(
+        this.systems.map((s) => [s.id, s.regionId]),
+      );
+    }
+    return this.sysRegionCache;
+  }
+
   getRegions(): Promise<RegionView[]> {
     const sorted = [...this.regions].sort((a, b) =>
       a.name.localeCompare(b.name),
     );
-    return Promise.resolve(
-      sorted.map((r) => ({
-        id: r.id,
-        name: r.name,
-        governmentType: r.governmentType,
-      })),
-    );
+    return Promise.resolve(sorted.map((r) => ({ id: r.id, name: r.name })));
   }
 
   getEdgesForRegion(regionId: string): Promise<EdgeView[]> {
-    const sysRegion = new Map(this.systems.map((s) => [s.id, s.regionId]));
+    const sysRegion = this.getSysRegion();
     const seen = new Set<string>();
     const edges: EdgeView[] = [];
     for (const c of this.connections) {
@@ -89,7 +98,7 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
   }
 
   getMarketSnapshotsForRegion(regionId: string): Promise<MarketSnapshot[]> {
-    const sysRegion = new Map(this.systems.map((s) => [s.id, s.regionId]));
+    const sysRegion = this.getSysRegion();
     const snapshots: MarketSnapshot[] = [];
     for (const m of this.markets) {
       if (sysRegion.get(m.systemId) !== regionId) continue;

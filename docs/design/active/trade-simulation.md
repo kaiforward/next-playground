@@ -66,7 +66,9 @@ Flow is **slow** — not every tick. Two reasons:
 1. Trade should feel deliberate, not jittery. Realistic merchant traffic is on the order of hours, not seconds.
 2. Performance: a 10K-system universe has ~30-60K edges. Processing all per tick is unnecessary and expensive.
 
-Approach: process flow in a **round-robin per region** (matching the existing economy processor pattern), every N ticks. With ~25 systems per region and ~3 edges per system, that's ~75 edge evaluations per processor run.
+Approach: process flow in a **round-robin per region** (matching the existing economy processor's per-region selection), every N ticks. With ~25 systems per region and ~3 edges per system, that's ~75 edge evaluations per processor run.
+
+The pick formula is `floor(tick / N) % regions.length`, not `tick % regions.length`. The latter — what `runEconomyProcessor` currently uses — can starve regions when `gcd(N, regions.length) > 1`, because the active ticks `0, N, 2N, …` land on a sub-lattice of region indices. The floor form picks each region in turn regardless of pairing. Worth folding back into the economy processor as a follow-up.
 
 Exact frequency is a tuning parameter (`FLOW_PROCESS_EVERY_N_TICKS`, default candidate: 3-5). The simulator will sweep this to find the value that produces healthy equilibrium without overshoot.
 

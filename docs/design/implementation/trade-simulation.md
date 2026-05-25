@@ -33,8 +33,10 @@ Build the simulation; no UI yet. Validate via sim sweeps and an integration test
 ### Modified files
 
 - **`lib/tick/registry.ts`** — Add `tradeFlowProcessor` to the processors array. Position after `economyProcessor` (declared via `dependsOn`).
-- **`lib/engine/simulator/runner.ts`** — Wire `InMemoryTradeFlowWorld` into the sim loop alongside the existing economy adapter so sim sweeps include flow effects.
-- **`scripts/simulate.ts`** — Surface flow constants in the YAML config sweep schema (so we can tune `FLOW_BUDGET` / `PROCESS_EVERY_N_TICKS` / `GRADIENT_THRESHOLD` against the equilibrium targets in `docs/design/active/economy-tuning.md`).
+- **`lib/engine/simulator/economy.ts`** — Wire `InMemoryTradeFlowWorld` into the sim tick loop alongside the existing economy adapter so sim sweeps include flow effects. (Sim orchestration lives here, not in `runner.ts`/`scripts/simulate.ts` as the original plan assumed.)
+- **`lib/engine/simulator/constants.ts`** — Add `tradeFlow` to `DEFAULT_SIM_CONSTANTS` so sim runs pick up the same defaults the live processor uses.
+- **`lib/engine/simulator/types.ts` / `world.ts`** — Extend `SimWorld` and add `SimFlowEvent` / `SimConnection` so the flow adapter has the shapes it needs.
+- **`lib/engine/simulator/experiment.ts`** — Surface flow constants in the YAML override schema (`overrides.tradeFlow`) so sweeps can tune `FLOW_BUDGET` / `PROCESS_EVERY_N_TICKS` / `GRADIENT_THRESHOLD` against the equilibrium targets in `docs/design/active/economy-tuning.md`.
 - **`docs/design/planned/trade-simulation.md` → `docs/design/active/trade-simulation.md`** — Promote on PR 1 ship. Update the implementation-phases section with what actually shipped.
 
 ### Reused pieces (do not re-create)

@@ -191,6 +191,14 @@ describe("Trade flow integration", () => {
     );
     expect(totalQuantity).toBeGreaterThan(0);
 
+    // tradeVolumeAccum: at least one system records non-zero throughput
+    // before prosperity captures it. Asserted directly so the test still
+    // verifies the design's volume promise if prosperity scoring changes.
+    const maxVolumeWithFlow = Math.max(
+      ...withFlow.systems.map((s) => s.tradeVolumeAccum),
+    );
+    expect(maxVolumeWithFlow).toBeGreaterThan(0);
+
     // With flow: at least one system finishes above zero prosperity.
     const maxProsperityWithFlow = Math.max(
       ...withFlow.systems.map((s) => s.prosperity),

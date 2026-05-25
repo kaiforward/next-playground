@@ -9,10 +9,7 @@ import type {
   VolumeIncrement,
 } from "@/lib/tick/world/trade-flow-world";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
-import { toGovernmentType } from "@/lib/types/guards";
-
-/** Window (ms) for "recent" player trade volume used to throttle flow. */
-const PLAYER_VOLUME_WINDOW_MS = 60_000;
+import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 
 /**
  * Live-game adapter for the trade-flow processor.
@@ -25,14 +22,10 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
 
   async getRegions(): Promise<RegionView[]> {
     const rows = await this.tx.region.findMany({
-      select: { id: true, name: true, governmentType: true },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      governmentType: toGovernmentType(r.governmentType),
-    }));
+    return rows.map((r) => ({ id: r.id, name: r.name }));
   }
 
   async getEdgesForRegion(regionId: string): Promise<EdgeView[]> {
@@ -87,7 +80,9 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
   }
 
   async getRecentPlayerVolume(regionId: string): Promise<number> {
-    const cutoff = new Date(Date.now() - PLAYER_VOLUME_WINDOW_MS);
+    const cutoff = new Date(
+      Date.now() - TRADE_SIMULATION.PLAYER_VOLUME_WINDOW_MS,
+    );
     const agg = await this.tx.tradeHistory.aggregate({
       where: {
         createdAt: { gt: cutoff },

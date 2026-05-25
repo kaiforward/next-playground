@@ -27,6 +27,11 @@ export const TRADE_SIMULATION = {
    * PROSPERITY_TARGET_VOLUME.
    */
   PLAYER_DISPLACEMENT_FACTOR: 2.0,
+  /**
+   * Wall-clock window (ms) for "recent" player trade volume used to throttle
+   * flow. Sliding window over `TradeHistory.createdAt`.
+   */
+  PLAYER_VOLUME_WINDOW_MS: 60_000,
   /** Minimum cumulative flow on an edge to count toward route inference. */
   ROUTE_INFERENCE_FLOOR: 5,
 } as const;

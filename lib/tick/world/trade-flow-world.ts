@@ -8,13 +8,10 @@
  * See `docs/design/active/trade-simulation.md` for the broader pattern.
  */
 
-import type { GovernmentType } from "@/lib/types/game";
-
 /** Region row for round-robin selection. */
 export interface RegionView {
   id: string;
   name: string;
-  governmentType: GovernmentType;
 }
 
 /**
