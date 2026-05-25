@@ -116,7 +116,7 @@ export const ANIM = {
 
 export const TRADE_FLOW = {
   /** Pixel radius of one particle (world-space — scales with zoom). */
-  particleRadius: 1.8,
+  particleRadius: 2.8,
   /** Pixels per second a particle travels along its edge. */
   particleSpeed: 80,
   /**

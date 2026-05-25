@@ -28,5 +28,11 @@ export function useTradeFlow(
     enabled: active,
   });
 
-  return { edges: data?.edges ?? [] };
+  // When the toggle flips off, `enabled: false` stops new fetches but
+  // TanStack keeps the prior response cached so a re-toggle is instant.
+  // We still need to hand an empty array back to the Pixi layer so it
+  // tears down particles immediately — the canvas reads `flowEdges` every
+  // sync, and stale cached data would otherwise keep particles alive
+  // until the cache is garbage-collected (gcTime later).
+  return { edges: active ? data?.edges ?? [] : [] };
 }
