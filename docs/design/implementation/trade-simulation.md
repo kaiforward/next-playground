@@ -97,6 +97,15 @@ Surface PR 1's `TradeFlow` data on the galaxy map as a new Pixi layer with direc
 - **Aggregate per request, not per tick**: the API computes edge aggregates on demand from `TradeFlow` (PR 1 keeps the raw events). Indexes on `(tick, fromSystemId)` make this cheap; one query per dashboard refresh, not per write.
 - **Particle density caps**: hard limit on total active particles (e.g. 2000) regardless of edges. At galactic zoom this prevents framerate cliff if many edges are simultaneously hot.
 
+### Carried over from PR 1 review
+
+PR 1's code review (PR #62) deferred a few items here because PR 2's surface area is the right place to address them. Don't ship PR 2 without folding these in:
+
+- **Lift `getEdgesForRegion` onto the adjacency cache.** `lib/tick/adapters/prisma/trade-flow.ts` currently calls `tx.systemConnection.findMany` every active tick. PR 2's aggregate API needs the full graph anyway for path inference — same patch can wire `lib/services/adjacency.ts:getAdjacencyList()` into the PR 1 adapter and avoid the per-tick scan. Filter to intra-region edges in JS via a `systemId → regionId` map.
+- **Calibrate `PROCESS_EVERY_N_TICKS` and `FLOW_BUDGET` against `economy-tuning.md` bands before the overlay ships.** The integration test forces `processEveryNTicks: 1`, so the production defaults (`4` / `8`) haven't been validated end-to-end. Run the sim sweep from PR 1's verification section (`experiments/trade-flow-sweep.yaml`) and pick values that keep equilibrium prices inside the bands. Players will see the overlay before they tune the constants, so wrong defaults read as "trade is broken."
+- **Defensive `isFinite()` guard at the gradient site.** `lib/tick/processors/trade-flow.ts` computes `gradient = (priceB - priceA) / mA.basePrice`. Clamps prevent `Infinity` today, but a `if (!isFinite(gradient)) continue;` at the gradient comparison future-proofs against schema/clamp tweaks. Cheap to add when the file is already open for PR 2.
+- **Gate `[tradeFlow]` console logs behind a debug flag.** At 10K scale + every-N-tick cadence the per-region log is noise. Drop to one summary per full region cycle, or gate behind `DEBUG_TRADE_FLOW=1`. Same treatment for the per-region `[economy]` log if it's noisy in production logs.
+
 ### Verification
 
 - `npm run dev`, open the galaxy map at default seed, manually verify edges show particles after ~50 ticks of sim.
