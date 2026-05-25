@@ -12,7 +12,7 @@ import { GOOD_TIER_BY_KEY } from "./goods";
  *   T2 advanced  → cyan    (high-tech precision goods)
  *
  * Specific good identity (which T0 good is moving here? food vs ore?) comes
- * from the system detail panel (PR3) and the future hover-tooltip iteration.
+ * from the system detail panel and the future hover-tooltip iteration.
  * The map overlay's job is "where is trade happening, and roughly of what
  * kind" — not full composition disclosure.
  */

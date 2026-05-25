@@ -117,8 +117,6 @@ export async function getTradeFlowEdges(
   return { edges };
 }
 
-// ── Per-system trade flow detail (PR 3) ──────────────────────────
-
 /**
  * Returns top imports / exports and a bucketed volume sparkline for one
  * system. Visibility-gated: an invisible system returns empty data instead
@@ -167,7 +165,7 @@ export async function getSystemTradeFlow(
     select: { id: true, name: true },
   });
   const nameById = new Map(partnerRows.map((r) => [r.id, r.name]));
-  const resolveName = (id: string): string => nameById.get(id) ?? id;
+  const resolveName = (id: string): string => nameById.get(id) ?? "Unknown System";
 
   return {
     topImports: rankGoodFlows(

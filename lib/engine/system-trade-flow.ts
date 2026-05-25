@@ -1,8 +1,8 @@
 /**
- * Pure aggregation helpers for the per-system trade-flow detail surface
- * (PR 3 of the trade-flow series). The service in `lib/services/trade-flow.ts`
- * loads raw `TradeFlow` rows from Prisma and feeds them through these helpers
- * to produce the panel-facing shape.
+ * Pure aggregation helpers for the per-system trade-flow detail surface.
+ * The service in `lib/services/trade-flow.ts` loads raw `TradeFlow` rows
+ * from Prisma and feeds them through these helpers to produce the
+ * panel-facing shape.
  *
  * Pure: no Prisma, no I/O. Safe to import from anywhere and unit-test
  * directly against an in-memory array of rows.
@@ -28,7 +28,7 @@ export interface SystemFlowRow {
 const TOP_GOODS_PER_DIRECTION = 5;
 /** Partner systems shown nested under each good. */
 const TOP_PARTNERS_PER_GOOD = 3;
-/** Sparkline bucket count — 200-tick window / 20 = 10-tick buckets. */
+/** Sparkline bucket count — the FLOW_HISTORY_TICKS window is split across this many buckets. */
 export const VOLUME_HISTORY_BUCKETS = 20;
 
 /**

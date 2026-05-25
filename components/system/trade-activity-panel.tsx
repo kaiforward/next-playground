@@ -13,8 +13,12 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeader } from "@/components/ui/section-header";
+import { TIER_COLOR, pixiHexToCss } from "@/lib/constants/good-colors";
 import { CHART_THEME, getGoodColor } from "@/lib/constants/ui";
 import { useSystemTradeFlow } from "@/lib/hooks/use-system-trade-flow";
+
+const SPARKLINE_IMPORT_COLOR = pixiHexToCss(TIER_COLOR[0]);
+const SPARKLINE_EXPORT_COLOR = pixiHexToCss(TIER_COLOR[1]);
 import type {
   TradeFlowGoodSummary,
   TradeFlowVolumeBucket,
@@ -216,18 +220,18 @@ function VolumeSparkline({ buckets }: VolumeSparklineProps) {
           <Line
             type="monotone"
             dataKey="imports"
-            stroke="#4ade80"
+            stroke={SPARKLINE_IMPORT_COLOR}
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: "#4ade80" }}
+            activeDot={{ r: 4, fill: SPARKLINE_IMPORT_COLOR }}
           />
           <Line
             type="monotone"
             dataKey="exports"
-            stroke="#f59e0b"
+            stroke={SPARKLINE_EXPORT_COLOR}
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: "#f59e0b" }}
+            activeDot={{ r: 4, fill: SPARKLINE_EXPORT_COLOR }}
           />
         </LineChart>
       </ResponsiveContainer>
