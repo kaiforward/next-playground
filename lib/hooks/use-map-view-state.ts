@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { UniverseData, StarSystemInfo } from "@/lib/types/game";
 import {
   getMapSessionState,
-  setMapSessionState,
+  setSelectedSystemInSession,
 } from "@/components/map/map-session";
 
 // ── Types ───────────────────────────────────────────────────────
@@ -71,14 +71,14 @@ export function useMapViewState({
   const selectSystem = useCallback(
     (system: StarSystemInfo) => {
       setSelectedSystem(system);
-      setMapSessionState({ selectedSystemId: system.id });
+      setSelectedSystemInSession(system.id);
     },
     [],
   );
 
   const closeSystem = useCallback(() => {
     setSelectedSystem(null);
-    setMapSessionState(null);
+    setSelectedSystemInSession(null);
   }, []);
 
   const setMapReady = useCallback(() => {

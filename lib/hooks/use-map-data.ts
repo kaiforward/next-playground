@@ -11,6 +11,7 @@ import type {
   EconomyType,
   SystemVisibility,
 } from "@/lib/types/game";
+import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 
@@ -56,6 +57,11 @@ export interface ConnectionData {
 export interface MapData {
   systems: SystemNodeData[];
   connections: ConnectionData[];
+  /**
+   * Trade-flow edges keyed by canonical edge id `${fromId}|${toId}` (sorted).
+   * Empty when the Trade Flows overlay is off — the Pixi layer renders nothing.
+   */
+  flowEdges: Map<string, TradeFlowEdgeInfo>;
   // Detail panel data
   shipsAtSelected: ShipState[];
   convoysAtSelected: ConvoyState[];
@@ -75,6 +81,7 @@ interface UseMapDataOptions {
   events: ActiveEvent[];
   visibleSystemIds: Set<string>;
   dynamicSystems: DynamicTileSystem[];
+  tradeFlowEdges: TradeFlowEdgeInfo[];
   selectedSystem: StarSystemInfo | null;
   navigationMode: NavigationMode;
   isNavigationActive: boolean;
@@ -91,6 +98,7 @@ export function useMapData({
   events,
   visibleSystemIds,
   dynamicSystems,
+  tradeFlowEdges,
   selectedSystem,
   navigationMode: mode,
   isNavigationActive,
@@ -288,9 +296,21 @@ export function useMapData({
     ? (visibleSystemIds.has(selectedSystem.id) ? "visible" : "unknown")
     : "unknown";
 
+  // ── Trade-flow edges keyed for O(1) lookup by Pixi layer ─────
+  const flowEdges = useMemo(() => {
+    const map = new Map<string, TradeFlowEdgeInfo>();
+    for (const edge of tradeFlowEdges) {
+      // Service guarantees canonical orientation (from < to), so a single key
+      // form covers every lookup the renderer can make.
+      map.set(`${edge.fromSystemId}|${edge.toSystemId}`, edge);
+    }
+    return map;
+  }, [tradeFlowEdges]);
+
   return {
     systems,
     connections,
+    flowEdges,
     shipsAtSelected,
     convoysAtSelected,
     eventsAtSelected,

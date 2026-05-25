@@ -38,6 +38,16 @@ export type AtlasResponse = ApiResponse<AtlasData>;
 export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
 export type DynamicTileResponse = ApiResponse<{ systems: DynamicTileSystem[] }>;
 export type VisibilityResponse = ApiResponse<{ systemIds: string[] }>;
+export interface TradeFlowEdgeInfo {
+  /** Lexicographically smaller endpoint id (canonical orientation). */
+  fromSystemId: string;
+  /** Lexicographically larger endpoint id. */
+  toSystemId: string;
+  totalVolume: number;
+  dominantGoodId: string;
+  perGood: Record<string, number>;
+}
+export type TradeFlowResponse = ApiResponse<{ edges: TradeFlowEdgeInfo[] }>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;

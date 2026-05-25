@@ -27,6 +27,8 @@ export const queryKeys = {
   // Visibility + dynamic data (separated concerns)
   visibility: ["visibility"] as const,
   dynamicVisible: ["dynamicVisible"] as const,
+  // Trade flow overlay (tick-scoped, gated by overlay toggle)
+  tradeFlow: ["tradeFlow"] as const,
   // Cantina
   cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
   cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,

@@ -15,17 +15,19 @@ export function useTickInvalidation() {
 
   useEffect(() => {
     const unsubs = [
-      // Ship arrivals → refresh fleet, convoys, market, visibility (ships moved), and dynamic data
+      // Ship arrivals → refresh fleet, convoys, market, visibility (ships moved), dynamic data, and trade flow
       subscribeToEvent("shipArrived", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
         queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
         queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.visibility });
         queryClient.invalidateQueries({ queryKey: queryKeys.dynamicVisible });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
       }),
-      // Economy ticks → refresh market data
+      // Economy ticks → refresh market data + trade flow (paired processors)
       subscribeToEvent("economyTick", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
       }),
       // Event notifications → refresh events cache and dynamic data (event state changed)
       subscribeToEvent("eventNotifications", () => {
