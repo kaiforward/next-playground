@@ -11,6 +11,7 @@ import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
 import { TerritoryLayer } from "./layers/territory-layer";
 import { FleetDotLayer } from "./layers/fleet-dot-layer";
+import { TradeFlowLayer } from "./layers/trade-flow-layer";
 import { EffectLayer } from "./layers/effect-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
@@ -44,6 +45,7 @@ interface PixiRefs {
   connectionLayer: ConnectionLayer;
   territoryLayer: TerritoryLayer;
   fleetDotLayer: FleetDotLayer;
+  tradeFlowLayer: TradeFlowLayer;
   effectLayer: EffectLayer;
 }
 
@@ -141,6 +143,11 @@ export function PixiMapCanvas({
       const connectionLayer = new ConnectionLayer();
       world.addChild(connectionLayer.container);
 
+      // Trade-flow particles render between connections and territories so
+      // they sit on top of the static graph but below region fills/labels.
+      const tradeFlowLayer = new TradeFlowLayer();
+      world.addChild(tradeFlowLayer.container);
+
       const territoryLayer = new TerritoryLayer();
       world.addChild(territoryLayer.container);
 
@@ -213,6 +220,11 @@ export function PixiMapCanvas({
         territoryLayer.updateVisibility(lod);
         fleetDotLayer.updateVisibility(lod);
 
+        // Trade-flow overlay: layer alpha multiplies the system fade so the
+        // overlay disappears alongside its host systems at universe zoom.
+        tradeFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
+        if (tradeFlowLayer.container.visible) tradeFlowLayer.update(dtMs);
+
         // Effect layer visibility based on LOD
         effectLayer.container.visible = lod.showEffects;
 
@@ -227,7 +239,7 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        fleetDotLayer, effectLayer,
+        fleetDotLayer, tradeFlowLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -245,6 +257,7 @@ export function PixiMapCanvas({
           refs.systemLayer.destroy();
           refs.connectionLayer.destroy();
           refs.territoryLayer.destroy();
+          refs.tradeFlowLayer.destroy();
           refs.effectLayer.destroy();
           refs.starfield.destroy();
           refs.pointCloudLayer.destroy();
@@ -309,6 +322,7 @@ export function PixiMapCanvas({
     // System objects and connections driven by mapData (viewport detail)
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems);
+    p.tradeFlowLayer.sync(mapData.systems, mapData.flowEdges);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
     p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
     p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");

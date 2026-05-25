@@ -38,6 +38,18 @@ export type AtlasResponse = ApiResponse<AtlasData>;
 export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
 export type DynamicTileResponse = ApiResponse<{ systems: DynamicTileSystem[] }>;
 export type VisibilityResponse = ApiResponse<{ systemIds: string[] }>;
+export interface TradeFlowEdgeInfo {
+  /** Net source system for the dominant good (where particles spawn). */
+  fromSystemId: string;
+  /** Net destination system for the dominant good (where particles terminate). */
+  toSystemId: string;
+  /** Sum of magnitudes across both directions and all goods. */
+  totalVolume: number;
+  dominantGoodId: string;
+  /** Per-good magnitude (both directions summed). */
+  perGood: Record<string, number>;
+}
+export type TradeFlowResponse = ApiResponse<{ edges: TradeFlowEdgeInfo[] }>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;

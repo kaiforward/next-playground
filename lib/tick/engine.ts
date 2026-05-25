@@ -85,8 +85,14 @@ class TickEngine {
     const outDir = path.join(projectRoot, ".next");
     const workerOut = path.join(outDir, "worker.mjs");
 
-    // Only rebuild if source is newer than output (or output doesn't exist)
+    // In dev we always rebuild — the bundle pulls in every file under lib/tick/
+    // (processors, adapters, world interfaces) plus their @/-aliased deps, and
+    // tracking that transitive set with mtime comparisons is fragile.
+    // Stale-bundle bugs silently swallow processor changes (entire processors
+    // can disappear without the dev noticing) which is much worse than the
+    // ~500ms esbuild rebuild cost. Prod keeps the original cheap check.
     const needsBuild =
+      process.env.NODE_ENV !== "production" ||
       !fs.existsSync(workerOut) ||
       fs.statSync(workerSrc).mtimeMs > fs.statSync(workerOut).mtimeMs;
 

@@ -6,15 +6,32 @@ import { buildAdjacencyList } from "@/lib/engine/visibility";
  * Connections are static (only change at seed time), so we build
  * the adjacency map once and reuse it across all visibility checks.
  */
-let cached: Map<string, string[]> | null = null;
+let cachedAdjacency: Map<string, string[]> | null = null;
 
 export async function getAdjacencyList(): Promise<Map<string, string[]>> {
-  if (cached) return cached;
+  if (cachedAdjacency) return cachedAdjacency;
 
   const connections = await prisma.systemConnection.findMany({
     select: { fromSystemId: true, toSystemId: true },
   });
 
-  cached = buildAdjacencyList(connections);
-  return cached;
+  cachedAdjacency = buildAdjacencyList(connections);
+  return cachedAdjacency;
+}
+
+/**
+ * Cached systemId → regionId map. Systems don't change region after seed,
+ * so this is safe to memoize for the process lifetime.
+ */
+let cachedSystemRegion: Map<string, string> | null = null;
+
+export async function getSystemRegionMap(): Promise<Map<string, string>> {
+  if (cachedSystemRegion) return cachedSystemRegion;
+
+  const systems = await prisma.starSystem.findMany({
+    select: { id: true, regionId: true },
+  });
+
+  cachedSystemRegion = new Map(systems.map((s) => [s.id, s.regionId]));
+  return cachedSystemRegion;
 }

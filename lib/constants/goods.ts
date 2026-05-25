@@ -251,6 +251,10 @@ export const GOOD_NAME_TO_KEY: ReadonlyMap<string, string> = new Map(
 );
 
 /** Good tier indexed by GOODS key (e.g. "food" -> 0). */
-export const GOOD_TIER_BY_KEY: Readonly<Record<string, number>> = Object.fromEntries(
-  Object.entries(GOODS).map(([key, def]) => [key, def.tier]),
-);
+export const GOOD_TIER_BY_KEY: Readonly<Record<string, GoodTier>> = (() => {
+  const out: Record<string, GoodTier> = {};
+  for (const [key, def] of Object.entries(GOODS)) {
+    out[key] = def.tier;
+  }
+  return out;
+})();

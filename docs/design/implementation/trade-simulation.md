@@ -67,22 +67,26 @@ Surface PR 1's `TradeFlow` data on the galaxy map as a new Pixi layer with direc
 
 ### New files
 
-- **`app/api/game/systems/trade-flow/route.ts`** — `GET /api/game/systems/trade-flow`. Returns aggregate flow per edge over the last `FLOW_HISTORY_TICKS`: `{ edges: Array<{ fromSystemId, toSystemId, totalVolume, dominantGoodId, perGood: Record<goodId, number> }> }`. Auth-gated → `Cache-Control: private, max-age=...` per memory's auth-gated rule. Single query against `TradeFlow` with `groupBy([fromSystemId, toSystemId, goodId])`, post-processed into edge shape.
-- **`lib/hooks/use-trade-flow.ts`** — TanStack Query hook on the tick-scoped pattern. Modeled exactly on `lib/hooks/use-dynamic-tiles.ts`. Query key `queryKeys.tradeFlow` (no viewport bounds — fetch once per tick, filter client-side). Activated by zoom threshold (see LOD note below). 10s stale time, 30s cache.
+- **`app/api/game/systems/trade-flow/route.ts`** — `GET /api/game/systems/trade-flow`. Returns aggregate flow per edge over the last `FLOW_HISTORY_TICKS`: `{ edges: Array<{ fromSystemId, toSystemId, totalVolume, dominantGoodId, perGood: Record<goodId, number> }> }`. **Visibility-gated server-side**: edges returned only if at least one endpoint is in the player's visibility set (`computeVisibility(playerId)` from the visibility service — same source `useVisibility` consumes). Trade-flow volume is dynamic data per `docs/design/planned/visibility-system.md` §1, so it must follow the same gating rules as prices/events. Auth-gated → `Cache-Control: private, max-age=...` per memory's auth-gated rule. Single query against `TradeFlow` with `groupBy([fromSystemId, toSystemId, goodId])`, post-processed into edge shape, then visibility-filtered.
+- **`lib/hooks/use-trade-flow.ts`** — TanStack Query hook on the tick-scoped pattern. Modeled exactly on `lib/hooks/use-dynamic-tiles.ts`. Query key `queryKeys.tradeFlow` (no viewport bounds — fetch once per tick, filter client-side). **Only enabled when the trade-flow map overlay is active** (`enabled: overlays.tradeFlow`) so we don't pay the request cost when toggled off. 10s stale time, 30s cache.
 - **`components/map/pixi/layers/trade-flow-layer.ts`** — New Pixi layer. Z-order between `ConnectionLayer` and `TerritoryLayer`. For each in-frustum edge with `totalVolume > ROUTE_INFERENCE_FLOOR`:
   - One `ParticleContainer` of directional dots flowing from→to. Particle speed proportional to volume; spawn rate capped per frame (same `MAX_CREATES_PER_FRAME` discipline as `SystemLayer`).
   - Particle tint pulled from a `goodId → color` map keyed on `--color-status-*` tokens (food→green, metals→amber, etc.).
   - Edge thickness emphasized via a thin underlay graphics call (additive on top of the existing connection).
 - **`components/map/pixi/objects/trade-flow-edge.ts`** — Per-edge particle emitter. Handles direction, speed, color, and per-frame advance/recycle. Modeled on the existing route-particle code inside `EffectLayer`.
 - **`lib/constants/good-colors.ts`** — Centralized `goodId → themeToken` map (food, metals, fuel, tech, contraband, neutral fallback). Imported by both the Pixi tint mapper and any later legend UI.
+- **`components/map/map-overlay-controls.tsx`** — Floating control cluster, top-right of the map. PR 2 ships a single toggle button (`Trade Flows`); the cluster is structured to accept more overlay toggles later (danger heatmap, faction control, etc.) without re-architecting. Foundry theme: copper accent stripe, sharp corners, icon + label, active state shows copper fill. Each toggle is an independent boolean — overlays combine, not mutually exclusive.
+- **`lib/hooks/use-map-overlays.ts`** — Client hook that owns the overlay-toggle state (`{ tradeFlow: boolean }`) and persists it via the existing `map-session.ts` mechanism (extend `MapSessionState` with an `overlays` field). Default off. Returns `{ overlays, toggle(key) }`.
 
 ### Modified files
 
 - **`lib/query/keys.ts`** — Add `tradeFlow: ['trade-flow'] as const`.
 - **`lib/hooks/use-tick-invalidation.ts`** — Invalidate `tradeFlow` on `shipArrived` (post-tick boundary) so the overlay refreshes when new flow ticks commit.
-- **`lib/hooks/use-map-data.ts`** — Merge flow data into `MapData` shape (`flowEdges: Map<edgeKey, FlowEdge>` keyed by `${fromId}|${toId}`). Pass through to `PixiMapCanvas`.
-- **`components/map/pixi/pixi-map-canvas.tsx`** — Instantiate `TradeFlowLayer`, add to world container in the correct z-position, call `.sync(flowEdges)` in the per-frame update.
-- **`components/map/pixi/lod.ts`** (or wherever LOD bands live) — Add `showTradeFlow` / `tradeFlowAlpha` to `LODState`. Visible from zoom ≥ 0.4 (matches systems); fully opaque by 0.6. Below 0.4 the universe view shows territory + fleet dots; flow overlay would be noise.
+- **`lib/hooks/use-map-data.ts`** — Merge flow data into `MapData` shape (`flowEdges: Map<edgeKey, FlowEdge>` keyed by `${fromId}|${toId}`). Pass through to `PixiMapCanvas`. Flow edges are empty when the overlay toggle is off (hook gated by `overlays.tradeFlow`).
+- **`components/map/star-map.tsx`** — Mount `MapOverlayControls` over the canvas (absolute, top-right). Wire `useMapOverlays()` and pass the active overlays into `useMapData` / `PixiMapCanvas` so the trade-flow layer activates accordingly.
+- **`components/map/map-session.ts`** — Extend `MapSessionState` with `overlays?: { tradeFlow?: boolean }` and the corresponding parse/persist branches. Keep the parser strict (typeof guards) per the existing pattern.
+- **`components/map/pixi/pixi-map-canvas.tsx`** — Instantiate `TradeFlowLayer`, add to world container in the correct z-position, call `.sync(flowEdges)` in the per-frame update. Layer's `visible` flag is driven by the overlay toggle (cheap early-out when off).
+- **`components/map/pixi/lod.ts`** (or wherever LOD bands live) — Add `showTradeFlow` / `tradeFlowAlpha` to `LODState`. Visible from zoom ≥ 0.4 (matches systems); fully opaque by 0.6. Below 0.4 the universe view shows territory + fleet dots; flow overlay would be noise. **Note**: LOD only governs zoom-based fade; final visibility is `LOD.showTradeFlow && overlays.tradeFlow`.
 - **`components/map/pixi/theme.ts`** — Particle base size, max-on-screen cap, direction-arrow style if any. Trade-route colors live in `good-colors.ts` and import here.
 
 ### Reused pieces
@@ -96,6 +100,10 @@ Surface PR 1's `TradeFlow` data on the galaxy map as a new Pixi layer with direc
 
 - **Aggregate per request, not per tick**: the API computes edge aggregates on demand from `TradeFlow` (PR 1 keeps the raw events). Indexes on `(tick, fromSystemId)` make this cheap; one query per dashboard refresh, not per write.
 - **Particle density caps**: hard limit on total active particles (e.g. 2000) regardless of edges. At galactic zoom this prevents framerate cliff if many edges are simultaneously hot.
+- **Overlay toggle, not always-on**: trade flows are visually busy and the map is gaining more overlay candidates (danger, faction control, scan ranges). Establishing the overlay-toggle pattern in PR 2 — even with just one toggle — costs little now and avoids retrofitting later. Default off so first-time users see the clean map.
+- **Visibility gating at the API boundary**: per the visibility design doc, dynamic data is gated by the player's visibility set. An edge appears if **at least one endpoint** is in the visibility set — strict "both endpoints" hides too much (a trader at a system you can see should be visible even if the partner is dark), and unfiltered would leak galaxy-wide commerce intel. Filtering server-side keeps payloads small and prevents the "I can see hidden flow data in devtools" leak.
+- **Toggle disables the query, not just the layer**: when the overlay is off, `useTradeFlow` is gated (`enabled: false`). We don't pay the request, the DB groupBy, or the visibility filter for off-by-default overlays. This matters at 10K scale.
+- **Visual treatment is owned by the Pixi layer alone, not the data pipeline.** The API/hook/`MapData` shape carries only volume + dominant good + per-good breakdown — no rendering concepts (particle count, dash length, glow radius, etc.). If the dots-along-edges treatment doesn't read well, the swap is confined to `trade-flow-layer.ts` and `trade-flow-edge.ts`; nothing upstream changes. Alternatives explicitly kept open: animated dashed lines, glowing intensity lines, recoloring the existing `ConnectionLayer`, midpoint arrows. **Do not bake particle assumptions into the API response or the `FlowEdge` type.**
 
 ### Carried over from PR 1 review
 
@@ -108,10 +116,13 @@ PR 1's code review (PR #62) deferred a few items here because PR 2's surface are
 
 ### Verification
 
-- `npm run dev`, open the galaxy map at default seed, manually verify edges show particles after ~50 ticks of sim.
+- `npm run dev`, open the galaxy map at default seed. Confirm overlay toggle is off by default and `/api/game/systems/trade-flow` does NOT fire on load.
+- Toggle Trade Flows on, manually verify edges show particles after ~50 ticks of sim.
+- Move ships to extend visibility, toggle off+on, confirm new edges appear that match the player's expanded visibility set. Edges where neither endpoint is visible must not appear in the network payload.
+- Refresh the page with the toggle on, confirm state is restored from session storage.
 - Pan/zoom check: particles cull off-screen, don't reappear at lower zoom (LOD), don't flicker on viewport change (tick-scoped query keys per memory's flicker gotcha).
-- Open browser devtools, watch network — `/api/game/systems/trade-flow` fires once per tick, not per pan.
-- Pixi performance: zoom out to galactic, confirm 60fps with full overlay; if not, lower the particle cap.
+- Open browser devtools, watch network — `/api/game/systems/trade-flow` fires once per tick when on, not per pan, and zero requests when off.
+- Pixi performance: zoom out to galactic with overlay on, confirm 60fps with full overlay; if not, lower the particle cap.
 
 ---
 
@@ -133,6 +144,7 @@ Player-facing route information at the per-system level. Builds on PR 2's API by
 - **`app/(game)/@panel/system/[systemId]/page.tsx`** — Insert `<TradeActivityPanel systemId={systemId} />` after the existing market snapshot section, wrapped in `QueryBoundary` like the other data sections.
 - **`lib/query/keys.ts`** — Add `systemTradeFlow: (id: string) => ['system-trade-flow', id] as const`.
 - **`lib/hooks/use-tick-invalidation.ts`** — Invalidate `systemTradeFlow(currentSystemId)` on relevant ship-arrival events.
+- **`components/map/map-overlay-controls.tsx`** — Add a collapsible tier-color legend under the Trade Flows toggle (raw=green / processed=amber / advanced=cyan) so first-time players can decode the overlay without reading docs. Only visible when the toggle is on; uses the tier colours from `lib/constants/good-colors.ts` as the source of truth so the legend can't drift from the renderer. PR2 deliberately shipped without this (overlay was MVP); the bottom-left positioning leaves room for the legend to grow downward without affecting the map canvas.
 
 ### Reused pieces
 

@@ -9,13 +9,16 @@ import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
+import { MapOverlayControls } from "@/components/map/map-overlay-controls";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
+import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
+import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 
 interface StarMapProps {
@@ -45,6 +48,10 @@ export function StarMap({
   const { systems: tileSystems, onViewportChange, active } = useStaticTiles();
   const { visibleSystemIds } = useVisibility();
   const { dynamicSystems } = useDynamicData(active);
+
+  // ── Overlay toggles (Trade Flows, future: danger, factions, etc.) ──
+  const { overlays, toggle } = useMapOverlays();
+  const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
 
   // Merge atlas (positions) with static tile data (names + economy)
   const mergedSystems = useMemo((): StarSystemInfo[] => {
@@ -131,6 +138,7 @@ export function StarMap({
     events,
     visibleSystemIds,
     dynamicSystems,
+    tradeFlowEdges,
     selectedSystem: view.selectedSystem,
     navigationMode: mode,
     isNavigationActive,
@@ -238,6 +246,9 @@ export function StarMap({
         regionInfos={regionInfos}
         onViewportChange={onViewportChange}
       />
+
+      {/* Map overlay toggle cluster (bottom-left) */}
+      <MapOverlayControls overlays={overlays} toggle={toggle} />
 
       {/* Navigation mode banner */}
       {mode.phase === "unit_selected" && (

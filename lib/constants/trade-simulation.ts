@@ -6,8 +6,19 @@
  */
 
 export const TRADE_SIMULATION = {
-  /** Process flow every N ticks (round-robin per region). */
-  PROCESS_EVERY_N_TICKS: 4,
+  /**
+   * Process flow every N ticks. The processor body picks one region per
+   * active tick via round-robin, so a full universe sweep takes
+   * `regions × PROCESS_EVERY_N_TICKS` ticks.
+   *
+   * MUST satisfy `regions × PROCESS_EVERY_N_TICKS < FLOW_HISTORY_TICKS`,
+   * otherwise each region's flow events get pruned before the round-robin
+   * cycles back to it and the overlay shows permanent gaps. At 10K scale
+   * (60 regions), `PROCESS_EVERY_N_TICKS=4` would need 240-tick sweeps which
+   * exceeds the 200-tick history window — so we run every tick. The
+   * per-tick processor cost is still sub-millisecond per region in practice.
+   */
+  PROCESS_EVERY_N_TICKS: 1,
   /** Max units of one good moved per edge per processor run. */
   FLOW_BUDGET: 8,
   /**
