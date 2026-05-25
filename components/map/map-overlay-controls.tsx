@@ -1,6 +1,12 @@
 "use client";
 
 import { tv } from "tailwind-variants";
+import {
+  TIER_COLOR,
+  TIER_LABEL,
+  pixiHexToCss,
+} from "@/lib/constants/good-colors";
+import type { GoodTier } from "@/lib/types/game";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 
 const toggleVariants = tv({
@@ -86,6 +92,37 @@ export function MapOverlayControls({
             </li>
           );
         })}
+      </ul>
+      {overlays.tradeFlow && <TradeFlowLegend />}
+    </div>
+  );
+}
+
+/**
+ * Tier-colour legend shown only when the Trade Flows overlay is on. Colours
+ * come from `TIER_COLOR` so they can't drift from the Pixi renderer.
+ */
+function TradeFlowLegend() {
+  const tiers: GoodTier[] = [0, 1, 2];
+  return (
+    <div className="border-t border-border px-3 py-2">
+      <h4 className="mb-1.5 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Good Tier
+      </h4>
+      <ul className="space-y-1">
+        {tiers.map((tier) => (
+          <li
+            key={tier}
+            className="flex items-center gap-2 text-[11px] text-text-secondary"
+          >
+            <span
+              className="h-2 w-2 shrink-0"
+              style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
+              aria-hidden
+            />
+            <span>{TIER_LABEL[tier]}</span>
+          </li>
+        ))}
       </ul>
     </div>
   );

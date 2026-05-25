@@ -50,6 +50,31 @@ export interface TradeFlowEdgeInfo {
   perGood: Record<string, number>;
 }
 export type TradeFlowResponse = ApiResponse<{ edges: TradeFlowEdgeInfo[] }>;
+/** Aggregate trading partner for a single good (top-N source or destination). */
+export interface TradeFlowPartner {
+  systemId: string;
+  systemName: string;
+  quantity: number;
+}
+/** One good's total flow and the top partner systems that contributed. */
+export interface TradeFlowGoodSummary {
+  goodId: string;
+  goodName: string;
+  totalQuantity: number;
+  partners: TradeFlowPartner[];
+}
+/** One bucket of the import/export volume sparkline. `tick` is the bucket end. */
+export interface TradeFlowVolumeBucket {
+  tick: number;
+  importVolume: number;
+  exportVolume: number;
+}
+export interface SystemTradeFlowData {
+  topImports: TradeFlowGoodSummary[];
+  topExports: TradeFlowGoodSummary[];
+  volumeHistory: TradeFlowVolumeBucket[];
+}
+export type SystemTradeFlowResponse = ApiResponse<SystemTradeFlowData>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;
