@@ -144,6 +144,7 @@ Player-facing route information at the per-system level. Builds on PR 2's API by
 - **`app/(game)/@panel/system/[systemId]/page.tsx`** — Insert `<TradeActivityPanel systemId={systemId} />` after the existing market snapshot section, wrapped in `QueryBoundary` like the other data sections.
 - **`lib/query/keys.ts`** — Add `systemTradeFlow: (id: string) => ['system-trade-flow', id] as const`.
 - **`lib/hooks/use-tick-invalidation.ts`** — Invalidate `systemTradeFlow(currentSystemId)` on relevant ship-arrival events.
+- **`components/map/map-overlay-controls.tsx`** — Add a collapsible tier-color legend under the Trade Flows toggle (raw=green / processed=amber / advanced=cyan) so first-time players can decode the overlay without reading docs. Only visible when the toggle is on; uses the tier colours from `lib/constants/good-colors.ts` as the source of truth so the legend can't drift from the renderer. PR2 deliberately shipped without this (overlay was MVP); the bottom-left positioning leaves room for the legend to grow downward without affecting the map canvas.
 
 ### Reused pieces
 

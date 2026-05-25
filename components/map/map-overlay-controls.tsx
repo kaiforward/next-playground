@@ -49,20 +49,21 @@ interface MapOverlayControlsProps {
 }
 
 /**
- * Floating cluster of overlay-toggle buttons, positioned absolutely over the
- * map canvas. PR 2 ships the Trade Flows toggle; future overlays (danger
- * heatmap, faction control, scan ranges) drop into `OVERLAY_DEFS` without
- * touching the surrounding markup.
+ * Floating cluster of overlay-toggle buttons, anchored bottom-left of the
+ * map canvas (just to the right of the game sidebar). PR 2 ships the Trade
+ * Flows toggle; future overlays (danger heatmap, faction control, scan
+ * ranges) drop into `OVERLAY_DEFS` without touching the surrounding markup.
  *
- * Foundry theme: copper left stripe on the cluster, sharp corners, surface
- * background. Active toggles get a copper-tinted row + glowing copper dot.
+ * Foundry theme: sharp corners, surface background. The cluster intentionally
+ * has NO copper left stripe — each active toggle has its own copper accent,
+ * and a container stripe would double up visually on the active row.
  */
 export function MapOverlayControls({
   overlays,
   toggle,
 }: MapOverlayControlsProps) {
   return (
-    <div className="absolute top-4 right-4 z-40 w-44 border border-border border-l-2 border-l-accent bg-surface/95 backdrop-blur shadow-lg">
+    <div className="absolute bottom-4 left-4 z-40 w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
       <div className="px-3 py-2 border-b border-border">
         <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
           Overlays

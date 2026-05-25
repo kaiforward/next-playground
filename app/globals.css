@@ -45,7 +45,7 @@
   --color-status-slate-light: #cbd5e1;
 
   /* Layout */
-  --sidebar-width: 256px;
+  --sidebar-width: 200px;
   --sidebar-collapsed-width: 48px;
   --topbar-height: 40px;
 }
