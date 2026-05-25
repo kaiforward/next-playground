@@ -34,6 +34,8 @@ import type {
   ProsperityUpdate,
 } from "@/lib/tick/world/economy-world";
 
+const DEBUG = process.env.DEBUG_ECONOMY === "1";
+
 /**
  * Pure processor body. Same logic runs against the Prisma adapter (live game)
  * or the in-memory adapter (simulator + unit tests). All knobs that differ
@@ -146,10 +148,12 @@ export async function runEconomyProcessor(
   await world.applyProsperityUpdates(prosperityUpdates);
 
   const modCount = rawModifiers.length;
-  console.log(
-    `[economy] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${markets.length} markets` +
-      (modCount > 0 ? `, ${modCount} active modifier(s)` : ""),
-  );
+  if (DEBUG) {
+    console.log(
+      `[economy] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${markets.length} markets` +
+        (modCount > 0 ? `, ${modCount} active modifier(s)` : ""),
+    );
+  }
 
   return {
     globalEvents: {

@@ -20,6 +20,8 @@ import type {
   VolumeIncrement,
 } from "@/lib/tick/world/trade-flow-world";
 
+const DEBUG = process.env.DEBUG_TRADE_FLOW === "1";
+
 /**
  * Pure processor body. Same logic runs against the Prisma adapter (live game)
  * or the in-memory adapter (simulator + unit tests).
@@ -81,9 +83,11 @@ export async function runTradeFlowProcessor(
   // Below 1 unit nothing can flow this run — still prune so the rolling window stays bounded.
   if (effectiveBudget < 1) {
     await world.pruneFlowEvents(ctx.tick - params.flowHistoryTicks);
-    console.log(
-      `[tradeFlow] Region "${targetRegion.name}": displaced by player pressure (volume=${playerVolume}); no flow`,
-    );
+    if (DEBUG) {
+      console.log(
+        `[tradeFlow] Region "${targetRegion.name}": displaced by player pressure (volume=${playerVolume}); no flow`,
+      );
+    }
     return {};
   }
 
@@ -121,6 +125,7 @@ export async function runTradeFlowProcessor(
         mB.priceCeiling,
       );
       const gradient = (priceB - priceA) / mA.basePrice;
+      if (!isFinite(gradient)) continue;
 
       if (Math.abs(gradient) > Math.abs(bestGradient)) {
         bestGradient = gradient;
@@ -224,9 +229,11 @@ export async function runTradeFlowProcessor(
   }
   await world.pruneFlowEvents(ctx.tick - params.flowHistoryTicks);
 
-  console.log(
-    `[tradeFlow] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${edges.length} edges, ${flowEvents.length} flow(s)`,
-  );
+  if (DEBUG) {
+    console.log(
+      `[tradeFlow] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${edges.length} edges, ${flowEvents.length} flow(s)`,
+    );
+  }
 
   return {};
 }

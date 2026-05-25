@@ -12,6 +12,58 @@ import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 
 /**
+ * Cached `regionId → unique unordered intra-region edges` map. The connection
+ * graph and region assignments are static after seed, so we build this once
+ * per process and reuse it across every tick. Replaces the per-tick
+ * `tx.systemConnection.findMany` call that the PR 1 adapter shipped with.
+ *
+ * The adjacency service is imported dynamically so that the unit tests, which
+ * only exercise the pure processor body through the in-memory adapter, do not
+ * transitively load `lib/prisma.ts` and trip its DATABASE_URL guard.
+ */
+let cachedEdgesByRegion: Map<string, EdgeView[]> | null = null;
+
+async function getEdgesByRegion(): Promise<Map<string, EdgeView[]>> {
+  if (cachedEdgesByRegion) return cachedEdgesByRegion;
+
+  const { getAdjacencyList, getSystemRegionMap } = await import(
+    "@/lib/services/adjacency"
+  );
+  const [adjacency, sysRegion] = await Promise.all([
+    getAdjacencyList(),
+    getSystemRegionMap(),
+  ]);
+
+  const byRegion = new Map<string, EdgeView[]>();
+  const seen = new Set<string>();
+
+  for (const [fromId, neighbors] of adjacency) {
+    const fromRegion = sysRegion.get(fromId);
+    if (!fromRegion) continue;
+
+    for (const toId of neighbors) {
+      if (fromId === toId) continue;
+      if (sysRegion.get(toId) !== fromRegion) continue;
+
+      const [a, b] = fromId < toId ? [fromId, toId] : [toId, fromId];
+      const key = `${a}|${b}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      let list = byRegion.get(fromRegion);
+      if (!list) {
+        list = [];
+        byRegion.set(fromRegion, list);
+      }
+      list.push({ aSystemId: a, bSystemId: b });
+    }
+  }
+
+  cachedEdgesByRegion = byRegion;
+  return byRegion;
+}
+
+/**
  * Live-game adapter for the trade-flow processor.
  *
  * Bulk writes via `unnest()` SQL (markets, volume increments) and
@@ -31,29 +83,9 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
   async getEdgesForRegion(regionId: string): Promise<EdgeView[]> {
     // Both endpoints must be in the region — gateway/inter-region edges are
     // skipped in PR 1 (the design defers cross-region flow to a later pass).
-    const rows = await this.tx.systemConnection.findMany({
-      where: {
-        fromSystem: { regionId },
-        toSystem: { regionId },
-      },
-      select: { fromSystemId: true, toSystemId: true },
-    });
-
-    // Connections are seeded bidirectionally; dedupe to unique unordered pairs.
-    const seen = new Set<string>();
-    const edges: EdgeView[] = [];
-    for (const { fromSystemId, toSystemId } of rows) {
-      if (fromSystemId === toSystemId) continue;
-      const [a, b] =
-        fromSystemId < toSystemId
-          ? [fromSystemId, toSystemId]
-          : [toSystemId, fromSystemId];
-      const key = `${a}|${b}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({ aSystemId: a, bSystemId: b });
-    }
-    return edges;
+    // Reads from the process-level cache built once on first call.
+    const byRegion = await getEdgesByRegion();
+    return byRegion.get(regionId) ?? [];
   }
 
   async getMarketSnapshotsForRegion(
