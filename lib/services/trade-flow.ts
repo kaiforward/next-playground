@@ -3,26 +3,43 @@ import { getPlayerVisibility } from "./visibility-cache";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 
 /**
- * Aggregated trade flow on one edge over the rolling history window.
+ * Aggregated trade flow on one undirected edge over the rolling history window.
  *
- * Edges are undirected for visualization — particles flowing both ways on
- * the same connection collapse into a single entry. `totalVolume` is the
- * sum of all quantities regardless of direction; `dominantGoodId` is the
- * highest-volume good across both directions. `perGood` exposes the full
- * breakdown so the UI can colour or filter without a second query.
+ * The Pixi overlay renders one stream of particles per active edge flowing from
+ * the net source to the net destination of the dominant good. `fromSystemId`
+ * and `toSystemId` reflect that net direction (NOT canonical sort order), so
+ * the renderer can use them directly without recomputing direction.
+ *
+ * `totalVolume` is the sum of magnitudes across both directions and all goods
+ * — used by the renderer for thickness/density. `perGood` is the per-good
+ * magnitude (both directions summed), useful for tooltips and future colour
+ * mixing.
+ *
+ * Callers that need a stable lookup key (e.g. matching a flow edge to a
+ * seed-ordered connection) should use the canonical key
+ * `${min(fromId,toId)}|${max(fromId,toId)}`.
  */
 export interface TradeFlowEdge {
-  /** Lexicographically smaller endpoint id (canonical orientation). */
+  /** Net source system for the dominant good (where particles spawn). */
   fromSystemId: string;
-  /** Lexicographically larger endpoint id. */
+  /** Net destination system for the dominant good (where particles terminate). */
   toSystemId: string;
+  /** Sum of magnitudes across both directions and all goods. */
   totalVolume: number;
   dominantGoodId: string;
+  /** Per-good magnitude (both directions summed, unsigned). */
   perGood: Record<string, number>;
 }
 
 export interface TradeFlowData {
   edges: TradeFlowEdge[];
+}
+
+interface DirectionalGoodTally {
+  /** Volume in canonical-from → canonical-to direction. */
+  forward: number;
+  /** Volume in canonical-to → canonical-from direction. */
+  reverse: number;
 }
 
 /**
@@ -51,24 +68,23 @@ export async function getTradeFlowEdges(
     _sum: { quantity: true },
   });
 
-  // Collapse to undirected edges keyed by sorted endpoint pair.
-  const byEdge = new Map<
-    string,
-    {
-      fromSystemId: string;
-      toSystemId: string;
-      perGood: Map<string, number>;
-    }
-  >();
+  // Collapse to undirected edges keyed by sorted endpoint pair, but preserve
+  // per-direction tallies so we can recover net flow direction below.
+  interface EdgeAgg {
+    canonicalFrom: string;
+    canonicalTo: string;
+    perGood: Map<string, DirectionalGoodTally>;
+  }
+  const byEdge = new Map<string, EdgeAgg>();
 
   for (const row of grouped) {
     const qty = row._sum.quantity ?? 0;
     if (qty <= 0) continue;
 
-    const [a, b] =
-      row.fromSystemId < row.toSystemId
-        ? [row.fromSystemId, row.toSystemId]
-        : [row.toSystemId, row.fromSystemId];
+    const isForward = row.fromSystemId < row.toSystemId;
+    const [a, b] = isForward
+      ? [row.fromSystemId, row.toSystemId]
+      : [row.toSystemId, row.fromSystemId];
 
     // Visibility gate: at least one endpoint must be visible.
     if (!visibleSet.has(a) && !visibleSet.has(b)) continue;
@@ -76,30 +92,44 @@ export async function getTradeFlowEdges(
     const key = `${a}|${b}`;
     let entry = byEdge.get(key);
     if (!entry) {
-      entry = { fromSystemId: a, toSystemId: b, perGood: new Map() };
+      entry = { canonicalFrom: a, canonicalTo: b, perGood: new Map() };
       byEdge.set(key, entry);
     }
-    entry.perGood.set(
-      row.goodId,
-      (entry.perGood.get(row.goodId) ?? 0) + qty,
-    );
+    let tally = entry.perGood.get(row.goodId);
+    if (!tally) {
+      tally = { forward: 0, reverse: 0 };
+      entry.perGood.set(row.goodId, tally);
+    }
+    if (isForward) tally.forward += qty;
+    else tally.reverse += qty;
   }
 
   const edges: TradeFlowEdge[] = [];
-  for (const { fromSystemId, toSystemId, perGood } of byEdge.values()) {
+  for (const { canonicalFrom, canonicalTo, perGood } of byEdge.values()) {
     let totalVolume = 0;
     let dominantGoodId = "";
-    let dominantVolume = 0;
+    let dominantNet = 0;
+    let dominantMagnitude = 0;
     const perGoodObj: Record<string, number> = {};
-    for (const [goodId, vol] of perGood) {
-      totalVolume += vol;
-      perGoodObj[goodId] = vol;
-      if (vol > dominantVolume) {
-        dominantVolume = vol;
+
+    for (const [goodId, tally] of perGood) {
+      const magnitude = tally.forward + tally.reverse;
+      totalVolume += magnitude;
+      perGoodObj[goodId] = magnitude;
+      if (magnitude > dominantMagnitude) {
+        dominantMagnitude = magnitude;
         dominantGoodId = goodId;
+        dominantNet = tally.forward - tally.reverse;
       }
     }
+
     if (totalVolume < TRADE_SIMULATION.ROUTE_INFERENCE_FLOOR) continue;
+
+    // Net direction is taken from the dominant good. Ties (perfect balance) fall
+    // back to canonical orientation rather than blinking direction over time.
+    const fromSystemId = dominantNet >= 0 ? canonicalFrom : canonicalTo;
+    const toSystemId = dominantNet >= 0 ? canonicalTo : canonicalFrom;
+
     edges.push({
       fromSystemId,
       toSystemId,

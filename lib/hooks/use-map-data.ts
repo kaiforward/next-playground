@@ -297,12 +297,17 @@ export function useMapData({
     : "unknown";
 
   // ── Trade-flow edges keyed for O(1) lookup by Pixi layer ─────
+  // `fromSystemId`/`toSystemId` reflect net flow direction (not sort order),
+  // so we key by canonical pair `${min}|${max}` for lookup. The renderer
+  // uses the value's from/to as-is for direction.
   const flowEdges = useMemo(() => {
     const map = new Map<string, TradeFlowEdgeInfo>();
     for (const edge of tradeFlowEdges) {
-      // Service guarantees canonical orientation (from < to), so a single key
-      // form covers every lookup the renderer can make.
-      map.set(`${edge.fromSystemId}|${edge.toSystemId}`, edge);
+      const [a, b] =
+        edge.fromSystemId < edge.toSystemId
+          ? [edge.fromSystemId, edge.toSystemId]
+          : [edge.toSystemId, edge.fromSystemId];
+      map.set(`${a}|${b}`, edge);
     }
     return map;
   }, [tradeFlowEdges]);

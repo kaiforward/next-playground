@@ -39,12 +39,14 @@ export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
 export type DynamicTileResponse = ApiResponse<{ systems: DynamicTileSystem[] }>;
 export type VisibilityResponse = ApiResponse<{ systemIds: string[] }>;
 export interface TradeFlowEdgeInfo {
-  /** Lexicographically smaller endpoint id (canonical orientation). */
+  /** Net source system for the dominant good (where particles spawn). */
   fromSystemId: string;
-  /** Lexicographically larger endpoint id. */
+  /** Net destination system for the dominant good (where particles terminate). */
   toSystemId: string;
+  /** Sum of magnitudes across both directions and all goods. */
   totalVolume: number;
   dominantGoodId: string;
+  /** Per-good magnitude (both directions summed). */
   perGood: Record<string, number>;
 }
 export type TradeFlowResponse = ApiResponse<{ edges: TradeFlowEdgeInfo[] }>;
