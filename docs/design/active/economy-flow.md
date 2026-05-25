@@ -33,6 +33,20 @@ Every tick, one region's markets update (round-robin). Each market has two value
            | updated supply/demand written to DB
            v
   +------------------+
+  |  TRADE FLOW      |  Runs THIRD
+  |                  |
+  |  For each edge   |  Goods flow along graph edges based on price
+  |  in the region:  |  gradients — pure math, no NPC entities.
+  |  - pick steepest |  Steepest-gradient good wins, capped by
+  |    gradient good |  FLOW_BUDGET per edge per run.
+  |  - move quantity |  Source/destination markets see the same
+  |    cheap -> dear |  supply/demand deltas a player trade would.
+  |  - record event  |  Volume increments feed prosperity below.
+  +--------+---------+
+           |
+           | flow events appended; per-system volume incremented
+           v
+  +------------------+
   |  PROSPERITY      |  Also during economy tick
   |  UPDATE          |
   |  Trade volume    |  High trade -> prosperity rises (-> booming)
@@ -113,7 +127,7 @@ Different economy types have different self-sufficiency levels for goods they co
   ====================================
   Agricultural (s=0.5):  has irrigation -> moderate water prices
   Refinery (s=0.2):      some recycling -> expensive but not desperate
-  Tech (s=0.05):         imports nearly everything -> very expensive
+  Tech (s=0.1):          imports nearly everything -> very expensive
 
   Traders must decide WHICH consumers to serve — not all are equally profitable.
 ```
@@ -172,9 +186,37 @@ Events inject chaos into the system in two ways:
                - Dampen mean reversion (markets stay disrupted longer)
 ```
 
-### Player Trading — "The missing link"
+### Edge-Flow Trade Simulation — "The background pressure"
 
-Players move goods between systems, which is the inter-system trade the simulation doesn't have on its own.
+Edge flow is the simulated inter-system trade that runs without players. For each connection edge within a region, the processor picks the good with the steepest price gradient and moves a budgeted quantity from the cheap side to the expensive side every active run.
+
+```
+  SYSTEM A (cheap)  --- edge ---  SYSTEM B (expensive)
+       |                                  ^
+       |  q = floor(min(BUDGET,           |
+       |              supplyHeadroom,     |
+       |              supplyCapacity)     |
+       |          * gradientFraction)     |
+       |                                  |
+       +-------- q units of good ---------+
+       supply -= q                        supply += q
+       demand += q * 0.5                  demand -= q * 0.5
+```
+
+Properties:
+- **Threshold-gated**: small gradients don't trigger flow (no equilibrium churn).
+- **Budget-capped**: per-edge, per-run cap on quantity moved.
+- **Reuses trade math**: supply/demand deltas are identical to a player trade — flow volume increments the same accumulator that prosperity reads, so edge flow and player trade contribute symmetrically.
+- **One good per edge per run**: steepest-gradient good wins; other goods get their turn when their gradient becomes the steepest.
+- **Player-displaced**: when players are active in a region, the budget scales down — players' own trade pressure replaces the simulation's.
+
+Chains emerge naturally: a system pulling food from a neighbor lowers that neighbor's supply, which then pulls from *its* neighbor. Real supply chains without explicitly programming them.
+
+Full design in [trade-simulation.md](./trade-simulation.md).
+
+### Player Trading — "Direct intervention"
+
+Players move goods between systems on top of the edge-flow background, with the same per-market effect.
 
 ```
   AGRICULTURAL SYSTEM              INDUSTRIAL SYSTEM
@@ -222,6 +264,8 @@ Price is calculated on-read, not stored. It's just:
   Production         -> supply grows, self-limiting near ceiling (1-5/tick)
   Consumption        -> supply shrinks, self-limiting near floor (1-4/tick)
   Prosperity         -> scales both production + consumption (0.3x to 1.3x)
+  Edge-flow trade    -> goods flow between connected systems by price
+                        gradient (background trade pressure, no entities)
 
   LAYER 3: Disruptions (unpredictable)
   =====================================
@@ -231,7 +275,7 @@ Price is calculated on-read, not stored. It's just:
 
   LAYER 4: Player Agency (real-time)
   ===================================
-  Trading            -> redistributes goods between systems
-                        (the inter-system trade the simulation lacks)
+  Trading            -> direct buy/sell on top of edge-flow background
+                        (also displaces edge flow in active regions)
   Prosperity impact  -> sustained trade boosts system activity
 ```
