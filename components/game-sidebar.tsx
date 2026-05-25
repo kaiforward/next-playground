@@ -214,7 +214,7 @@ export function GameSidebar({
           </button>
         ) : (
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-secondary truncate max-w-[140px]">
+            <span className="text-xs text-text-secondary truncate max-w-[100px]">
               {userEmail}
             </span>
             <button

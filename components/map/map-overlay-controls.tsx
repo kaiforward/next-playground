@@ -63,7 +63,7 @@ export function MapOverlayControls({
   toggle,
 }: MapOverlayControlsProps) {
   return (
-    <div className="absolute bottom-4 left-4 z-40 w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
+    <div className="absolute bottom-4 left-4 z-20 w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
       <div className="px-3 py-2 border-b border-border">
         <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
           Overlays
