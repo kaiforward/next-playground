@@ -15,13 +15,14 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Processor Pipeline
 
-8 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+9 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
 
 ```
 Ship Arrivals ──────────────────────────────────┐
   └→ Battles (depends on: ship-arrivals) ───────┤
 Events ─────────────────────────────────────────┤
   └→ Economy (depends on: events) ──────────────┤
+       └→ Trade Flow (depends on: economy) ─────┤
        └→ Trade Missions (depends on: events, economy)
        └→ Op Missions (depends on: events, economy)
        └→ Price Snapshots (depends on: economy) ┘
@@ -36,6 +37,7 @@ Notification Prune (independent, every 50 ticks) ┘
 | Battles | Every tick | Ship Arrivals | Resolves active battle rounds (every 6 ticks). Updates strength/morale, checks for victory/defeat/retreat. Applies ship damage and credits rewards on resolution |
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
 | Economy | Every tick | Events | Simulates one region's markets per tick (round-robin). Applies event modifiers and government effects to supply/demand |
+| Trade Flow | Every tick (internal region round-robin) | Economy | Simulates inter-system goods flow along edges driven by price gradients. Picks one region per active tick, mutates supply/demand at both endpoints, appends flow events, and increments per-system volume. Player trade volume in a region throttles the budget down to zero (player displacement). See [trade-simulation.md](./trade-simulation.md) |
 | Trade Missions | Every 5 ticks | Events, Economy | Generates new missions from price extremes and active events. Expires unclaimed/overdue missions. Notifies players |
 | Op Missions | Every tick | Events, Economy | Generates patrol/survey/bounty/salvage/recon missions from danger levels and traits. Expires unclaimed missions. Completes timed missions. Fails missions with destroyed/disabled ships |
 | Price Snapshots | Every 20 ticks | Economy | Records current prices for all systems into rolling history (max 50 snapshots per system) |

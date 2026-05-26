@@ -16,7 +16,7 @@ Enriches the physical universe that everything else builds on. No new gameplay s
 
 | System | What it does | Stands alone? |
 |---|---|---|
-| ~~[System Enrichment](./planned/system-enrichment.md) §1–3~~ | Traits, quality tiers, trait-to-economy derivation | **Done** — traits drive economy derivation, 24 neutral regions (no themes), EconomyBadge component, neutral map nodes. Region themes removed entirely; randomness produces natural variety. |
+| ~~[System Traits](./active/system-traits.md) §1–4~~ | Traits, quality tiers, trait-to-economy derivation, trait interactions with events and navigation | **Done** — moved from `planned/system-enrichment.md` to `active/system-traits.md` as part of doc cleanup. Traits drive economy derivation, neutral regions (no themes), EconomyBadge component, neutral map nodes. |
 
 **Why first**: Every later system references traits — factions value them, ships dock at facilities built on them, missions are flavoured by them. Without traits, the rest of the planned systems have nothing to hang on.
 
@@ -57,7 +57,7 @@ The big structural change. Named factions replace regions as the primary territo
 | [Faction System](./planned/faction-system.md) | Factions, territory, reputation, relations, alliances, government migration | Layer 0 (traits define strategic value) |
 | [War System](./planned/war-system.md) | Border conflicts (ambient), faction wars (interactive), battles, territory capture | Faction System |
 | [Navigation Changes](./planned/navigation-changes.md) §4 | Contraband/goods restrictions by government type, black markets | Faction System (government per faction) |
-| [System Enrichment](./planned/system-enrichment.md) §5 | Faction facilities (shipyards, naval bases, etc.), facility tiers, war targets | Faction System + Layer 0 |
+| [Facilities](./planned/facilities.md) | Faction facilities (shipyards, naval bases, etc.), facility tiers, war targets. Split out of `system-enrichment.md` during doc cleanup — the trait portion (§1–4) shipped and lives in [active/system-traits.md](./active/system-traits.md) | Faction System + Layer 0 |
 
 **Why third**: Factions are the demand engine — they give players reasons to trade beyond profit. But they're a large structural migration (government ownership, spawn logic, tick processors) so they need the simpler foundation layers stable first.
 
@@ -180,7 +180,7 @@ Specific items where a planned system replaces or modifies an active implementat
 
 **Key deltas**: Government modifiers (volatility, equilibrium spread, tax, danger, contraband) move from per-region to per-system based on owning faction. Affects economy processing, danger pipeline, contraband inspection, and tax collection.
 
-**Region dominant economy re-derivation**: Layer 0 adds `Region.dominantEconomy` (stored, computed at seed time). When faction conquest changes a system's economy via government affinity nudge (system-enrichment.md §2.2), the owning region's `dominantEconomy` must be re-derived. Add this to the war/territory-change processor.
+**Region dominant economy re-derivation**: Layer 0 adds `Region.dominantEconomy` (stored, computed at seed time). When faction conquest changes a system's economy via government affinity nudge ([system-traits.md §2.2](./active/system-traits.md)), the owning region's `dominantEconomy` must be re-derived. Add this to the war/territory-change processor.
 
 ---
 

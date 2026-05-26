@@ -4,7 +4,7 @@ Production facilities and the mechanics of player-driven goods production. Cover
 
 **Design principle**: Production facilities use the universal build system from [Player Facilities](./player-facilities.md) — construction, upgrades, operating costs, limits, and asset risk are inherited. This document only defines what makes production facilities unique: what they produce and how that production interacts with the game world.
 
-**Depends on**: [Player Facilities](./player-facilities.md) (build system), [Economy](../active/economy.md) (market integration), [System Enrichment](./system-enrichment.md) (traits, economy types, population), [Faction System](./faction-system.md) (war material demand)
+**Depends on**: [Player Facilities](./player-facilities.md) (build system), [Economy](../active/economy.md) (market integration), [System Traits](../active/system-traits.md) (traits, economy types, population), [Faction System](./faction-system.md) (war material demand)
 
 ---
 
@@ -74,7 +74,7 @@ Population is a new system-level stat that represents how many people live and w
 
 ### 2.2 Derivation from Traits
 
-Population is derived at world generation from system traits, not assigned independently. This keeps it consistent with the bottom-up trait system from [System Enrichment](./system-enrichment.md).
+Population is derived at world generation from system traits, not assigned independently. This keeps it consistent with the bottom-up trait system from [System Traits](../active/system-traits.md).
 
 **High population traits**: Habitable world (strongest contributor), lagrange stations, orbital ring remnant, ancient trade route, seed vault. These traits imply infrastructure, liveable conditions, and established civilisation.
 
@@ -93,7 +93,7 @@ Population is derived at world generation from system traits, not assigned indep
 | **Market absorption** | Higher population = deeper market = more supply/demand before prices shift. The primary use case for this stat |
 | **Consumption demand** | More people consume more food, textiles, medicine, luxuries. Scales base consumption rates |
 | **Facility income** | Infrastructure facilities (trade posts, etc.) earn more at high-population systems — more customers |
-| **Event impact** | Plague events hit harder at high-pop systems. Famine is more devastating. Already noted in [System Enrichment §4](./system-enrichment.md) |
+| **Event impact** | Plague events hit harder at high-pop systems. Famine is more devastating. Already noted in [System Traits §4](../active/system-traits.md) |
 | **Danger baseline** | Higher population generally means better infrastructure, rescue capability, law enforcement. Reduces base danger slightly |
 | **Faction value** | High-population systems are more valuable territory — more tax revenue, more economic output, worth fighting over |
 
@@ -310,7 +310,8 @@ See also [Production Roster §10](./production-roster.md) for per-good tuning (p
 
 - **[Player Facilities](./player-facilities.md)** — universal build system (construction, upgrades, costs, limits, asset risk)
 - **[Economy](../active/economy.md)** — market simulation, supply/demand, production/consumption rates
-- **[System Enrichment](./system-enrichment.md)** — system traits, economy types, trait quality tiers, faction facilities
+- **[System Traits (active)](../active/system-traits.md)** — system traits, economy types, trait quality tiers
+- **[Facilities](./facilities.md)** — faction facilities (separate from player facilities)
 - **[Simulation Enhancements](../archive/simulation-enhancements.md)** — supply chain dependencies, NPC trade pressure (archived — supply chain mechanics now covered in this doc)
 - **[Faction System](./faction-system.md)** — war material demand, faction economy effects, reputation
 - **[War System](./war-system.md)** — war material consumption, front-line demand spikes

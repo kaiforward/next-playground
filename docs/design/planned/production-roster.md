@@ -4,7 +4,7 @@ The complete catalog of market goods, production facility types, their recipes, 
 
 For the build system (construction, upgrades, costs, limits, asset risk) see [Player Facilities](./player-facilities.md). For the production architecture (market impact, population, chains, output routing) see [Production](./production.md).
 
-**Depends on**: [Production](./production.md) (architecture), [Economy](../active/economy.md) (existing goods), [System Enrichment](./system-enrichment.md) (traits, economy types), [War System](./war-system.md) (military asset consumption)
+**Depends on**: [Production](./production.md) (architecture), [Economy](../active/economy.md) (existing goods), [System Traits](../active/system-traits.md) (traits, economy types), [War System](./war-system.md) (military asset consumption)
 
 ---
 
@@ -540,7 +540,7 @@ All remaining open questions are tuning numbers that require simulation testing.
 - **[Production](./production.md)** — production architecture (market impact, population, chains, output routing, trait quality)
 - **[Player Facilities](./player-facilities.md)** — universal build system (construction, upgrades, costs, limits, asset risk)
 - **[Economy](../active/economy.md)** — market simulation, NPC production/consumption rates
-- **[System Enrichment](./system-enrichment.md)** — system traits, economy types, trait quality tiers
+- **[System Traits (active)](../active/system-traits.md)** — system traits, economy types, trait quality tiers
 - **[Faction System](./faction-system.md)** — war material demand, reputation
 - **[War System](./war-system.md)** — military asset consumption, front-line demand
 - **[Player Progression](./player-progression.md)** — production as mid/late game content

@@ -8,7 +8,7 @@ Two categories of facility share this build system:
 
 **Design principle**: Facilities are personal investments, not world-state modifications. Multiple players can own facilities in the same system. Player facilities don't affect system-level production data or faction facility behavior — they're private income streams and personal advantages layered on top of the world simulation.
 
-**Depends on**: [Player Progression](./player-progression.md) (mid/late game gating), [System Enrichment](./system-enrichment.md) (system traits, economy types), [Faction System](./faction-system.md) (standing tax, war seizure)
+**Depends on**: [Player Progression](./player-progression.md) (mid/late game gating), [System Traits](../active/system-traits.md) (system traits, economy types), [Faction System](./faction-system.md) (standing tax, war seizure)
 
 ---
 
@@ -328,7 +328,8 @@ Infrastructure facility benefits (spread bonuses, danger reduction, duty reducti
 
 - **[Production](./production.md)** — production facility mechanics, recipes, output, supply chain integration
 - **[Player Progression](./player-progression.md)** — progression gating (minor = mid game, major = late game), credit sinks
-- **[System Enrichment](./system-enrichment.md)** — system traits (placement requirements), faction facilities (separate from player facilities)
+- **[System Traits (active)](../active/system-traits.md)** — system traits (placement requirements)
+- **[Facilities](./facilities.md)** — faction-owned facilities (separate from player facilities)
 - **[Faction System](./faction-system.md)** — reputation (standing tax), war mechanics (seizure conditions)
 - **[War System](./war-system.md)** — territory conquest, direct involvement tracking
 - **[Navigation](../active/navigation.md)** — danger pipeline (modified by Security Office, Customs Brokerage, Smuggler's Den)

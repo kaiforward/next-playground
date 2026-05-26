@@ -138,8 +138,8 @@ The configurable universe and tile-based map renderer are in place — scale cei
 - **Faction territory**: Systems will belong to factions, with colored territory visualization
 - **Government migration**: Government type moves from per-region to per-faction (see [faction-system.md](../planned/faction-system.md) §1)
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
-- **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-enrichment.md](../planned/system-enrichment.md) §2.2)
-- **Facilities**: Faction-owned strategic infrastructure seeded at systems based on traits (see [system-enrichment.md](../planned/system-enrichment.md) §5)
+- **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-traits.md](./system-traits.md) §2.2)
+- **Facilities**: Faction-owned strategic infrastructure seeded at systems based on traits (see [facilities.md](../planned/facilities.md))
 
 ---
 

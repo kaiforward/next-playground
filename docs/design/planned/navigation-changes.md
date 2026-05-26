@@ -62,7 +62,7 @@ baseTicks = ceil(fuelCost / 2)
 hopDuration = max(1, ceil(baseTicks × (shipSpeed / referenceSpeed)))
 ```
 
-- **`shipSpeed`** — the ship's speed stat (lower is faster, per [ship-roster.md §1.1](./ship-roster.md)). Modified by Thruster Upgrade module
+- **`shipSpeed`** — the ship's speed stat (lower is faster, per [ship-roster.md §1.1](../active/ship-roster.md)). Modified by Thruster Upgrade module
 - **`referenceSpeed`** — a baseline constant calibrated so the current Shuttle travel times are preserved after migration. Set once during implementation and left fixed
 - **`baseTicks`** — distance still matters. Longer hops (higher fuel cost) produce more base ticks. The speed stat scales that, it doesn't replace it
 - **Minimum**: 1 tick per hop, regardless of how fast the ship is
@@ -186,7 +186,7 @@ A nimble ship in an escorted convoy benefits from both its own dodging and the e
 
 ### Hull Damage
 
-Stages 1 and 4 cause hull damage alongside cargo loss when incidents trigger. This connects the danger pipeline to the ship damage system ([ship-roster.md §5.3](./ship-roster.md)):
+Stages 1 and 4 cause hull damage alongside cargo loss when incidents trigger. This connects the danger pipeline to the ship damage system ([ship-roster.md §5.3](../active/ship-roster.md)):
 
 - **Damage severity** scales with the incident severity — a minor containment leak does less hull damage than a pirate boarding
 - **Hull stat** and **Armour Plating** reduce damage taken (same stat, same mechanism as cargo loss severity reduction)
@@ -243,11 +243,11 @@ Each government has a distinct smuggling/trading identity:
 
 ### Black Markets
 
-**Black markets** (see [system-enrichment.md](./system-enrichment.md) §5) bypass government restrictions entirely — all goods are available regardless of government type. This creates the smuggling loop: buy restricted goods at a black market or frontier system, transport them through restricted space (risking inspection), sell at another black market for a premium.
+**Black markets** (see [facilities.md](./facilities.md)) bypass government restrictions entirely — all goods are available regardless of government type. This creates the smuggling loop: buy restricted goods at a black market or frontier system, transport them through restricted space (risking inspection), sell at another black market for a premium.
 
 ### Customs House Facility
 
-The base contraband inspection chance is set by government type (25% base × government modifier). The **Customs House** facility (system-enrichment.md §5) adds a per-system bonus on top:
+The base contraband inspection chance is set by government type (25% base × government modifier). The **Customs House** facility (see [facilities.md](./facilities.md)) adds a per-system bonus on top:
 
 `effective_inspection_chance = government_base × government_modifier + customs_house_bonus`
 
@@ -259,7 +259,7 @@ This makes inspection rates system-specific, not just government-specific. Smugg
 
 All systems offer refueling — no system lacks the ability to refuel a ship. The base cost remains universal (currently 2 CR per fuel unit).
 
-The **Fuel Depot** facility (see [system-enrichment.md](./system-enrichment.md) §5) provides a discount on refueling at that system. Higher-tier fuel depots give larger discounts. This makes fuel depots valuable waypoints for long-haul routes but never gates access — a player can always refuel, they just pay more at systems without a depot.
+The **Fuel Depot** facility (see [facilities.md](./facilities.md)) provides a discount on refueling at that system. Higher-tier fuel depots give larger discounts. This makes fuel depots valuable waypoints for long-haul routes but never gates access — a player can always refuel, they just pay more at systems without a depot.
 
 ---
 
@@ -314,8 +314,8 @@ War zones are where escort mechanics earn their keep:
 ## Related Design Docs
 
 - **[Navigation (active)](../active/navigation.md)** — current implementation this doc modifies
-- **[Ship Roster](./ship-roster.md)** — ship stats, escort mechanics, fleet composition, ship damage
-- **[Ship Upgrades](./ship-upgrades.md)** — module catalog, slot types, danger pipeline interactions (§7)
+- **[Ship Roster](../active/ship-roster.md)** — ship stats, escort mechanics, fleet composition, ship damage
+- **[Ship Upgrades](../active/ship-upgrades.md)** — module catalog, slot types, danger pipeline interactions (§7)
 - **[War System](./war-system.md)** — war zones, contested systems, battle mechanics
 - **[Faction System](./faction-system.md)** — government types, doctrine effects on navigation
-- **[System Enrichment](./system-enrichment.md)** — customs house, fuel depot, black market, drydock facilities
+- **[Facilities](./facilities.md)** — customs house, fuel depot, black market, drydock facilities

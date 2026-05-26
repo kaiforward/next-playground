@@ -90,13 +90,13 @@ What generates missions and where they appear. This ties together all the facili
 | **Market conditions** | Trade (import/export) | Price thresholds (existing) | [trading.md](../active/trading.md) |
 | **Active events** | Event-linked deliveries | Event with themed goods (existing) | [trading.md](../active/trading.md) |
 | **Active faction war** | War logistics deliveries, war contributions (escort, sabotage, intelligence — see [war-system.md §8](./war-system.md)) | War status + contested systems | [war-system.md](./war-system.md) |
-| **Naval base** | Patrol | Facility presence + faction state | [system-enrichment.md](./system-enrichment.md) §5 |
-| **Intelligence outpost** | Intelligence | Facility presence + faction state | [system-enrichment.md](./system-enrichment.md) §5 |
-| **Embassy** | Diplomacy | Facility presence + inter-faction relations | [system-enrichment.md](./system-enrichment.md) §5 |
-| **Black market** | Smuggling | Facility presence | [system-enrichment.md](./system-enrichment.md) §5 |
-| **Research station** | Survey, data trading | Facility presence | [system-enrichment.md](./system-enrichment.md) §5 |
-| **Planetary administration** | Courier, faction reputation | Facility presence + faction state | [system-enrichment.md](./system-enrichment.md) §5 |
-| **Trade exchange** | Trade missions (boosted generation) | Facility presence | [system-enrichment.md](./system-enrichment.md) §5 |
+| **Naval base** | Patrol | Facility presence + faction state | [facilities.md](./facilities.md) |
+| **Intelligence outpost** | Intelligence | Facility presence + faction state | [facilities.md](./facilities.md) |
+| **Embassy** | Diplomacy | Facility presence + inter-faction relations | [facilities.md](./facilities.md) |
+| **Black market** | Smuggling | Facility presence | [facilities.md](./facilities.md) |
+| **Research station** | Survey, data trading | Facility presence | [facilities.md](./facilities.md) |
+| **Planetary administration** | Courier, faction reputation | Facility presence + faction state | [facilities.md](./facilities.md) |
+| **Trade exchange** | Trade missions (boosted generation) | Facility presence | [facilities.md](./facilities.md) |
 
 ---
 
@@ -146,7 +146,7 @@ All missions pay credits. Faction-sourced missions also pay reputation. War miss
 
 - **[Trading (active)](../active/trading.md)** — existing trade mission implementation (TradeMission model, lifecycle, reward formula)
 - **[War System](./war-system.md)** — war logistics, sabotage, intelligence as war contributions
-- **[System Enrichment](./system-enrichment.md)** — facilities that generate missions (naval base, embassy, black market, etc.)
+- **[Facilities](./facilities.md)** — facilities that generate missions (naval base, embassy, black market, etc.)
 - **[Faction System](./faction-system.md)** — reputation gating, faction association
 - **[Player Progression](./player-progression.md)** — mission availability by game phase
 - **[In-System Gameplay](./in-system-gameplay.md)** — separate system for trait-driven, story-driven missions within systems
