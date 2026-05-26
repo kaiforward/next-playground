@@ -29,7 +29,7 @@ Parse the user's command for these flags:
 Reasoning reviewers: db-integrity, data-contract, security, user-journey, tests, performance.
 Mechanical reviewers: conventions, silent-failures.
 
-## Pipeline (PR 1 scope: architect only)
+## Pipeline
 
 ### 1. Fetch the diff and metadata
 
@@ -46,6 +46,20 @@ Mechanical reviewers: conventions, silent-failures.
 - Bash: `gh pr diff <#>` for the diff.
 - Use `headRefOid` as the sha and `headRefName` as the branch.
 - Use `headRepository.nameWithOwner` for permalink format (PR mode output, added in PR 3).
+
+### 1.5. Classify each changed file
+
+For each file in the diff, assign one classification:
+
+- **docs** — matches `*.md`, `LICENSE`, `*.txt`
+- **schema** — matches `prisma/schema.prisma` or `prisma/migrations/**`
+- **config** — matches `package.json`, `package-lock.json`, `tsconfig*.json`, `next.config.*`, `eslint.config.*`, `vitest.config.*`, `.env.*`, `*.config.{ts,js,mjs}`
+- **asset** — images (`*.png`, `*.jpg`, `*.svg`, `*.webp`), fonts (`*.woff2`, `*.ttf`), files under `public/`
+- **source** — anything else (default catch-all)
+
+Hold the classification as a map `file → classification` for use by the skip-gate matrix.
+
+A chunk is **docs-only** if every file is `docs`; **schema-only** if every file is `schema` (or `schema` + `docs`); **config-only** if every file is `config` (or `config` + `docs`). The full PR (one chunk in PR 2) is classified accordingly.
 
 ### 2. Dispatch the architect
 
@@ -100,6 +114,102 @@ If architect `severity == "blocker"`:
 
 Otherwise:
 - Architect's findings join the pool. PR 2 will add downstream reviewers; in PR 1 the pool is just architect's findings.
+
+### 4.5. Dispatch the reviewer team (parallel, skip-gated)
+
+Skip this section if:
+- Architect returned `blocker` (pipeline already halted; only architect's findings get validated)
+- `--only=architect` was passed
+- `--skip-architect` was passed AND `--only` excludes downstream reviewers (rare; default behavior is "skip architect but run everyone else")
+
+For the single chunk (PR 2 — the whole PR is one chunk; PR 3 adds chunker), determine which reviewers run based on file classification:
+
+| Reviewer | Runs when chunk contains... |
+|----------|------------------------------|
+| Conventions | At least one `source` file (skips docs-only / schema-only / config-only) |
+| DB integrity | At least one file under `prisma/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/adapters/prisma/`, `lib/tick/world/` |
+| Data contract | Files spanning ≥2 layers from {prisma, lib/services, lib/tick, app/api, lib/hooks, components, app/(game), app/(auth)} |
+| Security | At least one file under `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, OR any file containing `requirePlayer`, `getServerSession`, or `session.` (grep the diff body) |
+| Silent failures | At least one `source` file |
+| User journey | At least one file under `app/(game)/`, `app/(auth)/`, `components/` |
+| Tests | At least one source file under `lib/engine/`, `lib/services/`, `lib/tick/processors/` |
+| Performance | At least one `source` file |
+
+Apply `--only` filter on top of the matrix (if `--only=security,db-integrity`, only those two run).
+
+Apply effort dial for model selection per reviewer (see "Effort dial" section above).
+
+**Dispatch in parallel** — send all matching reviewer `Agent` tool calls in a single message. Each Agent call:
+
+- `description`: `<reviewer name> review`
+- `subagent_type`: `general-purpose`
+- `model`: per effort dial
+- `prompt`: contents of `prompts/<reviewer>.md` + relevant rule injection (see below) + the chunk's diff
+
+**Rule injection**: for Conventions, inject the full contents of `rules/code-standards.md`. For all reviewers, inject `rules/severity-rubric.md`. Concatenate at the end of the agent's prompt under a clear separator.
+
+Collect each reviewer's JSON output. Parse each (same fenced-block regex + retry-once policy as architect). Findings from all reviewers go into the pool alongside architect's.
+
+Log skipped reviewers with reason (e.g., "user-journey: skipped — no UI files in chunk").
+
+### 4.6. Dedup findings
+
+**Pass 1 — deterministic.**
+
+Collect all findings into a pool. Group by `(file, normalized_line, category)` where `normalized_line` is the start line (parse "42" or "42-48" → 42).
+
+For each group with >1 finding:
+- Merge: pick the **highest** severity
+- Concatenate messages (joined by ` | `)
+- Concatenate evidence (joined by `\n\n`)
+- Record `agents` as the array of co-flaggers (e.g., `["security", "data-contract"]`)
+- Pick first `suggested_fix` that's non-empty
+
+**Pass 2 — semantic merge (Haiku, on-demand).**
+
+After Pass 1, scan for findings at the same `(file, overlapping line range)` but with **different** categories.
+
+Define "overlapping line range": if finding A is `42-45` and finding B is `44-50`, they overlap. If finding A is `42` and finding B is `60`, they don't.
+
+For each such pair (at most 5-15 per typical PR):
+
+Dispatch one Haiku Agent call:
+
+- `description`: "Dedup semantic merge"
+- `subagent_type`: `general-purpose`
+- `model`: `haiku`
+- `prompt`:
+
+```
+You are deciding whether two code review findings describe the same underlying issue.
+
+Finding A:
+  file: <fileA>
+  line: <lineA>
+  category: <categoryA>
+  message: <messageA>
+  evidence: <evidenceA>
+
+Finding B:
+  file: <fileB>
+  line: <lineB>
+  category: <categoryB>
+  message: <messageB>
+  evidence: <evidenceB>
+
+Are these the same underlying issue (different lens, same problem)?
+
+Return ONLY a JSON object in a ```json fenced block:
+
+{
+  "merge": true | false,
+  "rationale": "one-sentence reason"
+}
+
+When uncertain, prefer "merge: false". Keeping both findings separately is safer than wrongly collapsing distinct issues.
+```
+
+Parse output. If `merge: true`, combine the pair into one finding (highest severity, both messages joined, both agents recorded). If parse fails or `merge: false`, leave both as separate findings.
 
 ### 5. Validate findings (tiered)
 
@@ -194,7 +304,28 @@ Save to `.claude/reviews/<branch-or-PR>-<YYYY-MM-DD-HHmmss>.md`. (Create `.claud
 
 ## Reviewer dispatch log
 
-(PR 2 will populate this with per-chunk dispatch decisions.)
+For the single chunk (full PR):
+
+- Files in chunk: <count>
+- Classification: <docs-only | schema-only | config-only | mixed (default)>
+
+Reviewer status:
+
+| Reviewer | Status | Reason |
+|----------|--------|--------|
+| Conventions | ran / skipped | <reason if skipped> |
+| DB integrity | ran / skipped | ... |
+| Data contract | ran / skipped | ... |
+| Security | ran / skipped | ... |
+| Silent failures | ran / skipped | ... |
+| User journey | ran / skipped | ... |
+| Tests | ran / skipped | ... |
+| Performance | ran / skipped | ... |
+
+Findings collected: <total before dedup>
+Findings after dedup (Pass 1): <count>
+Findings after dedup (Pass 2): <count>
+Findings after validation filter: <count>
 ```
 
 ### 8. (PR 3) PR mode comment
@@ -208,12 +339,8 @@ Not yet implemented. PR 3 adds `gh pr comment` posting.
 - **Agent malformed output**: one retry; if still bad, skip with warning.
 - **Architect severity malformed**: treat as `clean` + warning.
 
-## What's NOT in PR 1
+## What's NOT yet implemented
 
-These are added in PR 2 and PR 3:
-- Other reviewer agents (conventions, db-integrity, data-contract, security, silent-failures, user-journey, tests, performance)
-- File classification and skip-gate matrix
-- Chunking for large PRs
-- Dedup (Pass 1 deterministic + Pass 2 Haiku fuzzy)
-- PR mode comment posting
-- `--only` filter behavior (PR 1 only knows architect)
+These are added in PR 3:
+- Chunking for large PRs (>20 files) — currently the full PR is one chunk
+- PR mode comment posting via `gh pr comment` with permalinks
