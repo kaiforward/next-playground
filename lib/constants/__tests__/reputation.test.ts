@@ -75,14 +75,21 @@ describe("getReputationMultipliers", () => {
   });
 
   it("champion: discount on buy, premium on sell", () => {
-    const m = getReputationMultipliers("champion");
-    expect(m.buy).toBeLessThan(1.0);
-    expect(m.sell).toBeGreaterThan(1.0);
+    expect(getReputationMultipliers("champion")).toEqual({ buy: 0.92, sell: 1.08 });
+  });
+
+  it("trusted: smaller discount on buy, smaller premium on sell", () => {
+    expect(getReputationMultipliers("trusted")).toEqual({ buy: 0.96, sell: 1.04 });
   });
 
   it("distrusted: premium on buy, discount on sell", () => {
-    const m = getReputationMultipliers("distrusted");
-    expect(m.buy).toBeGreaterThan(1.0);
-    expect(m.sell).toBeLessThan(1.0);
+    expect(getReputationMultipliers("distrusted")).toEqual({ buy: 1.08, sell: 0.92 });
+  });
+
+  // Hostile multipliers are 1.0/1.0 by design: trade is denied before the
+  // multiplier applies, so the values are deliberately inert. Asserted explicitly
+  // so a regression to "punishing" hostile multipliers is caught.
+  it("hostile: inert 1.0/1.0 (tradeDenied gates this tier before multipliers apply)", () => {
+    expect(getReputationMultipliers("hostile")).toEqual({ buy: 1.0, sell: 1.0 });
   });
 });

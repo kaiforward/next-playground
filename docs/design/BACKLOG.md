@@ -27,6 +27,7 @@ Direction is clear, approach needs a design doc before implementation.
 Blocked on prerequisites or very large scope.
 
 - **[XL] PostgreSQL migration** — Swap Prisma adapter from better-sqlite3 to pg. Enables parallel transactions, per-processor idempotency tracking, batch writes, and region-level parallelism. See `docs/design/archive/tick-engine-redesign.md` Step 5.
+- **[M] Switchable faction relation model** — `FactionRelation` currently stores one shared `score` per faction pair (symmetric). If the War sub-project or later play-testing reveals asymmetric opinions matter (one-sided grudges, vassal arrangements, "I trust you more than you trust me"), switch to per-direction scores. Two shapes available: (a) add `aOpinionOfB` / `bOpinionOfA` columns keeping the canonical-ordering convention; (b) drop ordering, store two rows per pair. Reevaluate post-PR-4 once the relations adapter exists and War's needs are clearer.
 - **[L] NPC agents (Tier 2)** — Distinct gameplay NPCs with decision trees, rivals. Separate from Tier 1 statistical pressure. Trade missions now exist as auto-generated contracts — NPC agents could accept/complete missions too. Design doc needed.
 - **[M] Events processor query optimization** — Re-fetches all events 3x per tick; fine on SQLite, problematic on PostgreSQL. Options: in-memory event store, sub-processors, or in-memory bookkeeping. Blocked on PostgreSQL migration.
 - **[M] Batch writes** — Economy processor uses individual Prisma updates inside a transaction. Batch SQL deferred to PostgreSQL migration.

@@ -409,20 +409,22 @@ export function deriveFactionStatus(
   currentStatus?: FactionStatus,
 ): FactionStatus {
   if (territorySize <= 0) return "minor";
-  if (currentStatus) {
-    const currentTier = FACTION_STATUS_TIERS.find((t) => t.status === currentStatus);
-    if (currentTier && territorySize >= currentTier.lose) {
-      const promoted = FACTION_STATUS_TIERS.find((t) => territorySize >= t.gain);
-      if (promoted) {
-        const promotedIdx = FACTION_STATUS_TIERS.indexOf(promoted);
-        const currentIdx = FACTION_STATUS_TIERS.indexOf(currentTier);
-        if (promotedIdx < currentIdx) return promoted.status;
-      }
-      return currentStatus;
-    }
-  }
-  const tier = FACTION_STATUS_TIERS.find((t) => territorySize >= t.gain);
-  return tier ? tier.status : "minor";
+
+  // Highest tier the territory qualifies for by gain threshold alone.
+  // FACTION_STATUS_TIERS is ordered highest-first, so findIndex returns the top match.
+  const naturalIdx = FACTION_STATUS_TIERS.findIndex((t) => territorySize >= t.gain);
+  const natural: FactionStatus = naturalIdx === -1 ? "minor" : FACTION_STATUS_TIERS[naturalIdx].status;
+
+  if (!currentStatus) return natural;
+
+  // Hysteresis: hold the current tier only if it outranks the natural one
+  // AND territory is still at or above its lose threshold. Otherwise the
+  // natural tier wins (covers both promotion and demotion).
+  const currentIdx = FACTION_STATUS_TIERS.findIndex((t) => t.status === currentStatus);
+  const currentTier = FACTION_STATUS_TIERS[currentIdx];
+  const outranksNatural = naturalIdx === -1 || currentIdx < naturalIdx;
+  if (outranksNatural && territorySize >= currentTier.lose) return currentStatus;
+  return natural;
 }
 
 // ── Template literal guards ───────────────────────────────────
