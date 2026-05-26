@@ -219,18 +219,18 @@ Every reviewer emits a JSON array of findings:
 | Conventions | Any `.ts` / `.tsx` source file; skips docs-only / schema-only / config-only chunks |
 | DB integrity | `prisma/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/adapters/prisma/`, `lib/tick/world/` |
 | Data contract | Files spanning ≥2 layers from {prisma, services, tick, app/api, hooks, components, app pages} |
-| Security | `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, or any file that imports from `lib/auth/` or references `requirePlayer` / `getServerSession` / `session.*` |
+| Security | `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, or any `.ts`/`.tsx` source file that imports from `lib/auth/` or references `requirePlayer` / `getServerSession` / `session.*` (grep restricted to source files — markdown/docs that merely describe these keywords do not trigger) |
 | Silent failures | Any `.ts` / `.tsx` source file; skips docs-only / schema-only chunks |
 | User journey | `app/(game)/`, `app/(auth)/`, `components/` |
-| Tests | Source changes in `lib/engine/`, `lib/services/`, `lib/tick/processors/` (regardless of whether matching test files are present) |
+| Tests | Source changes in `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/` (regardless of whether matching test files are present) |
 | Performance | Any `.ts` / `.tsx` source file; skips docs-only / schema-only chunks |
 
 **File classification (used by skip-gates):**
 - *docs* — `*.md`, `LICENSE`, `*.txt`
 - *schema* — `prisma/schema.prisma`, `prisma/migrations/**`
-- *config* — `package.json`, `package-lock.json`, `tsconfig*.json`, `next.config.*`, `eslint.config.*`, `vitest.config.*`, `.env.*`, `*.config.{ts,js,mjs}`
+- *config* — `package.json`, `package-lock.json`, `tsconfig*.json`, `next.config.*`, `eslint.config.*`, `vitest.config.*`, `prettier.config.*`, `.env.*`, `*.config.{ts,js,mjs}`, `Dockerfile*`, `Makefile`, `*.{yaml,yml}`, `.github/**`, dotfile configs (`.gitignore`, `.gitattributes`, `.dockerignore`, `.editorconfig`, `.npmrc`, `.nvmrc`, `.prettierrc*`, `.eslintrc*`)
 - *source* — anything else under `lib/`, `app/`, `components/`, `prisma/seed.ts`, etc.
-- *asset* — images, fonts, public assets
+- *asset* — images (incl. `*.ico`, `*.gif`, `*.avif`), fonts, public assets
 
 A chunk is "docs-only" if every file is *docs*; "schema-only" if every file is *schema* (or *schema* + *docs*); "config-only" if every file is *config* (or *config* + *docs*).
 

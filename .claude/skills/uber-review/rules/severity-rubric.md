@@ -1,5 +1,18 @@
 # Severity rubric (non-architect agents)
 
+## Scope guard — read this first
+
+You are reviewing a code diff. Your lens applies to **executable code only** — TypeScript, JavaScript, Python, SQL, etc. If the file you're looking at is markdown, plain documentation, a skill prompt, a YAML config, a rule file, or any other non-executable text, the patterns described in your lens **do not apply by content match alone**.
+
+Specifically:
+- A markdown file that *describes* a convention (e.g., shows a "do not do this" example like `as Foo`, `Record<string, unknown>`, `Cache-Control: immutable`) is **not** a violation of that convention. It is documentation.
+- A skill prompt that references function names like `requirePlayer`, `getServerSession`, `session.player.id` is **describing** what the security reviewer should look for in real code, not introducing an auth surface itself.
+- If the entire chunk you receive is non-executable (e.g., docs-only or prompts-only), return `[]`. Do not synthesize findings from prose.
+
+Verify each candidate finding against the actual changed code path — if the cited line is inside a fenced code block, a markdown bullet, a heading, or a docstring describing a pattern, it is not a violation.
+
+## Severity scale
+
 When emitting findings, assign one of these severities. The architect has its own rubric — these definitions apply to every other reviewer.
 
 ## `blocker`

@@ -53,8 +53,8 @@ For each file in the diff, assign one classification:
 
 - **docs** — matches `*.md`, `LICENSE`, `*.txt`
 - **schema** — matches `prisma/schema.prisma` or `prisma/migrations/**`
-- **config** — matches `package.json`, `package-lock.json`, `tsconfig*.json`, `next.config.*`, `eslint.config.*`, `vitest.config.*`, `.env.*`, `*.config.{ts,js,mjs}`
-- **asset** — images (`*.png`, `*.jpg`, `*.svg`, `*.webp`), fonts (`*.woff2`, `*.ttf`), files under `public/`
+- **config** — matches `package.json`, `package-lock.json`, `tsconfig*.json`, `next.config.*`, `eslint.config.*`, `vitest.config.*`, `prettier.config.*`, `.env.*`, `*.config.{ts,js,mjs}`, `Dockerfile*`, `Makefile`, `*.{yaml,yml}`, `.github/**`, and the common dotfile configs: `.gitignore`, `.gitattributes`, `.dockerignore`, `.editorconfig`, `.npmrc`, `.nvmrc`, `.prettierrc*`, `.eslintrc*`
+- **asset** — images (`*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.ico`, `*.svg`, `*.webp`, `*.avif`), fonts (`*.woff`, `*.woff2`, `*.ttf`, `*.otf`), files under `public/`
 - **source** — anything else (default catch-all)
 
 Hold the classification as a map `file → classification` for use by the skip-gate matrix.
@@ -183,10 +183,10 @@ Skip this section if:
 | Conventions | At least one `source` file (skips docs-only / schema-only / config-only) |
 | DB integrity | At least one file under `prisma/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/adapters/prisma/`, `lib/tick/world/` |
 | Data contract | Files spanning ≥2 layers from {prisma, lib/services, lib/tick, app/api, lib/hooks, components, app/(game), app/(auth)} |
-| Security | At least one file under `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, OR any file containing `requirePlayer`, `getServerSession`, or `session.` (grep the diff body) |
+| Security | At least one file under `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, OR any `.ts`/`.tsx` file containing `requirePlayer`, `getServerSession`, or `session.` (grep the diff body, restricted to source files — never trigger on markdown/docs that merely *describe* these keywords) |
 | Silent failures | At least one `source` file |
 | User journey | At least one file under `app/(game)/`, `app/(auth)/`, `components/` |
-| Tests | At least one source file under `lib/engine/`, `lib/services/`, `lib/tick/processors/` |
+| Tests | At least one source file under `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/` |
 | Performance | At least one `source` file |
 
 Apply `--only` filter on top of the matrix (if `--only=security,db-integrity`, only those two run).
