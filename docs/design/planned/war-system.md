@@ -4,7 +4,7 @@ Wars and territorial conflict between factions. This covers two distinct layers:
 
 **Replaces**: The random War event in the current event catalog (`lib/constants/events.ts`) will be removed when this system is implemented. Border conflicts absorb its role as the source of war-themed economy/danger modifiers.
 
-**Depends on**: [Faction System](./faction-system.md) (relations, alliances, doctrine), [Navigation Changes](./navigation-changes.md) (war zone danger values), [Ship Roster](./ship-roster.md) (combat stats for battle resolution)
+**Depends on**: [Faction System](./faction-system.md) (relations, alliances, doctrine), [Navigation Changes](./navigation-changes.md) (war zone danger values), [Ship Roster](../active/ship-roster.md) (combat stats for battle resolution)
 
 ---
 
@@ -669,5 +669,5 @@ Co-defenders accumulate exhaustion at a **reduced rate (~0.5×)** — it's not t
 - **[Faction System](./faction-system.md)** — faction model, inter-faction relations, player reputation, homeworlds, roster
 - **[Navigation Changes](./navigation-changes.md)** — war zone danger values (§6), convoy escort mechanics in contested space
 - **[Missions](./missions.md)** — war logistics, intelligence, sabotage as mission types
-- **[Ship Roster](./ship-roster.md)** — combat ship stats that feed into battle resolution (future interaction)
+- **[Ship Roster](../active/ship-roster.md)** — combat ship stats that feed into battle resolution (future interaction)
 - **[Player Progression](./player-progression.md)** — war contributions as a progression path

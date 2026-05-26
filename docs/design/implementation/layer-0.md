@@ -2,7 +2,7 @@
 
 Enriches the physical universe with traits, quality tiers, and bottom-up economy derivation. No new gameplay systems — richer world generation that creates the foundation every later layer builds on.
 
-**Design doc**: [system-enrichment.md](../planned/system-enrichment.md) §1–2 (trait catalog, affinity scoring)
+**Design doc**: [system-traits.md](../active/system-traits.md) §1–2 (trait catalog, affinity scoring)
 
 **Transition**: Clean cut. Old world generation replaced wholesale. Reseed the universe.
 
@@ -166,7 +166,7 @@ export interface TraitDefinition {
 - Tier 2: *"A substantial asteroid belt provides steady ore extraction and metallic resources."*
 - Tier 3: *"A dense, mineral-rich belt stretches across the system — one of the richest extraction sites in the sector."*
 
-**Economy affinity values** come directly from the design doc tables. Each trait has 0–3 economy types it's relevant to, scored 1 (minor) or 2 (strong). See [system-enrichment.md §1.1](../planned/system-enrichment.md) for the full catalog.
+**Economy affinity values** come directly from the design doc tables. Each trait has 0–3 economy types it's relevant to, scored 1 (minor) or 2 (strong). See [system-traits.md §1.1](../active/system-traits.md) for the full catalog.
 
 **Compact reference table** (affinities only — descriptions in design doc). Strong affinities (2) drive economy derivation per §2.1; minor affinities (1) are flavour/production only.
 

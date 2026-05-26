@@ -6,7 +6,7 @@ The second major gameplay space alongside the universe map. When docked at a sys
 
 **Design principle**: Start simple, grow deep. The framework supports unlimited content expansion, but Phase 1 ships a focused, polished set of content — enough to demonstrate the system and give early players engaging things to do beyond trading.
 
-**Depends on**: [System Enrichment](./system-enrichment.md) (traits generate locations), [Player Progression](./player-progression.md) (progression gating), [Faction System](./faction-system.md) (faction missions, reputation), [Ship Roster](./ship-roster.md) (ship stats gate some activities)
+**Depends on**: [System Traits](../active/system-traits.md) (traits generate locations), [Player Progression](./player-progression.md) (progression gating), [Faction System](./faction-system.md) (faction missions, reputation), [Ship Roster](../active/ship-roster.md) (ship stats gate some activities)
 
 ---
 
@@ -384,7 +384,7 @@ Each location template defines:
 | npcs | Which NPC template IDs are present at this location |
 | activities | Available activity types: dialogue, missions, mini-game |
 
-Location instances are **derived at runtime** from system traits — not stored in the DB. Given a system's traits and quality tiers, the engine deterministically computes which locations exist. This matches how economy type is derived from traits in system-enrichment.md.
+Location instances are **derived at runtime** from system traits — not stored in the DB. Given a system's traits and quality tiers, the engine deterministically computes which locations exist. This matches how economy type is derived from traits in [system-traits.md](../active/system-traits.md).
 
 Phase 1 location templates (~7):
 - Universal (3): Docking Bay, Station Cantina, Market Terminal
@@ -571,10 +571,10 @@ Each phase adds content to the existing framework. No architecture changes neede
 
 ## Related Design Docs
 
-- **[System Enrichment](./system-enrichment.md)** — traits that generate locations, trait quality tiers
+- **[System Traits (active)](../active/system-traits.md)** — traits that generate locations, trait quality tiers
 - **[Missions](./missions.md)** — universe-level missions (separate system, complements in-system missions)
 - **[Player Progression](./player-progression.md)** — game phases, progression gating, in-system content per phase
 - **[Faction System](./faction-system.md)** — reputation gating for NPC dialogue and missions
-- **[Ship Roster](./ship-roster.md)** — ship stats that gate in-system activities
+- **[Ship Roster](../active/ship-roster.md)** — ship stats that gate in-system activities
 - **[Mini-Games](./mini-games.md)** — Void's Gambit rules, future mini-games (Drift, Alignment, Cargo Roulette)
 - **[Multiplayer Infrastructure](./multiplayer-infrastructure.md)** — eventual PvP mini-games, cooperative missions

@@ -372,6 +372,6 @@ Phase 1 does NOT include:
 ## Related Design Docs
 
 - **[In-System Gameplay](./in-system-gameplay.md)** — the parent system. Mini-games are one activity type within in-system content
-- **[System Enrichment](./system-enrichment.md)** — traits determine which locations exist, which affects mini-game availability
+- **[System Traits (active)](../active/system-traits.md)** — traits determine which locations exist, which affects mini-game availability
 - **[Player Progression](./player-progression.md)** — stakes tiers align with progression phases
 - **[Multiplayer Infrastructure](./multiplayer-infrastructure.md)** — PvP mini-games as a future social feature

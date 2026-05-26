@@ -383,5 +383,6 @@ Based on faction count and territory needs:
 These topics are large enough to warrant their own design documents:
 - **[War System](./war-system.md)** — border conflicts, faction wars, battles, territory control, player involvement
 - **[Player Progression](./player-progression.md)** — ship upgrades, region unlocking, credit sinks, early/mid/late game arc
-- **[System Enrichment](./system-enrichment.md)** — facilities, system traits, strategic value
+- **[Facilities](./facilities.md)** — faction-owned facilities, war targets, tier capabilities
+- **[System Traits (active)](../active/system-traits.md)** — trait catalog, quality tiers, economy derivation
 - **[Multiplayer Infrastructure](./multiplayer-infrastructure.md)** — player trading, alliances, communication, coordination

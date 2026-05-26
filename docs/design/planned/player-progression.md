@@ -4,7 +4,7 @@ The player's journey from new trader to galactic power broker. Defines the three
 
 **Design principle**: Progression changes *what you do*, not just *how big the numbers are*. Early game is hands-on trading and exploration. Mid game introduces fleet management and facility investment. Late game shifts to strategic oversight — automated fleets, production empires, and faction power politics.
 
-**Depends on**: [Faction System](./faction-system.md) (reputation, war contributions), [System Enrichment](./system-enrichment.md) (facilities, traits), [Ship Roster](./ship-roster.md) (ship classes, upgrades), [Player Facilities](./player-facilities.md) (player-built facilities), [In-System Gameplay](./in-system-gameplay.md) (missions, story content)
+**Depends on**: [Faction System](./faction-system.md) (reputation, war contributions), [Facilities](./facilities.md) (faction facilities) + [System Traits](../active/system-traits.md) (traits), [Ship Roster](../active/ship-roster.md) (ship classes, upgrades), [Player Facilities](./player-facilities.md) (player-built facilities), [In-System Gameplay](./in-system-gameplay.md) (missions, story content)
 
 ---
 
@@ -58,7 +58,7 @@ The player has enough credits and experience to start thinking beyond individual
 
 ### Unlocks
 
-- **Fleet expansion**: Purchase additional ships across expanding ship classes. More specialisation becomes available — dedicated trade ships, scout/exploration ships, ships suited to different cargo types. See [Ship Roster](./ship-roster.md)
+- **Fleet expansion**: Purchase additional ships across expanding ship classes. More specialisation becomes available — dedicated trade ships, scout/exploration ships, ships suited to different cargo types. See [Ship Roster](../active/ship-roster.md)
 - **Minor player facilities**: First facility purchases — both infrastructure (trade posts, fuel depots, repair bays, warehouses, customs brokerages, security offices) and production (mining operations, gas harvesters, homesteads, refineries, factories, bioprocessors). These are personal investments tied to system economy and traits. Passive income via auto-sell supplements active trading. See [Player Facilities](./player-facilities.md) for the build system, [Production Roster](./production-roster.md) for the full 21-type facility catalog
 - **Faction reputation tiers**: Reaching Trusted (+25) and eventually Champion (+75) with chosen factions unlocks:
   - Better prices at faction systems
@@ -86,7 +86,7 @@ The player commands a trade empire. Multiple automated fleets, production facili
 
 - **Major player facilities**: Upgraded facilities with higher output and deeper supply chains — major shipyards, tech labs, arms factories, artisan workshops. Vertical integration becomes viable: mine ore, refine metals, manufacture components, build ship frames. Output feeds into the market (bounded by absorption capacity) and can be donated to faction war efforts. See [Production](./production.md) for the economic model, [Production Roster](./production-roster.md) for chains and facility details
 - **Advanced automation**: Upgraded AI behaviours for automated ships. Optimal routing (computationally expensive — see §5). Players manage fleet strategy rather than individual ships — assign trade regions, specify resource types, let ships execute
-- **Capital ships**: Large, expensive, specialised vessels gated by faction reputation (Champion tier) and high-tier shipyard access. See [Ship Roster](./ship-roster.md)
+- **Capital ships**: Large, expensive, specialised vessels gated by faction reputation (Champion tier) and high-tier shipyard access. See [Ship Roster](../active/ship-roster.md)
 - **War contributions (Tier 2 & 3)**: Strategic and direct action missions — blockade running, intelligence gathering, sabotage. High risk, high reward, significant reputation consequences with enemy factions
 - **Faction influence**: Top contributors shape faction behaviour — not through direct control, but through weight of contribution. A player who funds a faction's war effort and supplies their shipyards has *influence*, even if the faction AI makes its own decisions
 
@@ -121,13 +121,13 @@ Automation transforms gameplay from manual piloting to fleet management. It reus
 
 ### Automation Upgrades
 
-Purchased at drydocks (see [System Enrichment §5.3](./system-enrichment.md)). Each ship needs its own automation module — it's a per-ship upgrade, not a global unlock. Higher-tier drydocks offer higher-tier automation modules.
+Purchased at drydocks (see [Facilities §3](./facilities.md)). Each ship needs its own automation module — it's a per-ship upgrade, not a global unlock. Higher-tier drydocks offer higher-tier automation modules.
 
 ---
 
 ## 6. Player Facilities
 
-Player-owned facilities are personal investments — separate from faction facilities (see [System Enrichment §5](./system-enrichment.md)). They generate passive income, produce goods, and represent the player's economic footprint in the galaxy. 21 facility types total: 14 production + 7 infrastructure.
+Player-owned facilities are personal investments — separate from faction facilities (see [Facilities](./facilities.md)). They generate passive income, produce goods, and represent the player's economic footprint in the galaxy. 21 facility types total: 14 production + 7 infrastructure.
 
 ### Key Design Rules
 
@@ -208,8 +208,9 @@ In-system gameplay is a major system that requires its own detailed design. This
 
 - **[Faction System](./faction-system.md)** — reputation tiers, war contributions, player assets in conquered territory
 - **[Missions](./missions.md)** — universe/region-level mission framework (trade, operational, war contributions)
-- **[System Enrichment](./system-enrichment.md)** — faction facilities (shipyards, drydocks, academies), system traits
-- **[Ship Roster](./ship-roster.md)** — ship classes, roles, upgrade paths, faction-exclusive vessels
+- **[Facilities](./facilities.md)** — faction facilities (shipyards, drydocks, academies)
+- **[System Traits (active)](../active/system-traits.md)** — trait catalog and effects
+- **[Ship Roster](../active/ship-roster.md)** — ship classes, roles, upgrade paths, faction-exclusive vessels
 - **[Player Facilities](./player-facilities.md)** — universal build system (construction, upgrades, costs, limits, asset risk)
 - **[Production](./production.md)** — production architecture (market impact, population, income hierarchy)
 - **[Production Roster](./production-roster.md)** — 26 goods, production chains, 14 production facility types
