@@ -90,12 +90,13 @@ model Player {
   updatedAt DateTime @updatedAt
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ships         Ship[]
-  convoys       Convoy[]
-  tradeMissions TradeMission[]
-  missions      Mission[]
-  notifications PlayerNotification[]
-  npcVisits     NpcVisit[]
+  ships              Ship[]
+  convoys            Convoy[]
+  tradeMissions      TradeMission[]
+  missions           Mission[]
+  notifications      PlayerNotification[]
+  npcVisits          NpcVisit[]
+  factionReputations PlayerFactionReputation[]
 }
 
 model Ship {
@@ -200,11 +201,14 @@ model StarSystem {
   y                 Float
   description       String  @default("")
   regionId          String
+  factionId         String?
   isGateway         Boolean @default(false)
   prosperity        Float   @default(0)
   tradeVolumeAccum  Int     @default(0)
 
   region            Region             @relation(fields: [regionId], references: [id])
+  faction           Faction?           @relation("FactionTerritory", fields: [factionId], references: [id])
+  factionHomeworld  Faction?           @relation("FactionHomeworld")
   station           Station?
   traits            SystemTrait[]
   ships             Ship[]             @relation("ShipCurrentSystem")
@@ -224,6 +228,7 @@ model StarSystem {
   tradeFlowsTo      TradeFlow[]        @relation("TradeFlowsTo")
 
   @@index([regionId])
+  @@index([factionId])
   @@index([x, y])
 }
 
@@ -393,7 +398,7 @@ model TradeMission {
   reward         Int                         // Fixed CR payout
   deadlineTick   Int                         // Available missions expire here
   eventId        String?                     // Cascade-deletes with event
-  factionId      String?                     // Future: faction reputation
+  factionId      String?                     // Owning faction (faction reputation)
   penaltyType    String   @default("none")   // Future: "credits" | "reputation"
   penaltyValue   Int      @default(0)
   playerId       String?                     // null = available, set = accepted
@@ -405,11 +410,13 @@ model TradeMission {
   good        Good       @relation(fields: [goodId], references: [id])
   event       GameEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
   player      Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  faction     Faction?   @relation(fields: [factionId], references: [id])
 
   @@index([systemId, playerId])
   @@index([playerId])
   @@index([deadlineTick])
   @@index([eventId])
+  @@index([factionId])
 }
 
 // ── Operational Missions ────────────────────────────────────────
@@ -521,4 +528,76 @@ model NpcVisit {
 
   @@unique([playerId, npcType, systemId])
   @@index([playerId])
+}
+
+// ── Factions ───────────────────────────────────────────────────
+
+model Faction {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  description    String   @default("")
+  governmentType String                                // GovernmentType union (validated at boundary)
+  doctrine       String                                // Doctrine union (validated at boundary)
+  homeworldId    String   @unique                      // FK to StarSystem; one homeworld per faction
+  color          String                                // Hex (with leading #) for territory rendering
+  createdAtTick  Int
+
+  homeworld     StarSystem                @relation("FactionHomeworld", fields: [homeworldId], references: [id])
+  territory     StarSystem[]              @relation("FactionTerritory")
+  tradeMissions TradeMission[]
+  reputations   PlayerFactionReputation[]
+  relationsAsA  FactionRelation[]         @relation("RelationFactionA")
+  relationsAsB  FactionRelation[]         @relation("RelationFactionB")
+  alliancesAsA  AlliancePact[]            @relation("AllianceFactionA")
+  alliancesAsB  AlliancePact[]            @relation("AllianceFactionB")
+}
+
+/// Pair-wise relation score between two factions. The adapter layer enforces the
+/// convention `factionAId < factionBId` so each unordered pair occupies one row.
+model FactionRelation {
+  id            String @id @default(cuid())
+  factionAId    String
+  factionBId    String
+  score         Float  @default(0)              // [-100, +100]
+  historyJson   String @default("[]")            // JSON ring buffer of recent drift drivers
+  updatedAtTick Int    @default(0)
+
+  factionA Faction @relation("RelationFactionA", fields: [factionAId], references: [id], onDelete: Cascade)
+  factionB Faction @relation("RelationFactionB", fields: [factionBId], references: [id], onDelete: Cascade)
+
+  @@unique([factionAId, factionBId])
+  @@index([factionAId])
+  @@index([factionBId])
+}
+
+/// Active alliance between a pair of factions. One pact per pair at any time.
+model AlliancePact {
+  id                       String  @id @default(cuid())
+  factionAId               String
+  factionBId               String
+  formedAtTick             Int
+  pendingDissolutionAtTick Int?
+
+  factionA Faction @relation("AllianceFactionA", fields: [factionAId], references: [id], onDelete: Cascade)
+  factionB Faction @relation("AllianceFactionB", fields: [factionBId], references: [id], onDelete: Cascade)
+
+  @@unique([factionAId, factionBId])
+  @@index([factionAId])
+  @@index([factionBId])
+}
+
+/// Per-player, per-faction reputation score. Drives trade multipliers.
+model PlayerFactionReputation {
+  id            String @id @default(cuid())
+  playerId      String
+  factionId     String
+  score         Float  @default(0)              // [-100, +100]
+  updatedAtTick Int    @default(0)
+
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  faction Faction @relation(fields: [factionId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, factionId])
+  @@index([playerId])
+  @@index([factionId])
 }

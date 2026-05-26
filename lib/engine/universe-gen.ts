@@ -4,7 +4,7 @@
  */
 
 import type { EconomyType, GovernmentType } from "@/lib/types/game";
-import { ALL_GOVERNMENT_TYPES, toGovernmentType } from "@/lib/types/guards";
+import { toGovernmentType } from "@/lib/types/guards";
 import type { GeneratedTrait } from "./trait-gen";
 import { generateSystemTraits, deriveEconomyType } from "./trait-gen";
 
@@ -212,8 +212,13 @@ export function generateRegions(
     }
   }
 
-  // Government coverage guarantee: ensure every government type appears at least once
-  const allGovTypes = ALL_GOVERNMENT_TYPES;
+  // Government coverage guarantee. The GovernmentType union has 8 entries (Layer 2
+  // expanded it for the faction system), but this region-owned assignment is being
+  // deleted in Phase 2 once factions own territory. Until then we hold it at the
+  // original 4 so seeded RNG stays stable and existing regions don't suddenly
+  // re-flavor as cooperative/technocratic/militarist/theocratic. The new 4 enter
+  // the world through FACTION_ROSTER in Phase 2.
+  const allGovTypes: readonly GovernmentType[] = ["federation", "corporate", "authoritarian", "frontier"];
   const present = new Set(regions.map((r) => r.governmentType));
   const missing = allGovTypes.filter((g) => !present.has(g));
 

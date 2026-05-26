@@ -90,7 +90,27 @@ export type GovernmentType =
   | "federation"
   | "corporate"
   | "authoritarian"
-  | "frontier";
+  | "frontier"
+  | "cooperative"
+  | "technocratic"
+  | "militarist"
+  | "theocratic";
+
+export type Doctrine =
+  | "expansionist"
+  | "protectionist"
+  | "mercantile"
+  | "hegemonic"
+  | "opportunistic";
+
+export type FactionStatus = "dominant" | "major" | "regional" | "minor";
+
+export type ReputationStanding =
+  | "champion"
+  | "trusted"
+  | "neutral"
+  | "distrusted"
+  | "hostile";
 
 export type GoodTier = 0 | 1 | 2;
 
