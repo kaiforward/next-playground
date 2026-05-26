@@ -206,6 +206,7 @@ With T0 margins of ~5cr/unit and 50 cargo, a shuttle earns ~250cr/trip. Light Fr
 
 ---
 
-## Known Issues & Next Steps
+## Related Systems
 
-See [economy-tuning.md](./economy-tuning.md) for structural issues and planned improvements.
+- **[Trade simulation](./trade-simulation.md)** — edge-flow inter-system trade that provides the spatial restoring force production/consumption alone lack.
+- **[Economy flow](./economy-flow.md)** — narrative walk-through of how all these mechanisms compose each tick.
