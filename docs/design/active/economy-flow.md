@@ -4,7 +4,7 @@ How the economy works end-to-end, focused on mechanisms and interactions rather 
 
 ## The Core Loop
 
-Every tick, one region's markets update (round-robin). Each market has two values: **supply** and **demand**. Price is simply `demand / supply` (clamped to a floor/ceiling).
+Every tick, one region's markets update (round-robin). Each market has two values: **supply** and **demand**. Price is derived from the ratio between them — high demand against low supply means a high price, and the result is clamped to a per-tier band so the price can't run away in either direction.
 
 ```
                          EACH TICK (one region)
@@ -36,11 +36,12 @@ Every tick, one region's markets update (round-robin). Each market has two value
   |  TRADE FLOW      |  Runs THIRD
   |                  |
   |  For each edge   |  Goods flow along graph edges based on price
-  |  in the region:  |  gradients — pure math, no NPC entities.
-  |  - pick steepest |  Steepest-gradient good wins, capped by
-  |    gradient good |  FLOW_BUDGET per edge per run.
-  |  - move quantity |  Source/destination markets see the same
-  |    cheap -> dear |  supply/demand deltas a player trade would.
+  |  in the region:  |  differences — no NPC entities, just bookkeeping.
+  |  - pick the good |  The good with the steepest gradient wins,
+  |    with steepest |  capped by a per-edge per-run budget.
+  |    gradient      |
+  |  - move from     |  Source and destination markets see the same
+  |    cheap to dear |  supply/demand deltas a player trade would.
   |  - record event  |  Volume increments feed prosperity below.
   +--------+---------+
            |
@@ -83,16 +84,13 @@ Events can **dampen** reversion (making markets sluggish and volatile) or target
 
 ### Self-Limiting Production & Consumption — "Physical limits"
 
-Production and consumption rates scale with available room, using a square root curve:
+Production and consumption don't run flat-out — they each scale with how much room is left in the market. The curve is gentle (square-root shaped) rather than linear, so the effect kicks in gradually rather than all at once near the extremes.
 
 ```
-  Production:  rate * sqrt((MAX - supply) / (MAX - MIN))
-  Consumption: rate * sqrt((supply - MIN) / (MAX - MIN))
-
   PRODUCTION                           CONSUMPTION
   ~~~~~~~~~~                           ~~~~~~~~~~~
   At floor:   full rate (warehouses    At floor:   zero (nothing to
-              empty, ramp up)                     consume)
+              empty, ramp up)                      consume)
   At mid:     ~70% rate                At mid:     ~54% rate
   At ceiling: zero (warehouses full)   At ceiling: full rate
 ```
@@ -188,19 +186,19 @@ Events inject chaos into the system in two ways:
 
 ### Edge-Flow Trade Simulation — "The background pressure"
 
-Edge flow is the simulated inter-system trade that runs without players. For each connection edge within a region, the processor picks the good with the steepest price gradient and moves a budgeted quantity from the cheap side to the expensive side every active run.
+Edge flow is the simulated inter-system trade that runs without players. For each connection edge within the region being processed, the simulator picks the good with the largest price difference between the two ends and moves some of it from the cheap side to the expensive side.
 
 ```
   SYSTEM A (cheap)  --- edge ---  SYSTEM B (expensive)
        |                                  ^
-       |  q = floor(min(BUDGET,           |
-       |              supplyHeadroom,     |
-       |              supplyCapacity)     |
-       |          * gradientFraction)     |
+       |   the price gradient picks       |
+       |   the good; the per-edge budget, |
+       |   destination headroom, and      |
+       |   source surplus cap the move    |
        |                                  |
-       +-------- q units of good ---------+
-       supply -= q                        supply += q
-       demand += q * 0.5                  demand -= q * 0.5
+       +-------- goods move A -> B -------+
+       supply drops, demand ticks up      supply rises, demand ticks down
+       (mirrors a player buy)             (mirrors a player sell)
 ```
 
 Properties:
@@ -233,18 +231,12 @@ Player trade also drives prosperity — actively traded systems become more acti
 
 ### Price Derivation — "Simple ratio"
 
-Price is calculated on-read, not stored. It's just:
+Price is calculated on-read, not stored. It's the good's base price scaled by the demand-to-supply ratio — high demand against low supply pushes the price up, glut pulls it down. Each tier clamps how far that ratio can swing so wild fluctuations don't produce absurd numbers:
 
 ```
-  price = basePrice x (demand / supply)
-
-  High demand + low supply  = expensive
-  Low demand  + high supply = cheap
-
-  Clamped per tier:
-    T0: 0.5x - 2.0x base price
-    T1: 0.5x - 2.5x base price
-    T2: 0.5x - 3.0x base price
+  T0 (raw):       0.5x - 2.0x base price
+  T1 (processed): 0.5x - 2.5x base price
+  T2 (advanced):  0.5x - 3.0x base price
 ```
 
 ## How Systems Layer Together

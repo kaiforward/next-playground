@@ -8,147 +8,73 @@ The economy needs sustained inter-system trade pressure. Production and consumpt
 
 ## Solution
 
-Simulate trade as **goods flowing along graph edges** based on local price gradients, rate-limited per edge per tick. Flow is pure math on edges and markets — no entities are spawned. The aggregate metrics produced (per-edge flow events, per-system import/export volume) feed prosperity, mission generation, and the player-facing trade-flow surfaces.
-
-The universe contains thousands of unseen merchants in lore; edge flow simulates the *economic effect* of that merchant traffic at O(edges) cost.
+Trade is simulated as **goods flowing along graph edges** driven by local price differences. There are no merchant entities — the universe contains thousands of unseen merchants in lore, and the simulation captures the *economic effect* of their traffic at a fraction of the cost. Each flow is recorded as an event, and the same supply/demand bookkeeping a player trade would produce is applied to both endpoints.
 
 ---
 
 ## Design
 
-### Flow Mechanism
+### How a Flow is Decided
 
-For each connection edge `(A, B)` shared between two systems in the same region, the processor picks the good with the steepest absolute price gradient and considers a move from the cheap side to the expensive side:
+For every connection edge between two systems in the currently-processed region, the simulator looks at every good both systems trade. For each candidate good, it asks the same question: how much cheaper is it at one end than at the other, relative to that good's base price? That normalized price difference is the "gradient." Comparing as a fraction of base price keeps water and luxuries on the same scale.
 
-```
-priceA = calculatePrice(market(A, g))
-priceB = calculatePrice(market(B, g))
-gradient = (priceB - priceA) / mA.basePrice    // signed, normalized
+Only the steepest gradient on the edge gets to move that run — multi-good coverage emerges naturally as the price landscape shifts and a different good takes the lead next time the edge fires. If the steepest gradient is below the configured threshold, the edge sits idle: tiny price wobbles shouldn't trigger churn.
 
-if |gradient| < GRADIENT_THRESHOLD: skip
-if !isFinite(gradient): skip
+When a gradient clears the threshold, the simulator decides how many units to move by taking the smallest of three constraints — how much room the destination has, how much surplus the source can spare without dropping below its floor, and the per-edge budget — and then scales that by the gradient's strength. Steeper gradients move closer to the full budget; near-threshold gradients move only a sliver. The result is rounded down to whole units.
 
-fraction = min(1, |gradient| * GRADIENT_SENSITIVITY)
-quantity = floor(min(FLOW_BUDGET, supplyHeadroom, supplyCapacity) * fraction)
+The chosen quantity then flows from the cheap side to the expensive side. Both markets see the exact deltas a player trade would produce: supply leaves the source and arrives at the destination, with a smaller demand signal applied in the opposite direction to mirror the buy/sell intent. Mid-run state is mutated in place so later edges in the same region see the new prices and adapt — chains emerge when one move opens up a new gradient for a neighboring edge.
 
-if quantity > 0:
-  move `quantity` units of g from cheap → expensive
-  apply the same supply/demand deltas a player trade would (uses existing trade math)
-  record flow event: { tick, from, to, goodId, quantity }
-```
+### Tick Cadence
 
-Key properties:
-- **Rate-limited**: a per-edge per-run budget (`FLOW_BUDGET`) prevents unbounded equalization.
-- **Threshold-gated**: small gradients don't trigger flow, avoiding noise-driven churn at equilibrium.
-- **Reuses trade math**: flows hit markets identically to a player trade — supply decreases at source, demand decreases at destination, both increment the system's volume accumulator that feeds prosperity.
-- **One good per edge per run**: the steepest-gradient good wins; multi-good coverage happens over successive runs as the gradient landscape shifts.
+The processor runs every tick, but each tick it picks **one region** to work on, cycling through the universe in round-robin order. The position in the cycle is derived from `floor(tick / interval) % regions`, rather than the more obvious `tick % regions`, because the latter starves a fixed subset of regions whenever the cadence interval shares a factor with the region count.
 
-Chains emerge naturally: a system pulling food from a neighbor lowers that neighbor's supply, which then pulls from *its* neighbor, producing real supply chains without programming them.
+A full universe sweep therefore takes `regions × cadence_interval` ticks. There is one hard invariant: the sweep must finish before flow events get pruned. If a region's events were aged out before the round-robin returned to it, the player-facing overlay would show permanent gaps in that region's history. The processor logs a warning if the invariant is in danger of being violated.
 
-### Tick Processing
+By design, the trade-flow processor declares a dependency on the economy processor: within a single tick, the region's prices settle from production, consumption, and reversion *before* the trade simulator reads them. This avoids flow firing against stale gradients.
 
-Flow runs every tick, but the processor body picks **exactly one region per active tick** via round-robin:
+### What Gets Recorded
 
-```
-regionIndex = floor(tick / PROCESS_EVERY_N_TICKS) % regions.length
-```
+Two surfaces come out of each run:
 
-The `floor` form (rather than `tick % regions.length`) avoids GCD pathologies where any common factor between `PROCESS_EVERY_N_TICKS` and `regions.length` would starve a sub-lattice of region indices.
+- **A per-edge event log.** Every flow appended to a rolling-window table that captures the tick, the direction, the good, and the quantity. Indexes by source, destination, and good give the map overlay and the per-system detail panel cheap queries. A pruning step on every active run drops anything older than the configured history window.
+- **Per-system volume increments.** Both endpoints of the move have the volume accumulator on their `Market` row incremented in the same atomic write that adjusts supply and demand. This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active regions become booming whether or not players show up.
 
-A full universe sweep therefore takes `regions × PROCESS_EVERY_N_TICKS` ticks. There is a hard invariant:
+### Trade Routes
 
-```
-regions × PROCESS_EVERY_N_TICKS < FLOW_HISTORY_TICKS
-```
-
-If violated, each region's flow events would be pruned before the round-robin returned, and the overlay would show permanent gaps. The processor logs a warning if the invariant is at risk.
-
-The processor depends on `economy` (declared via `dependsOn: ["economy"]`) so flow runs after each region's price reversion settles for that tick.
-
-### Aggregate Metrics
-
-Two data surfaces are produced:
-
-**Per-edge flow event log** (`TradeFlow` table) — every flow becomes one row:
-- `{ tick, fromSystemId, toSystemId, goodId, quantity }`
-- Rolling window — events older than `FLOW_HISTORY_TICKS` are pruned each active run.
-- Indexed on `(tick)`, `(fromSystemId, tick)`, `(toSystemId, tick)`, `(goodId, tick)` for the route and per-system queries.
-- Source of truth for both the map overlay and the per-system detail surfaces.
-
-**Per-system trade volume** — each flow increments the source and destination system's volume accumulator on `Market`, in the same atomic write that adjusts supply/demand. This is the same accumulator player trades write to, so prosperity treats edge flow and player trade identically.
-
-### Trade Route Inference
-
-A trade route is a connected sequence of edges where the same good consistently moves in the same direction over a time window. Routes are computed on demand (not stored) — the underlying flow events are the truth.
-
-```
-For a given good g and time window [t-W, t]:
-1. Group flow events by (fromSystemId, toSystemId, goodId), sum quantities
-2. Filter edges below ROUTE_INFERENCE_FLOOR (noise)
-3. Stitch edges into chains: (A→B) connects to (B→C) if both moved g in the window
-4. Score by total volume and consistency
-```
+A "trade route" in the player's mind is a connected chain of edges all moving the same good in the same direction for a sustained period. Routes are not stored — they are computed on demand by walking the flow events for the relevant window: group by edge and good, drop edges below the noise floor, stitch surviving edges into chains by matching endpoints, and rank by total volume and consistency. The event log is the truth; routes are a presentation layer.
 
 ### Player Displacement
 
-When players are active in a region, edge flow throttles down so it doesn't compete with player trade:
+When players are actively trading in a region, edge flow scales itself back so it isn't competing with them. The processor sums recent player trade volume in that region — using a wall-clock sliding window so bursts of player activity take effect immediately regardless of tick cadence — and uses it to compute a displacement value between 0 and 1. That value linearly throttles the per-edge budget. Full displacement means the per-edge budget rounds to zero and the processor skips its work for that region (pruning still runs); zero displacement means the budget is unaffected.
 
-```
-playerVolume = sum(TradeHistory) over the last PLAYER_VOLUME_WINDOW_MS in the region
-playerPressure = playerVolume / PROSPERITY_TARGET_VOLUME
-displacement = clamp(playerPressure * PLAYER_DISPLACEMENT_FACTOR, 0, 1)
-effectiveBudget = FLOW_BUDGET * (1 - displacement)
-```
-
-If `effectiveBudget < 1` the region is fully displaced and no flow occurs for that run (pruning still runs).
-
-`PLAYER_VOLUME_WINDOW_MS` is a wall-clock sliding window so player activity bursts immediately throttle flow, regardless of tick cadence.
+The intent is conservation of attention: in dead regions, the simulator provides the trade pressure; in busy regions, the players are the trade pressure.
 
 ---
 
-## Schema
+## Data
 
-```prisma
-model TradeFlow {
-  id           String @id @default(cuid())
-  tick         Int
-  fromSystemId String
-  toSystemId   String
-  goodId       String
-  quantity     Int
+A single new table tracks flow events. Each row records the tick, the directional edge (source and destination systems), the good, and the quantity. Indexes on tick, on each endpoint paired with tick, and on good paired with tick cover the overlay aggregation, the per-system top-imports/exports lookup, and the route-chain stitching, respectively. Foreign keys to `StarSystem` use named relations (`TradeFlowsFrom` / `TradeFlowsTo`).
 
-  fromSystem StarSystem @relation("TradeFlowsFrom", fields: [fromSystemId], references: [id])
-  toSystem   StarSystem @relation("TradeFlowsTo",   fields: [toSystemId],   references: [id])
+The window is bounded — the pruning step at the end of every active run keeps the table size proportional to `flow events per active run × history window`, not unbounded growth.
 
-  @@index([tick])
-  @@index([fromSystemId, tick])
-  @@index([toSystemId, tick])
-  @@index([goodId, tick])
-}
-```
-
-Pruning runs at the end of every active processor run: `deleteMany({ where: { tick: { lt: currentTick - FLOW_HISTORY_TICKS } } })`.
+The exact schema lives in `prisma/schema.prisma`.
 
 ---
 
-## Constants
+## Tuneable Constants
 
-Defined in `lib/constants/trade-simulation.ts`:
+Defined in `lib/constants/trade-simulation.ts`. These are the dials the simulator exposes for calibration — change them, sweep with `npm run simulate -- --config <file>`, then promote the value that holds equilibrium prices inside the target band.
 
-```typescript
-export const TRADE_SIMULATION = {
-  PROCESS_EVERY_N_TICKS: 1,        // every tick — round-robin picks one region per tick
-  FLOW_BUDGET: 8,                  // max units moved per edge per run
-  GRADIENT_THRESHOLD: 0.05,        // fraction of basePrice below which no flow fires
-  GRADIENT_SENSITIVITY: 1.0,       // linear gradient → fraction response
-  FLOW_HISTORY_TICKS: 200,         // rolling window for events and route inference
-  PLAYER_DISPLACEMENT_FACTOR: 2.0, // player pressure that fully displaces flow
-  PLAYER_VOLUME_WINDOW_MS: 60_000, // wall-clock window for "recent" player trade
-  ROUTE_INFERENCE_FLOOR: 5,        // minimum cumulative edge flow for route inference
-} as const;
-```
-
-Values are tuned via the simulator — sweep with `npm run simulate -- --config <file>` before promoting changes.
+| Constant | Purpose |
+|---|---|
+| `PROCESS_EVERY_N_TICKS` | How often the round-robin advances. Bigger means slower, more deliberate trade; must satisfy `regions × this < FLOW_HISTORY_TICKS`. |
+| `FLOW_BUDGET` | Cap on how many units one edge can move in a single run. |
+| `GRADIENT_THRESHOLD` | Minimum normalized price gap, as a fraction of base price, before an edge fires at all. |
+| `GRADIENT_SENSITIVITY` | How aggressively the move size responds to gradient strength. 1.0 means a full-`basePrice` gap saturates the budget. |
+| `FLOW_HISTORY_TICKS` | Rolling window in ticks for retained events and route inference. |
+| `PLAYER_DISPLACEMENT_FACTOR` | How quickly player trade pressure throttles edge flow. Larger means edge flow gets out of the player's way sooner. |
+| `PLAYER_VOLUME_WINDOW_MS` | Wall-clock window summed for "recent" player trade volume when computing displacement. |
+| `ROUTE_INFERENCE_FLOOR` | Minimum cumulative flow on an edge before it counts as part of a route or shows on the overlay. |
 
 ---
 
@@ -156,37 +82,32 @@ Values are tuned via the simulator — sweep with `npm run simulate -- --config 
 
 ### Map Overlay
 
-A toggle on the floating overlay-controls cluster (default off) reveals a Pixi particle layer over the galaxy map. Edges with `totalVolume > ROUTE_INFERENCE_FLOOR` get directional flowing particles tinted by the dominant good's tier. Visibility-gated server-side: an edge appears only if at least one endpoint is in the player's visibility set.
+A toggle on the floating overlay-controls cluster (default off) reveals a Pixi particle layer over the galaxy map. Edges with cumulative flow above the route-inference floor get directional flowing particles tinted by the dominant good's tier. Visibility is gated server-side: an edge is returned only if at least one endpoint is in the player's visibility set.
 
-A tier-colour legend sits beneath the toggle so first-time players can decode the colour story (raw → green, processed → amber, advanced → cyan). Tier colours live in `lib/constants/good-colors.ts` as the single source of truth.
+A tier-colour legend sits beneath the toggle so first-time players can decode the colour story (raw → green, processed → amber, advanced → cyan). Tier colours live in `lib/constants/good-colors.ts` as the single source of truth shared by the legend and the Pixi tinting layer.
 
 ### Per-System Trade Activity Panel
 
 The system detail panel includes a "Trade Activity" card showing:
-- **Top imports** — top goods by inbound volume, each with its top contributing source systems (linked into the detail panel for traversal).
-- **Top exports** — mirror view by destination.
-- **Volume history** — a 20-bucket sparkline of inbound vs outbound volume over the `FLOW_HISTORY_TICKS` window.
 
-The panel is visibility-gated: an invisible system returns empty data instead of leaking activity intel.
+- **Top imports** — the goods with the highest inbound volume, each with the top contributing source systems linked into the detail panel.
+- **Top exports** — mirror view by destination.
+- **Volume history** — a bucketed sparkline of inbound vs outbound volume over the history window.
+
+The panel is visibility-gated: an invisible system returns empty data rather than leaking activity intel.
 
 ---
 
 ## Future Hooks
 
-Edge flow's data outputs enable several player-facing features without needing entities:
+The flow event log is a natural data source for several player-facing features without growing the simulation:
 
-**Mission generation** — `TradeFlow` is a natural data source:
-- Smuggler interception: high contraband flow on a route → spawn patrol/inspection.
-- Trade route disruption: an event blocks an edge → quest to find an alternative.
-- Cargo escort: high-value goods flowing along a dangerous route → escort opportunity.
-- Market manipulation: dump goods at the destination of a known route to disrupt prices.
-
-**Trade-skill tiered visibility** — once the player-progression system ships, route data can gate by skill: aggregate-only at low tiers, full chains at high tiers, predictive route shifts at master tier (compute forward a few ticks against current gradients).
-
-**Named convoy layer** — if gameplay demand surfaces for interactable entities (pirate prey, escort targets), a small named-convoy layer can be added on top of flow data — visible entities driven by the same flow math, but rendered at far lower count than full NPC simulation would require.
+- **Mission generation** — smuggler interception on high-contraband routes, cargo escort opportunities on dangerous high-value routes, "find an alternative" quests when an event blocks an edge, market manipulation by dumping at a known route's destination.
+- **Trade-skill tiered visibility** — once the player-progression system ships, route data can be gated by skill: aggregate-only at low tiers, full chains at high tiers, predictive route shifts at master tier by running the gradient math forward a few ticks against current state.
+- **Named convoy layer** — if interactable entities become valuable (pirate prey, escort targets), a small named-convoy layer can be added on top of the same flow data: visible entities driven by the same math, but rendered at far lower count than full NPC simulation would require.
 
 ---
 
 ## Implementation Notes
 
-Built on the unified processor architecture — see `docs/design/active/processor-architecture.md`. Live game and simulator run the same pure processor body (`runTradeFlowProcessor`) against different adapters (Prisma vs in-memory).
+Built on the unified processor architecture — see `docs/design/active/processor-architecture.md`. Live game and simulator run the same pure processor body against different adapters (Prisma vs in-memory), so simulator sweeps observe the same scheduling and same logic the live tick does.
