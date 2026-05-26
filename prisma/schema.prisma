@@ -89,13 +89,14 @@ model Player {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ships         Ship[]
-  convoys       Convoy[]
-  tradeMissions TradeMission[]
-  missions      Mission[]
-  notifications PlayerNotification[]
-  npcVisits     NpcVisit[]
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ships              Ship[]
+  convoys            Convoy[]
+  tradeMissions      TradeMission[]
+  missions           Mission[]
+  notifications      PlayerNotification[]
+  npcVisits          NpcVisit[]
+  factionReputations PlayerFactionReputation[]
 }
 
 model Ship {
@@ -125,14 +126,14 @@ model Ship {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  player        Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  system        StarSystem       @relation("ShipCurrentSystem", fields: [systemId], references: [id])
-  destination   StarSystem?      @relation("ShipDestination", fields: [destinationSystemId], references: [id])
-  cargo         CargoItem[]
-  upgradeSlots  ShipUpgradeSlot[]
-  convoyMember  ConvoyMember?
-  missions      Mission[]
-  battles       Battle[]
+  player       Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  system       StarSystem        @relation("ShipCurrentSystem", fields: [systemId], references: [id])
+  destination  StarSystem?       @relation("ShipDestination", fields: [destinationSystemId], references: [id])
+  cargo        CargoItem[]
+  upgradeSlots ShipUpgradeSlot[]
+  convoyMember ConvoyMember?
+  missions     Mission[]
+  battles      Battle[]
 
   @@index([playerId])
 }
@@ -140,10 +141,10 @@ model Ship {
 model ShipUpgradeSlot {
   id         String  @id @default(cuid())
   shipId     String
-  slotType   String  // "engine" | "cargo" | "defence" | "systems"
-  slotIndex  Int     // 0-based index within slotType
+  slotType   String // "engine" | "cargo" | "defence" | "systems"
+  slotIndex  Int // 0-based index within slotType
   moduleId   String? // null = empty slot
-  moduleTier Int?    // null = empty slot
+  moduleTier Int? // null = empty slot
 
   ship Ship @relation(fields: [shipId], references: [id], onDelete: Cascade)
 
@@ -163,9 +164,9 @@ model Convoy {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  player      Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  system      StarSystem      @relation("ConvoyCurrentSystem", fields: [systemId], references: [id])
-  destination StarSystem?     @relation("ConvoyDestination", fields: [destinationSystemId], references: [id])
+  player      Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  system      StarSystem     @relation("ConvoyCurrentSystem", fields: [systemId], references: [id])
+  destination StarSystem?    @relation("ConvoyDestination", fields: [destinationSystemId], references: [id])
   members     ConvoyMember[]
 
   @@index([playerId])
@@ -193,18 +194,21 @@ model CargoItem {
 }
 
 model StarSystem {
-  id                String  @id @default(cuid())
-  name              String  @unique
-  economyType       String
-  x                 Float
-  y                 Float
-  description       String  @default("")
-  regionId          String
-  isGateway         Boolean @default(false)
-  prosperity        Float   @default(0)
-  tradeVolumeAccum  Int     @default(0)
+  id               String  @id @default(cuid())
+  name             String  @unique
+  economyType      String
+  x                Float
+  y                Float
+  description      String  @default("")
+  regionId         String
+  factionId        String?
+  isGateway        Boolean @default(false)
+  prosperity       Float   @default(0)
+  tradeVolumeAccum Int     @default(0)
 
   region            Region             @relation(fields: [regionId], references: [id])
+  faction           Faction?           @relation("FactionTerritory", fields: [factionId], references: [id])
+  factionHomeworld  Faction?           @relation("FactionHomeworld")
   station           Station?
   traits            SystemTrait[]
   ships             Ship[]             @relation("ShipCurrentSystem")
@@ -224,6 +228,7 @@ model StarSystem {
   tradeFlowsTo      TradeFlow[]        @relation("TradeFlowsTo")
 
   @@index([regionId])
+  @@index([factionId])
   @@index([x, y])
 }
 
@@ -231,7 +236,7 @@ model SystemTrait {
   id       String @id @default(cuid())
   systemId String
   traitId  String // TraitId: asteroid_belt, habitable_world, etc.
-  quality  Int    // QualityTier: 1 (Marginal), 2 (Solid), 3 (Exceptional)
+  quality  Int // QualityTier: 1 (Marginal), 2 (Solid), 3 (Exceptional)
 
   system StarSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
 
@@ -300,7 +305,7 @@ model TradeHistory {
   goodId    String
   price     Float
   quantity  Int
-  type      String   // "buy" or "sell"
+  type      String // "buy" or "sell"
   playerId  String?
   createdAt DateTime @default(now())
 
@@ -341,21 +346,21 @@ model TradeFlow {
 
 model GameEvent {
   id             String  @id @default(cuid())
-  type           String                        // Event definition key: "war", "plague", etc.
-  phase          String                        // Current phase name: "tensions", "active", etc.
-  systemId       String?                       // Target system (null for region-level events)
-  regionId       String?                       // Target region
-  startTick      Int                           // Tick when event was created
-  phaseStartTick Int                           // Tick when current phase began
-  phaseDuration  Int                           // Ticks until next phase transition
-  severity       Float   @default(1.0)         // Intensity multiplier (spread events are weaker)
-  sourceEventId  String?                       // Parent event (for spread events)
-  metadata       String  @default("{}")        // JSON: event-specific data
+  type           String // Event definition key: "war", "plague", etc.
+  phase          String // Current phase name: "tensions", "active", etc.
+  systemId       String? // Target system (null for region-level events)
+  regionId       String? // Target region
+  startTick      Int // Tick when event was created
+  phaseStartTick Int // Tick when current phase began
+  phaseDuration  Int // Ticks until next phase transition
+  severity       Float   @default(1.0) // Intensity multiplier (spread events are weaker)
+  sourceEventId  String? // Parent event (for spread events)
+  metadata       String  @default("{}") // JSON: event-specific data
 
-  system        StarSystem?    @relation(fields: [systemId], references: [id])
-  region        Region?        @relation(fields: [regionId], references: [id])
-  sourceEvent   GameEvent?     @relation("EventSpread", fields: [sourceEventId], references: [id])
-  spreadEvents  GameEvent[]    @relation("EventSpread")
+  system        StarSystem?     @relation(fields: [systemId], references: [id])
+  region        Region?         @relation(fields: [regionId], references: [id])
+  sourceEvent   GameEvent?      @relation("EventSpread", fields: [sourceEventId], references: [id])
+  spreadEvents  GameEvent[]     @relation("EventSpread")
   modifiers     EventModifier[]
   tradeMissions TradeMission[]
   missions      Mission[]
@@ -368,13 +373,13 @@ model GameEvent {
 model EventModifier {
   id         String  @id @default(cuid())
   eventId    String
-  domain     String                    // "economy", "navigation", "combat", "reputation"
-  type       String                    // "equilibrium_shift", "rate_multiplier", "reversion_dampening"
-  targetType String                    // "system", "region"
-  targetId   String?                   // systemId or regionId
-  goodId     String?                   // Specific good key, or null for all goods
-  parameter  String                    // "supply_target", "demand_target", "production_rate", etc.
-  value      Float                     // Modifier value
+  domain     String // "economy", "navigation", "combat", "reputation"
+  type       String // "equilibrium_shift", "rate_multiplier", "reversion_dampening"
+  targetType String // "system", "region"
+  targetId   String? // systemId or regionId
+  goodId     String? // Specific good key, or null for all goods
+  parameter  String // "supply_target", "demand_target", "production_rate", etc.
+  value      Float // Modifier value
 
   event GameEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
@@ -385,18 +390,18 @@ model EventModifier {
 // ── Trade Missions ──────────────────────────────────────────────
 
 model TradeMission {
-  id             String   @id @default(cuid())
-  systemId       String                      // Board station (where mission appears)
-  destinationId  String                      // Delivery target
+  id             String  @id @default(cuid())
+  systemId       String // Board station (where mission appears)
+  destinationId  String // Delivery target
   goodId         String
   quantity       Int
-  reward         Int                         // Fixed CR payout
-  deadlineTick   Int                         // Available missions expire here
-  eventId        String?                     // Cascade-deletes with event
-  factionId      String?                     // Future: faction reputation
-  penaltyType    String   @default("none")   // Future: "credits" | "reputation"
-  penaltyValue   Int      @default(0)
-  playerId       String?                     // null = available, set = accepted
+  reward         Int // Fixed CR payout
+  deadlineTick   Int // Available missions expire here
+  eventId        String? // Cascade-deletes with event
+  factionId      String? // Owning faction (faction reputation)
+  penaltyType    String  @default("none") // Future: "credits" | "reputation"
+  penaltyValue   Int     @default(0)
+  playerId       String? // null = available, set = accepted
   acceptedAtTick Int?
   createdAtTick  Int
 
@@ -405,43 +410,45 @@ model TradeMission {
   good        Good       @relation(fields: [goodId], references: [id])
   event       GameEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
   player      Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  faction     Faction?   @relation(fields: [factionId], references: [id])
 
   @@index([systemId, playerId])
   @@index([playerId])
   @@index([deadlineTick])
   @@index([eventId])
+  @@index([factionId])
 }
 
 // ── Operational Missions ────────────────────────────────────────
 
 model Mission {
-  id               String   @id @default(cuid())
-  type             String                        // "patrol" | "survey" | "bounty"
-  systemId         String                        // Where mission is posted
-  targetSystemId   String                        // Where mission takes place
+  id               String  @id @default(cuid())
+  type             String // "patrol" | "survey" | "bounty"
+  systemId         String // Where mission is posted
+  targetSystemId   String // Where mission takes place
   reward           Int
   deadlineTick     Int
-  durationTicks    Int?                          // Patrol/survey commitment time (null for bounty)
-  enemyTier        String?                       // Bounty: "weak" | "moderate" | "strong"
-  statRequirements String   @default("{}")       // JSON: { firepower: 5 } etc.
+  durationTicks    Int? // Patrol/survey commitment time (null for bounty)
+  enemyTier        String? // Bounty: "weak" | "moderate" | "strong"
+  statRequirements String  @default("{}") // JSON: { firepower: 5 } etc.
   createdAtTick    Int
-  eventId          String?                       // Source event (event-spawned missions)
+  eventId          String? // Source event (event-spawned missions)
 
   // State
-  status           String   @default("available") // available | accepted | in_progress | completed | failed
-  playerId         String?
-  shipId           String?
-  acceptedAtTick   Int?
-  startedAtTick    Int?                          // When ship arrived and commitment began
-  completedAtTick  Int?
+  status          String  @default("available") // available | accepted | in_progress | completed | failed
+  playerId        String?
+  shipId          String?
+  acceptedAtTick  Int?
+  startedAtTick   Int? // When ship arrived and commitment began
+  completedAtTick Int?
 
   // Relations
-  system        StarSystem @relation("MissionSystem", fields: [systemId], references: [id])
-  targetSystem  StarSystem @relation("MissionTarget", fields: [targetSystemId], references: [id])
-  player        Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  ship          Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
-  event         GameEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  battle        Battle?
+  system       StarSystem @relation("MissionSystem", fields: [systemId], references: [id])
+  targetSystem StarSystem @relation("MissionTarget", fields: [targetSystemId], references: [id])
+  player       Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  ship         Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
+  event        GameEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  battle       Battle?
 
   @@index([systemId, status])
   @@index([playerId])
@@ -453,39 +460,39 @@ model Mission {
 // ── Battles ─────────────────────────────────────────────────────
 
 model Battle {
-  id              String   @id @default(cuid())
-  type            String                        // "pirate_encounter" — later: "fleet_battle"
-  systemId        String
-  missionId       String?  @unique
-  shipId          String?
+  id        String  @id @default(cuid())
+  type      String // "pirate_encounter" — later: "fleet_battle"
+  systemId  String
+  missionId String? @unique
+  shipId    String?
 
-  status          String   @default("active")   // active | player_victory | player_defeat | player_retreat | enemy_retreat
+  status String @default("active") // active | player_victory | player_defeat | player_retreat | enemy_retreat
 
   // Player side
   playerStrength        Float
   playerMorale          Float
-  dangerLevel           Float?                    // Danger at battle creation for enemy scaling
-  initialPlayerStrength Float?                    // Player strength at battle start for damage calc
+  dangerLevel           Float? // Danger at battle creation for enemy scaling
+  initialPlayerStrength Float? // Player strength at battle start for damage calc
 
   // Enemy side
-  enemyStrength   Float
-  enemyMorale     Float
-  enemyType       String                        // "pirates" — later: faction names
-  enemyTier       String                        // "weak" | "moderate" | "strong"
+  enemyStrength Float
+  enemyMorale   Float
+  enemyType     String // "pirates" — later: faction names
+  enemyTier     String // "weak" | "moderate" | "strong"
 
   // Resolution
-  roundsCompleted Int      @default(0)
-  roundInterval   Int      @default(6)
+  roundsCompleted Int    @default(0)
+  roundInterval   Int    @default(6)
   nextRoundTick   Int
-  roundHistory    String   @default("[]")       // JSON: Array<RoundResult>
+  roundHistory    String @default("[]") // JSON: Array<RoundResult>
 
-  createdAtTick   Int
-  resolvedAtTick  Int?
+  createdAtTick  Int
+  resolvedAtTick Int?
 
   // Relations
-  system    StarSystem @relation(fields: [systemId], references: [id])
-  mission   Mission?   @relation(fields: [missionId], references: [id], onDelete: SetNull)
-  ship      Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
+  system  StarSystem @relation(fields: [systemId], references: [id])
+  mission Mission?   @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  ship    Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
 
   @@index([status, nextRoundTick])
   @@index([systemId])
@@ -521,4 +528,79 @@ model NpcVisit {
 
   @@unique([playerId, npcType, systemId])
   @@index([playerId])
+}
+
+// ── Factions ───────────────────────────────────────────────────
+
+model Faction {
+  id             String @id @default(cuid())
+  name           String @unique
+  description    String @default("")
+  governmentType String // GovernmentType union (validated at boundary)
+  doctrine       String // Doctrine union (validated at boundary)
+  homeworldId    String @unique // FK to StarSystem; one homeworld per faction
+  color          String // Hex (with leading #) for territory rendering
+  createdAtTick  Int
+
+  homeworld     StarSystem                @relation("FactionHomeworld", fields: [homeworldId], references: [id])
+  territory     StarSystem[]              @relation("FactionTerritory")
+  tradeMissions TradeMission[]
+  reputations   PlayerFactionReputation[]
+  relationsAsA  FactionRelation[]         @relation("RelationFactionA")
+  relationsAsB  FactionRelation[]         @relation("RelationFactionB")
+  alliancesAsA  AlliancePact[]            @relation("AllianceFactionA")
+  alliancesAsB  AlliancePact[]            @relation("AllianceFactionB")
+}
+
+/// Pair-wise relation score between two factions. The adapter layer enforces the
+/// convention `factionAId < factionBId` so each unordered pair occupies one row.
+model FactionRelation {
+  id            String @id @default(cuid())
+  factionAId    String
+  factionBId    String
+  score         Float  @default(0) // [-100, +100]
+  historyJson   String @default("[]") // JSON ring buffer of recent drift drivers
+  updatedAtTick Int    @default(0)
+
+  factionA Faction @relation("RelationFactionA", fields: [factionAId], references: [id], onDelete: Cascade)
+  factionB Faction @relation("RelationFactionB", fields: [factionBId], references: [id], onDelete: Cascade)
+
+  // The composite @@unique already creates a B-tree whose leftmost column
+  // serves factionAId-only lookups, so a separate @@index([factionAId]) would
+  // be redundant. @@index([factionBId]) IS needed — it's not a prefix of the
+  // unique index.
+  @@unique([factionAId, factionBId])
+  @@index([factionBId])
+}
+
+/// Active alliance between a pair of factions. One pact per pair at any time.
+model AlliancePact {
+  id                       String @id @default(cuid())
+  factionAId               String
+  factionBId               String
+  formedAtTick             Int
+  pendingDissolutionAtTick Int?
+
+  factionA Faction @relation("AllianceFactionA", fields: [factionAId], references: [id], onDelete: Cascade)
+  factionB Faction @relation("AllianceFactionB", fields: [factionBId], references: [id], onDelete: Cascade)
+
+  // Same index reasoning as FactionRelation above.
+  @@unique([factionAId, factionBId])
+  @@index([factionBId])
+}
+
+/// Per-player, per-faction reputation score. Drives trade multipliers.
+model PlayerFactionReputation {
+  id            String @id @default(cuid())
+  playerId      String
+  factionId     String
+  score         Float  @default(0) // [-100, +100]
+  updatedAtTick Int    @default(0)
+
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  faction Faction @relation(fields: [factionId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, factionId])
+  @@index([playerId])
+  @@index([factionId])
 }

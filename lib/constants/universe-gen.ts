@@ -16,6 +16,8 @@ interface UniverseGenConfig {
   INTRA_REGION_BASE_FUEL: number;
   /** Max rejection sampling attempts before falling back to grid-jitter. */
   MAX_PLACEMENT_ATTEMPTS: number;
+  /** Minor factions seeded alongside the 8 majors. Consumed by Phase 2 world-gen. */
+  MINOR_FACTION_COUNT: number;
 }
 
 // ── Scale presets ───────────────────────────────────────────────
@@ -35,6 +37,7 @@ const BASE_CONFIG: UniverseGenConfig = {
   GATEWAYS_PER_BORDER: 3,
   INTRA_REGION_BASE_FUEL: 8,
   MAX_PLACEMENT_ATTEMPTS: 500,
+  MINOR_FACTION_COUNT: 12,
 };
 
 export type UniverseScale = "default" | "10k";
@@ -50,6 +53,7 @@ const SCALE_OVERRIDES: Record<UniverseScale, Partial<UniverseGenConfig>> = {
     MAP_SIZE: 25_000,
     REGION_COUNT: 60,
     REGION_MIN_DISTANCE: 2_500,
+    MINOR_FACTION_COUNT: 18,
   },
 };
 

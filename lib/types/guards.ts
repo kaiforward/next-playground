@@ -9,6 +9,9 @@
 import type {
   EconomyType,
   GovernmentType,
+  Doctrine,
+  FactionStatus,
+  ReputationStanding,
   QualityTier,
   ShipStatus,
   TradeType,
@@ -36,6 +39,19 @@ const ECONOMY_TYPES: ReadonlySet<string> = new Set<EconomyType>([
 
 const GOVERNMENT_TYPES: ReadonlySet<string> = new Set<GovernmentType>([
   "federation", "corporate", "authoritarian", "frontier",
+  "cooperative", "technocratic", "militarist", "theocratic",
+]);
+
+const DOCTRINES: ReadonlySet<string> = new Set<Doctrine>([
+  "expansionist", "protectionist", "mercantile", "hegemonic", "opportunistic",
+]);
+
+const FACTION_STATUSES: ReadonlySet<string> = new Set<FactionStatus>([
+  "dominant", "major", "regional", "minor",
+]);
+
+const REPUTATION_STANDINGS: ReadonlySet<string> = new Set<ReputationStanding>([
+  "champion", "trusted", "neutral", "distrusted", "hostile",
 ]);
 
 const QUALITY_TIERS: ReadonlySet<number> = new Set<QualityTier>([1, 2, 3]);
@@ -115,6 +131,35 @@ export function toGovernmentType(value: string): GovernmentType {
     throw new Error(`Invalid government type: "${value}"`);
   }
   return value as GovernmentType;
+}
+
+export function isGovernmentType(value: string): value is GovernmentType {
+  return GOVERNMENT_TYPES.has(value);
+}
+
+export function toDoctrine(value: string): Doctrine {
+  if (!DOCTRINES.has(value)) {
+    throw new Error(`Invalid doctrine: "${value}"`);
+  }
+  return value as Doctrine;
+}
+
+export function isDoctrine(value: string): value is Doctrine {
+  return DOCTRINES.has(value);
+}
+
+export function toFactionStatus(value: string): FactionStatus {
+  if (!FACTION_STATUSES.has(value)) {
+    throw new Error(`Invalid faction status: "${value}"`);
+  }
+  return value as FactionStatus;
+}
+
+export function toReputationStanding(value: string): ReputationStanding {
+  if (!REPUTATION_STANDINGS.has(value)) {
+    throw new Error(`Invalid reputation standing: "${value}"`);
+  }
+  return value as ReputationStanding;
 }
 
 export function toQualityTier(value: number): QualityTier {
@@ -320,9 +365,67 @@ export function toUniverseScale(value: string): UniverseScale {
 
 export const ALL_GOVERNMENT_TYPES: readonly GovernmentType[] = [
   "federation", "corporate", "authoritarian", "frontier",
+  "cooperative", "technocratic", "militarist", "theocratic",
+];
+
+export const ALL_DOCTRINES: readonly Doctrine[] = [
+  "expansionist", "protectionist", "mercantile", "hegemonic", "opportunistic",
+];
+
+export const ALL_FACTION_STATUSES: readonly FactionStatus[] = [
+  "dominant", "major", "regional", "minor",
+];
+
+export const ALL_REPUTATION_STANDINGS: readonly ReputationStanding[] = [
+  "champion", "trusted", "neutral", "distrusted", "hostile",
 ];
 
 export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
+
+// ── Faction status derivation (hysteresis) ───────────────────────
+
+/**
+ * Per faction-system.md §1. Hysteresis prevents flickering at boundaries:
+ * a faction that grew into a tier keeps the tier until its territory drops
+ * below the (smaller) lose threshold.
+ */
+const FACTION_STATUS_TIERS = [
+  { status: "dominant" as const, gain: 80, lose: 60 },
+  { status: "major"    as const, gain: 40, lose: 25 },
+  { status: "regional" as const, gain: 15, lose: 10 },
+  { status: "minor"    as const, gain: 1,  lose: 1  },
+];
+
+/**
+ * Derive a faction's status from its territory size, applying hysteresis
+ * when the previous status is known. With no previous status, fall back
+ * to gain thresholds (used at seed time).
+ *
+ * A faction with zero systems is destroyed — callers should handle that
+ * upstream; this helper returns "minor" for any positive territory.
+ */
+export function deriveFactionStatus(
+  territorySize: number,
+  currentStatus?: FactionStatus,
+): FactionStatus {
+  if (territorySize <= 0) return "minor";
+
+  // Highest tier the territory qualifies for by gain threshold alone.
+  // FACTION_STATUS_TIERS is ordered highest-first, so findIndex returns the top match.
+  const naturalIdx = FACTION_STATUS_TIERS.findIndex((t) => territorySize >= t.gain);
+  const natural: FactionStatus = naturalIdx === -1 ? "minor" : FACTION_STATUS_TIERS[naturalIdx].status;
+
+  if (!currentStatus) return natural;
+
+  // Hysteresis: hold the current tier only if it outranks the natural one
+  // AND territory is still at or above its lose threshold. Otherwise the
+  // natural tier wins (covers both promotion and demotion).
+  const currentIdx = FACTION_STATUS_TIERS.findIndex((t) => t.status === currentStatus);
+  const currentTier = FACTION_STATUS_TIERS[currentIdx];
+  const outranksNatural = naturalIdx === -1 || currentIdx < naturalIdx;
+  if (outranksNatural && territorySize >= currentTier.lose) return currentStatus;
+  return natural;
+}
 
 // ── Template literal guards ───────────────────────────────────
 
