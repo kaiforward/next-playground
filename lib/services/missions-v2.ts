@@ -312,7 +312,7 @@ export async function startMission(
       targetSystem: {
         select: {
           name: true,
-          region: { select: { governmentType: true } },
+          faction: { select: { governmentType: true } },
           traits: { select: { traitId: true, quality: true } },
         },
       },
@@ -449,8 +449,8 @@ export async function startMission(
         },
       });
 
-      const govType = mission.targetSystem?.region?.governmentType
-        ? toGovernmentType(mission.targetSystem.region.governmentType)
+      const govType = mission.targetSystem?.faction?.governmentType
+        ? toGovernmentType(mission.targetSystem.faction.governmentType)
         : undefined;
       const govDef = govType ? GOVERNMENT_TYPES[govType] : undefined;
       const govBaseline = govDef?.dangerBaseline ?? 0;

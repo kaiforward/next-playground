@@ -53,6 +53,7 @@ const SOL_SYSTEM = {
   y: 300,
   description: "Humanity's birthplace.",
   regionId: "mock-region",
+  factionId: null,
   isGateway: false,
 };
 

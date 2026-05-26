@@ -78,6 +78,15 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { data: universeData } = useUniverse();
   const allMissions = useSystemAllMissions(systemId);
 
+  // Owning faction (post-Layer-2 source of government). Falls back to the
+  // region's dominant faction for the transient cutover state.
+  const factionInfo = useMemo(() => {
+    if (!universeData) return null;
+    const factionId = systemInfo?.factionId ?? regionInfo?.dominantFactionId ?? null;
+    if (!factionId) return null;
+    return universeData.factions.find((f) => f.id === factionId) ?? null;
+  }, [universeData, systemInfo?.factionId, regionInfo?.dominantFactionId]);
+
   const traits = useMemo(
     () => enrichTraits(systemInfo?.traits ?? []),
     [systemInfo?.traits],
@@ -136,8 +145,10 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     }));
   }, [market]);
 
-  // Danger
-  const govType: GovernmentType = regionInfo?.governmentType ?? "frontier";
+  // Danger — sourced from the system's owning faction (post-Layer-2). Region
+  // dominant gov is the fallback path for the transient cutover state.
+  const govType: GovernmentType =
+    factionInfo?.governmentType ?? regionInfo?.dominantGovernmentType ?? "frontier";
   const govDef = GOVERNMENT_TYPES[govType];
   const traitDanger = computeTraitDanger(
     (systemInfo?.traits ?? []).map((t) => ({ traitId: t.traitId, quality: t.quality })),
@@ -172,6 +183,20 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
             <StatList>
               <StatRow label="Region">
                 <span className="text-sm text-text-primary">{regionInfo?.name ?? "—"}</span>
+              </StatRow>
+              <StatRow label="Faction">
+                {factionInfo ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="inline-block h-2.5 w-2.5"
+                      style={{ backgroundColor: factionInfo.color }}
+                    />
+                    <span className="text-sm text-text-primary">{factionInfo.name}</span>
+                  </span>
+                ) : (
+                  <span className="text-sm text-text-tertiary">—</span>
+                )}
               </StatRow>
               <StatRow label="Economy">
                 <EconomyBadge economyType={economyType} />

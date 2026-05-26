@@ -10,7 +10,6 @@ import {
   generateRegions,
   generateSystems,
   generateConnections,
-  selectStartingSystem,
   generateUniverse,
   type GenParams,
   type GeneratedRegion,
@@ -19,7 +18,6 @@ import {
   UNIVERSE_GEN,
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
-import type { GovernmentType } from "@/lib/types/game";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -38,6 +36,7 @@ function defaultParams(): GenParams {
     gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
     intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
+    minorFactionCount: UNIVERSE_GEN.MINOR_FACTION_COUNT,
   };
 }
 
@@ -217,24 +216,6 @@ describe("generateRegions", () => {
     const names = regions.map((r) => r.name);
     expect(new Set(names).size).toBe(names.length);
   });
-
-  it("assigns a valid government type to every region", () => {
-    const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    const validGovTypes: GovernmentType[] = ["federation", "corporate", "authoritarian", "frontier"];
-    for (const r of regions) {
-      expect(validGovTypes).toContain(r.governmentType);
-    }
-  });
-
-  it("ensures all 4 government types are present", () => {
-    const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    const govTypes = new Set(regions.map((r) => r.governmentType));
-    expect(govTypes.size).toBe(4);
-  });
 });
 
 // ── System generation ───────────────────────────────────────────
@@ -325,8 +306,8 @@ describe("generateSystems", () => {
 describe("assignRegions", () => {
   it("assigns each point to the nearest region center", () => {
     const regions: GeneratedRegion[] = [
-      { index: 0, name: "A", governmentType: "federation", x: 100, y: 100 },
-      { index: 1, name: "B", governmentType: "corporate", x: 900, y: 900 },
+      { index: 0, name: "A", x: 100, y: 100 },
+      { index: 1, name: "B", x: 900, y: 900 },
     ];
     const points = [
       { x: 150, y: 150 }, // closest to A
@@ -435,46 +416,29 @@ describe("generateConnections", () => {
 // ── Starting system ─────────────────────────────────────────────
 
 describe("selectStartingSystem", () => {
-  it("selects a system in the region closest to map center", () => {
+  it("places the player in Federation-major territory", () => {
     const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    const systems = generateSystems(rng, regions, params);
-
-    const idx = selectStartingSystem(systems, regions, params.mapSize);
-    const startSys = systems[idx];
-    const startRegion = regions.find((r) => r.index === startSys.regionIndex)!;
-
-    // Find the actual closest region to center
-    const center = params.mapSize / 2;
-    let closestRegion = regions[0];
-    let closestDist = distance(closestRegion.x, closestRegion.y, center, center);
-    for (const r of regions) {
-      const d = distance(r.x, r.y, center, center);
-      if (d < closestDist) {
-        closestRegion = r;
-        closestDist = d;
-      }
-    }
-
-    expect(startRegion.index).toBe(closestRegion.index);
+    const universe = generateUniverse(params, REGION_NAMES);
+    const startFactionIdx = universe.systemFactionAssignments[universe.startingSystemIndex];
+    const startFaction = universe.factions[startFactionIdx];
+    expect(startFaction.isMajor).toBe(true);
+    expect(startFaction.governmentType).toBe("federation");
   });
 
-  it("prefers a core-type system when available", () => {
+  it("prefers a core-type system within Federation territory when available", () => {
     const params = defaultParams();
-    const rng = mulberry32(params.seed);
-    const regions = generateRegions(rng, params, REGION_NAMES);
-    const systems = generateSystems(rng, regions, params);
+    const universe = generateUniverse(params, REGION_NAMES);
+    const startSys = universe.systems[universe.startingSystemIndex];
 
-    const idx = selectStartingSystem(systems, regions, params.mapSize);
-    const startSys = systems[idx];
-    const startRegion = regions.find((r) => r.index === startSys.regionIndex)!;
-
-    // Check if there are any core systems in this region — if so, the selected should be core
-    const coreSystems = systems.filter(
-      (s) => s.regionIndex === startRegion.index && s.economyType === "core",
+    // Find the federation major; if it owns any core systems, the start must be core.
+    const fedFaction = universe.factions.find(
+      (f) => f.isMajor && f.governmentType === "federation",
+    )!;
+    const fedOwnedSystems = universe.systems.filter(
+      (s) => universe.systemFactionAssignments[s.index] === fedFaction.index,
     );
-    if (coreSystems.length > 0) {
+    const fedCoreSystems = fedOwnedSystems.filter((s) => s.economyType === "core");
+    if (fedCoreSystems.length > 0) {
       expect(startSys.economyType).toBe("core");
     }
   });
@@ -491,6 +455,8 @@ describe("generateUniverse", () => {
     expect(u1.regions).toEqual(u2.regions);
     expect(u1.systems).toEqual(u2.systems);
     expect(u1.connections).toEqual(u2.connections);
+    expect(u1.factions).toEqual(u2.factions);
+    expect(u1.systemFactionAssignments).toEqual(u2.systemFactionAssignments);
     expect(u1.startingSystemIndex).toBe(u2.startingSystemIndex);
   });
 
@@ -526,6 +492,90 @@ describe("generateUniverse", () => {
     }
     for (const [, count] of regionCounts) {
       expect(count).toBeGreaterThanOrEqual(5);
+    }
+  });
+});
+
+// ── Faction generation + system ownership ───────────────────────
+
+describe("faction generation", () => {
+  it("seeds 8 majors plus the configured minor count", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const majors = u.factions.filter((f) => f.isMajor);
+    const minors = u.factions.filter((f) => !f.isMajor);
+    expect(majors).toHaveLength(8);
+    expect(minors).toHaveLength(params.minorFactionCount);
+  });
+
+  it("majors cover all 8 government types exactly once", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const majorGovs = u.factions.filter((f) => f.isMajor).map((f) => f.governmentType);
+    expect(new Set(majorGovs).size).toBe(8);
+  });
+
+  it("every faction has a distinct homeworld system", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const homeworlds = u.factions.map((f) => f.homeworldSystemIndex);
+    expect(new Set(homeworlds).size).toBe(homeworlds.length);
+  });
+
+  it("every faction has a unique name", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const names = u.factions.map((f) => f.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("every system is assigned to some faction", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    expect(u.systemFactionAssignments).toHaveLength(u.systems.length);
+    for (const idx of u.systemFactionAssignments) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(u.factions.length);
+    }
+  });
+
+  it("every minor faction holds at least 5 systems (post-Layer-2 floor)", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const sizeByFaction = new Map<number, number>();
+    for (const f of u.systemFactionAssignments) {
+      sizeByFaction.set(f, (sizeByFaction.get(f) ?? 0) + 1);
+    }
+    for (const f of u.factions) {
+      if (f.isMajor) continue;
+      const size = sizeByFaction.get(f.index) ?? 0;
+      expect(size).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it("minor archetypes total to the configured count", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const minors = u.factions.filter((f) => !f.isMajor);
+    expect(minors.length).toBe(params.minorFactionCount);
+    for (const m of minors) {
+      expect(m.archetype).not.toBeNull();
+    }
+  });
+
+  it("frontier minors are placed near the map edge", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES);
+    const center = params.mapSize / 2;
+    const frontierMinors = u.factions.filter(
+      (f) => !f.isMajor && f.archetype === "frontier",
+    );
+    // Each frontier minor's homeworld lies in the outer 40% of map radius —
+    // the placement algorithm samples from the top-20% distance-from-center pool.
+    for (const fm of frontierMinors) {
+      const hw = u.systems[fm.homeworldSystemIndex];
+      const d = distance(hw.x, hw.y, center, center);
+      expect(d).toBeGreaterThan(center * 0.4);
     }
   });
 });

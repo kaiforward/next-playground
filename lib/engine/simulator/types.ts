@@ -14,7 +14,6 @@ import type { SimAdjacencyList } from "./pathfinding-cache";
 export interface SimRegion {
   id: string;
   name: string;
-  governmentType: GovernmentType;
 }
 
 export interface SimSystem {
@@ -22,6 +21,8 @@ export interface SimSystem {
   name: string;
   economyType: EconomyType;
   regionId: string;
+  /** Owning faction's government — sourced per-system after the Layer 2 cutover. */
+  governmentType: GovernmentType;
   /** Goods this economy type produces, keyed by goodId → rate. */
   produces: Record<string, number>;
   /** Goods this economy type consumes, keyed by goodId → rate. */
@@ -356,6 +357,7 @@ export interface SimResults {
 
 export interface RegionOverviewEntry {
   name: string;
-  governmentType: string;
+  /** Modal government type across the region's systems, derived from faction ownership. */
+  dominantGovernmentType: string;
   systemCount: number;
 }

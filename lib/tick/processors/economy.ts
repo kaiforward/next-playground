@@ -92,8 +92,6 @@ export async function runEconomyProcessor(
     }
   }
 
-  const govDef = GOVERNMENT_TYPES[targetRegion.governmentType];
-
   // Prosperity: compute next value per system using current accum volume.
   const prosperityViews = await world.getProsperity(systemIds);
   const prosperityBySystem = new Map<string, number>();
@@ -113,7 +111,9 @@ export async function runEconomyProcessor(
     });
   }
 
-  // Build tick entries via the shared market-tick builder.
+  // Build tick entries via the shared market-tick builder. After the Layer 2
+  // cutover, government modifiers are resolved per-market (border regions can
+  // contain systems owned by different factions) rather than once per region.
   const tickEntries: MarketTickEntry[] = markets.map((m) =>
     resolveMarketTickEntry(
       {
@@ -126,7 +126,7 @@ export async function runEconomyProcessor(
         consumes: m.consumes,
         baseProductionRate: m.baseProductionRate,
         baseConsumptionRate: m.baseConsumptionRate,
-        govDef: govDef ?? undefined,
+        govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
         traits: m.traits,
         prosperity: prosperityBySystem.get(m.systemId) ?? 0,
         modifiers: modifiersBySystem.get(m.systemId) ?? [],

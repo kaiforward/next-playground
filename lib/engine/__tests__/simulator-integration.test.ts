@@ -118,8 +118,7 @@ describe("Simulator Integration", () => {
       const govBySystem = new Map<string, string>();
       const econBySystem = new Map<string, string>();
       for (const sys of world.systems) {
-        const region = world.regions.find((r) => r.id === sys.regionId);
-        if (region) govBySystem.set(sys.id, region.governmentType);
+        govBySystem.set(sys.id, sys.governmentType);
         econBySystem.set(sys.id, sys.economyType);
       }
 
@@ -195,8 +194,7 @@ describe("Simulator Integration", () => {
       // Compare within same economy type to isolate government effect
       const systemInfo = new Map<string, { gov: string; econ: string }>();
       for (const sys of world.systems) {
-        const region = world.regions.find((r) => r.id === sys.regionId);
-        if (region) systemInfo.set(sys.id, { gov: region.governmentType, econ: sys.economyType });
+        systemInfo.set(sys.id, { gov: sys.governmentType, econ: sys.economyType });
       }
 
       // Group medicine supply by economy type, then compare fed vs non-fed

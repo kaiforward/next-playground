@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { toEconomyType } from "@/lib/types/guards";
+import { deriveDominantEconomy } from "@/lib/engine/faction-gen";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL environment variable is required");
@@ -37,12 +38,15 @@ async function main() {
     gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
     intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
+    minorFactionCount: UNIVERSE_GEN.MINOR_FACTION_COUNT,
   };
 
   const universe = generateUniverse(params, REGION_NAMES);
 
+  const majorCount = universe.factions.filter((f) => f.isMajor).length;
+  const minorCount = universe.factions.length - majorCount;
   console.log(
-    `  Generated: ${universe.regions.length} regions, ${universe.systems.length} systems, ${universe.connections.length} connections`,
+    `  Generated: ${universe.regions.length} regions, ${universe.systems.length} systems, ${universe.connections.length} connections, ${majorCount} majors + ${minorCount} minors`,
   );
 
   // ── Clear existing data (FK-safe order) ──
@@ -60,6 +64,7 @@ async function main() {
   await prisma.ship.deleteMany();
   await prisma.convoy.deleteMany();
   await prisma.playerNotification.deleteMany();
+  await prisma.playerFactionReputation.deleteMany();
   await prisma.player.deleteMany();
   // Clear auth tables so re-registration works after reseed
   await prisma.session.deleteMany();
@@ -70,6 +75,12 @@ async function main() {
   await prisma.systemTrait.deleteMany();
   await prisma.station.deleteMany();
   await prisma.good.deleteMany();
+  await prisma.alliancePact.deleteMany();
+  await prisma.factionRelation.deleteMany();
+  // StarSystem.factionId → Faction; Faction.homeworldId → StarSystem (cycle).
+  // Null systems first so deleting factions doesn't trip the FK.
+  await prisma.starSystem.updateMany({ data: { factionId: null } });
+  await prisma.faction.deleteMany();
   await prisma.starSystem.deleteMany();
   await prisma.region.deleteMany();
   await prisma.gameWorld.deleteMany();
@@ -101,7 +112,6 @@ async function main() {
     const created = await prisma.region.create({
       data: {
         name: region.name,
-        governmentType: region.governmentType,
         x: region.x,
         y: region.y,
       },
@@ -177,24 +187,78 @@ async function main() {
   // ── Compute and store dominant economy per region ──
   for (let ri = 0; ri < universe.regions.length; ri++) {
     const regionSystems = universe.systems.filter((s) => s.regionIndex === ri);
-    const counts = new Map<string, number>();
-    for (const s of regionSystems) {
-      counts.set(s.economyType, (counts.get(s.economyType) ?? 0) + 1);
-    }
-    let dominant = "extraction";
-    let best = 0;
-    for (const [econ, count] of counts) {
-      if (count > best) {
-        dominant = econ;
-        best = count;
-      }
-    }
+    const dominant = deriveDominantEconomy(regionSystems);
     await prisma.region.update({
       where: { id: regionIds[ri] },
       data: { dominantEconomy: dominant },
     });
   }
   console.log(`  Updated ${universe.regions.length} regions with dominant economy`);
+
+  // ── Seed factions ──
+  // Faction.homeworldId is a unique FK to StarSystem, so systems must already
+  // exist. Inserts in roster order (majors first by FACTION_ROSTER, then minors).
+  const factionIds: string[] = new Array(universe.factions.length);
+  for (const faction of universe.factions) {
+    const homeworldSystemId = systemIds[faction.homeworldSystemIndex];
+    const created = await prisma.faction.create({
+      data: {
+        name: faction.name,
+        description: faction.description,
+        governmentType: faction.governmentType,
+        doctrine: faction.doctrine,
+        homeworldId: homeworldSystemId,
+        color: faction.color,
+        createdAtTick: 0,
+      },
+    });
+    factionIds[faction.index] = created.id;
+  }
+  console.log(`  Created ${factionIds.length} factions (${majorCount} majors + ${minorCount} minors)`);
+
+  // ── Bind each system to its owning faction (bulk UPDATE via unnest) ──
+  // Per `MEMORY.md` "Batch all DB writes": at 10k scale the per-row update path
+  // hits the 30s PostgreSQL transaction timeout. Single unnest() handles 10K
+  // rows in well under a second.
+  const sysIdsForUpdate = universe.systems.map((s) => systemIds[s.index]);
+  const sysFactionIds = universe.systems.map(
+    (s) => factionIds[universe.systemFactionAssignments[s.index]],
+  );
+  await prisma.$executeRaw`
+    UPDATE "StarSystem" AS ss
+    SET "factionId" = batch."factionId"
+    FROM unnest(${sysIdsForUpdate}::text[], ${sysFactionIds}::text[])
+      AS batch("id", "factionId")
+    WHERE ss."id" = batch."id"`;
+  console.log(`  Bound ${universe.systems.length} systems to owning factions`);
+
+  // ── Seed faction relations ──
+  // One row per unordered (factionAId < factionBId) pair, initial score 0.
+  // Phase 3's relations processor drifts these from doctrine + government +
+  // border + trade-volume drivers — Foundation seeds at neutral so processor
+  // tuning has a clean baseline.
+  const relationRows: { factionAId: string; factionBId: string }[] = [];
+  for (let i = 0; i < factionIds.length; i++) {
+    for (let j = i + 1; j < factionIds.length; j++) {
+      const a = factionIds[i];
+      const b = factionIds[j];
+      // Canonical ordering — adapter layer assumes factionAId < factionBId.
+      if (a < b) {
+        relationRows.push({ factionAId: a, factionBId: b });
+      } else {
+        relationRows.push({ factionAId: b, factionBId: a });
+      }
+    }
+  }
+  await prisma.factionRelation.createMany({
+    data: relationRows.map((r) => ({
+      factionAId: r.factionAId,
+      factionBId: r.factionBId,
+      score: 0,
+      updatedAtTick: 0,
+    })),
+  });
+  console.log(`  Created ${relationRows.length} faction relation rows`);
 
   // ── Seed price history (one row per system) ──
   for (const sysId of systemIds) {

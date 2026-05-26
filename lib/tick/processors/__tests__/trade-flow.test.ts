@@ -36,7 +36,6 @@ function makeParams(
 const region: SimRegion = {
   id: "r1",
   name: "Test Region",
-  governmentType: "federation",
 };
 
 function makeSystem(id: string): SimSystem {
@@ -45,6 +44,7 @@ function makeSystem(id: string): SimSystem {
     name: id.toUpperCase(),
     economyType: "extraction",
     regionId: "r1",
+    governmentType: "federation",
     produces: {},
     consumes: {},
     traits: [],
@@ -260,7 +260,6 @@ describe("runTradeFlowProcessor", () => {
     const otherRegion: SimRegion = {
       id: "r2",
       name: "Other Region",
-      governmentType: "federation",
     };
     const sysA = makeSystem("a"); // in r1
     const sysB: SimSystem = { ...makeSystem("b"), regionId: "r2" }; // in r2

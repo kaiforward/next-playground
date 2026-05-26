@@ -1,5 +1,38 @@
 import type { SystemConnectionInfo } from "@/lib/types/game";
 
+/**
+ * Pick the most-represented faction across a region's systems.
+ * Ties broken alphabetically by faction name (`factionNameById`) for determinism.
+ * Returns `null` only when the input list is empty — defensive against a pre-cutover
+ * state where some systems have no factionId.
+ */
+export function deriveRegionDominantFaction(
+  factionIdsInRegion: string[],
+  factionNameById: Map<string, string>,
+): string | null {
+  if (factionIdsInRegion.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const id of factionIdsInRegion) {
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  let bestId: string | null = null;
+  let bestCount = 0;
+  for (const [id, count] of counts) {
+    if (count > bestCount) {
+      bestId = id;
+      bestCount = count;
+      continue;
+    }
+    if (count === bestCount && bestId !== null) {
+      const aName = factionNameById.get(id) ?? id;
+      const bName = factionNameById.get(bestId) ?? bestId;
+      if (aName.localeCompare(bName) < 0) bestId = id;
+    }
+  }
+  return bestId;
+}
+
 /** Map each system to its regionId for fast lookups. */
 export function buildSystemRegionMap(
   systems: { id: string; regionId: string }[],
