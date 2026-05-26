@@ -50,6 +50,7 @@ next-env.d.ts
 # claude local settings
 .claude/settings.local.json
 .claude/worktrees/
+.claude/reviews/
 
 # cocoindex code search index
 .cocoindex_code/
