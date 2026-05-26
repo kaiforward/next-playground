@@ -1,6 +1,6 @@
 # /uber-review — Multi-Agent Code Review Skill
 
-**Status**: Design (not yet implemented)
+**Status**: Implemented (see `docs/design/implementation/uber-review-skill.md` for the build plan)
 **Date**: 2026-05-26
 **Author**: brainstormed with Claude
 
@@ -9,15 +9,6 @@
 A project-local code review skill that uses a team of specialized agents to review a PR or local branch in parallel. Each agent reviews through a single narrow lens (security, database integrity, data contract, conventions, etc.). An architect agent runs first and can halt the pipeline if it detects an architectural problem severe enough to require approach-level rework.
 
 The goal: catch more issues than a single general-purpose reviewer, with cost controlled by per-agent model selection, file-pattern skip-gates, and tiered LLM validation of findings.
-
-This is a cheaper alternative to `/ultrareview` for routine in-development reviews — the user remains cost-conscious and wants a tool that can be run frequently without burning a hole in the API budget.
-
-## Non-goals
-
-- Replacing `/ultrareview` for final pre-merge checks (that remains the heavyweight option)
-- Cross-PR analytics or rule-violation tracking over time
-- Automatic fixing of findings — the skill reports, the user fixes
-- Build / typecheck / test execution (assumed to be handled by CI)
 
 ## Invocation
 
@@ -298,8 +289,7 @@ No inline per-line comments — too noisy, too slow.
 │   └── validator.md           # shared validator prompt (parameterized by severity tier)
 └── rules/
     ├── code-standards.md       # forbidden-patterns checklist for conventions agent
-    ├── severity-rubric.md      # shared severity scale (other agents reference this)
-    └── halt-rubric.md          # architect's blocker-test wording (the fix-simulation test)
+    └── severity-rubric.md      # shared severity scale (other agents reference this)
 ```
 
 **Why ship the skill in-repo (committed):**
@@ -319,11 +309,3 @@ No inline per-line comments — too noisy, too slow.
 - **All reviewers skip a chunk** (e.g., chunk is pure docs): chunk is logged as "no applicable reviewers" and the pipeline continues.
 - **Dedup Pass 2 ambiguity**: if Haiku returns malformed merge-decision, default to "no merge" (keep both findings). Safe default.
 
-## Implementation notes (deferred to plan)
-
-- How the orchestrator dispatches sub-agents — likely via the existing `Agent` tool with specific `subagent_type` selections or with model overrides
-- How JSON output is parsed and validated robustly (e.g., agents wrap output in fenced code blocks)
-- How file-pattern classification is computed cheaply per chunk
-- How the markdown report is formatted (heading levels, tables vs lists, code excerpts)
-- Concrete `gh` commands for PR mode (fetching diff, posting comment, getting current sha for permalink format)
-- Token/cost accounting if feasible
