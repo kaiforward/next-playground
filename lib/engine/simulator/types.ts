@@ -158,7 +158,7 @@ export interface SimRunContext {
   /** Pre-built adjacency list for simulator pathfinding (avoids rebuilding per call). */
   adjacencyList: SimAdjacencyList;
   /** Map from systemId → governmentType for sell tracking. */
-  systemToGov: Map<string, string>;
+  systemToGov: Map<string, GovernmentType>;
 }
 
 // ── Metrics ─────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ export interface GoodTradeRecord {
   /** Credits earned selling. */
   sellRevenue: number;
   /** Government type of the system where a sell occurred. */
-  sellGovernmentType?: string;
+  sellGovernmentType?: GovernmentType;
 }
 
 export interface TickMetrics {
@@ -235,7 +235,7 @@ export interface PlayerSummary {
 }
 
 export interface GovernmentSellEntry {
-  governmentType: string;
+  governmentType: GovernmentType;
   totalSold: number;
   totalRevenue: number;
 }
@@ -358,6 +358,6 @@ export interface SimResults {
 export interface RegionOverviewEntry {
   name: string;
   /** Modal government type across the region's systems, derived from faction ownership. */
-  dominantGovernmentType: string;
+  dominantGovernmentType: GovernmentType;
   systemCount: number;
 }

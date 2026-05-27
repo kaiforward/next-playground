@@ -2,6 +2,7 @@
  * Metrics tracking and summary computation for simulator bots.
  */
 
+import type { GovernmentType } from "@/lib/types/game";
 import type {
   TickMetrics,
   PlayerSummary,
@@ -107,7 +108,7 @@ function computeRouteDiversity(
 
 /** Aggregate sell trades by destination government type. */
 function aggregateGovernmentSellBreakdown(metrics: TickMetrics[]): GovernmentSellEntry[] {
-  const map = new Map<string, { totalSold: number; totalRevenue: number }>();
+  const map = new Map<GovernmentType, { totalSold: number; totalRevenue: number }>();
 
   for (const m of metrics) {
     for (const rec of m.goodsTraded) {
@@ -162,7 +163,7 @@ export function computeStrategyAggregates(summaries: PlayerSummary[]): StrategyA
     }
 
     // Merge government sell breakdowns
-    const govMap = new Map<string, GovernmentSellEntry>();
+    const govMap = new Map<GovernmentType, GovernmentSellEntry>();
     for (const bot of bots) {
       for (const g of bot.governmentSellBreakdown) {
         const existing = govMap.get(g.governmentType);

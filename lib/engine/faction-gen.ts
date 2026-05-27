@@ -113,6 +113,9 @@ export function generateFactions(
   const archetypeCounts = computeArchetypeCounts(params.minorFactionCount);
   const usedMinorNames = new Set<string>();
   const majorHomeworlds = factions.map((f) => f.homeworldSystemIndex);
+  // Hue accumulator — seeded with major colors, appended per minor placement.
+  // Avoids re-deriving hues from the full faction list on every minor pick.
+  const usedHues: number[] = factions.map((f) => hexToHue(f.color));
 
   for (const { archetype, count } of archetypeCounts) {
     for (let k = 0; k < count; k++) {
@@ -128,6 +131,8 @@ export function generateFactions(
       usedHomeworlds.add(anchorSystemIndex);
 
       const index = factions.length;
+      const color = makeMinorColor(rng, usedHues);
+      usedHues.push(hexToHue(color));
       factions.push({
         index,
         key: `minor_${index}`,
@@ -135,7 +140,7 @@ export function generateFactions(
         description: "",
         governmentType: pickRandomGovernment(rng),
         doctrine: pickRandomDoctrine(rng),
-        color: makeMinorColor(rng, factions),
+        color,
         isMajor: false,
         archetype,
         homeworldSystemIndex: anchorSystemIndex,
@@ -160,16 +165,18 @@ function pickAnchorRegions(
   }
 
   const picked: GeneratedRegion[] = [];
+  const pickedSet = new Set<GeneratedRegion>();
   // First anchor: random
   const firstIdx = Math.floor(rng() * regions.length);
   picked.push(regions[firstIdx]);
+  pickedSet.add(regions[firstIdx]);
 
   // Subsequent anchors: maximize min-distance to already-picked
   while (picked.length < count) {
     let bestRegion = regions[0];
     let bestScore = -Infinity;
     for (const r of regions) {
-      if (picked.includes(r)) continue;
+      if (pickedSet.has(r)) continue;
       let minDist = Infinity;
       for (const p of picked) {
         const d = distance(r.x, r.y, p.x, p.y);
@@ -181,6 +188,7 @@ function pickAnchorRegions(
       }
     }
     picked.push(bestRegion);
+    pickedSet.add(bestRegion);
   }
 
   return picked;
@@ -416,12 +424,11 @@ function makeMinorName(rng: RNG, used: Set<string>): string {
 
 // ── Procedural minor coloring ───────────────────────────────────
 
-function makeMinorColor(rng: RNG, existing: GeneratedFaction[]): string {
+function makeMinorColor(rng: RNG, usedHues: number[]): string {
   // Hash-spread hues, lower saturation/lightness than majors so minor territory
   // reads as politically secondary. Rejection-sample for sufficient hue distance
   // from already-placed colors to maintain legibility on the political map.
   const maxAttempts = 20;
-  const usedHues = existing.map((f) => hexToHue(f.color));
 
   for (let i = 0; i < maxAttempts; i++) {
     const hue = Math.floor(rng() * 360);

@@ -186,34 +186,51 @@ async function main() {
   );
 
   // ── Compute and store dominant economy per region ──
+  // Bulk UPDATE via unnest() — same pattern as the system→faction binding below.
+  // Single round-trip handles 600+ regions (10K scale) well under the PG timeout.
+  const regionIdsForUpdate: string[] = [];
+  const regionDominantEconomies: string[] = [];
   for (let ri = 0; ri < universe.regions.length; ri++) {
     const regionSystems = universe.systems.filter((s) => s.regionIndex === ri);
-    const dominant = deriveDominantEconomy(regionSystems);
-    await prisma.region.update({
-      where: { id: regionIds[ri] },
-      data: { dominantEconomy: dominant },
-    });
+    regionIdsForUpdate.push(regionIds[ri]);
+    regionDominantEconomies.push(deriveDominantEconomy(regionSystems));
   }
+  await prisma.$executeRaw`
+    UPDATE "Region" AS r
+    SET "dominantEconomy" = batch."dominantEconomy"
+    FROM unnest(${regionIdsForUpdate}::text[], ${regionDominantEconomies}::text[])
+      AS batch("id", "dominantEconomy")
+    WHERE r."id" = batch."id"`;
   console.log(`  Updated ${universe.regions.length} regions with dominant economy`);
 
   // ── Seed factions ──
   // Faction.homeworldId is a unique FK to StarSystem, so systems must already
-  // exist. Inserts in roster order (majors first by FACTION_ROSTER, then minors).
-  const factionIds: string[] = new Array(universe.factions.length);
-  for (const faction of universe.factions) {
-    const homeworldSystemId = systemIds[faction.homeworldSystemIndex];
-    const created = await prisma.faction.create({
-      data: {
-        name: faction.name,
-        description: faction.description,
-        governmentType: faction.governmentType,
-        doctrine: faction.doctrine,
-        homeworldId: homeworldSystemId,
-        color: faction.color,
-        createdAtTick: 0,
-      },
-    });
-    factionIds[faction.index] = created.id;
+  // exist. One createManyAndReturn round-trip; map returned ids back to the
+  // generator's faction.index by joining on homeworldId (homeworldId is unique
+  // per faction, so the lookup is deterministic).
+  const factionRows = universe.factions.map((f) => ({
+    name: f.name,
+    description: f.description,
+    governmentType: f.governmentType,
+    doctrine: f.doctrine,
+    homeworldId: systemIds[f.homeworldSystemIndex],
+    color: f.color,
+    createdAtTick: 0,
+  }));
+  const createdFactions = await prisma.faction.createManyAndReturn({
+    data: factionRows,
+    select: { id: true, homeworldId: true },
+  });
+  const factionIdByHomeworld = new Map(
+    createdFactions.map((f) => [f.homeworldId, f.id]),
+  );
+  const factionIds: string[] = new Array<string>(universe.factions.length);
+  for (const f of universe.factions) {
+    const id = factionIdByHomeworld.get(systemIds[f.homeworldSystemIndex]);
+    if (!id) {
+      throw new Error(`Faction "${f.key}" missing from createManyAndReturn result`);
+    }
+    factionIds[f.index] = id;
   }
   console.log(`  Created ${factionIds.length} factions (${majorCount} majors + ${minorCount} minors)`);
 

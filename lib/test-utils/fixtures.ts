@@ -6,6 +6,7 @@
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
+import type { Doctrine, GovernmentType } from "@/lib/types/game";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -174,16 +175,14 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     color: "#d4a534",
   });
 
-  await prisma.starSystem.update({
+  // Two updateMany calls (one per owning faction) instead of three single-row
+  // updates — symmetric with the live seed's bulk faction-binding pattern.
+  await prisma.starSystem.updateMany({
     where: { id: agriSystem.id },
     data: { factionId: fedFaction },
   });
-  await prisma.starSystem.update({
-    where: { id: indSystem.id },
-    data: { factionId: corpFaction },
-  });
-  await prisma.starSystem.update({
-    where: { id: techSystem.id },
+  await prisma.starSystem.updateMany({
+    where: { id: { in: [indSystem.id, techSystem.id] } },
     data: { factionId: corpFaction },
   });
 
@@ -293,8 +292,8 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
 export interface TestFactionOpts {
   name: string;
   homeworldId: string;
-  governmentType?: string;
-  doctrine?: string;
+  governmentType?: GovernmentType;
+  doctrine?: Doctrine;
   color?: string;
   description?: string;
   createdAtTick?: number;

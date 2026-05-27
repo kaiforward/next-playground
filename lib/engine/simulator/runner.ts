@@ -17,6 +17,7 @@ import {
   computeEventImpacts,
 } from "./event-analysis";
 import { STRATEGIES } from "./strategies";
+import type { GovernmentType } from "@/lib/types/game";
 import type { SimConfig, SimResults, SimRunContext, TickMetrics, MarketSnapshot, EventLifecycle, RegionOverviewEntry } from "./types";
 import type { SimConstantOverrides } from "./constants";
 import type { TradeStrategy } from "./strategies/types";
@@ -43,14 +44,14 @@ export async function runSimulation(
 
   // Build systemId → governmentType lookup. After the Layer 2 cutover, gov is a
   // property of the owning faction (read off SimSystem directly), not the region.
-  const systemToGov: Map<string, string> = new Map(
+  const systemToGov: Map<string, GovernmentType> = new Map(
     world.systems.map((s) => [s.id, s.governmentType]),
   );
 
   // Build region overview for output — derive the modal government type from
   // the region's member systems, mirroring atlas service's dominant-faction
   // resolution. Border regions get the more common gov; ties broken alphabetically.
-  const systemsByRegion = new Map<string, string[]>();
+  const systemsByRegion = new Map<string, GovernmentType[]>();
   for (const s of world.systems) {
     const list = systemsByRegion.get(s.regionId) ?? [];
     list.push(s.governmentType);
@@ -58,9 +59,9 @@ export async function runSimulation(
   }
   const regionOverview: RegionOverviewEntry[] = world.regions.map((r) => {
     const govs = systemsByRegion.get(r.id) ?? [];
-    const counts = new Map<string, number>();
+    const counts = new Map<GovernmentType, number>();
     for (const g of govs) counts.set(g, (counts.get(g) ?? 0) + 1);
-    let dominant = "federation";
+    let dominant: GovernmentType = "federation";
     let bestCount = 0;
     for (const [g, count] of counts) {
       if (count > bestCount || (count === bestCount && g < dominant)) {
