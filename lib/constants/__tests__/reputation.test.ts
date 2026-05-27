@@ -67,6 +67,26 @@ describe("getReputationTier — boundary values", () => {
   it("clamps scores below -100", () => {
     expect(getReputationTier(-999).standing).toBe("hostile");
   });
+
+  // The score column is `Float`, so values like 24.25 or -74.5 fall between
+  // integer tier boundaries. Earlier the [minScore, maxScore] range match
+  // threw for these; now they resolve to whichever tier's minScore is at
+  // or below the score.
+  describe("half-integer scores resolve to the lower-min tier", () => {
+    const halfCases: ReadonlyArray<[number, string]> = [
+      [74.999, "trusted"],
+      [25.5, "trusted"],
+      [24.999, "neutral"],
+      [24.25, "neutral"],
+      [-24.5, "distrusted"],
+      [-74.5, "hostile"],
+    ];
+    for (const [score, expected] of halfCases) {
+      it(`score ${score} → ${expected}`, () => {
+        expect(getReputationTier(score).standing).toBe(expected);
+      });
+    }
+  });
 });
 
 describe("getReputationMultipliers", () => {

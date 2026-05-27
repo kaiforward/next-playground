@@ -270,7 +270,11 @@ export interface FactionInfo {
   id: string;
   name: string;
   color: string;
-  governmentType: GovernmentType;
+  // Nullable so atlas-derived shapes (which only carry id/name/color) can
+  // satisfy this type without inventing a stub value. The server-side
+  // `/api/game/systems` route always populates this; consumers must handle
+  // null when reading factions from the locally-derived universe in star-map.
+  governmentType: GovernmentType | null;
 }
 
 export interface SystemConnectionInfo {
@@ -327,14 +331,24 @@ export interface AtlasSystem {
   x: number;
   y: number;
   regionId: string;
+  /** Owning faction. Null only during the transient pre-cutover seed state. */
+  factionId: string | null;
   economyType: EconomyType;
   isGateway: boolean;
+}
+
+/** Lightweight faction row included alongside atlas data for political-map rendering. */
+export interface AtlasFaction {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface AtlasData {
   regions: RegionInfo[];
   systems: AtlasSystem[];
   connections: SystemConnectionInfo[];
+  factions: AtlasFaction[];
 }
 
 export interface ActiveEvent {

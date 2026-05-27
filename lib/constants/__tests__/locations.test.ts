@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  deriveSystemLocations,
-  LOCATIONS,
-  type LocationTypeId,
-} from "../locations";
+import { deriveSystemLocations, LOCATIONS } from "../locations";
 import { enrichTraits } from "@/lib/utils/traits";
 import { TRAITS, ALL_TRAIT_IDS } from "@/lib/constants/traits";
 import type { SystemTraitInfo, TraitId, QualityTier } from "@/lib/types/game";

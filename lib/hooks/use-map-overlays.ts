@@ -17,11 +17,15 @@ import {
  */
 export interface MapOverlays {
   tradeFlow: boolean;
+  politicalTerritory: boolean;
 }
 
 export type MapOverlayKey = keyof MapOverlays;
 
-const DEFAULT_OVERLAYS: MapOverlays = { tradeFlow: false };
+const DEFAULT_OVERLAYS: MapOverlays = {
+  tradeFlow: false,
+  politicalTerritory: false,
+};
 
 function hydrateFromSession(): MapOverlays {
   if (typeof window === "undefined") return DEFAULT_OVERLAYS;
@@ -30,6 +34,8 @@ function hydrateFromSession(): MapOverlays {
   if (!stored) return DEFAULT_OVERLAYS;
   return {
     tradeFlow: stored.tradeFlow ?? DEFAULT_OVERLAYS.tradeFlow,
+    politicalTerritory:
+      stored.politicalTerritory ?? DEFAULT_OVERLAYS.politicalTerritory,
   };
 }
 
@@ -55,6 +61,7 @@ export function useMapOverlays(): {
     }
     const stored: MapOverlaysState = {};
     if (overlays.tradeFlow) stored.tradeFlow = true;
+    if (overlays.politicalTerritory) stored.politicalTerritory = true;
     setOverlaysInSession(stored);
   }, [overlays]);
 

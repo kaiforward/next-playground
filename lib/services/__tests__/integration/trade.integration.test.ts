@@ -3,7 +3,6 @@ import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
 import { calculatePrice } from "@/lib/engine/pricing";
-import { GOODS } from "@/lib/constants/goods";
 
 // Mock the prisma import so executeTrade uses our test client
 const { prisma } = useIntegrationDb();

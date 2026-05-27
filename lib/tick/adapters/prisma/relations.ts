@@ -79,6 +79,7 @@ export class PrismaRelationsWorld implements RelationsWorld {
         _count: { select: { territory: true } },
       },
     });
+    const totalSystems = rows.reduce((sum, r) => sum + r._count.territory, 0);
     return rows.map((r) => {
       const territorySize = r._count.territory;
       return {
@@ -87,7 +88,7 @@ export class PrismaRelationsWorld implements RelationsWorld {
         governmentType: toGovernmentType(r.governmentType),
         doctrine: toDoctrine(r.doctrine),
         territorySize,
-        status: deriveFactionStatus(territorySize),
+        status: deriveFactionStatus(territorySize, totalSystems),
       };
     });
   }

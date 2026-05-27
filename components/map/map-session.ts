@@ -4,6 +4,7 @@ const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapOverlaysState {
   tradeFlow?: boolean;
+  politicalTerritory?: boolean;
 }
 
 export interface MapSessionState {
@@ -16,6 +17,12 @@ function parseOverlays(value: unknown): MapOverlaysState | undefined {
   const out: MapOverlaysState = {};
   if ("tradeFlow" in value && typeof value.tradeFlow === "boolean") {
     out.tradeFlow = value.tradeFlow;
+  }
+  if (
+    "politicalTerritory" in value &&
+    typeof value.politicalTerritory === "boolean"
+  ) {
+    out.politicalTerritory = value.politicalTerritory;
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }

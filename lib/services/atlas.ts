@@ -41,7 +41,8 @@ export async function getAtlas(): Promise<AtlasData> {
       },
     }),
     prisma.faction.findMany({
-      select: { id: true, name: true, governmentType: true },
+      select: { id: true, name: true, color: true, governmentType: true },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -86,6 +87,7 @@ export async function getAtlas(): Promise<AtlasData> {
       x: s.x,
       y: s.y,
       regionId: s.regionId,
+      factionId: s.factionId,
       economyType: toEconomyType(s.economyType),
       isGateway: s.isGateway,
     })),
@@ -94,6 +96,11 @@ export async function getAtlas(): Promise<AtlasData> {
       fromSystemId: c.fromSystemId,
       toSystemId: c.toSystemId,
       fuelCost: c.fuelCost,
+    })),
+    factions: factions.map((f) => ({
+      id: f.id,
+      name: f.name,
+      color: f.color,
     })),
   };
 }

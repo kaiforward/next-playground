@@ -4,6 +4,7 @@ import { seedTestUniverse } from "@/lib/test-utils/fixtures";
 import type { TestUniverse } from "@/lib/test-utils/fixtures";
 import { eventsProcessor } from "@/lib/tick/processors/events";
 import { EVENT_SPAWN_INTERVAL, EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { isEventTypeId } from "@/lib/types/guards";
 import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
 
 const { prisma } = useIntegrationDb();
@@ -44,7 +45,8 @@ describe("eventsProcessor (integration)", () => {
 
     const spawned = eventsAfter[0];
     // Event should have a valid type from EVENT_DEFINITIONS
-    expect(spawned.type in EVENT_DEFINITIONS).toBe(true);
+    expect(isEventTypeId(spawned.type)).toBe(true);
+    if (!isEventTypeId(spawned.type)) throw new Error("unreachable: just asserted");
 
     const def = EVENT_DEFINITIONS[spawned.type];
     const firstPhaseName = def.phases[0].name;

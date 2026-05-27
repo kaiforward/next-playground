@@ -65,10 +65,7 @@ export function StarMap({
         x: as.x,
         y: as.y,
         regionId: as.regionId,
-        // Atlas omits factionId by design (it's only needed when drilling into
-        // a system); the merged shape sets it to null and consumers fall back
-        // to RegionInfo.dominantFactionId.
-        factionId: null,
+        factionId: as.factionId,
         economyType: as.economyType,
         isGateway: as.isGateway,
         name: tileData?.name ?? "",
@@ -78,15 +75,20 @@ export function StarMap({
   }, [atlas.systems, tileSystems]);
 
   // Build UniverseData-compatible structure from atlas + viewport detail.
-  // Atlas omits faction-roster info (only available via /api/game/universe);
-  // the star-map doesn't render faction colors yet — Phase 5 introduces the
-  // political map overlay layer that will consume it.
+  // Atlas factions carry only id/name/color; `governmentType` is left null
+  // here. Downstream consumers that need real government data fetch the full
+  // `/api/game/systems` payload via `useUniverse()`.
   const universe = useMemo((): UniverseData => ({
     regions: atlas.regions,
     systems: mergedSystems,
     connections: atlas.connections,
-    factions: [],
-  }), [atlas.regions, mergedSystems, atlas.connections]);
+    factions: atlas.factions.map((f) => ({
+      id: f.id,
+      name: f.name,
+      color: f.color,
+      governmentType: null,
+    })),
+  }), [atlas.regions, atlas.factions, mergedSystems, atlas.connections]);
 
   // ── Foundation memos (stable across renders) ──────────────────
   const systemRegionMap = useMemo(
@@ -252,6 +254,7 @@ export function StarMap({
         centerTarget={centerTarget}
         onReady={handleReady}
         regionInfos={regionInfos}
+        politicalOverlay={overlays.politicalTerritory}
         onViewportChange={onViewportChange}
       />
 
