@@ -347,13 +347,12 @@ export function parseRelationEventMetadata(
   raw: unknown,
 ): RelationEventMetadata | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const obj = raw as Record<string, unknown>;
-  if (typeof obj.factionAId !== "string") return null;
-  if (typeof obj.factionBId !== "string") return null;
-  if (typeof obj.expiresAtTick !== "number") return null;
+  if (!("factionAId" in raw) || typeof raw.factionAId !== "string") return null;
+  if (!("factionBId" in raw) || typeof raw.factionBId !== "string") return null;
+  if (!("expiresAtTick" in raw) || typeof raw.expiresAtTick !== "number") return null;
   return {
-    factionAId: obj.factionAId,
-    factionBId: obj.factionBId,
-    expiresAtTick: obj.expiresAtTick,
+    factionAId: raw.factionAId,
+    factionBId: raw.factionBId,
+    expiresAtTick: raw.expiresAtTick,
   };
 }

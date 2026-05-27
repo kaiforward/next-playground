@@ -39,12 +39,11 @@ function parseHistory(json: string): RelationHistoryEntry[] {
     for (const item of parsed) {
       if (
         typeof item === "object" && item !== null &&
-        typeof (item as { tick?: unknown }).tick === "number" &&
-        typeof (item as { delta?: unknown }).delta === "number" &&
-        typeof (item as { drivers?: unknown }).drivers === "string"
+        "tick" in item && typeof item.tick === "number" &&
+        "delta" in item && typeof item.delta === "number" &&
+        "drivers" in item && typeof item.drivers === "string"
       ) {
-        const e = item as { tick: number; delta: number; drivers: string };
-        out.push({ tick: e.tick, delta: e.delta, drivers: e.drivers });
+        out.push({ tick: item.tick, delta: item.delta, drivers: item.drivers });
       }
     }
     return out;
