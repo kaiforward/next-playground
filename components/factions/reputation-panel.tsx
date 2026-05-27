@@ -1,5 +1,3 @@
-"use client";
-
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { StandingBadge } from "./standing-badge";

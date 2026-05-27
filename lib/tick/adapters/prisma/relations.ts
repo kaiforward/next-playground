@@ -54,6 +54,10 @@ function parseHistory(json: string): RelationHistoryEntry[] {
 }
 
 function clampScore(score: number): number {
+  // PostgreSQL rejects NaN/Infinity in double precision[] params and aborts
+  // the transaction. Guard at the boundary even though drift math should
+  // never produce non-finite values today.
+  if (!Number.isFinite(score)) return 0;
   return Math.max(RELATIONS_MIN, Math.min(RELATIONS_MAX, score));
 }
 

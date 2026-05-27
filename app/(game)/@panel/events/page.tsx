@@ -21,6 +21,7 @@ const FILTER_CHIPS = [
   { id: "conflict", label: "Conflict" },
   { id: "environmental", label: "Environmental" },
   { id: "social", label: "Social" },
+  { id: "diplomatic", label: "Diplomatic" },
 ];
 
 const SORT_OPTIONS = [

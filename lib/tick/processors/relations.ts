@@ -248,14 +248,6 @@ export async function runRelationsProcessor(
     await world.expireRelationEvents(toExpire);
   }
 
-  console.log(
-    `[relations] Tick ${ctx.tick}: drifted ${updates.length} pairs, ` +
-      `spawned ${eventCreates.length} events ` +
-      `(borderCand=${borderConflictCandidates.length}), ` +
-      `formedAlliances=${toFormAlliance.length}, ` +
-      `dissolvedAlliances=${toDissolveAlliance.length}, expired=${toExpire.length}`,
-  );
-
   return {};
 }
 

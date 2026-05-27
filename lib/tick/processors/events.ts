@@ -10,6 +10,17 @@ import {
   type EventPhaseDefinition,
   type EventTypeId,
 } from "@/lib/constants/events";
+import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import {
+  checkPhaseTransition,
+  buildModifiersForPhase,
+  buildShocksForPhase,
+  evaluateSpreadTargets,
+  selectEventsToSpawn,
+  rollPhaseDuration,
+  type SystemSnapshot,
+  type ShockRow,
+} from "@/lib/engine/events";
 
 /**
  * Relations-spawned events whose lifecycle is owned by the relations
@@ -22,17 +33,6 @@ const RELATIONS_OWNED_LIFECYCLE: ReadonlySet<EventTypeId> = new Set<EventTypeId>
   "pact_under_negotiation",
   "alliance_dissolved",
 ]);
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
-import {
-  checkPhaseTransition,
-  buildModifiersForPhase,
-  buildShocksForPhase,
-  evaluateSpreadTargets,
-  selectEventsToSpawn,
-  rollPhaseDuration,
-  type SystemSnapshot,
-  type ShockRow,
-} from "@/lib/engine/events";
 import { PrismaEventsWorld } from "@/lib/tick/adapters/prisma/events";
 import type {
   EventCreate,
