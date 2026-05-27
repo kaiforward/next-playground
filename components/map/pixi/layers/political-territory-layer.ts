@@ -85,11 +85,11 @@ export class PoliticalTerritoryLayer {
     const factionsChanged =
       factionIds.length !== this.lastFactionIds.length ||
       factionIds.some((id, i) => id !== this.lastFactionIds[i]);
+
     if (factionsChanged) {
       this.lastFactionIds = factionIds;
+      this.rebuildLabels(systems, factions);
     }
-    // Rebuild labels every sync — both faction set and territory centroids can shift.
-    this.rebuildLabels(systems, factions);
   }
 
   /** Per-frame LOD update (only matters while the layer is active). */

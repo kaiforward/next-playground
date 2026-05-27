@@ -75,9 +75,9 @@ export function StarMap({
   }, [atlas.systems, tileSystems]);
 
   // Build UniverseData-compatible structure from atlas + viewport detail.
-  // The atlas's lightweight `AtlasFaction` rows (id/name/color) widen into the
-  // `UniverseData.factions` shape; downstream consumers that need
-  // `governmentType` still fetch the full `/api/game/universe` payload.
+  // Atlas factions carry only id/name/color; `governmentType` is left null
+  // here. Downstream consumers that need real government data fetch the full
+  // `/api/game/systems` payload via `useUniverse()`.
   const universe = useMemo((): UniverseData => ({
     regions: atlas.regions,
     systems: mergedSystems,
@@ -86,7 +86,7 @@ export function StarMap({
       id: f.id,
       name: f.name,
       color: f.color,
-      governmentType: "frontier",
+      governmentType: null,
     })),
   }), [atlas.regions, atlas.factions, mergedSystems, atlas.connections]);
 

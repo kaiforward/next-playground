@@ -27,7 +27,7 @@ function FactionDetailContent({ factionId }: { factionId: string }) {
   const playerStanding = reputations.find((r) => r.factionId === factionId);
 
   return (
-    <>
+    <DetailPanel title={faction.name} size="xl" backPath="/factions">
       <FactionCard faction={faction} size="md" className="mb-6" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -234,7 +234,7 @@ function FactionDetailContent({ factionId }: { factionId: string }) {
           Toggle the political overlay on the map to see {faction.name} territory at a glance.
         </p>
       </div>
-    </>
+    </DetailPanel>
   );
 }
 
@@ -299,10 +299,8 @@ export default function FactionDetailPage({
 }) {
   const { factionId } = use(params);
   return (
-    <DetailPanel title="Faction" size="xl" backPath="/factions">
-      <QueryBoundary>
-        <FactionDetailContent factionId={factionId} />
-      </QueryBoundary>
-    </DetailPanel>
+    <QueryBoundary>
+      <FactionDetailContent factionId={factionId} />
+    </QueryBoundary>
   );
 }

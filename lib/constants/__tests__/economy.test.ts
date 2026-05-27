@@ -87,7 +87,7 @@ describe("SELF_SUFFICIENCY data integrity", () => {
 
   it("has factors in [0, 1] range", () => {
     for (const econ of ECONOMY_TYPES) {
-      for (const [goodId, factor] of Object.entries(SELF_SUFFICIENCY[econ])) {
+      for (const factor of Object.values(SELF_SUFFICIENCY[econ])) {
         expect(factor).toBeGreaterThanOrEqual(0);
         expect(factor).toBeLessThanOrEqual(1);
       }

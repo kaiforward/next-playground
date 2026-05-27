@@ -119,7 +119,7 @@ export function RelationsMatrix({ data }: RelationsMatrixProps) {
 
 function ColumnHeader({ faction }: { faction: RelationsMatrixFaction }) {
   return (
-    <th className="h-32 w-9 border border-border bg-surface-hover/30 align-bottom">
+    <th scope="col" className="h-32 w-9 border border-border bg-surface-hover/30 align-bottom">
       <Link
         href={`/factions/${faction.id}`}
         title={`${faction.name} — ${faction.governmentType}`}
@@ -143,7 +143,7 @@ function ColumnHeader({ faction }: { faction: RelationsMatrixFaction }) {
 
 function RowHeader({ faction }: { faction: RelationsMatrixFaction }) {
   return (
-    <th className="h-9 w-56 border border-border bg-surface-hover/30 text-left">
+    <th scope="row" className="h-9 w-56 border border-border bg-surface-hover/30 text-left">
       <Link
         href={`/factions/${faction.id}`}
         className="flex items-center gap-2 px-3 py-1.5 hover:text-text-accent transition-colors"

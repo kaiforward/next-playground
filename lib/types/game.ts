@@ -270,7 +270,11 @@ export interface FactionInfo {
   id: string;
   name: string;
   color: string;
-  governmentType: GovernmentType;
+  // Nullable so atlas-derived shapes (which only carry id/name/color) can
+  // satisfy this type without inventing a stub value. The server-side
+  // `/api/game/systems` route always populates this; consumers must handle
+  // null when reading factions from the locally-derived universe in star-map.
+  governmentType: GovernmentType | null;
 }
 
 export interface SystemConnectionInfo {

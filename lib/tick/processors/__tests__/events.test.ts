@@ -38,6 +38,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     name: id.toUpperCase(),
     economyType: "extraction",
     regionId,
+    governmentType: "frontier",
     produces: {},
     consumes: {},
     traits: [],
@@ -246,8 +247,10 @@ describe("runEventsProcessor", () => {
       id: "ev-pact",
       type: "pact_under_negotiation",
       phase: "negotiation",
-      systemId: null,
-      regionId: null,
+      // Relations-owned events have no system/region target; placeholders here
+      // satisfy the SimEvent type without exercising any per-system logic.
+      systemId: "",
+      regionId: "",
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 1,
@@ -258,8 +261,10 @@ describe("runEventsProcessor", () => {
       id: "ev-diss",
       type: "alliance_dissolved",
       phase: "dissolving",
-      systemId: null,
-      regionId: null,
+      // Relations-owned events have no system/region target; placeholders here
+      // satisfy the SimEvent type without exercising any per-system logic.
+      systemId: "",
+      regionId: "",
       startTick: 0,
       phaseStartTick: 0,
       phaseDuration: 1,
