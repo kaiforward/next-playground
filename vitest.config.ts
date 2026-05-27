@@ -14,7 +14,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: ["lib/**/__tests__/**/*.test.ts"],
+          include: [
+            "lib/**/__tests__/**/*.test.ts",
+            "components/**/__tests__/**/*.test.ts",
+          ],
           exclude: ["**/*.integration.test.ts"],
         },
       },

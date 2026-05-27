@@ -1,14 +1,16 @@
 // ── Session storage helpers for map view persistence ────────────
 
+import { isMapMode, type MapMode } from "@/lib/types/map";
+
 const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapOverlaysState {
   tradeFlow?: boolean;
-  politicalTerritory?: boolean;
 }
 
 export interface MapSessionState {
   selectedSystemId?: string;
+  mode?: MapMode;
   overlays?: MapOverlaysState;
 }
 
@@ -18,13 +20,13 @@ function parseOverlays(value: unknown): MapOverlaysState | undefined {
   if ("tradeFlow" in value && typeof value.tradeFlow === "boolean") {
     out.tradeFlow = value.tradeFlow;
   }
-  if (
-    "politicalTerritory" in value &&
-    typeof value.politicalTerritory === "boolean"
-  ) {
-    out.politicalTerritory = value.politicalTerritory;
-  }
+  // Legacy `politicalTerritory` is silently dropped — it migrated to the
+  // single-select `mode` axis. Users land on the default mode.
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function parseMode(value: unknown): MapMode | undefined {
+  return isMapMode(value) ? value : undefined;
 }
 
 export function getMapSessionState(): MapSessionState | null {
@@ -39,6 +41,7 @@ export function getMapSessionState(): MapSessionState | null {
         typeof parsed.selectedSystemId === "string"
           ? parsed.selectedSystemId
           : undefined,
+      mode: "mode" in parsed ? parseMode(parsed.mode) : undefined,
       overlays:
         "overlays" in parsed ? parseOverlays(parsed.overlays) : undefined,
     };
@@ -52,6 +55,7 @@ function writeSessionState(state: MapSessionState): void {
     // Empty state — clear the key entirely instead of storing "{}".
     if (
       state.selectedSystemId === undefined &&
+      state.mode === undefined &&
       (!state.overlays || Object.keys(state.overlays).length === 0)
     ) {
       sessionStorage.removeItem(SESSION_KEY);
@@ -64,8 +68,7 @@ function writeSessionState(state: MapSessionState): void {
 }
 
 /**
- * Persist (or clear) the selected system without disturbing other fields like
- * overlays. Pass `null` to clear just the selection.
+ * Persist (or clear) the selected system without disturbing other fields.
  */
 export function setSelectedSystemInSession(systemId: string | null): void {
   const current = getMapSessionState() ?? {};
@@ -76,9 +79,17 @@ export function setSelectedSystemInSession(systemId: string | null): void {
 }
 
 /**
- * Persist the overlay-toggle state without disturbing the selected system.
+ * Persist the overlay-toggle state without disturbing the selected system or mode.
  */
 export function setOverlaysInSession(overlays: MapOverlaysState): void {
   const current = getMapSessionState() ?? {};
   writeSessionState({ ...current, overlays });
+}
+
+/**
+ * Persist the single-select map mode without disturbing the selected system or overlays.
+ */
+export function setModeInSession(mode: MapMode): void {
+  const current = getMapSessionState() ?? {};
+  writeSessionState({ ...current, mode });
 }
