@@ -89,3 +89,16 @@ export function getReputationMultipliers(
   }
   return { buy: tier.buyMultiplier, sell: tier.sellMultiplier };
 }
+
+// ── Trade-driven reputation accrual ─────────────────────────────
+
+/**
+ * Reputation awarded for one successful trade against a faction-owned market.
+ */
+export const REPUTATION_TRADE_GAIN_PER_TRADE = 0.5;
+
+/**
+ * Maximum reputation a player can accrue per (faction, tick) across all trade
+ * actions. Keeps the gain visible without enabling grind-spam farming.
+ */
+export const REPUTATION_TRADE_GAIN_CAP_PER_TICK = 2.0;

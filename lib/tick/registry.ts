@@ -7,6 +7,7 @@ import { missionsProcessor } from "./processors/missions";
 import { battlesProcessor } from "./processors/battles";
 import { priceSnapshotsProcessor } from "./processors/price-snapshots";
 import { notificationPruneProcessor } from "./processors/notification-prune";
+import { relationsProcessor } from "./processors/relations";
 import type { TickProcessor } from "./types";
 
 /** All registered processors. */
@@ -20,6 +21,7 @@ export const processors: TickProcessor[] = [
   battlesProcessor,
   priceSnapshotsProcessor,
   notificationPruneProcessor,
+  relationsProcessor,
 ];
 
 /**

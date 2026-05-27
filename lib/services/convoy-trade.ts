@@ -3,6 +3,8 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
 import { getInstalledModules } from "@/lib/utils/ship";
+import { getReputationTier } from "@/lib/constants/reputation";
+import { accrueTradeReputationInTx } from "./reputation";
 import type { ShipTradeRequest } from "@/lib/types/api";
 import type { MarketEntry } from "@/lib/types/game";
 
@@ -83,13 +85,16 @@ export async function executeConvoyTrade(
     return { ok: false, error: "Player not found.", status: 404 };
   }
 
-  // Verify station is at the convoy's system
+  // Verify station is at the convoy's system; resolve owning faction for
+  // reputation gating + multipliers.
   const station = await prisma.station.findUnique({
     where: { systemId: convoy.systemId },
+    include: { system: { select: { factionId: true } } },
   });
   if (!station || station.id !== stationId) {
     return { ok: false, error: "Station is not at the convoy's system.", status: 400 };
   }
+  const factionId = station.system.factionId;
 
   const marketEntry = await prisma.stationMarket.findUnique({
     where: { stationId_goodId: { stationId, goodId } },
@@ -99,13 +104,32 @@ export async function executeConvoyTrade(
     return { ok: false, error: "Good not available at this station.", status: 404 };
   }
 
-  const unitPrice = calculatePrice(
+  const basePrice = calculatePrice(
     marketEntry.good.basePrice,
     marketEntry.supply,
     marketEntry.demand,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
   );
+
+  // Reputation gating + multiplier. Mirrors single-ship trade.
+  let unitPrice = basePrice;
+  if (factionId) {
+    const repRow = await prisma.playerFactionReputation.findUnique({
+      where: { playerId_factionId: { playerId, factionId } },
+      select: { score: true },
+    });
+    const tier = getReputationTier(repRow?.score ?? 0);
+    if (tier.tradeDenied) {
+      return {
+        ok: false,
+        error: "This faction refuses to trade with you (hostile standing).",
+        status: 403,
+      };
+    }
+    const mult = type === "buy" ? tier.buyMultiplier : tier.sellMultiplier;
+    unitPrice = Math.round(basePrice * mult);
+  }
 
   // Aggregate cargo across all member ships (accounting for upgrade bonuses)
   const ships = convoy.members.map((m) => m.ship);
@@ -141,9 +165,33 @@ export async function executeConvoyTrade(
 
   const { delta } = result;
 
+  // Hoist the current-tick read out of the transaction (see trade.ts for
+  // rationale — tick is monotonic, slightly stale is safe).
+  let currentTick = 0;
+  if (factionId) {
+    const world = await prisma.gameWorld.findUnique({
+      where: { id: "world" },
+      select: { currentTick: true },
+    });
+    currentTick = world?.currentTick ?? 0;
+  }
+
   let updatedMarket;
   try {
     updatedMarket = await prisma.$transaction(async (tx) => {
+      // Fresh hostile-gate check + per-tick capped reputation accrual.
+      // Snapshot multiplier above used the pre-tx score; if a tick processor
+      // flipped the player to hostile in between, abort here.
+      if (factionId) {
+        const { tradeDenied } = await accrueTradeReputationInTx(
+          tx,
+          player.id,
+          factionId,
+          currentTick,
+        );
+        if (tradeDenied) throw new Error("HOSTILE_STANDING");
+      }
+
       // Re-read credits
       const freshPlayer = await tx.player.findUnique({
         where: { id: player.id },
@@ -247,6 +295,13 @@ export async function executeConvoyTrade(
     });
   } catch (error) {
     if (error instanceof Error) {
+      if (error.message === "HOSTILE_STANDING") {
+        return {
+          ok: false,
+          error: "This faction refuses to trade with you (hostile standing).",
+          status: 403,
+        };
+      }
       if (error.message === "INSUFFICIENT_CREDITS") {
         return { ok: false, error: "Not enough credits. State may have changed concurrently.", status: 409 };
       }
