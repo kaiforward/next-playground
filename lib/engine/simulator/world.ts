@@ -11,6 +11,7 @@ import {
   UNIVERSE_GEN,
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
+import { toGovernmentType } from "@/lib/types/guards";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
 import { getConsumeEquilibrium } from "@/lib/constants/economy";
@@ -46,6 +47,7 @@ export function buildGenParams(seed: number, universe: SimConstants["universe"])
     gatewaysPerBorder: universe.gatewaysPerBorder,
     intraRegionBaseFuel: universe.intraRegionBaseFuel,
     maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
+    minorFactionCount: UNIVERSE_GEN.MINOR_FACTION_COUNT,
   };
 }
 
@@ -60,17 +62,19 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
   const regions: SimRegion[] = universe.regions.map((r, i) => ({
     id: `region-${i}`,
     name: r.name,
-    governmentType: r.governmentType,
   }));
 
-  // Build systems
+  // Build systems — government now comes from the owning faction's definition,
+  // not the region. Mirrors the live cutover in `prisma/seed.ts`.
   const systems: SimSystem[] = universe.systems.map((s, i) => {
     const econ = s.economyType;
+    const owningFaction = universe.factions[universe.systemFactionAssignments[s.index]];
     return {
       id: `system-${i}`,
       name: s.name,
       economyType: econ,
       regionId: `region-${s.regionIndex}`,
+      governmentType: toGovernmentType(owningFaction.governmentType),
       produces: ECONOMY_PRODUCTION[econ] ?? {},
       consumes: ECONOMY_CONSUMPTION[econ] ?? {},
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),

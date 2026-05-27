@@ -5,7 +5,7 @@ Layer 2 introduces the political and territorial dimension to the game: named fa
 This is the largest layer in the roadmap and the highest-risk transition since the prior universe-wide reseed in Layer 0. Rather than ship it as a single monolithic effort, it is decomposed into four sub-projects sequenced by dependency. Each sub-project gets its own implementation plan and ships before the next begins.
 
 **Source design docs**:
-- [planned/faction-system.md](../planned/faction-system.md)
+- [active/faction-system.md](../active/faction-system.md)
 - [planned/war-system.md](../planned/war-system.md)
 - [planned/navigation-changes.md](../planned/navigation-changes.md) §4–6
 - [planned/facilities.md](../planned/facilities.md)
@@ -22,7 +22,7 @@ Four sub-projects, executed in order. Each has a detailed implementation plan wr
 
 | # | Sub-project | Status | Detailed plan | Source design |
 |---|---|---|---|---|
-| 1 | [Faction Foundation](#3-sub-project-1--faction-foundation) | Not started | `layer-2-faction-foundation.md` (TBD) | faction-system.md, navigation-changes.md §6 (border-conflict danger only) |
+| 1 | [Faction Foundation](#3-sub-project-1--faction-foundation) | ✅ Shipped (PRs 1–5 on `feat/layer-2-foundation`, awaiting merge to main) | [layer-2-faction-foundation.md](./layer-2-faction-foundation.md) | active/faction-system.md, navigation-changes.md §6 (border-conflict danger only) |
 | 2 | [Faction Facilities](#4-sub-project-2--faction-facilities) | Not started | `layer-2-facilities.md` (TBD) | facilities.md |
 | 3 | [Goods & Government Restrictions](#5-sub-project-3--goods--government-restrictions) | Not started | `layer-2-contraband.md` (TBD) | navigation-changes.md §4 |
 | 4 | [War & Battle Engine](#6-sub-project-4--war--battle-engine) | Not started | `layer-2-war.md` (TBD) | war-system.md, navigation-changes.md §6 (war-zone danger) |
@@ -67,6 +67,8 @@ These decisions affect more than one sub-project and are settled here so each de
 
 The structural backbone. Every later sub-project depends on this.
 
+**Status: ✅ Shipped on `feat/layer-2-foundation`** (5 squash-merged phase PRs, awaiting the final merge to `main`). Detailed plan: [layer-2-faction-foundation.md](./layer-2-faction-foundation.md). Live behaviour: [active/faction-system.md](../active/faction-system.md). The "In scope" list below reflects what was planned and (with two small exceptions noted below) what shipped.
+
 ### In scope
 
 - `Faction` Prisma model: name, description, government, doctrine, homeworld, color
@@ -75,13 +77,13 @@ The structural backbone. Every later sub-project depends on this.
 - 8 major factions + 12–18 minor factions seeded at world gen (archetype placement rules: buffer / frontier / enclave / cluster)
 - `factionId` on `StarSystem`, replacing per-region government as the source of government modifiers
 - Region model: drop `governmentType`, keep `dominantEconomy` re-derivation hook
-- Inter-faction relations: per-pair score (-100 to +100), relations processor with the full set of drivers from faction-system.md §2 (border friction, doctrine compatibility, government opposition, trade volume, historical grievance, etc.)
-- Alliance mechanics: formation/dissolution rules, capacity per faction status, alliance pact records
+- Inter-faction relations: per-pair score (-100 to +100), relations processor with a subset of drivers from faction-system.md §2 (border friction, doctrine compatibility, government opposition, trade volume, baseline bias, common enemy, alliance maintenance, alliance-with-enemy). **Deferred**: resource/territory envy, historical grievance (needs War), player-action aggregate drivers, trade competition, distance modulation, post-war recovery
+- Alliance mechanics: event-gated formation (negotiation telegraph at +75, hold to +60 to confirm) and dissolution (warning at <+50) with `AlliancePact` records. **Deferred**: alliance capacity slots per faction status (any pair above +60 can ally today)
 - Player-faction reputation: per-player per-faction score, earned/lost from trade, missions, future combat. Reputation modifiers applied as transaction multipliers on buy/sell (separate from market price)
 - Homeworld definition: per-faction capital system, special status (sieged only when faction reduced below Minor — full enforcement deferred to War)
 - Border conflicts as event definitions in the event catalog, spawned by the relations processor when a pair crosses into the unfriendly band
 - Removal of the random `War` event from the event catalog (border conflicts replace it)
-- Faction-aware starting spawn: new players spawn in faction space; small initial reputation with local faction
+- Faction-aware starting spawn: new players spawn in a Federation-government major's territory with **zero reputation across every faction** (the "small initial reputation with local faction" was dropped in favour of pure-neutral start — see `layer-2-faction-foundation.md` resolved Q1)
 - Faction overview UI: galaxy political map (territory colours, relations matrix), faction detail page (lore, doctrine, government, relations), player reputation panel
 - Full reseed and universe regeneration at ship time
 
@@ -95,19 +97,19 @@ The structural backbone. Every later sub-project depends on this.
 
 ### Source design docs
 
-- [faction-system.md](../planned/faction-system.md) — all sections except §4 (war summary)
+- [faction-system.md](../active/faction-system.md) — all sections except §4 (war summary)
 - [navigation-changes.md](../planned/navigation-changes.md) §6 — only the border-system tier 0 danger value (war-zone danger lands with War)
 - [MIGRATION-NOTES §1](../MIGRATION-NOTES.md) — government ownership migration
 
-### Approximate PR shape
+### Actual PR shape (as shipped)
 
-| PR | Focus |
-|---|---|
-| 1 | Faction model + 8 government types + economic modifier constants + types/guards. No seeding behaviour yet — pure data-model groundwork |
-| 2 | World-gen rewrite: faction seeding (8 majors + minors with archetype placement), `factionId` on systems, full reseed, drop `Region.governmentType` |
-| 3 | Relations processor + alliance model + border-conflict events + random War event removal |
-| 4 | Player-faction reputation: schema, transaction-multiplier integration in trade service, reputation UI panel, initial-rep on spawn |
-| (optional 5) | Faction overview UI: political map view, faction detail page, relations matrix |
+| PR | Focus | Status |
+|---|---|---|
+| 1 | Data model groundwork: 8-government union, doctrine union, faction status type, reputation tier type, all guards, new Prisma models, dead `war: N` event-weight cleanup. No behaviour change | ✅ Merged |
+| 2 | World-gen rewrite + government cutover + full reseed: faction seeding, `factionId` on systems, flood-fill ownership, `Region.governmentType` dropped, all consumers re-pointed | ✅ Merged (#69) |
+| 3 | Relations processor + reputation: drift logic, border-conflict / pact-negotiation / alliance-dissolution events, trade-multiplier integration in trade.ts and convoy-trade.ts. Phases 3+4 of the plan bundled into one PR | ✅ Merged |
+| 4 | Faction overview UI: `/factions` list, `/factions/[id]` detail, `/factions/relations` matrix, political-territory Pixi layer, sidebar nav | ✅ Merged (#71) |
+| 5 | Map mode/overlay split + LOD polish: Mode (political/regions/none) vs Overlay (tradeFlow) axes, territory polygon LOD tuning. Self-contained map UX follow-up surfaced during PR 4 review | ✅ Merged (#72) |
 
 ### Done when
 
@@ -117,13 +119,15 @@ The structural backbone. Every later sub-project depends on this.
 - Players can see faction territory on the map, view their reputation with each faction, and feel reputation in buy/sell prices
 - All Layer 1 tests still pass; existing tick processors run unchanged against the new ownership model
 
-### Open questions for the detailed brainstorm
+### Open questions (resolved in [layer-2-faction-foundation.md](./layer-2-faction-foundation.md))
 
-- 8-government economic modifier values: 4 are tuned, 4 are sketched. Need concrete numbers before world-gen depends on them.
-- Faction selection on player spawn: assigned by region? Player choice at signup? Random with re-roll?
-- Alliance formation: fully automatic via relations score, or does it require an event/notification phase that players can see coming?
-- Reputation transaction-multiplier values per standing tier: Champion / Trusted / Distrusted / Hostile percentages.
-- Minor faction count: 12 vs. 18 changes archetype distribution density. Should be a YAML/seed knob, not hard-coded.
+| # | Question | Resolution |
+|---|---|---|
+| 1 | Player spawn faction | **No primary faction.** Pure-neutral start, zero rep across every faction; `PlayerFactionReputation` row created for each faction at registration |
+| 2 | Alliance formation | **Event-gated with telegraph.** Crossing +75 spawns a 5–10 tick `pact_under_negotiation` event; pact forms if score holds ≥+60 through the window. Dissolution similarly telegraphed below +50 |
+| 3 | Reputation multipliers | **Champion 0.92×/1.08×, Trusted 0.96×/1.04×, Neutral 1.0×, Distrusted 1.08×/0.92×, Hostile denied** |
+| 4 | 8-government modifiers | **Flat per-government values shipped for all 8 governments.** Per-good-tier nuance deferred (optional `goodCategoryModifiers?` field declared but unused) |
+| 5 | Minor faction count | **Tied to `UNIVERSE_SCALE`**: 12 at `default`, 18 at `10k`. Lives in `UNIVERSE_GEN.MINOR_FACTION_COUNT` |
 
 ---
 
@@ -273,7 +277,7 @@ The biggest sub-project. War and battle processors, two-stage conquest, player p
 
 - [war-system.md](../planned/war-system.md) — all sections
 - [navigation-changes.md](../planned/navigation-changes.md) §6
-- [faction-system.md](../planned/faction-system.md) §2.1 (alliance mechanics — wartime behaviour)
+- [faction-system.md](../active/faction-system.md) §2.1 (alliance mechanics — wartime behaviour)
 
 ### Approximate PR shape
 
@@ -321,7 +325,7 @@ Once stable, Layer 3 (faction-gated missions, in-system gameplay) can begin.
 | Document | Purpose | Status |
 |---|---|---|
 | `layer-2.md` (this file) | Roadmap, sub-project decomposition, cross-cutting decisions | Active |
-| `layer-2-faction-foundation.md` | Detailed plan for sub-project 1 | To be written before Foundation begins |
+| [`layer-2-faction-foundation.md`](./layer-2-faction-foundation.md) | Detailed plan for sub-project 1 | ✅ Shipped — preserved as the as-built record |
 | `layer-2-facilities.md` | Detailed plan for sub-project 2 | To be written before Facilities begins |
 | `layer-2-contraband.md` | Detailed plan for sub-project 3 | To be written before Contraband begins |
 | `layer-2-war.md` | Detailed plan for sub-project 4 | To be written before War begins |

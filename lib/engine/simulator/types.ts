@@ -14,7 +14,6 @@ import type { SimAdjacencyList } from "./pathfinding-cache";
 export interface SimRegion {
   id: string;
   name: string;
-  governmentType: GovernmentType;
 }
 
 export interface SimSystem {
@@ -22,6 +21,8 @@ export interface SimSystem {
   name: string;
   economyType: EconomyType;
   regionId: string;
+  /** Owning faction's government — sourced per-system after the Layer 2 cutover. */
+  governmentType: GovernmentType;
   /** Goods this economy type produces, keyed by goodId → rate. */
   produces: Record<string, number>;
   /** Goods this economy type consumes, keyed by goodId → rate. */
@@ -157,7 +158,7 @@ export interface SimRunContext {
   /** Pre-built adjacency list for simulator pathfinding (avoids rebuilding per call). */
   adjacencyList: SimAdjacencyList;
   /** Map from systemId → governmentType for sell tracking. */
-  systemToGov: Map<string, string>;
+  systemToGov: Map<string, GovernmentType>;
 }
 
 // ── Metrics ─────────────────────────────────────────────────────
@@ -173,7 +174,7 @@ export interface GoodTradeRecord {
   /** Credits earned selling. */
   sellRevenue: number;
   /** Government type of the system where a sell occurred. */
-  sellGovernmentType?: string;
+  sellGovernmentType?: GovernmentType;
 }
 
 export interface TickMetrics {
@@ -234,7 +235,7 @@ export interface PlayerSummary {
 }
 
 export interface GovernmentSellEntry {
-  governmentType: string;
+  governmentType: GovernmentType;
   totalSold: number;
   totalRevenue: number;
 }
@@ -356,6 +357,7 @@ export interface SimResults {
 
 export interface RegionOverviewEntry {
   name: string;
-  governmentType: string;
+  /** Modal government type across the region's systems, derived from faction ownership. */
+  dominantGovernmentType: GovernmentType;
   systemCount: number;
 }

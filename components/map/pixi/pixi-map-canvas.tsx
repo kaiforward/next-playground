@@ -10,6 +10,7 @@ import { PointCloudLayer } from "./layers/point-cloud-layer";
 import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
 import { TerritoryLayer } from "./layers/territory-layer";
+import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
 import { FleetDotLayer } from "./layers/fleet-dot-layer";
 import { TradeFlowLayer } from "./layers/trade-flow-layer";
 import { EffectLayer } from "./layers/effect-layer";
@@ -19,6 +20,7 @@ import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import type { ViewportBounds } from "@/lib/types/game";
+import type { MapMode } from "@/lib/types/map";
 
 export interface PixiMapCanvasProps {
   atlasData: AtlasData;
@@ -30,6 +32,11 @@ export interface PixiMapCanvasProps {
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
+  /**
+   * Which territory tint to paint. `political` shows faction colours,
+   * `regions` shows economy colours, `none` hides both layers.
+   */
+  mapMode?: MapMode;
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
 }
 
@@ -44,6 +51,7 @@ interface PixiRefs {
   systemLayer: SystemLayer;
   connectionLayer: ConnectionLayer;
   territoryLayer: TerritoryLayer;
+  politicalTerritoryLayer: PoliticalTerritoryLayer;
   fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
   effectLayer: EffectLayer;
@@ -59,6 +67,7 @@ export function PixiMapCanvas({
   centerTarget,
   onReady,
   regionInfos,
+  mapMode = "political",
   onViewportChange,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -151,6 +160,12 @@ export function PixiMapCanvas({
       const territoryLayer = new TerritoryLayer();
       world.addChild(territoryLayer.container);
 
+      // Political layer sits above the economy territory layer but below the
+      // fleet dots. Both layers receive sync data; only one is visible at a
+      // time (controlled via `politicalOverlay` prop / setActive()).
+      const politicalTerritoryLayer = new PoliticalTerritoryLayer();
+      world.addChild(politicalTerritoryLayer.container);
+
       const fleetDotLayer = new FleetDotLayer();
       world.addChild(fleetDotLayer.container);
 
@@ -218,6 +233,7 @@ export function PixiMapCanvas({
         connectionLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
 
         territoryLayer.updateVisibility(lod);
+        politicalTerritoryLayer.updateVisibility(lod);
         fleetDotLayer.updateVisibility(lod);
 
         // Trade-flow overlay: layer alpha multiplies the system fade so the
@@ -239,7 +255,7 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        fleetDotLayer, tradeFlowLayer, effectLayer,
+        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -257,6 +273,7 @@ export function PixiMapCanvas({
           refs.systemLayer.destroy();
           refs.connectionLayer.destroy();
           refs.territoryLayer.destroy();
+          refs.politicalTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
           refs.effectLayer.destroy();
           refs.starfield.destroy();
@@ -287,7 +304,19 @@ export function PixiMapCanvas({
     if (!p || !pixiReady) return;
 
     p.territoryLayer.sync(atlasData.systems, regionInfos);
-  }, [atlasData.systems, pixiReady, regionInfos]);
+    p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions);
+  }, [atlasData.systems, atlasData.factions, pixiReady, regionInfos]);
+
+  // ── Toggle which territory layer is visible ────────────────────────
+  // Three modes: "political" shows the faction layer, "regions" shows the
+  // economy layer, "none" hides both. Per-frame LOD logic still runs on the
+  // hidden layers (cheap) so swapping back is instant.
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.territoryLayer.container.visible = mapMode === "regions";
+    p.politicalTerritoryLayer.setActive(mapMode === "political");
+  }, [mapMode, pixiReady]);
 
   // ── Update player presence highlights (lightweight fill-only redraw) ──
   useEffect(() => {

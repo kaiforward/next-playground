@@ -108,10 +108,6 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 
 - **Never use `cd` in compound commands** — The working directory is already the project root. Compound commands like `cd /path && git log` trigger security approval prompts. Just run the command directly (e.g. `git log`).
 
-## Codebase Search
-
-Prefer **cocoindex semantic search** (`mcp__cocoindex-code__search`) over grep/glob for codebase exploration, especially for vague or cross-system questions. Use `refresh_index: false` for consecutive queries within the same session. Fall back to grep/glob only for exact-string or regex matches where you know the precise term.
-
 ## Troubleshooting
 
 When hitting errors, don't fix symptoms directly. Step back and search for the canonical

@@ -54,7 +54,7 @@ The big structural change. Named factions replace regions as the primary territo
 
 | System | What it does | Depends on |
 |---|---|---|
-| [Faction System](./planned/faction-system.md) | Factions, territory, reputation, relations, alliances, government migration | Layer 0 (traits define strategic value) |
+| [Faction System](./active/faction-system.md) | Factions, territory, reputation, relations, alliances, government migration | Layer 0 (traits define strategic value) |
 | [War System](./planned/war-system.md) | Border conflicts (ambient), faction wars (interactive), battles, territory capture | Faction System |
 | [Navigation Changes](./planned/navigation-changes.md) §4 | Contraband/goods restrictions by government type, black markets | Faction System (government per faction) |
 | [Facilities](./planned/facilities.md) | Faction facilities (shipyards, naval bases, etc.), facility tiers, war targets. Split out of `system-enrichment.md` during doc cleanup — the trait portion (§1–4) shipped and lives in [active/system-traits.md](./active/system-traits.md) | Faction System + Layer 0 |

@@ -36,4 +36,9 @@ export const queryKeys = {
   cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
   cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,
   cantinaNpcVisits: (systemId: string) => ["cantinaNpcVisits", systemId] as const,
+  // Factions
+  reputation: ["reputation"] as const,
+  factions: ["factions"] as const,
+  faction: (factionId: string) => ["factions", factionId] as const,
+  factionRelations: ["factions", "relations"] as const,
 };

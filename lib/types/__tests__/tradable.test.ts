@@ -10,6 +10,7 @@ const SYSTEM: StarSystemInfo = {
   y: 0,
   description: "",
   regionId: "reg-1",
+  factionId: null,
   isGateway: false,
 };
 

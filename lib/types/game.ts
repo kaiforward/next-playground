@@ -90,7 +90,27 @@ export type GovernmentType =
   | "federation"
   | "corporate"
   | "authoritarian"
-  | "frontier";
+  | "frontier"
+  | "cooperative"
+  | "technocratic"
+  | "militarist"
+  | "theocratic";
+
+export type Doctrine =
+  | "expansionist"
+  | "protectionist"
+  | "mercantile"
+  | "hegemonic"
+  | "opportunistic";
+
+export type FactionStatus = "dominant" | "major" | "regional" | "minor";
+
+export type ReputationStanding =
+  | "champion"
+  | "trusted"
+  | "neutral"
+  | "distrusted"
+  | "hostile";
 
 export type GoodTier = 0 | 1 | 2;
 
@@ -100,7 +120,14 @@ export interface RegionInfo {
   id: string;
   name: string;
   dominantEconomy: EconomyType;
-  governmentType: GovernmentType;
+  /**
+   * Most-represented faction across the region's systems, or null when no
+   * systems carry a factionId (defensive — post-Layer-2 reseed every system has one).
+   * Ties broken alphabetically by faction name.
+   */
+  dominantFactionId: string | null;
+  /** Government of the dominant faction; mirrors the legacy per-region field for downstream consumers. */
+  dominantGovernmentType: GovernmentType;
   x: number;
   y: number;
 }
@@ -232,8 +259,22 @@ export interface StarSystemInfo {
   y: number;
   description: string;
   regionId: string;
+  /** Owning faction (null only during the transient mid-cutover state). */
+  factionId: string | null;
   isGateway: boolean;
   traits?: SystemTraitInfo[];
+}
+
+/** Lightweight faction shape returned alongside universe data for client lookup. */
+export interface FactionInfo {
+  id: string;
+  name: string;
+  color: string;
+  // Nullable so atlas-derived shapes (which only carry id/name/color) can
+  // satisfy this type without inventing a stub value. The server-side
+  // `/api/game/systems` route always populates this; consumers must handle
+  // null when reading factions from the locally-derived universe in star-map.
+  governmentType: GovernmentType | null;
 }
 
 export interface SystemConnectionInfo {
@@ -280,6 +321,7 @@ export interface UniverseData {
   regions: RegionInfo[];
   systems: StarSystemInfo[];
   connections: SystemConnectionInfo[];
+  factions: FactionInfo[];
 }
 
 // ── Atlas (lightweight map data) ──────────────────────────────────
@@ -289,14 +331,24 @@ export interface AtlasSystem {
   x: number;
   y: number;
   regionId: string;
+  /** Owning faction. Null only during the transient pre-cutover seed state. */
+  factionId: string | null;
   economyType: EconomyType;
   isGateway: boolean;
+}
+
+/** Lightweight faction row included alongside atlas data for political-map rendering. */
+export interface AtlasFaction {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface AtlasData {
   regions: RegionInfo[];
   systems: AtlasSystem[];
   connections: SystemConnectionInfo[];
+  factions: AtlasFaction[];
 }
 
 export interface ActiveEvent {

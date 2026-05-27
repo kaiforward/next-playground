@@ -3,6 +3,8 @@ import { serializeShip } from "@/lib/auth/serialize";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { toShipStatus } from "@/lib/types/guards";
+import { getReputationTier } from "@/lib/constants/reputation";
+import { accrueTradeReputationInTx } from "./reputation";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
 
@@ -60,13 +62,16 @@ export async function executeTrade(
     return { ok: false, error: "This ship is in a convoy. Trade via the convoy instead.", status: 400 };
   }
 
-  // Verify station is in the ship's current system
+  // Verify station is in the ship's current system; resolve owning faction
+  // at the same time so reputation gating + multipliers can be applied below.
   const station = await prisma.station.findUnique({
     where: { systemId: ship.systemId },
+    include: { system: { select: { factionId: true } } },
   });
   if (!station || station.id !== stationId) {
     return { ok: false, error: "Station is not in the ship's current system.", status: 400 };
   }
+  const factionId = station.system.factionId;
 
   // Look up the market entry
   const marketEntry = await prisma.stationMarket.findUnique({
@@ -77,13 +82,33 @@ export async function executeTrade(
     return { ok: false, error: "Good not available at this station.", status: 404 };
   }
 
-  const unitPrice = calculatePrice(
+  const basePrice = calculatePrice(
     marketEntry.good.basePrice,
     marketEntry.supply,
     marketEntry.demand,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
   );
+
+  // Reputation gating + multiplier. Systems without a faction (transient
+  // mid-cutover state) trade at neutral. Hostile standing blocks the trade.
+  let unitPrice = basePrice;
+  if (factionId) {
+    const repRow = await prisma.playerFactionReputation.findUnique({
+      where: { playerId_factionId: { playerId, factionId } },
+      select: { score: true },
+    });
+    const tier = getReputationTier(repRow?.score ?? 0);
+    if (tier.tradeDenied) {
+      return {
+        ok: false,
+        error: "This faction refuses to trade with you (hostile standing).",
+        status: 403,
+      };
+    }
+    const mult = type === "buy" ? tier.buyMultiplier : tier.sellMultiplier;
+    unitPrice = Math.round(basePrice * mult);
+  }
 
   const currentCargoUsed = ship.cargo.reduce((sum, c) => sum + c.quantity, 0);
   const existingCargo = ship.cargo.find((c) => c.goodId === goodId);
@@ -107,10 +132,35 @@ export async function executeTrade(
 
   const { delta } = result;
 
+  // Hoist the current-tick read out of the transaction: it's only used by
+  // the rep accrual cap, which is monotonic in tick number, so reading
+  // slightly stale is safe.
+  let currentTick = 0;
+  if (factionId) {
+    const world = await prisma.gameWorld.findUnique({
+      where: { id: "world" },
+      select: { currentTick: true },
+    });
+    currentTick = world?.currentTick ?? 0;
+  }
+
   // Execute trade in a transaction with fresh state reads (TOCTOU guard)
   let updatedMarket;
   try {
     updatedMarket = await prisma.$transaction(async (tx) => {
+      // Fresh hostile-gate check before doing any work. Snapshot price/
+      // multiplier above used the pre-tx score; if a tick processor flipped
+      // the player to hostile in between, abort the trade here.
+      if (factionId) {
+        const { tradeDenied } = await accrueTradeReputationInTx(
+          tx,
+          player.id,
+          factionId,
+          currentTick,
+        );
+        if (tradeDenied) throw new Error("HOSTILE_STANDING");
+      }
+
       const freshPlayer = await tx.player.findUnique({
         where: { id: player.id },
         select: { credits: true },
@@ -184,6 +234,13 @@ export async function executeTrade(
     });
   } catch (error) {
     if (error instanceof Error) {
+      if (error.message === "HOSTILE_STANDING") {
+        return {
+          ok: false,
+          error: "This faction refuses to trade with you (hostile standing).",
+          status: 403,
+        };
+      }
       if (error.message === "INSUFFICIENT_CREDITS") {
         return { ok: false, error: "Not enough credits. State may have changed concurrently.", status: 409 };
       }

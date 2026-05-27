@@ -105,6 +105,18 @@ export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;
 export type PriceHistoryResponse = ApiResponse<SystemPriceHistory[]>;
 
+import type { PlayerFactionReputationInfo } from "@/lib/services/reputation";
+export type ReputationResponse = ApiResponse<PlayerFactionReputationInfo[]>;
+
+import type {
+  FactionSummary,
+  FactionDetail,
+  RelationsMatrixData,
+} from "@/lib/services/factions";
+export type FactionListResponse = ApiResponse<FactionSummary[]>;
+export type FactionDetailResponse = ApiResponse<FactionDetail>;
+export type RelationsMatrixResponse = ApiResponse<RelationsMatrixData>;
+
 export interface ShipTradeResult {
   ship: ShipState;
   updatedMarket: MarketEntry;

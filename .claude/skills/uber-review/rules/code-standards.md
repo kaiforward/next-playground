@@ -9,8 +9,14 @@ Patterns explicitly forbidden by `CLAUDE.md`. The Conventions agent uses this as
   - Any other `as Foo` is a violation.
 
 - **No non-null assertion `!`** — category: `non-null-assertion`
-  - Force-unwrapping with `!` silences rather than fixes the type at source.
-  - Exception: only in narrow contexts where a runtime check immediately precedes (rare and worth scrutiny).
+  - This rule covers the **TypeScript postfix `!` operator only** — `foo!`, `foo!.bar`, `arr[i]!`, `getThing()!`. It strips `null | undefined` from the type without a runtime check.
+  - This rule does NOT cover any of the following — these are normal operators and **never** a violation:
+    - `!foo` (logical-not, prefix)
+    - `!==` / `!=` (inequality comparisons; e.g. `bestId !== null` is a guard, NOT an assertion)
+    - `!!foo` (boolean coercion)
+    - `if (!foo)`, `while (!done)`, etc.
+  - Before flagging: confirm the offending character is a **postfix `!`** directly attached to an expression (`identifier!`, `expr.prop!`, `expr[i]!`, `(expr)!`). If the `!` is in a prefix or comparison position, it is not a non-null assertion — do not flag.
+  - Exception: postfix `!` is acceptable only in narrow contexts where a runtime check immediately precedes (rare and worth scrutiny).
 
 - **No `unknown` in the codebase** — category: `unknown-in-types`
   - `Record<string, unknown>`, `unknown`, and untyped maps/arrays are banned in components, hooks, services, processors, engine, constants.

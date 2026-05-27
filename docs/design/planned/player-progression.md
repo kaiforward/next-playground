@@ -4,7 +4,7 @@ The player's journey from new trader to galactic power broker. Defines the three
 
 **Design principle**: Progression changes *what you do*, not just *how big the numbers are*. Early game is hands-on trading and exploration. Mid game introduces fleet management and facility investment. Late game shifts to strategic oversight — automated fleets, production empires, and faction power politics.
 
-**Depends on**: [Faction System](./faction-system.md) (reputation, war contributions), [Facilities](./facilities.md) (faction facilities) + [System Traits](../active/system-traits.md) (traits), [Ship Roster](../active/ship-roster.md) (ship classes, upgrades), [Player Facilities](./player-facilities.md) (player-built facilities), [In-System Gameplay](./in-system-gameplay.md) (missions, story content)
+**Depends on**: [Faction System](../active/faction-system.md) (reputation, war contributions), [Facilities](./facilities.md) (faction facilities) + [System Traits](../active/system-traits.md) (traits), [Ship Roster](../active/ship-roster.md) (ship classes, upgrades), [Player Facilities](./player-facilities.md) (player-built facilities), [In-System Gameplay](./in-system-gameplay.md) (missions, story content)
 
 ---
 
@@ -65,7 +65,7 @@ The player has enough credits and experience to start thinking beyond individual
   - Higher-paying, more complex missions
   - Access to specialised ship classes at faction shipyards (reputation-gated)
   - More influence and rewards from war contributions
-- **War contributions (Tier 1)**: Economic support for faction war efforts — supplying war goods, donating credits, war logistics missions. Expensive but meaningful. Players choose which faction to back, with real reputation consequences (see [Faction System §4.7](./faction-system.md))
+- **War contributions (Tier 1)**: Economic support for faction war efforts — supplying war goods, donating credits, war logistics missions. Expensive but meaningful. Players choose which faction to back, with real reputation consequences (see [Faction System §4.7](../active/faction-system.md))
 - **Early automation**: First automation upgrades for ships. Assign a ship to a region with basic trade behaviour — the ship executes trades using simple strategies (greedy, nearest). Frees the player to focus on other ships or missions while automated ships generate background income
 
 ### Mid game progression
@@ -154,7 +154,7 @@ Detailed build system (construction, upgrades, costs, limits, asset risk) in [Pl
 
 ## 7. Faction Reputation as Progression
 
-Faction reputation (see [Faction System §3](./faction-system.md)) is a primary progression axis. It gates access to content and creates meaningful alignment choices — players can't be champions of everyone.
+Faction reputation (see [Faction System §3](../active/faction-system.md)) is a primary progression axis. It gates access to content and creates meaningful alignment choices — players can't be champions of everyone.
 
 ### What Reputation Unlocks
 
@@ -169,7 +169,7 @@ Faction reputation (see [Faction System §3](./faction-system.md)) is a primary 
 - Supporting one faction in a war costs reputation with their enemy. Players must choose sides
 - A **neutral trader** path is viable — tolerated everywhere, welcomed nowhere. Stable income but no access to the best content
 - **Multi-faction alignment** is possible if the factions aren't at war with each other, but alliance shifts and new wars can force difficult choices
-- Reputation loss from enemy factions scales with involvement tier — Tier 1 war contributions are invisible, Tier 3 guarantees hostility (see [Faction System §4.7](./faction-system.md))
+- Reputation loss from enemy factions scales with involvement tier — Tier 1 war contributions are invisible, Tier 3 guarantees hostility (see [Faction System §4.7](../active/faction-system.md))
 
 ---
 
@@ -206,7 +206,7 @@ In-system gameplay is a major system that requires its own detailed design. This
 
 ## Related Design Docs
 
-- **[Faction System](./faction-system.md)** — reputation tiers, war contributions, player assets in conquered territory
+- **[Faction System](../active/faction-system.md)** — reputation tiers, war contributions, player assets in conquered territory
 - **[Missions](./missions.md)** — universe/region-level mission framework (trade, operational, war contributions)
 - **[Facilities](./facilities.md)** — faction facilities (shipyards, drydocks, academies)
 - **[System Traits (active)](../active/system-traits.md)** — trait catalog and effects

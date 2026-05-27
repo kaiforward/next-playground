@@ -317,5 +317,5 @@ War zones are where escort mechanics earn their keep:
 - **[Ship Roster](../active/ship-roster.md)** — ship stats, escort mechanics, fleet composition, ship damage
 - **[Ship Upgrades](../active/ship-upgrades.md)** — module catalog, slot types, danger pipeline interactions (§7)
 - **[War System](./war-system.md)** — war zones, contested systems, battle mechanics
-- **[Faction System](./faction-system.md)** — government types, doctrine effects on navigation
+- **[Faction System](../active/faction-system.md)** — government types, doctrine effects on navigation
 - **[Facilities](./facilities.md)** — customs house, fuel depot, black market, drydock facilities

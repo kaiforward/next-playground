@@ -157,5 +157,5 @@ See **[Map Scaling Roadmap](./map-scaling-roadmap.md)** for the unified phase se
 ## Related Design Docs
 
 - **[Visibility System](./visibility-system.md)** — player visibility model that gates dynamic tiles
-- **[Faction System](./faction-system.md)** — faction territories affect visibility (future)
+- **[Faction System](../active/faction-system.md)** — faction territories affect visibility (future)
 - **[Universe](../active/universe.md)** — current universe generation (will need scaling updates)

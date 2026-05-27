@@ -38,6 +38,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     name: id.toUpperCase(),
     economyType: "extraction",
     regionId,
+    governmentType: "frontier",
     produces: {},
     consumes: {},
     traits: [],
@@ -236,5 +237,54 @@ describe("runEventsProcessor", () => {
     );
 
     expect(world.events).toEqual([]);
+  });
+
+  it("skips lifecycle for relations-owned event types (pact_under_negotiation, alliance_dissolved)", async () => {
+    // A pact event with phaseDuration=1 would normally advance/expire on the
+    // next tick. The events processor must leave it alone — the relations
+    // processor owns expiry via metadata.expiresAtTick.
+    const pact: SimEvent = {
+      id: "ev-pact",
+      type: "pact_under_negotiation",
+      phase: "negotiation",
+      // Relations-owned events have no system/region target; placeholders here
+      // satisfy the SimEvent type without exercising any per-system logic.
+      systemId: "",
+      regionId: "",
+      startTick: 0,
+      phaseStartTick: 0,
+      phaseDuration: 1,
+      severity: 1,
+      sourceEventId: null,
+    };
+    const dissolution: SimEvent = {
+      id: "ev-diss",
+      type: "alliance_dissolved",
+      phase: "dissolving",
+      // Relations-owned events have no system/region target; placeholders here
+      // satisfy the SimEvent type without exercising any per-system logic.
+      systemId: "",
+      regionId: "",
+      startTick: 0,
+      phaseStartTick: 0,
+      phaseDuration: 1,
+      severity: 1,
+      sourceEventId: null,
+    };
+
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      events: [pact, dissolution],
+    });
+
+    await runEventsProcessor(world, makeCtx(10), makeParams());
+
+    expect(world.events).toHaveLength(2);
+    const pactAfter = world.events.find((e) => e.id === "ev-pact");
+    const dissolutionAfter = world.events.find((e) => e.id === "ev-diss");
+    expect(pactAfter?.phase).toBe("negotiation");
+    expect(pactAfter?.phaseStartTick).toBe(0);
+    expect(dissolutionAfter?.phase).toBe("dissolving");
+    expect(dissolutionAfter?.phaseStartTick).toBe(0);
   });
 });

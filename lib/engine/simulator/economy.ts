@@ -83,11 +83,8 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
     let cargo = [...(ship.cargo ?? []).map((c) => ({ ...c }))];
 
     const destSystem = world.systems.find((s) => s.id === destSystemId);
-    const destRegion = destSystem
-      ? world.regions.find((r) => r.id === destSystem.regionId)
-      : undefined;
-    const govDef = destRegion
-      ? GOVERNMENT_TYPES[destRegion.governmentType]
+    const govDef = destSystem
+      ? GOVERNMENT_TYPES[destSystem.governmentType]
       : undefined;
 
     const navMods = world.modifiers.filter(

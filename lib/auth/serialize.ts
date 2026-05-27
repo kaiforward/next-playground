@@ -15,6 +15,7 @@ interface RawSystem {
   y: number;
   description: string;
   regionId: string;
+  factionId: string | null;
   isGateway: boolean;
 }
 
@@ -27,6 +28,7 @@ function serializeSystem(sys: RawSystem) {
     y: sys.y,
     description: sys.description,
     regionId: sys.regionId,
+    factionId: sys.factionId,
     isGateway: sys.isGateway,
   };
 }

@@ -102,7 +102,7 @@ What generates missions and where they appear. This ties together all the facili
 
 ## 4. Reputation Gating
 
-Mission availability scales with faction reputation, creating a natural progression through mission types. This aligns with the reputation tiers in [faction-system.md](./faction-system.md) §3 and [player-progression.md](./player-progression.md) §7.
+Mission availability scales with faction reputation, creating a natural progression through mission types. This aligns with the reputation tiers in [faction-system.md](../active/faction-system.md) §3 and [player-progression.md](./player-progression.md) §7.
 
 | Standing | Available missions |
 |---|---|
@@ -147,6 +147,6 @@ All missions pay credits. Faction-sourced missions also pay reputation. War miss
 - **[Trading (active)](../active/trading.md)** — existing trade mission implementation (TradeMission model, lifecycle, reward formula)
 - **[War System](./war-system.md)** — war logistics, sabotage, intelligence as war contributions
 - **[Facilities](./facilities.md)** — facilities that generate missions (naval base, embassy, black market, etc.)
-- **[Faction System](./faction-system.md)** — reputation gating, faction association
+- **[Faction System](../active/faction-system.md)** — reputation gating, faction association
 - **[Player Progression](./player-progression.md)** — mission availability by game phase
 - **[In-System Gameplay](./in-system-gameplay.md)** — separate system for trait-driven, story-driven missions within systems

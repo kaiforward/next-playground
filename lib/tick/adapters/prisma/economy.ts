@@ -34,13 +34,12 @@ export class PrismaEconomyWorld implements EconomyWorld {
 
   async getRegions(): Promise<RegionView[]> {
     const rows = await this.tx.region.findMany({
-      select: { id: true, name: true, governmentType: true },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
-      governmentType: toGovernmentType(r.governmentType),
     }));
   }
 
@@ -49,13 +48,29 @@ export class PrismaEconomyWorld implements EconomyWorld {
       where: { station: { system: { regionId } } },
       include: {
         good: true,
-        station: { include: { system: { include: { traits: true } } } },
+        station: {
+          include: {
+            system: {
+              include: {
+                traits: true,
+                faction: { select: { governmentType: true } },
+              },
+            },
+          },
+        },
       },
     });
 
     return rows.map((m) => {
       const economyType = toEconomyType(m.station.system.economyType);
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
+      // After the Layer 2 cutover every system has a non-null factionId. The
+      // `?? "frontier"` fallback covers the only legitimate gap: a system the
+      // adapter sees mid-write before its factionId is set. Frontier is the
+      // safe default (lowest-stability profile).
+      const governmentType = m.station.system.faction
+        ? toGovernmentType(m.station.system.faction.governmentType)
+        : "frontier";
       return {
         id: m.id,
         systemId: m.station.system.id,
@@ -64,6 +79,7 @@ export class PrismaEconomyWorld implements EconomyWorld {
         supply: m.supply,
         demand: m.demand,
         economyType,
+        governmentType,
         produces: getProducedGoods(economyType),
         consumes: getConsumedGoods(economyType),
         baseProductionRate: getProductionRate(economyType, goodKey),

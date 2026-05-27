@@ -47,6 +47,7 @@ const DEFAULT_PARAMS: GenParams = {
   gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
   intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
   maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
+  minorFactionCount: UNIVERSE_GEN.MINOR_FACTION_COUNT,
 };
 
 // ── Accumulator types ────────────────────────────────────────────

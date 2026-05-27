@@ -91,4 +91,4 @@ reward = 3 CR/unit x quantity x 1.25^hops x tierMult x eventMult
 - **Economy**: Trade prices emerge from supply/demand simulation. Player trades nudge markets. Price extremes trigger mission generation (see [economy.md](./economy.md))
 - **Events**: Event-linked missions spawn thematic delivery contracts with bonus rewards. Events disrupt markets creating trading opportunities (see [events.md](./events.md))
 - **Navigation**: Travel time and fuel costs determine which missions are profitable. Cargo loss on arrival affects delivered quantities (see [navigation.md](./navigation.md))
-- **Faction system** (planned): Faction reputation will unlock exclusive missions, affect prices, and enable war contribution missions (see [faction-system.md](../planned/faction-system.md))
+- **Faction system** (planned): Faction reputation will unlock exclusive missions, affect prices, and enable war contribution missions (see [faction-system.md](./faction-system.md))

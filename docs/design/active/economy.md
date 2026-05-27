@@ -104,7 +104,7 @@ This creates price variety between systems consuming the same good. Full factor 
 | Militarist | TBD | TBD | TBD | TBD | TBD | War economy, resource hungry |
 | Theocratic | TBD | TBD | TBD | TBD | TBD | Premium on basics, vice banned |
 
-(4 new types designed, modifiers to be defined during implementation — see [faction-system.md](../planned/faction-system.md) S1)
+(4 new types designed, modifiers to be defined during implementation — see [faction-system.md](./faction-system.md) S1)
 
 ### Government Effects on Gameplay
 - **Volatility modifier**: Scales price noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
@@ -202,7 +202,7 @@ With T0 margins of ~5cr/unit and 50 cargo, a shuttle earns ~250cr/trip. Light Fr
 - **Events** inject economic shocks — supply/demand shifts, production halts, consumption surges (see [events.md](./events.md))
 - **Trade missions** are generated from price extremes — high prices spawn import missions, low prices spawn export missions (see [trading.md](./trading.md))
 - **Navigation danger** is partly driven by government danger baseline — affects cargo loss on arrival (see [navigation.md](./navigation.md))
-- **Faction system** (planned) will add faction-specific economic modifiers and war-driven market disruption (see [faction-system.md](../planned/faction-system.md))
+- **Faction system** (planned) will add faction-specific economic modifiers and war-driven market disruption (see [faction-system.md](./faction-system.md))
 
 ---
 

@@ -128,13 +128,12 @@ export class PrismaOpMissionsWorld implements OpMissionsWorld {
 
   async getRegions(): Promise<RegionView[]> {
     const rows = await this.tx.region.findMany({
-      select: { id: true, name: true, governmentType: true },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
-      governmentType: toGovernmentType(r.governmentType),
     }));
   }
 
@@ -144,12 +143,19 @@ export class PrismaOpMissionsWorld implements OpMissionsWorld {
       select: {
         id: true,
         name: true,
+        faction: { select: { governmentType: true } },
         traits: { select: { traitId: true, quality: true } },
       },
     });
     return rows.map((s) => ({
       id: s.id,
       name: s.name,
+      // `?? "frontier"` is the safe fallback for the only legitimate gap: a
+      // system observed mid-write before its factionId column is populated.
+      // Post-cutover seed guarantees a non-null factionId on every system.
+      governmentType: s.faction?.governmentType
+        ? toGovernmentType(s.faction.governmentType)
+        : "frontier",
       traits: s.traits.map((t) => ({
         traitId: toTraitId(t.traitId),
         quality: toQualityTier(t.quality),

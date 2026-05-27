@@ -136,7 +136,7 @@ New players spawn at a core-economy system in the region closest to the map cent
 The configurable universe and tile-based map renderer are in place — scale ceiling is a performance target, not a design constraint. Remaining planned changes are faction-oriented:
 
 - **Faction territory**: Systems will belong to factions, with colored territory visualization
-- **Government migration**: Government type moves from per-region to per-faction (see [faction-system.md](../planned/faction-system.md) §1)
+- **Government migration**: Government type moves from per-region to per-faction (see [faction-system.md](./faction-system.md) §1)
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
 - **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-traits.md](./system-traits.md) §2.2)
 - **Facilities**: Faction-owned strategic infrastructure seeded at systems based on traits (see [facilities.md](../planned/facilities.md))
@@ -149,4 +149,4 @@ The configurable universe and tile-based map renderer are in place — scale cei
 - **Government → Economy**: Region government type determines market modifiers (volatility, equilibrium, taxes). See [economy.md](./economy.md)
 - **Navigation**: Connection graph defines travel routes and fuel costs. Gateway systems are strategic chokepoints (see [navigation.md](./navigation.md))
 - **Events**: Events spawn at specific systems based on economy type and affect neighboring systems via spread (see [events.md](./events.md))
-- **Faction system** (planned): Factions will control systems, with government type tied to faction rather than region (see [faction-system.md](../planned/faction-system.md))
+- **Faction system** (planned): Factions will control systems, with government type tied to faction rather than region (see [faction-system.md](./faction-system.md))

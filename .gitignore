@@ -57,3 +57,4 @@ next-env.d.ts
 
 # MCP server config (local tooling)
 .mcp.json
+.claude/reviews/

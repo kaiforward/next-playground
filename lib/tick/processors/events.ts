@@ -8,6 +8,7 @@ import {
   EVENT_SPAWN_INTERVAL,
   scaleEventCaps,
   type EventPhaseDefinition,
+  type EventTypeId,
 } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import {
@@ -20,6 +21,18 @@ import {
   type SystemSnapshot,
   type ShockRow,
 } from "@/lib/engine/events";
+
+/**
+ * Relations-spawned events whose lifecycle is owned by the relations
+ * processor (single-phase, informational, expiry resolved via
+ * `metadata.expiresAtTick`). The events processor skips phase transitions
+ * for these; `border_conflict` is intentionally NOT in this set because it
+ * has multi-phase modifiers driven by the events processor as normal.
+ */
+const RELATIONS_OWNED_LIFECYCLE: ReadonlySet<EventTypeId> = new Set<EventTypeId>([
+  "pact_under_negotiation",
+  "alliance_dissolved",
+]);
 import { PrismaEventsWorld } from "@/lib/tick/adapters/prisma/events";
 import type {
   EventCreate,
@@ -82,6 +95,11 @@ export async function runEventsProcessor(
       expiredIds.push(ev.id);
       continue;
     }
+
+    // Skip events whose lifecycle the relations processor owns. Their stored
+    // phaseDuration is a sentinel (RELATIONS_PHASE_SENTINEL); never advance
+    // or auto-expire them — relations resolves them via metadata.expiresAtTick.
+    if (RELATIONS_OWNED_LIFECYCLE.has(ev.type)) continue;
 
     const result = checkPhaseTransition(ev, ctx.tick, def);
     if (result === "expire") {

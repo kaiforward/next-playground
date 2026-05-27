@@ -17,7 +17,13 @@ export type EventTypeId =
   | "refugee_crisis"
   | "trade_embargo"
   | "tech_breakthrough"
-  | "asteroid_strike";
+  | "asteroid_strike"
+  // Relations-spawned events (Layer 2 Foundation Phase 3). All carry weight: 0
+  // so the events processor never randomly spawns them; only the relations
+  // processor creates them and tags the participant pair via GameEvent.metadata.
+  | "border_conflict"
+  | "pact_under_negotiation"
+  | "alliance_dissolved";
 
 // ── Type interfaces ─────────────────────────────────────────────
 
@@ -690,6 +696,95 @@ const asteroidStrike: EventDefinition = {
   ],
 };
 
+// ── Phase 3 (Layer 2): Relations-spawned events ────────────────
+
+/**
+ * Border conflict: spawned by the relations processor when a faction pair
+ * crosses into the unfriendly band (-74 to -25). Targets a representative
+ * border system; carries `{ factionAId, factionBId }` in GameEvent.metadata.
+ * No notifications — these surface on the political map, not in player feeds.
+ */
+const borderConflict: EventDefinition = {
+  type: "border_conflict",
+  name: "Border Conflict",
+  description: "Skirmishes erupt along a contested faction border, raising danger and disrupting production.",
+  cooldown: 60,
+  maxActive: 100,
+  weight: 0, // Never spawned randomly — only by the relations processor.
+  phases: [
+    {
+      name: "tension",
+      displayName: "Border Tension",
+      durationRange: [15, 25],
+      modifiers: [
+        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
+      ],
+    },
+    {
+      name: "skirmish",
+      displayName: "Skirmish",
+      durationRange: [25, 35],
+      modifiers: [
+        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.10 },
+        { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.9 },
+      ],
+    },
+    {
+      name: "de_escalation",
+      displayName: "De-escalation",
+      durationRange: [10, 20],
+      modifiers: [
+        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.02 },
+      ],
+    },
+  ],
+};
+
+/**
+ * Pact under negotiation: created when a faction pair's relations cross +75.
+ * Holds for ALLIANCE.negotiationWindow ticks; if the score stays at or above
+ * ALLIANCE.holdThreshold through that window, the AlliancePact is formed.
+ * No system/region target — purely a political-map signal.
+ */
+const pactUnderNegotiation: EventDefinition = {
+  type: "pact_under_negotiation",
+  name: "Pact Under Negotiation",
+  description: "Two factions are negotiating a formal alliance — outcome decided when the window closes.",
+  cooldown: 20,
+  maxActive: 50,
+  weight: 0,
+  phases: [
+    {
+      name: "negotiation",
+      displayName: "Negotiation",
+      durationRange: [5, 10],
+      modifiers: [],
+    },
+  ],
+};
+
+/**
+ * Alliance dissolution: warning event spawned when a pair drops below
+ * ALLIANCE.dissolutionThreshold while a pact is active. After the window
+ * the AlliancePact is removed.
+ */
+const allianceDissolved: EventDefinition = {
+  type: "alliance_dissolved",
+  name: "Alliance Dissolving",
+  description: "Relations between two allied factions have soured; the pact is being dissolved.",
+  cooldown: 20,
+  maxActive: 50,
+  weight: 0,
+  phases: [
+    {
+      name: "dissolving",
+      displayName: "Dissolving",
+      durationRange: [5, 5],
+      modifiers: [],
+    },
+  ],
+};
+
 // ── Event → mission theme mapping ──────────────────────────────
 
 export const EVENT_MISSION_GOODS: Partial<Record<EventTypeId, { goods: string[]; isImport: boolean }>> = {
@@ -746,6 +841,9 @@ const EVENT_DEFINITIONS_INTERNAL = {
   trade_embargo: tradeEmbargo,
   tech_breakthrough: techBreakthrough,
   asteroid_strike: asteroidStrike,
+  border_conflict: borderConflict,
+  pact_under_negotiation: pactUnderNegotiation,
+  alliance_dissolved: allianceDissolved,
 } as const satisfies Record<EventTypeId, EventDefinition>;
 
 export const EVENT_DEFINITIONS: Record<EventTypeId, EventDefinition> = EVENT_DEFINITIONS_INTERNAL;
@@ -755,6 +853,14 @@ export const EVENT_TYPE_IDS = [
   "inner_system_conflict", "plague", "trade_festival", "conflict_spillover",
   "plague_risk", "mining_boom", "ore_glut", "supply_shortage", "pirate_raid",
   "solar_storm", "refugee_crisis", "trade_embargo", "tech_breakthrough", "asteroid_strike",
+  "border_conflict", "pact_under_negotiation", "alliance_dissolved",
+] as const satisfies readonly EventTypeId[];
+
+/** Event types created by the relations processor — never randomly spawned. */
+export const RELATIONS_EVENT_TYPES = [
+  "border_conflict",
+  "pact_under_negotiation",
+  "alliance_dissolved",
 ] as const satisfies readonly EventTypeId[];
 
 // ── Phase effect summaries ──────────────────────────────────────
