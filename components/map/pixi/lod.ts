@@ -90,11 +90,15 @@ export function computeLOD(zoom: number): LODState {
     showEventDots: zoom > 0.5,
     eventDotAlpha: smoothStep(0.5, 0.6, zoom),
 
-    // Territories visible in universe/crossfade, fade out in system view
-    showTerritories: zoom < 0.5,
-    territoryAlpha: 1 - smoothStep(0.3, 0.5, zoom),
+    // Territories visible at every zoom level — they're the spatial frame for
+    // both Political and Regions modes. Alpha eases from 1.0 in universe view
+    // to a 0.6 floor in deep system view so individual systems still read
+    // cleanly against the tint. Tune the floor here if it feels too heavy.
+    showTerritories: true,
+    territoryAlpha: 1 - 0.4 * smoothStep(0.3, 0.7, zoom),
 
-    // Region labels visible in universe view, fade at same range as territories
+    // Region labels still fade out past 0.5 — text clutters individual-system
+    // inspection. Polygons stay; labels go.
     showRegionLabels: zoom < 0.5,
     regionLabelAlpha: 1 - smoothStep(0.3, 0.5, zoom),
 
