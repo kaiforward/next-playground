@@ -42,7 +42,6 @@ function buildFixture(): {
   const region: SimRegion = {
     id: "r1",
     name: "Test Region",
-    governmentType: "federation",
   };
 
   const producers = ["a", "b"].map<SimSystem>((id) => ({
@@ -50,6 +49,7 @@ function buildFixture(): {
     name: id.toUpperCase(),
     economyType: "agricultural",
     regionId: "r1",
+    governmentType: "federation",
     produces: { food: 4 },
     consumes: {},
     traits: [],
@@ -62,6 +62,7 @@ function buildFixture(): {
     name: id.toUpperCase(),
     economyType: "tech",
     regionId: "r1",
+    governmentType: "federation",
     produces: {},
     consumes: { food: 4 },
     traits: [],

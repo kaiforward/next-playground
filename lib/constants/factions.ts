@@ -92,6 +92,27 @@ export const FACTION_ROSTER: readonly MajorFactionDefinition[] = [
   },
 ] as const;
 
+// ── Minor faction procedural naming ──────────────────────────────
+
+/**
+ * Word pool for procedural minor faction naming. Combined as "Adjective Noun"
+ * by world-gen, with rejection on duplicates. Pool size (30×20 = 600) is far
+ * larger than `MINOR_FACTION_COUNT` so collisions are rare.
+ */
+export const MINOR_ADJECTIVES: readonly string[] = [
+  "Onyx", "Coral", "Veiled", "Iron", "Drift", "Tidal", "Ember", "Hollow",
+  "Glass", "Auric", "Vermilion", "Sable", "Argent", "Crimson", "Cobalt",
+  "Brass", "Ashen", "Spire", "Cinder", "Quartz", "Obsidian", "Vermeil",
+  "Lattice", "Solstice", "Equinox", "Nightward", "Sunward", "Hollowmoon",
+  "Pale", "Stormwarden",
+] as const;
+
+export const MINOR_NOUNS: readonly string[] = [
+  "Concord", "Reach", "Syndicate", "Vanguard", "Order", "Conclave", "Pact",
+  "Choir", "Council", "League", "Brotherhood", "Watch", "Accord", "Circle",
+  "Cartel", "Echelon", "Compact", "Junta", "Bloc", "Covenant",
+] as const;
+
 // ── Minor faction archetypes ─────────────────────────────────────
 
 export type MinorFactionArchetype = "buffer" | "frontier" | "enclave" | "cluster";
@@ -111,3 +132,10 @@ export const MINOR_ARCHETYPE_DISTRIBUTION: readonly {
   { archetype: "enclave", proportion: 0.2 },
   { archetype: "cluster", proportion: 0 },
 ] as const;
+
+/**
+ * Per faction-system.md §7.1: minors start at 5–30 systems each. World-gen
+ * post-processes flood-fill ownership to bring any minor below this floor up
+ * to it by flipping its closest systems away from neighboring majors.
+ */
+export const MIN_MINOR_TERRITORY = 5;

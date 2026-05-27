@@ -3,17 +3,21 @@
  * Deterministic given a seed value via mulberry32 PRNG.
  */
 
-import type { EconomyType, GovernmentType } from "@/lib/types/game";
-import { toGovernmentType } from "@/lib/types/guards";
+import type { EconomyType } from "@/lib/types/game";
 import type { GeneratedTrait } from "./trait-gen";
 import { generateSystemTraits, deriveEconomyType } from "./trait-gen";
+import {
+  generateFactions,
+  assignSystemFactions,
+  type GeneratedFaction,
+} from "./faction-gen";
+import { MIN_MINOR_TERRITORY } from "@/lib/constants/factions";
 
 // ── Output types ────────────────────────────────────────────────
 
 export interface GeneratedRegion {
   index: number;
   name: string;
-  governmentType: GovernmentType;
   x: number;
   y: number;
 }
@@ -41,6 +45,9 @@ export interface GeneratedUniverse {
   regions: GeneratedRegion[];
   systems: GeneratedSystem[];
   connections: GeneratedConnection[];
+  factions: GeneratedFaction[];
+  /** factionIndex per system (parallel to `systems` by system.index). */
+  systemFactionAssignments: number[];
   startingSystemIndex: number;
 }
 
@@ -60,6 +67,8 @@ export interface GenParams {
   gatewaysPerBorder: number;
   intraRegionBaseFuel: number;
   maxPlacementAttempts: number;
+  /** Procedurally generated minors layered on top of the 8 majors. */
+  minorFactionCount: number;
 }
 
 // ── PRNG (mulberry32) ───────────────────────────────────────────
@@ -175,14 +184,7 @@ export function generateRegions(
       }
       usedNames.add(name);
 
-      // Uniform government: 25% each
-      const governmentType = toGovernmentType(weightedPick(rng, {
-        federation: 1,
-        corporate: 1,
-        authoritarian: 1,
-        frontier: 1,
-      }));
-      regions.push({ index: i, name, governmentType, x, y });
+      regions.push({ index: i, name, x, y });
       placed = true;
       break;
     }
@@ -202,43 +204,8 @@ export function generateRegions(
       }
       usedNames.add(name);
 
-      const governmentType = toGovernmentType(weightedPick(rng, {
-        federation: 1,
-        corporate: 1,
-        authoritarian: 1,
-        frontier: 1,
-      }));
-      regions.push({ index: i, name, governmentType, x, y });
+      regions.push({ index: i, name, x, y });
     }
-  }
-
-  // Government coverage guarantee. The GovernmentType union has 8 entries (Layer 2
-  // expanded it for the faction system), but this region-owned assignment is being
-  // deleted in Phase 2 once factions own territory. Until then we hold it at the
-  // original 4 so seeded RNG stays stable and existing regions don't suddenly
-  // re-flavor as cooperative/technocratic/militarist/theocratic. The new 4 enter
-  // the world through FACTION_ROSTER in Phase 2.
-  const allGovTypes: readonly GovernmentType[] = ["federation", "corporate", "authoritarian", "frontier"];
-  const present = new Set(regions.map((r) => r.governmentType));
-  const missing = allGovTypes.filter((g) => !present.has(g));
-
-  for (const missingGov of missing) {
-    // Count how many regions have each government type
-    const govCounts = new Map<string, number>();
-    for (const r of regions) {
-      govCounts.set(r.governmentType, (govCounts.get(r.governmentType) ?? 0) + 1);
-    }
-
-    // Only consider regions whose government type is duplicated (count > 1)
-    const candidates = regions.filter(
-      (r) => (govCounts.get(r.governmentType) ?? 0) > 1,
-    );
-
-    if (candidates.length === 0) continue; // safety: can't swap without duplicates
-
-    // Pick a random candidate to swap
-    const swapIdx = Math.floor(rng() * candidates.length);
-    candidates[swapIdx].governmentType = missingGov;
   }
 
   return regions;
@@ -650,32 +617,44 @@ export function generateConnections(
 
 // ── Starting system selection ───────────────────────────────────
 
+/**
+ * Choose the system new players spawn at. Filters for Federation-major
+ * territory so players begin under stable, regulated rule — `factionAssignments`
+ * tells us which systems belong to whom, and `factions` carries each major's
+ * governmentType.
+ */
 export function selectStartingSystem(
   systems: GeneratedSystem[],
-  regions: GeneratedRegion[],
+  factions: GeneratedFaction[],
+  factionAssignments: number[],
   mapSize: number,
 ): number {
-  // Find region closest to map center
   const center = mapSize / 2;
-  let centralRegion = regions[0];
-  let bestRegionDist = distance(centralRegion.x, centralRegion.y, center, center);
-  for (const r of regions) {
-    const d = distance(r.x, r.y, center, center);
-    if (d < bestRegionDist) {
-      centralRegion = r;
-      bestRegionDist = d;
-    }
-  }
 
-  // Within the central region, prefer core economy systems closest to region center
-  const regionSystems = systems.filter((s) => s.regionIndex === centralRegion.index);
-  const coreSystems = regionSystems.filter((s) => s.economyType === "core");
-  const candidates = coreSystems.length > 0 ? coreSystems : regionSystems;
+  // Federation-government majors. With the FACTION_ROSTER fixed at one major per
+  // government type there's exactly one; defensive `.filter()` still covers the
+  // case where the roster grows or shifts in the future.
+  const federationMajors = factions.filter(
+    (f) => f.isMajor && f.governmentType === "federation",
+  );
+  const acceptedFactionIndices = new Set(federationMajors.map((f) => f.index));
 
-  let best = candidates[0];
-  let bestDist = distance(best.x, best.y, centralRegion.x, centralRegion.y);
-  for (const sys of candidates) {
-    const d = distance(sys.x, sys.y, centralRegion.x, centralRegion.y);
+  const candidates = systems.filter((s) =>
+    acceptedFactionIndices.has(factionAssignments[s.index]),
+  );
+
+  // No federation territory yet — defensive fallback uses every system so seed
+  // never hard-fails. Wouldn't trigger under FACTION_ROSTER as currently shaped.
+  const pool = candidates.length > 0 ? candidates : systems;
+
+  // Among those, prefer core economies closest to map center.
+  const coreSystems = pool.filter((s) => s.economyType === "core");
+  const finalPool = coreSystems.length > 0 ? coreSystems : pool;
+
+  let best = finalPool[0];
+  let bestDist = distance(best.x, best.y, center, center);
+  for (const sys of finalPool) {
+    const d = distance(sys.x, sys.y, center, center);
     if (d < bestDist) {
       best = sys;
       bestDist = d;
@@ -696,7 +675,32 @@ export function generateUniverse(
   const rawSystems = generateSystems(rng, regions, params);
   const { connections, systems } = generateConnections(rng, rawSystems, regions, params);
 
-  const startingSystemIndex = selectStartingSystem(systems, regions, params.mapSize);
+  const factions = generateFactions(rng, regions, systems, {
+    minorFactionCount: params.minorFactionCount,
+    mapSize: params.mapSize,
+    minMinorTerritory: MIN_MINOR_TERRITORY,
+  });
 
-  return { regions, systems, connections, startingSystemIndex };
+  const systemFactionAssignments = assignSystemFactions(
+    systems,
+    connections,
+    factions,
+    { minMinorTerritory: MIN_MINOR_TERRITORY },
+  );
+
+  const startingSystemIndex = selectStartingSystem(
+    systems,
+    factions,
+    systemFactionAssignments,
+    params.mapSize,
+  );
+
+  return {
+    regions,
+    systems,
+    connections,
+    factions,
+    systemFactionAssignments,
+    startingSystemIndex,
+  };
 }

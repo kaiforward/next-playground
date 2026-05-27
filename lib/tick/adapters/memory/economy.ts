@@ -52,7 +52,6 @@ export class InMemoryEconomyWorld implements EconomyWorld {
       sorted.map((r) => ({
         id: r.id,
         name: r.name,
-        governmentType: r.governmentType,
       })),
     );
   }
@@ -71,6 +70,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         supply: m.supply,
         demand: m.demand,
         economyType: sys.economyType,
+        governmentType: sys.governmentType,
         produces: Object.keys(sys.produces),
         consumes: Object.keys(sys.consumes),
         baseProductionRate: sys.produces[m.goodId],

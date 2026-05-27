@@ -33,7 +33,7 @@ export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
         destination: {
           select: {
             name: true,
-            region: { select: { governmentType: true } },
+            faction: { select: { governmentType: true } },
             traits: { select: { traitId: true, quality: true } },
           },
         },
@@ -61,8 +61,8 @@ export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
       destination: s.destination
         ? {
             name: s.destination.name,
-            governmentType: s.destination.region?.governmentType
-              ? toGovernmentType(s.destination.region.governmentType)
+            governmentType: s.destination.faction?.governmentType
+              ? toGovernmentType(s.destination.faction.governmentType)
               : null,
             traits: s.destination.traits.map((t) => ({
               traitId: toTraitId(t.traitId),

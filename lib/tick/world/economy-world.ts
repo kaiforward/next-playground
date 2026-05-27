@@ -16,11 +16,13 @@ import type {
   ProsperityParams,
 } from "@/lib/engine/tick";
 
-/** Region row needed for round-robin selection + government lookup. */
+/**
+ * Region row needed for round-robin selection. Government no longer lives on
+ * the region (factions own it per-system after Layer 2); see `MarketView.governmentType`.
+ */
 export interface RegionView {
   id: string;
   name: string;
-  governmentType: GovernmentType;
 }
 
 /**
@@ -37,6 +39,8 @@ export interface MarketView {
   supply: number;
   demand: number;
   economyType: EconomyType;
+  /** Government of the system's owning faction — read per-market post-cutover. */
+  governmentType: GovernmentType;
   /** Good IDs this economy type produces. */
   produces: string[];
   /** Good IDs this economy type consumes. */

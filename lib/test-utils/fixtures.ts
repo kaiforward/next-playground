@@ -6,12 +6,14 @@
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
+import type { Doctrine, GovernmentType } from "@/lib/types/game";
 
 // ── Types ────────────────────────────────────────────────────────
 
 export interface TestUniverse {
   worldId: string;
   regions: { federation: string; corporate: string };
+  factions: { federation: string; corporate: string };
   systems: { agricultural: string; industrial: string; tech: string };
   stations: { agricultural: string; industrial: string; tech: string };
   goodIds: Record<string, string>;
@@ -105,11 +107,11 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     data: { id: "world", currentTick: 10, tickRate: 5000 },
   });
 
-  // Regions
+  // Regions — government no longer lives on the region after Layer 2; each test
+  // system gets its government via its owning faction below.
   const fedRegion = await prisma.region.create({
     data: {
       name: `${prefix}-Federation Space`,
-      governmentType: "federation",
       dominantEconomy: "agricultural",
       x: 0,
       y: 0,
@@ -119,14 +121,14 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
   const corpRegion = await prisma.region.create({
     data: {
       name: `${prefix}-Corporate Zone`,
-      governmentType: "corporate",
       dominantEconomy: "industrial",
       x: 100,
       y: 0,
     },
   });
 
-  // Systems (one per economy type we commonly test)
+  // Systems first (faction homeworld FK requires them to exist), then factions,
+  // then bind systems to their owning faction.
   const agriSystem = await prisma.starSystem.create({
     data: {
       name: `${prefix}-Harvest Prime`,
@@ -155,6 +157,33 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: corpRegion.id,
     },
+  });
+
+  // Two factions, one per region — Federation owns agri, Corporate owns ind+tech.
+  const fedFaction = await createTestFaction(prisma, {
+    name: `${prefix}-Federation`,
+    governmentType: "federation",
+    doctrine: "protectionist",
+    homeworldId: agriSystem.id,
+    color: "#3a82c8",
+  });
+  const corpFaction = await createTestFaction(prisma, {
+    name: `${prefix}-Corporate`,
+    governmentType: "corporate",
+    doctrine: "mercantile",
+    homeworldId: indSystem.id,
+    color: "#d4a534",
+  });
+
+  // Two updateMany calls (one per owning faction) instead of three single-row
+  // updates — symmetric with the live seed's bulk faction-binding pattern.
+  await prisma.starSystem.updateMany({
+    where: { id: agriSystem.id },
+    data: { factionId: fedFaction },
+  });
+  await prisma.starSystem.updateMany({
+    where: { id: { in: [indSystem.id, techSystem.id] } },
+    data: { factionId: corpFaction },
   });
 
   // Bidirectional connections: agri ↔ ind ↔ tech
@@ -243,6 +272,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
   return {
     worldId: world.id,
     regions: { federation: fedRegion.id, corporate: corpRegion.id },
+    factions: { federation: fedFaction, corporate: corpFaction },
     systems: {
       agricultural: agriSystem.id,
       industrial: indSystem.id,
@@ -255,6 +285,36 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     },
     goodIds,
   };
+}
+
+// ── Faction helper ───────────────────────────────────────────────
+
+export interface TestFactionOpts {
+  name: string;
+  homeworldId: string;
+  governmentType?: GovernmentType;
+  doctrine?: Doctrine;
+  color?: string;
+  description?: string;
+  createdAtTick?: number;
+}
+
+export async function createTestFaction(
+  prisma: PrismaClient,
+  opts: TestFactionOpts,
+): Promise<string> {
+  const faction = await prisma.faction.create({
+    data: {
+      name: opts.name,
+      description: opts.description ?? "",
+      governmentType: opts.governmentType ?? "federation",
+      doctrine: opts.doctrine ?? "protectionist",
+      homeworldId: opts.homeworldId,
+      color: opts.color ?? "#888888",
+      createdAtTick: opts.createdAtTick ?? 0,
+    },
+  });
+  return faction.id;
 }
 
 // ── Entity builders ──────────────────────────────────────────────

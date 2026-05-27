@@ -1,14 +1,25 @@
 import type { UniverseData } from "@/lib/types/game";
 
+const MOCK_FACTION_ID = "mock-faction";
+
 export const MOCK_UNIVERSE: UniverseData = {
   regions: [
     {
       id: "mock-region",
       name: "Mock Region",
       dominantEconomy: "core" as const,
-      governmentType: "federation" as const,
+      dominantFactionId: MOCK_FACTION_ID,
+      dominantGovernmentType: "federation" as const,
       x: 400,
       y: 300,
+    },
+  ],
+  factions: [
+    {
+      id: MOCK_FACTION_ID,
+      name: "Mock Sovereignty",
+      color: "#3a82c8",
+      governmentType: "federation",
     },
   ],
   systems: [
@@ -21,6 +32,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       description:
         "Humanity's birthplace. A bustling hub of commerce and culture.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: false,
     },
     {
@@ -32,6 +44,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       description:
         "A cutting-edge research colony pushing the boundaries of science.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: false,
     },
     {
@@ -43,6 +56,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       description:
         "Rich asteroid belts provide an endless supply of raw ore.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: false,
     },
     {
@@ -54,6 +68,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       description:
         "Lush terraformed worlds produce food for the sector.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: false,
     },
     {
@@ -65,6 +80,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       description:
         "Massive orbital factories churn out fuel and ship components.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: true,
     },
     {
@@ -75,6 +91,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       y: 350,
       description: "A remote but mineral-rich frontier outpost.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: false,
     },
     {
@@ -86,6 +103,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       description:
         "A wealthy trade nexus connecting the outer colonies.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: false,
     },
     {
@@ -97,6 +115,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       description:
         "Quiet farming communities among gentle rolling hills.",
       regionId: "mock-region",
+      factionId: MOCK_FACTION_ID,
       isGateway: false,
     },
   ],

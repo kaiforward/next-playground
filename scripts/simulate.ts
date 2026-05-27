@@ -90,7 +90,7 @@ function formatTable(results: SimResults): string {
     for (const r of regionOverview) {
       const row = [
         pad(r.name, roWidths[0]),
-        pad(r.governmentType, roWidths[1]),
+        pad(r.dominantGovernmentType, roWidths[1]),
         rpad(String(r.systemCount), roWidths[2]),
       ];
       lines.push(row.join(" | "));

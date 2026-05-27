@@ -11,17 +11,17 @@ import type { ModifierRow } from "@/lib/engine/events";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { PlayerEventMap } from "@/lib/tick/types";
 
-/** Region row for round-robin and government lookup. */
+/** Region row used purely for round-robin selection — government is per-system now. */
 export interface RegionView {
   id: string;
   name: string;
-  governmentType: GovernmentType;
 }
 
-/** System + traits for danger + candidate generation. */
+/** System + traits + government (from owning faction) for danger + candidate generation. */
 export interface SystemTraitView {
   id: string;
   name: string;
+  governmentType: GovernmentType;
   traits: GeneratedTrait[];
 }
 

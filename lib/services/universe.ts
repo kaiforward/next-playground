@@ -1,25 +1,28 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
-import type { UniverseData } from "@/lib/types/game";
+import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData } from "@/lib/types/api";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier, isShipTypeId } from "@/lib/types/guards";
 import { TRAITS } from "@/lib/constants/traits";
 import { computeVisibilitySet } from "@/lib/engine/visibility";
 import { getAdjacencyList } from "./adjacency";
 import { SHIP_TYPES } from "@/lib/constants/ships";
+import { deriveRegionDominantFaction } from "@/lib/utils/region";
 import type { ShipPosition } from "@/lib/engine/visibility";
 
 /**
  * Get all regions, star systems, and connections.
+ *
+ * Region government is derived from each region's dominant owning faction
+ * (post-Layer-2 cutover) rather than stored directly on the region.
  */
 export async function getUniverse(): Promise<UniverseData> {
-  const [regions, systems, connections] = await Promise.all([
+  const [regions, systems, connections, factions] = await Promise.all([
     prisma.region.findMany({
       select: {
         id: true,
         name: true,
         dominantEconomy: true,
-        governmentType: true,
         x: true,
         y: true,
       },
@@ -34,6 +37,7 @@ export async function getUniverse(): Promise<UniverseData> {
         description: true,
         regionId: true,
         isGateway: true,
+        factionId: true,
         traits: { select: { traitId: true, quality: true } },
       },
     }),
@@ -45,17 +49,47 @@ export async function getUniverse(): Promise<UniverseData> {
         fuelCost: true,
       },
     }),
+    prisma.faction.findMany({
+      select: { id: true, name: true, color: true, governmentType: true },
+    }),
   ]);
 
-  return {
-    regions: regions.map((r) => ({
+  const factionGovById = new Map<string, GovernmentType>(
+    factions.map((f) => [f.id, toGovernmentType(f.governmentType)]),
+  );
+  const factionNameById = new Map<string, string>(
+    factions.map((f) => [f.id, f.name]),
+  );
+
+  const systemFactionsByRegion = new Map<string, string[]>();
+  for (const s of systems) {
+    if (!s.factionId) continue;
+    const list = systemFactionsByRegion.get(s.regionId) ?? [];
+    list.push(s.factionId);
+    systemFactionsByRegion.set(s.regionId, list);
+  }
+
+  const regionInfos: RegionInfo[] = regions.map((r) => {
+    const dominantFactionId = deriveRegionDominantFaction(
+      systemFactionsByRegion.get(r.id) ?? [],
+      factionNameById,
+    );
+    const dominantGov: GovernmentType = dominantFactionId
+      ? factionGovById.get(dominantFactionId) ?? "frontier"
+      : "frontier";
+    return {
       id: r.id,
       name: r.name,
       dominantEconomy: toEconomyType(r.dominantEconomy),
-      governmentType: toGovernmentType(r.governmentType),
+      dominantFactionId,
+      dominantGovernmentType: dominantGov,
       x: r.x,
       y: r.y,
-    })),
+    };
+  });
+
+  return {
+    regions: regionInfos,
     systems: systems.map((s) => ({
       id: s.id,
       name: s.name,
@@ -64,6 +98,7 @@ export async function getUniverse(): Promise<UniverseData> {
       y: s.y,
       description: s.description,
       regionId: s.regionId,
+      factionId: s.factionId,
       isGateway: s.isGateway,
       traits: s.traits.map((t) => ({
         traitId: toTraitId(t.traitId),
@@ -75,6 +110,12 @@ export async function getUniverse(): Promise<UniverseData> {
       fromSystemId: c.fromSystemId,
       toSystemId: c.toSystemId,
       fuelCost: c.fuelCost,
+    })),
+    factions: factions.map((f) => ({
+      id: f.id,
+      name: f.name,
+      color: f.color,
+      governmentType: toGovernmentType(f.governmentType),
     })),
   };
 }
@@ -94,6 +135,7 @@ export async function getSystemDetail(
       include: {
         station: { select: { id: true, name: true } },
         traits: { select: { traitId: true, quality: true } },
+        faction: { select: { id: true } },
       },
     }),
     prisma.ship.findMany({
@@ -137,6 +179,7 @@ export async function getSystemDetail(
     y: system.y,
     description: system.description,
     regionId: system.regionId,
+    factionId: system.factionId,
     isGateway: system.isGateway,
     visibility: "visible",
     station: system.station

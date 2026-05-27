@@ -146,11 +146,8 @@ export function getRiskMultiplier(
 ): number {
   const goodDef = GOODS[goodId];
   const targetSystem = world.systems.find((s) => s.id === targetSystemId);
-  const targetRegion = targetSystem
-    ? world.regions.find((r) => r.id === targetSystem.regionId)
-    : undefined;
-  const govDef = targetRegion
-    ? GOVERNMENT_TYPES[targetRegion.governmentType]
+  const govDef = targetSystem
+    ? GOVERNMENT_TYPES[targetSystem.governmentType]
     : undefined;
 
   const danger = dangerLevel ?? 0;

@@ -120,7 +120,14 @@ export interface RegionInfo {
   id: string;
   name: string;
   dominantEconomy: EconomyType;
-  governmentType: GovernmentType;
+  /**
+   * Most-represented faction across the region's systems, or null when no
+   * systems carry a factionId (defensive — post-Layer-2 reseed every system has one).
+   * Ties broken alphabetically by faction name.
+   */
+  dominantFactionId: string | null;
+  /** Government of the dominant faction; mirrors the legacy per-region field for downstream consumers. */
+  dominantGovernmentType: GovernmentType;
   x: number;
   y: number;
 }
@@ -252,8 +259,18 @@ export interface StarSystemInfo {
   y: number;
   description: string;
   regionId: string;
+  /** Owning faction (null only during the transient mid-cutover state). */
+  factionId: string | null;
   isGateway: boolean;
   traits?: SystemTraitInfo[];
+}
+
+/** Lightweight faction shape returned alongside universe data for client lookup. */
+export interface FactionInfo {
+  id: string;
+  name: string;
+  color: string;
+  governmentType: GovernmentType;
 }
 
 export interface SystemConnectionInfo {
@@ -300,6 +317,7 @@ export interface UniverseData {
   regions: RegionInfo[];
   systems: StarSystemInfo[];
   connections: SystemConnectionInfo[];
+  factions: FactionInfo[];
 }
 
 // ── Atlas (lightweight map data) ──────────────────────────────────
