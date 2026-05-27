@@ -7,9 +7,10 @@ import {
   pixiHexToCss,
 } from "@/lib/constants/good-colors";
 import type { GoodTier } from "@/lib/types/game";
+import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 
-const toggleVariants = tv({
+const rowVariants = tv({
   base: [
     "group flex items-center justify-between gap-3 w-full",
     "px-3 py-1.5 text-xs font-medium uppercase tracking-wider",
@@ -35,6 +36,12 @@ const dotVariants = tv({
   },
 });
 
+const MODE_LABELS: Record<MapMode, string> = {
+  political: "Political",
+  regions: "Regions",
+  none: "None",
+};
+
 interface OverlayDef {
   key: MapOverlayKey;
   label: string;
@@ -42,30 +49,34 @@ interface OverlayDef {
 
 /**
  * Order matters — this is also the rendered order in the cluster. Keep the
- * most-used overlay at the top so it stays the first click as the cluster
- * grows past a single toggle.
+ * most-used overlay at the top.
  */
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
   { key: "tradeFlow", label: "Trade Flows" },
-  { key: "politicalTerritory", label: "Political Map" },
 ];
 
 interface MapOverlayControlsProps {
+  mode: MapMode;
+  setMode: (mode: MapMode) => void;
   overlays: MapOverlays;
   toggle: (key: MapOverlayKey) => void;
 }
 
 /**
- * Floating cluster of overlay-toggle buttons, anchored bottom-left of the
- * map canvas (just to the right of the game sidebar). PR 2 ships the Trade
- * Flows toggle; future overlays (danger heatmap, faction control, scan
- * ranges) drop into `OVERLAY_DEFS` without touching the surrounding markup.
+ * Floating cluster anchored bottom-left of the map canvas. Two axes:
  *
- * Foundry theme: sharp corners, surface background. The cluster intentionally
- * has NO copper left stripe — each active toggle has its own copper accent,
- * and a container stripe would double up visually on the active row.
+ *   1. **Map Mode** (single-select) — paints the territory polygons. One tint
+ *      at a time. `none` hides both territory layers.
+ *   2. **Overlays** (multi-select) — additive layers on top of the polygons,
+ *      stackable freely.
+ *
+ * Foundry theme: sharp corners, surface background, copper left-accent stripe
+ * on the active row. The cluster intentionally has NO container-level stripe
+ * — the active row carries the accent.
  */
 export function MapOverlayControls({
+  mode,
+  setMode,
   overlays,
   toggle,
 }: MapOverlayControlsProps) {
@@ -73,10 +84,18 @@ export function MapOverlayControls({
     <div className="absolute bottom-4 left-4 z-20 w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
       <div className="px-3 py-2 border-b border-border">
         <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
-          Overlays
+          Map
         </h3>
       </div>
-      <ul>
+
+      <ModeSection mode={mode} setMode={setMode} />
+
+      <div className="border-t border-border px-3 pt-2 pb-1">
+        <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+          Overlays
+        </h4>
+      </div>
+      <ul role="group" aria-label="Map overlays">
         {OVERLAY_DEFS.map(({ key, label }) => {
           const active = overlays[key];
           return (
@@ -85,7 +104,7 @@ export function MapOverlayControls({
                 type="button"
                 onClick={() => toggle(key)}
                 aria-pressed={active}
-                className={toggleVariants({ active })}
+                className={rowVariants({ active })}
               >
                 <span>{label}</span>
                 <span className={dotVariants({ active })} aria-hidden />
@@ -96,6 +115,45 @@ export function MapOverlayControls({
       </ul>
       {overlays.tradeFlow && <TradeFlowLegend />}
     </div>
+  );
+}
+
+function ModeSection({
+  mode,
+  setMode,
+}: {
+  mode: MapMode;
+  setMode: (mode: MapMode) => void;
+}) {
+  return (
+    <>
+      <div className="px-3 pt-2 pb-1">
+        <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+          Mode
+        </h4>
+      </div>
+      <ul role="radiogroup" aria-label="Map mode">
+        {MAP_MODES.map((m) => {
+          const active = m === mode;
+          return (
+            <li key={m}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => {
+                  if (!active) setMode(m);
+                }}
+                className={rowVariants({ active })}
+              >
+                <span>{MODE_LABELS[m]}</span>
+                <span className={dotVariants({ active })} aria-hidden />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
 
