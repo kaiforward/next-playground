@@ -34,25 +34,36 @@ describe("getMarket (integration)", () => {
     expect(Number.isInteger(food!.demand)).toBe(true);
   });
 
-  it("price calculation uses raw float ratio (unchanged from rounded supply/demand)", async () => {
+  it("price calculation uses raw float ratio, not the floored display values", async () => {
     const stationId = universe.stations.agricultural;
     const goodId = universe.goodIds["food"];
 
+    // Set fractional values where flooring the supply changes the ratio enough
+    // to produce a different price.
+    // Raw ratio:    demand/supply = 10.0 / 10.9 ≈ 0.9174  → price = round(30 * 0.9174) = 28
+    // Floored ratio (the bug): 10 / 10 = 1.0              → price = round(30 * 1.0)    = 30
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId, goodId } },
-      data: { supply: 50.0, demand: 50.0 },
+      data: { supply: 10.9, demand: 10.0 },
     });
-    const a = await getMarket(universe.systems.agricultural);
+    const fractional = await getMarket(universe.systems.agricultural);
 
+    // Control: already-integer supply — same floored display value (10), but ratio is exactly 1.0.
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId, goodId } },
-      data: { supply: 50.4, demand: 50.4 },
+      data: { supply: 10.0, demand: 10.0 },
     });
-    const b = await getMarket(universe.systems.agricultural);
+    const integer = await getMarket(universe.systems.agricultural);
 
-    const priceA = a.entries.find((e) => e.goodId === goodId)!.currentPrice;
-    const priceB = b.entries.find((e) => e.goodId === goodId)!.currentPrice;
+    const food = (entries: typeof fractional.entries) =>
+      entries.find((e) => e.goodId === goodId)!;
 
-    expect(priceA).toBe(priceB);
+    // If calculatePrice received floored values, both prices would be equal (30).
+    // Because it receives the raw float, they differ (28 vs 30).
+    expect(food(fractional.entries).currentPrice).not.toBe(food(integer.entries).currentPrice);
+
+    // Display values are floored to the same integer in both cases.
+    expect(food(fractional.entries).supply).toBe(10);
+    expect(food(integer.entries).supply).toBe(10);
   });
 });

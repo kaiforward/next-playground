@@ -32,6 +32,8 @@ export async function getMarket(
     goodId: m.good.id,
     goodName: m.good.name,
     basePrice: m.good.basePrice,
+    // Price uses the raw float ratio (smoother signal); supply/demand are floored
+    // for display so the player never sees fractional goods.
     currentPrice: calculatePrice(m.good.basePrice, m.supply, m.demand, m.good.priceFloor, m.good.priceCeiling),
     supply: Math.floor(m.supply),
     demand: Math.floor(m.demand),
