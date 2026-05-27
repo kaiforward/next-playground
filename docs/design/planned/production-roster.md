@@ -541,6 +541,6 @@ All remaining open questions are tuning numbers that require simulation testing.
 - **[Player Facilities](./player-facilities.md)** — universal build system (construction, upgrades, costs, limits, asset risk)
 - **[Economy](../active/economy.md)** — market simulation, NPC production/consumption rates
 - **[System Traits (active)](../active/system-traits.md)** — system traits, economy types, trait quality tiers
-- **[Faction System](./faction-system.md)** — war material demand, reputation
+- **[Faction System](../active/faction-system.md)** — war material demand, reputation
 - **[War System](./war-system.md)** — military asset consumption, front-line demand
 - **[Player Progression](./player-progression.md)** — production as mid/late game content

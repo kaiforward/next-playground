@@ -5,7 +5,7 @@
  * with archetype-respecting placement. Then flood-fills system ownership from
  * each faction's homeworld via jump-lane hops.
  *
- * See docs/design/planned/faction-system.md §6 + §7.1 for the design intent.
+ * See docs/design/active/faction-system.md §6 + §7.1 for the design intent.
  */
 
 import type { Doctrine, EconomyType, GovernmentType } from "@/lib/types/game";

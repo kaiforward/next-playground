@@ -4,7 +4,7 @@ Production facilities and the mechanics of player-driven goods production. Cover
 
 **Design principle**: Production facilities use the universal build system from [Player Facilities](./player-facilities.md) — construction, upgrades, operating costs, limits, and asset risk are inherited. This document only defines what makes production facilities unique: what they produce and how that production interacts with the game world.
 
-**Depends on**: [Player Facilities](./player-facilities.md) (build system), [Economy](../active/economy.md) (market integration), [System Traits](../active/system-traits.md) (traits, economy types, population), [Faction System](./faction-system.md) (war material demand)
+**Depends on**: [Player Facilities](./player-facilities.md) (build system), [Economy](../active/economy.md) (market integration), [System Traits](../active/system-traits.md) (traits, economy types, population), [Faction System](../active/faction-system.md) (war material demand)
 
 ---
 
@@ -313,7 +313,7 @@ See also [Production Roster §10](./production-roster.md) for per-good tuning (p
 - **[System Traits (active)](../active/system-traits.md)** — system traits, economy types, trait quality tiers
 - **[Facilities](./facilities.md)** — faction facilities (separate from player facilities)
 - **[Simulation Enhancements](../archive/simulation-enhancements.md)** — supply chain dependencies, NPC trade pressure (archived — supply chain mechanics now covered in this doc)
-- **[Faction System](./faction-system.md)** — war material demand, faction economy effects, reputation
+- **[Faction System](../active/faction-system.md)** — war material demand, faction economy effects, reputation
 - **[War System](./war-system.md)** — war material consumption, front-line demand spikes
 - **[Player Progression](./player-progression.md)** — production facilities as mid/late game content, ship automation
 - **[Navigation](../active/navigation.md)** — transport of goods between systems

@@ -4,7 +4,7 @@ Wars and territorial conflict between factions. This covers two distinct layers:
 
 **Replaces**: The random War event in the current event catalog (`lib/constants/events.ts`) will be removed when this system is implemented. Border conflicts absorb its role as the source of war-themed economy/danger modifiers.
 
-**Depends on**: [Faction System](./faction-system.md) (relations, alliances, doctrine), [Navigation Changes](./navigation-changes.md) (war zone danger values), [Ship Roster](../active/ship-roster.md) (combat stats for battle resolution)
+**Depends on**: [Faction System](../active/faction-system.md) (relations, alliances, doctrine), [Navigation Changes](./navigation-changes.md) (war zone danger values), [Ship Roster](../active/ship-roster.md) (combat stats for battle resolution)
 
 ---
 
@@ -422,7 +422,7 @@ Scan all faction pairs for threshold crossings:
 - **Relations cross -25 (unfriendly)**: Spawn border conflict events via the event system. These are standard events with economy/danger modifiers — the event processor handles their lifecycle, not the war processor
 - **Relations cross -75 (hostile)**: Mark the pair as war-eligible. No immediate action — the declaration roll handles timing
 
-Relations themselves are updated by a separate faction relations processor (see [faction-system.md §2](./faction-system.md)). The war processor only reads the current value and reacts to thresholds.
+Relations themselves are updated by a separate faction relations processor (see [faction-system.md §2](../active/faction-system.md)). The war processor only reads the current value and reacts to thresholds.
 
 ### Step 2: Declaration Roll
 
@@ -625,7 +625,7 @@ The economy table above is the concrete implementation of the asymmetry describe
 
 ## 11. Alliance Behavior in War
 
-How allied factions participate when their ally is attacked. Alliance **formation** (pacts, relation thresholds, conditions) is defined in [faction-system.md](./faction-system.md). This section covers wartime behavior only.
+How allied factions participate when their ally is attacked. Alliance **formation** (pacts, relation thresholds, conditions) is defined in [faction-system.md](../active/faction-system.md). This section covers wartime behavior only.
 
 ### Joining a Defensive War
 
@@ -666,7 +666,7 @@ Co-defenders accumulate exhaustion at a **reduced rate (~0.5×)** — it's not t
 
 ## Related Design Docs
 
-- **[Faction System](./faction-system.md)** — faction model, inter-faction relations, player reputation, homeworlds, roster
+- **[Faction System](../active/faction-system.md)** — faction model, inter-faction relations, player reputation, homeworlds, roster
 - **[Navigation Changes](./navigation-changes.md)** — war zone danger values (§6), convoy escort mechanics in contested space
 - **[Missions](./missions.md)** — war logistics, intelligence, sabotage as mission types
 - **[Ship Roster](../active/ship-roster.md)** — combat ship stats that feed into battle resolution (future interaction)

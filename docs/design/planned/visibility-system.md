@@ -4,7 +4,7 @@ How players discover and lose information about the universe. The fog of war lay
 
 **Status**: Designed — ready for phased implementation.
 
-**Depends on**: [Scalable Data Loading](./scalable-data-loading.md) (tile architecture), [Faction System](./faction-system.md) (allied faction visibility, phase 2+), [Navigation](../active/navigation.md) (ship positions and roles for sensor range)
+**Depends on**: [Scalable Data Loading](./scalable-data-loading.md) (tile architecture), [Faction System](../active/faction-system.md) (allied faction visibility, phase 2+), [Navigation](../active/navigation.md) (ship positions and roles for sensor range)
 
 **Inspired by**: X4: Foundations (hardware-invested visibility with price staleness), Stellaris (multi-source intel with progressive reveal), EVE Online (presence-based binary visibility, no server-side snapshots)
 
@@ -231,6 +231,6 @@ See **[Map Scaling Roadmap](./map-scaling-roadmap.md)** for the unified phase se
 ## Related Design Docs
 
 - **[Scalable Data Loading](./scalable-data-loading.md)** — tile architecture that this system gates
-- **[Faction System](./faction-system.md)** — faction reputation drives allied visibility (Phase 2)
+- **[Faction System](../active/faction-system.md)** — faction reputation drives allied visibility (Phase 2)
 - **[Navigation](../active/navigation.md)** — ship positions and roles determine sensor range
 - **[Multiplayer Infrastructure](./multiplayer-infrastructure.md)** — player-to-player intel trading (far future)

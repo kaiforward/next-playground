@@ -12,7 +12,7 @@ Layer 0 (system traits), Layer 1 (ship roster, upgrades, convoys, damage pipelin
 
 ## Source Design Docs
 
-- [faction-system.md](../planned/faction-system.md) — all sections except §4 (war summary). Authoritative for faction model, doctrines, relations, alliances, reputation, roster, minor archetypes.
+- [faction-system.md](../active/faction-system.md) — all sections except §4 (war summary). Authoritative for faction model, doctrines, relations, alliances, reputation, roster, minor archetypes.
 - [navigation-changes.md](../planned/navigation-changes.md) §6 — border-system tier-0 danger only (war-zone danger lands with War).
 - [MIGRATION-NOTES §1](../MIGRATION-NOTES.md) — government ownership migration, region `dominantEconomy` re-derivation.
 
@@ -36,7 +36,7 @@ The 5 open questions in [layer-2.md §3](./layer-2.md) are resolved as follows.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Government ownership | Per-`StarSystem` via `factionId` FK; `Region.governmentType` dropped entirely | Border regions can contain systems owned by multiple factions ([faction-system.md §7](../planned/faction-system.md)). One-government-per-region is incompatible with the cross-border archetype. |
+| Government ownership | Per-`StarSystem` via `factionId` FK; `Region.governmentType` dropped entirely | Border regions can contain systems owned by multiple factions ([faction-system.md §7](../active/faction-system.md)). One-government-per-region is incompatible with the cross-border archetype. |
 | Economy processor batching | Keep round-robin by region; resolve `governmentType` per-market inside the adapter | The processor body iterates markets within a region already. Adding `governmentType` to `MarketView` (joined from `system → faction`) lets the body apply the modifier per-market with a one-line change. No restructure of the round-robin loop. |
 | `RegionView.governmentType` | Remove from the world interface | After government moves per-system, the type field on `RegionView` is dead. Drop it cleanly rather than letting it linger. |
 | Region homogeneity | Not enforced | World-gen will tend to produce mostly-single-faction regions (factions seed around contiguous system clusters), but border regions are explicitly heterogeneous by design. No constraint. |

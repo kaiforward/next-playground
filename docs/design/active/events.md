@@ -106,4 +106,4 @@ One-time market jolts applied when a phase starts. Directly modify supply or dem
 - **Trade missions**: Event-linked missions spawn with thematic goods and 1.5x reward bonus (see [trading.md](./trading.md))
 - **Navigation**: Danger modifiers increase cargo loss on arrival (see [navigation.md](./navigation.md))
 - **Tick engine**: Events processor runs every tick, before economy processor (see [tick-engine.md](./tick-engine.md))
-- **Faction system** (planned): Faction wars will interact with event system — border conflicts and war events tied to faction relations (see [faction-system.md](../planned/faction-system.md))
+- **Faction system** (planned): Faction wars will interact with event system — border conflicts and war events tied to faction relations (see [faction-system.md](./faction-system.md))

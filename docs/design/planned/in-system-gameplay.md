@@ -6,7 +6,7 @@ The second major gameplay space alongside the universe map. When docked at a sys
 
 **Design principle**: Start simple, grow deep. The framework supports unlimited content expansion, but Phase 1 ships a focused, polished set of content — enough to demonstrate the system and give early players engaging things to do beyond trading.
 
-**Depends on**: [System Traits](../active/system-traits.md) (traits generate locations), [Player Progression](./player-progression.md) (progression gating), [Faction System](./faction-system.md) (faction missions, reputation), [Ship Roster](../active/ship-roster.md) (ship stats gate some activities)
+**Depends on**: [System Traits](../active/system-traits.md) (traits generate locations), [Player Progression](./player-progression.md) (progression gating), [Faction System](../active/faction-system.md) (faction missions, reputation), [Ship Roster](../active/ship-roster.md) (ship stats gate some activities)
 
 ---
 
@@ -294,7 +294,7 @@ Events create *temporal variety* — the same system feels different during a pl
 
 ### 7.2 Faction System
 
-- Faction reputation gates NPC interactions and mission availability (see [faction-system.md §3](./faction-system.md))
+- Faction reputation gates NPC interactions and mission availability (see [faction-system.md §3](../active/faction-system.md))
 - Faction representatives at stations offer faction-specific missions and dialogue
 - In-system missions can grant or cost faction reputation based on choices
 - Government type affects location flavor — an authoritarian station has security checkpoints and propaganda; a frontier station has graffiti and unlicensed merchants
@@ -574,7 +574,7 @@ Each phase adds content to the existing framework. No architecture changes neede
 - **[System Traits (active)](../active/system-traits.md)** — traits that generate locations, trait quality tiers
 - **[Missions](./missions.md)** — universe-level missions (separate system, complements in-system missions)
 - **[Player Progression](./player-progression.md)** — game phases, progression gating, in-system content per phase
-- **[Faction System](./faction-system.md)** — reputation gating for NPC dialogue and missions
+- **[Faction System](../active/faction-system.md)** — reputation gating for NPC dialogue and missions
 - **[Ship Roster](../active/ship-roster.md)** — ship stats that gate in-system activities
 - **[Mini-Games](./mini-games.md)** — Void's Gambit rules, future mini-games (Drift, Alignment, Cargo Roulette)
 - **[Multiplayer Infrastructure](./multiplayer-infrastructure.md)** — eventual PvP mini-games, cooperative missions

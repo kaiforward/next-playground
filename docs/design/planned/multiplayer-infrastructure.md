@@ -4,7 +4,7 @@ How players interact with each other — trading, alliances, communication, and 
 
 **Status**: Stub — needs full design discussion.
 
-**Depends on**: [Faction System](./faction-system.md) (faction reputation, war contributions), [Player Progression](./player-progression.md) (what players have to trade/share)
+**Depends on**: [Faction System](../active/faction-system.md) (faction reputation, war contributions), [Player Progression](./player-progression.md) (what players have to trade/share)
 
 ---
 
