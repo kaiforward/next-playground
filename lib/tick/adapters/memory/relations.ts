@@ -118,6 +118,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   }
 
   getFactions(): Promise<FactionView[]> {
+    const totalSystems = this.factions.reduce((sum, f) => sum + f.territory.size, 0);
     return Promise.resolve(
       this.factions.map((f) => ({
         id: f.id,
@@ -125,7 +126,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
         governmentType: f.governmentType,
         doctrine: f.doctrine,
         territorySize: f.territory.size,
-        status: deriveFactionStatus(f.territory.size),
+        status: deriveFactionStatus(f.territory.size, totalSystems),
       })),
     );
   }

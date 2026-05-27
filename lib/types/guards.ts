@@ -385,45 +385,57 @@ export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
 // ── Faction status derivation (hysteresis) ───────────────────────
 
 /**
- * Per faction-system.md §1. Hysteresis prevents flickering at boundaries:
- * a faction that grew into a tier keeps the tier until its territory drops
- * below the (smaller) lose threshold.
+ * Per faction-system.md §1. Thresholds are expressed as a fraction of the
+ * total system pool so a status tier means "controls a meaningful share of
+ * the galaxy" rather than "clears an absolute floor". At the default
+ * 600-system scale these match the prior 80/40/15/1 absolute values
+ * (0.133 × 600 = 80, etc.); at 10k they scale up automatically, so the
+ * 1200-system giant is dominant while the 90-system minor is not.
+ *
+ * Hysteresis prevents flickering at boundaries: a faction that grew into
+ * a tier keeps the tier until its share drops below the (smaller) lose
+ * threshold.
  */
 const FACTION_STATUS_TIERS = [
-  { status: "dominant" as const, gain: 80, lose: 60 },
-  { status: "major"    as const, gain: 40, lose: 25 },
-  { status: "regional" as const, gain: 15, lose: 10 },
-  { status: "minor"    as const, gain: 1,  lose: 1  },
+  { status: "dominant" as const, gainPct: 0.133, losePct: 0.10  },
+  { status: "major"    as const, gainPct: 0.066, losePct: 0.041 },
+  { status: "regional" as const, gainPct: 0.025, losePct: 0.016 },
+  { status: "minor"    as const, gainPct: 0,     losePct: 0     },
 ];
 
 /**
- * Derive a faction's status from its territory size, applying hysteresis
- * when the previous status is known. With no previous status, fall back
- * to gain thresholds (used at seed time).
+ * Derive a faction's status from its territory size relative to the total
+ * pool of factioned systems, applying hysteresis when the previous status
+ * is known. With no previous status, fall back to gain thresholds (used
+ * at seed time).
  *
  * A faction with zero systems is destroyed — callers should handle that
  * upstream; this helper returns "minor" for any positive territory.
  */
 export function deriveFactionStatus(
   territorySize: number,
+  totalSystems: number,
   currentStatus?: FactionStatus,
 ): FactionStatus {
   if (territorySize <= 0) return "minor";
+  if (totalSystems <= 0) return "minor";
 
-  // Highest tier the territory qualifies for by gain threshold alone.
+  const pct = territorySize / totalSystems;
+
+  // Highest tier the share qualifies for by gain threshold alone.
   // FACTION_STATUS_TIERS is ordered highest-first, so findIndex returns the top match.
-  const naturalIdx = FACTION_STATUS_TIERS.findIndex((t) => territorySize >= t.gain);
+  const naturalIdx = FACTION_STATUS_TIERS.findIndex((t) => pct >= t.gainPct);
   const natural: FactionStatus = naturalIdx === -1 ? "minor" : FACTION_STATUS_TIERS[naturalIdx].status;
 
   if (!currentStatus) return natural;
 
   // Hysteresis: hold the current tier only if it outranks the natural one
-  // AND territory is still at or above its lose threshold. Otherwise the
+  // AND share is still at or above its lose threshold. Otherwise the
   // natural tier wins (covers both promotion and demotion).
   const currentIdx = FACTION_STATUS_TIERS.findIndex((t) => t.status === currentStatus);
   const currentTier = FACTION_STATUS_TIERS[currentIdx];
   const outranksNatural = naturalIdx === -1 || currentIdx < naturalIdx;
-  if (outranksNatural && territorySize >= currentTier.lose) return currentStatus;
+  if (outranksNatural && pct >= currentTier.losePct) return currentStatus;
   return natural;
 }
 

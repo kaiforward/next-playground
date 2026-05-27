@@ -38,4 +38,7 @@ export const queryKeys = {
   cantinaNpcVisits: (systemId: string) => ["cantinaNpcVisits", systemId] as const,
   // Factions
   reputation: ["reputation"] as const,
+  factions: ["factions"] as const,
+  faction: (factionId: string) => ["factions", factionId] as const,
+  factionRelations: ["factions", "relations"] as const,
 };

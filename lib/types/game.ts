@@ -327,14 +327,24 @@ export interface AtlasSystem {
   x: number;
   y: number;
   regionId: string;
+  /** Owning faction. Null only during the transient pre-cutover seed state. */
+  factionId: string | null;
   economyType: EconomyType;
   isGateway: boolean;
+}
+
+/** Lightweight faction row included alongside atlas data for political-map rendering. */
+export interface AtlasFaction {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface AtlasData {
   regions: RegionInfo[];
   systems: AtlasSystem[];
   connections: SystemConnectionInfo[];
+  factions: AtlasFaction[];
 }
 
 export interface ActiveEvent {

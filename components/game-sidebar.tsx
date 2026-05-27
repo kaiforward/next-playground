@@ -18,6 +18,9 @@ import {
   LogOut,
   NotebookText,
   ListChecks,
+  Landmark,
+  Network,
+  Handshake,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -41,6 +44,12 @@ const ACTIVITY_NAV: NavItem[] = [
   { href: "/missions", label: "Missions", icon: ListChecks },
   { href: "/events", label: "Events", icon: Radio },
   { href: "/battles", label: "Battles", icon: Crosshair },
+];
+
+const POLITICS_NAV: NavItem[] = [
+  { href: "/factions", label: "Factions", icon: Landmark },
+  { href: "/reputation", label: "Reputation", icon: Handshake },
+  { href: "/diplomacy", label: "Diplomacy", icon: Network },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -118,8 +127,13 @@ export function GameSidebar({
 }: GameSidebarProps) {
   const pathname = usePathname();
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + "/");
+  // Longest-prefix match across all nav hrefs so nested entries
+  // (e.g. /factions + /factions/[id]) don't both highlight.
+  const allHrefs = [...FLEET_NAV, ...ACTIVITY_NAV, ...POLITICS_NAV].map((n) => n.href);
+  const activeHref = allHrefs
+    .filter((h) => pathname === h || pathname.startsWith(h + "/"))
+    .reduce((best, h) => (h.length > best.length ? h : best), "");
+  const isActive = (href: string) => href === activeHref;
 
   return (
     <aside
@@ -160,6 +174,16 @@ export function GameSidebar({
       {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Activity</SectionHeader>}
       <nav aria-label="Activity navigation" className="flex flex-col gap-0.5">
         {ACTIVITY_NAV.map((item) => (
+          <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
+        ))}
+      </nav>
+
+      <Divider />
+
+      {/* Politics section */}
+      {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Politics</SectionHeader>}
+      <nav aria-label="Politics navigation" className="flex flex-col gap-0.5">
+        {POLITICS_NAV.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
         ))}
       </nav>

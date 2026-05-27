@@ -243,6 +243,31 @@ The galaxy-political-map view, faction list, and faction detail page.
 
 ---
 
+### Phase 6 — Map Mode/Overlay Split + LOD Polish
+
+Follow-up polish added after Phase 5 review surfaced two issues with the political-overlay UX. Self-contained, doesn't touch faction data or services — lives entirely in the map layer.
+
+**Problem 1 — modes vs overlays conflated.** Phase 5 wired `politicalTerritory` into `useMapOverlays` alongside `tradeFlow`, but they're conceptually different: region tinting and political tinting are *mutually exclusive views of the same territory layer* (a "map mode"), while trade flow is an *additive overlay* that works in either mode. The current single-flat-overlay-list invites the user to toggle both political and tradeFlow off and end up with no territory tint at all.
+
+**Problem 2 — territory layer fades out at close zoom.** LOD curves currently dim `territoryAlpha` as zoom increases so individual systems are more prominent. With a political mode this is backwards — faction colours stay useful (and arguably more useful) when zoomed in to inspect specific systems, and territory polygons are cheap to render. Systems are the thing that needs LOD culling, not territories.
+
+**Modified files:**
+- `lib/hooks/use-map-mode.ts` (new) — `mode: "regions" | "political"`, session-persisted via `map-session.ts`. Default `"regions"` to preserve existing behaviour.
+- `lib/hooks/use-map-overlays.ts` — drop `politicalTerritory` from the overlay set. Only additive overlays remain (`tradeFlow` today; future heatmaps, scan ranges, etc.).
+- `components/map/map-session.ts` — `MapSessionState` gains `mode?: "regions" | "political"`; drop `politicalTerritory` from `MapOverlaysState`.
+- `components/map/map-overlay-controls.tsx` — new "Map Mode" toggle group above the overlay list, single-select between Regions and Political. The overlay list shrinks to just the additive set.
+- `components/map/star-map.tsx` — read `useMapMode`, pass `mapMode` prop to `PixiMapCanvas` instead of `politicalOverlay`.
+- `components/map/pixi/pixi-map-canvas.tsx` — `politicalOverlay` prop renamed to `mapMode`. The visibility-toggle effect picks which layer is active based on the mode.
+- `components/map/pixi/lod.ts` — adjust `territoryAlpha` / `showTerritories` curves so territories stay visible at close zoom. Bias the curve toward "always show territories; only fade when truly at universe zoom and the point cloud takes over." Region labels follow the same treatment.
+
+**Testable after:**
+- Mode toggle flips between region and political fills without affecting trade-flow overlay state.
+- Trade-flow particles render correctly in both modes.
+- Zooming from universe → close, territories remain visible throughout; system clutter still respects existing LOD culling.
+- Session restore preserves both `mode` and `overlays.tradeFlow` independently.
+
+---
+
 ## 3.1 Government Modifier Starting Values (4 New Governments)
 
 Per faction-system.md §1 sketches, refined into concrete values matching the existing `GovernmentDefinition` shape. These are starting values for the plan — simulator tunes from here.
@@ -300,16 +325,17 @@ The optional `goodCategoryModifiers?: Record<GoodCategory, { volatility?: number
 
 ## Branch Strategy
 
-Foundation ships as **4 PRs against main**, grouped by natural seam (bisectability + revert-safety, not review capacity). Each PR is independently mergeable and leaves the game in a runnable state.
+Foundation ships as **5 PRs** through the shared `feat/layer-2-foundation` branch (one final merge to `main` at the end), grouped by natural seam (bisectability + revert-safety, not review capacity). Each PR is independently mergeable and leaves the game in a runnable state.
 
 | PR | Phases | Scope | Risk profile |
 |---|---|---|---|
 | **PR 1** | Phase 1 | Data model groundwork: schema additions, new constants, new types/guards. No behaviour change. | Low — pure additions, live game runs unchanged |
 | **PR 2** | Phase 2 | World-gen rewrite + government cutover + full reseed. Adapters switch to `system.faction.governmentType`. `Region.governmentType` column dropped. | High — biggest single migration in the roadmap. Must stand alone for revert/bisect |
 | **PR 3** | Phases 3 + 4 | Relations processor + alliance events + border-conflict events; player reputation + trade multiplier integration + reputation panel | Medium — runtime gameplay layered on top of the migrated data model. Tightly coupled (relations spawns events; reputation reads from same data) |
-| **PR 4** | Phase 5 | Faction overview UI: political map layer, faction list/detail pages, relations matrix | Low — UI polish on top of working systems. Can absorb into PR 3 at merge time if scope feels right |
+| **PR 4** | Phase 5 | Faction overview UI: political map layer, faction list/detail pages, relations matrix | Low — UI polish on top of working systems |
+| **PR 5** | Phase 6 | Map mode/overlay split + LOD territory-alpha tuning. Self-contained map polish, no data or service changes. | Low — UI-only, small diff (~5 files) |
 
-**Why 4 PRs, not one big one**: CLAUDE.md guidance — "Break large features into 2-4 phase PRs ... A 12-phase plan should ship as 3-4 PRs." Foundation's 5 phases fit comfortably in 4 PRs. Phase 2 in particular *must* stand alone — it changes ~10 adapters and reseeds the world; bundling Phase 1's groundwork or Phase 3's runtime code with it dilutes review attention on the risky bits and harms bisectability if a regression surfaces.
+**Why split PR 5 from PR 4**: PR 4's theme is "faction overview UI." The mode/overlay distinction and LOD tuning are general map-infrastructure concerns that aren't faction-specific — bundling them dilutes the review focus on PR 4 and conversely buries the map refactor inside a faction-themed diff that reviewers won't expect to find it in. Both PRs are small enough on their own; keeping them separate keeps each diff thematically tight.
 
 **Why not more (e.g. one PR per phase)**: Phases 3 and 4 are tightly coupled — the relations processor spawns events that the reputation system later cares about; testing one without the other is awkward. Splitting them produces two PRs that each block on the other, with no review-quality benefit.
 

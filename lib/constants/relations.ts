@@ -142,9 +142,14 @@ export const RELATION_TIERS: readonly RelationTierBounds[] = [
 
 export function getRelationTier(score: number): RelationTier {
   const c = clampRelationScore(score);
-  const match = RELATION_TIERS.find((t) => c >= t.minScore && c <= t.maxScore);
+  // RELATION_TIERS is ordered highest-min-first, so the first tier whose
+  // minScore is at-or-below the (clamped) score wins. Matching by minScore
+  // alone — not the [minScore, maxScore] range — keeps half-integer scores
+  // (the Float column produces e.g. 24.25) from falling into a gap between
+  // adjacent integer-bounded tiers.
+  const match = RELATION_TIERS.find((t) => c >= t.minScore);
   if (!match) {
-    // Unreachable: tiers partition the full clamped range without gaps.
+    // Unreachable: the lowest tier's minScore is the clamp floor.
     throw new Error(`No relation tier matched score ${score}`);
   }
   return match.tier;

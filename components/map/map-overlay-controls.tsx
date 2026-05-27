@@ -47,6 +47,7 @@ interface OverlayDef {
  */
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
   { key: "tradeFlow", label: "Trade Flows" },
+  { key: "politicalTerritory", label: "Political Map" },
 ];
 
 interface MapOverlayControlsProps {
