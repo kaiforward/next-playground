@@ -21,7 +21,7 @@ export function CompactConvoyCard({ convoy, systemId, onNavigate }: CompactConvo
           </span>
           <Badge color="purple">{memberCount} {memberCount === 1 ? "ship" : "ships"}</Badge>
         </div>
-        <span className="text-xs text-text-tertiary shrink-0">
+        <span className="text-xs text-text-tertiary shrink-0 font-mono">
           {convoy.combinedCargoMax} cargo
         </span>
       </div>
