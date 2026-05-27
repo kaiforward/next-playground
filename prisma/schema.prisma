@@ -590,11 +590,13 @@ model AlliancePact {
 
 /// Per-player, per-faction reputation score. Drives trade multipliers.
 model PlayerFactionReputation {
-  id            String @id @default(cuid())
-  playerId      String
-  factionId     String
-  score         Float  @default(0) // [-100, +100]
-  updatedAtTick Int    @default(0)
+  id                      String @id @default(cuid())
+  playerId                String
+  factionId               String
+  score                   Float  @default(0) // [-100, +100]
+  updatedAtTick           Int    @default(0)
+  /// Reputation accrued so far in `updatedAtTick`. Reset on the first accrual of a new tick.
+  currentTickGainThisTick Float  @default(0)
 
   player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
   faction Faction @relation(fields: [factionId], references: [id], onDelete: Cascade)

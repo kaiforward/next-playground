@@ -1,7 +1,9 @@
+import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   getReputationTier,
   REPUTATION_TRADE_GAIN_CAP_PER_TICK,
+  REPUTATION_TRADE_GAIN_PER_TRADE,
 } from "@/lib/constants/reputation";
 import type { ReputationStanding } from "@/lib/types/game";
 
@@ -97,4 +99,68 @@ export async function getStandingAt(
     sellMultiplier: tier.sellMultiplier,
     tradeDenied: tier.tradeDenied,
   };
+}
+
+/**
+ * Within a trade transaction: re-read the fresh (player, faction) reputation
+ * row, gate-check hostile standing against the FRESH score (TOCTOU-safe),
+ * and accrue a per-tick-capped reputation gain via `clampReputationGain`.
+ *
+ * Callers compute price multipliers from a pre-tx snapshot for stable
+ * pricing; this helper exists for the in-tx gate + accrual only.
+ *
+ * Returns `{ tradeDenied: true }` if the fresh score is in the hostile band,
+ * in which case the caller should throw to roll back the transaction. When
+ * not denied, the upsert (if any) commits with the rest of the trade.
+ *
+ * Per-tick cap accounting: the row's `currentTickGainThisTick` accumulates
+ * gain within `updatedAtTick`. On the first accrual of a new tick the
+ * accumulator resets to the granted gain. Concurrency: read-then-upsert is
+ * not strictly atomic across transactions but bounded — sequential trades
+ * from one player respect the cap; concurrent trades may overshoot by at
+ * most `REPUTATION_TRADE_GAIN_PER_TRADE` per concurrent request.
+ */
+export async function accrueTradeReputationInTx(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  factionId: string,
+  currentTick: number,
+): Promise<{ tradeDenied: boolean }> {
+  const existing = await tx.playerFactionReputation.findUnique({
+    where: { playerId_factionId: { playerId, factionId } },
+    select: { score: true, updatedAtTick: true, currentTickGainThisTick: true },
+  });
+
+  const freshScore = existing?.score ?? 0;
+  if (getReputationTier(freshScore).tradeDenied) {
+    return { tradeDenied: true };
+  }
+
+  const accruedThisTick =
+    existing && existing.updatedAtTick === currentTick
+      ? existing.currentTickGainThisTick
+      : 0;
+  const gain = clampReputationGain(accruedThisTick, REPUTATION_TRADE_GAIN_PER_TRADE);
+
+  if (gain <= 0) {
+    return { tradeDenied: false };
+  }
+
+  await tx.playerFactionReputation.upsert({
+    where: { playerId_factionId: { playerId, factionId } },
+    update: {
+      score: { increment: gain },
+      currentTickGainThisTick: accruedThisTick + gain,
+      updatedAtTick: currentTick,
+    },
+    create: {
+      playerId,
+      factionId,
+      score: gain,
+      currentTickGainThisTick: gain,
+      updatedAtTick: currentTick,
+    },
+  });
+
+  return { tradeDenied: false };
 }

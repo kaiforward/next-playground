@@ -4,7 +4,7 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { toShipStatus } from "@/lib/types/guards";
 import { getReputationTier } from "@/lib/constants/reputation";
-import { REPUTATION_TRADE_GAIN_PER_TRADE } from "@/lib/constants/reputation";
+import { accrueTradeReputationInTx } from "./reputation";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
 
@@ -132,10 +132,35 @@ export async function executeTrade(
 
   const { delta } = result;
 
+  // Hoist the current-tick read out of the transaction: it's only used by
+  // the rep accrual cap, which is monotonic in tick number, so reading
+  // slightly stale is safe.
+  let currentTick = 0;
+  if (factionId) {
+    const world = await prisma.gameWorld.findUnique({
+      where: { id: "world" },
+      select: { currentTick: true },
+    });
+    currentTick = world?.currentTick ?? 0;
+  }
+
   // Execute trade in a transaction with fresh state reads (TOCTOU guard)
   let updatedMarket;
   try {
     updatedMarket = await prisma.$transaction(async (tx) => {
+      // Fresh hostile-gate check before doing any work. Snapshot price/
+      // multiplier above used the pre-tx score; if a tick processor flipped
+      // the player to hostile in between, abort the trade here.
+      if (factionId) {
+        const { tradeDenied } = await accrueTradeReputationInTx(
+          tx,
+          player.id,
+          factionId,
+          currentTick,
+        );
+        if (tradeDenied) throw new Error("HOSTILE_STANDING");
+      }
+
       const freshPlayer = await tx.player.findUnique({
         where: { id: player.id },
         select: { credits: true },
@@ -205,39 +230,17 @@ export async function executeTrade(
         data: { tradeVolumeAccum: { increment: quantity } },
       });
 
-      // Per-tick capped reputation gain. One delta per (player, faction) per
-      // tick keeps the gain visible without enabling grind-spam farming.
-      if (factionId) {
-        const world = await tx.gameWorld.findUnique({
-          where: { id: "world" },
-          select: { currentTick: true },
-        });
-        const currentTick = world?.currentTick ?? 0;
-        const existing = await tx.playerFactionReputation.findUnique({
-          where: { playerId_factionId: { playerId: player.id, factionId } },
-          select: { updatedAtTick: true },
-        });
-        if (!existing || existing.updatedAtTick < currentTick) {
-          await tx.playerFactionReputation.upsert({
-            where: { playerId_factionId: { playerId: player.id, factionId } },
-            update: {
-              score: { increment: REPUTATION_TRADE_GAIN_PER_TRADE },
-              updatedAtTick: currentTick,
-            },
-            create: {
-              playerId: player.id,
-              factionId,
-              score: REPUTATION_TRADE_GAIN_PER_TRADE,
-              updatedAtTick: currentTick,
-            },
-          });
-        }
-      }
-
       return market;
     });
   } catch (error) {
     if (error instanceof Error) {
+      if (error.message === "HOSTILE_STANDING") {
+        return {
+          ok: false,
+          error: "This faction refuses to trade with you (hostile standing).",
+          status: 403,
+        };
+      }
       if (error.message === "INSUFFICIENT_CREDITS") {
         return { ok: false, error: "Not enough credits. State may have changed concurrently.", status: 409 };
       }
