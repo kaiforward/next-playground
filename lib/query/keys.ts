@@ -4,6 +4,7 @@ export const queryKeys = {
   universe: ["universe"] as const,
   marketAll: ["market"] as const,
   market: (systemId: string) => ["market", systemId] as const,
+  marketByGood: (goodId: string) => ["market", "by-good", goodId] as const,
   tradeHistory: (systemId: string) => ["tradeHistory", systemId] as const,
   events: ["events"] as const,
   priceHistory: (systemId: string) => ["priceHistory", systemId] as const,
