@@ -50,6 +50,8 @@ export async function runRelationsProcessor(
   ctx: TickContext,
   params: RelationsProcessorParams,
 ): Promise<TickProcessorResult> {
+  const rng = params.rng ?? Math.random;
+
   const factions = await world.getFactions();
   if (factions.length < 2) {
     return {};
@@ -155,7 +157,7 @@ export async function runRelationsProcessor(
       !allianceActive
     ) {
       eventCreates.push(
-        pactNegotiationTemplate(pair.factionAId, pair.factionBId, ctx.tick, Math.random),
+        pactNegotiationTemplate(pair.factionAId, pair.factionBId, ctx.tick, rng),
       );
     }
 
@@ -183,7 +185,7 @@ export async function runRelationsProcessor(
           factionBId,
           target.systemId,
           target.regionId,
-          Math.random,
+          rng,
         ),
       );
     }
