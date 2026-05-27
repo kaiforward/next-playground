@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runRelationsProcessor } from "../relations";
 import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
-import { ALLIANCE } from "@/lib/constants/relations";
+import { ALLIANCE, RELATIONS_PHASE_SENTINEL } from "@/lib/constants/relations";
 import type { TickContext } from "@/lib/tick/types";
 import type { Prisma } from "@/app/generated/prisma/client";
 
@@ -46,7 +46,7 @@ function makeWorld(score: number, opts: { alliance?: boolean; events?: { id: str
       id: e.id,
       type: e.type,
       phaseStartTick: 0,
-      phaseDuration: Number.MAX_SAFE_INTEGER,
+      phaseDuration: RELATIONS_PHASE_SENTINEL,
       metadata: { factionAId: "fa", factionBId: "fb", expiresAtTick: e.expiresAtTick },
     })),
   });
@@ -141,7 +141,7 @@ describe("runRelationsProcessor", () => {
   it("does not spawn duplicate border_conflict for a pair that already has one", async () => {
     const world = makeWorld(-30, {
       events: [
-        { id: "ev1", type: "border_conflict", expiresAtTick: Number.MAX_SAFE_INTEGER },
+        { id: "ev1", type: "border_conflict", expiresAtTick: RELATIONS_PHASE_SENTINEL },
       ],
     });
     await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });
@@ -172,7 +172,7 @@ describe("runRelationsProcessor", () => {
     const world = makeWorld(ALLIANCE.dissolutionThreshold - 10, {
       alliance: true,
       events: [
-        { id: "ev1", type: "alliance_dissolved", expiresAtTick: Number.MAX_SAFE_INTEGER },
+        { id: "ev1", type: "alliance_dissolved", expiresAtTick: RELATIONS_PHASE_SENTINEL },
       ],
     });
     await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });

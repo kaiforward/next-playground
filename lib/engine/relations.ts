@@ -8,6 +8,7 @@ import {
   DOCTRINE_COMPATIBILITY,
   DRIFT_COEFFICIENTS,
   RELATION_HISTORY_MAX,
+  RELATIONS_PHASE_SENTINEL,
   clampRelationScore,
   getGovernmentOpposition,
   getRelationTier,
@@ -198,7 +199,7 @@ export function borderConflictTemplate(
       // Border conflicts are owned by the events processor; expiresAtTick is
       // only meaningful for relations-owned events. Set to a sentinel so the
       // relations processor never tries to resolve them.
-      expiresAtTick: Number.MAX_SAFE_INTEGER,
+      expiresAtTick: RELATIONS_PHASE_SENTINEL,
     },
   };
 }
@@ -216,7 +217,7 @@ export function pactNegotiationTemplate(
     systemId: null,
     regionId: null,
     // Never auto-expired by events processor; relations owns the lifecycle.
-    phaseDuration: Number.MAX_SAFE_INTEGER,
+    phaseDuration: RELATIONS_PHASE_SENTINEL,
     severity: 1,
     metadata: {
       factionAId,
@@ -236,7 +237,7 @@ export function allianceDissolvedTemplate(
     phase: "dissolving",
     systemId: null,
     regionId: null,
-    phaseDuration: Number.MAX_SAFE_INTEGER,
+    phaseDuration: RELATIONS_PHASE_SENTINEL,
     severity: 1,
     metadata: {
       factionAId,

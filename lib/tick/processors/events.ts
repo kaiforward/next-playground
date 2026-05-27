@@ -97,7 +97,7 @@ export async function runEventsProcessor(
     }
 
     // Skip events whose lifecycle the relations processor owns. Their stored
-    // phaseDuration is a sentinel (Number.MAX_SAFE_INTEGER); never advance
+    // phaseDuration is a sentinel (RELATIONS_PHASE_SENTINEL); never advance
     // or auto-expire them — relations resolves them via metadata.expiresAtTick.
     if (RELATIONS_OWNED_LIFECYCLE.has(ev.type)) continue;
 

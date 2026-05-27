@@ -17,6 +17,7 @@ import {
   ALLIANCE,
   DRIFT_COEFFICIENTS,
   RELATION_HISTORY_MAX,
+  RELATIONS_PHASE_SENTINEL,
 } from "@/lib/constants/relations";
 import type {
   AlliancePactView,
@@ -250,16 +251,16 @@ describe("event templates", () => {
     expect(t.type).toBe("border_conflict");
     expect(t.metadata.factionAId).toBe("fa");
     expect(t.metadata.factionBId).toBe("fb");
-    expect(t.metadata.expiresAtTick).toBe(Number.MAX_SAFE_INTEGER);
+    expect(t.metadata.expiresAtTick).toBe(RELATIONS_PHASE_SENTINEL);
     expect(t.phase).toBe("tension");
     expect(t.systemId).toBe("sys1");
   });
 
-  it("pact negotiation template sets expiresAtTick from window and uses MAX_SAFE_INTEGER phaseDuration", () => {
+  it("pact negotiation template sets expiresAtTick from window and uses sentinel phaseDuration", () => {
     const tick = 100;
     const t = pactNegotiationTemplate("fa", "fb", tick, seededRng);
     expect(t.type).toBe("pact_under_negotiation");
-    expect(t.phaseDuration).toBe(Number.MAX_SAFE_INTEGER);
+    expect(t.phaseDuration).toBe(RELATIONS_PHASE_SENTINEL);
     const [min, max] = ALLIANCE.negotiationWindow;
     expect(t.metadata.expiresAtTick).toBeGreaterThanOrEqual(tick + min);
     expect(t.metadata.expiresAtTick).toBeLessThanOrEqual(tick + max);
@@ -272,7 +273,7 @@ describe("event templates", () => {
     expect(t.phase).toBe("dissolving");
     expect(t.systemId).toBeNull();
     expect(t.regionId).toBeNull();
-    expect(t.phaseDuration).toBe(Number.MAX_SAFE_INTEGER);
+    expect(t.phaseDuration).toBe(RELATIONS_PHASE_SENTINEL);
     expect(t.metadata.factionAId).toBe("fa");
     expect(t.metadata.factionBId).toBe("fb");
     expect(t.metadata.expiresAtTick).toBe(tick + ALLIANCE.dissolutionWindow);
