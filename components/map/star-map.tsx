@@ -14,6 +14,7 @@ import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
+import { useMapMode } from "@/lib/hooks/use-map-mode";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
@@ -49,7 +50,8 @@ export function StarMap({
   const { visibleSystemIds } = useVisibility();
   const { dynamicSystems } = useDynamicData(active);
 
-  // ── Overlay toggles (Trade Flows, future: danger, factions, etc.) ──
+  // ── Map mode (single-select tint) + additive overlay toggles ──
+  const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
 
@@ -254,12 +256,17 @@ export function StarMap({
         centerTarget={centerTarget}
         onReady={handleReady}
         regionInfos={regionInfos}
-        politicalOverlay={overlays.politicalTerritory}
+        mapMode={mapMode}
         onViewportChange={onViewportChange}
       />
 
-      {/* Map overlay toggle cluster (bottom-left) */}
-      <MapOverlayControls overlays={overlays} toggle={toggle} />
+      {/* Map mode + overlay controls (bottom-left) */}
+      <MapOverlayControls
+        mode={mapMode}
+        setMode={setMapMode}
+        overlays={overlays}
+        toggle={toggle}
+      />
 
       {/* Navigation mode banner */}
       {mode.phase === "unit_selected" && (
