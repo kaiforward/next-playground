@@ -33,8 +33,8 @@ export async function getMarket(
     goodName: m.good.name,
     basePrice: m.good.basePrice,
     currentPrice: calculatePrice(m.good.basePrice, m.supply, m.demand, m.good.priceFloor, m.good.priceCeiling),
-    supply: m.supply,
-    demand: m.demand,
+    supply: Math.floor(m.supply),
+    demand: Math.floor(m.demand),
   }));
 
   return { stationId: station.id, entries };
