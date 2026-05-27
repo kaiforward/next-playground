@@ -44,6 +44,9 @@ const TYPE_CATEGORY: Record<EventTypeId, string> = {
   supply_shortage: "economic",
   trade_embargo: "economic",
   tech_breakthrough: "economic",
+  border_conflict: "conflict",
+  pact_under_negotiation: "diplomatic",
+  alliance_dissolved: "diplomatic",
 };
 
 function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {

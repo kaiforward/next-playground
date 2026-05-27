@@ -3,6 +3,8 @@ import { serializeShip } from "@/lib/auth/serialize";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { toShipStatus } from "@/lib/types/guards";
+import { getReputationTier } from "@/lib/constants/reputation";
+import { REPUTATION_TRADE_GAIN_PER_TRADE } from "./reputation";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
 
@@ -60,13 +62,16 @@ export async function executeTrade(
     return { ok: false, error: "This ship is in a convoy. Trade via the convoy instead.", status: 400 };
   }
 
-  // Verify station is in the ship's current system
+  // Verify station is in the ship's current system; resolve owning faction
+  // at the same time so reputation gating + multipliers can be applied below.
   const station = await prisma.station.findUnique({
     where: { systemId: ship.systemId },
+    include: { system: { select: { factionId: true } } },
   });
   if (!station || station.id !== stationId) {
     return { ok: false, error: "Station is not in the ship's current system.", status: 400 };
   }
+  const factionId = station.system.factionId;
 
   // Look up the market entry
   const marketEntry = await prisma.stationMarket.findUnique({
@@ -77,13 +82,33 @@ export async function executeTrade(
     return { ok: false, error: "Good not available at this station.", status: 404 };
   }
 
-  const unitPrice = calculatePrice(
+  const basePrice = calculatePrice(
     marketEntry.good.basePrice,
     marketEntry.supply,
     marketEntry.demand,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
   );
+
+  // Reputation gating + multiplier. Systems without a faction (transient
+  // mid-cutover state) trade at neutral. Hostile standing blocks the trade.
+  let unitPrice = basePrice;
+  if (factionId) {
+    const repRow = await prisma.playerFactionReputation.findUnique({
+      where: { playerId_factionId: { playerId, factionId } },
+      select: { score: true },
+    });
+    const tier = getReputationTier(repRow?.score ?? 0);
+    if (tier.tradeDenied) {
+      return {
+        ok: false,
+        error: "This faction refuses to trade with you (hostile standing).",
+        status: 403,
+      };
+    }
+    const mult = type === "buy" ? tier.buyMultiplier : tier.sellMultiplier;
+    unitPrice = Math.round(basePrice * mult);
+  }
 
   const currentCargoUsed = ship.cargo.reduce((sum, c) => sum + c.quantity, 0);
   const existingCargo = ship.cargo.find((c) => c.goodId === goodId);
@@ -179,6 +204,35 @@ export async function executeTrade(
         where: { id: ship.systemId },
         data: { tradeVolumeAccum: { increment: quantity } },
       });
+
+      // Per-tick capped reputation gain. One delta per (player, faction) per
+      // tick keeps the gain visible without enabling grind-spam farming.
+      if (factionId) {
+        const world = await tx.gameWorld.findUnique({
+          where: { id: "world" },
+          select: { currentTick: true },
+        });
+        const currentTick = world?.currentTick ?? 0;
+        const existing = await tx.playerFactionReputation.findUnique({
+          where: { playerId_factionId: { playerId: player.id, factionId } },
+          select: { updatedAtTick: true },
+        });
+        if (!existing || existing.updatedAtTick < currentTick) {
+          await tx.playerFactionReputation.upsert({
+            where: { playerId_factionId: { playerId: player.id, factionId } },
+            update: {
+              score: { increment: REPUTATION_TRADE_GAIN_PER_TRADE },
+              updatedAtTick: currentTick,
+            },
+            create: {
+              playerId: player.id,
+              factionId,
+              score: REPUTATION_TRADE_GAIN_PER_TRADE,
+              updatedAtTick: currentTick,
+            },
+          });
+        }
+      }
 
       return market;
     });

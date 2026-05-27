@@ -22,6 +22,9 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   trade_embargo: "purple",
   tech_breakthrough: "green",
   asteroid_strike: "red",
+  border_conflict: "red",
+  pact_under_negotiation: "purple",
+  alliance_dissolved: "amber",
 };
 
 /** Mapping from notification/event type to toast/badge accent color. */
@@ -43,6 +46,9 @@ export const NOTIFICATION_BADGE_COLOR: Record<
   trade_embargo: "purple",
   tech_breakthrough: "green",
   asteroid_strike: "red",
+  border_conflict: "red",
+  pact_under_negotiation: "purple",
+  alliance_dissolved: "amber",
   ship_arrived: "blue",
   ship_damaged: "amber",
   ship_disabled: "red",
@@ -79,6 +85,11 @@ export const EVENT_TYPE_DANGER_PRIORITY: Record<
   solar_storm: 12,
   asteroid_strike: 13,
   inner_system_conflict: 14,
+  // Diplomatic events: informational only, no danger contribution.
+  pact_under_negotiation: 0,
+  alliance_dissolved: 0,
+  // Border conflict ranks between conflict_spillover and plague.
+  border_conflict: 10,
 };
 
 /** Mapping from mission type to Badge color. */
@@ -119,6 +130,9 @@ import {
   ShieldBan,
   Lightbulb,
   Flame,
+  Crosshair,
+  Handshake,
+  HeartCrack,
 } from "lucide-react";
 
 /** Lucide icon component per event type, consumed by EventIcon component. */
@@ -140,6 +154,9 @@ export const EVENT_TYPE_ICON: Record<
   trade_embargo: ShieldBan,
   tech_breakthrough: Lightbulb,
   asteroid_strike: Flame,
+  border_conflict: Crosshair,
+  pact_under_negotiation: Handshake,
+  alliance_dissolved: HeartCrack,
 };
 
 // ── Chart theme ──────────────────────────────────────────────

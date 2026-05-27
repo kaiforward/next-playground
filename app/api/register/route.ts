@@ -64,10 +64,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create user, player, and starter ship in a transaction
+    // Create user, player, and starter ship in a transaction. Also bootstrap
+    // a zero-score reputation row for every known faction so the reputation
+    // panel renders a complete row set from tick zero.
     const shuttleDef = SHIP_TYPES.shuttle;
     const shipData = buildShipData(shuttleDef, "Starter Ship");
     const slotData = buildUpgradeSlots(shuttleDef.slotLayout);
+
+    const factions = await prisma.faction.findMany({ select: { id: true } });
 
     const user = await prisma.user.create({
       data: {
@@ -83,6 +87,13 @@ export async function POST(request: Request) {
                 systemId: startingSystem.id,
                 upgradeSlots: { create: slotData },
               },
+            },
+            factionReputations: {
+              create: factions.map((f) => ({
+                factionId: f.id,
+                score: 0,
+                updatedAtTick: 0,
+              })),
             },
           },
         },

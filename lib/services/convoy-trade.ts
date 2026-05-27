@@ -3,6 +3,8 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
 import { getInstalledModules } from "@/lib/utils/ship";
+import { getReputationTier } from "@/lib/constants/reputation";
+import { REPUTATION_TRADE_GAIN_PER_TRADE } from "./reputation";
 import type { ShipTradeRequest } from "@/lib/types/api";
 import type { MarketEntry } from "@/lib/types/game";
 
@@ -83,13 +85,16 @@ export async function executeConvoyTrade(
     return { ok: false, error: "Player not found.", status: 404 };
   }
 
-  // Verify station is at the convoy's system
+  // Verify station is at the convoy's system; resolve owning faction for
+  // reputation gating + multipliers.
   const station = await prisma.station.findUnique({
     where: { systemId: convoy.systemId },
+    include: { system: { select: { factionId: true } } },
   });
   if (!station || station.id !== stationId) {
     return { ok: false, error: "Station is not at the convoy's system.", status: 400 };
   }
+  const factionId = station.system.factionId;
 
   const marketEntry = await prisma.stationMarket.findUnique({
     where: { stationId_goodId: { stationId, goodId } },
@@ -99,13 +104,32 @@ export async function executeConvoyTrade(
     return { ok: false, error: "Good not available at this station.", status: 404 };
   }
 
-  const unitPrice = calculatePrice(
+  const basePrice = calculatePrice(
     marketEntry.good.basePrice,
     marketEntry.supply,
     marketEntry.demand,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
   );
+
+  // Reputation gating + multiplier. Mirrors single-ship trade.
+  let unitPrice = basePrice;
+  if (factionId) {
+    const repRow = await prisma.playerFactionReputation.findUnique({
+      where: { playerId_factionId: { playerId, factionId } },
+      select: { score: true },
+    });
+    const tier = getReputationTier(repRow?.score ?? 0);
+    if (tier.tradeDenied) {
+      return {
+        ok: false,
+        error: "This faction refuses to trade with you (hostile standing).",
+        status: 403,
+      };
+    }
+    const mult = type === "buy" ? tier.buyMultiplier : tier.sellMultiplier;
+    unitPrice = Math.round(basePrice * mult);
+  }
 
   // Aggregate cargo across all member ships (accounting for upgrade bonuses)
   const ships = convoy.members.map((m) => m.ship);
@@ -242,6 +266,34 @@ export async function executeConvoyTrade(
         where: { id: convoy.systemId },
         data: { tradeVolumeAccum: { increment: quantity } },
       });
+
+      // Per-tick capped reputation gain (mirrors single-ship trade).
+      if (factionId) {
+        const world = await tx.gameWorld.findUnique({
+          where: { id: "world" },
+          select: { currentTick: true },
+        });
+        const currentTick = world?.currentTick ?? 0;
+        const existing = await tx.playerFactionReputation.findUnique({
+          where: { playerId_factionId: { playerId: player.id, factionId } },
+          select: { updatedAtTick: true },
+        });
+        if (!existing || existing.updatedAtTick < currentTick) {
+          await tx.playerFactionReputation.upsert({
+            where: { playerId_factionId: { playerId: player.id, factionId } },
+            update: {
+              score: { increment: REPUTATION_TRADE_GAIN_PER_TRADE },
+              updatedAtTick: currentTick,
+            },
+            create: {
+              playerId: player.id,
+              factionId,
+              score: REPUTATION_TRADE_GAIN_PER_TRADE,
+              updatedAtTick: currentTick,
+            },
+          });
+        }
+      }
 
       return market;
     });
