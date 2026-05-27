@@ -95,7 +95,7 @@ export class PoliticalTerritoryLayer {
   /** Per-frame LOD update (only matters while the layer is active). */
   updateVisibility(lod: LODState) {
     if (!this.container.visible) return;
-    this.territoryGraphics.alpha = lod.territoryAlpha;
+    this.territoryGraphics.alpha = lod.politicalTerritoryAlpha;
     this.labelContainer.visible = lod.showRegionLabels;
     this.labelContainer.alpha = lod.regionLabelAlpha;
   }

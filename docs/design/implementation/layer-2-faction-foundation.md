@@ -243,28 +243,52 @@ The galaxy-political-map view, faction list, and faction detail page.
 
 ---
 
-### Phase 6 — Map Mode/Overlay Split + LOD Polish
+### Phase 6 — Map Mode / Overlay Split + LOD Polish
 
-Follow-up polish added after Phase 5 review surfaced two issues with the political-overlay UX. Self-contained, doesn't touch faction data or services — lives entirely in the map layer.
+Follow-up polish added after Phase 5 review surfaced two issues with the political-overlay UX. Self-contained; no data, service, or processor changes — lives entirely in the map UI.
 
-**Problem 1 — modes vs overlays conflated.** Phase 5 wired `politicalTerritory` into `useMapOverlays` alongside `tradeFlow`, but they're conceptually different: region tinting and political tinting are *mutually exclusive views of the same territory layer* (a "map mode"), while trade flow is an *additive overlay* that works in either mode. The current single-flat-overlay-list invites the user to toggle both political and tradeFlow off and end up with no territory tint at all.
+**Problem 1 — modes vs overlays conflated.** Phase 5 wired `politicalTerritory` into `useMapOverlays` alongside `tradeFlow`, but they're conceptually different. Region tinting and political tinting are *mutually exclusive views of the same polygon layer* (a "map mode"), while trade flow is an *additive overlay* that works on top of either tint. The flat-overlay list invites the user to toggle both tints off and end up with an unframed map, or toggle both on and end up with no visible difference (the current code already hides the region layer when political is on).
 
-**Problem 2 — territory layer fades out at close zoom.** LOD curves currently dim `territoryAlpha` as zoom increases so individual systems are more prominent. With a political mode this is backwards — faction colours stay useful (and arguably more useful) when zoomed in to inspect specific systems, and territory polygons are cheap to render. Systems are the thing that needs LOD culling, not territories.
+**Problem 2 — territory fades out at close zoom.** LOD currently culls `territoryAlpha` to zero past zoom 0.5 so individual systems are more prominent. For political mode this is backwards: faction colours stay useful when inspecting individual systems (arguably *more* useful — they tell you whose space you're in), and territory polygons are cheap to render. Systems are the thing that needs LOD culling, not territories.
+
+**Conceptual model — two independent axes.**
+
+| Axis | Behaviour | Today | Default | Future |
+|---|---|---|---|---|
+| **Map Mode** | Single-select. Paints the territory polygons. One tint at a time. | `political` · `regions` · `none` | `political` | `danger` · `prosperity` · `government` · `contraband` |
+| **Overlays** | Multi-select. Drawn on top of the polygons. Stackable. | `tradeFlow` | all off | `regionGateways` · `scanRanges` · `dangerHeatmap` |
+
+Rule of thumb: a layer that paints the territory polygons is a Mode; a layer drawn on top (particles, lines, marker icons) is an Overlay. The political layer was the trigger for the split — it's a polygon tint, so it belongs on the Mode axis.
+
+The `regions` mode stays because the polygon shapes and regional grouping remain useful for orientation (clusters of systems with limited jump-lane access), even though regions carry less gameplay weight than factions. The `none` mode covers the case where the player wants a clean starfield.
+
+**New files:**
+- `lib/hooks/use-map-mode.ts` — owns `{ mode: MapMode, setMode }`. Mirrors `useMapOverlays` (mount + hydrate-from-session + skipPersist ref). Default `"political"`.
+- `lib/types/map.ts` — `MapMode = "political" | "regions" | "none"` union + `MAP_MODES: readonly MapMode[]` array for iteration.
 
 **Modified files:**
-- `lib/hooks/use-map-mode.ts` (new) — `mode: "regions" | "political"`, session-persisted via `map-session.ts`. Default `"regions"` to preserve existing behaviour.
-- `lib/hooks/use-map-overlays.ts` — drop `politicalTerritory` from the overlay set. Only additive overlays remain (`tradeFlow` today; future heatmaps, scan ranges, etc.).
-- `components/map/map-session.ts` — `MapSessionState` gains `mode?: "regions" | "political"`; drop `politicalTerritory` from `MapOverlaysState`.
-- `components/map/map-overlay-controls.tsx` — new "Map Mode" toggle group above the overlay list, single-select between Regions and Political. The overlay list shrinks to just the additive set.
-- `components/map/star-map.tsx` — read `useMapMode`, pass `mapMode` prop to `PixiMapCanvas` instead of `politicalOverlay`.
-- `components/map/pixi/pixi-map-canvas.tsx` — `politicalOverlay` prop renamed to `mapMode`. The visibility-toggle effect picks which layer is active based on the mode.
-- `components/map/pixi/lod.ts` — adjust `territoryAlpha` / `showTerritories` curves so territories stay visible at close zoom. Bias the curve toward "always show territories; only fade when truly at universe zoom and the point cloud takes over." Region labels follow the same treatment.
+- `lib/hooks/use-map-overlays.ts` — drop `politicalTerritory` from `MapOverlays` and `DEFAULT_OVERLAYS`. Only additive overlays remain.
+- `components/map/map-session.ts` — `MapSessionState` gains `mode?: MapMode`; `MapOverlaysState` loses `politicalTerritory`. New `setModeInSession()` helper. `parseOverlays` silently drops the stale `politicalTerritory` key (sessionStorage migration; no DB persistence to migrate — users land on the new default mode).
+- `components/map/map-overlay-controls.tsx` — two-section panel: a single-select "Mode" group at the top, the existing multi-select overlay list below. Panel title shrinks from "OVERLAYS" to "MAP". Mode rows reuse `toggleVariants` with radio semantics (`aria-pressed` on the active mode; clicking the active mode is a no-op).
+- `components/map/star-map.tsx` — reads `useMapMode` and `useMapOverlays`. Passes `mapMode` prop to `PixiMapCanvas` in place of `politicalOverlay`.
+- `components/map/pixi/pixi-map-canvas.tsx` — `politicalOverlay: boolean` prop → `mapMode: MapMode`. Visibility-toggle effect: `territoryLayer.container.visible = mapMode === "regions"`; `politicalTerritoryLayer.setActive(mapMode === "political")`. Both hidden when `mapMode === "none"`.
+- `components/map/pixi/lod.ts`:
+  - `showTerritories: true` (was `zoom < 0.5`) — never culled.
+  - `territoryAlpha: 1 - 0.4 * smoothStep(0.3, 0.7, zoom)` (was `1 - smoothStep(0.3, 0.5, zoom)`) — eases from 1.0 in universe view to 0.6 floor in deep system view over a wider band. Tune from here once the feel is right.
+  - `regionLabelAlpha` unchanged — labels still fade out past 0.5; text clutters individual-system inspection.
+
+**Extensibility notes:**
+- Adding a future Mode: extend the `MapMode` union, add a Pixi territory-layer variant or recolor function, register an entry in the mode list. No structural changes.
+- Adding a future Overlay: extend `MapOverlays` and `OVERLAY_DEFS`, add a Pixi layer with its own alpha curve. No structural changes.
+- The "Region Gateways" idea (highlight inter-region `SystemConnection` lanes) lands as a future overlay; the existing `ConnectionLayer` is the natural place. Not part of this PR.
 
 **Testable after:**
-- Mode toggle flips between region and political fills without affecting trade-flow overlay state.
-- Trade-flow particles render correctly in both modes.
-- Zooming from universe → close, territories remain visible throughout; system clutter still respects existing LOD culling.
-- Session restore preserves both `mode` and `overlays.tradeFlow` independently.
+- Mode toggle flips between Political / Regions / None without affecting overlay state.
+- Trade-flow overlay renders correctly under all three modes.
+- Territories visible at every zoom level; alpha eases from 1.0 → ~0.6 from universe to system view.
+- System dots / labels still respect existing LOD culling.
+- Session restore preserves `mode` and `overlays.tradeFlow` independently; legacy `overlays.politicalTerritory` from prior sessions is silently dropped.
+- Default for a brand-new browser session is `mode = "political"`, overlays all off.
 
 ---
 
