@@ -10,12 +10,18 @@ import type { GoodTier } from "@/lib/types/game";
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 
+// Focus ring works two ways so this variant can wrap either a focusable element
+// (the overlay <button>) or an element that contains one (the Mode <label> with
+// a sr-only <input type="radio"> inside). `focus-visible:` handles the first
+// case, `has-[:focus-visible]:` the second.
 const rowVariants = tv({
   base: [
-    "group flex items-center justify-between gap-3 w-full",
+    "group flex items-center justify-between gap-3 w-full cursor-pointer",
     "px-3 py-1.5 text-xs font-medium uppercase tracking-wider",
     "border-l-2 transition-colors duration-150",
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "focus:outline-none",
+    "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
   ],
   variants: {
     active: {
@@ -137,18 +143,18 @@ function ModeSection({
           const active = m === mode;
           return (
             <li key={m}>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => {
-                  if (!active) setMode(m);
-                }}
-                className={rowVariants({ active })}
-              >
+              <label className={rowVariants({ active })}>
+                <input
+                  type="radio"
+                  name="mapMode"
+                  value={m}
+                  checked={active}
+                  onChange={() => setMode(m)}
+                  className="sr-only"
+                />
                 <span>{MODE_LABELS[m]}</span>
                 <span className={dotVariants({ active })} aria-hidden />
-              </button>
+              </label>
             </li>
           );
         })}
