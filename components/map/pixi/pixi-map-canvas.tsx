@@ -20,6 +20,7 @@ import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import type { ViewportBounds } from "@/lib/types/game";
+import type { MapMode } from "@/lib/types/map";
 
 export interface PixiMapCanvasProps {
   atlasData: AtlasData;
@@ -31,8 +32,11 @@ export interface PixiMapCanvasProps {
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
-  /** When true, paint faction-coloured territory; the economy layer hides. */
-  politicalOverlay?: boolean;
+  /**
+   * Which territory tint to paint. `political` shows faction colours,
+   * `regions` shows economy colours, `none` hides both layers.
+   */
+  mapMode?: MapMode;
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
 }
 
@@ -63,7 +67,7 @@ export function PixiMapCanvas({
   centerTarget,
   onReady,
   regionInfos,
-  politicalOverlay = false,
+  mapMode = "political",
   onViewportChange,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -304,12 +308,15 @@ export function PixiMapCanvas({
   }, [atlasData.systems, atlasData.factions, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
+  // Three modes: "political" shows the faction layer, "regions" shows the
+  // economy layer, "none" hides both. Per-frame LOD logic still runs on the
+  // hidden layers (cheap) so swapping back is instant.
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
-    p.territoryLayer.container.visible = !politicalOverlay;
-    p.politicalTerritoryLayer.setActive(politicalOverlay);
-  }, [politicalOverlay, pixiReady]);
+    p.territoryLayer.container.visible = mapMode === "regions";
+    p.politicalTerritoryLayer.setActive(mapMode === "political");
+  }, [mapMode, pixiReady]);
 
   // ── Update player presence highlights (lightweight fill-only redraw) ──
   useEffect(() => {
