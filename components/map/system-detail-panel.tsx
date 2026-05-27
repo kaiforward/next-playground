@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EconomyBadge } from "@/components/ui/economy-badge";
 import type { StarSystemInfo, ShipState, ConvoyState, ActiveEvent, SystemVisibility } from "@/lib/types/game";
+import type { NavigableUnit } from "@/lib/types/navigable";
+import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
 import { SectionHeader } from "@/components/ui/section-header";
+import { CompactShipCard } from "@/components/map/compact-ship-card";
+import { CompactConvoyCard } from "@/components/map/compact-convoy-card";
 import { enrichTraits } from "@/lib/utils/traits";
 
 interface GatewayTarget {
@@ -25,7 +29,11 @@ interface SystemDetailPanelProps {
   activeEvents?: ActiveEvent[];
   visibility: SystemVisibility;
   onClose: () => void;
+  /** Triggers nav-mode for the given unit (ship or convoy) without leaving the map. */
+  onNavigateUnit: (unit: NavigableUnit) => void;
 }
+
+const MAX_VISIBLE_PER_SECTION = 3;
 
 export function SystemDetailPanel({
   system,
@@ -36,8 +44,21 @@ export function SystemDetailPanel({
   activeEvents,
   visibility,
   onClose,
+  onNavigateUnit,
 }: SystemDetailPanelProps) {
   if (!system) return null;
+
+  // Only idle ships/convoys are actionable from the panel.
+  const idleShips = shipsHere.filter(
+    (s) => s.status === "docked" && !s.convoyId && !s.disabled,
+  );
+  const idleConvoys = convoysHere.filter((c) => c.status === "docked");
+
+  const visibleConvoys = idleConvoys.slice(0, MAX_VISIBLE_PER_SECTION);
+  const hiddenConvoys = idleConvoys.length - visibleConvoys.length;
+
+  const visibleShips = idleShips.slice(0, MAX_VISIBLE_PER_SECTION);
+  const hiddenShips = idleShips.length - visibleShips.length;
 
   return (
     <Dialog
@@ -72,18 +93,34 @@ export function SystemDetailPanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Economy badge + region + gateway */}
+        {/* Status row: economy + gateway */}
         <div className="flex flex-wrap items-center gap-2">
           <EconomyBadge economyType={system.economyType} />
-          {system.isGateway && (
-            <Badge color="amber">Gateway</Badge>
-          )}
+          {system.isGateway && <Badge color="amber">Gateway</Badge>}
         </div>
 
         {regionName && (
           <p className="text-xs text-text-tertiary">
             Region: <span className="text-text-secondary">{regionName}</span>
           </p>
+        )}
+
+        {/* Tab shortcuts — only when system is visible */}
+        {visibility === "visible" && (
+          <div className="grid grid-cols-4 gap-1">
+            <Button href={`/system/${system.id}/market`} variant="ghost" size="xs">
+              Market
+            </Button>
+            <Button href={`/system/${system.id}/ships`} variant="ghost" size="xs">
+              Ships
+            </Button>
+            <Button href={`/system/${system.id}/contracts`} variant="ghost" size="xs">
+              Contracts
+            </Button>
+            <Button href={`/system/${system.id}`} variant="ghost" size="xs">
+              Overview
+            </Button>
+          </div>
         )}
 
         {visibility === "unknown" ? (
@@ -125,6 +162,73 @@ export function SystemDetailPanel({
               </div>
             )}
 
+            {/* Active events */}
+            {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
+
+            {/* Convoys Here */}
+            {idleConvoys.length > 0 && (
+              <div>
+                <SectionHeader className="mb-2 flex items-center justify-between">
+                  <span>Convoys Here</span>
+                  <span className="font-normal text-text-tertiary normal-case tracking-normal">
+                    {idleConvoys.length}
+                  </span>
+                </SectionHeader>
+                <div className="flex flex-col gap-1.5">
+                  {visibleConvoys.map((c) => (
+                    <CompactConvoyCard
+                      key={c.id}
+                      convoy={c}
+                      systemId={system.id}
+                      onNavigate={(convoy) => onNavigateUnit(convoyToNavigableUnit(convoy))}
+                    />
+                  ))}
+                  {hiddenConvoys > 0 && (
+                    <Link
+                      href={`/system/${system.id}/convoys`}
+                      className="text-xs text-text-accent hover:text-accent-muted text-center py-1"
+                    >
+                      View all {idleConvoys.length} convoys &rarr;
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Ships Here */}
+            {idleShips.length > 0 && (
+              <div>
+                <SectionHeader className="mb-2 flex items-center justify-between">
+                  <span>Ships Here</span>
+                  <span className="font-normal text-text-tertiary normal-case tracking-normal">
+                    {idleShips.length}
+                  </span>
+                </SectionHeader>
+                <div className="flex flex-col gap-1.5">
+                  {visibleShips.map((s) => (
+                    <CompactShipCard
+                      key={s.id}
+                      ship={s}
+                      systemId={system.id}
+                      onNavigate={(ship) => onNavigateUnit(shipToNavigableUnit(ship))}
+                    />
+                  ))}
+                  {hiddenShips > 0 && (
+                    <Link
+                      href={`/system/${system.id}/ships`}
+                      className="text-xs text-text-accent hover:text-accent-muted text-center py-1"
+                    >
+                      View all {idleShips.length} ships &rarr;
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {idleConvoys.length === 0 && idleShips.length === 0 && (
+              <p className="text-sm text-text-tertiary">No idle ships docked here.</p>
+            )}
+
             {/* System traits */}
             {system.traits && system.traits.length > 0 && (
               <div>
@@ -134,54 +238,6 @@ export function SystemDetailPanel({
                 <TraitList traits={enrichTraits(system.traits)} variant="compact" />
               </div>
             )}
-
-            {/* Active events */}
-            {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
-
-            {/* Fleet at this system */}
-            <div>
-              <SectionHeader className="mb-2">
-                Your Fleet Here
-              </SectionHeader>
-
-              {convoysHere.length === 0 && shipsHere.length === 0 ? (
-                <p className="text-sm text-gray-500">No ships docked at this system.</p>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm text-text-secondary">
-                    {shipsHere.length > 0 && (
-                      <>{shipsHere.length} {shipsHere.length === 1 ? "ship" : "ships"}</>
-                    )}
-                    {shipsHere.length > 0 && convoysHere.length > 0 && " · "}
-                    {convoysHere.length > 0 && (
-                      <>{convoysHere.length} {convoysHere.length === 1 ? "convoy" : "convoys"} ({convoysHere.reduce((sum, c) => sum + c.members.length, 0)} ships)</>
-                    )}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href={`/system/${system.id}/ships`}
-                      className="text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
-                    >
-                      Ships tab
-                    </Link>
-                    {convoysHere.length > 0 && (
-                      <Link
-                        href={`/system/${system.id}/convoys`}
-                        className="text-xs font-medium text-blue-300 hover:text-blue-200 transition-colors"
-                      >
-                        Convoys tab
-                      </Link>
-                    )}
-                    <Link
-                      href={`/system/${system.id}/market`}
-                      className="text-xs font-medium text-text-accent hover:text-accent-muted transition-colors"
-                    >
-                      Market
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Coordinates */}
             <div>
@@ -197,19 +253,7 @@ export function SystemDetailPanel({
       </div>
 
       {/* Actions */}
-      <div className="px-4 py-3 border-t border-gray-700 space-y-2">
-        {visibility === "visible" && (
-          <Button
-            href={`/system/${system.id}`}
-            variant="action"
-            color="accent"
-            size="md"
-            fullWidth
-            className="active:scale-[0.98]"
-          >
-            View System
-          </Button>
-        )}
+      <div className="px-4 py-3 border-t border-gray-700">
         <Button onClick={onClose} variant="ghost" size="md" fullWidth>
           Close
         </Button>

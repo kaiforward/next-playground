@@ -316,6 +316,7 @@ export function StarMap({
           activeEvents={mapData.eventsAtSelected}
           visibility={mapData.selectedVisibility}
           onClose={closeSystem}
+          onNavigateUnit={navigation.selectUnit}
         />
       )}
     </div>
