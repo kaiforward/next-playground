@@ -4,7 +4,7 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { toShipStatus } from "@/lib/types/guards";
 import { getReputationTier } from "@/lib/constants/reputation";
-import { REPUTATION_TRADE_GAIN_PER_TRADE } from "./reputation";
+import { REPUTATION_TRADE_GAIN_PER_TRADE } from "@/lib/constants/reputation";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
 

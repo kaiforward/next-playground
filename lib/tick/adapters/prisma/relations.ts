@@ -130,20 +130,27 @@ export class PrismaRelationsWorld implements RelationsWorld {
 
   async getBorderLengthsBetween(): Promise<Map<FactionPairKey, number>> {
     // A "border lane" is a SystemConnection whose two endpoints belong to
-    // different factions. Group counts per unordered (factionA, factionB).
-    const rows = await this.tx.systemConnection.findMany({
-      select: {
-        fromSystem: { select: { factionId: true } },
-        toSystem: { select: { factionId: true } },
-      },
-    });
+    // different factions. Aggregate in PostgreSQL — at 10K-system scale the
+    // connection table has 30K-50K rows and JS-side grouping every 3 ticks
+    // would materialise the whole graph. The GROUP BY returns at most O(F²)
+    // rows (≈45 for 10 factions). Pair canonicalisation still happens here
+    // so (A,B) and (B,A) collapse on the same pairKey.
+    const rows = await this.tx.$queryRaw<
+      { a: string; b: string; cnt: bigint }[]
+    >`
+      SELECT fs."factionId" AS a, ts."factionId" AS b, COUNT(*) AS cnt
+      FROM "SystemConnection" sc
+      JOIN "StarSystem" fs ON sc."fromSystemId" = fs.id
+      JOIN "StarSystem" ts ON sc."toSystemId" = ts.id
+      WHERE fs."factionId" IS NOT NULL
+        AND ts."factionId" IS NOT NULL
+        AND fs."factionId" <> ts."factionId"
+      GROUP BY fs."factionId", ts."factionId"
+    `;
     const out = new Map<FactionPairKey, number>();
-    for (const c of rows) {
-      const a = c.fromSystem.factionId;
-      const b = c.toSystem.factionId;
-      if (!a || !b || a === b) continue;
-      const key = pairKey(a, b);
-      out.set(key, (out.get(key) ?? 0) + 1);
+    for (const r of rows) {
+      const key = pairKey(r.a, r.b);
+      out.set(key, (out.get(key) ?? 0) + Number(r.cnt));
     }
     return out;
   }
@@ -151,23 +158,28 @@ export class PrismaRelationsWorld implements RelationsWorld {
   async getTradeVolumeBetween(
     sinceTick: number,
   ): Promise<Map<FactionPairKey, number>> {
-    // Aggregate quantity by (from-faction, to-faction) across recent TradeFlow rows.
-    // The join is large; restrict by tick first via the TradeFlow index.
-    const rows = await this.tx.tradeFlow.findMany({
-      where: { tick: { gte: sinceTick } },
-      select: {
-        quantity: true,
-        fromSystem: { select: { factionId: true } },
-        toSystem: { select: { factionId: true } },
-      },
-    });
+    // Aggregate quantity by (from-faction, to-faction) across recent TradeFlow
+    // rows in PostgreSQL. Same scaling concern as getBorderLengthsBetween: the
+    // trade window can hold thousands of flows at 10K-system scale and the
+    // GROUP BY collapses them to O(F²) rows.
+    const rows = await this.tx.$queryRaw<
+      { a: string; b: string; total: bigint | null }[]
+    >`
+      SELECT fs."factionId" AS a, ts."factionId" AS b, SUM(tf.quantity) AS total
+      FROM "TradeFlow" tf
+      JOIN "StarSystem" fs ON tf."fromSystemId" = fs.id
+      JOIN "StarSystem" ts ON tf."toSystemId" = ts.id
+      WHERE tf.tick >= ${sinceTick}
+        AND fs."factionId" IS NOT NULL
+        AND ts."factionId" IS NOT NULL
+        AND fs."factionId" <> ts."factionId"
+      GROUP BY fs."factionId", ts."factionId"
+    `;
     const out = new Map<FactionPairKey, number>();
-    for (const f of rows) {
-      const a = f.fromSystem.factionId;
-      const b = f.toSystem.factionId;
-      if (!a || !b || a === b) continue;
-      const key = pairKey(a, b);
-      out.set(key, (out.get(key) ?? 0) + f.quantity);
+    for (const r of rows) {
+      if (r.total === null) continue;
+      const key = pairKey(r.a, r.b);
+      out.set(key, (out.get(key) ?? 0) + Number(r.total));
     }
     return out;
   }

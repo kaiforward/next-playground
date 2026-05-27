@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { getReputationTier } from "@/lib/constants/reputation";
+import {
+  getReputationTier,
+  REPUTATION_TRADE_GAIN_CAP_PER_TICK,
+} from "@/lib/constants/reputation";
 import type { ReputationStanding } from "@/lib/types/game";
 
 /** Per-player, per-faction reputation entry returned to clients. */
@@ -14,13 +17,6 @@ export interface PlayerFactionReputationInfo {
   tradeDenied: boolean;
   updatedAtTick: number;
 }
-
-/**
- * Per-tick reputation gain cap, applied per (player, faction) per tick across
- * all trade actions. Prevents grind-spam farming a single faction's score.
- */
-export const REPUTATION_TRADE_GAIN_PER_TRADE = 0.5;
-export const REPUTATION_TRADE_GAIN_CAP_PER_TICK = 2.0;
 
 /**
  * Compute the maximum delta we'll add to (player, faction) reputation this

@@ -3,8 +3,10 @@ import { calculatePrice } from "@/lib/engine/pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
 import { getInstalledModules } from "@/lib/utils/ship";
-import { getReputationTier } from "@/lib/constants/reputation";
-import { REPUTATION_TRADE_GAIN_PER_TRADE } from "./reputation";
+import {
+  getReputationTier,
+  REPUTATION_TRADE_GAIN_PER_TRADE,
+} from "@/lib/constants/reputation";
 import type { ShipTradeRequest } from "@/lib/types/api";
 import type { MarketEntry } from "@/lib/types/game";
 
