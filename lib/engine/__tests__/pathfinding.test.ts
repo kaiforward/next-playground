@@ -3,6 +3,7 @@ import {
   findShortestPath,
   findReachableSystems,
   validateRoute,
+  boundedHopsFromOrigin,
 } from "../pathfinding";
 import type { ConnectionInfo } from "../navigation";
 
@@ -198,5 +199,40 @@ describe("validateRoute", () => {
     if (!result.ok) {
       expect(result.error).toContain("duplicate consecutive");
     }
+  });
+});
+
+// ── boundedHopsFromOrigin ───────────────────────────────────────
+
+describe("boundedHopsFromOrigin", () => {
+  const connections = [
+    { fromSystemId: "A", toSystemId: "B", fuelCost: 10 },
+    { fromSystemId: "B", toSystemId: "C", fuelCost: 10 },
+    { fromSystemId: "C", toSystemId: "D", fuelCost: 10 },
+    { fromSystemId: "B", toSystemId: "E", fuelCost: 10 },
+  ];
+
+  it("returns origin at 0", () => {
+    const hops = boundedHopsFromOrigin("A", connections, 4);
+    expect(hops.get("A")).toBe(0);
+  });
+
+  it("returns shortest hop distance to each reachable node within maxHops", () => {
+    const hops = boundedHopsFromOrigin("A", connections, 4);
+    expect(hops.get("B")).toBe(1);
+    expect(hops.get("C")).toBe(2);
+    expect(hops.get("D")).toBe(3);
+    expect(hops.get("E")).toBe(2);
+  });
+
+  it("does not include nodes beyond maxHops", () => {
+    const hops = boundedHopsFromOrigin("A", connections, 2);
+    expect(hops.has("D")).toBe(false);
+  });
+
+  it("returns empty map (with just origin) when origin is unknown", () => {
+    const hops = boundedHopsFromOrigin("Z", connections, 4);
+    expect(hops.get("Z")).toBe(0);
+    expect(hops.size).toBe(1);
   });
 });
