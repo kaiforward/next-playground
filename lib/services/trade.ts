@@ -121,7 +121,7 @@ export async function executeTrade(
     playerCredits: player.credits,
     currentCargoUsed,
     cargoMax: ship.cargoMax,
-    currentSupply: marketEntry.supply,
+    currentSupply: Math.floor(marketEntry.supply),
     currentGoodQuantityInCargo,
     shipStatus: toShipStatus(ship.status),
   });
