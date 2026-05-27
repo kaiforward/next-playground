@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  allianceDissolvedTemplate,
   applyDriftToPair,
   borderConflictTemplate,
   computeConflictCounts,
@@ -10,6 +11,7 @@ import {
   indexRelationEvents,
   pactNegotiationTemplate,
   parseRelationEventMetadata,
+  rollWindow,
 } from "../relations";
 import {
   ALLIANCE,
@@ -261,6 +263,44 @@ describe("event templates", () => {
     const [min, max] = ALLIANCE.negotiationWindow;
     expect(t.metadata.expiresAtTick).toBeGreaterThanOrEqual(tick + min);
     expect(t.metadata.expiresAtTick).toBeLessThanOrEqual(tick + max);
+  });
+
+  it("alliance dissolved template uses the fixed dissolutionWindow and sentinel phaseDuration", () => {
+    const tick = 200;
+    const t = allianceDissolvedTemplate("fa", "fb", tick);
+    expect(t.type).toBe("alliance_dissolved");
+    expect(t.phase).toBe("dissolving");
+    expect(t.systemId).toBeNull();
+    expect(t.regionId).toBeNull();
+    expect(t.phaseDuration).toBe(Number.MAX_SAFE_INTEGER);
+    expect(t.metadata.factionAId).toBe("fa");
+    expect(t.metadata.factionBId).toBe("fb");
+    expect(t.metadata.expiresAtTick).toBe(tick + ALLIANCE.dissolutionWindow);
+  });
+});
+
+// ── rollWindow ──────────────────────────────────────────────────
+
+describe("rollWindow", () => {
+  it("returns min when rng yields 0", () => {
+    expect(rollWindow([5, 10], () => 0)).toBe(5);
+  });
+
+  it("returns max when rng yields the largest float < 1", () => {
+    expect(rollWindow([5, 10], () => 0.9999)).toBe(10);
+  });
+
+  it("returns a value in range for arbitrary rng outputs", () => {
+    for (const r of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+      const v = rollWindow([3, 7], () => r);
+      expect(v).toBeGreaterThanOrEqual(3);
+      expect(v).toBeLessThanOrEqual(7);
+      expect(Number.isInteger(v)).toBe(true);
+    }
+  });
+
+  it("collapses to a single value when min === max", () => {
+    expect(rollWindow([4, 4], () => 0.42)).toBe(4);
   });
 });
 

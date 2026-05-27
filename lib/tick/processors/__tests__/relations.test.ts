@@ -149,4 +149,56 @@ describe("runRelationsProcessor", () => {
     const conflicts = events.filter((e) => e.type === "border_conflict");
     expect(conflicts).toHaveLength(1);
   });
+
+  it("spawns an alliance_dissolved event when an active alliance's score is below dissolutionThreshold", async () => {
+    // Allied pair already below the dissolution threshold with no existing
+    // dissolution event — the trigger fires on the first relations tick.
+    const world = makeWorld(ALLIANCE.dissolutionThreshold - 2, {
+      alliance: true,
+    });
+    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });
+    const events = await world.getActiveRelationEvents();
+    const dissolution = events.find((e) => e.type === "alliance_dissolved");
+    expect(dissolution).toBeDefined();
+    expect(dissolution?.metadata.factionAId).toBe("fa");
+    expect(dissolution?.metadata.factionBId).toBe("fb");
+
+    // Alliance is still active — the event was spawned, not resolved.
+    const alliances = await world.getActiveAlliances();
+    expect(alliances).toHaveLength(1);
+  });
+
+  it("does not spawn duplicate alliance_dissolved when one already exists for the pair", async () => {
+    const world = makeWorld(ALLIANCE.dissolutionThreshold - 10, {
+      alliance: true,
+      events: [
+        { id: "ev1", type: "alliance_dissolved", expiresAtTick: Number.MAX_SAFE_INTEGER },
+      ],
+    });
+    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });
+    const events = await world.getActiveRelationEvents();
+    expect(events.filter((e) => e.type === "alliance_dissolved")).toHaveLength(1);
+  });
+
+  it("threads params.rng through event templates for deterministic windows", async () => {
+    // Cross into negotiation territory with rng pinned to 0 → minimum window.
+    const minWorld = makeWorld(74.99);
+    minWorld.tradeFlows.push({ tick: 5, fromSystemId: "s1", toSystemId: "s2", quantity: 5000 });
+    minWorld.tradeFlows.push({ tick: 5, fromSystemId: "s2", toSystemId: "s1", quantity: 5000 });
+    await runRelationsProcessor(minWorld, makeCtx(10), { tradeWindowTicks: 100, rng: () => 0 });
+    const minEvents = await minWorld.getActiveRelationEvents();
+    const minPact = minEvents.find((e) => e.type === "pact_under_negotiation");
+    expect(minPact).toBeDefined();
+    expect(minPact?.metadata.expiresAtTick).toBe(10 + ALLIANCE.negotiationWindow[0]);
+
+    // Same scenario with rng pinned to 0.9999 → maximum window.
+    const maxWorld = makeWorld(74.99);
+    maxWorld.tradeFlows.push({ tick: 5, fromSystemId: "s1", toSystemId: "s2", quantity: 5000 });
+    maxWorld.tradeFlows.push({ tick: 5, fromSystemId: "s2", toSystemId: "s1", quantity: 5000 });
+    await runRelationsProcessor(maxWorld, makeCtx(10), { tradeWindowTicks: 100, rng: () => 0.9999 });
+    const maxEvents = await maxWorld.getActiveRelationEvents();
+    const maxPact = maxEvents.find((e) => e.type === "pact_under_negotiation");
+    expect(maxPact).toBeDefined();
+    expect(maxPact?.metadata.expiresAtTick).toBe(10 + ALLIANCE.negotiationWindow[1]);
+  });
 });

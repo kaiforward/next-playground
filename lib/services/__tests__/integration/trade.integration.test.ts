@@ -197,4 +197,86 @@ describe("executeTrade (integration)", () => {
       expect(result.error).toMatch(/docked/i);
     }
   });
+
+  it("buy is blocked when the player has hostile standing with the system's faction", async () => {
+    // Hostile-band score for the federation faction (which owns the agri system).
+    await prisma.playerFactionReputation.create({
+      data: {
+        playerId: player.playerId,
+        factionId: universe.factions.federation,
+        score: -80,
+        updatedAtTick: 0,
+      },
+    });
+
+    const result = await executeTrade(player.playerId, shipId, {
+      stationId: universe.stations.agricultural,
+      goodId: universe.goodIds["food"],
+      quantity: 1,
+      type: "buy",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(403);
+      expect(result.error).toMatch(/hostile/i);
+    }
+  });
+
+  it("accrues per-tick capped reputation on a successful buy and updates the accumulator", async () => {
+    const factionId = universe.factions.federation;
+    const stationId = universe.stations.agricultural;
+    const goodId = universe.goodIds["food"];
+
+    // Two trades in the same tick. Both succeed; the accumulator should
+    // show the sum of granted gains.
+    const r1 = await executeTrade(player.playerId, shipId, {
+      stationId,
+      goodId,
+      quantity: 1,
+      type: "buy",
+    });
+    const r2 = await executeTrade(player.playerId, shipId, {
+      stationId,
+      goodId,
+      quantity: 1,
+      type: "buy",
+    });
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+
+    const row = await prisma.playerFactionReputation.findUnique({
+      where: { playerId_factionId: { playerId: player.playerId, factionId } },
+    });
+    expect(row?.score).toBeCloseTo(1); // two trades × 0.5 each
+    expect(row?.currentTickGainThisTick).toBeCloseTo(1);
+    expect(row?.updatedAtTick).toBe(10); // tick from seedTestUniverse
+  });
+
+  it("respects REPUTATION_TRADE_GAIN_CAP_PER_TICK across many trades in the same tick", async () => {
+    const factionId = universe.factions.federation;
+    const stationId = universe.stations.agricultural;
+    const goodId = universe.goodIds["food"];
+
+    // Bump credits + cargo so we can do many sequential buys.
+    await prisma.player.update({ where: { id: player.playerId }, data: { credits: 100_000 } });
+    await prisma.ship.update({ where: { id: shipId }, data: { cargoMax: 500 } });
+
+    // Drive ten buys — well past the cap budget (2.0 / 0.5 = 4 buys).
+    for (let i = 0; i < 10; i++) {
+      const r = await executeTrade(player.playerId, shipId, {
+        stationId,
+        goodId,
+        quantity: 1,
+        type: "buy",
+      });
+      expect(r.ok).toBe(true);
+    }
+
+    const row = await prisma.playerFactionReputation.findUnique({
+      where: { playerId_factionId: { playerId: player.playerId, factionId } },
+    });
+    expect(row?.score).toBeCloseTo(2);
+    expect(row?.currentTickGainThisTick).toBeCloseTo(2);
+  });
 });
