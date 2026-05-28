@@ -100,8 +100,8 @@ Engine module (zero DB, Vitest-tested). The Pixi layer stays a thin renderer.
 - `components/map/map-overlay-controls.tsx`: add a "Ship Routes" row to `OVERLAY_DEFS` and a short legend.
 
 ### Modified: `components/map/star-map.tsx`
-- Source `currentTick` from `useTickContext` (already provided by `TickProvider` on the page); source the tick rate from world state (`GameWorld.tickRate` — confirm units; the game ticks every 5s).
-- Hold selected-transit state (`selectedTransitId | null`); render the **compact in-transit card** (reuse/extend `compact-ship-card.tsx`) when a marker is selected, positioned near the marker, with destination/cargo/ETA and a link to the full ship page. Clicking empty space or another marker updates/clears selection.
+- Source `currentTick` from `useTickContext` (already provided by `TickProvider` on the page). The tick interval is measured inside the layer (see Position interpolation), so no tick-rate plumbing is needed.
+- Hold selected-transit state (`selectedTransitId | null`); render the **compact in-transit card** (new `compact-transit-card.tsx` — the existing `compact-ship-card.tsx` is docked-only with Navigate/Trade actions that don't apply mid-transit) when a marker is selected. Shown in a **fixed panel** (same placement family as `RoutePreviewPanel`), **not pinned to the moving marker** (per-frame DOM re-projection at 60fps is avoided); shows destination / cargo / ETA + a link to the full ship page. The selected marker is highlighted so the card↔marker link is clear. Clicking empty space or another marker updates/clears selection.
 - Feed `transitUnits` + interaction handlers into `PixiMapCanvas`.
 
 ### Theme: `components/map/pixi/theme.ts`
@@ -129,7 +129,7 @@ nowTick   = currentTick + clamp((Date.now() − lastTickChangeAt) / tickRateMs, 
 progress  = clamp((nowTick − departureTick) / (arrivalTick − departureTick), 0, 1)
 ```
 
-The layer records `lastTickChangeAt = Date.now()` whenever the `currentTick` prop changes, and re-interpolates each frame. Self-correcting on every tick; no change to the tick context required. `tickRateMs` comes from `GameWorld.tickRate` (already available in world state).
+The layer records `lastTickChangeAt = Date.now()` whenever the `currentTick` prop changes, and re-interpolates each frame. `tickRateMs` is **measured empirically** — the interval between the last two `currentTick` changes (clamped to `[500, 30000]`ms, defaulting to `5000` before the first interval is observed). This auto-adapts to the live rate (including dev-tools rate changes) with no extra server plumbing. Self-correcting on every tick.
 
 ---
 
