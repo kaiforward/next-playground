@@ -15,9 +15,11 @@ import { FleetDotLayer } from "./layers/fleet-dot-layer";
 import { TradeFlowLayer } from "./layers/trade-flow-layer";
 import { PriceHeatmapLayer } from "./layers/price-heatmap-layer";
 import { EffectLayer } from "./layers/effect-layer";
+import { FleetTransitLayer } from "./layers/fleet-transit-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
 import type { MapData } from "@/lib/hooks/use-map-data";
+import type { ConnectionInfo } from "@/lib/engine/navigation";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import type { ViewportBounds } from "@/lib/types/game";
@@ -39,6 +41,11 @@ export interface PixiMapCanvasProps {
    */
   mapMode?: MapMode;
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
+  connections: ConnectionInfo[];
+  currentTick: number;
+  showShipRoutes: boolean;
+  selectedTransitId: string | null;
+  onTransitClick: (unitId: string | null) => void;
 }
 
 /** Holds all mutable Pixi references. Created once during mount. */
@@ -56,6 +63,7 @@ interface PixiRefs {
   fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
   priceHeatmapLayer: PriceHeatmapLayer;
+  fleetTransitLayer: FleetTransitLayer;
   effectLayer: EffectLayer;
 }
 
@@ -71,6 +79,11 @@ export function PixiMapCanvas({
   regionInfos,
   mapMode = "political",
   onViewportChange,
+  connections,
+  currentTick,
+  showShipRoutes,
+  selectedTransitId,
+  onTransitClick,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pixiRef = useRef<PixiRefs | null>(null);
@@ -82,6 +95,12 @@ export function PixiMapCanvas({
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
+
+  const onTransitClickRef = useRef(onTransitClick);
+  onTransitClickRef.current = onTransitClick;
+
+  const currentTickRef = useRef(currentTick);
+  currentTickRef.current = currentTick;
 
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
@@ -180,6 +199,11 @@ export function PixiMapCanvas({
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
 
+      // Fleet transit markers + routes sit above system glyphs but below the
+      // navigation effect layer.
+      const fleetTransitLayer = new FleetTransitLayer();
+      world.addChild(fleetTransitLayer.container);
+
       const effectLayer = new EffectLayer();
       world.addChild(effectLayer.container);
 
@@ -190,6 +214,8 @@ export function PixiMapCanvas({
         getCallbacks: () => callbacksRef.current,
         getMapData: () => mapDataRef.current,
       });
+
+      fleetTransitLayer.setOnClick((id) => onTransitClickRef.current(id));
 
       // Keep camera screen size in sync with Pixi's own resize
       app.renderer.on("resize", onResize);
@@ -253,6 +279,11 @@ export function PixiMapCanvas({
         tradeFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
         if (tradeFlowLayer.container.visible) tradeFlowLayer.update(dtMs);
 
+        // Fleet transit markers — always-on across zoom levels
+        fleetTransitLayer.setTick(currentTickRef.current);
+        fleetTransitLayer.update(dtMs, camera.zoom, frustum);
+        fleetTransitLayer.updateVisibility(1);
+
         // Effect layer visibility based on LOD
         effectLayer.container.visible = lod.showEffects;
 
@@ -267,7 +298,8 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer, priceHeatmapLayer, effectLayer,
+        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer, priceHeatmapLayer,
+        fleetTransitLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -288,6 +320,7 @@ export function PixiMapCanvas({
           refs.politicalTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
           refs.priceHeatmapLayer.destroy();
+          refs.fleetTransitLayer.destroy();
           refs.effectLayer.destroy();
           refs.starfield.destroy();
           refs.pointCloudLayer.destroy();
@@ -368,7 +401,12 @@ export function PixiMapCanvas({
     p.priceHeatmapLayer.sync(mapData.systems, mapData.priceHeatmap);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
     p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
-  }, [mapData, selectedSystem, navigationMode, pixiReady]);
+
+    const transitPositions = new Map(mapData.systems.map((s) => [s.id, { x: s.x, y: s.y }]));
+    p.fleetTransitLayer.sync(mapData.transitUnits, transitPositions, connections);
+    p.fleetTransitLayer.setSelected(selectedTransitId);
+    p.fleetTransitLayer.setShowAllRoutes(showShipRoutes);
+  }, [mapData, selectedSystem, navigationMode, pixiReady, connections, selectedTransitId, showShipRoutes]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

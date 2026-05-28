@@ -7,6 +7,7 @@ import type { AtlasData, UniverseData, StarSystemInfo, ShipState, ConvoyState, A
 import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
+import { CompactTransitCard } from "@/components/map/compact-transit-card";
 import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
 import { MapOverlayControls } from "@/components/map/map-overlay-controls";
@@ -16,6 +17,7 @@ import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useMapMode } from "@/lib/hooks/use-map-mode";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
+import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
@@ -58,6 +60,10 @@ export function StarMap({
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
+
+  // ── Live tick + in-transit marker selection ───────────────────
+  const { currentTick } = useTickContext();
+  const [selectedTransitId, setSelectedTransitId] = useState<string | null>(null);
 
   // ── Price overlay control state (good picker + comparison panel) ──
   const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
@@ -194,6 +200,15 @@ export function StarMap({
     priceHeatmap: heatmapData,
   });
 
+  // ── Selected in-transit unit + ETA (drives the compact card) ──
+  const selectedTransit = useMemo(
+    () => mapData.transitUnits.find((u) => u.id === selectedTransitId) ?? null,
+    [mapData.transitUnits, selectedTransitId],
+  );
+  const selectedTransitEta = selectedTransit
+    ? Math.max(0, selectedTransit.arrivalTick - currentTick)
+    : 0;
+
   // ── Auto-select ship/convoy from URL query param on mount ────────
   useEffect(() => {
     if (!initialSelectedShipId) return;
@@ -252,10 +267,15 @@ export function StarMap({
   );
 
   const onEmptyClick = useCallback(() => {
+    setSelectedTransitId(null);
     if (mode.phase === "default") {
       closeSystem();
     }
   }, [mode.phase, closeSystem]);
+
+  const onTransitClick = useCallback((id: string | null) => {
+    setSelectedTransitId((prev) => (prev === id ? null : id));
+  }, []);
 
   // ── Center target (reactive — responds to systemId URL changes) ──
   type CenterTarget = { x: number; y: number; zoom: number };
@@ -294,6 +314,11 @@ export function StarMap({
         regionInfos={regionInfos}
         mapMode={mapMode}
         onViewportChange={onViewportChange}
+        connections={allConnections}
+        currentTick={currentTick}
+        showShipRoutes={overlays.shipRoutes}
+        selectedTransitId={selectedTransitId}
+        onTransitClick={onTransitClick}
       />
 
       {/* Price heatmap data fetcher — only mounts when overlay+good are active. */}
@@ -349,6 +374,15 @@ export function StarMap({
           isNavigating={navigation.isNavigating}
           onConfirm={navigation.confirmNavigation}
           onCancel={navigation.cancel}
+        />
+      )}
+
+      {/* Compact in-transit ship card (shown when a marker is selected) */}
+      {selectedTransit && (
+        <CompactTransitCard
+          unit={selectedTransit}
+          etaTicks={selectedTransitEta}
+          onClose={() => setSelectedTransitId(null)}
         />
       )}
 
