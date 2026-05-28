@@ -8,6 +8,8 @@ Mini-games are part of the [In-System Gameplay](./in-system-gameplay.md) layer. 
 
 **Design principle**: Thematic resonance. Every game reflects the world it exists in — traders bluff about cargo, miners push their luck, officers play strategy games. The mini-games are a window into the culture.
 
+> **Status — Void's Gambit is live.** §1 below is shipped: the engine (`lib/engine/mini-games/voids-gambit/`), all 4 NPC opponent archetypes, per-opponent wager limits, and the in-cantina game UI are built and playable through the Explore tab's cantina location. The future expansion hooks in §1.12 and the other games in §2 (Drift, Alignment, Cargo Roulette) remain planned.
+
 ---
 
 ## 1. Void's Gambit

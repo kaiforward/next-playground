@@ -1,5 +1,7 @@
 # Server-Side Filtering & Pagination
 
+> **Status — infrastructure shipped.** The pagination/filtering foundation is live: `PaginatedResult<T>` types and the `buildPaginatedArgs` / `paginateResults` helpers in `lib/services/pagination.ts`, the generic `usePaginatedQuery` hook in `lib/hooks/use-paginated-query.ts`, and the Captain's Log panel (`app/(game)/@panel/log/page.tsx`) as the first consumer (cursor pagination + FilterBar chips + message search). See the live [Notifications & Captain's Log](../active/gameplay/notifications.md) doc. **Remaining scope below is applying this infra to the other lists** (events, fleet, etc.) once the map stops loading everything client-side.
+
 ## Problem
 
 Several entity collections will grow beyond what's practical to fetch in a single API response:
@@ -20,9 +22,9 @@ The FilterBar component provides the right UI — chips, search, sort, result co
 
 ## Scope
 
-**Phase 1–2 (this PR)**: Infrastructure (`PaginatedData<T>`, `usePaginatedQuery`, pagination service helpers) + Captain's Log migration (the only panel with data NOT loaded by the map).
+**Shipped**: Infrastructure (`PaginatedResult<T>`, `usePaginatedQuery`, pagination service helpers) + Captain's Log migration (the only panel with data NOT loaded by the map).
 
-**Deferred**: Events panel pagination, fleet panel pagination, fleet summary endpoint. Events and fleet data is loaded by the map (`useEvents()`, `useFleet()`); the panels reuse the TanStack Query cache. Adding server-side pagination to panels while the map still loads everything yields zero savings. These become useful when the map switches to viewport-based loading (a separate, larger architectural change).
+**Remaining (deferred)**: Events panel pagination, fleet panel pagination, fleet summary endpoint. Events and fleet data is loaded by the map (`useEvents()`, `useFleet()`); the panels reuse the TanStack Query cache. Adding server-side pagination to panels while the map still loads everything yields zero savings. These become useful when the map switches to viewport-based loading (a separate, larger architectural change).
 
 ## Goals
 
@@ -159,22 +161,13 @@ When SSE signals a change, the current page of data is invalidated. TanStack Que
 
 ## Migration Plan
 
-### Phase 1: Shared Infrastructure
+### Phase 1 + 2 — SHIPPED
 
-- `PaginatedData<T>` / `PaginatedResponse<T>` types in `lib/types/api.ts`
-- `buildPaginatedArgs` + `paginateResults` helpers in `lib/services/pagination.ts`
-- `usePaginatedQuery` hook in `lib/hooks/use-paginated-query.ts` (wraps `useInfiniteQuery`, 300ms search debounce)
-- Notification API aligned to `PaginatedResponse` shape
-- Unit tests for pagination helpers
+Shared infrastructure (`buildPaginatedArgs` / `paginateResults` helpers, `usePaginatedQuery` hook with 300ms search debounce) and the Captain's Log migration are done. The notifications API serves `{ items, nextCursor, total }`, supports a `search` param (message `contains`), and the log panel drives it with FilterBar + search + LoadMoreFooter. See the [Notifications & Captain's Log](../active/gameplay/notifications.md) doc.
 
-### Phase 2: Captain's Log Migration
+### Remaining: apply the infra to other lists
 
-First migration — notifications already have cursor pagination, this aligns the response shape and replaces the bespoke `useLog` hook:
-
-- Align `GET /api/game/notifications` response to `PaginatedResponse` shape (`items` + `total`)
-- Add `search` param (message text LIKE query)
-- Replace `useLog` with `usePaginatedQuery` in Captain's Log panel
-- Log panel uses FilterBar + search input + LoadMoreFooter
+See **Deferred: Events & Fleet Pagination** below.
 
 ---
 

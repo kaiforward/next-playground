@@ -330,4 +330,4 @@ Once stable, Layer 3 (faction-gated missions, in-system gameplay) can begin.
 | `layer-2-contraband.md` | Detailed plan for sub-project 3 | To be written before Contraband begins |
 | `layer-2-war.md` | Detailed plan for sub-project 4 | To be written before War begins |
 
-Each sub-project plan is brainstormed and committed before any code for that sub-project lands. Plans follow the depth pattern of `layer-1.md`: phase breakdown, file change summary, test/validation strategy, branch strategy.
+Each sub-project plan is brainstormed and written before any code for that sub-project lands — a code-heavy build plan in `docs/plans/` (deleted once the sub-project ships), covering a phase breakdown, file-change summary, test/validation strategy, and branch strategy.

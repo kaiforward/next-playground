@@ -46,7 +46,7 @@ Functional spec: `docs/SPEC.md` — master game spec with system interaction map
 Module index: `docs/MODULE_INDEX.md` — auto-generated inventory of all shared exports (utils, hooks, components, constants). Regenerate with `npm run index`.
 
 Design docs (under `docs/`):
-- `docs/active/` — Implemented systems, split by type: `gameplay/` (economy, events, trading, trade-simulation, navigation, universe, system-traits, faction-system, combat, …), `engineering/` (tick-engine, processor-architecture), `design-system/` (theme)
+- `docs/active/` — Implemented systems, split by type: `gameplay/` (economy, events, trading, trade-simulation, navigation, universe, system-traits, faction-system, combat, notifications, …), `engineering/` (tick-engine, processor-architecture, map-data-loading), `design-system/` (theme)
 - `docs/planned/` — Designed but not yet built (war-system, facilities, production, player-progression, multiplayer-infrastructure, …)
 - `docs/archive/` — Historical design docs (may be outdated)
 - `docs/plans/` — Transient, code-heavy build plans for in-flight features. **Delete each once its feature ships** — the functional spec moves to `docs/active/` and the code is the source of truth. Functional roadmaps that merely order unbuilt features go in `docs/planned/`, not here.

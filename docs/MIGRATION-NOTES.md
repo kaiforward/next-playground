@@ -172,15 +172,11 @@ No formal pause point needed. Layer 4 (facilities, production, automation) and L
 
 Specific items where a planned system replaces or modifies an active implementation. Each item tracks the active state, planned state, and what changes during migration. Delete each item once the migration is complete and the active docs are updated.
 
-### 1. Government Ownership: Region → Faction
+### ~~1. Government Ownership: Region → Faction~~ — **Resolved (Layer 2 foundation)**
 
-**Active** (universe.md, economy.md): Government type is assigned per *region* at seed time. All systems in a region share the same government.
+Implemented. Government type now lives on the faction and is sourced per-system via `StarSystem.factionId`; `Region.governmentType` was dropped entirely. Government modifiers (volatility, equilibrium spread, tax, danger, contraband) resolve per-system from the owning faction, and a region's displayed "dominant government" is derived from its most prevalent owning faction. universe.md and faction-system.md reflect this.
 
-**Planned** (faction-system.md §1): Government type belongs to the *faction*. Systems inherit their controlling faction's government type. When territory changes hands in a war, the system's government changes.
-
-**Key deltas**: Government modifiers (volatility, equilibrium spread, tax, danger, contraband) move from per-region to per-system based on owning faction. Affects economy processing, danger pipeline, contraband inspection, and tax collection.
-
-**Region dominant economy re-derivation**: Layer 0 adds `Region.dominantEconomy` (stored, computed at seed time). When faction conquest changes a system's economy via government affinity nudge ([system-traits.md §2.2](./active/gameplay/system-traits.md)), the owning region's `dominantEconomy` must be re-derived. Add this to the war/territory-change processor.
+*(Still to come with War: re-deriving `Region.dominantEconomy` when conquest changes a system's economy via the government affinity nudge — folded into the future war/territory-change processor.)*
 
 ---
 
@@ -213,9 +209,9 @@ Implemented and exceeded. `UNIVERSE_SCALE` env var supports `"default"` (600 sys
 
 ### 7. Tick Engine Expansion
 
-New tick processors needed for planned systems. None are described in the active tick engine doc yet. Processor dependency order not yet considered.
+The `relations` processor (inter-faction relation drift; border-conflict / pact / dissolution events) **shipped** with the Layer-2 foundation and is documented in the active tick-engine doc. Further processors are still planned:
 
-**Faction system**: Relation drift, war exhaustion, battle resolution, territory control, faction economy effects.
+**War system**: war exhaustion, battle resolution, territory control, faction economy effects.
 
 **Ship automation**: Automated trade execution for player ships.
 

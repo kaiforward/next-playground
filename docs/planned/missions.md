@@ -42,40 +42,31 @@ All missions share a core set of properties regardless of category:
 
 "Bring X to Y." Player loads cargo, travels to destination, delivers. Outcome depends on having the goods and surviving the danger pipeline.
 
-This is the existing trade mission system, extended with new generation sources.
+The market-generated and event-linked variants are **shipped** — see [trading.md](../active/gameplay/trading.md) for the live `TradeMission` model, generation, lifecycle, and reward formula. The remaining variants below are the faction- and facility-gated extensions that build on that foundation.
 
-| Subtype | Source | Description | Example |
+| Subtype | Source | Description | Status |
 |---|---|---|---|
-| **Trade (import)** | Market conditions | Good's price exceeds 2x base — system needs supply | "Deliver 20 Medicine to Kepler Station" |
-| **Trade (export)** | Market conditions | Good's price below 0.5x base — system has surplus to move | "Transport 30 Ore from Kepler to Vega Outpost" |
-| **Event-linked** | Active events | Thematic goods for active events, 1.5x reward bonus | "Emergency: deliver Fuel to war-torn Arcturus" |
-| **War logistics** | Active faction war | Deliver war goods (weapons, fuel, food, machinery) to contested or staging systems. Bonus rewards. Tier 1 war contribution | "Supply 15 Weapons to the Terran staging depot at Wolf 359" |
-| **Smuggling** | Black market facility | Deliver contraband through dangerous/restricted space. Higher danger, higher margins | "Move 10 Chemicals to the black market at Tortuga" |
-| **Courier** | Faction (any facility) | Small-cargo, time-sensitive deliveries. Low reward, good for early reputation building | "Rush delivery: 5 Electronics to the embassy at Sol" |
+| **Trade (import/export)** | Market conditions | Price-threshold supply/surplus deliveries | **Shipped** ([trading.md](../active/gameplay/trading.md)) |
+| **Event-linked** | Active events | Thematic goods for active events, reward bonus | **Shipped** ([trading.md](../active/gameplay/trading.md)) |
+| **War logistics** | Active faction war | Deliver war goods (weapons, fuel, food, machinery) to contested or staging systems. Bonus rewards. Tier 1 war contribution | Planned |
+| **Smuggling** | Black market facility | Deliver contraband through dangerous/restricted space. Higher danger, higher margins | Planned |
+| **Courier** | Faction (any facility) | Small-cargo, time-sensitive deliveries. Low reward, good for early reputation building | Planned |
 
-**Reward formula**: Extends the existing `3 CR/unit × quantity × 1.25^hops × tierMult × sourceMult` pattern. Source multiplier varies: market 1.0x, event 1.5x, war logistics 2.0x, smuggling 2.5x (risk premium), courier 0.5x (low volume, easy).
+**Reward formula**: The shipped formula (see [trading.md](../active/gameplay/trading.md)) extends with a per-source multiplier for the new variants: war logistics 2.0x, smuggling 2.5x (risk premium), courier 0.5x (low volume, easy).
 
 ### 2.2 Operational Missions
 
-"Go to X, spend time, effect applied." Player sends a ship to a target system. The ship is committed for a duration (locked, similar to travel). The ship's stats determine which missions it can accept, and its presence at the target system produces the effect.
+"Go to X, spend time, effect applied." Player sends a ship to a target system, committed for a duration; the ship's stats gate acceptance, and its presence at the target produces the effect.
 
-**Partially implemented (Layer 1.5)**: Non-faction variants of patrol, survey, and bounty are live. These are generated from system danger levels and traits, without faction or facility requirements. See [combat.md](../active/gameplay/combat.md) for the battle engine and mission generation details. The faction-gated variants described below extend this foundation in Layer 2.
+The non-faction variants of **patrol, survey, and bounty are shipped** — generated from system danger and traits, no faction or facility required. See [combat.md](../active/gameplay/combat.md) for the battle engine, mission generation, stat gating, and durations. The faction- and facility-gated variants below extend that foundation.
 
-| Subtype | Source | Stat gate | Duration | Effect | Status |
-|---|---|---|---|---|---|
-| **Patrol** | Danger level (now) / Naval base (Layer 2) | Firepower ≥ 5 | 15–25 ticks | Reduces danger modifier at target system. Higher danger = higher reward | **Live** (non-faction) |
-| **Bounty** | Danger level (now) / Naval base (Layer 2) | Firepower ≥ 4, Hull ≥ 30 | Battle-driven | Tick-based combat vs pirate encounters. Enemy tier (weak/moderate/strong) scales with danger | **Live** (non-faction) |
-| **Survey** | System traits (now) / Research station (Layer 2) | Sensors ≥ 6 | 10–15 ticks | Scouts systems with eligible traits (precursor ruins, anomalies, etc.) | **Live** (non-faction) |
-| **Intelligence** | Intelligence outpost | Stealth, sensors | Medium (10–20 ticks) | Gathers data on rival faction systems. Detection risk based on stealth vs system security | Planned (Layer 2) |
-| **Diplomacy** | Embassy | None (ship is transport) | Short (5–10 ticks) | Ferries envoys between faction systems. Generates positive inter-faction relation drift | Planned (Layer 2) |
-
-**Interaction model**: Same as delivery missions from the player's perspective — accept at a mission board, assign a ship, wait for resolution. The difference is that the outcome comes from the ship's presence and stats rather than cargo delivery.
-
-**Stat gating**: Ship stats set a minimum threshold for acceptance, not a success roll. A ship below the firepower threshold can't take a patrol mission. Above the threshold, better stats improve the effect magnitude (more danger reduction, less detection risk) but don't determine pass/fail.
-
-**Duration**: Operational missions take longer than deliveries. The ship is committed and unavailable for the mission duration, making ship allocation a strategic decision — assigning your best combat ship to a patrol means it's not available for trade runs.
-
-**Bounty combat**: Bounty missions trigger a tick-based battle when the ship arrives at the target system. Battles resolve in rounds (every 6 ticks) with simultaneous damage, morale tracking, and variance. See [combat.md](../active/gameplay/combat.md) for full engine details.
+| Subtype | Source | Stat gate | Effect | Status |
+|---|---|---|---|---|
+| **Patrol** | Naval base | Firepower | Reduces danger modifier at target faction system | Planned (faction variant of shipped patrol) |
+| **Bounty** | Naval base | Firepower, Hull | Tick-based combat vs faction-tied encounters | Planned (faction variant of shipped bounty) |
+| **Survey** | Research station | Sensors | Scouts trait-eligible faction systems | Planned (faction variant of shipped survey) |
+| **Intelligence** | Intelligence outpost | Stealth, sensors | Gathers data on rival faction systems. Detection risk based on stealth vs system security | Planned |
+| **Diplomacy** | Embassy | None (ship is transport) | Ferries envoys between faction systems. Generates positive inter-faction relation drift | Planned |
 
 **Wartime escalation**: Escort and sabotage are wartime activities that belong to the war contribution system (see [war-system.md §8](./war-system.md)). Patrol and intelligence missions may gain wartime variants with higher stakes and rewards, but the mechanics for that integration are designed with the war system, not here.
 

@@ -2,6 +2,8 @@
 
 The second major gameplay space alongside the universe map. When docked at a system, players engage with narrative content, NPC interactions, missions, and activities that take place *within* the system — on planets, stations, moons, in asteroid fields, and at anomaly sites. A text-based adventure layer on top of the space trading simulation.
 
+> **Status — framework live, content pending.** The Explore tab ships: each system derives its locations from its traits at runtime (`lib/constants/locations.ts`, rendered at `app/(game)/.../system/[systemId]/explore/`), and the cantina with Void's Gambit is integrated as a location (§8.5). What remains is **content and depth**, not architecture: the NPC/dialogue framework, in-system mission templates and stage logic, timed-mission ship commitment, multi-system storylines, and the broader activity catalog described below. Read the Phase 1 sections (§8) as the build sequence — the location-derivation and mini-game steps are done; the dialogue, mission, and content steps are the open work.
+
 **Design principle**: Worthwhile but not mandatory. Fleet-focused players should never feel forced into in-system content to stay competitive. Adventure-focused players should find enough depth to spend most of their time here. Both paths are viable and rewarding — in-system gameplay is an alternative progression axis, not a prerequisite for the trading game.
 
 **Design principle**: Start simple, grow deep. The framework supports unlimited content expansion, but Phase 1 ships a focused, polished set of content — enough to demonstrate the system and give early players engaging things to do beyond trading.
