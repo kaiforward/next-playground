@@ -368,7 +368,6 @@ export function PixiMapCanvas({
     p.priceHeatmapLayer.sync(mapData.systems, mapData.priceHeatmap);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
     p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
-    p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");
   }, [mapData, selectedSystem, navigationMode, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────

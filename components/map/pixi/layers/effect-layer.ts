@@ -13,24 +13,12 @@ interface RouteParticle {
   speed: number;   // units per ms
 }
 
-interface PulseRing {
-  gfx: Graphics;
-  systemId: string;
-  x: number;
-  y: number;
-  phase: number;
-}
-
 export class EffectLayer {
   readonly container = new Container();
   private particles: RouteParticle[] = [];
-  private pulseRings: PulseRing[] = [];
-  private pulseRingMap = new Map<string, PulseRing>();
   private particleContainer = new Container();
-  private pulseContainer = new Container();
 
   constructor() {
-    this.container.addChild(this.pulseContainer);
     this.container.addChild(this.particleContainer);
   }
 
@@ -88,49 +76,6 @@ export class EffectLayer {
     }
   }
 
-  /** Sync pulse rings on systems with ships (default mode only). Diffs by systemId to avoid destroy/recreate churn. */
-  syncPulseRings(systems: SystemNodeData[], isDefaultMode: boolean) {
-    if (!isDefaultMode) {
-      this.clearPulseRings();
-      return;
-    }
-
-    // Build set of systems that should have rings
-    const wanted = new Set<string>();
-    for (const sys of systems) {
-      if (sys.shipCount > 0) wanted.add(sys.id);
-    }
-
-    // Remove stale rings
-    for (const [id, ring] of this.pulseRingMap) {
-      if (!wanted.has(id)) {
-        this.pulseContainer.removeChild(ring.gfx);
-        ring.gfx.destroy();
-        this.pulseRingMap.delete(id);
-      }
-    }
-
-    // Add new rings
-    for (const sys of systems) {
-      if (sys.shipCount <= 0) continue;
-      if (this.pulseRingMap.has(sys.id)) continue;
-
-      const gfx = new Graphics();
-      this.pulseContainer.addChild(gfx);
-      const ring: PulseRing = {
-        gfx,
-        systemId: sys.id,
-        x: sys.x,
-        y: sys.y,
-        phase: Math.random() * ANIM.pulseRingPeriod,
-      };
-      this.pulseRingMap.set(sys.id, ring);
-    }
-
-    // Rebuild flat array for update loop
-    this.pulseRings = [...this.pulseRingMap.values()];
-  }
-
   update(dtMs: number) {
     // Animate route particles
     for (const p of this.particles) {
@@ -138,18 +83,6 @@ export class EffectLayer {
       const x = p.fromX + (p.toX - p.fromX) * p.offset;
       const y = p.fromY + (p.toY - p.fromY) * p.offset;
       p.gfx.position.set(x, y);
-    }
-
-    // Animate pulse rings
-    for (const ring of this.pulseRings) {
-      ring.phase = (ring.phase + dtMs) % ANIM.pulseRingPeriod;
-      const t = ring.phase / ANIM.pulseRingPeriod;
-      const radius = 12 + (ANIM.pulseRingMaxRadius - 12) * t;
-      const alpha = 0.4 * (1 - t);
-
-      ring.gfx.clear();
-      ring.gfx.circle(ring.x, ring.y, radius);
-      ring.gfx.stroke({ color: NAV_COLORS.origin, width: 1.5, alpha });
     }
   }
 
@@ -161,18 +94,8 @@ export class EffectLayer {
     this.particleContainer.removeChildren();
   }
 
-  private clearPulseRings() {
-    for (const ring of this.pulseRings) {
-      ring.gfx.destroy();
-    }
-    this.pulseRings = [];
-    this.pulseRingMap.clear();
-    this.pulseContainer.removeChildren();
-  }
-
   destroy() {
     this.clearParticles();
-    this.clearPulseRings();
     this.container.destroy({ children: true });
   }
 }

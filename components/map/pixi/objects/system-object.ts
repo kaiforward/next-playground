@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { EconomyType, SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -17,11 +17,11 @@ const ECON_STYLE = new TextStyle({
   align: "center",
 });
 
-const SHIP_STYLE = new TextStyle({
-  fontSize: SIZES.systemShipLabelSize,
-  fill: TEXT_COLORS.ship,
-  fontFamily: "system-ui, -apple-system, sans-serif",
-  fontWeight: "bold",
+const DOCKED_COUNT_STYLE = new TextStyle({
+  fontSize: 12,
+  fill: FLEET.pillContent,
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontWeight: "700",
   align: "center",
 });
 
@@ -34,7 +34,10 @@ export class SystemObject extends Container {
   private navigationRing: Graphics;
   private nameLabel: Text;
   private econLabel: Text;
-  private shipLabel: Text;
+  private dockedPill: Container;
+  private dockedPillBg: Graphics;
+  private dockedGlyph: Graphics;
+  private dockedCount: Text;
   private gatewayDot: Graphics;
   private eventDots: Graphics;
 
@@ -80,11 +83,15 @@ export class SystemObject extends Container {
     this.econLabel.anchor.set(0.5, 0);
     this.addChild(this.econLabel);
 
-    // Ship count label
-    this.shipLabel = new Text({ text: "", style: SHIP_STYLE, resolution: TEXT_RESOLUTION });
-    this.shipLabel.anchor.set(0.5, 0);
-    this.shipLabel.visible = false;
-    this.addChild(this.shipLabel);
+    // Docked-ship pill (top-left of the glyph; replaces the pulse ring + text)
+    this.dockedPill = new Container();
+    this.dockedPillBg = new Graphics();
+    this.dockedGlyph = new Graphics();
+    this.dockedCount = new Text({ text: "", style: DOCKED_COUNT_STYLE, resolution: TEXT_RESOLUTION });
+    this.dockedCount.anchor.set(0, 0.5);
+    this.dockedPill.addChild(this.dockedPillBg, this.dockedGlyph, this.dockedCount);
+    this.dockedPill.visible = false;
+    this.addChild(this.dockedPill);
 
     // Gateway indicator
     this.gatewayDot = new Graphics();
@@ -165,16 +172,12 @@ export class SystemObject extends Container {
       this.currentShipCount = data.shipCount;
       // Ship count comes from the player's own fleet data — always show regardless of fog-of-war
       if (data.shipCount > 0) {
-        this.shipLabel.visible = true;
-        this.shipLabel.text = `${data.shipCount} SHIP${data.shipCount !== 1 ? "S" : ""}`;
+        this.dockedPill.visible = true;
+        this.drawDockedPill(data.shipCount);
       } else {
-        this.shipLabel.visible = false;
+        this.dockedPill.visible = false;
       }
     }
-    this.shipLabel.position.set(
-      0,
-      SIZES.systemCoreRadius + 4 + SIZES.systemLabelSize + 2 + SIZES.systemEconLabelSize + 2,
-    );
 
     if (gatewayChanged) {
       this.currentIsGateway = data.isGateway;
@@ -199,6 +202,30 @@ export class SystemObject extends Container {
     }
   }
 
+  private drawDockedPill(count: number) {
+    const h = FLEET.markerHeight;
+    const pad = 5;
+    const glyphW = FLEET.chevronSize;
+    this.dockedCount.text = String(count);
+    const textW = this.dockedCount.width;
+    const w = pad + glyphW + 4 + textW + pad;
+
+    this.dockedPillBg.clear();
+    this.dockedPillBg.roundRect(-w, -h / 2, w, h, FLEET.pillCorner);
+    this.dockedPillBg.fill(FLEET.pillFill);
+
+    // ship glyph (small right-pointing chevron) near the left
+    const gx = -w + pad;
+    this.dockedGlyph.clear();
+    this.dockedGlyph.poly([gx, -glyphW / 2, gx + glyphW, 0, gx, glyphW / 2, gx + glyphW * 0.35, 0]);
+    this.dockedGlyph.fill(FLEET.pillContent);
+
+    this.dockedCount.position.set(gx + glyphW + 4, 0);
+
+    // anchor the pill's bottom-right just off the glyph's top-left corner
+    this.dockedPill.position.set(-SIZES.systemCoreRadius + 2, -SIZES.systemCoreRadius - 2);
+  }
+
   /** Apply LOD-based visibility. Called per frame from layer. */
   setLOD(lod: LODState) {
     const isUnknown = this.currentVisibility === "unknown";
@@ -211,8 +238,8 @@ export class SystemObject extends Container {
     this.econLabel.alpha = lod.detailAlpha;
 
     if (this.currentShipCount > 0) {
-      this.shipLabel.visible = lod.showShipLabels;
-      this.shipLabel.alpha = lod.detailAlpha;
+      this.dockedPill.visible = lod.showShipLabels;
+      this.dockedPill.alpha = lod.detailAlpha;
     }
 
     this.glow.visible = lod.showGlow;

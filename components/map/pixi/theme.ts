@@ -42,6 +42,26 @@ export const FLEET_DOTS = {
   glowRadius: 50,
 } as const;
 
+// ── Fleet markers (docked pill + in-transit marker + routes) ─────
+// Colours/sizes are the binding values from the v2 mockup
+// (docs/design/planned/ship-map-ux/mockup.html).
+export const FLEET = {
+  pillFill: 0x38bdf8,     // sky-400 — pill body, docked + in-transit
+  pillContent: 0x0a1018,  // near-black — ship glyph + count drawn on the pill
+  pillCorner: 2,          // matches the price-heatmap badge corner
+  markerHeight: 18,       // pill height (world units, before counter-scale)
+  markerMinWidth: 22,     // single-ship pill width
+  chevronSize: 8,         // direction nose / ship glyph size
+  countDigitWidth: 8,     // extra pill width per count digit
+  hitRadius: 16,          // marker pointer hit radius
+  clusterBadge: 0xd06a42, // copper accent — cluster/convoy count badge
+  clusterThresholdPx: 26, // SCREEN-space merge distance (÷ zoom for world)
+  markerScreenScale: 1,   // markers held at constant screen size (÷ zoom)
+  routeHover:  { color: 0x38bdf8, alpha: 0.4,  width: 1.8 },
+  routeActive: { color: 0x22d3ee, alpha: 0.85, width: 2.6 },
+  routeAll:    { color: 0x38bdf8, alpha: 0.22, width: 1.4 },
+} as const;
+
 // ── Edge colors ──────────────────────────────────────────────────
 
 export const EDGE = {
@@ -103,8 +123,6 @@ export const ANIM = {
   fitViewDuration:    400,   // ms
   setCenterDuration:  300,   // ms
   viewTransitionMs:   200,   // layer fade in/out
-  pulseRingPeriod:   2000,   // ms per cycle
-  pulseRingMaxRadius: 30,
   particleSpeed:     100,    // pixels per second
   particlesPerEdge:    5,
   twinkleMinPeriod:  3000,   // ms
