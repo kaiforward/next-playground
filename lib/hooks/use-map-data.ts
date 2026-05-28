@@ -44,6 +44,21 @@ export interface SystemNodeData {
   activeEvents?: SystemEventInfo[];
 }
 
+export interface TransitUnit {
+  id: string;
+  kind: "ship" | "convoy";
+  name: string;
+  originSystemId: string;
+  destinationSystemId: string;
+  destinationName: string;
+  departureTick: number;
+  arrivalTick: number;
+  speed: number;
+  memberCount: number;
+  cargoUsed: number;
+  cargoMax: number;
+}
+
 export interface ConnectionData {
   id: string;
   fromId: string;
@@ -67,6 +82,7 @@ export interface MapData {
   // Detail panel data
   shipsAtSelected: ShipState[];
   convoysAtSelected: ConvoyState[];
+  transitUnits: TransitUnit[];
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
@@ -142,6 +158,53 @@ export function useMapData({
         : [],
     [selectedSystem, convoys],
   );
+
+  // ── In-transit units (solo ships + convoys) for map markers ───
+  const transitUnits = useMemo((): TransitUnit[] => {
+    const nameById = new Map(universe.systems.map((s) => [s.id, s.name]));
+    const sumCargo = (s: ShipState) => s.cargo.reduce((n, c) => n + c.quantity, 0);
+    const out: TransitUnit[] = [];
+
+    for (const ship of ships) {
+      if (ship.status !== "in_transit" || ship.convoyId) continue;
+      if (!ship.destinationSystemId || ship.departureTick === null || ship.arrivalTick === null) continue;
+      out.push({
+        id: ship.id,
+        kind: "ship",
+        name: ship.name,
+        originSystemId: ship.systemId,
+        destinationSystemId: ship.destinationSystemId,
+        destinationName: nameById.get(ship.destinationSystemId) ?? "Unknown",
+        departureTick: ship.departureTick,
+        arrivalTick: ship.arrivalTick,
+        speed: ship.speed,
+        memberCount: 1,
+        cargoUsed: sumCargo(ship),
+        cargoMax: ship.cargoMax,
+      });
+    }
+
+    for (const convoy of convoys) {
+      if (convoy.status !== "in_transit") continue;
+      if (!convoy.destinationSystemId || convoy.departureTick === null || convoy.arrivalTick === null) continue;
+      const speed = convoy.members.length > 0 ? Math.min(...convoy.members.map((m) => m.speed)) : 1;
+      out.push({
+        id: convoy.id,
+        kind: "convoy",
+        name: convoy.name ?? "Convoy",
+        originSystemId: convoy.systemId,
+        destinationSystemId: convoy.destinationSystemId,
+        destinationName: nameById.get(convoy.destinationSystemId) ?? "Unknown",
+        departureTick: convoy.departureTick,
+        arrivalTick: convoy.arrivalTick,
+        speed,
+        memberCount: convoy.members.length,
+        cargoUsed: convoy.combinedCargoUsed,
+        cargoMax: convoy.combinedCargoMax,
+      });
+    }
+    return out;
+  }, [ships, convoys, universe.systems]);
 
   // ── Events per system (from dynamic data) ────────────────────
   const eventsPerSystem = useMemo(() => {
@@ -333,6 +396,7 @@ export function useMapData({
     priceHeatmap,
     shipsAtSelected,
     convoysAtSelected,
+    transitUnits,
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,
