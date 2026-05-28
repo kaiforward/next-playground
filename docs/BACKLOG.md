@@ -1,6 +1,6 @@
 # Backlog
 
-Actionable work items. When something ships, delete it — git history is the audit trail. For detailed designs, see linked docs in `docs/design/`.
+Actionable work items. When something ships, delete it — git history is the audit trail. For detailed designs, see linked docs in `docs/active/` and `docs/planned/`.
 
 Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi-week).
 
