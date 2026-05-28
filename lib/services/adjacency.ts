@@ -19,6 +19,11 @@ export async function getAdjacencyList(): Promise<Map<string, string[]>> {
   return cachedAdjacency;
 }
 
+/** Force-clear the adjacency cache (e.g. after a reseed in integration tests). */
+export function invalidateAdjacencyCache(): void {
+  cachedAdjacency = null;
+}
+
 /**
  * Cached systemId → regionId map. Systems don't change region after seed,
  * so this is safe to memoize for the process lifetime.

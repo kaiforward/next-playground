@@ -16,12 +16,14 @@ import {
  */
 export interface MapOverlays {
   tradeFlow: boolean;
+  priceHeatmap: boolean;
 }
 
 export type MapOverlayKey = keyof MapOverlays;
 
 const DEFAULT_OVERLAYS: MapOverlays = {
   tradeFlow: false,
+  priceHeatmap: false,
 };
 
 function hydrateFromSession(): MapOverlays {
@@ -31,6 +33,7 @@ function hydrateFromSession(): MapOverlays {
   if (!stored) return DEFAULT_OVERLAYS;
   return {
     tradeFlow: stored.tradeFlow ?? DEFAULT_OVERLAYS.tradeFlow,
+    priceHeatmap: stored.priceHeatmap ?? DEFAULT_OVERLAYS.priceHeatmap,
   };
 }
 
@@ -52,6 +55,7 @@ export function useMapOverlays(): {
     }
     const stored: MapOverlaysState = {};
     if (overlays.tradeFlow) stored.tradeFlow = true;
+    if (overlays.priceHeatmap) stored.priceHeatmap = true;
     setOverlaysInSession(stored);
   }, [overlays]);
 

@@ -9,6 +9,8 @@ import type {
   StaticTileSystem,
   DynamicTileSystem,
   MarketEntry,
+  MarketComparisonEntry,
+  GoodInfo,
   TradeHistoryEntry,
   TradeType,
   ActiveEvent,
@@ -101,6 +103,8 @@ export type SystemDetailData =
     };
 export type SystemDetailResponse = ApiResponse<SystemDetailData>;
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
+export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
+export type GoodsResponse = ApiResponse<{ goods: GoodInfo[] }>;
 export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;
 export type PriceHistoryResponse = ApiResponse<SystemPriceHistory[]>;

@@ -6,6 +6,7 @@ const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapOverlaysState {
   tradeFlow?: boolean;
+  priceHeatmap?: boolean;
 }
 
 export interface MapSessionState {
@@ -19,6 +20,9 @@ function parseOverlays(value: unknown): MapOverlaysState | undefined {
   const out: MapOverlaysState = {};
   if ("tradeFlow" in value && typeof value.tradeFlow === "boolean") {
     out.tradeFlow = value.tradeFlow;
+  }
+  if ("priceHeatmap" in value && typeof value.priceHeatmap === "boolean") {
+    out.priceHeatmap = value.priceHeatmap;
   }
   // Legacy `politicalTerritory` is silently dropped — it migrated to the
   // single-select `mode` axis. Users land on the default mode.

@@ -20,7 +20,11 @@ import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
+import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { buildSystemRegionMap } from "@/lib/utils/region";
+import { useGoods } from "@/lib/hooks/use-goods";
+import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 
 interface StarMapProps {
   atlas: AtlasData;
@@ -54,6 +58,32 @@ export function StarMap({
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
+
+  // ── Price overlay control state (good picker + comparison panel) ──
+  const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+
+  // ── Price heatmap data (per-system price for the selected good) ──
+  // Tagged with the good it was fetched for, and surfaced only when the tag
+  // matches the current selection. This avoids a stale flash when switching
+  // goods AND sidesteps an effect-ordering race: a separate "clear on change"
+  // effect runs after the fetcher's write (child effects fire before parent
+  // effects), so for an already-cached good — which resolves synchronously in
+  // the same commit — the clear would clobber the fetched data and the markers
+  // would never reappear. Deriving instead of clearing has no competing write.
+  const heatmapActive = overlays.priceHeatmap && !!priceGoodId;
+  const [heatmapState, setHeatmapState] = useState<{
+    goodId: string;
+    data: Map<string, { currentPrice: number; basePrice: number }>;
+  } | null>(null);
+
+  const heatmapData =
+    heatmapActive && heatmapState?.goodId === priceGoodId
+      ? heatmapState.data
+      : null;
+
+  // Cached goods catalog — staleTime: Infinity, ~12 rows, one fetch per session.
+  const goods = useGoods();
 
   // Merge atlas (positions) with static tile data (names + economy)
   const mergedSystems = useMemo((): StarSystemInfo[] => {
@@ -119,6 +149,11 @@ export function StarMap({
     [universe.connections],
   );
 
+  const systemsForComparison = useMemo(
+    () => universe.systems.map((s) => ({ id: s.id, name: s.name })),
+    [universe.systems],
+  );
+
   // ── View state (selection, session persistence) ────────────────
   const view = useMapViewState({
     universe,
@@ -156,6 +191,7 @@ export function StarMap({
     isNavigationActive,
     systemRegionMap,
     regionMap,
+    priceHeatmap: heatmapData,
   });
 
   // ── Auto-select ship/convoy from URL query param on mount ────────
@@ -260,12 +296,23 @@ export function StarMap({
         onViewportChange={onViewportChange}
       />
 
+      {/* Price heatmap data fetcher — only mounts when overlay+good are active. */}
+      {heatmapActive && priceGoodId && (
+        <QueryBoundary loadingFallback={null}>
+          <PriceHeatmapDataFetcher goodId={priceGoodId} onData={setHeatmapState} />
+        </QueryBoundary>
+      )}
+
       {/* Map mode + overlay controls (bottom-left) */}
       <MapOverlayControls
         mode={mapMode}
         setMode={setMapMode}
         overlays={overlays}
         toggle={toggle}
+        priceGoodId={priceGoodId}
+        setPriceGoodId={setPriceGoodId}
+        goods={goods}
+        onOpenComparisonTable={() => setComparisonOpen(true)}
       />
 
       {/* Navigation mode banner */}
@@ -312,12 +359,64 @@ export function StarMap({
           shipsHere={mapData.shipsAtSelected}
           convoysHere={mapData.convoysAtSelected}
           regionName={mapData.selectedRegionName}
+          factionName={mapData.selectedFactionName}
           gatewayTargetRegions={mapData.selectedGatewayTargets}
           activeEvents={mapData.eventsAtSelected}
           visibility={mapData.selectedVisibility}
           onClose={closeSystem}
+          onNavigateUnit={navigation.selectUnit}
+        />
+      )}
+
+      {/* Cross-system price comparison panel (Price overlay) */}
+      {comparisonOpen && priceGoodId && view.selectedSystem && (
+        <MarketComparisonPanel
+          goodId={priceGoodId}
+          goodName={goods.find((g) => g.id === priceGoodId)?.name ?? priceGoodId}
+          fromSystemId={view.selectedSystem.id}
+          fromSystemName={view.selectedSystem.name}
+          systems={systemsForComparison}
+          connections={allConnections}
+          onSelectSystem={(sysId) => {
+            const sys = universe.systems.find((s) => s.id === sysId);
+            if (sys) {
+              view.selectSystem(sys);
+              setCenterTarget({ x: sys.x, y: sys.y, zoom: 1.2 });
+            }
+            setComparisonOpen(false);
+          }}
+          onClose={() => setComparisonOpen(false)}
         />
       )}
     </div>
   );
+}
+
+/**
+ * Suspense-isolated price-data fetcher. Lives outside StarMap so the
+ * suspending hook only mounts when the heatmap overlay is active, and
+ * lifts the resulting map back up via the `onData` callback.
+ */
+function PriceHeatmapDataFetcher({
+  goodId,
+  onData,
+}: {
+  goodId: string;
+  onData: (state: {
+    goodId: string;
+    data: Map<string, { currentPrice: number; basePrice: number }>;
+  }) => void;
+}) {
+  const { entries } = useMarketComparison(goodId);
+  const map = useMemo(() => {
+    const m = new Map<string, { currentPrice: number; basePrice: number }>();
+    for (const e of entries) {
+      m.set(e.systemId, { currentPrice: e.currentPrice, basePrice: e.basePrice });
+    }
+    return m;
+  }, [entries]);
+  useEffect(() => {
+    onData({ goodId, data: map });
+  }, [goodId, map, onData]);
+  return null;
 }

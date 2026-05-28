@@ -1,16 +1,18 @@
 "use client";
 
 import { use, useState, useCallback, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useMarket } from "@/lib/hooks/use-market";
 import { usePriceHistory } from "@/lib/hooks/use-price-history";
 import { useTradeMutation } from "@/lib/hooks/use-trade-mutation";
 import { useConvoys, useConvoyTradeMutation } from "@/lib/hooks/use-convoy";
+import { useUniverse } from "@/lib/hooks/use-universe";
 import { MarketTable } from "@/components/trade/market-table";
 import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
 import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
+import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
 import { FormError } from "@/components/form/form-error";
 import { SelectInput, type SelectOption } from "@/components/form/select-input";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -25,11 +27,37 @@ const fleetUnitRefKey = (ref: FleetUnitRef | null): string =>
 
 function MarketContent({ systemId }: { systemId: string }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const { fleet } = useFleet();
   const { market, stationId } = useMarket(systemId);
   const { history } = usePriceHistory(systemId);
   const { convoys } = useConvoys();
+  const { data: universe } = useUniverse();
+
+  const [comparison, setComparison] = useState<
+    { goodId: string; goodName: string } | null
+  >(null);
+
+  const fromSystemName = useMemo(
+    () => universe.systems.find((s) => s.id === systemId)?.name ?? "Here",
+    [universe.systems, systemId],
+  );
+
+  const universeSystems = useMemo(
+    () => universe.systems.map((s) => ({ id: s.id, name: s.name })),
+    [universe.systems],
+  );
+
+  const universeConnections = useMemo(
+    () =>
+      universe.connections.map((c) => ({
+        fromSystemId: c.fromSystemId,
+        toSystemId: c.toSystemId,
+        fuelCost: c.fuelCost,
+      })),
+    [universe.connections],
+  );
 
   // Build initial selection from query params
   const initialShipId = searchParams.get("tradeShipId");
@@ -179,6 +207,9 @@ function MarketContent({ systemId }: { systemId: string }) {
               onSelectGood={setSelectedGoodId}
               selectedGoodId={selectedGoodId}
               cargoByGoodId={tradingUnit ? cargoByGoodId : undefined}
+              onCompareGood={(goodId, goodName) =>
+                setComparison({ goodId, goodName })
+              }
             />
           </div>
         </div>
@@ -207,6 +238,22 @@ function MarketContent({ systemId }: { systemId: string }) {
       <div className="mt-8">
         <SupplyDemandChart entries={market} />
       </div>
+
+      {comparison && (
+        <MarketComparisonPanel
+          goodId={comparison.goodId}
+          goodName={comparison.goodName}
+          fromSystemId={systemId}
+          fromSystemName={fromSystemName}
+          systems={universeSystems}
+          connections={universeConnections}
+          onSelectSystem={(sysId) => {
+            router.push(`/?systemId=${sysId}`);
+            setComparison(null);
+          }}
+          onClose={() => setComparison(null)}
+        />
+      )}
     </>
   );
 }

@@ -13,6 +13,7 @@ import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
 import { FleetDotLayer } from "./layers/fleet-dot-layer";
 import { TradeFlowLayer } from "./layers/trade-flow-layer";
+import { PriceHeatmapLayer } from "./layers/price-heatmap-layer";
 import { EffectLayer } from "./layers/effect-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
@@ -54,6 +55,7 @@ interface PixiRefs {
   politicalTerritoryLayer: PoliticalTerritoryLayer;
   fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
+  priceHeatmapLayer: PriceHeatmapLayer;
   effectLayer: EffectLayer;
 }
 
@@ -169,6 +171,12 @@ export function PixiMapCanvas({
       const fleetDotLayer = new FleetDotLayer();
       world.addChild(fleetDotLayer.container);
 
+      // Price heatmap rings sit above territories + fleet dots so the colour
+      // is visible against any map mode, but below the system glyphs so the
+      // dot + labels stay readable.
+      const priceHeatmapLayer = new PriceHeatmapLayer();
+      world.addChild(priceHeatmapLayer.container);
+
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
 
@@ -236,6 +244,10 @@ export function PixiMapCanvas({
         politicalTerritoryLayer.updateVisibility(lod);
         fleetDotLayer.updateVisibility(lod);
 
+        // Price heatmap: fades with the system layer so rings disappear at
+        // universe zoom alongside their host systems.
+        priceHeatmapLayer.updateVisibility(frustum, lod.systemLayerAlpha);
+
         // Trade-flow overlay: layer alpha multiplies the system fade so the
         // overlay disappears alongside its host systems at universe zoom.
         tradeFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
@@ -255,7 +267,7 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer, effectLayer,
+        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer, priceHeatmapLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -275,6 +287,7 @@ export function PixiMapCanvas({
           refs.territoryLayer.destroy();
           refs.politicalTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
+          refs.priceHeatmapLayer.destroy();
           refs.effectLayer.destroy();
           refs.starfield.destroy();
           refs.pointCloudLayer.destroy();
@@ -352,6 +365,7 @@ export function PixiMapCanvas({
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems);
     p.tradeFlowLayer.sync(mapData.systems, mapData.flowEdges);
+    p.priceHeatmapLayer.sync(mapData.systems, mapData.priceHeatmap);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
     p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
     p.effectLayer.syncPulseRings(mapData.systems, navigationMode.phase === "default");

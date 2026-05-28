@@ -251,7 +251,7 @@ export function computeAllHopDistances(
 
     while (head < queue.length) {
       const current = queue[head++];
-      const currentDist = distances.get(current)!;
+      const currentDist = distances.get(current) ?? 0;
       const neighbors = adj.get(current) ?? [];
 
       for (const neighbor of neighbors) {
@@ -292,7 +292,7 @@ export function computeBoundedHopDistances(
 
     while (head < queue.length) {
       const current = queue[head++];
-      const currentDist = distances.get(current)!;
+      const currentDist = distances.get(current) ?? 0;
       if (currentDist >= maxHops) continue;
 
       const neighbors = adj.get(current) ?? [];
@@ -308,6 +308,40 @@ export function computeBoundedHopDistances(
   }
 
   return result;
+}
+
+// ── Single-origin bounded hop distances (BFS) ──────────────────
+
+/**
+ * BFS hop-count from a single origin, stopping at maxHops depth.
+ * Always includes the origin itself at distance 0.
+ */
+export function boundedHopsFromOrigin(
+  origin: string,
+  connections: ConnectionInfo[],
+  maxHops: number,
+): Map<string, number> {
+  const { adj } = buildHopAdjacencyList(connections);
+  const distances = new Map<string, number>();
+  distances.set(origin, 0);
+  const queue: string[] = [origin];
+  let head = 0;
+
+  while (head < queue.length) {
+    const current = queue[head++];
+    const currentDist = distances.get(current) ?? 0;
+    if (currentDist >= maxHops) continue;
+
+    const neighbors = adj.get(current) ?? [];
+    for (const neighbor of neighbors) {
+      if (!distances.has(neighbor)) {
+        distances.set(neighbor, currentDist + 1);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  return distances;
 }
 
 // ── Linear route validation (server-side) ──────────────────────

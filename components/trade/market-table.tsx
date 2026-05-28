@@ -3,6 +3,7 @@
 import type { MarketEntry } from "@/lib/types/game";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { formatCredits } from "@/lib/utils/format";
+import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { TrendIcon } from "@/components/ui/trend-icon";
 
@@ -12,6 +13,8 @@ interface MarketTableProps {
   selectedGoodId?: string;
   /** Quantity of each good the player currently owns, keyed by goodId. */
   cargoByGoodId?: Map<string, number>;
+  /** When provided, renders a per-row Compare action that opens a cross-system comparison. */
+  onCompareGood?: (goodId: string, goodName: string) => void;
 }
 
 export function MarketTable({
@@ -19,6 +22,7 @@ export function MarketTable({
   onSelectGood,
   selectedGoodId,
   cargoByGoodId,
+  onCompareGood,
 }: MarketTableProps) {
   const columns: Column<MarketEntry>[] = [
     {
@@ -103,6 +107,28 @@ export function MarketTable({
         return <span className="text-text-secondary">--</span>;
       },
     },
+    ...(onCompareGood
+      ? [
+          {
+            key: "compare",
+            label: "",
+            render: (row: MarketEntry) => (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCompareGood(row.goodId, row.goodName);
+                }}
+                variant="pill"
+                color="accent"
+                size="xs"
+                aria-label={`Compare ${row.goodName} across systems`}
+              >
+                Compare
+              </Button>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

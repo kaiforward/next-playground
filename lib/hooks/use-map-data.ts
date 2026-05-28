@@ -62,12 +62,15 @@ export interface MapData {
    * Empty when the Trade Flows overlay is off — the Pixi layer renders nothing.
    */
   flowEdges: Map<string, TradeFlowEdgeInfo>;
+  /** Per-system price data for the active heatmap good. Null when overlay is off. */
+  priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
   // Detail panel data
   shipsAtSelected: ShipState[];
   convoysAtSelected: ConvoyState[];
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
+  selectedFactionName: string | undefined;
   selectedVisibility: SystemVisibility;
   allSystems: StarSystemInfo[];
 }
@@ -87,6 +90,7 @@ interface UseMapDataOptions {
   isNavigationActive: boolean;
   systemRegionMap: Map<string, string>;
   regionMap: Map<string, { id: string; name: string }>;
+  priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
 }
 
 // ── Hook ────────────────────────────────────────────────────────
@@ -104,6 +108,7 @@ export function useMapData({
   isNavigationActive,
   systemRegionMap,
   regionMap,
+  priceHeatmap,
 }: UseMapDataOptions): MapData {
   // ── Ship counts per system (docked only) ──────────────────────
   const shipsAtSystem = useMemo(() => {
@@ -291,6 +296,15 @@ export function useMapData({
     [selectedSystem, regionMap],
   );
 
+  // ── Selected system faction name ──────────────────────────────
+  const selectedFactionName = useMemo(
+    () =>
+      selectedSystem?.factionId
+        ? universe.factions.find((f) => f.id === selectedSystem.factionId)?.name
+        : undefined,
+    [selectedSystem, universe.factions],
+  );
+
   // ── Selected system visibility ───────────────────────────────
   const selectedVisibility: SystemVisibility = selectedSystem
     ? (visibleSystemIds.has(selectedSystem.id) ? "visible" : "unknown")
@@ -316,11 +330,13 @@ export function useMapData({
     systems,
     connections,
     flowEdges,
+    priceHeatmap,
     shipsAtSelected,
     convoysAtSelected,
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,
+    selectedFactionName,
     selectedVisibility,
     allSystems: universe.systems,
   };

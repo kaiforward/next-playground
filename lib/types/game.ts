@@ -306,6 +306,14 @@ export interface MarketEntry {
   demand: number;
 }
 
+export interface MarketComparisonEntry {
+  systemId: string;
+  basePrice: number;
+  currentPrice: number;
+  supply: number; // floored
+  demand: number; // floored
+}
+
 export interface TradeHistoryEntry {
   id: string;
   stationId: string;

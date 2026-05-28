@@ -154,7 +154,7 @@ export async function executeConvoyTrade(
     playerCredits: player.credits,
     currentCargoUsed: combinedCargoUsed,
     cargoMax: combinedCargoMax,
-    currentSupply: marketEntry.supply,
+    currentSupply: Math.floor(marketEntry.supply),
     currentGoodQuantityInCargo: combinedGoodQuantity,
     shipStatus: "docked",
   });
