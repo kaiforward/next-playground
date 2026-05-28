@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
 const MAX_HOPS = 6;
+const GRID_COLS = "grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_64px]";
 
-type SortKey = "price" | "supply" | "demand" | "hops";
+type SortKey = "price" | "supply" | "hops";
 type SortDir = "asc" | "desc";
 type FilterMode = "all" | "buy" | "sell";
 
@@ -82,17 +83,13 @@ function MarketComparisonContent({
           ? a.hops ?? Number.POSITIVE_INFINITY
           : sortKey === "price"
             ? a.currentPrice
-            : sortKey === "supply"
-              ? a.supply
-              : a.demand;
+            : a.supply;
       const bv =
         sortKey === "hops"
           ? b.hops ?? Number.POSITIVE_INFINITY
           : sortKey === "price"
             ? b.currentPrice
-            : sortKey === "supply"
-              ? b.supply
-              : b.demand;
+            : b.supply;
       return (av - bv) * sign;
     });
     return sorted;
@@ -147,7 +144,7 @@ function MarketComparisonContent({
       </div>
 
       {/* Sortable header */}
-      <div className="grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_64px] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-text-tertiary border-b border-border bg-background">
+      <div className={`grid ${GRID_COLS} gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-text-tertiary border-b border-border bg-background`}>
         <span>System</span>
         <button
           onClick={() => toggleSort("hops")}
@@ -183,7 +180,7 @@ function MarketComparisonContent({
           return (
             <div
               key={r.systemId}
-              className={`grid grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_64px] gap-2 px-4 py-2 text-xs border-b border-border ${
+              className={`grid ${GRID_COLS} gap-2 px-4 py-2 text-xs border-b border-border ${
                 isOrigin ? "bg-surface-active" : "hover:bg-surface-hover"
               }`}
             >
