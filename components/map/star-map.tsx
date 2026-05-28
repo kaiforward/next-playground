@@ -20,9 +20,11 @@ import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
+import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 import { GOODS } from "@/lib/constants/goods";
 import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 
 interface StarMapProps {
   atlas: AtlasData;
@@ -60,6 +62,19 @@ export function StarMap({
   // ── Price overlay control state (good picker + comparison panel) ──
   const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
   const [comparisonOpen, setComparisonOpen] = useState(false);
+
+  // ── Price heatmap data (per-system price for the selected good) ──
+  const heatmapActive = overlays.priceHeatmap && !!priceGoodId;
+  const [heatmapData, setHeatmapData] = useState<Map<
+    string,
+    { currentPrice: number; basePrice: number }
+  > | null>(null);
+
+  // Clear data when the heatmap turns off — keeps the Pixi layer in sync
+  // even before the next sync tick fires.
+  useEffect(() => {
+    if (!heatmapActive) setHeatmapData(null);
+  }, [heatmapActive]);
 
   const goods = useMemo(
     () =>
@@ -170,6 +185,7 @@ export function StarMap({
     isNavigationActive,
     systemRegionMap,
     regionMap,
+    priceHeatmap: heatmapData,
   });
 
   // ── Auto-select ship/convoy from URL query param on mount ────────
@@ -274,6 +290,13 @@ export function StarMap({
         onViewportChange={onViewportChange}
       />
 
+      {/* Price heatmap data fetcher — only mounts when overlay+good are active. */}
+      {heatmapActive && priceGoodId && (
+        <QueryBoundary loadingFallback={null}>
+          <PriceHeatmapDataFetcher goodId={priceGoodId} onData={setHeatmapData} />
+        </QueryBoundary>
+      )}
+
       {/* Map mode + overlay controls (bottom-left) */}
       <MapOverlayControls
         mode={mapMode}
@@ -360,4 +383,30 @@ export function StarMap({
       )}
     </div>
   );
+}
+
+/**
+ * Suspense-isolated price-data fetcher. Lives outside StarMap so the
+ * suspending hook only mounts when the heatmap overlay is active, and
+ * lifts the resulting map back up via the `onData` callback.
+ */
+function PriceHeatmapDataFetcher({
+  goodId,
+  onData,
+}: {
+  goodId: string;
+  onData: (data: Map<string, { currentPrice: number; basePrice: number }>) => void;
+}) {
+  const { entries } = useMarketComparison(goodId);
+  const map = useMemo(() => {
+    const m = new Map<string, { currentPrice: number; basePrice: number }>();
+    for (const e of entries) {
+      m.set(e.systemId, { currentPrice: e.currentPrice, basePrice: e.basePrice });
+    }
+    return m;
+  }, [entries]);
+  useEffect(() => {
+    onData(map);
+  }, [map, onData]);
+  return null;
 }

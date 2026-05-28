@@ -62,6 +62,8 @@ export interface MapData {
    * Empty when the Trade Flows overlay is off — the Pixi layer renders nothing.
    */
   flowEdges: Map<string, TradeFlowEdgeInfo>;
+  /** Per-system price data for the active heatmap good. Null when overlay is off. */
+  priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
   // Detail panel data
   shipsAtSelected: ShipState[];
   convoysAtSelected: ConvoyState[];
@@ -87,6 +89,7 @@ interface UseMapDataOptions {
   isNavigationActive: boolean;
   systemRegionMap: Map<string, string>;
   regionMap: Map<string, { id: string; name: string }>;
+  priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
 }
 
 // ── Hook ────────────────────────────────────────────────────────
@@ -104,6 +107,7 @@ export function useMapData({
   isNavigationActive,
   systemRegionMap,
   regionMap,
+  priceHeatmap,
 }: UseMapDataOptions): MapData {
   // ── Ship counts per system (docked only) ──────────────────────
   const shipsAtSystem = useMemo(() => {
@@ -316,6 +320,7 @@ export function useMapData({
     systems,
     connections,
     flowEdges,
+    priceHeatmap,
     shipsAtSelected,
     convoysAtSelected,
     eventsAtSelected,
