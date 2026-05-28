@@ -25,6 +25,7 @@ export function CompactTransitCard({ unit, etaTicks, onClose }: CompactTransitCa
           {unit.kind === "convoy" && <Badge color="cyan">{unit.memberCount} ships</Badge>}
         </div>
         <Button
+          type="button"
           variant="ghost"
           size="xs"
           onClick={onClose}
