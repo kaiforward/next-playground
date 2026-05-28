@@ -44,6 +44,21 @@ function MarketContent({ systemId }: { systemId: string }) {
     [universe.systems, systemId],
   );
 
+  const universeSystems = useMemo(
+    () => universe.systems.map((s) => ({ id: s.id, name: s.name })),
+    [universe.systems],
+  );
+
+  const universeConnections = useMemo(
+    () =>
+      universe.connections.map((c) => ({
+        fromSystemId: c.fromSystemId,
+        toSystemId: c.toSystemId,
+        fuelCost: c.fuelCost,
+      })),
+    [universe.connections],
+  );
+
   // Build initial selection from query params
   const initialShipId = searchParams.get("tradeShipId");
   const initialConvoyId = searchParams.get("tradeConvoyId");
@@ -230,12 +245,8 @@ function MarketContent({ systemId }: { systemId: string }) {
           goodName={comparison.goodName}
           fromSystemId={systemId}
           fromSystemName={fromSystemName}
-          systems={universe.systems.map((s) => ({ id: s.id, name: s.name }))}
-          connections={universe.connections.map((c) => ({
-            fromSystemId: c.fromSystemId,
-            toSystemId: c.toSystemId,
-            fuelCost: c.fuelCost,
-          }))}
+          systems={universeSystems}
+          connections={universeConnections}
           onSelectSystem={(sysId) => {
             router.push(`/?systemId=${sysId}`);
             setComparison(null);

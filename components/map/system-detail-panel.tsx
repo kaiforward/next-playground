@@ -25,6 +25,7 @@ interface SystemDetailPanelProps {
   shipsHere: ShipState[];
   convoysHere: ConvoyState[];
   regionName?: string;
+  factionName?: string;
   gatewayTargetRegions?: GatewayTarget[];
   activeEvents?: ActiveEvent[];
   visibility: SystemVisibility;
@@ -40,6 +41,7 @@ export function SystemDetailPanel({
   shipsHere,
   convoysHere,
   regionName,
+  factionName,
   gatewayTargetRegions,
   activeEvents,
   visibility,
@@ -99,10 +101,19 @@ export function SystemDetailPanel({
           {system.isGateway && <Badge color="amber">Gateway</Badge>}
         </div>
 
-        {regionName && (
-          <p className="text-xs text-text-tertiary">
-            Region: <span className="text-text-secondary">{regionName}</span>
-          </p>
+        {(regionName || factionName) && (
+          <div className="space-y-1 text-xs text-text-tertiary">
+            {regionName && (
+              <p>
+                Region: <span className="text-text-secondary">{regionName}</span>
+              </p>
+            )}
+            {factionName && (
+              <p>
+                Faction: <span className="text-text-secondary">{factionName}</span>
+              </p>
+            )}
+          </div>
         )}
 
         {/* Tab shortcuts — only when system is visible. Overview is reached via the footer button. */}

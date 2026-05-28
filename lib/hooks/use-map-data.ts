@@ -70,6 +70,7 @@ export interface MapData {
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
+  selectedFactionName: string | undefined;
   selectedVisibility: SystemVisibility;
   allSystems: StarSystemInfo[];
 }
@@ -295,6 +296,15 @@ export function useMapData({
     [selectedSystem, regionMap],
   );
 
+  // ── Selected system faction name ──────────────────────────────
+  const selectedFactionName = useMemo(
+    () =>
+      selectedSystem?.factionId
+        ? universe.factions.find((f) => f.id === selectedSystem.factionId)?.name
+        : undefined,
+    [selectedSystem, universe.factions],
+  );
+
   // ── Selected system visibility ───────────────────────────────
   const selectedVisibility: SystemVisibility = selectedSystem
     ? (visibleSystemIds.has(selectedSystem.id) ? "visible" : "unknown")
@@ -326,6 +336,7 @@ export function useMapData({
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,
+    selectedFactionName,
     selectedVisibility,
     allSystems: universe.systems,
   };

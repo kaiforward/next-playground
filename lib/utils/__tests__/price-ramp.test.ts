@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { priceRampColor, PRICE_RAMP_STOPS } from "../price-ramp";
+import { priceRampColor, priceRampColorPixi, PRICE_RAMP_STOPS } from "../price-ramp";
 
 describe("priceRampColor", () => {
   it("returns the deep-bargain green at <= 0.6x base", () => {
@@ -27,5 +27,21 @@ describe("priceRampColor", () => {
 
   it("returns null when basePrice is 0 or current is missing", () => {
     expect(priceRampColor(100, 0)).toBeNull();
+  });
+});
+
+describe("priceRampColorPixi", () => {
+  it("converts a known hex stop to the matching Pixi integer", () => {
+    // neutral stop: #d9c95d => parseInt("d9c95d", 16) = 14272861
+    expect(priceRampColorPixi(100, 100)).toBe(parseInt("d9c95d", 16));
+  });
+
+  it("converts the deep-bargain stop correctly", () => {
+    // deepBargain stop: #3ec775 => parseInt("3ec775", 16) = 4113269
+    expect(priceRampColorPixi(60, 100)).toBe(parseInt("3ec775", 16));
+  });
+
+  it("returns null when basePrice is non-positive", () => {
+    expect(priceRampColorPixi(100, 0)).toBeNull();
   });
 });

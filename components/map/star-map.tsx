@@ -149,6 +149,11 @@ export function StarMap({
     [universe.connections],
   );
 
+  const systemsForComparison = useMemo(
+    () => universe.systems.map((s) => ({ id: s.id, name: s.name })),
+    [universe.systems],
+  );
+
   // ── View state (selection, session persistence) ────────────────
   const view = useMapViewState({
     universe,
@@ -354,6 +359,7 @@ export function StarMap({
           shipsHere={mapData.shipsAtSelected}
           convoysHere={mapData.convoysAtSelected}
           regionName={mapData.selectedRegionName}
+          factionName={mapData.selectedFactionName}
           gatewayTargetRegions={mapData.selectedGatewayTargets}
           activeEvents={mapData.eventsAtSelected}
           visibility={mapData.selectedVisibility}
@@ -369,7 +375,7 @@ export function StarMap({
           goodName={goods.find((g) => g.id === priceGoodId)?.name ?? priceGoodId}
           fromSystemId={view.selectedSystem.id}
           fromSystemName={view.selectedSystem.name}
-          systems={universe.systems.map((s) => ({ id: s.id, name: s.name }))}
+          systems={systemsForComparison}
           connections={allConnections}
           onSelectSystem={(sysId) => {
             const sys = universe.systems.find((s) => s.id === sysId);

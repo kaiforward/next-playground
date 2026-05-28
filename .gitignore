@@ -52,6 +52,9 @@ next-env.d.ts
 .claude/worktrees/
 .claude/reviews/
 
+# superpowers brainstorm scratch
+.superpowers/
+
 # cocoindex code search index
 .cocoindex_code/
 

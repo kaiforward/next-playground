@@ -251,7 +251,7 @@ export function computeAllHopDistances(
 
     while (head < queue.length) {
       const current = queue[head++];
-      const currentDist = distances.get(current)!;
+      const currentDist = distances.get(current) ?? 0;
       const neighbors = adj.get(current) ?? [];
 
       for (const neighbor of neighbors) {
@@ -292,7 +292,7 @@ export function computeBoundedHopDistances(
 
     while (head < queue.length) {
       const current = queue[head++];
-      const currentDist = distances.get(current)!;
+      const currentDist = distances.get(current) ?? 0;
       if (currentDist >= maxHops) continue;
 
       const neighbors = adj.get(current) ?? [];
@@ -329,7 +329,7 @@ export function boundedHopsFromOrigin(
 
   while (head < queue.length) {
     const current = queue[head++];
-    const currentDist = distances.get(current)!;
+    const currentDist = distances.get(current) ?? 0;
     if (currentDist >= maxHops) continue;
 
     const neighbors = adj.get(current) ?? [];

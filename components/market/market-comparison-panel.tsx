@@ -7,6 +7,7 @@ import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { priceRampColor } from "@/lib/utils/price-ramp";
 import { formatCredits } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
 const MAX_HOPS = 6;
@@ -170,9 +171,7 @@ function MarketComparisonContent({
       {/* Rows */}
       <div className="flex-1 overflow-y-auto">
         {rows.length === 0 && (
-          <p className="text-sm text-text-tertiary p-4 text-center">
-            No visible systems carry {goodName} matching this filter.
-          </p>
+          <EmptyState message={`No visible systems carry ${goodName} matching this filter.`} />
         )}
         {rows.map((r) => {
           const color = priceRampColor(r.currentPrice, r.basePrice);

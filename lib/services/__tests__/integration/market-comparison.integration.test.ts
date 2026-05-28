@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
+import { ServiceError } from "@/lib/services/errors";
 
 const { prisma } = useIntegrationDb();
 vi.mock("@/lib/prisma", () => ({ prisma }));
@@ -32,7 +33,19 @@ describe("getMarketComparison (integration)", () => {
     });
   });
 
-  it("returns entries only for visible systems", async () => {
+  it("returns entries only for visible systems and excludes systems outside sensor range", async () => {
+    // The default ship (shuttle, role=trade) at `agricultural` has sensor range 2.
+    // Graph: agri(0) → ind(1) → tech(2). All three systems are within range 2, so
+    // we can't prove exclusion with the default ship.
+    // Switch to `interceptor` (role=combat, sensor range=1): agri and ind are
+    // visible but tech (hop 2) is outside sensor range and must not appear.
+    await prisma.ship.updateMany({
+      where: { playerId: player.playerId },
+      data: { shipType: "interceptor" },
+    });
+    // Flush the visibility cache so the updated ship type takes effect.
+    invalidateVisibilityCache(player.playerId);
+
     const goodId = universe.goodIds["food"];
     const result = await getMarketComparison(player.playerId, goodId);
 
@@ -40,6 +53,19 @@ describe("getMarketComparison (integration)", () => {
     expect(result.entries.length).toBeGreaterThan(0);
     expect(result.entries.every((e) => Number.isInteger(e.supply))).toBe(true);
     expect(result.entries.every((e) => Number.isInteger(e.demand))).toBe(true);
+
+    // tech system (hop 2 from agri) must be absent — proves non-visible systems
+    // are filtered out, not just that some entries are returned.
+    const returnedSystemIds = new Set(result.entries.map((e) => e.systemId));
+    expect(returnedSystemIds.has(universe.systems.tech)).toBe(false);
+    // Sanity-check: the systems that are visible (agri + ind) may have entries.
+    expect(
+      result.entries.every(
+        (e) =>
+          e.systemId === universe.systems.agricultural ||
+          e.systemId === universe.systems.industrial,
+      ),
+    ).toBe(true);
   });
 
   it("floors fractional supply/demand the same way getMarket does", async () => {
@@ -59,6 +85,11 @@ describe("getMarketComparison (integration)", () => {
   });
 
   it("throws ServiceError(404) for an unknown goodId", async () => {
-    await expect(getMarketComparison(player.playerId, "nonexistent")).rejects.toThrow();
+    await expect(
+      getMarketComparison(player.playerId, "nonexistent"),
+    ).rejects.toBeInstanceOf(ServiceError);
+    await expect(
+      getMarketComparison(player.playerId, "nonexistent"),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });

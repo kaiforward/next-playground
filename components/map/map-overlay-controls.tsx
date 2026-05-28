@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { tv } from "tailwind-variants";
 import {
   TIER_COLOR,
@@ -10,6 +11,7 @@ import type { GoodTier } from "@/lib/types/game";
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { SelectInput } from "@/components/form/select-input";
+import { Button } from "@/components/ui/button";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
 
 // Focus ring works two ways so this variant can wrap either a focusable element
@@ -201,10 +203,13 @@ function PriceOverlaySection({
   goods: { id: string; name: string }[];
   onOpenComparisonTable: () => void;
 }) {
-  const options: { value: string | null; label: string }[] = [
-    { value: null, label: "Select a good…" },
-    ...goods.map((g) => ({ value: g.id, label: g.name })),
-  ];
+  const options = useMemo<{ value: string | null; label: string }[]>(
+    () => [
+      { value: null, label: "Select a good…" },
+      ...goods.map((g) => ({ value: g.id, label: g.name })),
+    ],
+    [goods]
+  );
   return (
     <div className="border-t border-border px-3 py-2 space-y-2">
       <SelectInput<string | null>
@@ -217,13 +222,15 @@ function PriceOverlaySection({
         isSearchable
       />
       {priceGoodId && (
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="xs"
+          fullWidth
           onClick={onOpenComparisonTable}
-          className="w-full text-xs uppercase tracking-wider text-text-accent hover:text-accent-muted border border-border bg-surface-hover px-2 py-1"
         >
           Show all prices
-        </button>
+        </Button>
       )}
       <PriceRampLegend />
     </div>
