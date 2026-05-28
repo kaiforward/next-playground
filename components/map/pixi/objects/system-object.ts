@@ -270,20 +270,20 @@ export class SystemObject extends Container {
     this.econLabel.visible = lod.showEconomyLabels && !isUnknown;
     this.econLabel.alpha = lod.detailAlpha;
 
-    if (this.currentSoloShipCount > 0) {
-      this.shipPill.container.visible = lod.showShipLabels;
-      this.shipPill.container.alpha = lod.detailAlpha;
-    }
-    if (this.currentConvoyCount > 0) {
-      this.convoyPill.container.visible = lod.showShipLabels;
-      this.convoyPill.container.alpha = lod.detailAlpha;
-    }
+    // Fleet pills + event dots are markers, not text: they track the system
+    // glyph itself (the systemLayer container already carries systemLayerAlpha),
+    // so they appear/disappear in step with the price ring instead of fading
+    // out earlier than it. Only the text labels above keep a staggered reveal.
+    this.shipPill.container.visible = this.currentSoloShipCount > 0;
+    this.shipPill.container.alpha = 1;
+    this.convoyPill.container.visible = this.currentConvoyCount > 0;
+    this.convoyPill.container.alpha = 1;
 
     this.glow.visible = lod.showGlow;
 
     // Unknown systems: event dots hidden regardless of LOD
-    this.eventDots.visible = lod.showEventDots && !isUnknown;
-    this.eventDots.alpha = lod.eventDotAlpha;
+    this.eventDots.visible = !isUnknown;
+    this.eventDots.alpha = 1;
 
     // Scale core + highlight by LOD
     this.core.scale.set(lod.systemDotScale);

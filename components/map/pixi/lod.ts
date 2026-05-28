@@ -20,8 +20,6 @@ export interface LODState {
   showSystemDots: boolean;
   showSystemNames: boolean;
   showEconomyLabels: boolean;
-  showShipLabels: boolean;
-  showEventDots: boolean;
   showFuelLabels: boolean;
   showTerritories: boolean;
   showRegionLabels: boolean;
@@ -37,8 +35,6 @@ export interface LODState {
   politicalTerritoryAlpha: number;
   /** Alpha for region name labels */
   regionLabelAlpha: number;
-  /** Alpha for event dots */
-  eventDotAlpha: number;
   /** Whether to show glow effects */
   showGlow: boolean;
   /** Whether to show effect layer (particles, pulse rings) */
@@ -121,15 +117,10 @@ export function computeLOD(zoom: number): LODState {
     showSystemNames: zoom > 0.45,
     systemNameAlpha: smoothStep(0.45, 0.55, zoom),
 
-    // Economy/ship/fuel labels fade in 0.6–0.7
+    // Economy/fuel labels fade in 0.6–0.7
     showEconomyLabels: zoom > 0.6,
-    showShipLabels: zoom > 0.6,
     showFuelLabels: zoom > 0.6,
     detailAlpha: smoothStep(0.6, 0.7, zoom),
-
-    // Event dots fade in 0.5–0.6 (after names settle)
-    showEventDots: zoom > 0.5,
-    eventDotAlpha: smoothStep(0.5, 0.6, zoom),
 
     // Territories never cull — they're the spatial frame for both modes.
     // Each layer reads its own alpha so political and regions can diverge.
