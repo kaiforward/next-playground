@@ -67,6 +67,19 @@ describe("interpolateTransit", () => {
   it("returns null when a path system has no position", () => {
     expect(interpolateTransit(path, new Map([["A", { x: 0, y: 0 }]]), 0.75)).toBeNull();
   });
+
+  it("reports the segment heading (angleRad) for a non-horizontal layout", () => {
+    // Vertical layout so the angle is not trivially 0 — guards the atan2 args/sign.
+    const verticalPositions = new Map([
+      ["A", { x: 0, y: 0 }],
+      ["B", { x: 0, y: 100 }],
+      ["C", { x: 0, y: 200 }],
+    ]);
+    const p = interpolateTransit(path, verticalPositions, 0.75)!;
+    expect(p.x).toBeCloseTo(0);
+    expect(p.y).toBeCloseTo(150);
+    expect(p.angleRad).toBeCloseTo(Math.PI / 2); // heading straight "up" (+y)
+  });
 });
 
 describe("clusterMarkers", () => {
@@ -82,5 +95,21 @@ describe("clusterMarkers", () => {
     expect(clusters).toHaveLength(2);
     expect(clusters[0].items).toEqual(["a", "b"]);
     expect(clusters[1].items).toEqual(["c"]);
+  });
+
+  it("returns an empty array for empty input", () => {
+    expect(clusterMarkers([], 10)).toEqual([]);
+  });
+
+  it("merges a marker sitting exactly on the threshold (inclusive boundary)", () => {
+    const clusters = clusterMarkers(
+      [
+        { id: "1", x: 0, y: 0, item: "a" },
+        { id: "2", x: 10, y: 0, item: "b" }, // distance == thresholdPx
+      ],
+      10,
+    );
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].items).toEqual(["a", "b"]);
   });
 });

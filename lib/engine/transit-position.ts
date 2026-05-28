@@ -4,7 +4,7 @@
  * because only origin → final destination + ticks are persisted on the ship.
  */
 import type { ConnectionInfo } from "./navigation";
-import { findShortestPath } from "./pathfinding";
+import { findShortestPath, buildAdjacencyList, type FuelAdjacency } from "./pathfinding";
 import { hopDuration } from "./travel";
 
 export interface Vec2 {
@@ -49,14 +49,20 @@ function clamp01(n: number): number {
   return n;
 }
 
-/** Reconstruct the hop path + per-node cumulative duration for an in-transit unit. */
+/**
+ * Reconstruct the hop path + per-node cumulative duration for an in-transit unit.
+ * Pass a prebuilt `adj` when reconstructing many paths over the same graph (e.g.
+ * one per in-transit fleet) to avoid rebuilding the adjacency list per call.
+ */
 export function reconstructTransitPath(
   originId: string,
   destinationId: string,
   connections: ConnectionInfo[],
   speed: number,
+  adj?: FuelAdjacency,
 ): TransitPath {
-  const result = findShortestPath(originId, destinationId, connections, speed);
+  const adjacency = adj ?? buildAdjacencyList(connections);
+  const result = findShortestPath(originId, destinationId, connections, speed, adjacency);
   if (!result || result.path.length < 2) {
     return {
       nodes: [
@@ -68,16 +74,11 @@ export function reconstructTransitPath(
     };
   }
 
-  const fuelByPair = new Map<string, number>();
-  for (const c of connections) {
-    fuelByPair.set(`${c.fromSystemId}|${c.toSystemId}`, c.fuelCost);
-    fuelByPair.set(`${c.toSystemId}|${c.fromSystemId}`, c.fuelCost);
-  }
-
   const nodes: TransitPathNode[] = [{ systemId: result.path[0], cumulativeDuration: 0 }];
   let cum = 0;
   for (let i = 0; i < result.path.length - 1; i++) {
-    const fuel = fuelByPair.get(`${result.path[i]}|${result.path[i + 1]}`) ?? 0;
+    const edges = adjacency.get(result.path[i]) ?? [];
+    const fuel = edges.find((e) => e.toSystemId === result.path[i + 1])?.fuelCost ?? 0;
     cum += hopDuration(fuel, speed);
     nodes.push({ systemId: result.path[i + 1], cumulativeDuration: cum });
   }

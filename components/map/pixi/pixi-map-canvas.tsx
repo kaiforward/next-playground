@@ -404,9 +404,17 @@ export function PixiMapCanvas({
 
     const transitPositions = new Map(mapData.systems.map((s) => [s.id, { x: s.x, y: s.y }]));
     p.fleetTransitLayer.sync(mapData.transitUnits, transitPositions, connections);
+  }, [mapData, selectedSystem, navigationMode, pixiReady, connections]);
+
+  // ── Propagate transit selection / route overlay (cheap setters only) ──
+  // Kept separate from the data sync above so toggling selection or the
+  // ship-routes overlay doesn't re-run every layer's sync().
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
     p.fleetTransitLayer.setSelected(selectedTransitId);
     p.fleetTransitLayer.setShowAllRoutes(showShipRoutes);
-  }, [mapData, selectedSystem, navigationMode, pixiReady, connections, selectedTransitId, showShipRoutes]);
+  }, [selectedTransitId, showShipRoutes, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

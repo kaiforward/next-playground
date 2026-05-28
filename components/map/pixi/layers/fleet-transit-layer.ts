@@ -9,6 +9,7 @@ import {
   type TransitPath,
   type Vec2,
 } from "@/lib/engine/transit-position";
+import { buildAdjacencyList } from "@/lib/engine/pathfinding";
 import { FLEET, TEXT_RESOLUTION } from "../theme";
 
 const DEFAULT_TICK_MS = 5000;
@@ -39,6 +40,11 @@ interface MarkerObject {
   hit: Graphics;
   /** Single-unit id for hover/click, or "" for a multi-ship cluster. */
   unitId: string;
+  /** Last-drawn shape inputs — geometry is only redrawn when these change.
+   *  The heading is applied every frame via a cheap rotation, not a redraw. */
+  drawnConvoy: boolean;
+  drawnSingle: boolean;
+  drawnCount: number;
 }
 
 /**
@@ -111,8 +117,10 @@ export class FleetTransitLayer {
     if (key !== this.pathKey) {
       this.pathKey = key;
       this.paths = new Map();
+      // Build the adjacency list once for all units rather than per path query.
+      const adj = buildAdjacencyList(connections);
       for (const u of units) {
-        this.paths.set(u.id, reconstructTransitPath(u.originSystemId, u.destinationSystemId, connections, u.speed));
+        this.paths.set(u.id, reconstructTransitPath(u.originSystemId, u.destinationSystemId, connections, u.speed, adj));
       }
     }
 
@@ -198,7 +206,11 @@ export class FleetTransitLayer {
     container.eventMode = "static";
     container.cursor = "pointer";
 
-    const m: MarkerObject = { container, body, pill, glyph, badge, count, hit, unitId };
+    // drawnCount = -1 is an impossible real count, so the first drawMarker always draws.
+    const m: MarkerObject = {
+      container, body, pill, glyph, badge, count, hit, unitId,
+      drawnConvoy: false, drawnSingle: false, drawnCount: -1,
+    };
 
     container.on("pointerover", () => {
       if (m.unitId) this.hoveredId = m.unitId;
@@ -216,6 +228,17 @@ export class FleetTransitLayer {
   }
 
   private drawMarker(m: MarkerObject, angle: number, count: number, single: boolean, isConvoy: boolean) {
+    // The heading rotates every frame as the unit moves — a cheap transform, no redraw.
+    m.body.rotation = angle;
+
+    // The pill/glyph/badge geometry only depends on convoy-ness, cluster-ness, and
+    // count — none of which change frame-to-frame for a stable marker. Skip the
+    // (expensive) Graphics clear+rebuild unless one of those actually changed.
+    if (m.drawnConvoy === isConvoy && m.drawnSingle === single && m.drawnCount === count) return;
+    m.drawnConvoy = isConvoy;
+    m.drawnSingle = single;
+    m.drawnCount = count;
+
     const h = FLEET.markerHeight;
     const bodyW = FLEET.markerMinWidth;
     const half = (bodyW + FLEET.noseLength) / 2;
@@ -235,9 +258,6 @@ export class FleetTransitLayer {
     m.glyph.clear();
     m.glyph.poly([gx, -cs / 2, gx + cs, 0, gx, cs / 2, gx + cs * 0.35, 0]);
     m.glyph.fill(FLEET.pillContent);
-
-    // Rotate the whole shape to the heading; the count badge stays upright.
-    m.body.rotation = angle;
 
     if (single) {
       m.badge.visible = false;

@@ -3,6 +3,7 @@
 import type { TransitUnit } from "@/lib/hooks/use-map-data";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 
 export interface CompactTransitCardProps {
   unit: TransitUnit;
@@ -13,20 +14,25 @@ export interface CompactTransitCardProps {
 
 export function CompactTransitCard({ unit, etaTicks, onClose }: CompactTransitCardProps) {
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-72 bg-surface border border-border border-l-2 border-l-cyan-500 px-3 py-2.5 shadow-lg flex flex-col gap-2">
+    <Card
+      variant="bordered"
+      padding="sm"
+      className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-72 shadow-lg flex flex-col gap-2"
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-sm font-semibold text-text-primary truncate">{unit.name}</span>
           {unit.kind === "convoy" && <Badge color="cyan">{unit.memberCount} ships</Badge>}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="xs"
           onClick={onClose}
-          className="text-text-tertiary hover:text-text-primary text-xs shrink-0"
+          className="shrink-0"
           aria-label="Deselect ship"
         >
           ✕
-        </button>
+        </Button>
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
         <dt className="text-text-tertiary">Destination</dt>
@@ -41,6 +47,6 @@ export function CompactTransitCard({ unit, etaTicks, onClose }: CompactTransitCa
           Ship details
         </Button>
       )}
-    </div>
+    </Card>
   );
 }
