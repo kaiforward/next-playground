@@ -27,11 +27,17 @@ export type RouteValidationResult =
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-/** Build adjacency list from flat connection array. */
-function buildAdjacencyList(
-  connections: ConnectionInfo[],
-): Map<string, { toSystemId: string; fuelCost: number }[]> {
-  const adj = new Map<string, { toSystemId: string; fuelCost: number }[]>();
+/** Directional fuel adjacency: systemId → outgoing edges. */
+export type FuelAdjacency = Map<string, { toSystemId: string; fuelCost: number }[]>;
+
+/**
+ * Build a directional fuel adjacency list from a flat connection array.
+ * Exported so callers that run many path queries over the same graph (e.g. the
+ * map's fleet-transit layer) can build it once and pass it in, instead of
+ * rebuilding it per query.
+ */
+export function buildAdjacencyList(connections: ConnectionInfo[]): FuelAdjacency {
+  const adj: FuelAdjacency = new Map();
   for (const c of connections) {
     let neighbors = adj.get(c.fromSystemId);
     if (!neighbors) {
@@ -46,7 +52,7 @@ function buildAdjacencyList(
 /** Sum travel duration across a path using the adjacency list. */
 function sumTravelDuration(
   path: string[],
-  adj: Map<string, { toSystemId: string; fuelCost: number }[]>,
+  adj: FuelAdjacency,
   shipSpeed?: number,
 ): number {
   let total = 0;
@@ -66,16 +72,19 @@ function sumTravelDuration(
  * Find the lowest-fuel-cost path between two systems using Dijkstra.
  * Returns null if no path exists.
  * Optional shipSpeed adjusts travel duration calculations.
+ * Optional prebuilt `adj` avoids rebuilding the adjacency list when running
+ * many queries over the same graph.
  */
 export function findShortestPath(
   originId: string,
   destinationId: string,
   connections: ConnectionInfo[],
   shipSpeed?: number,
+  adj?: FuelAdjacency,
 ): PathResult | null {
   if (originId === destinationId) return null;
 
-  const adj = buildAdjacencyList(connections);
+  const adjacency = adj ?? buildAdjacencyList(connections);
 
   // dist[node] = lowest fuel cost from origin to node
   const dist = new Map<string, number>();
@@ -101,7 +110,7 @@ export function findShortestPath(
 
     visited.add(current);
 
-    const neighbors = adj.get(current) ?? [];
+    const neighbors = adjacency.get(current) ?? [];
     for (const { toSystemId, fuelCost } of neighbors) {
       if (visited.has(toSystemId)) continue;
       const newDist = currentDist + fuelCost;
@@ -125,7 +134,7 @@ export function findShortestPath(
   if (path[0] !== originId) return null; // Disconnected
 
   const totalFuelCost = dist.get(destinationId)!;
-  const totalTravelDuration = sumTravelDuration(path, adj, shipSpeed);
+  const totalTravelDuration = sumTravelDuration(path, adjacency, shipSpeed);
 
   return { path, totalFuelCost, totalTravelDuration };
 }

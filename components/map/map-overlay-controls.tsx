@@ -64,6 +64,7 @@ interface OverlayDef {
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
   { key: "tradeFlow", label: "Trade Flows" },
   { key: "priceHeatmap", label: "Price" },
+  { key: "shipRoutes", label: "Ship Routes" },
 ];
 
 interface MapOverlayControlsProps {
@@ -143,6 +144,11 @@ export function MapOverlayControls({
           goods={goods}
           onOpenComparisonTable={onOpenComparisonTable}
         />
+      )}
+      {overlays.shipRoutes && (
+        <div className="border-t border-border px-3 py-2 text-[10px] text-text-secondary font-mono leading-relaxed">
+          Shows every in-transit ship&apos;s route. Markers are always visible; hover one for its ETA, click to pin its route.
+        </div>
       )}
     </div>
   );

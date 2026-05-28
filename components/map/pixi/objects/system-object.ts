@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { EconomyType, SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -17,13 +17,21 @@ const ECON_STYLE = new TextStyle({
   align: "center",
 });
 
-const SHIP_STYLE = new TextStyle({
-  fontSize: SIZES.systemShipLabelSize,
-  fill: TEXT_COLORS.ship,
-  fontFamily: "system-ui, -apple-system, sans-serif",
-  fontWeight: "bold",
+const DOCKED_COUNT_STYLE = new TextStyle({
+  fontSize: 12,
+  fill: FLEET.pillContent,
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontWeight: "700",
   align: "center",
 });
+
+/** A single docked-fleet pill (ship glyph + count) drawn on the system glyph. */
+interface DockedPill {
+  container: Container;
+  bg: Graphics;
+  glyph: Graphics;
+  count: Text;
+}
 
 export class SystemObject extends Container {
   systemId = "";
@@ -34,7 +42,8 @@ export class SystemObject extends Container {
   private navigationRing: Graphics;
   private nameLabel: Text;
   private econLabel: Text;
-  private shipLabel: Text;
+  private shipPill: DockedPill;   // blue — solo docked ships
+  private convoyPill: DockedPill; // copper — docked convoys
   private gatewayDot: Graphics;
   private eventDots: Graphics;
 
@@ -46,7 +55,8 @@ export class SystemObject extends Container {
   private currentEconomy = "";
   private currentNavState: NavigationNodeState | undefined;
   private currentVisibility: SystemVisibility = "unknown";
-  private currentShipCount = 0;
+  private currentSoloShipCount = 0;
+  private currentConvoyCount = 0;
   private currentIsGateway = false;
   private currentSelected = false;
   private currentEventTypes: string[] = [];
@@ -80,11 +90,10 @@ export class SystemObject extends Container {
     this.econLabel.anchor.set(0.5, 0);
     this.addChild(this.econLabel);
 
-    // Ship count label
-    this.shipLabel = new Text({ text: "", style: SHIP_STYLE, resolution: TEXT_RESOLUTION });
-    this.shipLabel.anchor.set(0.5, 0);
-    this.shipLabel.visible = false;
-    this.addChild(this.shipLabel);
+    // Docked-fleet pills (top-left of the glyph; replace the pulse ring + text).
+    // Solo ships (blue) and convoys (copper) get separate pills, stacked when both.
+    this.shipPill = this.createDockedPill();
+    this.convoyPill = this.createDockedPill();
 
     // Gateway indicator
     this.gatewayDot = new Graphics();
@@ -112,7 +121,9 @@ export class SystemObject extends Container {
     const econChanged = data.economyType !== this.currentEconomy;
     const navChanged = data.navigationState !== this.currentNavState;
     const visibilityChanged = data.visibility !== this.currentVisibility;
-    const shipChanged = data.shipCount !== this.currentShipCount;
+    const shipChanged =
+      data.dockedShipCount !== this.currentSoloShipCount ||
+      data.dockedConvoyCount !== this.currentConvoyCount;
     const gatewayChanged = data.isGateway !== this.currentIsGateway;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
@@ -162,19 +173,11 @@ export class SystemObject extends Container {
     this.econLabel.visible = !isUnknown;
 
     if (shipChanged) {
-      this.currentShipCount = data.shipCount;
-      // Ship count comes from the player's own fleet data — always show regardless of fog-of-war
-      if (data.shipCount > 0) {
-        this.shipLabel.visible = true;
-        this.shipLabel.text = `${data.shipCount} SHIP${data.shipCount !== 1 ? "S" : ""}`;
-      } else {
-        this.shipLabel.visible = false;
-      }
+      // Counts come from the player's own fleet data — always show regardless of fog-of-war
+      this.currentSoloShipCount = data.dockedShipCount;
+      this.currentConvoyCount = data.dockedConvoyCount;
+      this.redrawDockedPills();
     }
-    this.shipLabel.position.set(
-      0,
-      SIZES.systemCoreRadius + 4 + SIZES.systemLabelSize + 2 + SIZES.systemEconLabelSize + 2,
-    );
 
     if (gatewayChanged) {
       this.currentIsGateway = data.isGateway;
@@ -199,6 +202,63 @@ export class SystemObject extends Container {
     }
   }
 
+  private createDockedPill(): DockedPill {
+    const container = new Container();
+    const bg = new Graphics();
+    const glyph = new Graphics();
+    const count = new Text({ text: "", style: DOCKED_COUNT_STYLE, resolution: TEXT_RESOLUTION });
+    count.anchor.set(0, 0.5);
+    container.addChild(bg, glyph, count);
+    container.visible = false;
+    this.addChild(container);
+    return { container, bg, glyph, count };
+  }
+
+  /** Lay out the ship + convoy pills, stacking the ship pill above the convoy
+   *  pill when both are present. Both right-align to the glyph's top-left. */
+  private redrawDockedPills() {
+    const h = FLEET.markerHeight;
+    const gap = 3;
+    const x = -SIZES.systemCoreRadius + 2;
+    const baseY = -SIZES.systemCoreRadius - 2;
+    const hasShips = this.currentSoloShipCount > 0;
+    const hasConvoys = this.currentConvoyCount > 0;
+
+    // Convoy pill sits at the anchor (nearest the glyph); ships stack above it.
+    if (hasConvoys) {
+      this.drawPill(this.convoyPill, this.currentConvoyCount, FLEET.convoyFill, x, baseY);
+    }
+    this.convoyPill.container.visible = hasConvoys;
+
+    if (hasShips) {
+      const shipY = hasConvoys ? baseY - (h + gap) : baseY;
+      this.drawPill(this.shipPill, this.currentSoloShipCount, FLEET.pillFill, x, shipY);
+    }
+    this.shipPill.container.visible = hasShips;
+  }
+
+  private drawPill(pill: DockedPill, count: number, color: number, x: number, y: number) {
+    const h = FLEET.markerHeight;
+    const pad = 5;
+    const glyphW = FLEET.chevronSize;
+    pill.count.text = String(count);
+    const textW = pill.count.width;
+    const w = pad + glyphW + 4 + textW + pad;
+
+    pill.bg.clear();
+    pill.bg.roundRect(-w, -h / 2, w, h, FLEET.pillCorner);
+    pill.bg.fill(color);
+
+    // ship glyph (small right-pointing chevron) near the left
+    const gx = -w + pad;
+    pill.glyph.clear();
+    pill.glyph.poly([gx, -glyphW / 2, gx + glyphW, 0, gx, glyphW / 2, gx + glyphW * 0.35, 0]);
+    pill.glyph.fill(FLEET.pillContent);
+
+    pill.count.position.set(gx + glyphW + 4, 0);
+    pill.container.position.set(x, y);
+  }
+
   /** Apply LOD-based visibility. Called per frame from layer. */
   setLOD(lod: LODState) {
     const isUnknown = this.currentVisibility === "unknown";
@@ -210,16 +270,20 @@ export class SystemObject extends Container {
     this.econLabel.visible = lod.showEconomyLabels && !isUnknown;
     this.econLabel.alpha = lod.detailAlpha;
 
-    if (this.currentShipCount > 0) {
-      this.shipLabel.visible = lod.showShipLabels;
-      this.shipLabel.alpha = lod.detailAlpha;
-    }
+    // Fleet pills + event dots are markers, not text: they track the system
+    // glyph itself (the systemLayer container already carries systemLayerAlpha),
+    // so they appear/disappear in step with the price ring instead of fading
+    // out earlier than it. Only the text labels above keep a staggered reveal.
+    this.shipPill.container.visible = this.currentSoloShipCount > 0;
+    this.shipPill.container.alpha = 1;
+    this.convoyPill.container.visible = this.currentConvoyCount > 0;
+    this.convoyPill.container.alpha = 1;
 
     this.glow.visible = lod.showGlow;
 
     // Unknown systems: event dots hidden regardless of LOD
-    this.eventDots.visible = lod.showEventDots && !isUnknown;
-    this.eventDots.alpha = lod.eventDotAlpha;
+    this.eventDots.visible = !isUnknown;
+    this.eventDots.alpha = 1;
 
     // Scale core + highlight by LOD
     this.core.scale.set(lod.systemDotScale);

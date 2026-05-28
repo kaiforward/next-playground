@@ -37,11 +37,31 @@ export interface SystemNodeData {
   name: string;
   economyType: EconomyType;
   regionId: string;
+  /** Total docked ships incl. convoy members — used for fleet-presence checks. */
   shipCount: number;
+  /** Solo docked ships (not in a convoy) — drives the blue docked pill. */
+  dockedShipCount: number;
+  /** Docked convoys at this system — drives the copper docked pill. */
+  dockedConvoyCount: number;
   isGateway: boolean;
   visibility: SystemVisibility;
   navigationState?: NavigationNodeState;
   activeEvents?: SystemEventInfo[];
+}
+
+export interface TransitUnit {
+  id: string;
+  kind: "ship" | "convoy";
+  name: string;
+  originSystemId: string;
+  destinationSystemId: string;
+  destinationName: string;
+  departureTick: number;
+  arrivalTick: number;
+  speed: number;
+  memberCount: number;
+  cargoUsed: number;
+  cargoMax: number;
 }
 
 export interface ConnectionData {
@@ -67,6 +87,7 @@ export interface MapData {
   // Detail panel data
   shipsAtSelected: ShipState[];
   convoysAtSelected: ConvoyState[];
+  transitUnits: TransitUnit[];
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
@@ -121,6 +142,28 @@ export function useMapData({
     return map;
   }, [ships]);
 
+  // ── Solo docked ships per system (excludes convoy members) ────
+  const dockedSoloShips = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ship of ships) {
+      if (ship.status === "docked" && !ship.convoyId) {
+        map.set(ship.systemId, (map.get(ship.systemId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [ships]);
+
+  // ── Docked convoys per system ─────────────────────────────────
+  const dockedConvoys = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const convoy of convoys) {
+      if (convoy.status === "docked") {
+        map.set(convoy.systemId, (map.get(convoy.systemId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [convoys]);
+
   // ── Solo ships docked at selected system ──────────────────────
   const shipsAtSelected = useMemo(
     () =>
@@ -142,6 +185,53 @@ export function useMapData({
         : [],
     [selectedSystem, convoys],
   );
+
+  // ── In-transit units (solo ships + convoys) for map markers ───
+  const transitUnits = useMemo((): TransitUnit[] => {
+    const nameById = new Map(universe.systems.map((s) => [s.id, s.name]));
+    const sumCargo = (s: ShipState) => s.cargo.reduce((n, c) => n + c.quantity, 0);
+    const out: TransitUnit[] = [];
+
+    for (const ship of ships) {
+      if (ship.status !== "in_transit" || ship.convoyId) continue;
+      if (!ship.destinationSystemId || ship.departureTick === null || ship.arrivalTick === null) continue;
+      out.push({
+        id: ship.id,
+        kind: "ship",
+        name: ship.name,
+        originSystemId: ship.systemId,
+        destinationSystemId: ship.destinationSystemId,
+        destinationName: nameById.get(ship.destinationSystemId) ?? "Unknown",
+        departureTick: ship.departureTick,
+        arrivalTick: ship.arrivalTick,
+        speed: ship.speed,
+        memberCount: 1,
+        cargoUsed: sumCargo(ship),
+        cargoMax: ship.cargoMax,
+      });
+    }
+
+    for (const convoy of convoys) {
+      if (convoy.status !== "in_transit") continue;
+      if (!convoy.destinationSystemId || convoy.departureTick === null || convoy.arrivalTick === null) continue;
+      const speed = convoy.members.length > 0 ? Math.min(...convoy.members.map((m) => m.speed)) : 1;
+      out.push({
+        id: convoy.id,
+        kind: "convoy",
+        name: convoy.name ?? "Convoy",
+        originSystemId: convoy.systemId,
+        destinationSystemId: convoy.destinationSystemId,
+        destinationName: nameById.get(convoy.destinationSystemId) ?? "Unknown",
+        departureTick: convoy.departureTick,
+        arrivalTick: convoy.arrivalTick,
+        speed,
+        memberCount: convoy.members.length,
+        cargoUsed: convoy.combinedCargoUsed,
+        cargoMax: convoy.combinedCargoMax,
+      });
+    }
+    return out;
+  }, [ships, convoys, universe.systems]);
 
   // ── Events per system (from dynamic data) ────────────────────
   const eventsPerSystem = useMemo(() => {
@@ -230,13 +320,15 @@ export function useMapData({
         economyType: system.economyType,
         regionId: system.regionId,
         shipCount: shipsAtSystem.get(system.id) ?? 0,
+        dockedShipCount: dockedSoloShips.get(system.id) ?? 0,
+        dockedConvoyCount: dockedConvoys.get(system.id) ?? 0,
         isGateway: system.isGateway,
         visibility,
         navigationState: nodeNavigationStates.get(system.id),
         activeEvents: eventsPerSystem.get(system.id),
       };
     });
-  }, [universe.systems, shipsAtSystem, nodeNavigationStates, eventsPerSystem, visibleSystemIds]);
+  }, [universe.systems, shipsAtSystem, dockedSoloShips, dockedConvoys, nodeNavigationStates, eventsPerSystem, visibleSystemIds]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
@@ -333,6 +425,7 @@ export function useMapData({
     priceHeatmap,
     shipsAtSelected,
     convoysAtSelected,
+    transitUnits,
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,
