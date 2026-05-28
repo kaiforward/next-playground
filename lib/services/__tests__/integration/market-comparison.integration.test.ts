@@ -42,6 +42,17 @@ describe("getMarketComparison (integration)", () => {
     expect(result.entries.every((e) => Number.isInteger(e.demand))).toBe(true);
   });
 
+  it("accepts a GOODS constant key in place of the CUID and returns the same data", async () => {
+    const cuid = universe.goodIds["food"];
+    const byCuid = await getMarketComparison(player.playerId, cuid);
+    const byKey = await getMarketComparison(player.playerId, "food");
+
+    // Both responses carry the CUID (the resolved canonical id), regardless of input form.
+    expect(byCuid.goodId).toBe(cuid);
+    expect(byKey.goodId).toBe(cuid);
+    expect(byKey.entries).toEqual(byCuid.entries);
+  });
+
   it("floors fractional supply/demand the same way getMarket does", async () => {
     const goodId = universe.goodIds["food"];
     const stationId = universe.stations.agricultural;
