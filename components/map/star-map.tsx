@@ -64,18 +64,23 @@ export function StarMap({
   const [comparisonOpen, setComparisonOpen] = useState(false);
 
   // ── Price heatmap data (per-system price for the selected good) ──
+  // Tagged with the good it was fetched for, and surfaced only when the tag
+  // matches the current selection. This avoids a stale flash when switching
+  // goods AND sidesteps an effect-ordering race: a separate "clear on change"
+  // effect runs after the fetcher's write (child effects fire before parent
+  // effects), so for an already-cached good — which resolves synchronously in
+  // the same commit — the clear would clobber the fetched data and the markers
+  // would never reappear. Deriving instead of clearing has no competing write.
   const heatmapActive = overlays.priceHeatmap && !!priceGoodId;
-  const [heatmapData, setHeatmapData] = useState<Map<
-    string,
-    { currentPrice: number; basePrice: number }
-  > | null>(null);
+  const [heatmapState, setHeatmapState] = useState<{
+    goodId: string;
+    data: Map<string, { currentPrice: number; basePrice: number }>;
+  } | null>(null);
 
-  // Clear data when the heatmap turns off OR the selected good changes.
-  // Without the goodId reset, switching goods briefly shows the previous
-  // good's prices while the new query is in flight.
-  useEffect(() => {
-    setHeatmapData(null);
-  }, [heatmapActive, priceGoodId]);
+  const heatmapData =
+    heatmapActive && heatmapState?.goodId === priceGoodId
+      ? heatmapState.data
+      : null;
 
   // Cached goods catalog — staleTime: Infinity, ~12 rows, one fetch per session.
   const goods = useGoods();
@@ -289,7 +294,7 @@ export function StarMap({
       {/* Price heatmap data fetcher — only mounts when overlay+good are active. */}
       {heatmapActive && priceGoodId && (
         <QueryBoundary loadingFallback={null}>
-          <PriceHeatmapDataFetcher goodId={priceGoodId} onData={setHeatmapData} />
+          <PriceHeatmapDataFetcher goodId={priceGoodId} onData={setHeatmapState} />
         </QueryBoundary>
       )}
 
@@ -391,7 +396,10 @@ function PriceHeatmapDataFetcher({
   onData,
 }: {
   goodId: string;
-  onData: (data: Map<string, { currentPrice: number; basePrice: number }>) => void;
+  onData: (state: {
+    goodId: string;
+    data: Map<string, { currentPrice: number; basePrice: number }>;
+  }) => void;
 }) {
   const { entries } = useMarketComparison(goodId);
   const map = useMemo(() => {
@@ -402,7 +410,7 @@ function PriceHeatmapDataFetcher({
     return m;
   }, [entries]);
   useEffect(() => {
-    onData(map);
-  }, [map, onData]);
+    onData({ goodId, data: map });
+  }, [goodId, map, onData]);
   return null;
 }
