@@ -105,7 +105,7 @@ function MarketComparisonContent({
   }
 
   return (
-    <aside className="fixed top-12 right-0 h-[calc(100%-3rem)] w-96 bg-surface border-l-2 border-l-accent shadow-2xl z-50 flex flex-col">
+    <aside className="fixed top-[84px] right-0 h-[calc(100%)] w-96 bg-surface border-l-2 border-l-accent shadow-2xl z-50 flex flex-col">
       <header className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div>
           <h2 className="font-display uppercase tracking-wider text-text-accent text-sm">

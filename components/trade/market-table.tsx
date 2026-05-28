@@ -3,6 +3,7 @@
 import type { MarketEntry } from "@/lib/types/game";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { formatCredits } from "@/lib/utils/format";
+import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { TrendIcon } from "@/components/ui/trend-icon";
 
@@ -112,16 +113,18 @@ export function MarketTable({
             key: "compare",
             label: "",
             render: (row: MarketEntry) => (
-              <button
+              <Button
                 onClick={(e) => {
                   e.stopPropagation();
                   onCompareGood(row.goodId, row.goodName);
                 }}
-                className="text-xs text-text-accent hover:text-accent-muted"
+                variant="pill"
+                color="accent"
+                size="xs"
                 aria-label={`Compare ${row.goodName} across systems`}
               >
                 Compare
-              </button>
+              </Button>
             ),
           },
         ]
