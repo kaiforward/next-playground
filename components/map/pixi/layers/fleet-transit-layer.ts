@@ -29,8 +29,12 @@ const ETA_STYLE = new TextStyle({
 
 interface MarkerObject {
   container: Container;
+  /** Pill + connected nose + inner glyph — rotates as one to the heading. */
+  body: Container;
   pill: Graphics;
-  nose: Graphics;
+  glyph: Graphics;
+  /** Cluster count badge + text — kept upright (not rotated) so it stays readable. */
+  badge: Graphics;
   count: Text;
   hit: Graphics;
   /** Single-unit id for hover/click, or "" for a multi-ship cluster. */
@@ -163,7 +167,8 @@ export class FleetTransitLayer {
       m.container.position.set(lead.x, lead.y);
       m.container.scale.set(markerScale);
       m.container.visible = frustum.contains(lead.x, lead.y);
-      this.drawMarker(m, lead.angle, count, single);
+      const isConvoy = single && lead.unit.kind === "convoy";
+      this.drawMarker(m, lead.angle, count, single, isConvoy);
     }
 
     for (const [k, m] of this.markerPool) {
@@ -179,18 +184,21 @@ export class FleetTransitLayer {
 
   private createMarker(unitId: string): MarkerObject {
     const container = new Container();
+    const body = new Container();
     const pill = new Graphics();
-    const nose = new Graphics();
+    const glyph = new Graphics();
+    body.addChild(pill, glyph);
+    const badge = new Graphics();
     const count = new Text({ text: "", style: COUNT_STYLE, resolution: TEXT_RESOLUTION });
     count.anchor.set(0.5, 0.5);
     const hit = new Graphics();
     hit.circle(0, 0, FLEET.hitRadius);
     hit.fill({ color: 0xffffff, alpha: 0.001 });
-    container.addChild(pill, nose, count, hit);
+    container.addChild(body, badge, count, hit);
     container.eventMode = "static";
     container.cursor = "pointer";
 
-    const m: MarkerObject = { container, pill, nose, count, hit, unitId };
+    const m: MarkerObject = { container, body, pill, glyph, badge, count, hit, unitId };
 
     container.on("pointerover", () => {
       if (m.unitId) this.hoveredId = m.unitId;
@@ -207,33 +215,43 @@ export class FleetTransitLayer {
     return m;
   }
 
-  private drawMarker(m: MarkerObject, angle: number, count: number, single: boolean) {
+  private drawMarker(m: MarkerObject, angle: number, count: number, single: boolean, isConvoy: boolean) {
     const h = FLEET.markerHeight;
-    const w = single ? FLEET.markerMinWidth : FLEET.markerMinWidth + String(count).length * FLEET.countDigitWidth;
+    const bodyW = FLEET.markerMinWidth;
+    const half = (bodyW + FLEET.noseLength) / 2;
+    const fill = isConvoy ? FLEET.convoyFill : FLEET.pillFill;
 
+    // Pill body + connected nose, both filled the same colour so they read as one
+    // arrow-shaped marker. The nose's base is exactly the pill's leading edge.
     m.pill.clear();
-    m.pill.roundRect(-w / 2, -h / 2, w, h, FLEET.pillCorner);
-    m.pill.fill(FLEET.pillFill);
+    m.pill.roundRect(-half, -h / 2, bodyW, h, FLEET.pillCorner);
+    m.pill.fill(fill);
+    m.pill.poly([-half + bodyW, -h / 2, half, 0, -half + bodyW, h / 2]);
+    m.pill.fill(fill);
 
-    // direction nose: a triangle just off the pill edge, rotated to the heading
-    const r = w / 2 + 3;
-    const cx = Math.cos(angle) * r;
-    const cy = Math.sin(angle) * r;
-    const s = FLEET.chevronSize;
-    m.nose.clear();
-    m.nose.poly([
-      cx + Math.cos(angle) * s, cy + Math.sin(angle) * s,
-      cx + Math.cos(angle + 2.5) * s, cy + Math.sin(angle + 2.5) * s,
-      cx + Math.cos(angle - 2.5) * s, cy + Math.sin(angle - 2.5) * s,
-    ]);
-    m.nose.fill(FLEET.pillFill);
+    // Inner dark ship chevron, centred in the pill body, pointing toward the nose.
+    const cs = FLEET.chevronSize;
+    const gx = -half + bodyW / 2 - cs / 2;
+    m.glyph.clear();
+    m.glyph.poly([gx, -cs / 2, gx + cs, 0, gx, cs / 2, gx + cs * 0.35, 0]);
+    m.glyph.fill(FLEET.pillContent);
+
+    // Rotate the whole shape to the heading; the count badge stays upright.
+    m.body.rotation = angle;
 
     if (single) {
+      m.badge.visible = false;
       m.count.visible = false;
     } else {
+      m.badge.visible = true;
       m.count.visible = true;
+      const bx = half - 1;
+      const by = -h / 2 - 1;
+      m.badge.clear();
+      m.badge.circle(bx, by, FLEET.badgeRadius);
+      m.badge.fill(FLEET.clusterBadge);
       m.count.text = String(count);
-      m.count.position.set(0, 0);
+      m.count.position.set(bx, by);
     }
   }
 
@@ -248,7 +266,10 @@ export class FleetTransitLayer {
     }
     g.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
-    g.stroke({ color: style.color, alpha: style.alpha, width: style.width / Math.max(zoom, 0.0001) });
+    // Screen width = style.width when zoomed out, growing with zoom past 1× so the
+    // line stays legible against system glyphs + dashed edges at close range.
+    const width = (style.width * Math.max(1, zoom)) / Math.max(zoom, 0.0001);
+    g.stroke({ color: style.color, alpha: style.alpha, width });
   }
 
   private drawRoutes(zoom: number) {
