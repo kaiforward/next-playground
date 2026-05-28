@@ -17,6 +17,7 @@ import {
 export interface MapOverlays {
   tradeFlow: boolean;
   priceHeatmap: boolean;
+  shipRoutes: boolean;
 }
 
 export type MapOverlayKey = keyof MapOverlays;
@@ -24,6 +25,7 @@ export type MapOverlayKey = keyof MapOverlays;
 const DEFAULT_OVERLAYS: MapOverlays = {
   tradeFlow: false,
   priceHeatmap: false,
+  shipRoutes: false,
 };
 
 function hydrateFromSession(): MapOverlays {
@@ -34,6 +36,7 @@ function hydrateFromSession(): MapOverlays {
   return {
     tradeFlow: stored.tradeFlow ?? DEFAULT_OVERLAYS.tradeFlow,
     priceHeatmap: stored.priceHeatmap ?? DEFAULT_OVERLAYS.priceHeatmap,
+    shipRoutes: stored.shipRoutes ?? DEFAULT_OVERLAYS.shipRoutes,
   };
 }
 
@@ -56,6 +59,7 @@ export function useMapOverlays(): {
     const stored: MapOverlaysState = {};
     if (overlays.tradeFlow) stored.tradeFlow = true;
     if (overlays.priceHeatmap) stored.priceHeatmap = true;
+    if (overlays.shipRoutes) stored.shipRoutes = true;
     setOverlaysInSession(stored);
   }, [overlays]);
 
