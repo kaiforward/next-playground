@@ -37,7 +37,12 @@ export interface SystemNodeData {
   name: string;
   economyType: EconomyType;
   regionId: string;
+  /** Total docked ships incl. convoy members — used for fleet-presence checks. */
   shipCount: number;
+  /** Solo docked ships (not in a convoy) — drives the blue docked pill. */
+  dockedShipCount: number;
+  /** Docked convoys at this system — drives the copper docked pill. */
+  dockedConvoyCount: number;
   isGateway: boolean;
   visibility: SystemVisibility;
   navigationState?: NavigationNodeState;
@@ -136,6 +141,28 @@ export function useMapData({
     }
     return map;
   }, [ships]);
+
+  // ── Solo docked ships per system (excludes convoy members) ────
+  const dockedSoloShips = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ship of ships) {
+      if (ship.status === "docked" && !ship.convoyId) {
+        map.set(ship.systemId, (map.get(ship.systemId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [ships]);
+
+  // ── Docked convoys per system ─────────────────────────────────
+  const dockedConvoys = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const convoy of convoys) {
+      if (convoy.status === "docked") {
+        map.set(convoy.systemId, (map.get(convoy.systemId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [convoys]);
 
   // ── Solo ships docked at selected system ──────────────────────
   const shipsAtSelected = useMemo(
@@ -293,13 +320,15 @@ export function useMapData({
         economyType: system.economyType,
         regionId: system.regionId,
         shipCount: shipsAtSystem.get(system.id) ?? 0,
+        dockedShipCount: dockedSoloShips.get(system.id) ?? 0,
+        dockedConvoyCount: dockedConvoys.get(system.id) ?? 0,
         isGateway: system.isGateway,
         visibility,
         navigationState: nodeNavigationStates.get(system.id),
         activeEvents: eventsPerSystem.get(system.id),
       };
     });
-  }, [universe.systems, shipsAtSystem, nodeNavigationStates, eventsPerSystem, visibleSystemIds]);
+  }, [universe.systems, shipsAtSystem, dockedSoloShips, dockedConvoys, nodeNavigationStates, eventsPerSystem, visibleSystemIds]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {

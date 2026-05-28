@@ -25,6 +25,14 @@ const DOCKED_COUNT_STYLE = new TextStyle({
   align: "center",
 });
 
+/** A single docked-fleet pill (ship glyph + count) drawn on the system glyph. */
+interface DockedPill {
+  container: Container;
+  bg: Graphics;
+  glyph: Graphics;
+  count: Text;
+}
+
 export class SystemObject extends Container {
   systemId = "";
 
@@ -34,10 +42,8 @@ export class SystemObject extends Container {
   private navigationRing: Graphics;
   private nameLabel: Text;
   private econLabel: Text;
-  private dockedPill: Container;
-  private dockedPillBg: Graphics;
-  private dockedGlyph: Graphics;
-  private dockedCount: Text;
+  private shipPill: DockedPill;   // blue — solo docked ships
+  private convoyPill: DockedPill; // copper — docked convoys
   private gatewayDot: Graphics;
   private eventDots: Graphics;
 
@@ -49,7 +55,8 @@ export class SystemObject extends Container {
   private currentEconomy = "";
   private currentNavState: NavigationNodeState | undefined;
   private currentVisibility: SystemVisibility = "unknown";
-  private currentShipCount = 0;
+  private currentSoloShipCount = 0;
+  private currentConvoyCount = 0;
   private currentIsGateway = false;
   private currentSelected = false;
   private currentEventTypes: string[] = [];
@@ -83,15 +90,10 @@ export class SystemObject extends Container {
     this.econLabel.anchor.set(0.5, 0);
     this.addChild(this.econLabel);
 
-    // Docked-ship pill (top-left of the glyph; replaces the pulse ring + text)
-    this.dockedPill = new Container();
-    this.dockedPillBg = new Graphics();
-    this.dockedGlyph = new Graphics();
-    this.dockedCount = new Text({ text: "", style: DOCKED_COUNT_STYLE, resolution: TEXT_RESOLUTION });
-    this.dockedCount.anchor.set(0, 0.5);
-    this.dockedPill.addChild(this.dockedPillBg, this.dockedGlyph, this.dockedCount);
-    this.dockedPill.visible = false;
-    this.addChild(this.dockedPill);
+    // Docked-fleet pills (top-left of the glyph; replace the pulse ring + text).
+    // Solo ships (blue) and convoys (copper) get separate pills, stacked when both.
+    this.shipPill = this.createDockedPill();
+    this.convoyPill = this.createDockedPill();
 
     // Gateway indicator
     this.gatewayDot = new Graphics();
@@ -119,7 +121,9 @@ export class SystemObject extends Container {
     const econChanged = data.economyType !== this.currentEconomy;
     const navChanged = data.navigationState !== this.currentNavState;
     const visibilityChanged = data.visibility !== this.currentVisibility;
-    const shipChanged = data.shipCount !== this.currentShipCount;
+    const shipChanged =
+      data.dockedShipCount !== this.currentSoloShipCount ||
+      data.dockedConvoyCount !== this.currentConvoyCount;
     const gatewayChanged = data.isGateway !== this.currentIsGateway;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
@@ -169,14 +173,10 @@ export class SystemObject extends Container {
     this.econLabel.visible = !isUnknown;
 
     if (shipChanged) {
-      this.currentShipCount = data.shipCount;
-      // Ship count comes from the player's own fleet data — always show regardless of fog-of-war
-      if (data.shipCount > 0) {
-        this.dockedPill.visible = true;
-        this.drawDockedPill(data.shipCount);
-      } else {
-        this.dockedPill.visible = false;
-      }
+      // Counts come from the player's own fleet data — always show regardless of fog-of-war
+      this.currentSoloShipCount = data.dockedShipCount;
+      this.currentConvoyCount = data.dockedConvoyCount;
+      this.redrawDockedPills();
     }
 
     if (gatewayChanged) {
@@ -202,28 +202,61 @@ export class SystemObject extends Container {
     }
   }
 
-  private drawDockedPill(count: number) {
+  private createDockedPill(): DockedPill {
+    const container = new Container();
+    const bg = new Graphics();
+    const glyph = new Graphics();
+    const count = new Text({ text: "", style: DOCKED_COUNT_STYLE, resolution: TEXT_RESOLUTION });
+    count.anchor.set(0, 0.5);
+    container.addChild(bg, glyph, count);
+    container.visible = false;
+    this.addChild(container);
+    return { container, bg, glyph, count };
+  }
+
+  /** Lay out the ship + convoy pills, stacking the ship pill above the convoy
+   *  pill when both are present. Both right-align to the glyph's top-left. */
+  private redrawDockedPills() {
+    const h = FLEET.markerHeight;
+    const gap = 3;
+    const x = -SIZES.systemCoreRadius + 2;
+    const baseY = -SIZES.systemCoreRadius - 2;
+    const hasShips = this.currentSoloShipCount > 0;
+    const hasConvoys = this.currentConvoyCount > 0;
+
+    // Convoy pill sits at the anchor (nearest the glyph); ships stack above it.
+    if (hasConvoys) {
+      this.drawPill(this.convoyPill, this.currentConvoyCount, FLEET.convoyFill, x, baseY);
+    }
+    this.convoyPill.container.visible = hasConvoys;
+
+    if (hasShips) {
+      const shipY = hasConvoys ? baseY - (h + gap) : baseY;
+      this.drawPill(this.shipPill, this.currentSoloShipCount, FLEET.pillFill, x, shipY);
+    }
+    this.shipPill.container.visible = hasShips;
+  }
+
+  private drawPill(pill: DockedPill, count: number, color: number, x: number, y: number) {
     const h = FLEET.markerHeight;
     const pad = 5;
     const glyphW = FLEET.chevronSize;
-    this.dockedCount.text = String(count);
-    const textW = this.dockedCount.width;
+    pill.count.text = String(count);
+    const textW = pill.count.width;
     const w = pad + glyphW + 4 + textW + pad;
 
-    this.dockedPillBg.clear();
-    this.dockedPillBg.roundRect(-w, -h / 2, w, h, FLEET.pillCorner);
-    this.dockedPillBg.fill(FLEET.pillFill);
+    pill.bg.clear();
+    pill.bg.roundRect(-w, -h / 2, w, h, FLEET.pillCorner);
+    pill.bg.fill(color);
 
     // ship glyph (small right-pointing chevron) near the left
     const gx = -w + pad;
-    this.dockedGlyph.clear();
-    this.dockedGlyph.poly([gx, -glyphW / 2, gx + glyphW, 0, gx, glyphW / 2, gx + glyphW * 0.35, 0]);
-    this.dockedGlyph.fill(FLEET.pillContent);
+    pill.glyph.clear();
+    pill.glyph.poly([gx, -glyphW / 2, gx + glyphW, 0, gx, glyphW / 2, gx + glyphW * 0.35, 0]);
+    pill.glyph.fill(FLEET.pillContent);
 
-    this.dockedCount.position.set(gx + glyphW + 4, 0);
-
-    // anchor the pill's bottom-right just off the glyph's top-left corner
-    this.dockedPill.position.set(-SIZES.systemCoreRadius + 2, -SIZES.systemCoreRadius - 2);
+    pill.count.position.set(gx + glyphW + 4, 0);
+    pill.container.position.set(x, y);
   }
 
   /** Apply LOD-based visibility. Called per frame from layer. */
@@ -237,9 +270,13 @@ export class SystemObject extends Container {
     this.econLabel.visible = lod.showEconomyLabels && !isUnknown;
     this.econLabel.alpha = lod.detailAlpha;
 
-    if (this.currentShipCount > 0) {
-      this.dockedPill.visible = lod.showShipLabels;
-      this.dockedPill.alpha = lod.detailAlpha;
+    if (this.currentSoloShipCount > 0) {
+      this.shipPill.container.visible = lod.showShipLabels;
+      this.shipPill.container.alpha = lod.detailAlpha;
+    }
+    if (this.currentConvoyCount > 0) {
+      this.convoyPill.container.visible = lod.showShipLabels;
+      this.convoyPill.container.alpha = lod.detailAlpha;
     }
 
     this.glow.visible = lod.showGlow;
