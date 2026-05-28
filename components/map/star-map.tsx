@@ -21,6 +21,8 @@ import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { buildSystemRegionMap } from "@/lib/utils/region";
+import { GOODS } from "@/lib/constants/goods";
+import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
 
 interface StarMapProps {
   atlas: AtlasData;
@@ -54,6 +56,18 @@ export function StarMap({
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
+
+  // ── Price overlay control state (good picker + comparison panel) ──
+  const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+
+  const goods = useMemo(
+    () =>
+      Object.entries(GOODS)
+        .map(([id, g]) => ({ id, name: g.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [],
+  );
 
   // Merge atlas (positions) with static tile data (names + economy)
   const mergedSystems = useMemo((): StarSystemInfo[] => {
@@ -266,6 +280,10 @@ export function StarMap({
         setMode={setMapMode}
         overlays={overlays}
         toggle={toggle}
+        priceGoodId={priceGoodId}
+        setPriceGoodId={setPriceGoodId}
+        goods={goods}
+        onOpenComparisonTable={() => setComparisonOpen(true)}
       />
 
       {/* Navigation mode banner */}
@@ -317,6 +335,27 @@ export function StarMap({
           visibility={mapData.selectedVisibility}
           onClose={closeSystem}
           onNavigateUnit={navigation.selectUnit}
+        />
+      )}
+
+      {/* Cross-system price comparison panel (Price overlay) */}
+      {comparisonOpen && priceGoodId && view.selectedSystem && (
+        <MarketComparisonPanel
+          goodId={priceGoodId}
+          goodName={goods.find((g) => g.id === priceGoodId)?.name ?? priceGoodId}
+          fromSystemId={view.selectedSystem.id}
+          fromSystemName={view.selectedSystem.name}
+          systems={universe.systems.map((s) => ({ id: s.id, name: s.name }))}
+          connections={allConnections}
+          onSelectSystem={(sysId) => {
+            const sys = universe.systems.find((s) => s.id === sysId);
+            if (sys) {
+              view.selectSystem(sys);
+              setCenterTarget({ x: sys.x, y: sys.y, zoom: 1.2 });
+            }
+            setComparisonOpen(false);
+          }}
+          onClose={() => setComparisonOpen(false)}
         />
       )}
     </div>
