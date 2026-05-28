@@ -33,7 +33,7 @@ Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-varia
 Core layers (fixed roles — see CLAUDE.md conventions for rules):
 - `lib/engine/` — Pure game logic. Zero DB dependency. Test with Vitest.
 - `lib/services/` — All DB access and business logic. Route handlers are thin wrappers.
-- `lib/tick/` — Tick engine and processor pipeline. Each processor splits into a typed `World` interface (`lib/tick/world/`), a Prisma adapter (`lib/tick/adapters/prisma/`), an in-memory adapter when the simulator needs it (`lib/tick/adapters/memory/`), and a pure processor body (`lib/tick/processors/`). Live and sim run the same body. See `docs/design/active/processor-architecture.md`.
+- `lib/tick/` — Tick engine and processor pipeline. Each processor splits into a typed `World` interface (`lib/tick/world/`), a Prisma adapter (`lib/tick/adapters/prisma/`), an in-memory adapter when the simulator needs it (`lib/tick/adapters/memory/`), and a pure processor body (`lib/tick/processors/`). Live and sim run the same body. See `docs/active/engineering/processor-architecture.md`.
 - `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json.
 - `app/(game)/` — Game UI pages. `app/(auth)/` — Auth pages.
 - `prisma/` — Schema and seed script.
@@ -45,11 +45,12 @@ Shared modules (utils, hooks, constants, components) are inventoried in `docs/MO
 Functional spec: `docs/SPEC.md` — master game spec with system interaction map. Read this first.
 Module index: `docs/MODULE_INDEX.md` — auto-generated inventory of all shared exports (utils, hooks, components, constants). Regenerate with `npm run index`.
 
-Design docs:
-- `docs/design/active/` — Implemented systems (economy, events, trading, trade-simulation, navigation, universe, tick-engine, processor-architecture, event-catalog, **theme**)
-- `docs/design/planned/` — Designed but not yet built (faction-system, player-progression, facilities, multiplayer-infrastructure, simulation-enhancements)
-- `docs/design/archive/` — Historical design docs (may be outdated)
-- `docs/design/BACKLOG.md` — Actionable work items (delete when shipped)
+Design docs (under `docs/`):
+- `docs/active/` — Implemented systems, split by type: `gameplay/` (economy, events, trading, trade-simulation, navigation, universe, system-traits, faction-system, combat, …), `engineering/` (tick-engine, processor-architecture), `design-system/` (theme)
+- `docs/planned/` — Designed but not yet built (war-system, facilities, production, player-progression, multiplayer-infrastructure, …)
+- `docs/archive/` — Historical design docs (may be outdated)
+- `docs/plans/` — Transient, code-heavy build plans for in-flight features. **Delete each once its feature ships** — the functional spec moves to `docs/active/` and the code is the source of truth. Functional roadmaps that merely order unbuilt features go in `docs/planned/`, not here.
+- `docs/BACKLOG.md` — Actionable work items (delete when shipped)
 
 ## Design Principles
 
@@ -78,7 +79,7 @@ These apply to every layer — components, hooks, services, engine, processors, 
 
 ## UI Components
 
-**Theme**: "Foundry" — industrial, sharp-edged, copper/amber accents. Full reference: `docs/design/active/theme.md`. Key rules: no rounded corners on cards/buttons/badges (only DetailPanel modal and FilterBar chips get rounding), copper left-accent stripe on all cards, `font-display` (Chakra Petch) for headings, `font-mono` (Geist Mono) for numeric values.
+**Theme**: "Foundry" — industrial, sharp-edged, copper/amber accents. Full reference: `docs/active/design-system/theme.md`. Key rules: no rounded corners on cards/buttons/badges (only DetailPanel modal and FilterBar chips get rounding), copper left-accent stripe on all cards, `font-display` (Chakra Petch) for headings, `font-mono` (Geist Mono) for numeric values.
 
 Use existing components instead of inline markup. Never duplicate markup that already has a component. Use `tv()` variants, typed props, and semantic HTML (`<dl>` for key-value, `<button>` for actions). Keep variant counts small and intentional.
 
