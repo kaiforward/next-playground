@@ -154,11 +154,6 @@ export function PixiMapCanvas({
       const connectionLayer = new ConnectionLayer();
       world.addChild(connectionLayer.container);
 
-      // Price heatmap rings sit above connections but BELOW trade-flow lanes
-      // so animated particles always render on top of the static price tint.
-      const priceHeatmapLayer = new PriceHeatmapLayer();
-      world.addChild(priceHeatmapLayer.container);
-
       // Trade-flow particles render between connections and territories so
       // they sit on top of the static graph but below region fills/labels.
       const tradeFlowLayer = new TradeFlowLayer();
@@ -175,6 +170,12 @@ export function PixiMapCanvas({
 
       const fleetDotLayer = new FleetDotLayer();
       world.addChild(fleetDotLayer.container);
+
+      // Price heatmap rings sit above territories + fleet dots so the colour
+      // is visible against any map mode, but below the system glyphs so the
+      // dot + labels stay readable.
+      const priceHeatmapLayer = new PriceHeatmapLayer();
+      world.addChild(priceHeatmapLayer.container);
 
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);

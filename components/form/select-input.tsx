@@ -166,6 +166,8 @@ export function SelectInput<T = string>({
         isSearchable={isSearchable}
         styles={resolvedDarkStyles}
         menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+        menuPlacement="auto"
+        menuShouldScrollIntoView={false}
       />
       {error && <p className={styles.error()}>{error}</p>}
     </div>
