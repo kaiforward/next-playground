@@ -12,6 +12,8 @@ interface MarketTableProps {
   selectedGoodId?: string;
   /** Quantity of each good the player currently owns, keyed by goodId. */
   cargoByGoodId?: Map<string, number>;
+  /** When provided, renders a per-row Compare action that opens a cross-system comparison. */
+  onCompareGood?: (goodId: string, goodName: string) => void;
 }
 
 export function MarketTable({
@@ -19,6 +21,7 @@ export function MarketTable({
   onSelectGood,
   selectedGoodId,
   cargoByGoodId,
+  onCompareGood,
 }: MarketTableProps) {
   const columns: Column<MarketEntry>[] = [
     {
@@ -103,6 +106,26 @@ export function MarketTable({
         return <span className="text-text-secondary">--</span>;
       },
     },
+    ...(onCompareGood
+      ? [
+          {
+            key: "compare",
+            label: "",
+            render: (row: MarketEntry) => (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCompareGood(row.goodId, row.goodName);
+                }}
+                className="text-xs text-text-accent hover:text-accent-muted"
+                aria-label={`Compare ${row.goodName} across systems`}
+              >
+                Compare
+              </button>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
