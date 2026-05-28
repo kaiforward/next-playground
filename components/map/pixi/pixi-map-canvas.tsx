@@ -190,14 +190,14 @@ export function PixiMapCanvas({
       const fleetDotLayer = new FleetDotLayer();
       world.addChild(fleetDotLayer.container);
 
-      // Price heatmap rings sit above territories + fleet dots so the colour
-      // is visible against any map mode, but below the system glyphs so the
-      // dot + labels stay readable.
-      const priceHeatmapLayer = new PriceHeatmapLayer();
-      world.addChild(priceHeatmapLayer.container);
-
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
+
+      // Price heatmap rings sit just above the system glyphs (incl. their
+      // semi-transparent glow) so the price-coloured ring isn't washed out,
+      // but below the fleet transit markers added next.
+      const priceHeatmapLayer = new PriceHeatmapLayer();
+      world.addChild(priceHeatmapLayer.container);
 
       // Fleet transit markers + routes sit above system glyphs but below the
       // navigation effect layer.
