@@ -1,6 +1,6 @@
 # Processor Architecture
 
-Status: **Active** — implemented in feat/processor-refactor (Phases 1–5).
+Status: **Active**.
 
 ## Goal
 
@@ -47,6 +47,7 @@ For processors that pick one region per tick (economy, missions), the round-robi
 | price-snapshots | ✓ | ✓ | ✓ |
 | events | ✓ | ✓ | ✓ |
 | economy | ✓ | ✓ | ✓ |
+| relations | ✓ | ✓ | ✓ |
 | trade-missions | ✓ | ✓ | — (no sim need yet) |
 | missions (operational) | ✓ | ✓ | — (no sim need yet) |
 | battles | ✓ | ✓ | — (no sim need yet) |
@@ -80,31 +81,9 @@ Adding it to the sim is then: construct the memory adapter, call the body, copy 
 
 ---
 
-## Migration history
-
-| Phase | Commit | What landed |
-|---|---|---|
-| 1 | 89a0347 | `price-snapshots` proved the pattern with the simplest case. |
-| 2 | 1cbbbee | `events` validated the pattern on a real drift case; sim's bespoke event lifecycle replaced. |
-| 3 | 450929c | `economy` — the highest-drift processor. Sim's economy orchestrator replaced. |
-| 4 | 752ec26 | `trade-missions`, `missions`, `battles`, `ship-arrivals` — consistency pass. |
-| 5 | — | Doc + CLAUDE.md updates. |
-
----
-
 ## Design decisions made along the way
 
 - **Round-robin lives in the processor body, not the adapter.** Tried both. Body-side is simpler because the adapter only has to know how to fetch by region — it doesn't need to know `ctx.tick`.
 - **Memory adapters mutate in-place, then expose the final state via public fields.** The simulator reads back `world.markets`, `world.systems`, etc. after the processor returns. Cleaner than threading return values through every interface method.
 - **Sim's `tradeVolumeAccum` reset uses `Math.max(0, current - captured)`, matching live's `GREATEST(0, vol - captured)`.** Both adapters subtract the volume that fed into the prosperity calc rather than resetting to 0, so trades committed between read and write aren't silently lost. In sim this is moot (no concurrent writers) but matching behavior keeps adapters interchangeable.
 - **`unknown` stays banned at the boundary.** Adapters narrow Prisma's string-typed columns to validated unions via `lib/types/guards.ts` once, on the way out. The processor body receives `EconomyType`, `GovernmentType`, `EventTypeId`, etc. directly.
-
----
-
-## Success criteria — final check
-
-- Identical simulator output for any seeded experiment configuration before vs after the refactor — confirmed via `npm run simulate` runs on each phase.
-- All existing integration tests pass — 740/740 at Phase 4.
-- Adding a new processor requires writing it exactly once — yes, by construction.
-- Sim's bespoke orchestrator can be deleted — done for economy and events; ship-arrivals path remains by design (see exception above).
-- "Do I follow pattern A or pattern B?" — answer is always "the World pattern", with the documented exceptions for trivial wrappers (notification-prune).

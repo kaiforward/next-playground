@@ -86,6 +86,10 @@ A system has **2–4 traits**, rolled at generation. More traits = more complex 
 | Pulsar proximity | Tech (1), Industrial (1) | Regular electromagnetic pulses. Energy harvesting, unique radiation effects on materials |
 | Ion storm corridor | Refinery (2) | Charged particle streams from stellar wind interactions. Dangerous to navigate but enables industrial-scale catalysis |
 | Bioluminescent ecosystem | Agricultural (2), Tech (1) | Exotic biological systems. Pharmaceutical research and agricultural applications |
+| Signal anomaly | Tech (1) | Repeating, possibly artificial signals of unknown origin. Pure research draw — listening arrays decode structured transmissions |
+| Xenobiology preserve | Agricultural (1), Tech (1) | Protected zone of non-terrestrial life. Controlled research yields pharmaceutical and agricultural breakthroughs |
+| Ancient minefield | Tech (1) | Dormant automated mines from a forgotten conflict. Navigation hazard — higher base danger — but the intelligence locked within is valuable |
+| Pirate stronghold | — | Fortified raider base hidden in the system. No economic affinity; raises base danger and disrupts commerce |
 
 #### Infrastructure & Legacy
 
@@ -98,6 +102,9 @@ A system has **2–4 traits**, rolled at generation. More traits = more complex 
 | Colonial capital | Core (2), Industrial (1) | Seat of an early colonial administration. Established institutions, population density |
 | Free port declaration | Core (2) | Historically declared open-trade zone. Tariff-free commerce attracts merchants |
 | Shipbreaking yards | Industrial (2), Extraction (1) | Orbital scrapyards. Recycled metals, salvaged components feed local industry |
+| Derelict fleet | Extraction (1), Industrial (1) | A graveyard of warships from a forgotten campaign. Salvage rights yield rare alloys and intact components |
+| Abandoned station | Industrial (1), Core (1) | A decommissioned megastation. Reclamation recovers industrial equipment; if restored, could anchor a new hub |
+| Smuggler haven | Core (1) | Concealed berths, black markets, and information brokers. Contraband flows freely; minor core (trade hub) affinity |
 
 ### 1.2 Quality Tiers
 
@@ -127,6 +134,8 @@ Some traits have downsides that create risk/reward trade-offs:
 | Dark nebula | Sensor interference, higher danger, smuggling haven |
 | Subspace rift | Unstable, high danger, unpredictable events |
 | Ion storm corridor | Periodic charged particle surges disrupt navigation and station operations |
+| Ancient minefield | Dormant mines make navigation perilous, higher base danger |
+| Pirate stronghold | Raiding fleets disrupt commerce, high base danger, lawless space |
 
 These traits tend to appear in frontier/lawless space, creating the high-risk-high-reward zones that adventurous players seek out.
 

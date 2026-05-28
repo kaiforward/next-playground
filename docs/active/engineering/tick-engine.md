@@ -15,17 +15,18 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Processor Pipeline
 
-9 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+10 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
 
 ```
 Ship Arrivals ──────────────────────────────────┐
   └→ Battles (depends on: ship-arrivals) ───────┤
 Events ─────────────────────────────────────────┤
   └→ Economy (depends on: events) ──────────────┤
-       └→ Trade Flow (depends on: economy) ─────┤
-       └→ Trade Missions (depends on: events, economy)
-       └→ Op Missions (depends on: events, economy)
-       └→ Price Snapshots (depends on: economy) ┘
+  │    └→ Trade Flow (depends on: economy) ─────┤
+  │    └→ Trade Missions (depends on: events, economy)
+  │    └→ Op Missions (depends on: events, economy)
+  │    └→ Price Snapshots (depends on: economy) ┘
+  └→ Relations (depends on: events, every 3 ticks)
 Notification Prune (independent, every 50 ticks) ┘
 ```
 
@@ -40,6 +41,7 @@ Notification Prune (independent, every 50 ticks) ┘
 | Trade Flow | Every tick (internal region round-robin) | Economy | Simulates inter-system goods flow along edges driven by price gradients. Picks one region per active tick, mutates supply/demand at both endpoints, appends flow events, and increments per-system volume. Player trade volume in a region throttles the budget down to zero (player displacement). See [trade-simulation.md](../gameplay/trade-simulation.md) |
 | Trade Missions | Every 5 ticks | Events, Economy | Generates new missions from price extremes and active events. Expires unclaimed/overdue missions. Notifies players |
 | Op Missions | Every tick | Events, Economy | Generates patrol/survey/bounty/salvage/recon missions from danger levels and traits. Expires unclaimed missions. Completes timed missions. Fails missions with destroyed/disabled ships |
+| Relations | Every 3 ticks | Events | Drifts every faction pair's relation score (border length, cross-faction trade, doctrine, common enemies). Spawns `border_conflict`/`pact_under_negotiation`/`alliance_dissolved` events on threshold crossings, then resolves relations-owned event windows (forms/dissolves alliances, expires events). See [faction-system.md](../gameplay/faction-system.md) |
 | Price Snapshots | Every 20 ticks | Economy | Records current prices for all systems into rolling history (max 50 snapshots per system) |
 | Notification Prune | Every 50 ticks | None | Deletes old notifications past their max age to prevent unbounded growth |
 
@@ -85,3 +87,4 @@ This means:
 - **Trading**: Trade missions processor generates contracts from market state (see [trading.md](../gameplay/trading.md))
 - **Combat**: Battles processor resolves pirate encounters from bounty missions (see [combat.md](../gameplay/combat.md))
 - **Operational Missions**: Missions processor generates patrol/survey/bounty from danger levels and traits (see [combat.md](../gameplay/combat.md))
+- **Relations**: Relations processor (every 3 ticks) drifts inter-faction scores and spawns relation events; runs after events so its drift drivers and threshold spawns see the current event state (see [faction-system.md](../gameplay/faction-system.md))

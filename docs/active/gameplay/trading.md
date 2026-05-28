@@ -28,6 +28,18 @@ Players can view at each system:
 
 ---
 
+## Trade UX
+
+Quality-of-life surfaces that support the buy / sell / compare loop:
+
+- **Integer quantities** — supply and demand are floored for both display and trade validation, so the number shown is exactly the maximum you can act on (flooring never overstates what's available; the underlying economy math stays fractional).
+- **System detail panel** — selecting a system on the map opens a hub: status (economy / gateway / danger / region / faction), one-click shortcuts to that system's Market / Ships / Contracts tabs, an active-event banner, and cards for docked ships and convoys with inline **Navigate** (enters map nav-mode for that unit) and **Trade** actions.
+- **Cross-system price comparison** — answers "where is good X cheapest / most expensive" across the systems you can see, via two surfaces fed by one by-good lookup:
+  - **Price heatmap overlay** tints visible systems by `currentPrice / basePrice` along a green → amber → red ramp (deep bargain to buy → neutral → premium to sell).
+  - **Comparison panel** is a sortable table of price, floored supply/demand, and jump distance from the system you're viewing, with Buy / Sell / All filters and a jump-to action.
+
+---
+
 ## Trade Missions
 
 Auto-generated delivery contracts posted at stations. They give players structured objectives with guaranteed rewards on top of the goods' sale value.

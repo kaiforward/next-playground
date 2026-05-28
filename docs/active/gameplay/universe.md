@@ -23,32 +23,9 @@ Each region has:
 - **Government type**: One of 4 types (federation, corporate, authoritarian, frontier), assigned with uniform 25% distribution. Coverage guarantee ensures all 4 types appear
 - **Dominant economy**: The most common economy type among the region's systems, computed at seed time and stored on the Region model. Displayed as a subtitle on the map (e.g., "Arcturus — Extraction")
 
-### System Traits
+### System Traits & Economy Type
 
-Every system has **2–4 traits** — permanent physical properties (stars, planets, moons, orbital features, resource deposits, anomalies) that define the system's character and economic potential. 52 traits across 5 categories: planetary, orbital, resource, phenomena, legacy.
-
-Each trait has:
-- **Quality tier** (1–3): Marginal, Solid, Exceptional. Rolled at generation with rarity weights: 50% tier 1, 35% tier 2, 15% tier 3
-- **Economy affinity**: Per-economy-type scores (0 = irrelevant, 1 = minor, 2 = strong). Only strong affinities (value 2) drive economy derivation
-- **Production goods**: Which goods the trait boosts production of. Quality tier scales the modifier magnitude (+15% at tier 1, +40% at tier 2, +80% at tier 3)
-
-**Trait generation**: The first trait is guaranteed to have at least one strong (value 2) economy affinity, ensuring every system has a clear economy signal. Remaining traits are drawn from the full pool with uniform weights. No duplicate traits on a system.
-
-**Strong affinity balance**: 52 traits distribute strong affinities evenly across 6 economy types (5–6 strong affinities each: agricultural 6, tech 6, extraction 5, refinery 5, industrial 5, core 5). This produces naturally even economy distributions without enforcement.
-
-### Economy Derivation
-
-Economy type is derived bottom-up from traits, not assigned directly:
-
-```
-For each economy type:
-  score = sum of (quality) for all system traits WHERE trait affinity for that type === 2
-
-Winner = economy type with highest score
-Tiebreaker = seeded random selection
-```
-
-Minor affinities (value 1) do not influence economy derivation — they affect production modifiers and serve as secondary connections. This keeps the economy signal clean.
+Every system has **2–4 permanent traits** (quality tiers 1–3) that define its character and drive its economy type. Economy is derived **bottom-up** — summing the strong trait affinities, never assigned directly — and the first trait is guaranteed a strong affinity so every system has a clear economic signal. Trait quality also scales per-good production bonuses. The full trait catalog, affinity scoring, and derivation rules live in [system-traits.md](./system-traits.md).
 
 ### Systems
 
@@ -95,6 +72,16 @@ The map uses a WebGL canvas (Pixi.js) with two rendering tiers that crossfade ba
 **Background**: Parallax starfield with 3 depth layers, independent of the world container.
 
 **Performance**: Frustum culling skips off-screen systems and connections each frame. SystemObjects are created on demand (batched per frame) and hidden on deactivation rather than destroyed — constructor cost is high (~10 display objects each). Viewport change callbacks are throttled to avoid 60 setState calls/sec during pan/zoom.
+
+### Fleet on the Map
+
+The player's own fleet is always legible, in one cyan visual language kept distinct from event / economy / price cues:
+
+- **Docked ships** show as a small count pill on the system glyph.
+- **In-transit ships** show as always-visible directional markers that move smoothly along their route between ticks (a chevron points toward the destination). Convoys render as a single marker; markers that overlap on screen cluster into one pill with a count.
+- **Routes on demand** (progressive disclosure): hovering a marker shows a ghost route + ETA tooltip; clicking it draws the solid animated route and opens a compact transit card (destination, cargo, ETA); a "Ship Routes" overlay can draw every in-transit route at once.
+
+In-transit markers are the player's own ships, so they stay visible even across unexplored systems.
 
 ### Map Side Panel
 

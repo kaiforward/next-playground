@@ -6,57 +6,9 @@ Ship management, travel between systems, fuel mechanics, convoys, upgrades, dama
 
 ## Ships
 
-### Ship Types
+12 ship classes across 3 sizes and 5 roles, each with 10 core stats (cargo, fuel, speed, hull, shields, firepower, evasion, stealth, sensors, crew). Three of those feed the arrival danger pipeline directly — hull reduces hazard severity, stealth reduces inspection chance, evasion reduces event cargo-loss — and firepower drives convoy escort protection. The full class roster, stat blocks, sizes, and roles are in [ship-roster.md](./ship-roster.md).
 
-12 ship classes across 3 sizes and 5 roles. Each ship has 10 core stats.
-
-| Class | Size | Role | Cargo | Fuel | Speed | Hull | Shields | Cost |
-|---|---|---|---|---|---|---|---|---|
-| Shuttle | Small | Trade | 50 | 100 | 5 | 40 | 10 | Free (starter) |
-| Light Freighter | Small | Trade | 80 | 90 | 4 | 50 | 10 | 3,000 CR |
-| Interceptor | Small | Combat | 15 | 80 | 8 | 35 | 20 | 4,000 CR |
-| Scout Skiff | Small | Scout | 10 | 120 | 7 | 25 | 10 | 2,500 CR |
-| Bulk Freighter | Medium | Trade | 200 | 120 | 3 | 80 | 15 | 12,000 CR |
-| Corvette | Medium | Combat | 40 | 100 | 6 | 70 | 30 | 15,000 CR |
-| Blockade Runner | Medium | Stealth | 60 | 110 | 7 | 50 | 20 | 18,000 CR |
-| Survey Vessel | Medium | Support | 50 | 130 | 5 | 60 | 20 | 10,000 CR |
-| Heavy Freighter | Large | Trade | 400 | 150 | 2 | 120 | 20 | 35,000 CR |
-| Frigate | Large | Combat | 30 | 120 | 4 | 120 | 50 | 45,000 CR |
-| Stealth Transport | Large | Stealth | 150 | 130 | 4 | 80 | 25 | 40,000 CR |
-| Command Vessel | Large | Support | 80 | 140 | 4 | 100 | 35 | 50,000 CR |
-
-### Core Stats (10)
-
-| Stat | Effect |
-|---|---|
-| Fuel / MaxFuel | Determines travel range per refuel |
-| Cargo / CargoMax | Units of goods that fit in the hold |
-| Speed | Determines travel time (higher = faster). Reference speed = 5 (Shuttle) |
-| Hull (Max/Current) | Absorbs damage after shields. Hull 0 = disabled |
-| Shields (Max/Current) | Absorbs damage first. Regenerates fully on dock |
-| Firepower | Determines escort protection strength in convoys |
-| Evasion | Reduces cargo loss probability in danger pipeline |
-| Stealth | Reduces contraband inspection chance in danger pipeline |
-| Sensors | Detection range (future use) |
-| Crew Capacity | Crew limit (future use) |
-
-### Ship Sizes
-
-| Size | Max Upgrade Slots | Ships |
-|---|---|---|
-| Small | 2 | Shuttle, Light Freighter, Interceptor, Scout Skiff |
-| Medium | 4 | Bulk Freighter, Corvette, Blockade Runner, Survey Vessel |
-| Large | 6 | Heavy Freighter, Frigate, Stealth Transport, Command Vessel |
-
-### Ship Roles
-
-- **Trade**: High cargo capacity, balanced other stats
-- **Combat**: High firepower/hull/shields, low cargo
-- **Scout**: High sensors/speed/fuel, minimal cargo
-- **Stealth**: High stealth/evasion, moderate cargo
-- **Support**: High sensors/crew, balanced stats
-
-Players start with one Shuttle. Additional ships are purchased at any system's shipyard. Ships are auto-named ("[Type] #N"). Each ship has its own location, cargo, fuel, hull/shield state, and upgrade slots.
+Players start with one Shuttle; more are bought at shipyards. Each ship has its own location, cargo, fuel, hull/shield state, and upgrade slots.
 
 ### Disabled Ships
 
@@ -74,21 +26,7 @@ Available at any station while docked. Cost is 10 CR per hull point of damage. S
 
 ## Upgrade Modules
 
-12 modules across 4 slot types. Each ship has a fixed slot layout determined by its class.
-
-### Slot Types
-
-| Type | Modules |
-|---|---|
-| Engine | Fuel Optimiser (tiered), Thruster Upgrade (tiered), Manoeuvring Thrusters (capability) |
-| Cargo | Expanded Hold (tiered), Reinforced Containers (tiered), Hidden Compartment (capability) |
-| Defence | Armour Plating (tiered), Shield Booster (tiered), Point Defence Array (capability) |
-| Systems | Scanner Array (tiered), Automation Module (capability, placeholder), Repair Bay (capability, placeholder — hullRegenRate not yet active) |
-
-### Module Categories
-
-- **Tiered**: Mk I / Mk II / Mk III with increasing bonuses and costs
-- **Capability**: Single tier, provides a unique effect
+12 modules across 4 slot types (engine, cargo, defence, systems) — tiered stat boosts (Mk I/II/III) or single-tier capability unlocks, installed into a ship's fixed slot layout. The full module catalog, per-class slot layouts, and install/remove flow are in [ship-upgrades.md](./ship-upgrades.md). Their pipeline-relevant effects:
 
 ### Module Effects in Danger Pipeline
 

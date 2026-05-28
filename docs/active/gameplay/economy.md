@@ -174,6 +174,47 @@ Boom amplifies both sides equally — no corrective tug-of-war. A booming system
 
 ---
 
+## How It Composes Each Tick
+
+The per-market steps above sit inside a larger ordering. Each tick processes **one region** (round-robin); three processors touch its markets in sequence, and player trades layer on top in real time:
+
+```
+EVENTS       run first  - shocks (one-time supply/demand jolts) +
+   |                      modifiers (ongoing multipliers that persist:
+   |                      shift targets, scale rates, dampen reversion)
+   v
+ECONOMY      run second - per market: mean-revert -> noise -> produce ->
+   |                      consume -> prosperity scale -> clamp
+   v
+TRADE FLOW   run third  - goods flow along edges by price gradient, using
+   |                      the same supply/demand deltas a player trade makes
+   v
+PROSPERITY   trade volume (edge flow + players) raises it toward booming;
+             no trade decays it toward stagnant; events can force crisis
+
+PLAYER TRADES  anytime (not tick-locked) - buy lowers supply, sell raises
+               it (+ small demand signal); same per-market effect as a flow
+```
+
+Viewed another way, the simulation stacks four layers from static to real-time:
+
+```
+1  Base identity (static)      economy type -> produce/consume rates;
+                               self-sufficiency -> import dependence;
+                               traits -> per-good production bonuses;
+                               government -> volatility, consumption boosts
+2  Tick evolution (each tick)  mean reversion, noise, self-limiting
+                               production/consumption, prosperity, edge flow
+3  Disruptions (events)        shocks + modifiers temporarily change how
+                               layer 2 behaves
+4  Player agency (real-time)   trading on the edge-flow background;
+                               sustained trade boosts prosperity
+```
+
+Edge-flow mechanics are detailed in [trade-simulation.md](./trade-simulation.md); this is just where it sits in the tick.
+
+---
+
 ## Ship Prices & Progression
 
 Ship prices are calibrated relative to trade margins to create a multi-stage progression:
@@ -209,4 +250,3 @@ With T0 margins of ~5cr/unit and 50 cargo, a shuttle earns ~250cr/trip. Light Fr
 ## Related Systems
 
 - **[Trade simulation](./trade-simulation.md)** — edge-flow inter-system trade that provides the spatial restoring force production/consumption alone lack.
-- **[Economy flow](./economy-flow.md)** — narrative walk-through of how all these mechanisms compose each tick.
