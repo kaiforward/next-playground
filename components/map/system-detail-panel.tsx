@@ -105,21 +105,27 @@ export function SystemDetailPanel({
           </p>
         )}
 
-        {/* Tab shortcuts — only when system is visible */}
+        {/* Tab shortcuts — only when system is visible. Overview is reached via the footer button. */}
         {visibility === "visible" && (
-          <div className="grid grid-cols-4 gap-1">
-            <Button href={`/system/${system.id}/market`} variant="ghost" size="xs">
-              Market
-            </Button>
-            <Button href={`/system/${system.id}/ships`} variant="ghost" size="xs">
-              Ships
-            </Button>
-            <Button href={`/system/${system.id}/contracts`} variant="ghost" size="xs">
-              Contracts
-            </Button>
-            <Button href={`/system/${system.id}`} variant="ghost" size="xs">
-              Overview
-            </Button>
+          <div className="grid grid-cols-3 gap-1">
+            {[
+              { href: `/system/${system.id}/market`, label: "Market" },
+              { href: `/system/${system.id}/ships`, label: "Ships" },
+              { href: `/system/${system.id}/convoys`, label: "Convoys" },
+              { href: `/system/${system.id}/shipyard`, label: "Shipyard" },
+              { href: `/system/${system.id}/contracts`, label: "Contracts" },
+              { href: `/system/${system.id}/explore`, label: "Explore" },
+            ].map(({ href, label }) => (
+              <Button
+                key={label}
+                href={href}
+                variant="ghost"
+                size="xs"
+                className="bg-surface border-border-strong text-text-primary uppercase tracking-wider font-medium hover:bg-surface-hover"
+              >
+                {label}
+              </Button>
+            ))}
           </div>
         )}
 
@@ -253,11 +259,18 @@ export function SystemDetailPanel({
       </div>
 
       {/* Actions */}
-      <div className="px-4 py-3 border-t border-gray-700">
-        <Button onClick={onClose} variant="ghost" size="md" fullWidth>
-          Close
-        </Button>
-      </div>
+      {visibility === "visible" && (
+        <div className="px-4 py-3 border-t border-gray-700">
+          <Button
+            href={`/system/${system.id}`}
+            variant="outline"
+            size="md"
+            fullWidth
+          >
+            View System Overview
+          </Button>
+        </div>
+      )}
     </Dialog>
   );
 }
