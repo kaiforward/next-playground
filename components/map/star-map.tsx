@@ -70,11 +70,12 @@ export function StarMap({
     { currentPrice: number; basePrice: number }
   > | null>(null);
 
-  // Clear data when the heatmap turns off — keeps the Pixi layer in sync
-  // even before the next sync tick fires.
+  // Clear data when the heatmap turns off OR the selected good changes.
+  // Without the goodId reset, switching goods briefly shows the previous
+  // good's prices while the new query is in flight.
   useEffect(() => {
-    if (!heatmapActive) setHeatmapData(null);
-  }, [heatmapActive]);
+    setHeatmapData(null);
+  }, [heatmapActive, priceGoodId]);
 
   const goods = useMemo(
     () =>
