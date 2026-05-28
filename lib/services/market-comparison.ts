@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { calculatePrice } from "@/lib/engine/pricing";
 import { ServiceError } from "./errors";
 import { getPlayerVisibility } from "./visibility-cache";
-import { GOODS } from "@/lib/constants/goods";
 import type { MarketComparisonEntry } from "@/lib/types/game";
 
 /**
@@ -10,10 +9,8 @@ import type { MarketComparisonEntry } from "@/lib/types/game";
  * Supply and demand are floored for display (matching getMarket); price calculation
  * uses the raw float ratio for signal fidelity.
  *
- * `goodId` accepts either the database CUID (used by `MarketEntry.goodId` from
- * `getMarket()`) OR a `GOODS` constant key (used by the map overlay good picker
- * which has no easy access to CUIDs). Constant keys are resolved to the
- * corresponding `Good.name` lookup.
+ * `goodId` is the database CUID. Clients that don't have a CUID handy (e.g. the
+ * map overlay picker) should fetch the catalog via `useGoods()` first.
  *
  * Throws ServiceError(404) if the good does not exist.
  */
@@ -21,11 +18,8 @@ export async function getMarketComparison(
   playerId: string,
   goodId: string,
 ): Promise<{ goodId: string; entries: MarketComparisonEntry[] }> {
-  const goodNameFromKey = GOODS[goodId]?.name;
-  const good = await prisma.good.findFirst({
-    where: goodNameFromKey
-      ? { OR: [{ id: goodId }, { name: goodNameFromKey }] }
-      : { id: goodId },
+  const good = await prisma.good.findUnique({
+    where: { id: goodId },
     select: { id: true, basePrice: true, priceFloor: true, priceCeiling: true },
   });
 
@@ -41,7 +35,7 @@ export async function getMarketComparison(
   const visibleIds = [...visibleSet];
 
   // Stations are 1:1 with systems by `systemId`. Query markets for this good
-  // whose station's system is visible. Use the resolved CUID, not the raw input.
+  // whose station's system is visible.
   const markets = await prisma.stationMarket.findMany({
     where: {
       goodId: good.id,

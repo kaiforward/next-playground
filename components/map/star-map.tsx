@@ -22,7 +22,7 @@ import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { buildSystemRegionMap } from "@/lib/utils/region";
-import { GOODS } from "@/lib/constants/goods";
+import { useGoods } from "@/lib/hooks/use-goods";
 import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
@@ -77,13 +77,8 @@ export function StarMap({
     setHeatmapData(null);
   }, [heatmapActive, priceGoodId]);
 
-  const goods = useMemo(
-    () =>
-      Object.entries(GOODS)
-        .map(([id, g]) => ({ id, name: g.name }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [],
-  );
+  // Cached goods catalog — staleTime: Infinity, ~12 rows, one fetch per session.
+  const goods = useGoods();
 
   // Merge atlas (positions) with static tile data (names + economy)
   const mergedSystems = useMemo((): StarSystemInfo[] => {

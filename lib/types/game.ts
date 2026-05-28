@@ -314,6 +314,7 @@ export interface MarketComparisonEntry {
   demand: number; // floored
 }
 
+
 export interface TradeHistoryEntry {
   id: string;
   stationId: string;
