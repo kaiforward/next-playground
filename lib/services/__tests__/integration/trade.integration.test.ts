@@ -70,8 +70,8 @@ describe("executeTrade (integration)", () => {
     expect(history).not.toBeNull();
     expect(history!.quantity).toBe(5);
     expect(history!.price).toBeGreaterThan(0);
-    // Spent == sum of credits delta.
-    expect(history!.price * 5).toBe(5000 - playerAfter!.credits);
+    // History stores the per-unit price (round of total / quantity).
+    expect(history!.price).toBe(Math.round((5000 - playerAfter!.credits) / 5));
   });
 
   it("sell succeeds: credits added, cargo removed, market stock increased", async () => {

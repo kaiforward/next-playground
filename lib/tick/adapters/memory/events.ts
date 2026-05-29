@@ -179,15 +179,14 @@ export class InMemoryEventsWorld implements EventsWorld {
     for (const shock of shocks) {
       const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
       if (!market) continue;
-      const current =
-        shock.parameter === "supply" ? market.supply : market.demand;
       const delta =
         shock.mode === "percentage"
-          ? Math.round(current * shock.value)
+          ? Math.round(market.stock * shock.value)
           : shock.value;
-      const next = Math.max(minLevel, Math.min(maxLevel, current + delta));
-      if (shock.parameter === "supply") market.supply = next;
-      else market.demand = next;
+      // Single-stock model: a "supply" shock moves stock directly; a "demand"
+      // shock moves it inversely (more demand → scarcer → lower stock).
+      const signed = shock.parameter === "supply" ? delta : -delta;
+      market.stock = Math.max(minLevel, Math.min(maxLevel, market.stock + signed));
       touched.add(market);
     }
     return Promise.resolve(touched.size);
