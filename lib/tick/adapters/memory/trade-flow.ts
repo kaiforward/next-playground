@@ -107,8 +107,7 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
         systemId: m.systemId,
         goodId: m.goodId,
         basePrice: m.basePrice,
-        supply: m.supply,
-        demand: m.demand,
+        stock: m.stock,
         priceFloor: m.priceFloor,
         priceCeiling: m.priceCeiling,
       });
@@ -128,11 +127,7 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
     this.markets = this.markets.map((m) => {
       const u = byKey.get(`${m.systemId}|${m.goodId}`);
       if (!u) return m;
-      return {
-        ...m,
-        supply: isFinite(u.supply) ? u.supply : 0,
-        demand: isFinite(u.demand) ? u.demand : 0,
-      };
+      return { ...m, stock: isFinite(u.stock) ? u.stock : 0 };
     });
     return Promise.resolve();
   }
