@@ -14,6 +14,7 @@ import type {
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
+import { priceRampColorPixi } from "@/lib/utils/price-ramp";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -47,6 +48,10 @@ export interface SystemNodeData {
   visibility: SystemVisibility;
   navigationState?: NavigationNodeState;
   activeEvents?: SystemEventInfo[];
+  /** Price-ramp tint for the active heatmap good, or null when none/overlay off. */
+  priceTint?: number | null;
+  /** Signed % deviation from base price for the active heatmap good. */
+  priceDelta?: number | null;
 }
 
 export interface TransitUnit {
@@ -312,6 +317,11 @@ export function useMapData({
       const visibility: SystemVisibility = visibleSystemIds.has(system.id)
         ? "visible"
         : "unknown";
+      const price = priceHeatmap?.get(system.id) ?? null;
+      const priceTint = price ? priceRampColorPixi(price.currentPrice, price.basePrice) : null;
+      const priceDelta = price
+        ? Math.round((price.currentPrice / price.basePrice - 1) * 100)
+        : null;
       return {
         id: system.id,
         x: system.x,
@@ -326,9 +336,11 @@ export function useMapData({
         visibility,
         navigationState: nodeNavigationStates.get(system.id),
         activeEvents: eventsPerSystem.get(system.id),
+        priceTint,
+        priceDelta,
       };
     });
-  }, [universe.systems, shipsAtSystem, dockedSoloShips, dockedConvoys, nodeNavigationStates, eventsPerSystem, visibleSystemIds]);
+  }, [universe.systems, shipsAtSystem, dockedSoloShips, dockedConvoys, nodeNavigationStates, eventsPerSystem, visibleSystemIds, priceHeatmap]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
