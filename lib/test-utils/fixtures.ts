@@ -6,7 +6,8 @@
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
-import type { Doctrine, GovernmentType } from "@/lib/types/game";
+import { getInitialStock } from "@/lib/constants/market-economy";
+import type { Doctrine, EconomyType, GovernmentType } from "@/lib/types/game";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -229,41 +230,20 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     goodIds[key] = good.id;
   }
 
-  // Markets — each station gets all 12 goods at equilibrium
-  const stationSystems: { stationId: string; economyType: string }[] = [
+  // Markets — each station gets all 12 goods at its derived initial stock.
+  const stationSystems: { stationId: string; economyType: EconomyType }[] = [
     { stationId: agriStation.id, economyType: "agricultural" },
     { stationId: indStation.id, economyType: "industrial" },
     { stationId: techStation.id, economyType: "tech" },
   ];
 
   for (const { stationId, economyType } of stationSystems) {
-    for (const [key, def] of Object.entries(GOODS)) {
-      // Determine relationship: does this economy produce or consume this good?
-      const { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } = await import("@/lib/constants/universe");
-      const econ = economyType as keyof typeof ECONOMY_PRODUCTION;
-      const produces = key in (ECONOMY_PRODUCTION[econ] ?? {});
-      const consumes = key in (ECONOMY_CONSUMPTION[econ] ?? {});
-
-      let supply: number;
-      let demand: number;
-      if (produces) {
-        supply = def.equilibrium.produces.supply;
-        demand = def.equilibrium.produces.demand;
-      } else if (consumes) {
-        supply = def.equilibrium.consumes.supply;
-        demand = def.equilibrium.consumes.demand;
-      } else {
-        // Neutral — balanced supply/demand
-        supply = 60;
-        demand = 60;
-      }
-
+    for (const key of Object.keys(GOODS)) {
       await prisma.stationMarket.create({
         data: {
           stationId,
           goodId: goodIds[key],
-          supply,
-          demand,
+          stock: getInitialStock(economyType, key),
         },
       });
     }
