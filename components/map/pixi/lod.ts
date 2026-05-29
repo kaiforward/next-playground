@@ -117,14 +117,16 @@ export function computeLOD(zoom: number): LODState {
     // System dots always visible
     showSystemDots: true,
 
-    // System names fade in 0.45–0.55 (after crossfade completes at 0.4)
-    showSystemNames: zoom > 0.45,
-    systemNameAlpha: smoothStep(0.45, 0.55, zoom),
+    // All system text shares one late band: it begins fading in at 0.8 and is
+    // fully in by 0.9. Earlier than this the labels render too small to read
+    // and just add clutter — keep the mid-zoom view to glyphs + pill shapes.
+    showSystemNames: zoom > 0.8,
+    systemNameAlpha: smoothStep(0.8, 0.9, zoom),
 
-    // Economy/fuel labels fade in 0.6–0.7
-    showEconomyLabels: zoom > 0.6,
-    showFuelLabels: zoom > 0.6,
-    detailAlpha: smoothStep(0.6, 0.7, zoom),
+    // Economy + fuel labels ride the same 0.8–0.9 text band as the name.
+    showEconomyLabels: zoom > 0.8,
+    showFuelLabels: zoom > 0.8,
+    detailAlpha: smoothStep(0.8, 0.9, zoom),
 
     // Territories never cull — they're the spatial frame for both modes.
     // Each layer reads its own alpha so political and regions can diverge.
@@ -152,9 +154,10 @@ export function computeLOD(zoom: number): LODState {
     // Trade-flow overlay fades in across the crossfade-to-system band
     tradeFlowAlpha: smoothStep(0.4, 0.6, zoom),
 
-    // Pill content (text/icon) reveals with system names — one band after the
-    // pill shapes appear with systemLayerAlpha.
-    showPillContent: zoom > 0.5,
-    pillContentAlpha: smoothStep(0.5, 0.6, zoom),
+    // Pill content (text/icon) reveals with system names on the 0.8–0.9 text
+    // band — the pill shapes still appear far earlier (with systemLayerAlpha),
+    // so far-out pills read as bare colour until the labels come in.
+    showPillContent: zoom > 0.8,
+    pillContentAlpha: smoothStep(0.8, 0.9, zoom),
   };
 }

@@ -116,8 +116,8 @@ export const SIZES = {
   systemCoreRadius:   12,
   systemGlowRadius:   40,
   systemHitRadius:    20,
-  systemLabelSize:    11,
-  systemEconLabelSize: 9,
+  systemLabelSize:    14,
+  systemEconLabelSize: 11,
   systemShipLabelSize: 9,
   regionWidth:       180,
   regionHeight:      100,
@@ -155,7 +155,7 @@ export const PILL = {
   padX:      5,
   gap:       3,   // vertical gap when stacking (ships+convoys)
   offset:    4,   // radial gap between pill edge and core
-  glyphSize: 8,   // inner ship chevron / icon box
+  glyphSize: 9,   // inner ship chevron / icon box
 } as const;
 
 // ── Corner-pill anchors (top-left fleet, top-right price, bottom-right event) ─
