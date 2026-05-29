@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { ServiceError } from "./errors";
 import { getPlayerVisibility } from "./visibility-cache";
 import type { MarketComparisonEntry } from "@/lib/types/game";
 
 /**
- * Returns price/supply/demand for one good across all systems visible to the player.
- * Supply and demand are floored for display (matching getMarket); price calculation
- * uses the raw float ratio for signal fidelity.
+ * Returns price/stock for one good across all systems visible to the player.
+ * Stock is floored for display (matching getMarket); the mid price is derived
+ * from stock via the good's price curve.
  *
  * `goodId` is the database CUID. Clients that don't have a CUID handy (e.g. the
  * map overlay picker) should fetch the catalog via `useGoods()` first.
@@ -20,7 +21,7 @@ export async function getMarketComparison(
 ): Promise<{ goodId: string; entries: MarketComparisonEntry[] }> {
   const good = await prisma.good.findUnique({
     where: { id: goodId },
-    select: { id: true, basePrice: true, priceFloor: true, priceCeiling: true },
+    select: { id: true, name: true, basePrice: true, priceFloor: true, priceCeiling: true },
   });
 
   if (!good) {
@@ -42,26 +43,19 @@ export async function getMarketComparison(
       station: { systemId: { in: visibleIds } },
     },
     select: {
-      supply: true,
-      demand: true,
+      stock: true,
       station: { select: { systemId: true } },
     },
   });
 
+  const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.id;
+  const curve = curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling);
+
   const entries: MarketComparisonEntry[] = markets.map((m) => ({
     systemId: m.station.systemId,
     basePrice: good.basePrice,
-    // Price uses the raw float ratio (smoother signal); supply/demand are floored
-    // for display so the player never sees fractional goods.
-    currentPrice: calculatePrice(
-      good.basePrice,
-      m.supply,
-      m.demand,
-      good.priceFloor,
-      good.priceCeiling,
-    ),
-    supply: Math.floor(m.supply),
-    demand: Math.floor(m.demand),
+    currentPrice: spotPrice(curve, m.stock),
+    stock: Math.floor(m.stock),
   }));
 
   return { goodId: good.id, entries };
