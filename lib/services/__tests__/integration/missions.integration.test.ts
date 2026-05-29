@@ -7,7 +7,8 @@ import {
   createTestTradeMission,
 } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 
 // Mock the prisma import so mission service uses our test client
@@ -109,7 +110,7 @@ describe("trade mission lifecycle (integration)", () => {
   // ── deliverMission ─────────────────────────────────────────────
 
   describe("deliverMission", () => {
-    it("atomic 5-table write: cargo decremented, market supply incremented, credits += goodsValue + reward, trade history created, mission deleted", async () => {
+    it("atomic 5-table write: cargo decremented, market stock incremented, credits += goodsValue + reward, trade history created, mission deleted", async () => {
       // Accept the mission first
       await acceptMission(player.playerId, missionId);
 
@@ -132,12 +133,15 @@ describe("trade mission lifecycle (integration)", () => {
       });
       expect(marketBefore).not.toBeNull();
 
-      const expectedUnitPrice = calculatePrice(
-        marketBefore!.good.basePrice,
-        marketBefore!.supply,
-        marketBefore!.demand,
-        marketBefore!.good.priceFloor,
-        marketBefore!.good.priceCeiling,
+      const goodKey = GOOD_NAME_TO_KEY.get(marketBefore!.good.name) ?? "food";
+      const expectedUnitPrice = spotPrice(
+        curveForGood(
+          goodKey,
+          marketBefore!.good.basePrice,
+          marketBefore!.good.priceFloor,
+          marketBefore!.good.priceCeiling,
+        ),
+        marketBefore!.stock,
       );
       const expectedGoodsValue = expectedUnitPrice * 10;
       const expectedTotalCredit = expectedGoodsValue + 500;
@@ -157,14 +161,14 @@ describe("trade mission lifecycle (integration)", () => {
       expect(cargoAfter).not.toBeNull();
       expect(cargoAfter!.quantity).toBe(10);
 
-      // 2. Market supply incremented by mission quantity
+      // 2. Market stock incremented by mission quantity
       const marketAfter = await prisma.stationMarket.findUnique({
         where: {
           stationId_goodId: { stationId, goodId: universe.goodIds["food"] },
         },
       });
       expect(marketAfter).not.toBeNull();
-      expect(marketAfter!.supply).toBe(marketBefore!.supply + 10);
+      expect(marketAfter!.stock).toBe(marketBefore!.stock + 10);
 
       // 3. Credits += goodsValue + reward
       const playerAfter = await prisma.player.findUnique({

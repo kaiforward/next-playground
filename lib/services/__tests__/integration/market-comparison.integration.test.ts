@@ -51,8 +51,7 @@ describe("getMarketComparison (integration)", () => {
 
     expect(result.goodId).toBe(goodId);
     expect(result.entries.length).toBeGreaterThan(0);
-    expect(result.entries.every((e) => Number.isInteger(e.supply))).toBe(true);
-    expect(result.entries.every((e) => Number.isInteger(e.demand))).toBe(true);
+    expect(result.entries.every((e) => Number.isInteger(e.stock))).toBe(true);
 
     // tech system (hop 2 from agri) must be absent — proves non-visible systems
     // are filtered out, not just that some entries are returned.
@@ -68,20 +67,19 @@ describe("getMarketComparison (integration)", () => {
     ).toBe(true);
   });
 
-  it("floors fractional supply/demand the same way getMarket does", async () => {
+  it("floors fractional stock the same way getMarket does", async () => {
     const goodId = universe.goodIds["food"];
     const stationId = universe.stations.agricultural;
 
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId, goodId } },
-      data: { supply: 23.7, demand: 11.2 },
+      data: { stock: 23.7 },
     });
 
     const result = await getMarketComparison(player.playerId, goodId);
     const agri = result.entries.find((e) => e.systemId === universe.systems.agricultural);
     expect(agri).toBeDefined();
-    expect(agri!.supply).toBe(23);
-    expect(agri!.demand).toBe(11);
+    expect(agri!.stock).toBe(23);
   });
 
   it("throws ServiceError(404) for an unknown goodId", async () => {
