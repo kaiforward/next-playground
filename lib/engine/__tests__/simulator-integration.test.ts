@@ -90,11 +90,11 @@ describe("Simulator Integration", () => {
         seed: 42,
       };
 
-      const overrides = { economy: { reversionRate: 0.1 } };
+      const overrides = { economy: { noiseAmplitude: 0.1 } };
       const results = await runSimulation(config, overrides);
 
       expect(results.overrides).toEqual(overrides);
-      expect(results.constants.economy.reversionRate).toBe(0.1);
+      expect(results.constants.economy.noiseAmplitude).toBe(0.1);
     });
 
     it("includes label in results when provided", async () => {

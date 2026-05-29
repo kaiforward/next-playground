@@ -14,7 +14,6 @@ import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
-import { TRADE_DEMAND_IMPACT_FACTOR } from "@/lib/engine/trade";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import type { TickContext } from "@/lib/tick/types";
 import type {
@@ -92,8 +91,8 @@ function buildFixture(): {
       systemId: sys.id,
       goodId: "food",
       basePrice: 50,
-      supply: isProducer ? 120 : 20,
-      demand: isProducer ? 40 : 120,
+      // Producers food-rich (high stock → cheap), consumers food-poor (low → dear).
+      stock: isProducer ? 120 : 20,
       priceFloor: 0.2,
       priceCeiling: 5.0,
     });
@@ -122,12 +121,9 @@ async function runScenario(
   const econParams = {
     rng,
     simParams: {
-      reversionRate: DEFAULT_SIM_CONSTANTS.economy.reversionRate,
       noiseAmplitude: DEFAULT_SIM_CONSTANTS.economy.noiseAmplitude,
-      noiseReferenceLevel: DEFAULT_SIM_CONSTANTS.economy.noiseReferenceLevel,
       minLevel: DEFAULT_SIM_CONSTANTS.economy.minLevel,
       maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
-      equilibrium: DEFAULT_SIM_CONSTANTS.equilibrium,
     },
     prosperityParams: DEFAULT_SIM_CONSTANTS.prosperity,
     modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
@@ -145,7 +141,6 @@ async function runScenario(
     prosperityTargetVolume: DEFAULT_SIM_CONSTANTS.prosperity.targetVolume,
     minLevel: DEFAULT_SIM_CONSTANTS.economy.minLevel,
     maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
-    tradeDemandImpactFactor: TRADE_DEMAND_IMPACT_FACTOR,
   };
 
   for (let t = 1; t <= tickCount; t++) {
@@ -211,15 +206,15 @@ describe("Trade flow integration", () => {
     expect(maxProsperityWithFlow).toBeGreaterThan(0);
   });
 
-  it("moves consumer markets away from initial supply shortage", async () => {
+  it("moves consumer markets away from initial stock shortage", async () => {
     const { markets } = await runScenario(8, 80);
 
     const consumerFood = markets.filter(
       (m) => (m.systemId === "c" || m.systemId === "d") && m.goodId === "food",
     );
-    // Started at supply=20; flow should push consumer supply meaningfully higher.
+    // Started at stock=20; flow should push consumer stock meaningfully higher.
     for (const m of consumerFood) {
-      expect(m.supply).toBeGreaterThan(20);
+      expect(m.stock).toBeGreaterThan(20);
     }
   });
 });

@@ -15,14 +15,12 @@ function makeCtx(tick: number): TickContext {
 function makeMarket(
   systemId: string,
   goodId: string,
-  supply: number,
-  demand: number,
+  stock: number,
 ): MarketView {
   return {
     systemId,
     goodId,
-    supply,
-    demand,
+    stock,
     basePrice: 100,
     // priceFloor/priceCeiling are multipliers, not absolute prices.
     priceFloor: 0.2,
@@ -34,9 +32,9 @@ describe("runPriceSnapshotsProcessor", () => {
   it("appends a snapshot entry to each system with markets", async () => {
     const world = new InMemorySnapshotsWorld(
       [
-        makeMarket("sys-a", "iron", 50, 50),
-        makeMarket("sys-a", "food", 80, 40),
-        makeMarket("sys-b", "iron", 30, 60),
+        makeMarket("sys-a", "iron", 103), // unknown good → targetStock 103 → price == base
+        makeMarket("sys-a", "food", 160), // stock > targetStock(133) → cheap
+        makeMarket("sys-b", "iron", 50), // stock < targetStock → dear
       ],
       ["sys-a", "sys-b"],
     );
@@ -48,16 +46,16 @@ describe("runPriceSnapshotsProcessor", () => {
     expect(a).toHaveLength(1);
     expect(b).toHaveLength(1);
     expect(a[0].tick).toBe(20);
-    expect(a[0].prices.iron).toBe(100); // supply == demand → basePrice
-    expect(a[0].prices.food).toBeLessThan(100); // supply > demand
-    expect(b[0].prices.iron).toBeGreaterThan(100); // demand > supply
+    expect(a[0].prices.iron).toBe(100); // stock == targetStock → basePrice
+    expect(a[0].prices.food).toBeLessThan(100); // abundant stock → below base
+    expect(b[0].prices.iron).toBeGreaterThan(100); // scarce stock → above base
 
     expect(result.globalEvents?.priceSnapshot).toEqual([{ systemCount: 2 }]);
   });
 
   it("accumulates entries across successive ticks", async () => {
     const world = new InMemorySnapshotsWorld(
-      [makeMarket("sys-a", "iron", 50, 50)],
+      [makeMarket("sys-a", "iron", 103)],
       ["sys-a"],
     );
 
@@ -76,7 +74,7 @@ describe("runPriceSnapshotsProcessor", () => {
     );
 
     const world = new InMemorySnapshotsWorld(
-      [makeMarket("sys-a", "iron", 50, 50)],
+      [makeMarket("sys-a", "iron", 103)],
       ["sys-a"],
     );
     await world.writePriceHistories([{ systemId: "sys-a", entries: seed }]);
@@ -93,8 +91,8 @@ describe("runPriceSnapshotsProcessor", () => {
     // sys-b has markets but no history row — must be silently skipped, not crash.
     const world = new InMemorySnapshotsWorld(
       [
-        makeMarket("sys-a", "iron", 50, 50),
-        makeMarket("sys-b", "iron", 50, 50),
+        makeMarket("sys-a", "iron", 103),
+        makeMarket("sys-b", "iron", 103),
       ],
       ["sys-a"],
     );
@@ -109,7 +107,7 @@ describe("runPriceSnapshotsProcessor", () => {
 
   it("does not invent entries for systems with no markets", async () => {
     const world = new InMemorySnapshotsWorld(
-      [makeMarket("sys-a", "iron", 50, 50)],
+      [makeMarket("sys-a", "iron", 103)],
       ["sys-a", "sys-empty"],
     );
 

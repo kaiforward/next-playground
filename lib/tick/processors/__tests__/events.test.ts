@@ -50,15 +50,13 @@ function makeSystem(id: string, regionId: string): SimSystem {
 function makeMarket(
   systemId: string,
   goodId: string,
-  supply: number,
-  demand: number,
+  stock: number,
 ): SimMarketEntry {
   return {
     systemId,
     goodId,
     basePrice: 100,
-    supply,
-    demand,
+    stock,
     priceFloor: 0.2,
     priceCeiling: 5.0,
   };
@@ -178,7 +176,7 @@ describe("runEventsProcessor", () => {
       sourceEventId: null,
     };
 
-    const market = makeMarket("s1", "food", 100, 100);
+    const market = makeMarket("s1", "food", 100);
     const world = makeWorld({
       systems: [makeSystem("s1", "r1")],
       events: [ev],
@@ -192,10 +190,8 @@ describe("runEventsProcessor", () => {
     // crashing on percentage-mode shocks (the old sim used to silently
     // mis-apply them). Market values must be within MIN/MAX clamps.
     for (const m of world.markets) {
-      expect(m.supply).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
-      expect(m.supply).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
-      expect(m.demand).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
-      expect(m.demand).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+      expect(m.stock).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
+      expect(m.stock).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
     }
   });
 
