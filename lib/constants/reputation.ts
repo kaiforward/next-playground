@@ -17,8 +17,19 @@ export interface ReputationTier {
 
 /**
  * Reputation tiers per layer-2-faction-foundation.md §3. Bounds are inclusive
- * and partition the score range [-100, +100] without gaps; multipliers are
- * symmetric so equal-magnitude positive/negative standings mirror each other.
+ * and partition the score range [-100, +100] without gaps.
+ *
+ * Multiplier design — the favourable (positive-standing) multipliers act as a
+ * NEGATIVE spread: a buy discount + sell premium narrows the effective bid-ask
+ * gap. They MUST stay small enough that, even at the tightest government spread,
+ * an instant same-market buy→resell still can't profit — i.e.
+ * (1+minSpread)·buyMult ≥ (1−minSpread)·sellMult. At minSpread ≈ 0.0425
+ * (authoritarian) that caps the symmetric swing at ~±2% (verified incl. integer
+ * rounding). Going wider reopens the resell exploit. The unfavourable
+ * (distrusted) multipliers are NOT bounded this way — they only worsen trades,
+ * so they can't be exploited and stay a meaningful deterrent. This asymmetry is
+ * intentional. (Interim: the richer reputation reward will move off the price
+ * spread entirely — see the reputation redesign.)
  */
 export const REPUTATION_TIERS: readonly ReputationTier[] = [
   {
@@ -26,8 +37,8 @@ export const REPUTATION_TIERS: readonly ReputationTier[] = [
     name: "Champion",
     minScore: 75,
     maxScore: 100,
-    buyMultiplier: 0.92,
-    sellMultiplier: 1.08,
+    buyMultiplier: 0.98,
+    sellMultiplier: 1.02,
     tradeDenied: false,
   },
   {
@@ -35,8 +46,8 @@ export const REPUTATION_TIERS: readonly ReputationTier[] = [
     name: "Trusted",
     minScore: 25,
     maxScore: 74,
-    buyMultiplier: 0.96,
-    sellMultiplier: 1.04,
+    buyMultiplier: 0.99,
+    sellMultiplier: 1.01,
     tradeDenied: false,
   },
   {
