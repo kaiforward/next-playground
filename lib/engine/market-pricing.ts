@@ -1,4 +1,4 @@
-import { DEFAULT_ELASTICITY } from "@/lib/constants/market-economy";
+import { DEFAULT_ELASTICITY, getTargetStock } from "@/lib/constants/market-economy";
 
 /**
  * A good's price curve at one station. Price is a function of a single
@@ -97,4 +97,24 @@ export function quoteTrade(
   const avgUnitPrice = avgMidUnit * spreadMult;
   const totalPrice = Math.round(avgUnitPrice * quantity);
   return { avgMidUnit, avgUnitPrice, totalPrice };
+}
+
+/**
+ * Build a MarketCurve for a good from its DB/definition fields. `targetStock`
+ * is derived (PR 2) / calibrated (PR 3) in lib/constants/market-economy.ts; the
+ * float floor/ceiling multipliers come straight off the good.
+ */
+export function curveForGood(
+  goodId: string,
+  basePrice: number,
+  floorMult: number,
+  ceilingMult: number,
+): MarketCurve {
+  return {
+    basePrice,
+    targetStock: getTargetStock(goodId),
+    k: DEFAULT_ELASTICITY,
+    floorMult,
+    ceilingMult,
+  };
 }
