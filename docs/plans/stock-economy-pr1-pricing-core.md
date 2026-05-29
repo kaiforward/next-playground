@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript 5 (strict), Vitest 4. Test runner: `npx vitest run <path>`.
 
-**Design reference:** `docs/superpowers/specs/2026-05-29-stock-based-market-economy-design.md` (sections 1–2).
+**Design reference:** `docs/planned/stock-based-market-economy.md` (sections 1–2).
 
 ---
 
@@ -125,7 +125,7 @@ Create `lib/constants/market-economy.ts`:
 ```ts
 /**
  * Constants for the stock-based market economy. See
- * docs/superpowers/specs/2026-05-29-stock-based-market-economy-design.md.
+ * docs/planned/stock-based-market-economy.md.
  */
 
 /** Price-curve elasticity. k=1 reproduces the legacy demand/supply hyperbola. */
