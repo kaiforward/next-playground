@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, GLYPH, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, GLYPH, GATEWAY_COLOR, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -39,12 +39,12 @@ export class SystemObject extends Container {
   private glow: Graphics;
   private core: Graphics;
   private highlight: Graphics;
+  private gatewayRing: Graphics;
   private navigationRing: Graphics;
   private nameLabel: Text;
   private econLabel: Text;
   private shipPill: DockedPill;   // blue — solo docked ships
   private convoyPill: DockedPill; // copper — docked convoys
-  private gatewayDot: Graphics;
   private eventDots: Graphics;
 
   // For hit testing
@@ -66,9 +66,14 @@ export class SystemObject extends Container {
   constructor() {
     super();
 
-    // Glow (bottom)
+    // Glow / soft-body halo (bottom)
     this.glow = new Graphics();
     this.addChild(this.glow);
+
+    // Gateway ring (magenta) — outside the halo, below the core.
+    this.gatewayRing = new Graphics();
+    this.gatewayRing.visible = false;
+    this.addChild(this.gatewayRing);
 
     // Navigation ring (behind core)
     this.navigationRing = new Graphics();
@@ -96,11 +101,6 @@ export class SystemObject extends Container {
     // Solo ships (blue) and convoys (copper) get separate pills, stacked when both.
     this.shipPill = this.createDockedPill();
     this.convoyPill = this.createDockedPill();
-
-    // Gateway indicator
-    this.gatewayDot = new Graphics();
-    this.gatewayDot.visible = false;
-    this.addChild(this.gatewayDot);
 
     // Event dots
     this.eventDots = new Graphics();
@@ -190,14 +190,13 @@ export class SystemObject extends Container {
 
     if (gatewayChanged) {
       this.currentIsGateway = data.isGateway;
-      this.gatewayDot.clear();
+      this.gatewayRing.clear();
       if (data.isGateway) {
-        this.gatewayDot.visible = true;
-        this.gatewayDot.circle(0, 0, SIZES.gatewayDotRadius);
-        this.gatewayDot.fill(TEXT_COLORS.gateway);
-        this.gatewayDot.position.set(SIZES.systemCoreRadius - 2, -SIZES.systemCoreRadius + 2);
+        this.gatewayRing.visible = true;
+        this.gatewayRing.circle(0, 0, GLYPH.gatewayRingRadius);
+        this.gatewayRing.stroke({ color: GATEWAY_COLOR, width: GLYPH.gatewayRingWidth });
       } else {
-        this.gatewayDot.visible = false;
+        this.gatewayRing.visible = false;
       }
     }
 
