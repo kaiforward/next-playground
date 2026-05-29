@@ -13,7 +13,6 @@ import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
 import { FleetDotLayer } from "./layers/fleet-dot-layer";
 import { TradeFlowLayer } from "./layers/trade-flow-layer";
-import { PriceHeatmapLayer } from "./layers/price-heatmap-layer";
 import { EffectLayer } from "./layers/effect-layer";
 import { FleetTransitLayer } from "./layers/fleet-transit-layer";
 import { setupInteractions } from "./interactions";
@@ -62,7 +61,6 @@ interface PixiRefs {
   politicalTerritoryLayer: PoliticalTerritoryLayer;
   fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
-  priceHeatmapLayer: PriceHeatmapLayer;
   fleetTransitLayer: FleetTransitLayer;
   effectLayer: EffectLayer;
 }
@@ -193,14 +191,9 @@ export function PixiMapCanvas({
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
 
-      // Price heatmap rings sit just above the system glyphs (incl. their
-      // semi-transparent glow) so the price-coloured ring isn't washed out,
-      // but below the fleet transit markers added next.
-      const priceHeatmapLayer = new PriceHeatmapLayer();
-      world.addChild(priceHeatmapLayer.container);
-
       // Fleet transit markers + routes sit above system glyphs but below the
-      // navigation effect layer.
+      // navigation effect layer. Price now renders inside the system glyph
+      // (halo lens + top-right pill), so there's no standalone price layer.
       const fleetTransitLayer = new FleetTransitLayer();
       world.addChild(fleetTransitLayer.container);
 
@@ -270,10 +263,6 @@ export function PixiMapCanvas({
         politicalTerritoryLayer.updateVisibility(lod);
         fleetDotLayer.updateVisibility(lod);
 
-        // Price heatmap: fades with the system layer so rings disappear at
-        // universe zoom alongside their host systems.
-        priceHeatmapLayer.updateVisibility(frustum, lod.systemLayerAlpha);
-
         // Trade-flow overlay: layer alpha multiplies the system fade so the
         // overlay disappears alongside its host systems at universe zoom.
         tradeFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
@@ -298,7 +287,7 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer, priceHeatmapLayer,
+        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer,
         fleetTransitLayer, effectLayer,
       };
       setPixiReady(true);
@@ -319,7 +308,6 @@ export function PixiMapCanvas({
           refs.territoryLayer.destroy();
           refs.politicalTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
-          refs.priceHeatmapLayer.destroy();
           refs.fleetTransitLayer.destroy();
           refs.effectLayer.destroy();
           refs.starfield.destroy();
@@ -398,7 +386,6 @@ export function PixiMapCanvas({
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems);
     p.tradeFlowLayer.sync(mapData.systems, mapData.flowEdges);
-    p.priceHeatmapLayer.sync(mapData.systems, mapData.priceHeatmap);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
     p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
 
