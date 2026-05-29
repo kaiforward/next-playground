@@ -8,6 +8,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/form/number-input";
 import { formatCredits } from "@/lib/utils/format";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { TabList, Tab } from "@/components/ui/tabs";
 import {
   createTradeSchema,
@@ -36,23 +37,25 @@ export function TradeForm({
   const [tradeType, setTradeType] = useState<TradeType>("buy");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Active per-unit price: buy uses buyPrice, sell uses sellPrice (the spread).
+  const unitPrice = tradeType === "buy" ? good.buyPrice : good.sellPrice;
   const cargoSpaceAvailable = cargoMax - cargoUsed;
+  const maxBuyable = Math.max(0, Math.floor(good.stock) - ECONOMY_CONSTANTS.MIN_LEVEL);
 
-  const maxBuyByCredits = Math.floor(playerCredits / good.currentPrice);
-  const maxBuyByCargo = cargoSpaceAvailable;
-  const maxBuy = Math.min(maxBuyByCredits, maxBuyByCargo, good.supply);
+  const maxBuyByCredits = Math.floor(playerCredits / Math.max(1, good.buyPrice));
+  const maxBuy = Math.min(maxBuyByCredits, cargoSpaceAvailable, maxBuyable);
   const maxSell = currentCargoQuantity;
 
   const schemaCtx = useMemo(
     () => ({
       tradeType,
-      unitPrice: good.currentPrice,
+      unitPrice,
       playerCredits,
       cargoSpaceAvailable,
-      supply: good.supply,
+      maxBuyable,
       currentCargoQuantity,
     }),
-    [tradeType, good.currentPrice, playerCredits, cargoSpaceAvailable, good.supply, currentCargoQuantity]
+    [tradeType, unitPrice, playerCredits, cargoSpaceAvailable, maxBuyable, currentCargoQuantity]
   );
 
   const schema = useMemo(() => createTradeSchema(schemaCtx), [schemaCtx]);
@@ -77,7 +80,7 @@ export function TradeForm({
   }, [schema, trigger]);
 
   const quantity = watch("quantity") || 0;
-  const totalCost = quantity * good.currentPrice;
+  const totalCost = quantity * unitPrice;
 
   async function onSubmit(data: TradeFormData) {
     setIsSubmitting(true);
@@ -99,7 +102,7 @@ export function TradeForm({
     <Card variant="bordered" padding="md">
       <CardHeader
         title={`Trade ${good.goodName}`}
-        subtitle={shipName ? `Ship: ${shipName} · ${formatCredits(good.currentPrice)}/unit` : `Unit price: ${formatCredits(good.currentPrice)}`}
+        subtitle={shipName ? `Ship: ${shipName} · ${formatCredits(unitPrice)}/unit` : `Unit price: ${formatCredits(unitPrice)}`}
       />
       <CardContent>
         {/* Buy / Sell tabs */}
@@ -131,7 +134,7 @@ export function TradeForm({
             error={errors.quantity?.message}
             hint={
               tradeType === "buy"
-                ? `Max: ${maxBuy} (credits: ${maxBuyByCredits}, cargo: ${maxBuyByCargo}, supply: ${good.supply})`
+                ? `Max: ${maxBuy} (credits: ${maxBuyByCredits}, cargo: ${cargoSpaceAvailable}, stock: ${maxBuyable})`
                 : `Max: ${maxSell} in cargo`
             }
             {...register("quantity", { valueAsNumber: true })}
@@ -142,7 +145,7 @@ export function TradeForm({
             <div className="flex justify-between text-sm">
               <span className="text-text-tertiary">Unit Price</span>
               <span className="text-text-primary">
-                {formatCredits(good.currentPrice)}
+                {formatCredits(unitPrice)}
               </span>
             </div>
             <div className="flex justify-between text-sm">
