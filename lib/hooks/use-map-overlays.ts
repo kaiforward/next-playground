@@ -1,16 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getMapSessionState,
   setOverlaysInSession,
   type MapOverlaysState,
 } from "@/components/map/map-session";
-import {
-  overlaysForPreset,
-  presetForOverlays,
-  type MapPreset,
-} from "@/lib/utils/map-presets";
 
 /**
  * Owns which additive map overlays are toggled on. Overlays sit on top of
@@ -19,8 +14,8 @@ import {
  *
  * `fleet` and `events` gate the *ambient* display of the docked-fleet and
  * event pills on each system glyph (the data still reveals on hover/select even
- * when the overlay is off). Defaults match the "default" preset so a first-time
- * player sees their fleet and live events.
+ * when the overlay is off). They default ON so a first-time player sees their
+ * fleet and live events; the opt-in overlays default off for a clean map.
  */
 export interface MapOverlays {
   fleet: boolean;
@@ -32,7 +27,13 @@ export interface MapOverlays {
 
 export type MapOverlayKey = keyof MapOverlays;
 
-const DEFAULT_OVERLAYS: MapOverlays = overlaysForPreset("default");
+const DEFAULT_OVERLAYS: MapOverlays = {
+  fleet: true,
+  events: true,
+  tradeFlow: false,
+  priceHeatmap: false,
+  shipRoutes: false,
+};
 
 function hydrateFromSession(): MapOverlays {
   if (typeof window === "undefined") return DEFAULT_OVERLAYS;
@@ -51,8 +52,6 @@ function hydrateFromSession(): MapOverlays {
 export function useMapOverlays(): {
   overlays: MapOverlays;
   toggle: (key: MapOverlayKey) => void;
-  preset: MapPreset;
-  setPreset: (preset: MapPreset) => void;
 } {
   const [overlays, setOverlays] = useState<MapOverlays>(DEFAULT_OVERLAYS);
   const skipPersist = useRef(true);
@@ -83,14 +82,5 @@ export function useMapOverlays(): {
     setOverlays((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  // Derived, not stored — the active preset is always a function of the live
-  // overlay set, so manual toggles naturally fall through to "custom".
-  const preset = useMemo(() => presetForOverlays(overlays), [overlays]);
-
-  const setPreset = useCallback((next: MapPreset) => {
-    if (next === "custom") return; // "custom" is a derived state, not selectable
-    setOverlays(overlaysForPreset(next));
-  }, []);
-
-  return { overlays, toggle, preset, setPreset };
+  return { overlays, toggle };
 }
