@@ -1,9 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
+import { getSpread, STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { toGovernmentType } from "@/lib/types/guards";
 import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
 import { getInstalledModules } from "@/lib/utils/ship";
 import { getReputationTier } from "@/lib/constants/reputation";
+import { buildMarketEntry } from "./market-entry";
 import { accrueTradeReputationInTx } from "./reputation";
 import type { ShipTradeRequest } from "@/lib/types/api";
 import type { MarketEntry } from "@/lib/types/game";
@@ -89,12 +94,17 @@ export async function executeConvoyTrade(
   // reputation gating + multipliers.
   const station = await prisma.station.findUnique({
     where: { systemId: convoy.systemId },
-    include: { system: { select: { factionId: true } } },
+    include: {
+      system: { select: { factionId: true, faction: { select: { governmentType: true } } } },
+    },
   });
   if (!station || station.id !== stationId) {
     return { ok: false, error: "Station is not at the convoy's system.", status: 400 };
   }
   const factionId = station.system.factionId;
+  const govDef = station.system.faction
+    ? GOVERNMENT_TYPES[toGovernmentType(station.system.faction.governmentType)]
+    : undefined;
 
   const marketEntry = await prisma.stationMarket.findUnique({
     where: { stationId_goodId: { stationId, goodId } },
@@ -104,16 +114,19 @@ export async function executeConvoyTrade(
     return { ok: false, error: "Good not available at this station.", status: 404 };
   }
 
-  const basePrice = calculatePrice(
+  // Integrated-slippage quote priced off current stock + the government spread.
+  const goodKey = GOOD_NAME_TO_KEY.get(marketEntry.good.name) ?? marketEntry.good.name;
+  const curve = curveForGood(
+    goodKey,
     marketEntry.good.basePrice,
-    marketEntry.supply,
-    marketEntry.demand,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
   );
+  const spread = getSpread(govDef);
+  const quote = quoteTrade(curve, marketEntry.stock, quantity, type, spread);
 
   // Reputation gating + multiplier. Mirrors single-ship trade.
-  let unitPrice = basePrice;
+  let totalPrice = quote.totalPrice;
   if (factionId) {
     const repRow = await prisma.playerFactionReputation.findUnique({
       where: { playerId_factionId: { playerId, factionId } },
@@ -128,8 +141,9 @@ export async function executeConvoyTrade(
       };
     }
     const mult = type === "buy" ? tier.buyMultiplier : tier.sellMultiplier;
-    unitPrice = Math.round(basePrice * mult);
+    totalPrice = Math.round(totalPrice * mult);
   }
+  const unitPrice = Math.round(totalPrice / quantity); // for trade history
 
   // Aggregate cargo across all member ships (accounting for upgrade bonuses)
   const ships = convoy.members.map((m) => m.ship);
@@ -150,11 +164,13 @@ export async function executeConvoyTrade(
   const result = validateFleetTrade({
     type,
     quantity,
-    unitPrice,
+    totalPrice,
     playerCredits: player.credits,
     currentCargoUsed: combinedCargoUsed,
     cargoMax: combinedCargoMax,
-    currentSupply: Math.floor(marketEntry.supply),
+    currentStock: marketEntry.stock,
+    stockMin: STOCK_MIN,
+    stockMax: STOCK_MAX,
     currentGoodQuantityInCargo: combinedGoodQuantity,
     shipStatus: "docked",
   });
@@ -266,17 +282,17 @@ export async function executeConvoyTrade(
         }
       }
 
-      // Update market supply/demand
+      // Update market stock (clamped)
       const freshMarket = await tx.stationMarket.findUnique({
         where: { id: marketEntry.id },
       });
-
+      const nextStock = Math.max(
+        STOCK_MIN,
+        Math.min(STOCK_MAX, (freshMarket?.stock ?? 0) + delta.stockDelta),
+      );
       const market = await tx.stationMarket.update({
         where: { id: marketEntry.id },
-        data: {
-          supply: Math.max(0, (freshMarket?.supply ?? 0) + delta.supplyDelta),
-          demand: Math.max(0, (freshMarket?.demand ?? 0) + delta.demandDelta),
-        },
+        data: { stock: nextStock },
         include: { good: true },
       });
 
@@ -312,25 +328,15 @@ export async function executeConvoyTrade(
     throw error;
   }
 
-  const newPrice = calculatePrice(
-    updatedMarket.good.basePrice,
-    updatedMarket.supply,
-    updatedMarket.demand,
-    updatedMarket.good.priceFloor,
-    updatedMarket.good.priceCeiling,
-  );
-
   return {
     ok: true,
     data: {
-      updatedMarket: {
-        goodId: updatedMarket.goodId,
-        goodName: updatedMarket.good.name,
-        basePrice: updatedMarket.good.basePrice,
-        currentPrice: newPrice,
-        supply: updatedMarket.supply,
-        demand: updatedMarket.demand,
-      },
+      updatedMarket: buildMarketEntry(
+        updatedMarket.goodId,
+        updatedMarket.good,
+        updatedMarket.stock,
+        govDef,
+      ),
     },
   };
 }
