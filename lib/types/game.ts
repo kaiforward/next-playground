@@ -309,6 +309,16 @@ export interface MarketEntry {
   sellPrice: number;
   /** Units in stock (floored for display). */
   stock: number;
+  // ── Price-curve inputs (so clients can reproduce the server's integrated
+  // slippage quote via quoteTrade, e.g. the trade-form total preview). ──
+  /** Min price as a multiple of basePrice (the good's floorMult). */
+  priceFloor: number;
+  /** Max price as a multiple of basePrice (the good's ceilingMult). */
+  priceCeiling: number;
+  /** Stock level where the mid price equals basePrice. */
+  targetStock: number;
+  /** Government bid-ask half-spread applied to this station's quotes. */
+  spread: number;
 }
 
 export interface MarketComparisonEntry {

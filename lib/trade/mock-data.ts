@@ -1,12 +1,13 @@
 import type { MarketEntry, TradeHistoryEntry, FleetState } from "@/lib/types/game";
 
+const MOCK_CURVE = { priceFloor: 0.5, priceCeiling: 2.0, spread: 0.05 };
 export const MOCK_MARKET: MarketEntry[] = [
-  { goodId: "food", goodName: "Food", basePrice: 20, currentPrice: 18, buyPrice: 19, sellPrice: 17, stock: 120 },
-  { goodId: "ore", goodName: "Ore", basePrice: 30, currentPrice: 35, buyPrice: 37, sellPrice: 33, stock: 45 },
-  { goodId: "fuel", goodName: "Fuel", basePrice: 40, currentPrice: 42, buyPrice: 44, sellPrice: 40, stock: 50 },
-  { goodId: "electronics", goodName: "Electronics", basePrice: 80, currentPrice: 95, buyPrice: 100, sellPrice: 90, stock: 30 },
-  { goodId: "machinery", goodName: "Machinery", basePrice: 100, currentPrice: 88, buyPrice: 92, sellPrice: 84, stock: 65 },
-  { goodId: "luxuries", goodName: "Luxuries", basePrice: 150, currentPrice: 200, buyPrice: 210, sellPrice: 190, stock: 15 },
+  { goodId: "food", goodName: "Food", basePrice: 20, currentPrice: 18, buyPrice: 19, sellPrice: 17, stock: 120, targetStock: 120, ...MOCK_CURVE },
+  { goodId: "ore", goodName: "Ore", basePrice: 30, currentPrice: 35, buyPrice: 37, sellPrice: 33, stock: 45, targetStock: 45, ...MOCK_CURVE },
+  { goodId: "fuel", goodName: "Fuel", basePrice: 40, currentPrice: 42, buyPrice: 44, sellPrice: 40, stock: 50, targetStock: 50, ...MOCK_CURVE },
+  { goodId: "electronics", goodName: "Electronics", basePrice: 80, currentPrice: 95, buyPrice: 100, sellPrice: 90, stock: 30, targetStock: 30, ...MOCK_CURVE },
+  { goodId: "machinery", goodName: "Machinery", basePrice: 100, currentPrice: 88, buyPrice: 92, sellPrice: 84, stock: 65, targetStock: 65, ...MOCK_CURVE },
+  { goodId: "luxuries", goodName: "Luxuries", basePrice: 150, currentPrice: 200, buyPrice: 210, sellPrice: 190, stock: 15, targetStock: 15, ...MOCK_CURVE },
 ];
 
 export const MOCK_PRICE_HISTORY: { time: string; price: number }[] = [

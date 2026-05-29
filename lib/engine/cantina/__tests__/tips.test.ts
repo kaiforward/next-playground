@@ -15,6 +15,10 @@ function makeEntry(overrides: Partial<MarketEntry>): MarketEntry {
     buyPrice: 105,
     sellPrice: 95,
     stock: 50,
+    priceFloor: 0.5,
+    priceCeiling: 2.0,
+    targetStock: 50,
+    spread: 0.05,
     ...overrides,
   };
 }

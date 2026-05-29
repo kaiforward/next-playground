@@ -48,6 +48,11 @@ export function buildMarketEntry(
     buyPrice: quoteTrade(curve, stock, 1, "buy", spread).totalPrice,
     sellPrice: quoteTrade(curve, stock, 1, "sell", spread).totalPrice,
     stock: Math.floor(stock),
+    // Curve inputs for client-side quote previews (trade form).
+    priceFloor: good.priceFloor,
+    priceCeiling: good.priceCeiling,
+    targetStock: curve.targetStock,
+    spread,
   };
 }
 

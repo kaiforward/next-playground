@@ -56,6 +56,12 @@ describe("buildMarketEntry", () => {
     expect(entry.currentPrice).toBe(spotPrice(curve, stock));
     expect(entry.buyPrice).toBe(quoteTrade(curve, stock, 1, "buy", spread).totalPrice);
     expect(entry.sellPrice).toBe(quoteTrade(curve, stock, 1, "sell", spread).totalPrice);
+
+    // Curve inputs exposed for client-side quote previews.
+    expect(entry.priceFloor).toBe(FOOD.priceFloor);
+    expect(entry.priceCeiling).toBe(FOOD.priceCeiling);
+    expect(entry.targetStock).toBe(curve.targetStock);
+    expect(entry.spread).toBe(spread);
   });
 
   it("applies the government bid-ask spread (non-default path)", () => {
