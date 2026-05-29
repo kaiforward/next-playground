@@ -2,13 +2,13 @@
  * Market health analysis — snapshot collection and derived metrics.
  *
  * Snapshots are sampled periodically during the simulation. Derived metrics
- * (price dispersion, equilibrium drift) are computed post-simulation from
- * the final world state.
+ * (price dispersion, stock drift) are computed post-simulation from the final
+ * world state.
  */
 
-import { calculatePrice } from "@/lib/engine/pricing";
-import type { SimWorld, SimSystem, MarketSnapshot, MarketHealthSummary } from "./types";
-import type { SimConstants } from "./constants";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { getTargetStock } from "@/lib/constants/market-economy";
+import type { SimWorld, MarketSnapshot, MarketHealthSummary } from "./types";
 
 /** Default: sample every 50 ticks. */
 export const SNAPSHOT_INTERVAL = 50;
@@ -18,20 +18,16 @@ export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
   return world.markets.map((m) => ({
     systemId: m.systemId,
     goodId: m.goodId,
-    supply: m.supply,
-    demand: m.demand,
-    price: calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling),
+    stock: m.stock,
+    price: spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock),
   }));
 }
 
 /** Compute market health summary from the final world state. */
-export function computeMarketHealth(
-  world: SimWorld,
-  constants: SimConstants,
-): MarketHealthSummary {
+export function computeMarketHealth(world: SimWorld): MarketHealthSummary {
   return {
     priceDispersion: computePriceDispersion(world),
-    equilibriumDrift: computeEquilibriumDrift(world, constants),
+    stockDrift: computeStockDrift(world),
   };
 }
 
@@ -48,7 +44,7 @@ function computePriceDispersion(
   // Group prices by good
   const pricesByGood = new Map<string, number[]>();
   for (const m of world.markets) {
-    const price = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
+    const price = spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock);
     let prices = pricesByGood.get(m.goodId);
     if (!prices) {
       prices = [];
@@ -67,66 +63,34 @@ function computePriceDispersion(
   return result.sort((a, b) => b.avgStdDev - a.avgStdDev);
 }
 
-// ── Equilibrium drift ───────────────────────────────────────────
+// ── Stock drift ─────────────────────────────────────────────────
 
 /**
- * For each good, compute the average distance of supply and demand from
- * their equilibrium targets across all systems. Positive drift = above
- * equilibrium, negative = below.
+ * For each good, compute the average distance of stock from its targetStock
+ * across all systems. Positive drift = above target (cheap), negative = below
+ * target (expensive). The further from zero, the more the pricing anchor is off.
  */
-function computeEquilibriumDrift(
+function computeStockDrift(
   world: SimWorld,
-  constants: SimConstants,
-): { goodId: string; avgSupplyDrift: number; avgDemandDrift: number }[] {
-  const systemMap = new Map<string, SimSystem>();
-  for (const sys of world.systems) {
-    systemMap.set(sys.id, sys);
-  }
-
-  // Accumulate drift per good
-  const driftByGood = new Map<string, { supplyDrifts: number[]; demandDrifts: number[] }>();
+): { goodId: string; avgStockDrift: number }[] {
+  const driftsByGood = new Map<string, number[]>();
 
   for (const m of world.markets) {
-    const sys = systemMap.get(m.systemId);
-    if (!sys) continue;
-
-    // Determine equilibrium target based on produce/consume relationship
-    const goodEq = constants.goods[m.goodId]?.equilibrium;
-    let eqSupply: number;
-    let eqDemand: number;
-    if (m.goodId in sys.produces) {
-      const target = goodEq?.produces ?? constants.equilibrium.produces;
-      eqSupply = target.supply;
-      eqDemand = target.demand;
-    } else if (m.goodId in sys.consumes) {
-      const target = goodEq?.consumes ?? constants.equilibrium.consumes;
-      eqSupply = target.supply;
-      eqDemand = target.demand;
-    } else {
-      eqSupply = constants.equilibrium.neutral.supply;
-      eqDemand = constants.equilibrium.neutral.demand;
+    const drift = m.stock - getTargetStock(m.goodId);
+    let drifts = driftsByGood.get(m.goodId);
+    if (!drifts) {
+      drifts = [];
+      driftsByGood.set(m.goodId, drifts);
     }
-
-    let entry = driftByGood.get(m.goodId);
-    if (!entry) {
-      entry = { supplyDrifts: [], demandDrifts: [] };
-      driftByGood.set(m.goodId, entry);
-    }
-
-    entry.supplyDrifts.push(m.supply - eqSupply);
-    entry.demandDrifts.push(m.demand - eqDemand);
+    drifts.push(drift);
   }
 
-  const result: { goodId: string; avgSupplyDrift: number; avgDemandDrift: number }[] = [];
-  for (const [goodId, { supplyDrifts, demandDrifts }] of driftByGood) {
-    const avgSupplyDrift = supplyDrifts.reduce((a, b) => a + b, 0) / supplyDrifts.length;
-    const avgDemandDrift = demandDrifts.reduce((a, b) => a + b, 0) / demandDrifts.length;
-    result.push({ goodId, avgSupplyDrift, avgDemandDrift });
+  const result: { goodId: string; avgStockDrift: number }[] = [];
+  for (const [goodId, drifts] of driftsByGood) {
+    const avgStockDrift = drifts.reduce((a, b) => a + b, 0) / drifts.length;
+    result.push({ goodId, avgStockDrift });
   }
 
-  // Sort by absolute magnitude of supply drift (most drifted first)
-  return result.sort(
-    (a, b) => Math.abs(b.avgSupplyDrift) + Math.abs(b.avgDemandDrift)
-            - Math.abs(a.avgSupplyDrift) - Math.abs(a.avgDemandDrift),
-  );
+  // Sort by absolute magnitude of stock drift (most drifted first).
+  return result.sort((a, b) => Math.abs(b.avgStockDrift) - Math.abs(a.avgStockDrift));
 }

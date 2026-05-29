@@ -28,7 +28,6 @@ import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
-import { TRADE_DEMAND_IMPACT_FACTOR } from "@/lib/engine/trade";
 import type { InjectionRequest } from "@/lib/tick/world/events-world";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimConstants } from "./constants";
@@ -43,12 +42,9 @@ const EVENT_DEFINITIONS = SCALED.definitions;
 
 function buildSimParams(constants: SimConstants): EconomySimParams {
   return {
-    reversionRate: constants.economy.reversionRate,
     noiseAmplitude: constants.economy.noiseAmplitude,
-    noiseReferenceLevel: constants.economy.noiseReferenceLevel,
     minLevel: constants.economy.minLevel,
     maxLevel: constants.economy.maxLevel,
-    equilibrium: constants.equilibrium,
   };
 }
 
@@ -302,7 +298,6 @@ async function processSimTradeFlow(
     prosperityTargetVolume: constants.prosperity.targetVolume,
     minLevel: constants.economy.minLevel,
     maxLevel: constants.economy.maxLevel,
-    tradeDemandImpactFactor: TRADE_DEMAND_IMPACT_FACTOR,
   });
 
   return {
