@@ -311,6 +311,19 @@ export class SystemObject extends Container {
     this.navigationRing.scale.set(lod.systemDotScale);
   }
 
+  /** Stroke a dashed ring as a series of short arcs (Pixi v12 has no native
+   *  dashed stroke on circle()). Each dash is its own subpath so no chords
+   *  connect them. */
+  private strokeDashedRing(g: Graphics, radius: number, color: number, width: number, alpha = 1) {
+    const dash = 0.5;  // radians drawn
+    const gap = 0.32;  // radians skipped
+    for (let a = 0; a < Math.PI * 2; a += dash + gap) {
+      g.moveTo(Math.cos(a) * radius, Math.sin(a) * radius);
+      g.arc(0, 0, radius, a, a + dash);
+    }
+    g.stroke({ color, width, alpha });
+  }
+
   private updateNavigationVisuals(
     state: NavigationNodeState | undefined,
     isSelected: boolean,
@@ -321,17 +334,15 @@ export class SystemObject extends Container {
     this.cursor = "pointer";
 
     if (isSelected && !state) {
-      // Selected system (no navigation) — subtle highlight ring
-      this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 4);
-      this.navigationRing.stroke({ color: 0xffffff, width: 2, alpha: 0.6 });
+      // Selected system (no navigation) — subtle dashed focus ring, white + faint.
+      this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, 0xffffff, GLYPH.navRingWidth, 0.5);
     }
 
     if (!state) return;
 
     switch (state) {
       case "origin":
-        this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 4);
-        this.navigationRing.stroke({ color: NAV_COLORS.origin, width: 3, alpha: 1 });
+        this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, NAV_COLORS.origin, GLYPH.navRingWidth);
         this.scale.set(1.1);
         break;
 
@@ -352,8 +363,7 @@ export class SystemObject extends Container {
         break;
 
       case "destination":
-        this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 4);
-        this.navigationRing.stroke({ color: NAV_COLORS.destination, width: 3, alpha: 1 });
+        this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, NAV_COLORS.destination, GLYPH.navRingWidth);
         this.scale.set(1.1);
         break;
     }
