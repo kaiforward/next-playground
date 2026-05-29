@@ -45,6 +45,10 @@ export interface LODState {
   fleetDotAlpha: number;
   /** Alpha for trade-flow particles (smooth fade in 0.4 → 0.6). */
   tradeFlowAlpha: number;
+  /** Whether pill TEXT/ICON content shows (shapes show earlier, with the layer). */
+  showPillContent: boolean;
+  /** Alpha for pill text/icon content (smooth fade). */
+  pillContentAlpha: number;
 }
 
 /** Cubic smoothstep: 0 at edge0, 1 at edge1 with smooth acceleration/deceleration */
@@ -147,5 +151,10 @@ export function computeLOD(zoom: number): LODState {
 
     // Trade-flow overlay fades in across the crossfade-to-system band
     tradeFlowAlpha: smoothStep(0.4, 0.6, zoom),
+
+    // Pill content (text/icon) reveals with system names — one band after the
+    // pill shapes appear with systemLayerAlpha.
+    showPillContent: zoom > 0.5,
+    pillContentAlpha: smoothStep(0.5, 0.6, zoom),
   };
 }

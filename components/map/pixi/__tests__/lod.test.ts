@@ -73,3 +73,17 @@ describe("computeLOD — unchanged adjacent curves (regression guards)", () => {
     expect(computeLOD(0.55).fleetDotAlpha).toBe(0);
   });
 });
+
+describe("pill content staging", () => {
+  it("hides pill content while the system layer is still fading in", () => {
+    const lod = computeLOD(0.42); // crossfade just finished, names not yet in
+    expect(lod.showPillContent).toBe(false);
+    expect(lod.pillContentAlpha).toBe(0);
+  });
+
+  it("reveals pill content at closer zoom, in step with names", () => {
+    const near = computeLOD(0.6);
+    expect(near.showPillContent).toBe(true);
+    expect(near.pillContentAlpha).toBeGreaterThan(0);
+  });
+});
