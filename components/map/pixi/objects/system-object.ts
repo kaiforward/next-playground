@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, GLYPH, GATEWAY_COLOR, PILL, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, FLEET, GLYPH, GATEWAY_COLOR, PILL, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -25,6 +25,15 @@ const DOCKED_COUNT_STYLE = new TextStyle({
   align: "center",
 });
 
+// Event-pill count uses a light fill — the pill body is dark (slate-800).
+const EVENT_COUNT_STYLE = new TextStyle({
+  fontSize: 11,
+  fill: TEXT_COLORS.primary,
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontWeight: "700",
+  align: "center",
+});
+
 /** A single docked-fleet pill (ship glyph + count) drawn on the system glyph. */
 interface DockedPill {
   container: Container;
@@ -40,6 +49,14 @@ interface PricePill {
   label: Text;
 }
 
+/** Bottom-right event pill: dominant event icon + count, accent-bordered. */
+interface EventPill {
+  container: Container;
+  bg: Graphics;
+  icon: Text;
+  count: Text;
+}
+
 export class SystemObject extends Container {
   systemId = "";
 
@@ -53,7 +70,7 @@ export class SystemObject extends Container {
   private shipPill: DockedPill;   // blue — solo docked ships
   private convoyPill: DockedPill; // copper — docked convoys
   private pricePill: PricePill;   // top-right — price-ramp delta
-  private eventDots: Graphics;
+  private eventPill: EventPill;   // bottom-right — dominant event icon + count
 
   // For hit testing
   private hitCircle: Graphics;
@@ -70,6 +87,7 @@ export class SystemObject extends Container {
   private currentEventTypes: string[] = [];
   private currentPriceTint: number | null = null;
   private currentPriceDelta: number | null = null;
+  private hasEventPill = false;
 
   constructor() {
     super();
@@ -113,9 +131,8 @@ export class SystemObject extends Container {
     // Price pill (top-right of the glyph) — tinted to the price ramp.
     this.pricePill = this.createPricePill();
 
-    // Event dots
-    this.eventDots = new Graphics();
-    this.addChild(this.eventDots);
+    // Event pill (bottom-right of the glyph) — dominant event icon + count.
+    this.eventPill = this.createEventPill();
 
     // Hit area (invisible, for pointer events)
     this.hitCircle = new Graphics();
@@ -214,11 +231,7 @@ export class SystemObject extends Container {
 
     if (eventsChanged || visibilityChanged) {
       this.currentEventTypes = eventTypes.split(",").filter(Boolean);
-      if (isUnknown) {
-        this.eventDots.clear();
-      } else {
-        this.drawEventDots(data.activeEvents, data.navigationState);
-      }
+      this.redrawEventPill(isUnknown ? undefined : data.activeEvents, data.navigationState);
     }
   }
 
@@ -347,9 +360,9 @@ export class SystemObject extends Container {
 
     this.glow.visible = lod.showGlow;
 
-    // Unknown systems: event dots hidden regardless of LOD
-    this.eventDots.visible = !isUnknown;
-    this.eventDots.alpha = 1;
+    // Unknown systems: event pill hidden regardless of LOD
+    this.eventPill.container.visible = this.hasEventPill && !isUnknown;
+    this.eventPill.container.alpha = 1;
 
     // Scale core + highlight by LOD
     this.core.scale.set(lod.systemDotScale);
@@ -415,20 +428,55 @@ export class SystemObject extends Container {
     }
   }
 
-  private drawEventDots(events: SystemEventInfo[] | undefined, navState?: NavigationNodeState) {
-    this.eventDots.clear();
-    if (!events || events.length === 0 || navState === "unreachable") return;
+  private createEventPill(): EventPill {
+    const container = new Container();
+    const bg = new Graphics();
+    const icon = new Text({
+      text: "",
+      style: new TextStyle({ fontSize: 12, fontFamily: "system-ui, -apple-system, sans-serif" }),
+      resolution: TEXT_RESOLUTION,
+    });
+    icon.anchor.set(0, 0.5);
+    const count = new Text({ text: "", style: EVENT_COUNT_STYLE, resolution: TEXT_RESOLUTION });
+    count.anchor.set(0, 0.5);
+    container.addChild(bg, icon, count);
+    container.visible = false;
+    this.addChild(container);
+    return { container, bg, icon, count };
+  }
 
-    const sorted = [...events].sort((a, b) => b.priority - a.priority);
-    const maxDots = 3;
-    const dotSpacing = SIZES.eventDotRadius * 2.5;
-    const startX = SIZES.systemCoreRadius + 2;
-    const startY = SIZES.systemCoreRadius - 2;
+  /** Draw the bottom-right event pill from the dominant (highest-priority)
+   *  event. Visibility is finalised in setLOD via `hasEventPill`. */
+  private redrawEventPill(events: SystemEventInfo[] | undefined, navState?: NavigationNodeState) {
+    this.hasEventPill = !!events && events.length > 0 && navState !== "unreachable";
+    if (!this.hasEventPill || !events) return;
 
-    for (let i = 0; i < Math.min(sorted.length, maxDots); i++) {
-      const color = EVENT_DOT_COLORS[sorted[i].color] ?? EVENT_DOT_COLORS.slate;
-      this.eventDots.circle(startX + i * dotSpacing, startY, SIZES.eventDotRadius);
-      this.eventDots.fill(color);
+    const top = [...events].sort((a, b) => b.priority - a.priority)[0];
+    const color = EVENT_DOT_COLORS[top.color] ?? EVENT_DOT_COLORS.slate;
+    const h = PILL.height;
+    const { bg, icon, count } = this.eventPill;
+
+    icon.text = EVENT_ICON[top.color] ?? EVENT_ICON.slate;
+    icon.style.fill = color;
+    icon.position.set(PILL.padX, 0);
+
+    const showCount = events.length > 1;
+    count.visible = showCount;
+    let w: number;
+    if (showCount) {
+      count.text = String(events.length);
+      count.position.set(PILL.padX + icon.width + PILL.gap, 0);
+      w = count.x + count.width + PILL.padX;
+    } else {
+      w = PILL.padX + icon.width + PILL.padX;
     }
+
+    bg.clear();
+    bg.roundRect(0, -h / 2, w, h, PILL.corner);
+    bg.fill(0x1e293b);
+    bg.stroke({ color, width: 1.5 });
+
+    // Bottom-right: mirror of the price pill anchor, below the core.
+    this.eventPill.container.position.set(GLYPH.coreRadius - 2, GLYPH.coreRadius + 2);
   }
 }
