@@ -11,7 +11,7 @@ import { useUniverse } from "@/lib/hooks/use-universe";
 import { MarketTable } from "@/components/trade/market-table";
 import { TradeForm } from "@/components/trade/trade-form";
 import { PriceChart } from "@/components/trade/price-chart";
-import { SupplyDemandChart } from "@/components/trade/supply-demand-chart";
+import { StockChart } from "@/components/trade/stock-chart";
 import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
 import { FormError } from "@/components/form/form-error";
 import { SelectInput, type SelectOption } from "@/components/form/select-input";
@@ -236,7 +236,7 @@ function MarketContent({ systemId }: { systemId: string }) {
 
       {/* Supply/demand chart */}
       <div className="mt-8">
-        <SupplyDemandChart entries={market} />
+        <StockChart entries={market} />
       </div>
 
       {comparison && (
