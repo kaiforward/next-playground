@@ -88,6 +88,7 @@ export class SystemObject extends Container {
   private currentPriceTint: number | null = null;
   private currentPriceDelta: number | null = null;
   private hasEventPill = false;
+  private eventHasCount = false;
 
   constructor() {
     super();
@@ -207,7 +208,7 @@ export class SystemObject extends Container {
     this.nameLabel.alpha = isUnknown ? 0.3 : 1;
     this.econLabel.position.set(0, SIZES.systemCoreRadius + 4 + SIZES.systemLabelSize + 2);
 
-    // Unknown systems: hide economy label, ship count, event dots
+    // Unknown systems: hide economy label (ship/price/event pills gated in setLOD)
     this.econLabel.visible = !isUnknown;
 
     if (shipChanged) {
@@ -294,10 +295,8 @@ export class SystemObject extends Container {
   /** Lay out the ship + convoy pills, stacking the ship pill above the convoy
    *  pill when both are present. Both right-align to the glyph's top-left. */
   private redrawDockedPills() {
-    const h = FLEET.markerHeight;
-    const gap = 3;
-    const x = -SIZES.systemCoreRadius + 2;
-    const baseY = -SIZES.systemCoreRadius - 2;
+    const x = -GLYPH.coreRadius + 2;
+    const baseY = -GLYPH.coreRadius - 2;
     const hasShips = this.currentSoloShipCount > 0;
     const hasConvoys = this.currentConvoyCount > 0;
 
@@ -305,34 +304,29 @@ export class SystemObject extends Container {
     if (hasConvoys) {
       this.drawPill(this.convoyPill, this.currentConvoyCount, FLEET.convoyFill, x, baseY);
     }
-    this.convoyPill.container.visible = hasConvoys;
-
     if (hasShips) {
-      const shipY = hasConvoys ? baseY - (h + gap) : baseY;
+      const shipY = hasConvoys ? baseY - (PILL.height + PILL.gap) : baseY;
       this.drawPill(this.shipPill, this.currentSoloShipCount, FLEET.pillFill, x, shipY);
     }
-    this.shipPill.container.visible = hasShips;
   }
 
   private drawPill(pill: DockedPill, count: number, color: number, x: number, y: number) {
-    const h = FLEET.markerHeight;
-    const pad = 5;
-    const glyphW = FLEET.chevronSize;
+    const h = PILL.height;
+    const glyphW = PILL.glyphSize;
     pill.count.text = String(count);
-    const textW = pill.count.width;
-    const w = pad + glyphW + 4 + textW + pad;
+    const w = PILL.padX + glyphW + PILL.gap + pill.count.width + PILL.padX;
 
     pill.bg.clear();
-    pill.bg.roundRect(-w, -h / 2, w, h, FLEET.pillCorner);
+    pill.bg.roundRect(-w, -h / 2, w, h, PILL.corner);
     pill.bg.fill(color);
 
     // ship glyph (small right-pointing chevron) near the left
-    const gx = -w + pad;
+    const gx = -w + PILL.padX;
     pill.glyph.clear();
     pill.glyph.poly([gx, -glyphW / 2, gx + glyphW, 0, gx, glyphW / 2, gx + glyphW * 0.35, 0]);
     pill.glyph.fill(FLEET.pillContent);
 
-    pill.count.position.set(gx + glyphW + 4, 0);
+    pill.count.position.set(gx + glyphW + PILL.gap, 0);
     pill.container.position.set(x, y);
   }
 
@@ -347,27 +341,49 @@ export class SystemObject extends Container {
     this.econLabel.visible = lod.showEconomyLabels && !isUnknown;
     this.econLabel.alpha = lod.detailAlpha;
 
-    // Fleet pills + event dots are markers, not text: they track the system
-    // glyph itself (the systemLayer container already carries systemLayerAlpha),
-    // so they appear/disappear in step with the price ring instead of fading
-    // out earlier than it. Only the text labels above keep a staggered reveal.
-    this.shipPill.container.visible = this.currentSoloShipCount > 0;
-    this.shipPill.container.alpha = 1;
-    this.convoyPill.container.visible = this.currentConvoyCount > 0;
-    this.convoyPill.container.alpha = 1;
-    this.pricePill.container.visible = this.currentPriceTint != null && !isUnknown;
-    this.pricePill.container.alpha = 1;
+    // ── Corner pills: two-stage reveal ──
+    // The coloured pill *shape* (bg) shows whenever its data is present — it
+    // tracks the system glyph (the systemLayer container carries
+    // systemLayerAlpha). The *content* (chevron / icon / text) fades in one
+    // band later, alongside system names, so far-out pills read as bare colour.
+    const showContent = lod.showPillContent;
+    const contentAlpha = lod.pillContentAlpha;
+
+    const showShip = this.currentSoloShipCount > 0;
+    this.shipPill.container.visible = showShip;
+    if (showShip) this.stagePillContent(showContent, contentAlpha, this.shipPill.glyph, this.shipPill.count);
+
+    const showConvoy = this.currentConvoyCount > 0;
+    this.convoyPill.container.visible = showConvoy;
+    if (showConvoy) this.stagePillContent(showContent, contentAlpha, this.convoyPill.glyph, this.convoyPill.count);
+
+    const showPrice = this.currentPriceTint != null && !isUnknown;
+    this.pricePill.container.visible = showPrice;
+    if (showPrice) this.stagePillContent(showContent, contentAlpha, this.pricePill.label);
+
+    const showEvent = this.hasEventPill && !isUnknown;
+    this.eventPill.container.visible = showEvent;
+    if (showEvent) {
+      this.stagePillContent(showContent, contentAlpha, this.eventPill.icon);
+      this.eventPill.count.visible = showContent && this.eventHasCount;
+      this.eventPill.count.alpha = contentAlpha;
+    }
 
     this.glow.visible = lod.showGlow;
-
-    // Unknown systems: event pill hidden regardless of LOD
-    this.eventPill.container.visible = this.hasEventPill && !isUnknown;
-    this.eventPill.container.alpha = 1;
 
     // Scale core + highlight by LOD
     this.core.scale.set(lod.systemDotScale);
     this.highlight.scale.set(lod.systemDotScale);
     this.navigationRing.scale.set(lod.systemDotScale);
+  }
+
+  /** Two-stage LOD helper: toggle a pill's content nodes (text/icons) together.
+   *  The pill *shape* (bg) is gated separately by the caller. */
+  private stagePillContent(visible: boolean, alpha: number, ...nodes: (Graphics | Text)[]) {
+    for (const node of nodes) {
+      node.visible = visible;
+      node.alpha = alpha;
+    }
   }
 
   /** Stroke a dashed ring as a series of short arcs (Pixi v12 has no native
@@ -460,14 +476,14 @@ export class SystemObject extends Container {
     icon.style.fill = color;
     icon.position.set(PILL.padX, 0);
 
-    const showCount = events.length > 1;
-    count.visible = showCount;
+    this.eventHasCount = events.length > 1;
     let w: number;
-    if (showCount) {
+    if (this.eventHasCount) {
       count.text = String(events.length);
       count.position.set(PILL.padX + icon.width + PILL.gap, 0);
       w = count.x + count.width + PILL.padX;
     } else {
+      count.text = "";
       w = PILL.padX + icon.width + PILL.padX;
     }
 
