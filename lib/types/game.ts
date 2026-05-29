@@ -301,17 +301,22 @@ export interface MarketEntry {
   goodId: string;
   goodName: string;
   basePrice: number;
+  /** Mid (spot) price — used for trend vs basePrice and price history. */
   currentPrice: number;
-  supply: number;
-  demand: number;
+  /** Per-unit buy price (mid × (1 + spread)), rounded. */
+  buyPrice: number;
+  /** Per-unit sell price (mid × (1 − spread)), rounded. */
+  sellPrice: number;
+  /** Units in stock (floored for display). */
+  stock: number;
 }
 
 export interface MarketComparisonEntry {
   systemId: string;
   basePrice: number;
   currentPrice: number;
-  supply: number; // floored
-  demand: number; // floored
+  /** Units in stock (floored). */
+  stock: number;
 }
 
 export interface TradeHistoryEntry {
