@@ -3,8 +3,7 @@ import type {
   TickProcessor,
   TickProcessorResult,
 } from "../types";
-import { calculatePrice } from "@/lib/engine/pricing";
-import { TRADE_DEMAND_IMPACT_FACTOR } from "@/lib/engine/trade";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import {
   ECONOMY_CONSTANTS,
@@ -130,19 +129,13 @@ export async function runTradeFlowProcessor(
       const mB = marketByKey.get(`${edge.bSystemId}|${goodId}`);
       if (!mA || !mB || mA.basePrice <= 0) continue;
 
-      const priceA = calculatePrice(
-        mA.basePrice,
-        mA.supply,
-        mA.demand,
-        mA.priceFloor,
-        mA.priceCeiling,
+      const priceA = spotPrice(
+        curveForGood(goodId, mA.basePrice, mA.priceFloor, mA.priceCeiling),
+        mA.stock,
       );
-      const priceB = calculatePrice(
-        mB.basePrice,
-        mB.supply,
-        mB.demand,
-        mB.priceFloor,
-        mB.priceCeiling,
+      const priceB = spotPrice(
+        curveForGood(goodId, mB.basePrice, mB.priceFloor, mB.priceCeiling),
+        mB.stock,
       );
       const gradient = (priceB - priceA) / mA.basePrice;
       if (!isFinite(gradient)) continue;
@@ -163,58 +156,27 @@ export async function runTradeFlowProcessor(
     const mTo = marketByKey.get(`${toSystemId}|${bestGoodId}`);
     if (!mFrom || !mTo) continue;
 
-    const supplyHeadroom = Math.max(0, mFrom.supply - params.minLevel);
-    const supplyCapacity = Math.max(0, params.maxLevel - mTo.supply);
+    const stockHeadroom = Math.max(0, mFrom.stock - params.minLevel);
+    const stockCapacity = Math.max(0, params.maxLevel - mTo.stock);
     const gradientFraction = Math.min(
       1,
       Math.abs(bestGradient) * params.gradientSensitivity,
     );
     const rawQty =
-      Math.min(effectiveBudget, supplyHeadroom, supplyCapacity) *
-      gradientFraction;
+      Math.min(effectiveBudget, stockHeadroom, stockCapacity) * gradientFraction;
     const quantity = Math.floor(rawQty);
     if (quantity <= 0) continue;
 
-    const demandImpact = Math.round(quantity * params.tradeDemandImpactFactor);
+    // Source mirrors a player buy at the cheaper end; destination a sell at the dearer end.
+    const newFromStock = clamp(mFrom.stock - quantity, params.minLevel, params.maxLevel);
+    const newToStock = clamp(mTo.stock + quantity, params.minLevel, params.maxLevel);
 
-    // Source mirrors a player buy at A; destination mirrors a player sell at B.
-    const newFromSupply = clamp(
-      mFrom.supply - quantity,
-      params.minLevel,
-      params.maxLevel,
-    );
-    const newFromDemand = clamp(
-      mFrom.demand + demandImpact,
-      params.minLevel,
-      params.maxLevel,
-    );
-    const newToSupply = clamp(
-      mTo.supply + quantity,
-      params.minLevel,
-      params.maxLevel,
-    );
-    const newToDemand = clamp(
-      mTo.demand - demandImpact,
-      params.minLevel,
-      params.maxLevel,
-    );
+    // Mutate the in-flight snapshot so later edges see fresh state.
+    mFrom.stock = newFromStock;
+    mTo.stock = newToStock;
 
-    // Mutate the in-flight snapshot so later edges that touch the same market see fresh state.
-    mFrom.supply = newFromSupply;
-    mFrom.demand = newFromDemand;
-    mTo.supply = newToSupply;
-    mTo.demand = newToDemand;
-
-    updatesByMarketId.set(mFrom.id, {
-      id: mFrom.id,
-      supply: newFromSupply,
-      demand: newFromDemand,
-    });
-    updatesByMarketId.set(mTo.id, {
-      id: mTo.id,
-      supply: newToSupply,
-      demand: newToDemand,
-    });
+    updatesByMarketId.set(mFrom.id, { id: mFrom.id, stock: newFromStock });
+    updatesByMarketId.set(mTo.id, { id: mTo.id, stock: newToStock });
 
     volumeBySystem.set(
       fromSystemId,
@@ -283,7 +245,6 @@ export const tradeFlowProcessor: TickProcessor = {
       prosperityTargetVolume: PROSPERITY_TARGET_VOLUME,
       minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
       maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
-      tradeDemandImpactFactor: TRADE_DEMAND_IMPACT_FACTOR,
     });
   },
 };

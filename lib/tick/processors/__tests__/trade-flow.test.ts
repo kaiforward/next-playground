@@ -28,7 +28,6 @@ function makeParams(
     prosperityTargetVolume: 50,
     minLevel: 5,
     maxLevel: 200,
-    tradeDemandImpactFactor: 0.1,
     ...overrides,
   };
 }
@@ -53,18 +52,17 @@ function makeSystem(id: string): SimSystem {
   };
 }
 
+/** A market priced purely off `stock` (higher stock → cheaper). */
 function makeMarket(
   systemId: string,
   goodId: string,
-  supply: number,
-  demand: number,
+  stock: number,
 ): SimMarketEntry {
   return {
     systemId,
     goodId,
     basePrice: 100,
-    supply,
-    demand,
+    stock,
     priceFloor: 0.2,
     priceCeiling: 5.0,
   };
@@ -90,17 +88,16 @@ function makeWorld(opts: {
 }
 
 describe("runTradeFlowProcessor", () => {
-  it("moves goods from low-price system to high-price neighbor", async () => {
-    // Producer A: high supply / low demand → low price.
-    // Consumer B: low supply / high demand → high price.
+  it("moves goods from the high-stock (cheap) system to the low-stock (dear) neighbor", async () => {
+    // A holds plenty of stock → low price. B is starved → high price.
     const systems = [makeSystem("a"), makeSystem("b")];
     const connections: SimConnection[] = [
       { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
       { fromSystemId: "b", toSystemId: "a", fuelCost: 10 },
     ];
     const markets = [
-      makeMarket("a", "food", 150, 30),
-      makeMarket("b", "food", 20, 120),
+      makeMarket("a", "food", 150),
+      makeMarket("b", "food", 20),
     ];
     const world = makeWorld({ systems, connections, markets });
 
@@ -119,8 +116,9 @@ describe("runTradeFlowProcessor", () => {
     const marketB = world.markets.find(
       (m) => m.systemId === "b" && m.goodId === "food",
     )!;
-    expect(marketA.supply).toBe(150 - flow.quantity);
-    expect(marketB.supply).toBe(20 + flow.quantity);
+    // Cheaper (higher-stock) source loses stock; dearer (lower-stock) dest gains.
+    expect(marketA.stock).toBe(150 - flow.quantity);
+    expect(marketB.stock).toBe(20 + flow.quantity);
 
     // tradeVolumeAccum updated on both endpoints (mirrors player-trade bookkeeping).
     const sysA = world.systems.find((s) => s.id === "a")!;
@@ -134,10 +132,10 @@ describe("runTradeFlowProcessor", () => {
     const connections: SimConnection[] = [
       { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
     ];
-    // Nearly identical markets — sub-threshold gradient.
+    // Nearly identical stock → sub-threshold gradient.
     const markets = [
-      makeMarket("a", "food", 80, 80),
-      makeMarket("b", "food", 79, 82),
+      makeMarket("a", "food", 80),
+      makeMarket("b", "food", 79),
     ];
     const world = makeWorld({ systems, connections, markets });
 
@@ -152,7 +150,7 @@ describe("runTradeFlowProcessor", () => {
     const marketA = world.markets.find(
       (m) => m.systemId === "a" && m.goodId === "food",
     )!;
-    expect(marketA.supply).toBe(80);
+    expect(marketA.stock).toBe(80);
   });
 
   it("caps flow quantity at the flow budget regardless of gradient", async () => {
@@ -160,10 +158,10 @@ describe("runTradeFlowProcessor", () => {
     const connections: SimConnection[] = [
       { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
     ];
-    // Maximum gradient — A drowning in supply, B starving.
+    // Maximum gradient — A drowning in stock, B starving.
     const markets = [
-      makeMarket("a", "food", 200, 5),
-      makeMarket("b", "food", 5, 200),
+      makeMarket("a", "food", 200),
+      makeMarket("b", "food", 5),
     ];
     const world = makeWorld({ systems, connections, markets });
 
@@ -183,8 +181,8 @@ describe("runTradeFlowProcessor", () => {
       { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
     ];
     const markets = [
-      makeMarket("a", "food", 150, 30),
-      makeMarket("b", "food", 20, 120),
+      makeMarket("a", "food", 150),
+      makeMarket("b", "food", 20),
     ];
     const playerVolumeByRegion = new Map([["r1", 200]]);
     const world = makeWorld({
@@ -206,8 +204,8 @@ describe("runTradeFlowProcessor", () => {
       { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
     ];
     const markets = [
-      makeMarket("a", "food", 150, 30),
-      makeMarket("b", "food", 20, 120),
+      makeMarket("a", "food", 150),
+      makeMarket("b", "food", 20),
     ];
     const world = makeWorld({ systems, connections, markets });
 
@@ -233,7 +231,7 @@ describe("runTradeFlowProcessor", () => {
     const connections: SimConnection[] = [
       { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
     ];
-    const markets = [makeMarket("a", "food", 80, 80), makeMarket("b", "food", 80, 80)];
+    const markets = [makeMarket("a", "food", 80), makeMarket("b", "food", 80)];
     const oldEvents: SimFlowEvent[] = [
       { tick: 10, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 4 },
       { tick: 95, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 3 },
@@ -267,8 +265,8 @@ describe("runTradeFlowProcessor", () => {
       { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
     ];
     const markets = [
-      makeMarket("a", "food", 150, 30),
-      makeMarket("b", "food", 20, 120),
+      makeMarket("a", "food", 150),
+      makeMarket("b", "food", 20),
     ];
     const world = new InMemoryTradeFlowWorld(
       { systems: [sysA, sysB], markets, flowEvents: [] },
