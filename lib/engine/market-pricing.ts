@@ -63,3 +63,31 @@ export function tradeAvgMidPrice(
   }
   return total / quantity;
 }
+
+export interface TradeQuote {
+  /** Pre-spread average mid price per unit. */
+  avgMidUnit: number;
+  /** Post-spread average price per unit (buy: above mid, sell: below mid). */
+  avgUnitPrice: number;
+  /** Integer total the player pays (buy) or receives (sell). */
+  totalPrice: number;
+}
+
+/**
+ * Full price quote for a trade: integrated slippage (tradeAvgMidPrice) plus the
+ * bid-ask spread. `spread` is the half-spread (e.g. 0.05). Only the grand total
+ * is rounded, so per-unit rounding never compounds across the quantity.
+ */
+export function quoteTrade(
+  curve: MarketCurve,
+  stock: number,
+  quantity: number,
+  type: "buy" | "sell",
+  spread: number,
+): TradeQuote {
+  const avgMidUnit = tradeAvgMidPrice(curve, stock, quantity, type);
+  const spreadMult = type === "buy" ? 1 + spread : 1 - spread;
+  const avgUnitPrice = avgMidUnit * spreadMult;
+  const totalPrice = Math.round(avgUnitPrice * quantity);
+  return { avgMidUnit, avgUnitPrice, totalPrice };
+}

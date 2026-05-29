@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { midPriceAt, spotPrice, tradeAvgMidPrice, type MarketCurve } from "../market-pricing";
+import { midPriceAt, spotPrice, tradeAvgMidPrice, quoteTrade, type MarketCurve } from "../market-pricing";
 
 // Wide clamp so the raw curve is visible (legacy-style 0.2x–5.0x).
 const WIDE: MarketCurve = {
@@ -119,5 +119,46 @@ describe("tradeAvgMidPrice", () => {
     const avg = tradeAvgMidPrice(NARROW, 8, 8, "buy");
     expect(avg).toBeLessThanOrEqual(200);
     expect(avg).toBeGreaterThan(100);
+  });
+});
+
+describe("quoteTrade", () => {
+  const WIDE: MarketCurve = {
+    basePrice: 100,
+    targetStock: 20,
+    k: 1,
+    floorMult: 0.2,
+    ceilingMult: 5.0,
+  };
+
+  it("applies the spread above mid on a buy and rounds only the total", () => {
+    // avgMid ~138.567; buy unit *1.05 -> ~145.495; total = round(*10) = 1455
+    const q = quoteTrade(WIDE, 20, 10, "buy", 0.05);
+    expect(q.avgMidUnit).toBeCloseTo(138.57, 1);
+    expect(q.avgUnitPrice).toBeCloseTo(145.5, 0);
+    expect(q.totalPrice).toBe(1455);
+  });
+
+  it("applies the spread below mid on a sell", () => {
+    // avgMid ~138.567; sell unit *0.95 -> ~131.639; total = round(*10) = 1316
+    const q = quoteTrade(WIDE, 10, 10, "sell", 0.05);
+    expect(q.avgUnitPrice).toBeCloseTo(131.6, 0);
+    expect(q.totalPrice).toBe(1316);
+  });
+
+  it("KILLS the same-system round-trip: buying then selling back is a loss", () => {
+    const buy = quoteTrade(WIDE, 20, 10, "buy", 0.05); // pay
+    const sellBack = quoteTrade(WIDE, 10, 10, "sell", 0.05); // receive, stock now 10
+    expect(sellBack.totalPrice).toBeLessThan(buy.totalPrice); // 1316 < 1455
+  });
+
+  it("PRESERVES cross-system arbitrage: buy at a surplus, sell at a shortage", () => {
+    // Spread 0 isolates the geographic gap. Buy 10 at surplus stock 40,
+    // sell 10 at shortage stock 10.
+    const buyA = quoteTrade(WIDE, 40, 10, "buy", 0); // avg ~57.53 -> 575
+    const sellB = quoteTrade(WIDE, 10, 10, "sell", 0); // avg ~138.57 -> 1386
+    expect(buyA.totalPrice).toBe(575);
+    expect(sellB.totalPrice).toBe(1386);
+    expect(sellB.totalPrice - buyA.totalPrice).toBe(811); // healthy profit
   });
 });
