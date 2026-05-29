@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, GLYPH, GATEWAY_COLOR, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, GLYPH, GATEWAY_COLOR, PILL, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -33,6 +33,13 @@ interface DockedPill {
   count: Text;
 }
 
+/** Top-right price pill: signed % delta, tinted to the price ramp. */
+interface PricePill {
+  container: Container;
+  bg: Graphics;
+  label: Text;
+}
+
 export class SystemObject extends Container {
   systemId = "";
 
@@ -45,6 +52,7 @@ export class SystemObject extends Container {
   private econLabel: Text;
   private shipPill: DockedPill;   // blue — solo docked ships
   private convoyPill: DockedPill; // copper — docked convoys
+  private pricePill: PricePill;   // top-right — price-ramp delta
   private eventDots: Graphics;
 
   // For hit testing
@@ -101,6 +109,9 @@ export class SystemObject extends Container {
     // Solo ships (blue) and convoys (copper) get separate pills, stacked when both.
     this.shipPill = this.createDockedPill();
     this.convoyPill = this.createDockedPill();
+
+    // Price pill (top-right of the glyph) — tinted to the price ramp.
+    this.pricePill = this.createPricePill();
 
     // Event dots
     this.eventDots = new Graphics();
@@ -161,6 +172,7 @@ export class SystemObject extends Container {
       this.currentPriceTint = data.priceTint ?? null;
       this.currentPriceDelta = data.priceDelta ?? null;
       this.redrawHalo(data, isUnknown);
+      this.redrawPricePill();
     }
 
     if (econChanged || navChanged || selectedChanged || visibilityChanged) {
@@ -234,6 +246,38 @@ export class SystemObject extends Container {
     return { container, bg, glyph, count };
   }
 
+  private createPricePill(): PricePill {
+    const container = new Container();
+    const bg = new Graphics();
+    const label = new Text({ text: "", style: DOCKED_COUNT_STYLE, resolution: TEXT_RESOLUTION });
+    label.anchor.set(0, 0.5);
+    container.addChild(bg, label);
+    container.visible = false;
+    this.addChild(container);
+    return { container, bg, label };
+  }
+
+  /** Draw the top-right price pill from the tracked tint/delta. Visibility is
+   *  decided per-frame in setLOD; this just lays out the shape + label. */
+  private redrawPricePill() {
+    const tint = this.currentPriceTint;
+    const delta = this.currentPriceDelta;
+    if (tint == null || delta == null) return;
+
+    const h = PILL.height;
+    const { label, bg } = this.pricePill;
+    label.text = `${delta > 0 ? "+" : ""}${delta}%`;
+    const w = PILL.padX + label.width + PILL.padX;
+
+    bg.clear();
+    bg.roundRect(0, -h / 2, w, h, PILL.corner);
+    bg.fill(tint);
+
+    label.position.set(PILL.padX, 0);
+    // Top-right mirror of the fleet pills' top-left anchor; grows rightward.
+    this.pricePill.container.position.set(GLYPH.coreRadius - 2, -GLYPH.coreRadius - 2);
+  }
+
   /** Lay out the ship + convoy pills, stacking the ship pill above the convoy
    *  pill when both are present. Both right-align to the glyph's top-left. */
   private redrawDockedPills() {
@@ -298,6 +342,8 @@ export class SystemObject extends Container {
     this.shipPill.container.alpha = 1;
     this.convoyPill.container.visible = this.currentConvoyCount > 0;
     this.convoyPill.container.alpha = 1;
+    this.pricePill.container.visible = this.currentPriceTint != null && !isUnknown;
+    this.pricePill.container.alpha = 1;
 
     this.glow.visible = lod.showGlow;
 
