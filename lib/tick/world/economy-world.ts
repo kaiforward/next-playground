@@ -36,8 +36,7 @@ export interface MarketView {
   systemId: string;
   goodId: string;
   basePrice: number;
-  supply: number;
-  demand: number;
+  stock: number;
   economyType: EconomyType;
   /** Government of the system's owning faction — read per-market post-cutover. */
   governmentType: GovernmentType;
@@ -63,8 +62,7 @@ export interface ProsperityView {
 /** Result of one market simulation step — written back via applyMarketUpdates. */
 export interface MarketUpdate {
   id: string;
-  supply: number;
-  demand: number;
+  stock: number;
 }
 
 /**
@@ -99,7 +97,7 @@ export interface EconomyWorld {
   /** Current prosperity + accumulated trade volume for the given systems. */
   getProsperity(systemIds: string[]): Promise<ProsperityView[]>;
 
-  /** Bulk-write market supply/demand. */
+  /** Bulk-write market stock. */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
 
   /** Bulk-write prosperity and subtract captured volume from accumulators. */
