@@ -43,6 +43,10 @@ export interface PixiMapCanvasProps {
   connections: ConnectionInfo[];
   currentTick: number;
   showShipRoutes: boolean;
+  /** Ambient display of docked-fleet pills (still reveal on hover/select). */
+  showFleet: boolean;
+  /** Ambient display of the event pill (still reveals on hover/select). */
+  showEvents: boolean;
   selectedTransitId: string | null;
   onTransitClick: (unitId: string | null) => void;
 }
@@ -80,6 +84,8 @@ export function PixiMapCanvas({
   connections,
   currentTick,
   showShipRoutes,
+  showFleet,
+  showEvents,
   selectedTransitId,
   onTransitClick,
 }: PixiMapCanvasProps) {
@@ -402,6 +408,15 @@ export function PixiMapCanvas({
     p.fleetTransitLayer.setSelected(selectedTransitId);
     p.fleetTransitLayer.setShowAllRoutes(showShipRoutes);
   }, [selectedTransitId, showShipRoutes, pixiReady]);
+
+  // ── Propagate fleet/events overlay flags to the system layer ──
+  // Gates ambient display of the docked-fleet and event pills. Cheap setter —
+  // kept out of the data sync so toggling an overlay doesn't re-run every sync.
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.systemLayer.setOverlayVisibility({ fleet: showFleet, events: showEvents });
+  }, [showFleet, showEvents, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

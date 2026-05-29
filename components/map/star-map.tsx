@@ -317,6 +317,8 @@ export function StarMap({
         connections={allConnections}
         currentTick={currentTick}
         showShipRoutes={overlays.shipRoutes}
+        showFleet={overlays.fleet}
+        showEvents={overlays.events}
         selectedTransitId={selectedTransitId}
         onTransitClick={onTransitClick}
       />
