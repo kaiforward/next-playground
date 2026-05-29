@@ -85,6 +85,16 @@ describe("map-session", () => {
       // collapses to undefined (same as the legacy-only case above).
       expect(getMapSessionState()?.overlays).toBeUndefined();
     });
+
+    it("round-trips an explicit fleet:false through the write path", () => {
+      // Exercises setOverlaysInSession → writeSessionState → getMapSessionState
+      // end-to-end (not just a seeded parse): a default-ON overlay turned off
+      // must survive the write, or it would silently revert on hydrate.
+      setOverlaysInSession({ fleet: false, events: true });
+      const overlays = getMapSessionState()?.overlays;
+      expect(overlays?.fleet).toBe(false);
+      expect(overlays?.events).toBe(true);
+    });
   });
 
   describe("mode persistence", () => {
