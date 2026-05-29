@@ -2,7 +2,8 @@
  * Shared helpers for bot strategies.
  */
 
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { STOCK_MIN } from "@/lib/constants/market-economy";
 import { findReachableSystems, type ReachableSystem } from "@/lib/engine/pathfinding";
 import { findReachableSystemsCached } from "../pathfinding-cache";
 import type { SimAdjacencyList } from "../pathfinding-cache";
@@ -14,7 +15,7 @@ import type { SimWorld, SimShip, SimMarketEntry } from "../types";
 
 /** Get the current price for a market entry. */
 export function getPrice(m: SimMarketEntry): number {
-  return calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
+  return spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock);
 }
 
 /** Get market entries for a specific system. */
@@ -51,7 +52,7 @@ export function estimateSellPrice(
     (m) => m.systemId === targetSystemId && m.goodId === goodId,
   );
   if (!market) return 0;
-  return calculatePrice(market.basePrice, market.supply, market.demand, market.priceFloor, market.priceCeiling) * quantity;
+  return getPrice(market) * quantity;
 }
 
 /** Estimate buy cost for a good at the current system. */
@@ -65,8 +66,8 @@ export function estimateBuyPrice(
     (m) => m.systemId === systemId && m.goodId === goodId,
   );
   if (!market) return Infinity;
-  if (market.supply < quantity) return Infinity;
-  return calculatePrice(market.basePrice, market.supply, market.demand, market.priceFloor, market.priceCeiling) * quantity;
+  if (market.stock - STOCK_MIN < quantity) return Infinity;
+  return getPrice(market) * quantity;
 }
 
 export interface ProfitOpportunity {
@@ -96,7 +97,7 @@ export function findOpportunities(
 
   for (const [targetId, target] of reachable) {
     for (const buyMarket of currentMarkets) {
-      if (buyMarket.supply <= 0) continue;
+      if (buyMarket.stock - STOCK_MIN <= 0) continue;
 
       const buyPrice = getPrice(buyMarket);
       const sellMarket = world.markets.find(
@@ -108,7 +109,7 @@ export function findOpportunities(
       if (sellPrice <= buyPrice) continue;
 
       const maxByCredits = Math.floor(maxCredits / buyPrice);
-      const maxBySupply = buyMarket.supply;
+      const maxBySupply = Math.floor(buyMarket.stock - STOCK_MIN);
       const quantity = Math.min(maxByCredits, maxBySupply, availableCargo);
       if (quantity <= 0) continue;
 
