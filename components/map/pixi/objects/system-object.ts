@@ -1,8 +1,8 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
-import type { EconomyType, SystemVisibility } from "@/lib/types/game";
+import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, FLEET, GLYPH, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -60,6 +60,8 @@ export class SystemObject extends Container {
   private currentIsGateway = false;
   private currentSelected = false;
   private currentEventTypes: string[] = [];
+  private currentPriceTint: number | null = null;
+  private currentPriceDelta: number | null = null;
 
   constructor() {
     super();
@@ -128,6 +130,9 @@ export class SystemObject extends Container {
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
     const eventsChanged = eventTypes !== this.currentEventTypes.join(",");
+    const priceChanged =
+      (data.priceTint ?? null) !== this.currentPriceTint ||
+      (data.priceDelta ?? null) !== this.currentPriceDelta;
 
     const isUnknown = data.visibility === "unknown";
 
@@ -141,10 +146,6 @@ export class SystemObject extends Container {
       this.core.fill(colors.core);
       this.core.alpha = isUnknown ? 0.4 : 1;
 
-      this.glow.clear();
-      this.glow.circle(0, 0, SIZES.systemGlowRadius);
-      this.glow.fill({ color: colors.glow, alpha: isUnknown ? 0.05 : 0.15 });
-
       this.highlight.clear();
       this.highlight.circle(0, 0, 4);
       this.highlight.fill({ color: 0xffffff, alpha: isUnknown ? 0.2 : 0.6 });
@@ -154,10 +155,18 @@ export class SystemObject extends Container {
       this.econLabel.style.fill = colors.core;
     }
 
+    // Halo is the overlay lens: it owns its own draw path so navigation state
+    // (which used to redraw the glow) can't clobber the price tint.
+    if (econChanged || visibilityChanged || priceChanged) {
+      this.currentPriceTint = data.priceTint ?? null;
+      this.currentPriceDelta = data.priceDelta ?? null;
+      this.redrawHalo(data, isUnknown);
+    }
+
     if (econChanged || navChanged || selectedChanged || visibilityChanged) {
       this.currentNavState = data.navigationState;
       this.currentSelected = isSelected;
-      this.updateNavigationVisuals(data.navigationState, isSelected, data.economyType, isUnknown);
+      this.updateNavigationVisuals(data.navigationState, isSelected);
     }
 
     // Name — only update text when changed (avoids Pixi texture regeneration for 600+ systems)
@@ -200,6 +209,18 @@ export class SystemObject extends Container {
         this.drawEventDots(data.activeEvents, data.navigationState);
       }
     }
+  }
+
+  /** Draw the soft-body halo — the overlay lens. Price ramp when price data is
+   *  present, else the economy glow tint. The single owner of `this.glow`. */
+  private redrawHalo(data: SystemNodeData, isUnknown: boolean) {
+    const tint = data.priceTint;
+    const hasPrice = tint != null;
+    const haloColor = hasPrice ? tint : ECONOMY_COLORS[data.economyType].glow;
+    const haloAlpha = isUnknown ? 0.05 : hasPrice ? GLYPH.haloPriceAlpha : GLYPH.haloAlpha;
+    this.glow.clear();
+    this.glow.circle(0, 0, GLYPH.haloRadius);
+    this.glow.fill({ color: haloColor, alpha: haloAlpha });
   }
 
   private createDockedPill(): DockedPill {
@@ -294,16 +315,11 @@ export class SystemObject extends Container {
   private updateNavigationVisuals(
     state: NavigationNodeState | undefined,
     isSelected: boolean,
-    economyType: EconomyType,
-    isUnknown = false,
   ) {
     this.navigationRing.clear();
     this.alpha = 1;
     this.scale.set(1);
     this.cursor = "pointer";
-
-    const colors = ECONOMY_COLORS[economyType];
-    const glowAlpha = isUnknown ? 0.05 : 0.15;
 
     if (isSelected && !state) {
       // Selected system (no navigation) — subtle highlight ring
@@ -311,21 +327,13 @@ export class SystemObject extends Container {
       this.navigationRing.stroke({ color: 0xffffff, width: 2, alpha: 0.6 });
     }
 
-    if (!state) {
-      this.glow.clear();
-      this.glow.circle(0, 0, SIZES.systemGlowRadius);
-      this.glow.fill({ color: colors.glow, alpha: glowAlpha });
-      return;
-    }
+    if (!state) return;
 
     switch (state) {
       case "origin":
         this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 4);
         this.navigationRing.stroke({ color: NAV_COLORS.origin, width: 3, alpha: 1 });
         this.scale.set(1.1);
-        this.glow.clear();
-        this.glow.circle(0, 0, SIZES.systemGlowRadius);
-        this.glow.fill({ color: colors.glow, alpha: 0.3 });
         break;
 
       case "reachable":
@@ -348,9 +356,6 @@ export class SystemObject extends Container {
         this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 4);
         this.navigationRing.stroke({ color: NAV_COLORS.destination, width: 3, alpha: 1 });
         this.scale.set(1.1);
-        this.glow.clear();
-        this.glow.circle(0, 0, SIZES.systemGlowRadius);
-        this.glow.fill({ color: colors.glow, alpha: 0.3 });
         break;
     }
   }
