@@ -158,6 +158,36 @@ export const PILL = {
   glyphSize: 8,   // inner ship chevron / icon box
 } as const;
 
+// ── Corner-pill anchors (top-left fleet, top-right price, bottom-right event) ─
+// Each pill's inner corner (the one nearest the core) sits on the 45° diagonal,
+// just outside the halo — so pills read as orbiting the glyph rather than
+// crowding the core. The vertical anchor is the horizontal one plus half a pill
+// height, because pills are vertically centred on their anchor.
+const PILL_CORNER_RADIUS = 22;                          // > GLYPH.haloRadius (20)
+const PILL_CORNER_XY = PILL_CORNER_RADIUS / Math.SQRT2; // ≈ 15.6 per axis
+export const PILL_ANCHOR = {
+  x:       PILL_CORNER_XY,                        // inner vertical edge of L/R pills
+  yTop:    -(PILL_CORNER_XY + PILL.height / 2),   // top pills (anchor centre)
+  yBottom: PILL_CORNER_XY + PILL.height / 2,      // bottom pills (anchor centre)
+} as const;
+
+// ── System label backing (name + economy type) ──────────────────
+// The labels sit below the glyph and can fall behind the nav ring / halo, so
+// each gets a semi-transparent black backing for legibility. They're pushed
+// far enough down to clear the bottom corner-pills: the event pill (and the
+// mirror space a bottom-left pill would use) reaches `yBottom + height/2` below
+// centre, so the name's top starts a few px past that.
+const BOTTOM_PILL_REACH = PILL_ANCHOR.yBottom + PILL.height / 2; // ≈ 34
+export const LABEL = {
+  bgFill:   0x000000,
+  bgAlpha:  0.55,
+  bgPadX:   4,
+  bgPadY:   1.5,
+  bgCorner: 3,
+  offsetY:  BOTTOM_PILL_REACH + 4, // ≈ 38 — name top clears the bottom pills
+  lineGap:  4,                     // gap between the name and economy backings
+} as const;
+
 // ── Animation ────────────────────────────────────────────────────
 
 export const ANIM = {

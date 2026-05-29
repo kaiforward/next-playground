@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, FLEET, GLYPH, GATEWAY_COLOR, PILL, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, FLEET, GLYPH, GATEWAY_COLOR, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -65,7 +65,9 @@ export class SystemObject extends Container {
   private highlight: Graphics;
   private gatewayRing: Graphics;
   private navigationRing: Graphics;
+  private nameBg: Graphics;
   private nameLabel: Text;
+  private econBg: Graphics;
   private econLabel: Text;
   private shipPill: DockedPill;   // blue — solo docked ships
   private convoyPill: DockedPill; // copper — docked convoys
@@ -114,12 +116,18 @@ export class SystemObject extends Container {
     this.highlight = new Graphics();
     this.addChild(this.highlight);
 
-    // Name label
+    // Name label, over a semi-transparent backing for legibility against the
+    // ring/halo behind it. Backing is added first so it sits behind the text;
+    // both stay below the corner pills (added later) in the z-stack.
+    this.nameBg = new Graphics();
+    this.addChild(this.nameBg);
     this.nameLabel = new Text({ text: "", style: NAME_STYLE, resolution: TEXT_RESOLUTION });
     this.nameLabel.anchor.set(0.5, 0);
     this.addChild(this.nameLabel);
 
-    // Economy label
+    // Economy label (same backing treatment)
+    this.econBg = new Graphics();
+    this.addChild(this.econBg);
     this.econLabel = new Text({ text: "", style: ECON_STYLE, resolution: TEXT_RESOLUTION });
     this.econLabel.anchor.set(0.5, 0);
     this.addChild(this.econLabel);
@@ -182,6 +190,7 @@ export class SystemObject extends Container {
 
       this.econLabel.text = data.economyType.toUpperCase();
       this.econLabel.style.fill = colors.core;
+      this.drawLabelBg(this.econBg, this.econLabel);
     }
 
     // Halo is the overlay lens: it owns its own draw path so navigation state
@@ -199,17 +208,26 @@ export class SystemObject extends Container {
       this.updateNavigationVisuals(data.navigationState, isSelected);
     }
 
-    // Name — only update text when changed (avoids Pixi texture regeneration for 600+ systems)
+    // Name — only update text + backing when changed (avoids Pixi texture
+    // regeneration for 600+ systems)
     if (data.name !== this.currentName) {
       this.currentName = data.name;
       this.nameLabel.text = data.name;
+      this.drawLabelBg(this.nameBg, this.nameLabel);
     }
-    this.nameLabel.position.set(0, SIZES.systemCoreRadius + 4);
+    this.nameLabel.position.set(0, LABEL.offsetY);
+    this.nameBg.position.set(0, LABEL.offsetY);
     this.nameLabel.alpha = isUnknown ? 0.3 : 1;
-    this.econLabel.position.set(0, SIZES.systemCoreRadius + 4 + SIZES.systemLabelSize + 2);
+
+    // Stack the economy line under the name *backing* with a real gap — use the
+    // name's measured height (≈14), not its 11px font size, or the two overlap.
+    const econY = LABEL.offsetY + this.nameLabel.height + LABEL.bgPadY * 2 + LABEL.lineGap;
+    this.econLabel.position.set(0, econY);
+    this.econBg.position.set(0, econY);
 
     // Unknown systems: hide economy label (ship/price/event pills gated in setLOD)
     this.econLabel.visible = !isUnknown;
+    this.econBg.visible = !isUnknown;
 
     if (shipChanged) {
       // Counts come from the player's own fleet data — always show regardless of fog-of-war
@@ -246,6 +264,17 @@ export class SystemObject extends Container {
     this.glow.clear();
     this.glow.circle(0, 0, GLYPH.haloRadius);
     this.glow.fill({ color: haloColor, alpha: haloAlpha });
+  }
+
+  /** Size a label's backing rect to the (already-set) text, centred under its
+   *  top-centre anchor with a little padding. Redrawn only when the text
+   *  changes — position is set per-frame in update(). */
+  private drawLabelBg(bg: Graphics, label: Text) {
+    const w = label.width + LABEL.bgPadX * 2;
+    const h = label.height + LABEL.bgPadY * 2;
+    bg.clear();
+    bg.roundRect(-w / 2, -LABEL.bgPadY, w, h, LABEL.bgCorner);
+    bg.fill({ color: LABEL.bgFill, alpha: LABEL.bgAlpha });
   }
 
   private createDockedPill(): DockedPill {
@@ -289,14 +318,14 @@ export class SystemObject extends Container {
 
     label.position.set(PILL.padX, 0);
     // Top-right mirror of the fleet pills' top-left anchor; grows rightward.
-    this.pricePill.container.position.set(GLYPH.coreRadius - 2, -GLYPH.coreRadius - 2);
+    this.pricePill.container.position.set(PILL_ANCHOR.x, PILL_ANCHOR.yTop);
   }
 
   /** Lay out the ship + convoy pills, stacking the ship pill above the convoy
    *  pill when both are present. Both right-align to the glyph's top-left. */
   private redrawDockedPills() {
-    const x = -GLYPH.coreRadius + 2;
-    const baseY = -GLYPH.coreRadius - 2;
+    const x = -PILL_ANCHOR.x;
+    const baseY = PILL_ANCHOR.yTop;
     const hasShips = this.currentSoloShipCount > 0;
     const hasConvoys = this.currentConvoyCount > 0;
 
@@ -334,12 +363,18 @@ export class SystemObject extends Container {
   setLOD(lod: LODState) {
     const isUnknown = this.currentVisibility === "unknown";
 
+    const nameAlpha = lod.systemNameAlpha * (isUnknown ? 0.3 : 1);
     this.nameLabel.visible = lod.showSystemNames;
-    this.nameLabel.alpha = lod.systemNameAlpha * (isUnknown ? 0.3 : 1);
+    this.nameLabel.alpha = nameAlpha;
+    this.nameBg.visible = lod.showSystemNames;
+    this.nameBg.alpha = nameAlpha;
 
     // Unknown systems: economy label hidden regardless of LOD
-    this.econLabel.visible = lod.showEconomyLabels && !isUnknown;
+    const showEcon = lod.showEconomyLabels && !isUnknown;
+    this.econLabel.visible = showEcon;
     this.econLabel.alpha = lod.detailAlpha;
+    this.econBg.visible = showEcon;
+    this.econBg.alpha = lod.detailAlpha;
 
     // ── Corner pills: two-stage reveal ──
     // The coloured pill *shape* (bg) shows whenever its data is present — it
@@ -493,6 +528,6 @@ export class SystemObject extends Container {
     bg.stroke({ color, width: 1.5 });
 
     // Bottom-right: mirror of the price pill anchor, below the core.
-    this.eventPill.container.position.set(GLYPH.coreRadius - 2, GLYPH.coreRadius + 2);
+    this.eventPill.container.position.set(PILL_ANCHOR.x, PILL_ANCHOR.yBottom);
   }
 }
