@@ -58,7 +58,7 @@ export function StarMap({
 
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
-  const { overlays, toggle } = useMapOverlays();
+  const { overlays, toggle, preset, setPreset } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
 
   // ── Live tick + in-transit marker selection ───────────────────
@@ -336,6 +336,8 @@ export function StarMap({
         setMode={setMapMode}
         overlays={overlays}
         toggle={toggle}
+        preset={preset}
+        setPreset={setPreset}
         priceGoodId={priceGoodId}
         setPriceGoodId={setPriceGoodId}
         goods={goods}

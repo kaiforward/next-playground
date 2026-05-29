@@ -2,46 +2,63 @@
 
 import { useMemo } from "react";
 import { tv } from "tailwind-variants";
-import {
-  TIER_COLOR,
-  TIER_LABEL,
-  pixiHexToCss,
-} from "@/lib/constants/good-colors";
-import type { GoodTier } from "@/lib/types/game";
+import { TIER_COLOR, pixiHexToCss } from "@/lib/constants/good-colors";
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
+import { PRESETS, type MapPreset } from "@/lib/utils/map-presets";
 import { SelectInput } from "@/components/form/select-input";
 import { Button } from "@/components/ui/button";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
 
-// Focus ring works two ways so this variant can wrap either a focusable element
-// (the overlay <button>) or an element that contains one (the Mode <label> with
-// a sr-only <input type="radio"> inside). `focus-visible:` handles the first
-// case, `has-[:focus-visible]:` the second.
-const rowVariants = tv({
+// ── Variants ────────────────────────────────────────────────────────
+// Preset + territory segments: copper accent on the active choice, muted
+// otherwise. Sharp corners per Foundry (the HTML UI; the WebGL map is its own
+// surface).
+const chipVariants = tv({
   base: [
-    "group flex items-center justify-between gap-3 w-full cursor-pointer",
-    "px-3 py-1.5 text-xs font-medium uppercase tracking-wider",
-    "border-l-2 transition-colors duration-150",
-    "focus:outline-none",
-    "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
+    "px-2 py-1 text-[10px] font-medium uppercase tracking-wider",
+    "border transition-colors duration-150",
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-background",
   ],
   variants: {
     active: {
-      true: "border-l-accent bg-accent/10 text-text-accent hover:bg-accent/20",
+      true: "border-accent bg-accent/15 text-text-accent",
       false:
-        "border-l-transparent bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
+        "border-border bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
     },
   },
 });
 
-const dotVariants = tv({
-  base: "h-2 w-2 transition-colors duration-150",
+const segmentVariants = tv({
+  base: [
+    "flex-1 cursor-pointer text-center",
+    "px-1.5 py-1 text-[10px] font-medium uppercase tracking-wider",
+    "border transition-colors duration-150",
+    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-1 has-[:focus-visible]:ring-offset-background",
+  ],
   variants: {
     active: {
-      true: "bg-accent shadow-[0_0_6px_var(--color-accent)]",
-      false: "bg-border-strong group-hover:bg-text-secondary",
+      true: "border-accent bg-accent/15 text-text-accent",
+      false:
+        "border-border bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
+    },
+  },
+});
+
+// Overlay chips: a persistent colour swatch identifies the glyph element each
+// overlay paints (so the legend is implicit); the swatch dims when off.
+const overlayChipVariants = tv({
+  base: [
+    "group/chip relative flex items-center gap-2 w-full cursor-pointer",
+    "px-2 py-1.5 text-[10px] font-medium uppercase tracking-wider",
+    "border transition-colors duration-150",
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+  ],
+  variants: {
+    active: {
+      true: "border-accent/60 bg-accent/10 text-text-primary",
+      false:
+        "border-border bg-transparent text-text-secondary hover:bg-surface-hover",
     },
   },
 });
@@ -52,19 +69,30 @@ const MODE_LABELS: Record<MapMode, string> = {
   none: "None",
 };
 
+const PRESET_LABELS: Record<MapPreset, string> = {
+  default: "Default",
+  trader: "Trader",
+  navigator: "Navigator",
+  custom: "Custom",
+};
+
 interface OverlayDef {
   key: MapOverlayKey;
   label: string;
+  /** CSS swatch colour — matches the glyph element this overlay paints. */
+  swatch: string;
 }
 
 /**
- * Order matters — this is also the rendered order in the cluster. Keep the
- * most-used overlay at the top.
+ * Order matters — this is also the rendered order in the 2-col grid. Swatches
+ * are pulled from the same constants the Pixi renderer uses so they can't drift.
  */
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
-  { key: "tradeFlow", label: "Trade Flows" },
-  { key: "priceHeatmap", label: "Price" },
-  { key: "shipRoutes", label: "Ship Routes" },
+  { key: "fleet", label: "Fleet", swatch: "#38bdf8" }, // FLEET.pillFill (sky-400)
+  { key: "events", label: "Events", swatch: "#f59e0b" }, // EVENT_DOT_COLORS.amber
+  { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium },
+  { key: "tradeFlow", label: "Trade Flows", swatch: pixiHexToCss(TIER_COLOR[2]) },
+  { key: "shipRoutes", label: "Ship Routes", swatch: "#38bdf8" },
 ];
 
 interface MapOverlayControlsProps {
@@ -72,6 +100,8 @@ interface MapOverlayControlsProps {
   setMode: (mode: MapMode) => void;
   overlays: MapOverlays;
   toggle: (key: MapOverlayKey) => void;
+  preset: MapPreset;
+  setPreset: (preset: MapPreset) => void;
   /** Required when the Price overlay is on. Null until a good is picked. */
   priceGoodId: string | null;
   setPriceGoodId: (goodId: string | null) => void;
@@ -82,61 +112,70 @@ interface MapOverlayControlsProps {
 }
 
 /**
- * Floating cluster anchored bottom-left of the map canvas. Two axes:
+ * Floating cluster anchored bottom-left of the map canvas. Three controls:
  *
- *   1. **Map Mode** (single-select) — paints the territory polygons. One tint
- *      at a time. `none` hides both territory layers.
- *   2. **Overlays** (multi-select) — additive layers on top of the polygons,
- *      stackable freely.
+ *   1. **Preset** — one-click curated overlay bundles (Default / Trader /
+ *      Navigator). Toggling any overlay by hand drops to a derived "Custom".
+ *   2. **Territory** (single-select segmented) — paints the territory polygons.
+ *   3. **Overlays** (multi-select grid) — additive layers, stackable freely.
  *
- * Foundry theme: sharp corners, surface background, copper left-accent stripe
- * on the active row. The cluster intentionally has NO container-level stripe
- * — the active row carries the accent.
+ * Foundry theme: sharp corners, surface background, copper accent on active
+ * controls. Legends live in hover tooltips so the panel stays compact.
  */
 export function MapOverlayControls({
   mode,
   setMode,
   overlays,
   toggle,
+  preset,
+  setPreset,
   priceGoodId,
   setPriceGoodId,
   goods,
   onOpenComparisonTable,
 }: MapOverlayControlsProps) {
   return (
-    <div className="absolute bottom-4 left-4 z-20 w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
+    <div className="absolute bottom-4 left-4 z-20 w-52 border border-border bg-surface/95 backdrop-blur shadow-lg">
       <div className="px-3 py-2 border-b border-border">
         <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
           Map
         </h3>
       </div>
 
-      <ModeSection mode={mode} setMode={setMode} />
+      <PresetRow preset={preset} setPreset={setPreset} />
+      <TerritorySegment mode={mode} setMode={setMode} />
 
       <div className="border-t border-border px-3 pt-2 pb-1">
         <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
           Overlays
         </h4>
       </div>
-      <ul role="group" aria-label="Map overlays">
-        {OVERLAY_DEFS.map(({ key, label }) => {
+      <div
+        role="group"
+        aria-label="Map overlays"
+        className="grid grid-cols-2 gap-1.5 px-3 pb-2.5"
+      >
+        {OVERLAY_DEFS.map(({ key, label, swatch }) => {
           const active = overlays[key];
           return (
-            <li key={key}>
-              <button
-                type="button"
-                onClick={() => toggle(key)}
-                aria-pressed={active}
-                className={rowVariants({ active })}
-              >
-                <span>{label}</span>
-                <span className={dotVariants({ active })} aria-hidden />
-              </button>
-            </li>
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggle(key)}
+              aria-pressed={active}
+              className={overlayChipVariants({ active })}
+            >
+              <span
+                className="h-2.5 w-2.5 shrink-0 transition-opacity duration-150"
+                style={{ backgroundColor: swatch, opacity: active ? 1 : 0.35 }}
+                aria-hidden
+              />
+              <span className="truncate">{label}</span>
+            </button>
           );
         })}
-      </ul>
-      {overlays.tradeFlow && <TradeFlowLegend />}
+      </div>
+
       {overlays.priceHeatmap && (
         <PriceOverlaySection
           priceGoodId={priceGoodId}
@@ -145,16 +184,55 @@ export function MapOverlayControls({
           onOpenComparisonTable={onOpenComparisonTable}
         />
       )}
-      {overlays.shipRoutes && (
-        <div className="border-t border-border px-3 py-2 text-[10px] text-text-secondary font-mono leading-relaxed">
-          Shows every in-transit ship&apos;s route. Markers are always visible; hover one for its ETA, click to pin its route.
-        </div>
-      )}
     </div>
   );
 }
 
-function ModeSection({
+/**
+ * One-click overlay bundles. Custom is a derived state — it only appears (and
+ * is non-interactive) when the live overlay set matches no preset.
+ */
+function PresetRow({
+  preset,
+  setPreset,
+}: {
+  preset: MapPreset;
+  setPreset: (preset: MapPreset) => void;
+}) {
+  return (
+    <div className="border-t border-border px-3 pt-2 pb-2.5">
+      <h4 className="mb-1.5 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Preset
+      </h4>
+      <div role="group" aria-label="Map presets" className="flex flex-wrap gap-1">
+        {PRESETS.map((p) => {
+          const active = p === preset;
+          // "Custom" is derived, not selectable — show it only while active.
+          if (p === "custom" && !active) return null;
+          const isCustom = p === "custom";
+          return (
+            <button
+              key={p}
+              type="button"
+              disabled={isCustom}
+              onClick={isCustom ? undefined : () => setPreset(p)}
+              aria-pressed={active}
+              className={chipVariants({ active })}
+            >
+              {PRESET_LABELS[p]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Territory tint, single-select. `none` hides both territory layers. Rendered
+ * as a 3-segment horizontal control (sr-only radios keep it a real radiogroup).
+ */
+function TerritorySegment({
   mode,
   setMode,
 }: {
@@ -162,41 +240,35 @@ function ModeSection({
   setMode: (mode: MapMode) => void;
 }) {
   return (
-    <>
-      <div className="px-3 pt-2 pb-1">
-        <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-          Mode
-        </h4>
-      </div>
-      <ul role="radiogroup" aria-label="Map mode">
+    <div className="border-t border-border px-3 pt-2 pb-2.5">
+      <h4 className="mb-1.5 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Territory
+      </h4>
+      <div role="radiogroup" aria-label="Territory" className="flex gap-1">
         {MAP_MODES.map((m) => {
           const active = m === mode;
           return (
-            <li key={m}>
-              <label className={rowVariants({ active })}>
-                <input
-                  type="radio"
-                  name="mapMode"
-                  value={m}
-                  checked={active}
-                  onChange={() => setMode(m)}
-                  className="sr-only"
-                />
-                <span>{MODE_LABELS[m]}</span>
-                <span className={dotVariants({ active })} aria-hidden />
-              </label>
-            </li>
+            <label key={m} className={segmentVariants({ active })}>
+              <input
+                type="radio"
+                name="mapMode"
+                value={m}
+                checked={active}
+                onChange={() => setMode(m)}
+                className="sr-only"
+              />
+              {MODE_LABELS[m]}
+            </label>
           );
         })}
-      </ul>
-    </>
+      </div>
+    </div>
   );
 }
 
 /**
  * Shown only when the Price overlay is on. Lets the user pick a good (for the
- * forthcoming Pixi tint) and jump straight to the cross-system comparison
- * panel. Empty state (no good picked) just shows the picker + legend.
+ * Pixi halo/pill tint) and jump to the cross-system comparison panel.
  */
 function PriceOverlaySection({
   priceGoodId,
@@ -238,69 +310,6 @@ function PriceOverlaySection({
           Show all prices
         </Button>
       )}
-      <PriceRampLegend />
-    </div>
-  );
-}
-
-function PriceRampLegend() {
-  const stops: { color: string; label: string }[] = [
-    { color: PRICE_RAMP_STOPS.deepBargain, label: "≤ 0.6x" },
-    { color: PRICE_RAMP_STOPS.bargain, label: "0.85x" },
-    { color: PRICE_RAMP_STOPS.neutral, label: "base" },
-    { color: PRICE_RAMP_STOPS.premium, label: "1.15x" },
-    { color: PRICE_RAMP_STOPS.deepPremium, label: "≥ 1.4x" },
-  ];
-  return (
-    <div className="pt-1">
-      <h4 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-        Price vs Base
-      </h4>
-      <ul className="space-y-0.5">
-        {stops.map((s) => (
-          <li
-            key={s.color}
-            className="flex items-center gap-2 text-[10px] text-text-secondary"
-          >
-            <span
-              className="h-2 w-4 shrink-0"
-              style={{ backgroundColor: s.color }}
-              aria-hidden
-            />
-            <span>{s.label}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/**
- * Tier-colour legend shown only when the Trade Flows overlay is on. Colours
- * come from `TIER_COLOR` so they can't drift from the Pixi renderer.
- */
-function TradeFlowLegend() {
-  const tiers: GoodTier[] = [0, 1, 2];
-  return (
-    <div className="border-t border-border px-3 py-2">
-      <h4 className="mb-1.5 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-        Good Tier
-      </h4>
-      <ul className="space-y-1">
-        {tiers.map((tier) => (
-          <li
-            key={tier}
-            className="flex items-center gap-2 text-[11px] text-text-secondary"
-          >
-            <span
-              className="h-2 w-2 shrink-0"
-              style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
-              aria-hidden
-            />
-            <span>{TIER_LABEL[tier]}</span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
