@@ -288,8 +288,7 @@ model StationMarket {
   id        String   @id @default(cuid())
   stationId String
   goodId    String
-  supply    Float
-  demand    Float
+  stock     Float
   updatedAt DateTime @updatedAt
 
   station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
