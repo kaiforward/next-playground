@@ -5,6 +5,8 @@ import { isMapMode, type MapMode } from "@/lib/types/map";
 const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapOverlaysState {
+  fleet?: boolean;
+  events?: boolean;
   tradeFlow?: boolean;
   priceHeatmap?: boolean;
   shipRoutes?: boolean;
@@ -19,6 +21,12 @@ export interface MapSessionState {
 function parseOverlays(value: unknown): MapOverlaysState | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const out: MapOverlaysState = {};
+  if ("fleet" in value && typeof value.fleet === "boolean") {
+    out.fleet = value.fleet;
+  }
+  if ("events" in value && typeof value.events === "boolean") {
+    out.events = value.events;
+  }
   if ("tradeFlow" in value && typeof value.tradeFlow === "boolean") {
     out.tradeFlow = value.tradeFlow;
   }
