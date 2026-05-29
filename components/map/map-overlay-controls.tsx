@@ -1,50 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
-import { tv } from "tailwind-variants";
-import {
-  TIER_COLOR,
-  TIER_LABEL,
-  pixiHexToCss,
-} from "@/lib/constants/good-colors";
-import type { GoodTier } from "@/lib/types/game";
+import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
-import { SelectInput } from "@/components/form/select-input";
-import { Button } from "@/components/ui/button";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
-
-// Focus ring works two ways so this variant can wrap either a focusable element
-// (the overlay <button>) or an element that contains one (the Mode <label> with
-// a sr-only <input type="radio"> inside). `focus-visible:` handles the first
-// case, `has-[:focus-visible]:` the second.
-const rowVariants = tv({
-  base: [
-    "group flex items-center justify-between gap-3 w-full cursor-pointer",
-    "px-3 py-1.5 text-xs font-medium uppercase tracking-wider",
-    "border-l-2 transition-colors duration-150",
-    "focus:outline-none",
-    "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
-  ],
-  variants: {
-    active: {
-      true: "border-l-accent bg-accent/10 text-text-accent hover:bg-accent/20",
-      false:
-        "border-l-transparent bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
-    },
-  },
-});
-
-const dotVariants = tv({
-  base: "h-2 w-2 transition-colors duration-150",
-  variants: {
-    active: {
-      true: "bg-accent shadow-[0_0_6px_var(--color-accent)]",
-      false: "bg-border-strong group-hover:bg-text-secondary",
-    },
-  },
-});
+import { RadioGroup } from "@/components/form/radio-group";
+import { CheckboxInput } from "@/components/form/checkbox-input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const MODE_LABELS: Record<MapMode, string> = {
   political: "Political",
@@ -52,245 +19,165 @@ const MODE_LABELS: Record<MapMode, string> = {
   none: "None",
 };
 
+/** Overlays whose colour mapping isn't self-evident carry a hover/focus legend. */
+type LegendKind = "price" | "tradeFlow" | "routes";
+
 interface OverlayDef {
   key: MapOverlayKey;
   label: string;
+  /** CSS swatch colour — matches the glyph element this overlay paints. */
+  swatch: string;
+  /** Optional legend, shown in a tooltip on hover/focus (no permanent height). */
+  legend?: LegendKind;
 }
 
 /**
- * Order matters — this is also the rendered order in the cluster. Keep the
- * most-used overlay at the top.
+ * Order matters — this is also the rendered (top-to-bottom) order. Swatches are
+ * pulled from the same constants the Pixi renderer uses so they can't drift.
  */
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
-  { key: "tradeFlow", label: "Trade Flows" },
-  { key: "priceHeatmap", label: "Price" },
-  { key: "shipRoutes", label: "Ship Routes" },
+  { key: "fleet", label: "Fleet", swatch: "#38bdf8" }, // FLEET.pillFill (sky-400)
+  { key: "events", label: "Events", swatch: "#f59e0b" }, // EVENT_DOT_COLORS.amber
+  { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium, legend: "price" },
+  { key: "tradeFlow", label: "Trade Flows", swatch: pixiHexToCss(TIER_COLOR[2]), legend: "tradeFlow" },
+  { key: "shipRoutes", label: "Ship Routes", swatch: "#38bdf8", legend: "routes" },
 ];
+
+const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] }));
 
 interface MapOverlayControlsProps {
   mode: MapMode;
   setMode: (mode: MapMode) => void;
   overlays: MapOverlays;
   toggle: (key: MapOverlayKey) => void;
-  /** Required when the Price overlay is on. Null until a good is picked. */
-  priceGoodId: string | null;
-  setPriceGoodId: (goodId: string | null) => void;
-  /** Sorted goods list for the picker. */
-  goods: { id: string; name: string }[];
-  /** Open the cross-system comparison panel. Disabled until a good is picked. */
-  onOpenComparisonTable: () => void;
 }
 
 /**
- * Floating cluster anchored bottom-left of the map canvas. Two axes:
+ * The primary map control panel — Territory (single-select tint) over Overlays
+ * (multi-select additive layers), built from the shared accessible form
+ * controls (`RadioGroup` / `CheckboxInput`) so the two read as one family:
+ * label left, indicator right (round radio vs square colour-coded checkbox).
+ * Positioning is owned by the parent dock ([map-controls-dock.tsx]); the Price
+ * good-picker lives in its own floating panel so it can't reflow this one.
  *
- *   1. **Map Mode** (single-select) — paints the territory polygons. One tint
- *      at a time. `none` hides both territory layers.
- *   2. **Overlays** (multi-select) — additive layers on top of the polygons,
- *      stackable freely.
- *
- * Foundry theme: sharp corners, surface background, copper left-accent stripe
- * on the active row. The cluster intentionally has NO container-level stripe
- * — the active row carries the accent.
+ * Foundry theme: sharp corners, surface background, copper accent on the active
+ * row. Legends live in Radix tooltips (hover + keyboard focus) so the panel
+ * stays compact and the legend is keyboard-accessible.
  */
 export function MapOverlayControls({
   mode,
   setMode,
   overlays,
   toggle,
-  priceGoodId,
-  setPriceGoodId,
-  goods,
-  onOpenComparisonTable,
 }: MapOverlayControlsProps) {
   return (
-    <div className="absolute bottom-4 left-4 z-20 w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
-      <div className="px-3 py-2 border-b border-border">
-        <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
-          Map
-        </h3>
-      </div>
-
-      <ModeSection mode={mode} setMode={setMode} />
-
-      <div className="border-t border-border px-3 pt-2 pb-1">
-        <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-          Overlays
-        </h4>
-      </div>
-      <ul role="group" aria-label="Map overlays">
-        {OVERLAY_DEFS.map(({ key, label }) => {
-          const active = overlays[key];
-          return (
-            <li key={key}>
-              <button
-                type="button"
-                onClick={() => toggle(key)}
-                aria-pressed={active}
-                className={rowVariants({ active })}
-              >
-                <span>{label}</span>
-                <span className={dotVariants({ active })} aria-hidden />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {overlays.tradeFlow && <TradeFlowLegend />}
-      {overlays.priceHeatmap && (
-        <PriceOverlaySection
-          priceGoodId={priceGoodId}
-          setPriceGoodId={setPriceGoodId}
-          goods={goods}
-          onOpenComparisonTable={onOpenComparisonTable}
-        />
-      )}
-      {overlays.shipRoutes && (
-        <div className="border-t border-border px-3 py-2 text-[10px] text-text-secondary font-mono leading-relaxed">
-          Shows every in-transit ship&apos;s route. Markers are always visible; hover one for its ETA, click to pin its route.
+    <TooltipProvider delayDuration={150}>
+      <div className="w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
+        <div className="px-3 py-2 border-b border-border">
+          <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
+            Map
+          </h3>
         </div>
-      )}
-    </div>
-  );
-}
 
-function ModeSection({
-  mode,
-  setMode,
-}: {
-  mode: MapMode;
-  setMode: (mode: MapMode) => void;
-}) {
-  return (
-    <>
-      <div className="px-3 pt-2 pb-1">
-        <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-          Mode
-        </h4>
+        <SectionHeading>Territory</SectionHeading>
+        <RadioGroup
+          ariaLabel="Territory"
+          name="mapMode"
+          value={mode}
+          onChange={setMode}
+          options={TERRITORY_OPTIONS}
+        />
+
+        <div className="border-t border-border" />
+        <SectionHeading>Overlays</SectionHeading>
+        <div role="group" aria-label="Map overlays">
+          {OVERLAY_DEFS.map(({ key, label, swatch, legend }) => {
+            const checkbox = (
+              <CheckboxInput
+                label={label}
+                checked={overlays[key]}
+                onChange={() => toggle(key)}
+                color={swatch}
+              />
+            );
+            if (!legend) return <div key={key}>{checkbox}</div>;
+            return (
+              <Tooltip key={key}>
+                <TooltipTrigger asChild>{checkbox}</TooltipTrigger>
+                <TooltipContent side="right">
+                  <OverlayLegend kind={legend} />
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
       </div>
-      <ul role="radiogroup" aria-label="Map mode">
-        {MAP_MODES.map((m) => {
-          const active = m === mode;
-          return (
-            <li key={m}>
-              <label className={rowVariants({ active })}>
-                <input
-                  type="radio"
-                  name="mapMode"
-                  value={m}
-                  checked={active}
-                  onChange={() => setMode(m)}
-                  className="sr-only"
-                />
-                <span>{MODE_LABELS[m]}</span>
-                <span className={dotVariants({ active })} aria-hidden />
-              </label>
-            </li>
-          );
-        })}
-      </ul>
-    </>
+    </TooltipProvider>
   );
 }
 
-/**
- * Shown only when the Price overlay is on. Lets the user pick a good (for the
- * forthcoming Pixi tint) and jump straight to the cross-system comparison
- * panel. Empty state (no good picked) just shows the picker + legend.
- */
-function PriceOverlaySection({
-  priceGoodId,
-  setPriceGoodId,
-  goods,
-  onOpenComparisonTable,
-}: {
-  priceGoodId: string | null;
-  setPriceGoodId: (goodId: string | null) => void;
-  goods: { id: string; name: string }[];
-  onOpenComparisonTable: () => void;
-}) {
-  const options = useMemo<{ value: string | null; label: string }[]>(
-    () => [
-      { value: null, label: "Select a good…" },
-      ...goods.map((g) => ({ value: g.id, label: g.name })),
-    ],
-    [goods]
-  );
+function SectionHeading({ children }: { children: string }) {
   return (
-    <div className="border-t border-border px-3 py-2 space-y-2">
-      <SelectInput<string | null>
-        label="Good"
-        size="sm"
-        options={options}
-        value={priceGoodId}
-        onChange={setPriceGoodId}
-        valueKey={(v) => v ?? ""}
-        isSearchable
-      />
-      {priceGoodId && (
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          fullWidth
-          onClick={onOpenComparisonTable}
-        >
-          Show all prices
-        </Button>
-      )}
-      <PriceRampLegend />
+    <div className="px-3 pt-2 pb-1">
+      <h4 className="text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        {children}
+      </h4>
     </div>
   );
 }
+
+/** Legend body for a tooltip — the surrounding box is supplied by TooltipContent. */
+function OverlayLegend({ kind }: { kind: LegendKind }) {
+  if (kind === "price") return <PriceRampLegend />;
+  if (kind === "tradeFlow") return <TradeFlowLegend />;
+  return (
+    <p className="text-[10px] leading-relaxed text-text-secondary">
+      Every in-transit ship&apos;s route. Markers stay visible at all zooms —
+      hover one for its ETA, click to pin its route.
+    </p>
+  );
+}
+
+const PRICE_RAMP = [
+  PRICE_RAMP_STOPS.deepBargain,
+  PRICE_RAMP_STOPS.bargain,
+  PRICE_RAMP_STOPS.neutral,
+  PRICE_RAMP_STOPS.premium,
+  PRICE_RAMP_STOPS.deepPremium,
+].join(", ");
 
 function PriceRampLegend() {
-  const stops: { color: string; label: string }[] = [
-    { color: PRICE_RAMP_STOPS.deepBargain, label: "≤ 0.6x" },
-    { color: PRICE_RAMP_STOPS.bargain, label: "0.85x" },
-    { color: PRICE_RAMP_STOPS.neutral, label: "base" },
-    { color: PRICE_RAMP_STOPS.premium, label: "1.15x" },
-    { color: PRICE_RAMP_STOPS.deepPremium, label: "≥ 1.4x" },
-  ];
   return (
-    <div className="pt-1">
-      <h4 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Price vs Base
-      </h4>
-      <ul className="space-y-0.5">
-        {stops.map((s) => (
-          <li
-            key={s.color}
-            className="flex items-center gap-2 text-[10px] text-text-secondary"
-          >
-            <span
-              className="h-2 w-4 shrink-0"
-              style={{ backgroundColor: s.color }}
-              aria-hidden
-            />
-            <span>{s.label}</span>
-          </li>
-        ))}
-      </ul>
+      </h5>
+      <div
+        className="h-2 w-full"
+        style={{ background: `linear-gradient(to right, ${PRICE_RAMP})` }}
+        aria-hidden
+      />
+      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>0.6×</span>
+        <span>base</span>
+        <span>1.4×</span>
+      </div>
     </div>
   );
 }
 
-/**
- * Tier-colour legend shown only when the Trade Flows overlay is on. Colours
- * come from `TIER_COLOR` so they can't drift from the Pixi renderer.
- */
 function TradeFlowLegend() {
-  const tiers: GoodTier[] = [0, 1, 2];
+  const tiers = [0, 1, 2] as const;
   return (
-    <div className="border-t border-border px-3 py-2">
-      <h4 className="mb-1.5 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Good Tier
-      </h4>
-      <ul className="space-y-1">
+      </h5>
+      <ul className="space-y-0.5">
         {tiers.map((tier) => (
           <li
             key={tier}
-            className="flex items-center gap-2 text-[11px] text-text-secondary"
+            className="flex items-center gap-1.5 text-[10px] text-text-secondary"
           >
             <span
               className="h-2 w-2 shrink-0"

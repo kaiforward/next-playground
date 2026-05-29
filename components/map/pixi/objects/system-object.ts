@@ -108,6 +108,14 @@ export class SystemObject extends Container {
   private hasEventPill = false;
   private eventHasCount = false;
 
+  // ── Ambient-visibility gating ─────────────────────────────────
+  // Fleet/event pills render ambiently only when their overlay is on; otherwise
+  // they reveal on hover or selection (overlay-off hides the clutter, it doesn't
+  // hide the data). Defaults match the "default" preset (both overlays on).
+  private showFleet = true;
+  private showEvents = true;
+  private isHovered = false;
+
   // setLOD runs every frame for every visible system; its output depends only
   // on the incoming LODState plus the tracked state above (all mutated in
   // update()). `lodDirty` is set whenever update() runs so the next setLOD
@@ -283,6 +291,23 @@ export class SystemObject extends Container {
     this.lodDirty = true;
   }
 
+  /** Set whether fleet / event pills show ambiently (overlay flags). When off,
+   *  the pills still reveal on hover/selection. Marks LOD dirty so the next
+   *  frame reapplies. */
+  setOverlayFlags(showFleet: boolean, showEvents: boolean) {
+    if (this.showFleet === showFleet && this.showEvents === showEvents) return;
+    this.showFleet = showFleet;
+    this.showEvents = showEvents;
+    this.lodDirty = true;
+  }
+
+  /** Hovering reveals this system's overlay-gated pills. Marks LOD dirty. */
+  setHovered(hovered: boolean) {
+    if (this.isHovered === hovered) return;
+    this.isHovered = hovered;
+    this.lodDirty = true;
+  }
+
   /** Draw the soft-body halo — the overlay lens. Price ramp when price data is
    *  present, else the economy glow tint. The single owner of `this.glow`. */
   private redrawHalo(data: SystemNodeData, isUnknown: boolean) {
@@ -422,11 +447,17 @@ export class SystemObject extends Container {
     const showContent = lod.showPillContent;
     const contentAlpha = lod.pillContentAlpha;
 
-    const showShip = this.currentSoloShipCount > 0;
+    // Hover or selection always reveals a system's pills, even with the overlay
+    // off. Fleet pills gate on the Fleet overlay; the event pill on Events.
+    const reveal = this.isHovered || this.currentSelected;
+    const revealFleet = this.showFleet || reveal;
+    const revealEvents = this.showEvents || reveal;
+
+    const showShip = revealFleet && this.currentSoloShipCount > 0;
     this.shipPill.container.visible = showShip;
     if (showShip) this.stagePillContent(showContent, contentAlpha, this.shipPill.glyph, this.shipPill.count);
 
-    const showConvoy = this.currentConvoyCount > 0;
+    const showConvoy = revealFleet && this.currentConvoyCount > 0;
     this.convoyPill.container.visible = showConvoy;
     if (showConvoy) this.stagePillContent(showContent, contentAlpha, this.convoyPill.glyph, this.convoyPill.count);
 
@@ -434,7 +465,7 @@ export class SystemObject extends Container {
     this.pricePill.container.visible = showPrice;
     if (showPrice) this.stagePillContent(showContent, contentAlpha, this.pricePill.label);
 
-    const showEvent = this.hasEventPill && !isUnknown;
+    const showEvent = revealEvents && this.hasEventPill && !isUnknown;
     this.eventPill.container.visible = showEvent;
     if (showEvent) {
       this.stagePillContent(showContent, contentAlpha, this.eventPill.icon);

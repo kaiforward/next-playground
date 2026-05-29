@@ -12,9 +12,14 @@ import {
  * whatever map mode is active and can be stacked freely. State is persisted
  * via `map-session` so a refresh preserves the user's last view.
  *
- * Defaults to all-off so first-time players see a clean map.
+ * `fleet` and `events` gate the *ambient* display of the docked-fleet and
+ * event pills on each system glyph (the data still reveals on hover/select even
+ * when the overlay is off). They default ON so a first-time player sees their
+ * fleet and live events; the opt-in overlays default off for a clean map.
  */
 export interface MapOverlays {
+  fleet: boolean;
+  events: boolean;
   tradeFlow: boolean;
   priceHeatmap: boolean;
   shipRoutes: boolean;
@@ -23,6 +28,8 @@ export interface MapOverlays {
 export type MapOverlayKey = keyof MapOverlays;
 
 const DEFAULT_OVERLAYS: MapOverlays = {
+  fleet: true,
+  events: true,
   tradeFlow: false,
   priceHeatmap: false,
   shipRoutes: false,
@@ -34,6 +41,8 @@ function hydrateFromSession(): MapOverlays {
   const stored = session?.overlays;
   if (!stored) return DEFAULT_OVERLAYS;
   return {
+    fleet: stored.fleet ?? DEFAULT_OVERLAYS.fleet,
+    events: stored.events ?? DEFAULT_OVERLAYS.events,
     tradeFlow: stored.tradeFlow ?? DEFAULT_OVERLAYS.tradeFlow,
     priceHeatmap: stored.priceHeatmap ?? DEFAULT_OVERLAYS.priceHeatmap,
     shipRoutes: stored.shipRoutes ?? DEFAULT_OVERLAYS.shipRoutes,
@@ -56,7 +65,13 @@ export function useMapOverlays(): {
       skipPersist.current = false;
       return;
     }
-    const stored: MapOverlaysState = {};
+    // `fleet`/`events` default to ON, so an "off" choice has to be stored
+    // explicitly — the truthy-only shorthand used for the opt-in overlays would
+    // silently revert them to the default on the next hydrate.
+    const stored: MapOverlaysState = {
+      fleet: overlays.fleet,
+      events: overlays.events,
+    };
     if (overlays.tradeFlow) stored.tradeFlow = true;
     if (overlays.priceHeatmap) stored.priceHeatmap = true;
     if (overlays.shipRoutes) stored.shipRoutes = true;

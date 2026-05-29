@@ -61,28 +61,59 @@ The map uses a WebGL canvas (Pixi.js) with two rendering tiers that crossfade ba
 
 **Detail tier (system zoom, >0.4)**:
 - Tile-based viewport loading — only systems in visible tiles are fetched from the API
-- Full SystemObject rendering with economy-colored cores, glow effects, and hit areas
-- System names, economy badges, ship counts, event indicator dots
+- Full SystemObject rendering — layered glyph with economy core, overlay halo, rings, and four corner pills (see [System Glyph Anatomy](#system-glyph-anatomy))
+- System names and economy badges
 - Connection lines between systems (dashed for intra-region, solid for gateway/route) with fuel cost labels
 - Effect layer: route particles and pulse ring animations
 
 **Crossfade (0.3–0.4)**: Smooth alpha transition between tiers using cubic smoothstep. SystemObject creation begins slightly before the crossfade (zoom 0.28) so objects are ready when they fade in.
 
-**LOD within detail tier**: Additional smoothstep fades control progressive disclosure — system names (0.45–0.55), event dots (0.5–0.6), economy/ship/fuel labels (0.6–0.7), glow effects (>0.45).
+**LOD within detail tier**: Additional smoothstep fades control progressive disclosure. Pill *shapes* appear with the system layer as it fades in; pill *content* (counts, %, icons) reveals one band closer (~0.5–0.6) alongside system names; economy/fuel labels follow (~0.6–0.7); glow/halo shows above ~0.45.
 
 **Background**: Parallax starfield with 3 depth layers, independent of the world container.
 
-**Performance**: Frustum culling skips off-screen systems and connections each frame. SystemObjects are created on demand (batched per frame) and hidden on deactivation rather than destroyed — constructor cost is high (~10 display objects each). Viewport change callbacks are throttled to avoid 60 setState calls/sec during pan/zoom.
+**Performance**: Frustum culling skips off-screen systems and connections each frame. SystemObjects are created on demand (batched per frame) and hidden on deactivation rather than destroyed — constructor cost is high (~10 display objects each). Viewport change callbacks are throttled to avoid 60 setState calls/sec during pan/zoom. `setLOD` runs every frame per visible glyph but short-circuits via a dirty flag when neither the glyph's data nor the LOD bands it reads have changed.
+
+### System Glyph Anatomy
+
+Each system renders as a layered glyph with a fixed radial budget so indicators never collide. Geometry lives in `components/map/pixi/theme.ts` (`GLYPH`/`PILL`); the glyph is assembled in `components/map/pixi/objects/system-object.ts`.
+
+- **Core (r ≤ 12)** — solid economy colour; the system's intrinsic identity, with a small highlight dot.
+- **Halo (r ≈ 20) — the overlay lens.** A translucent disc carrying the *active overlay*: a faint economy tint by default, recoloured to the price ramp when the Price overlay is on. Overlap-forgiving; the halo channel is designed to host future per-system lenses (danger, prosperity).
+- **Gateway ring (r ≈ 28)** — bright magenta (`#e879f9`, a hue reserved for gateways) stroke on inter-region gateway systems.
+- **Navigation ring (r ≈ 34, outermost, dashed)** — drawn only during routing, on the origin/destination, plus a subtle dashed focus ring on the selected system. `reachable` nodes keep a thin solid ring; `unreachable` dim to ~0.3 alpha.
+
+**Corner pills.** Four fixed corners, all sharing one height and radial offset, each pinned to a channel so the map reads without a legend:
+
+| Corner | Channel | Content |
+|---|---|---|
+| Top-left | Fleet | docked ships (blue) + convoys (copper), stacked, with counts |
+| Top-right | Price | signed % deviation from base price (ramp-tinted, matches halo) |
+| Bottom-right | Events | dominant event icon + count, bordered by the event's colour |
+| Bottom-left | *reserved* | future channel |
+
+Pills are deliberately **rounded** — Pixi aliases sharp corners and tiny text at these sizes — so the WebGL map diverges from the Foundry sharp-edge HTML rule (see [theme.md](../design-system/theme.md)). Their two-stage reveal (shape early, content near) is covered in the LOD notes above.
 
 ### Fleet on the Map
 
-The player's own fleet is always legible, in one cyan visual language kept distinct from event / economy / price cues:
+The player's own fleet is always legible, in a consistent fleet visual language (blue solo ships, copper convoys) kept distinct from event / economy / price cues:
 
-- **Docked ships** show as a small count pill on the system glyph.
+- **Docked ships** show as top-left count pills on the system glyph — blue for solo ships, copper for convoys, stacked when both are present.
 - **In-transit ships** show as always-visible directional markers that move smoothly along their route between ticks (a chevron points toward the destination). Convoys render as a single marker; markers that overlap on screen cluster into one pill with a count.
 - **Routes on demand** (progressive disclosure): hovering a marker shows a ghost route + ETA tooltip; clicking it draws the solid animated route and opens a compact transit card (destination, cargo, ETA); a "Ship Routes" overlay can draw every in-transit route at once.
 
 In-transit markers are the player's own ships, so they stay visible even across unexplored systems.
+
+### Overlays & Control Panel
+
+The map's controls float at the bottom-left in a dock (`components/map/map-controls-dock.tsx`) that stacks panels upward. The main panel (`map-overlay-controls.tsx`, state in `lib/hooks/use-map-overlays.ts`) holds two vertically-stacked sections:
+
+- **Territory** (single-select) — Political / Regions / None faction/region polygons (the map mode).
+- **Overlays** (multi-select) — Fleet, Events, Price, Trade-flow, Ship Routes. Each row carries its glyph element's colour so the panel doubles as the key; the price-ramp, trade-flow tier, and routes legends appear in hover tooltips beside the row so they cost no permanent height.
+
+When the Price overlay is on, a separate **Price panel** (`map-price-panel.tsx`) — the good-picker plus a jump to cross-system comparison — floats above the main panel, kept independent so picking a good never reflows the main panel. The dock is the single owner of panel layout; further context panels slot in as siblings.
+
+Overlays govern *ambient* clutter, not data access: with Fleet or Events off, a system's pills are hidden ambiently but still **reveal on hover or selection**. The always-on skeleton — economy core, halo, gateway ring, jump lanes, moving ships — is never gated by a toggle. Overlay state persists per session.
 
 ### Fog of War / Visibility
 
@@ -105,10 +136,11 @@ When a system is selected on the map, the side panel shows:
 - Docked ships and active events
 
 ### Navigation Mode
-When planning a route:
-- **Origin**: Ship's current system (solid outline)
-- **Reachable**: Systems the ship can reach with current fuel (normal display)
-- **Unreachable**: Systems beyond fuel range (dimmed)
+When planning a route (navigation rings, see [glyph anatomy](#system-glyph-anatomy)):
+- **Origin**: Ship's current system — dashed navigation ring
+- **Destination**: Chosen endpoint — dashed navigation ring
+- **Reachable**: Systems the ship can reach with current fuel — thin solid ring
+- **Unreachable**: Systems beyond fuel range (dimmed to ~0.3 alpha)
 - **Route preview**: Selected path highlighted with estimated fuel cost and travel duration
 
 ### State Persistence

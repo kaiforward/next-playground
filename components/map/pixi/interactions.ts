@@ -40,12 +40,15 @@ export function setupInteractions({
     });
 
     obj.on("pointerover", () => {
+      // Hover reveals overlay-gated pills regardless of reachability.
+      obj.setHovered(true);
       if (obj.cursor === "not-allowed") return;
       const baseScale = getBaseScale(obj.systemId, getMapData);
       obj.scale.set(baseScale * ANIM.hoverScale);
     });
 
     obj.on("pointerout", () => {
+      obj.setHovered(false);
       obj.scale.set(getBaseScale(obj.systemId, getMapData));
     });
   }
