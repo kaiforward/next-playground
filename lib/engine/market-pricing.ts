@@ -38,3 +38,28 @@ export function midPriceAt(curve: MarketCurve, stock: number): number {
 export function spotPrice(curve: MarketCurve, stock: number): number {
   return Math.round(midPriceAt(curve, stock));
 }
+
+/**
+ * Average mid price per unit for a trade of `quantity` units, integrating the
+ * price curve over the stock range the trade moves (slippage). Each unit is
+ * priced at the midpoint of the stock step it causes, so a buy and an immediate
+ * sell-back traverse the identical price points — that symmetry is what makes
+ * the round-trip exploit unprofitable.
+ *
+ *  - buy:  stock decreases; units priced at stock-0.5, stock-1.5, ...
+ *  - sell: stock increases; units priced at stock+0.5, stock+1.5, ...
+ */
+export function tradeAvgMidPrice(
+  curve: MarketCurve,
+  stock: number,
+  quantity: number,
+  type: "buy" | "sell",
+): number {
+  if (quantity <= 0) return 0;
+  let total = 0;
+  for (let i = 0; i < quantity; i++) {
+    const level = type === "buy" ? stock - i - 0.5 : stock + i + 0.5;
+    total += midPriceAt(curve, level);
+  }
+  return total / quantity;
+}

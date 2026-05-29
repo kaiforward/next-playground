@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { midPriceAt, spotPrice, type MarketCurve } from "../market-pricing";
+import { midPriceAt, spotPrice, tradeAvgMidPrice, type MarketCurve } from "../market-pricing";
 
 // Wide clamp so the raw curve is visible (legacy-style 0.2x–5.0x).
 const WIDE: MarketCurve = {
@@ -64,5 +64,60 @@ describe("spotPrice", () => {
   it("rounds the mid price for display", () => {
     // 100 * 20/30 = 66.667 -> 67
     expect(spotPrice(WIDE, 30)).toBe(67);
+  });
+});
+
+describe("tradeAvgMidPrice", () => {
+  // WIDE curve (base 100, target 20, k 1, clamps 0.2x–5.0x) keeps the
+  // 10.5–39.5 stock range fully on the raw curve (no clamping).
+  const WIDE: MarketCurve = {
+    basePrice: 100,
+    targetStock: 20,
+    k: 1,
+    floorMult: 0.2,
+    ceilingMult: 5.0,
+  };
+
+  it("returns 0 for non-positive quantity", () => {
+    expect(tradeAvgMidPrice(WIDE, 20, 0, "buy")).toBe(0);
+  });
+
+  it("matches the spot price for a single unit (priced at the step midpoint)", () => {
+    // Buying 1 unit moves stock 20 -> 19, priced at midpoint 19.5: 100*20/19.5
+    expect(tradeAvgMidPrice(WIDE, 20, 1, "buy")).toBeCloseTo(102.564, 2);
+  });
+
+  it("buying averages ABOVE the starting spot price (price rises as you buy)", () => {
+    const avg = tradeAvgMidPrice(WIDE, 20, 10, "buy");
+    expect(avg).toBeGreaterThan(midPriceAt(WIDE, 20)); // > 100
+    expect(avg).toBeCloseTo(138.57, 1); // ~ integral 100*20*ln(20/10)/10 = 138.6
+  });
+
+  it("selling averages BELOW the starting spot price (price falls as you sell)", () => {
+    // Selling 10 into a shortage at stock 10 moves stock 10 -> 20.
+    const avg = tradeAvgMidPrice(WIDE, 10, 10, "sell");
+    expect(avg).toBeLessThan(midPriceAt(WIDE, 10)); // < 200
+    expect(avg).toBeCloseTo(138.57, 1);
+  });
+
+  it("buy q from S and sell q back from S-q are perfectly symmetric", () => {
+    // The exploit fix: same stock segment traversed both ways -> identical avg.
+    const buyAvg = tradeAvgMidPrice(WIDE, 20, 10, "buy"); // 20 -> 10
+    const sellAvg = tradeAvgMidPrice(WIDE, 10, 10, "sell"); // 10 -> 20
+    expect(sellAvg).toBeCloseTo(buyAvg, 6);
+  });
+
+  it("clamps each unit so draining toward zero cannot exceed the ceiling", () => {
+    const NARROW: MarketCurve = {
+      basePrice: 100,
+      targetStock: 20,
+      k: 1,
+      floorMult: 0.5,
+      ceilingMult: 2.0, // ceiling price = 200
+    };
+    // Buying 8 from stock 8 walks levels 7.5..0.5; deep levels clamp to 200.
+    const avg = tradeAvgMidPrice(NARROW, 8, 8, "buy");
+    expect(avg).toBeLessThanOrEqual(200);
+    expect(avg).toBeGreaterThan(100);
   });
 });
