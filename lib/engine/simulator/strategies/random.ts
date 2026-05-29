@@ -5,6 +5,7 @@
 import type { RNG } from "@/lib/engine/universe-gen";
 import type { TradeStrategy, TradeDecision } from "./types";
 import { getReachable, getMarkets, getCargoUsed, getPrice } from "./helpers";
+import { STOCK_MIN } from "@/lib/constants/market-economy";
 import type { SimAdjacencyList } from "../pathfinding-cache";
 import type { SimPlayer, SimShip, SimWorld } from "../types";
 
@@ -26,7 +27,7 @@ export function createRandomStrategy(rng: RNG): TradeStrategy {
 
       const affordable = currentMarkets.filter((m) => {
         const price = getPrice(m);
-        return m.supply > 0 && price <= player.credits && price > 0;
+        return m.stock - STOCK_MIN > 0 && price <= player.credits && price > 0;
       });
 
       if (affordable.length === 0) return null;
@@ -34,7 +35,7 @@ export function createRandomStrategy(rng: RNG): TradeStrategy {
       const market = affordable[Math.floor(rng() * affordable.length)];
       const price = getPrice(market);
       const maxByCredits = Math.floor(player.credits / price);
-      const quantity = Math.min(maxByCredits, market.supply, availableCargo);
+      const quantity = Math.min(maxByCredits, Math.floor(market.stock - STOCK_MIN), availableCargo);
 
       if (quantity <= 0) return null;
 
