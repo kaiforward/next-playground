@@ -58,7 +58,12 @@ export function useNavigationState({
 
   const selectDestination = useCallback(
     (system: StarSystemInfo) => {
-      if (mode.phase !== "unit_selected") return;
+      // Allowed from both unit_selected and route_preview so the player can
+      // re-pick a destination any number of times before confirming. Both
+      // phases carry the same `unit` and `reachable` set.
+      if (mode.phase !== "unit_selected" && mode.phase !== "route_preview") {
+        return;
+      }
 
       const route = findShortestPath(
         mode.unit.systemId,

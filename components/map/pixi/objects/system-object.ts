@@ -18,7 +18,7 @@ const ECON_STYLE = new TextStyle({
 });
 
 const DOCKED_COUNT_STYLE = new TextStyle({
-  fontSize: 12,
+  fontSize: 13,
   fill: FLEET.pillContent,
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
   fontWeight: "700",
@@ -27,7 +27,7 @@ const DOCKED_COUNT_STYLE = new TextStyle({
 
 // Event-pill count uses a light fill — the pill body is dark (slate-800).
 const EVENT_COUNT_STYLE = new TextStyle({
-  fontSize: 11,
+  fontSize: 12,
   fill: TEXT_COLORS.primary,
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
   fontWeight: "700",
@@ -553,7 +553,7 @@ export class SystemObject extends Container {
     const bg = new Graphics();
     const icon = new Text({
       text: "",
-      style: new TextStyle({ fontSize: 12, fontFamily: "system-ui, -apple-system, sans-serif" }),
+      style: new TextStyle({ fontSize: 13, fontFamily: "system-ui, -apple-system, sans-serif" }),
       resolution: TEXT_RESOLUTION,
     });
     icon.anchor.set(0, 0.5);

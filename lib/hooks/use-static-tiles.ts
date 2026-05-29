@@ -83,5 +83,8 @@ export function useStaticTiles() {
     return result;
   }, [queries]);
 
-  return { systems, onViewportChange, active };
+  // `zoom` is the throttled camera zoom (leading + trailing edge above). Exposed
+  // so consumers — e.g. the dev zoom-debug overlay — can read it without adding
+  // a second 60fps Pixi→React state path.
+  return { systems, onViewportChange, active, zoom };
 }

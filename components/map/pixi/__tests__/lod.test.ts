@@ -75,15 +75,47 @@ describe("computeLOD — unchanged adjacent curves (regression guards)", () => {
 });
 
 describe("pill content staging", () => {
-  it("hides pill content while the system layer is still fading in", () => {
-    const lod = computeLOD(0.42); // crossfade just finished, names not yet in
+  it("hides pill content through the mid-zoom range (shapes only)", () => {
+    // Crossfade is long done but text hasn't started — pills read as bare colour.
+    const lod = computeLOD(0.6);
     expect(lod.showPillContent).toBe(false);
     expect(lod.pillContentAlpha).toBe(0);
   });
 
-  it("reveals pill content at closer zoom, in step with names", () => {
-    const near = computeLOD(0.6);
+  it("reveals pill content once the text band opens past 0.8", () => {
+    const near = computeLOD(0.85);
     expect(near.showPillContent).toBe(true);
     expect(near.pillContentAlpha).toBeGreaterThan(0);
+  });
+});
+
+describe("system text shares one 0.8 → 0.9 fade band", () => {
+  it("keeps all text hidden at and below 0.8", () => {
+    const lod = computeLOD(0.8);
+    expect(lod.showSystemNames).toBe(false);
+    expect(lod.showEconomyLabels).toBe(false);
+    expect(lod.showFuelLabels).toBe(false);
+    expect(lod.showPillContent).toBe(false);
+    expect(lod.systemNameAlpha).toBe(0);
+    expect(lod.detailAlpha).toBe(0);
+    expect(lod.pillContentAlpha).toBe(0);
+  });
+
+  it("fully reveals all text by 0.9", () => {
+    const lod = computeLOD(0.9);
+    expect(lod.showSystemNames).toBe(true);
+    expect(lod.showEconomyLabels).toBe(true);
+    expect(lod.showPillContent).toBe(true);
+    expect(lod.systemNameAlpha).toBe(1);
+    expect(lod.detailAlpha).toBe(1);
+    expect(lod.pillContentAlpha).toBe(1);
+  });
+
+  it("fades names, economy detail, and pill content in lockstep", () => {
+    const lod = computeLOD(0.85);
+    expect(lod.systemNameAlpha).toBeGreaterThan(0);
+    expect(lod.systemNameAlpha).toBeLessThan(1);
+    expect(lod.detailAlpha).toBe(lod.systemNameAlpha);
+    expect(lod.pillContentAlpha).toBe(lod.systemNameAlpha);
   });
 });
