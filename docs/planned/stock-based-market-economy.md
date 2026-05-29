@@ -137,9 +137,9 @@ Acknowledged as a significant effort, owned by the calibration harness (`npm run
 
 Per the 2–4 PR convention, shipped on a shared `feat/stock-based-economy` branch:
 
-1. **Engine + pricing core** — single-stock `calculatePrice`, integrated-slippage trade pricing, spread; pure functions with Vitest coverage. No DB changes yet.
-2. **Schema migration + services** — `StationMarket.stock`, `executeTrade` / engine `trade.ts`, the economy tick processor, the trade-flow processor. Live + simulator run the same processor bodies.
-3. **Calibration + UI** — recalibrate `targetStock` / rates against the simulator, update market & trade UI to stock language, update `docs/active/gameplay/economy.md` + `trading.md` + `trade-simulation.md`.
+1. **Engine + pricing core** *(shipped, PR #80)* — single-stock pricing curve, integrated-slippage trade pricing, spread; pure functions with Vitest coverage. No DB changes yet.
+2. **Schema migration + services + UI** *(shipped)* — `StationMarket.stock`, `executeTrade` / `executeConvoyTrade` / engine `trade.ts`, the economy + trade-flow processors, the simulator, and the market/trade UI (In Stock / Buy / Sell / stock-based max). Live + simulator run the same processor bodies. `targetStock` / initial stock are mechanically derived from the legacy equilibrium band.
+3. **Calibration + docs** — recalibrate `targetStock` / rates against the simulator (`npm run simulate`), then write the `docs/active/gameplay/economy.md` + `trading.md` + `trade-simulation.md` updates. **The UI moved to stock language in PR 2, so PR 3 is calibration + docs only.**
 
 ---
 
