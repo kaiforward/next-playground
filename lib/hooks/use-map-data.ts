@@ -49,9 +49,9 @@ export interface SystemNodeData {
   navigationState?: NavigationNodeState;
   activeEvents?: SystemEventInfo[];
   /** Price-ramp tint for the active heatmap good, or null when none/overlay off. */
-  priceTint?: number | null;
-  /** Signed % deviation from base price for the active heatmap good. */
-  priceDelta?: number | null;
+  priceTint: number | null;
+  /** Signed % deviation from base price for the active heatmap good, or null when none. */
+  priceDelta: number | null;
 }
 
 export interface TransitUnit {

@@ -186,7 +186,7 @@ Skip this section if:
 | Security | At least one file under `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, OR any `.ts`/`.tsx` file containing `requirePlayer`, `getServerSession`, or `session.` (grep the diff body, restricted to source files — never trigger on markdown/docs that merely *describe* these keywords) |
 | Silent failures | At least one `source` file |
 | User journey | At least one file under `app/(game)/`, `app/(auth)/`, `components/` |
-| Tests | At least one source file under `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/` |
+| Tests | **Any** of: (a) a source file under `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/`; **or** (b) a changed test file (path under `**/__tests__/**` or matching `*.test.{ts,tsx}`); **or** (c) a changed pure-logic `.ts` module (not `.tsx`) anywhere that has a co-located test — i.e. a `__tests__/` sibling dir or a `<name>.test.ts` next to it. Rationale: testable logic isn't confined to the `lib/` dirs (e.g. `components/map/pixi/lod.ts` is pure LOD math with `__tests__/lod.test.ts`), and a changed test file should always be reviewed for meaningfulness even when its source sits outside `lib/`. |
 | Performance | At least one `source` file |
 
 Apply `--only` filter on top of the matrix (if `--only=security,db-integrity`, only those two run).

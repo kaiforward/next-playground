@@ -57,6 +57,22 @@ interface EventPill {
   count: Text;
 }
 
+/** The LODState fields setLOD() actually reads. Kept in sync with setLOD's body
+ *  so the per-frame guard can skip redundant reapplies when only unrelated LOD
+ *  bands (territory alpha, region labels, …) changed. */
+function lodVisuallyEqual(a: LODState, b: LODState): boolean {
+  return (
+    a.showSystemNames === b.showSystemNames &&
+    a.systemNameAlpha === b.systemNameAlpha &&
+    a.showEconomyLabels === b.showEconomyLabels &&
+    a.detailAlpha === b.detailAlpha &&
+    a.showPillContent === b.showPillContent &&
+    a.pillContentAlpha === b.pillContentAlpha &&
+    a.showGlow === b.showGlow &&
+    a.systemDotScale === b.systemDotScale
+  );
+}
+
 export class SystemObject extends Container {
   systemId = "";
 
@@ -92,6 +108,13 @@ export class SystemObject extends Container {
   private hasEventPill = false;
   private eventHasCount = false;
 
+  // setLOD runs every frame for every visible system; its output depends only
+  // on the incoming LODState plus the tracked state above (all mutated in
+  // update()). `lodDirty` is set whenever update() runs so the next setLOD
+  // reapplies; otherwise an unchanged LOD short-circuits the per-frame writes.
+  private appliedLod: LODState | null = null;
+  private lodDirty = true;
+
   constructor() {
     super();
 
@@ -124,6 +147,9 @@ export class SystemObject extends Container {
     this.nameLabel = new Text({ text: "", style: NAME_STYLE, resolution: TEXT_RESOLUTION });
     this.nameLabel.anchor.set(0.5, 0);
     this.addChild(this.nameLabel);
+    // Label backing + text sit at a fixed offset below the glyph — set once.
+    this.nameLabel.position.set(0, LABEL.offsetY);
+    this.nameBg.position.set(0, LABEL.offsetY);
 
     // Economy label (same backing treatment)
     this.econBg = new Graphics();
@@ -168,8 +194,8 @@ export class SystemObject extends Container {
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
     const eventsChanged = eventTypes !== this.currentEventTypes.join(",");
     const priceChanged =
-      (data.priceTint ?? null) !== this.currentPriceTint ||
-      (data.priceDelta ?? null) !== this.currentPriceDelta;
+      data.priceTint !== this.currentPriceTint ||
+      data.priceDelta !== this.currentPriceDelta;
 
     const isUnknown = data.visibility === "unknown";
 
@@ -196,8 +222,8 @@ export class SystemObject extends Container {
     // Halo is the overlay lens: it owns its own draw path so navigation state
     // (which used to redraw the glow) can't clobber the price tint.
     if (econChanged || visibilityChanged || priceChanged) {
-      this.currentPriceTint = data.priceTint ?? null;
-      this.currentPriceDelta = data.priceDelta ?? null;
+      this.currentPriceTint = data.priceTint;
+      this.currentPriceDelta = data.priceDelta;
       this.redrawHalo(data, isUnknown);
       this.redrawPricePill();
     }
@@ -209,21 +235,21 @@ export class SystemObject extends Container {
     }
 
     // Name — only update text + backing when changed (avoids Pixi texture
-    // regeneration for 600+ systems)
+    // regeneration for 600+ systems). The economy line stacks under the name
+    // *backing*, so its Y only shifts when the name's measured height changes —
+    // recompute it here, inside the same guard, not every update.
     if (data.name !== this.currentName) {
       this.currentName = data.name;
       this.nameLabel.text = data.name;
       this.drawLabelBg(this.nameBg, this.nameLabel);
-    }
-    this.nameLabel.position.set(0, LABEL.offsetY);
-    this.nameBg.position.set(0, LABEL.offsetY);
-    this.nameLabel.alpha = isUnknown ? 0.3 : 1;
 
-    // Stack the economy line under the name *backing* with a real gap — use the
-    // name's measured height (≈14), not its 11px font size, or the two overlap.
-    const econY = LABEL.offsetY + this.nameLabel.height + LABEL.bgPadY * 2 + LABEL.lineGap;
-    this.econLabel.position.set(0, econY);
-    this.econBg.position.set(0, econY);
+      // Use the name's measured height (≈14), not its 11px font size, or the
+      // two labels overlap.
+      const econY = LABEL.offsetY + this.nameLabel.height + LABEL.bgPadY * 2 + LABEL.lineGap;
+      this.econLabel.position.set(0, econY);
+      this.econBg.position.set(0, econY);
+    }
+    this.nameLabel.alpha = isUnknown ? 0.3 : 1;
 
     // Unknown systems: hide economy label (ship/price/event pills gated in setLOD)
     this.econLabel.visible = !isUnknown;
@@ -252,6 +278,9 @@ export class SystemObject extends Container {
       this.currentEventTypes = eventTypes.split(",").filter(Boolean);
       this.redrawEventPill(isUnknown ? undefined : data.activeEvents, data.navigationState);
     }
+
+    // Tracked state may have changed — force the next setLOD to reapply.
+    this.lodDirty = true;
   }
 
   /** Draw the soft-body halo — the overlay lens. Price ramp when price data is
@@ -361,6 +390,15 @@ export class SystemObject extends Container {
 
   /** Apply LOD-based visibility. Called per frame from layer. */
   setLOD(lod: LODState) {
+    // Idle-frame fast path: nothing in update() changed and the LOD bands this
+    // method reads are identical to last frame — skip the ~25 display-object
+    // writes (the player is neither zooming nor moving fleets).
+    if (!this.lodDirty && this.appliedLod && lodVisuallyEqual(this.appliedLod, lod)) {
+      return;
+    }
+    this.appliedLod = lod;
+    this.lodDirty = false;
+
     const isUnknown = this.currentVisibility === "unknown";
 
     const nameAlpha = lod.systemNameAlpha * (isUnknown ? 0.3 : 1);
