@@ -86,6 +86,16 @@ export const EVENT_DOT_COLORS: Record<SystemEventInfo["color"], number> = {
   slate:  0x94a3b8,
 };
 
+// Event icon by colour bucket (SystemEventInfo.color already categorises).
+export const EVENT_ICON: Record<SystemEventInfo["color"], string> = {
+  red:    "⚔",   // conflict / raid
+  amber:  "▲",   // boom / shock
+  purple: "✦",   // anomaly / precursor
+  green:  "★",   // festival / boon
+  blue:   "⚛",   // tech
+  slate:  "●",   // generic
+};
+
 // ── Point cloud (universe view) ─────────────────────────────────
 
 export const POINT_CLOUD = {
@@ -119,6 +129,63 @@ export const SIZES = {
   fuelLabelSize:      10,
   dashLength:          6,
   dashGap:             4,
+} as const;
+
+// ── Glyph radial budget (world units, glyph-local) ───────────────
+// Each concentric element owns a fixed radius band so price, gateway, and
+// navigation indicators never collide. See docs map-layer-reconciliation §2.
+export const GLYPH = {
+  coreRadius:        12,   // economy core (unchanged, matches SIZES.systemCoreRadius)
+  haloRadius:        20,   // soft-body lens (was the 40px glow — pulled in)
+  haloAlpha:         0.16, // economy default
+  haloPriceAlpha:    0.5,  // when the halo carries the price ramp
+  gatewayRingRadius: 28,
+  gatewayRingWidth:  3,
+  navRingRadius:     34,   // outermost, dashed
+  navRingWidth:      3,
+} as const;
+
+// Gateway: reserved magenta, used by nothing else on the map.
+export const GATEWAY_COLOR = 0xe879f9; // fuchsia-400
+
+// ── Unified corner-pill geometry (all four corners share this) ───
+export const PILL = {
+  height:    18,
+  corner:    5,
+  padX:      5,
+  gap:       3,   // vertical gap when stacking (ships+convoys)
+  offset:    4,   // radial gap between pill edge and core
+  glyphSize: 8,   // inner ship chevron / icon box
+} as const;
+
+// ── Corner-pill anchors (top-left fleet, top-right price, bottom-right event) ─
+// Each pill's inner corner (the one nearest the core) sits on the 45° diagonal,
+// just outside the halo — so pills read as orbiting the glyph rather than
+// crowding the core. The vertical anchor is the horizontal one plus half a pill
+// height, because pills are vertically centred on their anchor.
+const PILL_CORNER_RADIUS = 22;                          // > GLYPH.haloRadius (20)
+const PILL_CORNER_XY = PILL_CORNER_RADIUS / Math.SQRT2; // ≈ 15.6 per axis
+export const PILL_ANCHOR = {
+  x:       PILL_CORNER_XY,                        // inner vertical edge of L/R pills
+  yTop:    -(PILL_CORNER_XY + PILL.height / 2),   // top pills (anchor centre)
+  yBottom: PILL_CORNER_XY + PILL.height / 2,      // bottom pills (anchor centre)
+} as const;
+
+// ── System label backing (name + economy type) ──────────────────
+// The labels sit below the glyph and can fall behind the nav ring / halo, so
+// each gets a semi-transparent black backing for legibility. They're pushed
+// far enough down to clear the bottom corner-pills: the event pill (and the
+// mirror space a bottom-left pill would use) reaches `yBottom + height/2` below
+// centre, so the name's top starts a few px past that.
+const BOTTOM_PILL_REACH = PILL_ANCHOR.yBottom + PILL.height / 2; // ≈ 34
+export const LABEL = {
+  bgFill:   0x000000,
+  bgAlpha:  0.55,
+  bgPadX:   4,
+  bgPadY:   1.5,
+  bgCorner: 3,
+  offsetY:  BOTTOM_PILL_REACH + 4, // ≈ 38 — name top clears the bottom pills
+  lineGap:  4,                     // gap between the name and economy backings
 } as const;
 
 // ── Animation ────────────────────────────────────────────────────
