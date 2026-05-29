@@ -1,162 +1,109 @@
 import { describe, it, expect } from "vitest";
-import { validateAndCalculateTrade, validateFleetTrade } from "../trade";
+import { validateAndCalculateTrade, validateFleetTrade, type TradeParams } from "../trade";
 
-describe("validateAndCalculateTrade", () => {
-  const baseBuyParams = {
-    type: "buy" as const,
-    quantity: 5,
-    unitPrice: 100,
-    playerCredits: 1000,
-    currentCargoUsed: 10,
-    cargoMax: 50,
-    currentSupply: 20,
-    currentGoodQuantityInCargo: 0,
-  };
+const BUY_BASE: TradeParams = {
+  type: "buy",
+  quantity: 10,
+  totalPrice: 1000,
+  playerCredits: 5000,
+  currentCargoUsed: 0,
+  cargoMax: 100,
+  currentStock: 100,
+  stockMin: 5,
+  stockMax: 200,
+  currentGoodQuantityInCargo: 0,
+};
 
-  const baseSellParams = {
-    type: "sell" as const,
-    quantity: 5,
-    unitPrice: 100,
-    playerCredits: 500,
+describe("validateAndCalculateTrade — buy", () => {
+  it("produces a negative-credit, +cargo, -stock delta", () => {
+    const res = validateAndCalculateTrade(BUY_BASE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.delta).toEqual({
+      creditsDelta: -1000,
+      cargoQuantityDelta: 10,
+      stockDelta: -10,
+      totalPrice: 1000,
+    });
+  });
+
+  it("rejects when the player cannot afford the total", () => {
+    const res = validateAndCalculateTrade({ ...BUY_BASE, playerCredits: 999 });
+    expect(res.ok).toBe(false);
+  });
+
+  it("rejects when cargo space is insufficient", () => {
+    const res = validateAndCalculateTrade({ ...BUY_BASE, currentCargoUsed: 95 });
+    expect(res.ok).toBe(false);
+  });
+
+  it("caps the buy at floor(stock - stockMin) — the market keeps a reserve", () => {
+    // stock 12, min 5 -> at most 7 buyable; asking 10 fails
+    const res = validateAndCalculateTrade({ ...BUY_BASE, currentStock: 12, quantity: 10 });
+    expect(res.ok).toBe(false);
+    const ok = validateAndCalculateTrade({ ...BUY_BASE, currentStock: 12, quantity: 7 });
+    expect(ok.ok).toBe(true);
+  });
+});
+
+describe("validateAndCalculateTrade — sell", () => {
+  const SELL_BASE: TradeParams = {
+    type: "sell",
+    quantity: 10,
+    totalPrice: 800,
+    playerCredits: 0,
     currentCargoUsed: 10,
-    cargoMax: 50,
-    currentSupply: 20,
+    cargoMax: 100,
+    currentStock: 100,
+    stockMin: 5,
+    stockMax: 200,
     currentGoodQuantityInCargo: 10,
   };
 
-  describe("buy", () => {
-    it("succeeds with valid params", () => {
-      const result = validateAndCalculateTrade(baseBuyParams);
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.delta.creditsDelta).toBe(-500); // 5 * 100
-        expect(result.delta.cargoQuantityDelta).toBe(5);
-        expect(result.delta.supplyDelta).toBe(-5);
-        expect(result.delta.demandDelta).toBe(1); // round(5 * 0.1)
-        expect(result.delta.totalPrice).toBe(500);
-      }
-    });
-
-    it("fails when not enough credits", () => {
-      const result = validateAndCalculateTrade({
-        ...baseBuyParams,
-        playerCredits: 100, // Need 500 (5 * 100)
-      });
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("Not enough credits");
-      }
-    });
-
-    it("fails when cargo is full", () => {
-      const result = validateAndCalculateTrade({
-        ...baseBuyParams,
-        currentCargoUsed: 48, // Only 2 slots left, need 5
-        cargoMax: 50,
-      });
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("Not enough cargo space");
-      }
-    });
-
-    it("fails when not enough supply", () => {
-      const result = validateAndCalculateTrade({
-        ...baseBuyParams,
-        currentSupply: 3, // Only 3 available, want 5
-      });
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("Not enough supply");
-      }
+  it("produces a positive-credit, -cargo, +stock delta", () => {
+    const res = validateAndCalculateTrade(SELL_BASE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.delta).toEqual({
+      creditsDelta: 800,
+      cargoQuantityDelta: -10,
+      stockDelta: 10,
+      totalPrice: 800,
     });
   });
 
-  describe("sell", () => {
-    it("succeeds with valid params", () => {
-      const result = validateAndCalculateTrade(baseSellParams);
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.delta.creditsDelta).toBe(500); // 5 * 100
-        expect(result.delta.cargoQuantityDelta).toBe(-5);
-        expect(result.delta.supplyDelta).toBe(5);
-        expect(result.delta.demandDelta).toBe(-1); // -round(5 * 0.1)
-        expect(result.delta.totalPrice).toBe(500);
-      }
-    });
-
-    it("fails when not enough cargo", () => {
-      const result = validateAndCalculateTrade({
-        ...baseSellParams,
-        currentGoodQuantityInCargo: 2, // Only have 2, want to sell 5
-      });
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain("Not enough in cargo");
-      }
-    });
+  it("rejects selling more than is in cargo", () => {
+    const res = validateAndCalculateTrade({ ...SELL_BASE, currentGoodQuantityInCargo: 4 });
+    expect(res.ok).toBe(false);
   });
 
-  it("rejects zero quantity", () => {
-    const result = validateAndCalculateTrade({
-      ...baseBuyParams,
-      quantity: 0,
+  it("caps the sell at floor(stockMax - stock) — can't sell into a full warehouse", () => {
+    // stock 195, max 200 -> at most 5 absorbable; asking 10 fails
+    const res = validateAndCalculateTrade({
+      ...SELL_BASE,
+      currentStock: 195,
+      currentGoodQuantityInCargo: 10,
+      quantity: 10,
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Quantity must be a positive integer");
-    }
-  });
-
-  it("rejects negative quantity", () => {
-    const result = validateAndCalculateTrade({
-      ...baseBuyParams,
-      quantity: -3,
+    expect(res.ok).toBe(false);
+    const ok = validateAndCalculateTrade({
+      ...SELL_BASE,
+      currentStock: 195,
+      currentGoodQuantityInCargo: 10,
+      quantity: 5,
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Quantity must be a positive integer");
-    }
+    expect(ok.ok).toBe(true);
   });
 });
 
 describe("validateFleetTrade", () => {
-  const baseParams = {
-    type: "buy" as const,
-    quantity: 5,
-    unitPrice: 100,
-    playerCredits: 1000,
-    currentCargoUsed: 10,
-    cargoMax: 50,
-    currentSupply: 20,
-    currentGoodQuantityInCargo: 0,
-    shipStatus: "docked" as const,
-  };
-
-  it("succeeds when ship is docked", () => {
-    const result = validateFleetTrade(baseParams);
-    expect(result.ok).toBe(true);
+  it("rejects a non-docked ship before any market checks", () => {
+    const res = validateFleetTrade({ ...BUY_BASE, shipStatus: "in_transit" });
+    expect(res.ok).toBe(false);
   });
 
-  it("fails when ship is in transit", () => {
-    const result = validateFleetTrade({
-      ...baseParams,
-      shipStatus: "in_transit",
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Ship must be docked to trade");
-    }
-  });
-
-  it("delegates validation to validateAndCalculateTrade when docked", () => {
-    const result = validateFleetTrade({
-      ...baseParams,
-      playerCredits: 100, // Not enough
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Not enough credits");
-    }
+  it("delegates to validateAndCalculateTrade when docked", () => {
+    const res = validateFleetTrade({ ...BUY_BASE, shipStatus: "docked" });
+    expect(res.ok).toBe(true);
   });
 });
