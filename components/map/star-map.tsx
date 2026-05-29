@@ -11,6 +11,7 @@ import { CompactTransitCard } from "@/components/map/compact-transit-card";
 import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
+import { MapZoomDebug } from "@/components/map/map-zoom-debug";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
@@ -52,7 +53,7 @@ export function StarMap({
   events = [],
 }: StarMapProps) {
   // ── Progressive data loading ────────────────────────────────────
-  const { systems: tileSystems, onViewportChange, active } = useStaticTiles();
+  const { systems: tileSystems, onViewportChange, active, zoom } = useStaticTiles();
   const { visibleSystemIds } = useVisibility();
   const { dynamicSystems } = useDynamicData(active);
 
@@ -245,8 +246,10 @@ export function StarMap({
       // Guard: viewport detail hasn't loaded yet — name is empty placeholder
       if (!fullSystem || fullSystem.name === "") return;
 
-      // Navigation logic
-      if (mode.phase === "unit_selected") {
+      // Navigation logic — destination selection stays live in both
+      // unit_selected and route_preview so the player can freely re-pick a
+      // destination (re-previewing the route) until they confirm.
+      if (mode.phase === "unit_selected" || mode.phase === "route_preview") {
         if (!mode.reachable.has(system.id) && system.id !== mode.unit.systemId) {
           return;
         }
@@ -257,8 +260,6 @@ export function StarMap({
         navigation.selectDestination(fullSystem);
         return;
       }
-
-      if (mode.phase === "route_preview") return;
 
       // Default mode — open system detail panel
       selectSystem(fullSystem);
@@ -322,6 +323,9 @@ export function StarMap({
         selectedTransitId={selectedTransitId}
         onTransitClick={onTransitClick}
       />
+
+      {/* Dev-only zoom/LOD readout for tuning pixi/lod.ts thresholds. */}
+      {process.env.NODE_ENV === "development" && <MapZoomDebug zoom={zoom} />}
 
       {/* Price heatmap data fetcher — only mounts when overlay+good are active. */}
       {heatmapActive && priceGoodId && (
