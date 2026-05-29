@@ -63,6 +63,28 @@ describe("map-session", () => {
       expect(overlays?.tradeFlow).toBe(true);
       expect("politicalTerritory" in (overlays ?? {})).toBe(false);
     });
+
+    it("keeps fleet and events when present, including an explicit false", () => {
+      // `fleet`/`events` default ON, so an explicit `false` must round-trip —
+      // a dropped key would silently revert to the default on hydrate.
+      sessionStorage.setItem(
+        "stellarTrader:mapState",
+        JSON.stringify({ overlays: { fleet: false, events: true } }),
+      );
+      const overlays = getMapSessionState()?.overlays;
+      expect(overlays?.fleet).toBe(false);
+      expect(overlays?.events).toBe(true);
+    });
+
+    it("drops a non-boolean fleet value during parse", () => {
+      sessionStorage.setItem(
+        "stellarTrader:mapState",
+        JSON.stringify({ overlays: { fleet: "yes" } }),
+      );
+      // Non-boolean is ignored; with no valid overlay keys left, overlays
+      // collapses to undefined (same as the legacy-only case above).
+      expect(getMapSessionState()?.overlays).toBeUndefined();
+    });
   });
 
   describe("mode persistence", () => {
