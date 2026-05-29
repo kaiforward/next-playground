@@ -96,6 +96,64 @@ describe("validateAndCalculateTrade — sell", () => {
   });
 });
 
+describe("validateAndCalculateTrade — quantity guard", () => {
+  const SELL_BASE: TradeParams = {
+    type: "sell",
+    quantity: 10,
+    totalPrice: 800,
+    playerCredits: 0,
+    currentCargoUsed: 10,
+    cargoMax: 100,
+    currentStock: 100,
+    stockMin: 5,
+    stockMax: 200,
+    currentGoodQuantityInCargo: 10,
+  };
+
+  it("rejects a zero quantity", () => {
+    expect(validateAndCalculateTrade({ ...BUY_BASE, quantity: 0 }).ok).toBe(false);
+    expect(validateAndCalculateTrade({ ...SELL_BASE, quantity: 0 }).ok).toBe(false);
+  });
+
+  it("rejects a negative quantity", () => {
+    expect(validateAndCalculateTrade({ ...BUY_BASE, quantity: -1 }).ok).toBe(false);
+    expect(validateAndCalculateTrade({ ...SELL_BASE, quantity: -1 }).ok).toBe(false);
+  });
+
+  it("rejects a non-integer quantity", () => {
+    expect(validateAndCalculateTrade({ ...BUY_BASE, quantity: 1.5 }).ok).toBe(false);
+  });
+});
+
+describe("validateAndCalculateTrade — stock boundaries", () => {
+  it("a max buy drains stock exactly to stockMin (the reserve floor)", () => {
+    // stock 12, min 5 → 7 buyable; buying all 7 lands stock at the floor.
+    const res = validateAndCalculateTrade({ ...BUY_BASE, currentStock: 12, quantity: 7 });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(12 + res.delta.stockDelta).toBe(5); // == stockMin
+  });
+
+  it("a max sell fills stock exactly to stockMax (can't overfill the warehouse)", () => {
+    // stock 195, max 200 → 5 absorbable; selling all 5 lands stock at the ceiling.
+    const res = validateAndCalculateTrade({
+      type: "sell",
+      quantity: 5,
+      totalPrice: 400,
+      playerCredits: 0,
+      currentCargoUsed: 5,
+      cargoMax: 100,
+      currentStock: 195,
+      stockMin: 5,
+      stockMax: 200,
+      currentGoodQuantityInCargo: 5,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(195 + res.delta.stockDelta).toBe(200); // == stockMax
+  });
+});
+
 describe("validateFleetTrade", () => {
   it("rejects a non-docked ship before any market checks", () => {
     const res = validateFleetTrade({ ...BUY_BASE, shipStatus: "in_transit" });

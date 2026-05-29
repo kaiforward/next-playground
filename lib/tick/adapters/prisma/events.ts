@@ -203,6 +203,7 @@ export class PrismaEventsWorld implements EventsWorld {
     for (const shock of shocks) {
       const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
       if (!market) continue;
+      if (!isFinite(shock.value)) continue;
 
       const delta =
         shock.mode === "percentage" ? Math.round(market.stock * shock.value) : shock.value;

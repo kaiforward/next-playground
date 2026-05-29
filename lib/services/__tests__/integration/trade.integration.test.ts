@@ -2,6 +2,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
+import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
+import { getSpread } from "@/lib/constants/market-economy";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+
+// Recompute the exact quote the service should charge, independently of the
+// trade's own outcome (so a pricing bug can't hide behind a derived assertion).
+// The agri system is Federation-owned and the player starts at Neutral standing
+// (rep multiplier 1.0), so totalPrice is the raw quote.
+async function expectedQuote(
+  goodId: string,
+  stock: number,
+  quantity: number,
+  type: "buy" | "sell",
+) {
+  const good = await prisma.good.findUniqueOrThrow({ where: { id: goodId } });
+  const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.name;
+  const curve = curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling);
+  const spread = getSpread(GOVERNMENT_TYPES.federation);
+  return quoteTrade(curve, stock, quantity, type, spread);
+}
 
 // Mock the prisma import so executeTrade uses our test client
 const { prisma } = useIntegrationDb();
@@ -34,6 +55,9 @@ describe("executeTrade (integration)", () => {
     });
     expect(marketBefore).not.toBeNull();
 
+    // Pre-compute the exact total the service should charge for this buy.
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "buy");
+
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
       goodId: foodGoodId,
@@ -44,12 +68,9 @@ describe("executeTrade (integration)", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // Credits deducted by the quoted total; updatedMarket reports the new stock.
-    const spent = result.data.updatedMarket.buyPrice; // single-unit buy price, sanity-checked below
-    expect(spent).toBeGreaterThan(0);
-
+    // Credits deducted by exactly the quoted total.
     const playerAfter = await prisma.player.findUnique({ where: { id: player.playerId } });
-    expect(playerAfter!.credits).toBeLessThan(5000);
+    expect(playerAfter!.credits).toBe(5000 - quote.totalPrice);
 
     // Cargo added
     const cargo = await prisma.cargoItem.findFirst({ where: { shipId, goodId: foodGoodId } });
@@ -69,9 +90,9 @@ describe("executeTrade (integration)", () => {
     });
     expect(history).not.toBeNull();
     expect(history!.quantity).toBe(5);
-    expect(history!.price).toBeGreaterThan(0);
-    // History stores the per-unit price (round of total / quantity).
-    expect(history!.price).toBe(Math.round((5000 - playerAfter!.credits) / 5));
+    // History stores the per-unit price = round(quoted total / quantity),
+    // pinned to the independently-computed quote (not derived from credits).
+    expect(history!.price).toBe(Math.round(quote.totalPrice / 5));
   });
 
   it("sell succeeds: credits added, cargo removed, market stock increased", async () => {
@@ -86,6 +107,9 @@ describe("executeTrade (integration)", () => {
       where: { stationId_goodId: { stationId, goodId: foodGoodId } },
     });
 
+    // Pre-compute the exact proceeds the service should pay for this sell.
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "sell");
+
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
       goodId: foodGoodId,
@@ -95,9 +119,9 @@ describe("executeTrade (integration)", () => {
 
     expect(result.ok).toBe(true);
 
-    // Credits added.
+    // Credits increased by exactly the quoted proceeds.
     const playerAfter = await prisma.player.findUnique({ where: { id: player.playerId } });
-    expect(playerAfter!.credits).toBeGreaterThan(5000);
+    expect(playerAfter!.credits).toBe(5000 + quote.totalPrice);
 
     // Cargo reduced.
     const cargo = await prisma.cargoItem.findFirst({ where: { shipId, goodId: foodGoodId } });

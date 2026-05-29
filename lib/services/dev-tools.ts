@@ -285,18 +285,28 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
       Object.entries(GOODS).map(([key, def]) => [def.name, key]),
     );
 
-    let resetCount = 0;
+    // Collect (id, stock) pairs and bulk-write with a single unnest() UPDATE.
+    // A per-row update loop blows the 30s tx timeout at 10K scale (~60–120K
+    // rows). Mirrors PrismaEconomyWorld.applyMarketUpdates.
+    const ids: string[] = [];
+    const stocks: number[] = [];
     for (const m of markets) {
       const econ = toEconomyType(m.station.system.economyType);
       const goodKey = goodKeyByName.get(m.good.name) ?? m.good.name;
-      await tx.stationMarket.update({
-        where: { id: m.id },
-        data: { stock: getInitialStock(econ, goodKey) },
-      });
-      resetCount++;
+      ids.push(m.id);
+      stocks.push(getInitialStock(econ, goodKey));
     }
 
-    return { marketsReset: resetCount, eventsCleared: eventCount };
+    if (ids.length > 0) {
+      await tx.$executeRaw`
+        UPDATE "StationMarket" AS sm
+        SET "stock" = batch."stock"
+        FROM unnest(${ids}::text[], ${stocks}::double precision[])
+          AS batch("id", "stock")
+        WHERE sm."id" = batch."id"`;
+    }
+
+    return { marketsReset: ids.length, eventsCleared: eventCount };
   });
 
   return { ok: true, data: result };

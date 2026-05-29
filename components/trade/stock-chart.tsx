@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { MarketEntry } from "@/lib/types/game";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ThemedBarChart } from "@/components/ui/themed-bar-chart";
@@ -11,7 +12,10 @@ interface StockChartProps {
 }
 
 export function StockChart({ entries }: StockChartProps) {
-  const data = entries.map((e) => ({ name: e.goodName, stock: e.stock }));
+  const data = useMemo(
+    () => entries.map((e) => ({ name: e.goodName, stock: e.stock })),
+    [entries],
+  );
 
   return (
     <Card variant="bordered" padding="md">

@@ -284,6 +284,14 @@ model Good {
   tradeMissions TradeMission[]
 }
 
+// Stock-based economy (PR 2 cutover): a single `stock` axis replaced the legacy
+// `supply` + `demand` columns. This was applied via `prisma db push` (no
+// migration file), which is fine for the dev workflow where the DB is reseeded
+// (`npx prisma db seed`) after a schema change.
+//
+// MIGRATION NOTE: any environment with live data (staging/prod) MUST run a real
+// migration that derives `stock` from the old `supply`/`demand` values BEFORE
+// those columns are dropped — `db push` would discard player-facing market state.
 model StationMarket {
   id        String   @id @default(cuid())
   stationId String

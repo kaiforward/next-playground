@@ -179,6 +179,7 @@ export class InMemoryEventsWorld implements EventsWorld {
     for (const shock of shocks) {
       const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
       if (!market) continue;
+      if (!isFinite(shock.value)) continue;
       const delta =
         shock.mode === "percentage"
           ? Math.round(market.stock * shock.value)
@@ -186,8 +187,14 @@ export class InMemoryEventsWorld implements EventsWorld {
       // Single-stock model: a "supply" shock moves stock directly; a "demand"
       // shock moves it inversely (more demand → scarcer → lower stock).
       const signed = shock.parameter === "supply" ? delta : -delta;
-      market.stock = Math.max(minLevel, Math.min(maxLevel, market.stock + signed));
+      // Accumulate unclamped, then clamp once below — parity with the Prisma
+      // adapter, which only clamps at write time. Clamping per-shock here would
+      // diverge when ≥2 shocks hit the same market in one tick.
+      market.stock += signed;
       touched.add(market);
+    }
+    for (const market of touched) {
+      market.stock = Math.max(minLevel, Math.min(maxLevel, market.stock));
     }
     return Promise.resolve(touched.size);
   }

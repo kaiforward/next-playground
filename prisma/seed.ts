@@ -154,15 +154,13 @@ async function main() {
     const stationId = created.station!.id;
     const econ = toEconomyType(sys.economyType);
 
-    for (const [goodKey, goodRec] of Object.entries(goodRecords)) {
-      await prisma.stationMarket.create({
-        data: {
-          stationId,
-          goodId: goodRec.id,
-          stock: getInitialStock(econ, goodKey),
-        },
-      });
-    }
+    await prisma.stationMarket.createMany({
+      data: Object.entries(goodRecords).map(([goodKey, goodRec]) => ({
+        stationId,
+        goodId: goodRec.id,
+        stock: getInitialStock(econ, goodKey),
+      })),
+    });
   }
   const totalTraits = universe.systems.reduce((sum, s) => sum + s.traits.length, 0);
   console.log(
