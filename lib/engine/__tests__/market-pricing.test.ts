@@ -107,6 +107,16 @@ describe("tradeAvgMidPrice", () => {
     expect(sellAvg).toBeCloseTo(buyAvg, 6);
   });
 
+  it("sell from stock 0 prices the first unit at level 0.5 (raw curve), not the stock<=0 ceiling", () => {
+    // Reachable state: a station emptied to 0 stock, player sells into it.
+    // High ceiling so level 0.5 stays on the raw curve instead of clamping.
+    const HIGH: MarketCurve = { basePrice: 100, targetStock: 20, k: 1, floorMult: 0.2, ceilingMult: 50 };
+    // The single unit sells at level 0 + 0.5 = 0.5: raw 100 * 20/0.5 = 4000.
+    expect(tradeAvgMidPrice(HIGH, 0, 1, "sell")).toBeCloseTo(4000, 6);
+    // Distinct from the stock<=0 branch, which returns the ceiling (50 * 100 = 5000).
+    expect(midPriceAt(HIGH, 0)).toBe(5000);
+  });
+
   it("clamps each unit so draining toward zero cannot exceed the ceiling", () => {
     const NARROW: MarketCurve = {
       basePrice: 100,

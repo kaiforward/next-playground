@@ -48,6 +48,13 @@ export function spotPrice(curve: MarketCurve, stock: number): number {
  *
  *  - buy:  stock decreases; units priced at stock-0.5, stock-1.5, ...
  *  - sell: stock increases; units priced at stock+0.5, stock+1.5, ...
+ *
+ * O(quantity): one `midPriceAt` (a Math.pow) per unit. Fine for cargo-bounded
+ * player trades, but if the simulator's bot loop ever calls this per-good
+ * per-market per-tick, replace the loop with the closed-form integral of the
+ * power-law curve (O(1)). Any such replacement MUST reproduce the discrete
+ * 0.5-step midpoint sampling and the floor/ceiling clamp exactly, or it breaks
+ * the buy/sell-back symmetry that makes the round-trip exploit unprofitable.
  */
 export function tradeAvgMidPrice(
   curve: MarketCurve,
