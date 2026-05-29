@@ -58,17 +58,6 @@ export function MarketTable({
       ),
     },
     {
-      key: "currentPrice",
-      label: "Current Price",
-      sortable: true,
-      getValue: (row) => row.currentPrice,
-      render: (row) => (
-        <span className="font-semibold text-text-primary">
-          {formatCredits(row.currentPrice)}
-        </span>
-      ),
-    },
-    {
       key: "stock",
       label: "In Stock",
       sortable: true,
