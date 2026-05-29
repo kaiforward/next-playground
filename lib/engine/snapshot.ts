@@ -1,10 +1,9 @@
-import { calculatePrice } from "./pricing";
+import { spotPrice, curveForGood } from "./market-pricing";
 
 export interface MarketInput {
   systemId: string;
   goodId: string;
-  supply: number;
-  demand: number;
+  stock: number;
   basePrice: number;
   priceFloor?: number;
   priceCeiling?: number;
@@ -17,8 +16,7 @@ export interface PriceHistoryEntry {
 
 /**
  * Build one PriceHistoryEntry per system from a flat array of market rows.
- * Groups markets by systemId, computes price for each good via calculatePrice.
- * Pure function — no DB dependency.
+ * Groups by systemId, computes each good's spot price from its stock. Pure.
  */
 export function buildPriceEntry(
   markets: MarketInput[],
@@ -27,18 +25,16 @@ export function buildPriceEntry(
   const bySystem = new Map<string, MarketInput[]>();
   for (const m of markets) {
     const arr = bySystem.get(m.systemId);
-    if (arr) {
-      arr.push(m);
-    } else {
-      bySystem.set(m.systemId, [m]);
-    }
+    if (arr) arr.push(m);
+    else bySystem.set(m.systemId, [m]);
   }
 
   const result = new Map<string, PriceHistoryEntry>();
   for (const [systemId, systemMarkets] of bySystem) {
     const prices: Record<string, number> = {};
     for (const m of systemMarkets) {
-      prices[m.goodId] = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
+      const curve = curveForGood(m.goodId, m.basePrice, m.priceFloor ?? 0.2, m.priceCeiling ?? 5.0);
+      prices[m.goodId] = spotPrice(curve, m.stock);
     }
     result.set(systemId, { tick, prices });
   }

@@ -5,6 +5,7 @@ import type {
   SnapshotsWorld,
 } from "@/lib/tick/world/snapshots-world";
 import type { PriceHistoryEntry } from "@/lib/engine/snapshot";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 
 /**
  * Live-game adapter for the price-snapshots processor.
@@ -21,11 +22,9 @@ export class PrismaSnapshotsWorld implements SnapshotsWorld {
   async getMarkets(): Promise<MarketView[]> {
     const rows = await this.tx.stationMarket.findMany({
       select: {
-        goodId: true,
-        supply: true,
-        demand: true,
+        stock: true,
         good: {
-          select: { basePrice: true, priceFloor: true, priceCeiling: true },
+          select: { name: true, basePrice: true, priceFloor: true, priceCeiling: true },
         },
         station: { select: { system: { select: { id: true } } } },
       },
@@ -33,9 +32,9 @@ export class PrismaSnapshotsWorld implements SnapshotsWorld {
 
     return rows.map((r) => ({
       systemId: r.station.system.id,
-      goodId: r.goodId,
-      supply: r.supply,
-      demand: r.demand,
+      // The price curve anchors on the canonical good key, not the DB CUID.
+      goodId: GOOD_NAME_TO_KEY.get(r.good.name) ?? r.good.name,
+      stock: r.stock,
       basePrice: r.good.basePrice,
       priceFloor: r.good.priceFloor,
       priceCeiling: r.good.priceCeiling,
