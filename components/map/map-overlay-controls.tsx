@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { tv } from "tailwind-variants";
-import { TIER_COLOR, pixiHexToCss } from "@/lib/constants/good-colors";
+import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { PRESETS, type MapPreset } from "@/lib/utils/map-presets";
@@ -46,10 +46,12 @@ const segmentVariants = tv({
 });
 
 // Overlay chips: a persistent colour swatch identifies the glyph element each
-// overlay paints (so the legend is implicit); the swatch dims when off.
+// overlay paints (so the legend is implicit); the swatch dims when off. The
+// `group/chip` + `relative` live on the wrapper so the legend tooltip can pop
+// above without growing the panel.
 const overlayChipVariants = tv({
   base: [
-    "group/chip relative flex items-center gap-2 w-full cursor-pointer",
+    "flex items-center gap-2 w-full cursor-pointer",
     "px-2 py-1.5 text-[10px] font-medium uppercase tracking-wider",
     "border transition-colors duration-150",
     "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-background",
@@ -76,11 +78,16 @@ const PRESET_LABELS: Record<MapPreset, string> = {
   custom: "Custom",
 };
 
+/** Overlays whose colour mapping isn't self-evident carry a hover legend. */
+type LegendKind = "price" | "tradeFlow" | "routes";
+
 interface OverlayDef {
   key: MapOverlayKey;
   label: string;
   /** CSS swatch colour — matches the glyph element this overlay paints. */
   swatch: string;
+  /** Optional hover-tooltip legend (kept out of the panel's permanent height). */
+  legend?: LegendKind;
 }
 
 /**
@@ -90,9 +97,9 @@ interface OverlayDef {
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
   { key: "fleet", label: "Fleet", swatch: "#38bdf8" }, // FLEET.pillFill (sky-400)
   { key: "events", label: "Events", swatch: "#f59e0b" }, // EVENT_DOT_COLORS.amber
-  { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium },
-  { key: "tradeFlow", label: "Trade Flows", swatch: pixiHexToCss(TIER_COLOR[2]) },
-  { key: "shipRoutes", label: "Ship Routes", swatch: "#38bdf8" },
+  { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium, legend: "price" },
+  { key: "tradeFlow", label: "Trade Flows", swatch: pixiHexToCss(TIER_COLOR[2]), legend: "tradeFlow" },
+  { key: "shipRoutes", label: "Ship Routes", swatch: "#38bdf8", legend: "routes" },
 ];
 
 interface MapOverlayControlsProps {
@@ -155,23 +162,25 @@ export function MapOverlayControls({
         aria-label="Map overlays"
         className="grid grid-cols-2 gap-1.5 px-3 pb-2.5"
       >
-        {OVERLAY_DEFS.map(({ key, label, swatch }) => {
+        {OVERLAY_DEFS.map(({ key, label, swatch, legend }) => {
           const active = overlays[key];
           return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => toggle(key)}
-              aria-pressed={active}
-              className={overlayChipVariants({ active })}
-            >
-              <span
-                className="h-2.5 w-2.5 shrink-0 transition-opacity duration-150"
-                style={{ backgroundColor: swatch, opacity: active ? 1 : 0.35 }}
-                aria-hidden
-              />
-              <span className="truncate">{label}</span>
-            </button>
+            <div key={key} className="group/chip relative">
+              <button
+                type="button"
+                onClick={() => toggle(key)}
+                aria-pressed={active}
+                className={overlayChipVariants({ active })}
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 transition-opacity duration-150"
+                  style={{ backgroundColor: swatch, opacity: active ? 1 : 0.35 }}
+                  aria-hidden
+                />
+                <span className="truncate">{label}</span>
+              </button>
+              {legend && <LegendTooltip kind={legend} />}
+            </div>
           );
         })}
       </div>
@@ -184,6 +193,82 @@ export function MapOverlayControls({
           onOpenComparisonTable={onOpenComparisonTable}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Floating legend shown on chip hover. Absolutely positioned above the chip and
+ * `pointer-events-none`, so it never grows the panel or eats clicks. The panel
+ * sits at the bottom-left of the viewport, so legends open upward.
+ */
+function LegendTooltip({ kind }: { kind: LegendKind }) {
+  return (
+    <div
+      role="tooltip"
+      className="pointer-events-none absolute bottom-full left-0 z-30 mb-1.5 hidden w-44 border border-border bg-surface px-2 py-1.5 shadow-lg group-hover/chip:block"
+    >
+      {kind === "price" && <PriceRampLegend />}
+      {kind === "tradeFlow" && <TradeFlowLegend />}
+      {kind === "routes" && (
+        <p className="text-[10px] leading-relaxed text-text-secondary">
+          Every in-transit ship&apos;s route. Markers stay visible at all zooms
+          — hover one for its ETA, click to pin its route.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PriceRampLegend() {
+  const ramp = [
+    PRICE_RAMP_STOPS.deepBargain,
+    PRICE_RAMP_STOPS.bargain,
+    PRICE_RAMP_STOPS.neutral,
+    PRICE_RAMP_STOPS.premium,
+    PRICE_RAMP_STOPS.deepPremium,
+  ];
+  return (
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Price vs Base
+      </h5>
+      <div
+        className="h-2 w-full"
+        style={{ background: `linear-gradient(to right, ${ramp.join(", ")})` }}
+        aria-hidden
+      />
+      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>0.6×</span>
+        <span>base</span>
+        <span>1.4×</span>
+      </div>
+    </div>
+  );
+}
+
+function TradeFlowLegend() {
+  const tiers = [0, 1, 2] as const;
+  return (
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Good Tier
+      </h5>
+      <ul className="space-y-0.5">
+        {tiers.map((tier) => (
+          <li
+            key={tier}
+            className="flex items-center gap-1.5 text-[10px] text-text-secondary"
+          >
+            <span
+              className="h-2 w-2 shrink-0"
+              style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
+              aria-hidden
+            />
+            <span>{TIER_LABEL[tier]}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
