@@ -10,7 +10,7 @@ import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { CompactTransitCard } from "@/components/map/compact-transit-card";
 import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
-import { MapOverlayControls } from "@/components/map/map-overlay-controls";
+import { MapControlsDock } from "@/components/map/map-controls-dock";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
@@ -58,7 +58,7 @@ export function StarMap({
 
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
-  const { overlays, toggle, preset, setPreset } = useMapOverlays();
+  const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
 
   // ── Live tick + in-transit marker selection ───────────────────
@@ -330,14 +330,12 @@ export function StarMap({
         </QueryBoundary>
       )}
 
-      {/* Map mode + overlay controls (bottom-left) */}
-      <MapOverlayControls
+      {/* Map controls dock (bottom-left) — main panel + floating Price panel */}
+      <MapControlsDock
         mode={mapMode}
         setMode={setMapMode}
         overlays={overlays}
         toggle={toggle}
-        preset={preset}
-        setPreset={setPreset}
         priceGoodId={priceGoodId}
         setPriceGoodId={setPriceGoodId}
         goods={goods}

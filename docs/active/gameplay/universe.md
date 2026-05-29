@@ -106,13 +106,14 @@ In-transit markers are the player's own ships, so they stay visible even across 
 
 ### Overlays & Control Panel
 
-A compact panel anchored bottom-left (`components/map/map-overlay-controls.tsx`, state in `lib/hooks/use-map-overlays.ts`) governs three independent axes:
+The map's controls float at the bottom-left in a dock (`components/map/map-controls-dock.tsx`) that stacks panels upward. The main panel (`map-overlay-controls.tsx`, state in `lib/hooks/use-map-overlays.ts`) holds two vertically-stacked sections:
 
-- **Presets** — one-click overlay bundles: **Default** (Fleet + Events), **Trader** (Price + Events), **Navigator** (Fleet + Routes). The map opens on Default; toggling any single overlay by hand drops to a derived **Custom**. The pure preset↔overlay mapping lives in `lib/utils/map-presets.ts`.
-- **Territory** (segmented single-select) — Political / Regions / None faction/region polygons (the map mode).
-- **Overlays** (2-column toggle grid) — Fleet, Events, Price, Trade-flow, Ship Routes. Each chip carries its glyph element's colour so the panel doubles as the key; the price-ramp, trade-flow tier, and routes legends live in hover tooltips so they cost no permanent height. The Price good-picker + "Show all prices" button stay inline, shown only when Price is on.
+- **Territory** (single-select) — Political / Regions / None faction/region polygons (the map mode).
+- **Overlays** (multi-select) — Fleet, Events, Price, Trade-flow, Ship Routes. Each row carries its glyph element's colour so the panel doubles as the key; the price-ramp, trade-flow tier, and routes legends appear in hover tooltips beside the row so they cost no permanent height.
 
-Overlays govern *ambient* clutter, not data access: with Fleet or Events off, a system's pills are hidden ambiently but still **reveal on hover or selection**. The always-on skeleton — economy core, halo, gateway ring, jump lanes, moving ships — is never gated by a toggle. Overlay and preset state persist per session.
+When the Price overlay is on, a separate **Price panel** (`map-price-panel.tsx`) — the good-picker plus a jump to cross-system comparison — floats above the main panel, kept independent so picking a good never reflows the main panel. The dock is the single owner of panel layout; further context panels slot in as siblings.
+
+Overlays govern *ambient* clutter, not data access: with Fleet or Events off, a system's pills are hidden ambiently but still **reveal on hover or selection**. The always-on skeleton — economy core, halo, gateway ring, jump lanes, moving ships — is never gated by a toggle. Overlay state persists per session.
 
 ### Fog of War / Visibility
 
