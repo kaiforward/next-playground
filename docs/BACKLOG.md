@@ -21,6 +21,7 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
+- **[M] Decouple reputation reward from market price** — Favourable rep multipliers act as a negative spread; to avoid reopening the instant-resell exploit they're capped at ±2% (almost cosmetic). Move the real reputation reward off the price spread entirely: reduced taxes/tariffs/docking fees, access to restricted goods or higher quantity caps, better mission rewards. Then rep can be impactful without threatening the no-instant-resell-profit invariant. See `lib/constants/reputation.ts` and the anti-arbitrage test in its `__tests__`.
 - **[M] Reversion rate tuning** — Current 5% base reversion may be too aggressive. Slower reversion means player trades leave a bigger, longer-lasting mark. Per-good rates now in place — see simulator metrics for balance data.
 
 ## Future
