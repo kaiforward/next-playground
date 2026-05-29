@@ -28,16 +28,9 @@ const BotConfigSchema = z.object({
 
 const ConstantOverridesSchema = z.object({
   economy: z.object({
-    reversionRate: z.number().optional(),
     noiseAmplitude: z.number().optional(),
-    noiseReferenceLevel: z.number().optional(),
     minLevel: z.number().optional(),
     maxLevel: z.number().optional(),
-  }).optional(),
-  equilibrium: z.object({
-    produces: z.object({ supply: z.number().optional(), demand: z.number().optional() }).optional(),
-    consumes: z.object({ supply: z.number().optional(), demand: z.number().optional() }).optional(),
-    neutral: z.object({ supply: z.number().optional(), demand: z.number().optional() }).optional(),
   }).optional(),
   goods: z.record(z.string(), z.object({ basePrice: z.number() })).optional(),
   fuel: z.object({

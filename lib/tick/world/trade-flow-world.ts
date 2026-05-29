@@ -36,17 +36,15 @@ export interface MarketSnapshot {
   systemId: string;
   goodId: string;
   basePrice: number;
-  supply: number;
-  demand: number;
+  stock: number;
   priceFloor: number;
   priceCeiling: number;
 }
 
-/** Absolute supply/demand write (already clamped). */
+/** Absolute stock write (already clamped). */
 export interface MarketUpdate {
   id: string;
-  supply: number;
-  demand: number;
+  stock: number;
 }
 
 /** Increment to a system's tradeVolumeAccum (mirrors player-trade bookkeeping). */
@@ -81,7 +79,7 @@ export interface TradeFlowWorld {
    */
   getRecentPlayerVolume(regionId: string): Promise<number>;
 
-  /** Bulk-write market supply/demand (absolute, already-clamped values). */
+  /** Bulk-write market stock (absolute, already-clamped values). */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
 
   /** Bulk-increment tradeVolumeAccum on systems. */
@@ -110,10 +108,8 @@ export interface TradeFlowProcessorParams {
   playerDisplacementFactor: number;
   /** Per-region target trade volume used to normalize player pressure. */
   prosperityTargetVolume: number;
-  /** Supply/demand floor — flow can't draw a market below this. */
+  /** Stock floor — flow can't draw a market below this. */
   minLevel: number;
-  /** Supply/demand ceiling — flow can't push a market above this. */
+  /** Stock ceiling — flow can't push a market above this. */
   maxLevel: number;
-  /** Demand impact factor — fraction of moved quantity that shifts demand. */
-  tradeDemandImpactFactor: number;
 }

@@ -2,7 +2,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
+import { getSpread } from "@/lib/constants/market-economy";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+
+// Recompute the exact quote the service should charge, independently of the
+// trade's own outcome (so a pricing bug can't hide behind a derived assertion).
+// The agri system is Federation-owned and the player starts at Neutral standing
+// (rep multiplier 1.0), so totalPrice is the raw quote.
+async function expectedQuote(
+  goodId: string,
+  stock: number,
+  quantity: number,
+  type: "buy" | "sell",
+) {
+  const good = await prisma.good.findUniqueOrThrow({ where: { id: goodId } });
+  const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.name;
+  const curve = curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling);
+  const spread = getSpread(GOVERNMENT_TYPES.federation);
+  return quoteTrade(curve, stock, quantity, type, spread);
+}
 
 // Mock the prisma import so executeTrade uses our test client
 const { prisma } = useIntegrationDb();
@@ -26,24 +46,17 @@ describe("executeTrade (integration)", () => {
     });
   });
 
-  it("buy succeeds: credits deducted, cargo added, market supply decreased, trade history created", async () => {
+  it("buy succeeds: credits deducted, cargo added, market stock decreased, trade history created", async () => {
     const foodGoodId = universe.goodIds["food"];
     const stationId = universe.stations.agricultural;
 
-    // Get market state before trade
     const marketBefore = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId, goodId: foodGoodId } },
-      include: { good: true },
     });
     expect(marketBefore).not.toBeNull();
 
-    const expectedPrice = calculatePrice(
-      marketBefore!.good.basePrice,
-      marketBefore!.supply,
-      marketBefore!.demand,
-      marketBefore!.good.priceFloor,
-      marketBefore!.good.priceCeiling,
-    );
+    // Pre-compute the exact total the service should charge for this buy.
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "buy");
 
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
@@ -53,52 +66,49 @@ describe("executeTrade (integration)", () => {
     });
 
     expect(result.ok).toBe(true);
+    if (!result.ok) return;
 
-    // Verify credits deducted
+    // Credits deducted by exactly the quoted total.
     const playerAfter = await prisma.player.findUnique({ where: { id: player.playerId } });
-    expect(playerAfter!.credits).toBe(5000 - expectedPrice * 5);
+    expect(playerAfter!.credits).toBe(5000 - quote.totalPrice);
 
-    // Verify cargo added
+    // Cargo added
     const cargo = await prisma.cargoItem.findFirst({ where: { shipId, goodId: foodGoodId } });
     expect(cargo).not.toBeNull();
     expect(cargo!.quantity).toBe(5);
 
-    // Verify market supply decreased
+    // Market stock decreased by exactly the quantity bought.
     const marketAfter = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId, goodId: foodGoodId } },
     });
-    expect(marketAfter!.supply).toBe(marketBefore!.supply - 5);
+    expect(marketAfter!.stock).toBe(marketBefore!.stock - 5);
+    expect(result.data.updatedMarket.stock).toBe(Math.floor(marketBefore!.stock - 5));
 
-    // Verify trade history created
+    // Trade history created.
     const history = await prisma.tradeHistory.findFirst({
       where: { stationId, goodId: foodGoodId, type: "buy" },
     });
     expect(history).not.toBeNull();
     expect(history!.quantity).toBe(5);
-    expect(history!.price).toBe(expectedPrice);
+    // History stores the per-unit price = round(quoted total / quantity),
+    // pinned to the independently-computed quote (not derived from credits).
+    expect(history!.price).toBe(Math.round(quote.totalPrice / 5));
   });
 
-  it("sell succeeds: credits added, cargo removed, market supply increased", async () => {
+  it("sell succeeds: credits added, cargo removed, market stock increased", async () => {
     const foodGoodId = universe.goodIds["food"];
     const stationId = universe.stations.agricultural;
 
-    // Pre-load cargo
     await prisma.cargoItem.create({
       data: { shipId, goodId: foodGoodId, quantity: 10 },
     });
 
     const marketBefore = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId, goodId: foodGoodId } },
-      include: { good: true },
     });
 
-    const expectedPrice = calculatePrice(
-      marketBefore!.good.basePrice,
-      marketBefore!.supply,
-      marketBefore!.demand,
-      marketBefore!.good.priceFloor,
-      marketBefore!.good.priceCeiling,
-    );
+    // Pre-compute the exact proceeds the service should pay for this sell.
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "sell");
 
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
@@ -109,19 +119,50 @@ describe("executeTrade (integration)", () => {
 
     expect(result.ok).toBe(true);
 
-    // Credits added
+    // Credits increased by exactly the quoted proceeds.
     const playerAfter = await prisma.player.findUnique({ where: { id: player.playerId } });
-    expect(playerAfter!.credits).toBe(5000 + expectedPrice * 5);
+    expect(playerAfter!.credits).toBe(5000 + quote.totalPrice);
 
-    // Cargo reduced
+    // Cargo reduced.
     const cargo = await prisma.cargoItem.findFirst({ where: { shipId, goodId: foodGoodId } });
     expect(cargo!.quantity).toBe(5);
 
-    // Market supply increased
+    // Market stock increased by exactly the quantity sold.
     const marketAfter = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId, goodId: foodGoodId } },
     });
-    expect(marketAfter!.supply).toBe(marketBefore!.supply + 5);
+    expect(marketAfter!.stock).toBe(marketBefore!.stock + 5);
+  });
+
+  it("buy then immediate sell-back nets a loss (the bid-ask spread kills the exploit)", async () => {
+    const foodGoodId = universe.goodIds["food"];
+    const stationId = universe.stations.agricultural;
+
+    const buy = await executeTrade(player.playerId, shipId, {
+      stationId,
+      goodId: foodGoodId,
+      quantity: 10,
+      type: "buy",
+    });
+    expect(buy.ok).toBe(true);
+
+    const sellBack = await executeTrade(player.playerId, shipId, {
+      stationId,
+      goodId: foodGoodId,
+      quantity: 10,
+      type: "sell",
+    });
+    expect(sellBack.ok).toBe(true);
+
+    // Round-trip costs the player money — buying and dumping back is unprofitable.
+    const playerAfter = await prisma.player.findUnique({ where: { id: player.playerId } });
+    expect(playerAfter!.credits).toBeLessThan(5000);
+
+    // Stock returns to where it started (buy -10 then sell +10).
+    const marketAfter = await prisma.stationMarket.findUnique({
+      where: { stationId_goodId: { stationId, goodId: foodGoodId } },
+    });
+    expect(Math.round(marketAfter!.stock)).toBe(155); // agricultural food initial stock
   });
 
   it("buy fails with insufficient credits", async () => {

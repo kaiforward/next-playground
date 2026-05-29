@@ -12,8 +12,13 @@ function makeEntry(overrides: Partial<MarketEntry>): MarketEntry {
     goodName: "Food",
     basePrice: 100,
     currentPrice: 100,
-    supply: 50,
-    demand: 50,
+    buyPrice: 105,
+    sellPrice: 95,
+    stock: 50,
+    priceFloor: 0.5,
+    priceCeiling: 2.0,
+    targetStock: 50,
+    spread: 0.05,
     ...overrides,
   };
 }

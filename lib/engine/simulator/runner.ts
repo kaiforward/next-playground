@@ -156,7 +156,7 @@ export async function runSimulation(
   const strategyAggregates = computeStrategyAggregates(summaries);
 
   // Compute market health from final state
-  const marketHealth = computeMarketHealth(world, constants);
+  const marketHealth = computeMarketHealth(world);
 
   // Compute event impact
   const eventImpacts = computeEventImpacts(

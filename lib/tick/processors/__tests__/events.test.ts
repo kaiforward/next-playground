@@ -12,6 +12,7 @@ import type {
   SimSystem,
 } from "@/lib/engine/simulator/types";
 import type { ModifierRow } from "@/lib/engine/events";
+import type { SystemShock } from "@/lib/tick/world/events-world";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 
 function makeCtx(tick: number): TickContext {
@@ -50,15 +51,13 @@ function makeSystem(id: string, regionId: string): SimSystem {
 function makeMarket(
   systemId: string,
   goodId: string,
-  supply: number,
-  demand: number,
+  stock: number,
 ): SimMarketEntry {
   return {
     systemId,
     goodId,
     basePrice: 100,
-    supply,
-    demand,
+    stock,
     priceFloor: 0.2,
     priceCeiling: 5.0,
   };
@@ -178,7 +177,7 @@ describe("runEventsProcessor", () => {
       sourceEventId: null,
     };
 
-    const market = makeMarket("s1", "food", 100, 100);
+    const market = makeMarket("s1", "food", 100);
     const world = makeWorld({
       systems: [makeSystem("s1", "r1")],
       events: [ev],
@@ -192,10 +191,8 @@ describe("runEventsProcessor", () => {
     // crashing on percentage-mode shocks (the old sim used to silently
     // mis-apply them). Market values must be within MIN/MAX clamps.
     for (const m of world.markets) {
-      expect(m.supply).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
-      expect(m.supply).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
-      expect(m.demand).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
-      expect(m.demand).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+      expect(m.stock).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
+      expect(m.stock).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
     }
   });
 
@@ -286,5 +283,92 @@ describe("runEventsProcessor", () => {
     expect(pactAfter?.phaseStartTick).toBe(0);
     expect(dissolutionAfter?.phase).toBe("dissolving");
     expect(dissolutionAfter?.phaseStartTick).toBe(0);
+  });
+});
+
+describe("InMemoryEventsWorld.applyShocks", () => {
+  function shock(over: Partial<SystemShock>): SystemShock {
+    return {
+      systemId: "s1",
+      goodId: "food",
+      parameter: "supply",
+      value: 0,
+      mode: "percentage",
+      ...over,
+    };
+  }
+
+  it("a percentage supply shock raises stock directly", async () => {
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    const touched = await world.applyShocks([
+      shock({ parameter: "supply", mode: "percentage", value: 0.3 }),
+    ]);
+    expect(touched).toBe(1);
+    expect(world.markets[0].stock).toBe(130); // 100 + round(100*0.3)
+  });
+
+  it("a percentage demand shock lowers stock inversely (more demand → scarcer)", async () => {
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    const touched = await world.applyShocks([
+      shock({ parameter: "demand", mode: "percentage", value: 0.3 }),
+    ]);
+    expect(touched).toBe(1);
+    expect(world.markets[0].stock).toBe(70); // 100 − round(100*0.3)
+  });
+
+  it("an absolute demand shock subtracts the raw value", async () => {
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    await world.applyShocks([
+      shock({ parameter: "demand", mode: "absolute", value: 50 }),
+    ]);
+    expect(world.markets[0].stock).toBe(50);
+  });
+
+  it("accumulates multiple shocks on one market then clamps once (not per-shock)", async () => {
+    // Per-shock clamping would give 80: (100 + 150 → clamp 200) − 120 = 80.
+    // Accumulate-then-clamp gives 130: clamp(100 + 150 − 120). The latter is
+    // the contract (parity with the Prisma adapter).
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    await world.applyShocks([
+      shock({ parameter: "supply", mode: "absolute", value: 150 }),
+      shock({ parameter: "demand", mode: "absolute", value: 120 }),
+    ]);
+    expect(world.markets[0].stock).toBe(130);
+  });
+
+  it("clamps the final accumulated value to the stock band", async () => {
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    await world.applyShocks([
+      shock({ parameter: "supply", mode: "absolute", value: 10_000 }),
+    ]);
+    expect(world.markets[0].stock).toBe(ECONOMY_CONSTANTS.MAX_LEVEL);
+  });
+
+  it("skips non-finite shock values and missing markets", async () => {
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    const touched = await world.applyShocks([
+      shock({ value: Infinity }),
+      shock({ goodId: "no_such_good", mode: "absolute", value: 10 }),
+    ]);
+    expect(touched).toBe(0);
+    expect(world.markets[0].stock).toBe(100);
   });
 });

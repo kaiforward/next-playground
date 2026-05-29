@@ -4,6 +4,8 @@ import {
   getReputationTier,
   getReputationMultipliers,
 } from "../reputation";
+import { GOVERNMENT_TYPES } from "../government";
+import { getSpread } from "../market-economy";
 import { ALL_REPUTATION_STANDINGS } from "@/lib/types/guards";
 
 describe("REPUTATION_TIERS", () => {
@@ -29,13 +31,23 @@ describe("REPUTATION_TIERS", () => {
     }
   });
 
-  it("symmetric multipliers — equal-magnitude tiers mirror each other", () => {
-    const champion = REPUTATION_TIERS.find((t) => t.standing === "champion");
-    const distrusted = REPUTATION_TIERS.find((t) => t.standing === "distrusted");
-    expect(champion).toBeDefined();
-    expect(distrusted).toBeDefined();
-    expect(champion!.buyMultiplier).toBeCloseTo(2 - distrusted!.buyMultiplier);
-    expect(champion!.sellMultiplier).toBeCloseTo(2 - distrusted!.sellMultiplier);
+  // The favourable (buyMult < 1) multipliers must never let an instant
+  // same-market buy→resell profit, even at the tightest government spread:
+  // (1+minSpread)·buyMult ≥ (1−minSpread)·sellMult. This is the anti-arbitrage
+  // invariant — a regression that widens the perk past the spread reopens the
+  // resell exploit. (Replaces an earlier cosmetic "multipliers are symmetric"
+  // check; perks are bounded by the spread, penalties intentionally aren't.)
+  it("favourable multipliers stay inside the tightest bid-ask spread (no instant-resell profit)", () => {
+    const minSpread = Math.min(
+      ...Object.values(GOVERNMENT_TYPES).map((g) => getSpread(g)),
+    );
+    for (const tier of REPUTATION_TIERS) {
+      if (tier.tradeDenied || tier.buyMultiplier >= 1) continue; // perks only
+      expect(
+        (1 + minSpread) * tier.buyMultiplier,
+        `${tier.standing} perk must not invert the round-trip at the tightest spread`,
+      ).toBeGreaterThanOrEqual((1 - minSpread) * tier.sellMultiplier);
+    }
   });
 });
 
@@ -94,12 +106,12 @@ describe("getReputationMultipliers", () => {
     expect(getReputationMultipliers("neutral")).toEqual({ buy: 1.0, sell: 1.0 });
   });
 
-  it("champion: discount on buy, premium on sell", () => {
-    expect(getReputationMultipliers("champion")).toEqual({ buy: 0.92, sell: 1.08 });
+  it("champion: discount on buy, premium on sell (bounded under the spread)", () => {
+    expect(getReputationMultipliers("champion")).toEqual({ buy: 0.98, sell: 1.02 });
   });
 
   it("trusted: smaller discount on buy, smaller premium on sell", () => {
-    expect(getReputationMultipliers("trusted")).toEqual({ buy: 0.96, sell: 1.04 });
+    expect(getReputationMultipliers("trusted")).toEqual({ buy: 0.99, sell: 1.01 });
   });
 
   it("distrusted: premium on buy, discount on sell", () => {

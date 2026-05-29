@@ -172,3 +172,24 @@ describe("quoteTrade", () => {
     expect(sellB.totalPrice - buyA.totalPrice).toBe(811); // healthy profit
   });
 });
+
+import { curveForGood } from "../market-pricing";
+import { getTargetStock } from "@/lib/constants/market-economy";
+
+describe("curveForGood", () => {
+  it("assembles a MarketCurve from good fields + derived targetStock", () => {
+    const curve = curveForGood("water", 25, 0.5, 2.0);
+    expect(curve).toEqual({
+      basePrice: 25,
+      targetStock: getTargetStock("water"), // 135
+      k: 1,
+      floorMult: 0.5,
+      ceilingMult: 2.0,
+    });
+  });
+
+  it("prices at base when stock equals the derived target", () => {
+    const curve = curveForGood("water", 25, 0.5, 2.0);
+    expect(midPriceAt(curve, getTargetStock("water"))).toBe(25);
+  });
+});

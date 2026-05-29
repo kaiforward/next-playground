@@ -12,7 +12,6 @@ import {
 } from "@/lib/engine/tick";
 import {
   ECONOMY_CONSTANTS,
-  EQUILIBRIUM_TARGETS,
   PROSPERITY_DECAY_RATE,
   PROSPERITY_MAX_GAIN,
   PROSPERITY_TARGET_VOLUME,
@@ -118,9 +117,7 @@ export async function runEconomyProcessor(
     resolveMarketTickEntry(
       {
         goodId: m.goodId,
-        supply: m.supply,
-        demand: m.demand,
-        basePrice: m.basePrice,
+        stock: m.stock,
         economyType: m.economyType,
         produces: m.produces,
         consumes: m.consumes,
@@ -140,8 +137,7 @@ export async function runEconomyProcessor(
 
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
     id: m.id,
-    supply: simulated[i].supply,
-    demand: simulated[i].demand,
+    stock: simulated[i].stock,
   }));
 
   await world.applyMarketUpdates(marketUpdates);
@@ -182,12 +178,9 @@ const prosperityParams: ProsperityParams = {
 };
 
 const simParams: EconomySimParams = {
-  reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-  noiseReferenceLevel: ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL,
   minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
   maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
-  equilibrium: EQUILIBRIUM_TARGETS,
 };
 
 export const economyProcessor: TickProcessor = {

@@ -1,409 +1,232 @@
 import { describe, it, expect } from "vitest";
 import {
   simulateEconomyTick,
+  buildMarketTickEntry,
   processShipArrivals,
+  updateProsperity,
+  getProsperityMultiplier,
+  getProsperityLabel,
   type MarketTickEntry,
   type EconomySimParams,
+  type ProsperityParams,
 } from "../tick";
 
-// ── Test helpers ────────────────────────────────────────────────
-
-/** Deterministic RNG that always returns 0.5 (zero noise). */
-const zeroNoiseRng = () => 0.5;
-
-/** Deterministic RNG returning a fixed sequence. */
-function sequenceRng(values: number[]): () => number {
-  let i = 0;
-  return () => values[i++ % values.length];
-}
-
-const defaultParams: EconomySimParams = {
-  reversionRate: 0.05,
-  noiseAmplitude: 3,
-  noiseReferenceLevel: 75,
+const PARAMS: EconomySimParams = {
+  noiseAmplitude: 0, // deterministic: no noise unless a test opts in
   minLevel: 5,
   maxLevel: 200,
-  equilibrium: {
-    produces: { supply: 120, demand: 40 },
-    consumes: { supply: 40, demand: 120 },
-    neutral: { supply: 60, demand: 60 },
-  },
 };
 
-function makeEntry(overrides: Partial<MarketTickEntry> = {}): MarketTickEntry {
+function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
   return {
-    goodId: "ore",
-    supply: 60,
-    demand: 60,
-    basePrice: 30,
-    economyType: "extraction",
+    goodId: "food",
+    stock: 100,
+    economyType: "agricultural",
     produces: [],
     consumes: [],
-    ...overrides,
+    ...over,
   };
 }
 
-// ── simulateEconomyTick ─────────────────────────────────────────
-
-describe("simulateEconomyTick", () => {
-  it("does not mutate the input array", () => {
-    const entries = [makeEntry()];
-    const original = JSON.parse(JSON.stringify(entries));
-    simulateEconomyTick(entries, defaultParams, zeroNoiseRng);
-    expect(entries).toEqual(original);
+describe("simulateEconomyTick — production", () => {
+  it("raises stock for a producer, self-limiting near the ceiling", () => {
+    const mid = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, stock: 100 })], PARAMS);
+    expect(mid[0].stock).toBeGreaterThan(100);
+    const high = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, stock: 199 })], PARAMS);
+    expect(high[0].stock - 199).toBeLessThan(mid[0].stock - 100); // slows near MAX
+    expect(high[0].stock).toBeLessThanOrEqual(200); // clamped
   });
 
-  it("returns same length as input", () => {
-    const entries = [makeEntry(), makeEntry(), makeEntry()];
-    const result = simulateEconomyTick(entries, defaultParams, zeroNoiseRng);
-    expect(result).toHaveLength(3);
+  it("does nothing for a good the system does not produce", () => {
+    const out = simulateEconomyTick([entry({ produces: ["water"], productionRate: 10, stock: 100 })], PARAMS);
+    expect(out[0].stock).toBe(100);
   });
 
-  describe("mean reversion", () => {
-    it("pulls supply toward neutral target when above", () => {
-      // supply=100, target=60 → reversion = (60-100)*0.05 = -2
-      const entry = makeEntry({ supply: 100, demand: 60 });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.supply).toBeLessThan(100);
-    });
-
-    it("pulls supply toward neutral target when below", () => {
-      // supply=30, target=60 → reversion = (60-30)*0.05 = +1.5
-      const entry = makeEntry({ supply: 30, demand: 60 });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.supply).toBeGreaterThan(30);
-    });
-
-    it("pulls demand toward neutral target when above", () => {
-      const entry = makeEntry({ supply: 60, demand: 100 });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.demand).toBeLessThan(100);
-    });
-
-    it("uses producer equilibrium targets for produced goods", () => {
-      // Producer: target supply=120. Current supply=60.
-      // reversion = (120-60)*0.05 = +3, plus productionRate=+3 → supply increases significantly
-      const entry = makeEntry({
-        supply: 60,
-        demand: 60,
-        produces: ["ore"],
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // Supply should move toward 120 + production boost
-      expect(result.supply).toBeGreaterThan(60);
-      // Demand should move toward 40 - production demand reduction
-      expect(result.demand).toBeLessThan(60);
-    });
-
-    it("uses consumer equilibrium targets for consumed goods", () => {
-      // Consumer: target supply=40. Current supply=60.
-      // reversion = (40-60)*0.05 = -1, minus consumptionRate=2 → supply drops
-      const entry = makeEntry({
-        supply: 60,
-        demand: 60,
-        consumes: ["ore"],
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.supply).toBeLessThan(60);
-      expect(result.demand).toBeGreaterThan(60);
-    });
-  });
-
-  describe("production and consumption effects", () => {
-    // Self-limiting sqrt curve: production scales by sqrt((max-supply)/range),
-    // consumption scales by sqrt((supply-min)/range). range = 200 - 5 = 195.
-
-    it("producers increase supply by scaled productionRate", () => {
-      // At equilibrium (supply=120, target=120): reversion=0, noise=0
-      // prodScale = sqrt((200-120)/195) ≈ 0.6405
-      // scaledProduction = 3 * 0.6405 ≈ 1.9215
-      const entry = makeEntry({
-        supply: 120,
-        demand: 40,
-        produces: ["ore"],
-        productionRate: 3,
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      const prodScale = Math.sqrt((200 - 120) / 195);
-      expect(result.supply).toBeCloseTo(120 + 3 * prodScale, 5);
-    });
-
-    it("producers do not affect demand", () => {
-      const entry = makeEntry({
-        supply: 120,
-        demand: 40,
-        produces: ["ore"],
-        productionRate: 3,
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.demand).toBe(40);
-    });
-
-    it("consumers decrease supply by scaled consumptionRate", () => {
-      // At equilibrium (supply=40, target=40): reversion=0, noise=0
-      // consScale = sqrt((40-5)/195) ≈ 0.4237
-      // scaledConsumption = 2 * 0.4237 ≈ 0.8474
-      const entry = makeEntry({
-        supply: 40,
-        demand: 120,
-        consumes: ["ore"],
-        consumptionRate: 2,
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      const consScale = Math.sqrt((40 - 5) / 195);
-      expect(result.supply).toBeCloseTo(40 - 2 * consScale, 5);
-    });
-
-    it("consumers do not affect demand", () => {
-      const entry = makeEntry({
-        supply: 40,
-        demand: 120,
-        consumes: ["ore"],
-        consumptionRate: 2,
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.demand).toBe(120);
-    });
-  });
-
-  describe("clamping", () => {
-    it("clamps supply to minLevel", () => {
-      const entry = makeEntry({ supply: 5, consumes: ["ore"] });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.supply).toBeGreaterThanOrEqual(defaultParams.minLevel);
-    });
-
-    it("clamps supply to maxLevel", () => {
-      const entry = makeEntry({ supply: 200, produces: ["ore"] });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.supply).toBeLessThanOrEqual(defaultParams.maxLevel);
-    });
-
-    it("clamps demand to minLevel", () => {
-      const entry = makeEntry({ demand: 5, produces: ["ore"] });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.demand).toBeGreaterThanOrEqual(defaultParams.minLevel);
-    });
-
-    it("clamps demand to maxLevel", () => {
-      const entry = makeEntry({ demand: 200, consumes: ["ore"] });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      expect(result.demand).toBeLessThanOrEqual(defaultParams.maxLevel);
-    });
-  });
-
-  describe("noise", () => {
-    it("applies noise from the RNG", () => {
-      // rng returning 0 → noise = (0*2-1)*3 = -3
-      // rng returning 1 → noise = (1*2-1)*3 = +3
-      const entry = makeEntry({ supply: 60, demand: 60 });
-
-      // All-zero RNG: noise = -3 for both supply and demand
-      const [lowResult] = simulateEconomyTick([entry], defaultParams, () => 0);
-      // All-one RNG: noise = +3
-      const [highResult] = simulateEconomyTick([entry], defaultParams, () => 1);
-
-      expect(highResult.supply).toBeGreaterThan(lowResult.supply);
-      expect(highResult.demand).toBeGreaterThan(lowResult.demand);
-    });
-
-    it("is deterministic with a fixed RNG", () => {
-      const entry = makeEntry({ supply: 80, demand: 50, produces: ["ore"] });
-      const rng1 = sequenceRng([0.2, 0.7, 0.3, 0.9]);
-      const rng2 = sequenceRng([0.2, 0.7, 0.3, 0.9]);
-      const r1 = simulateEconomyTick([entry, entry], defaultParams, rng1);
-      const r2 = simulateEconomyTick([entry, entry], defaultParams, rng2);
-      expect(r1).toEqual(r2);
-    });
-  });
-
-  describe("per-good equilibrium overrides", () => {
-    it("uses equilibriumProduces when present", () => {
-      // Custom target: supply=80, demand=60 (instead of global 120/40)
-      const entry = makeEntry({
-        supply: 80,
-        demand: 60,
-        produces: ["ore"],
-        productionRate: 3,
-        equilibriumProduces: { supply: 80, demand: 60 },
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // At custom equilibrium: reversion = 0, only production effect
-      // prodScale = sqrt((200-80)/195) ≈ 0.7845, scaledProduction = 3 * 0.7845 ≈ 2.3534
-      const prodScale = Math.sqrt((200 - 80) / 195);
-      expect(result.supply).toBeCloseTo(80 + 3 * prodScale, 5);
-      // Demand unchanged — production only affects supply
-      expect(result.demand).toBe(60);
-    });
-
-    it("uses equilibriumConsumes when present", () => {
-      // Custom target: supply=50, demand=100 (instead of global 40/120)
-      const entry = makeEntry({
-        supply: 50,
-        demand: 100,
-        consumes: ["ore"],
-        consumptionRate: 2,
-        equilibriumConsumes: { supply: 50, demand: 100 },
-      });
-      const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-      // At custom equilibrium: reversion = 0, only consumption effect
-      // consScale = sqrt((50-5)/195) ≈ 0.4804, scaledConsumption = 2 * 0.4804 ≈ 0.9608
-      const consScale = Math.sqrt((50 - 5) / 195);
-      expect(result.supply).toBeCloseTo(50 - 2 * consScale, 5);
-      expect(result.demand).toBe(100);
-    });
-
-    it("falls back to global equilibrium when per-good not set", () => {
-      const withOverride = makeEntry({
-        supply: 60, demand: 60, produces: ["ore"], productionRate: 3,
-        equilibriumProduces: { supply: 120, demand: 40 },
-      });
-      const withoutOverride = makeEntry({
-        supply: 60, demand: 60, produces: ["ore"], productionRate: 3,
-      });
-      const rng1 = sequenceRng([0.5, 0.5]);
-      const rng2 = sequenceRng([0.5, 0.5]);
-      const [r1] = simulateEconomyTick([withOverride], defaultParams, rng1);
-      const [r2] = simulateEconomyTick([withoutOverride], defaultParams, rng2);
-      // Both use the same target (120/40) so results match
-      expect(r1.supply).toBe(r2.supply);
-      expect(r1.demand).toBe(r2.demand);
-    });
-  });
-
-  describe("convergence", () => {
-    it("converges toward equilibrium over many ticks", () => {
-      // Start far from producer equilibrium, run 200 ticks with zero noise
-      let entries = [makeEntry({ supply: 60, demand: 100, produces: ["ore"], productionRate: 3 })];
-      for (let i = 0; i < 200; i++) {
-        entries = simulateEconomyTick(entries, defaultParams, zeroNoiseRng);
-      }
-      // Should be near producer equilibrium (120, 40) ± production overshoot
-      // Supply should be well above 100 (toward 120+)
-      expect(entries[0].supply).toBeGreaterThan(100);
-      // Demand should be well below 60 (toward 40-)
-      expect(entries[0].demand).toBeLessThan(60);
-    });
+  it("applies event production multipliers", () => {
+    const base = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, stock: 100 })], PARAMS);
+    const boosted = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, productionMult: 2, stock: 100 })], PARAMS);
+    expect(boosted[0].stock - 100).toBeGreaterThan(base[0].stock - 100);
   });
 });
 
-// ── Modifier integration ────────────────────────────────────────
-
-describe("modifier integration", () => {
-  it("scales supply target via supplyTargetMult", () => {
-    // Neutral entry: base target supply=60. Mult ×2.0 → effective target 120.
-    // Supply at 60, reversion pulls toward 120: (120-60)*0.05 = +3
-    const entry = makeEntry({ supply: 60, demand: 60, supplyTargetMult: 2.0 });
-    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    // Without mult: (60-60)*0.05 = 0, supply stays at 60
-    // With mult: (120-60)*0.05 = +3, supply becomes 63
-    expect(result.supply).toBeCloseTo(63, 0);
+describe("simulateEconomyTick — consumption", () => {
+  it("lowers stock for a consumer, self-limiting near the floor", () => {
+    const mid = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, stock: 100 })], PARAMS);
+    expect(mid[0].stock).toBeLessThan(100);
+    const low = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, stock: 6 })], PARAMS);
+    expect(low[0].stock).toBeGreaterThanOrEqual(5); // clamped at MIN
   });
 
-  it("scales demand target via demandTargetMult", () => {
-    const entry = makeEntry({ supply: 60, demand: 60, demandTargetMult: 2.0 });
-    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    // demand target: 60 × 2.0 = 120. reversion: (120-60)*0.05 = +3 → 63
-    expect(result.demand).toBeCloseTo(63, 0);
+  it("applies event consumption multipliers", () => {
+    const base = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, stock: 100 })], PARAMS);
+    const boosted = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, consumptionMult: 2, stock: 100 })], PARAMS);
+    // A 2× multiplier drains more stock than the base rate.
+    expect(100 - boosted[0].stock).toBeGreaterThan(100 - base[0].stock);
   });
+});
 
-  it("scales production via productionMult", () => {
-    // Producer at equilibrium: supply=120, target=120
-    // prodScale = sqrt((200-120)/195) ≈ 0.6405
-    // productionMult=0.5 → effective = 3 * 0.5 = 1.5, scaled = 1.5 * 0.6405 ≈ 0.9608
-    const entry = makeEntry({
-      supply: 120, demand: 40,
-      produces: ["ore"],
-      productionRate: 3,
-      productionMult: 0.5,
-    });
-    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    const prodScale = Math.sqrt((200 - 120) / 195);
-    expect(result.supply).toBeCloseTo(120 + 3 * 0.5 * prodScale, 5);
-    // With full production (no mult): scaled = 3 * 0.6405 ≈ 1.9215
-    const [full] = simulateEconomyTick(
-      [makeEntry({ supply: 120, demand: 40, produces: ["ore"], productionRate: 3 })],
-      defaultParams,
-      zeroNoiseRng,
+describe("simulateEconomyTick — noise", () => {
+  it("perturbs stock within the band when amplitude > 0", () => {
+    const out = simulateEconomyTick(
+      [entry({ stock: 100, volatility: 1 })],
+      { ...PARAMS, noiseAmplitude: 3 },
+      () => 1, // rng=1 -> +full amplitude
     );
-    expect(full.supply).toBeCloseTo(120 + 3 * prodScale, 5);
-    expect(result.supply).toBeLessThan(full.supply);
+    expect(out[0].stock).toBeGreaterThan(100);
+    expect(out[0].stock).toBeLessThanOrEqual(200);
   });
 
-  it("scales consumption via consumptionMult", () => {
-    // consScale = sqrt((40-5)/195) ≈ 0.4237
-    // consumptionMult=0.5 → effective = 2 * 0.5 = 1, scaled = 1 * 0.4237 ≈ 0.4237
-    const entry = makeEntry({
-      supply: 40, demand: 120,
-      consumes: ["ore"],
-      consumptionRate: 2,
-      consumptionMult: 0.5,
-    });
-    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    const consScale = Math.sqrt((40 - 5) / 195);
-    expect(result.supply).toBeCloseTo(40 - 2 * 0.5 * consScale, 5);
-    // Without mult: scaled = 2 * 0.4237 ≈ 0.8474
-    const [full] = simulateEconomyTick(
-      [makeEntry({ supply: 40, demand: 120, consumes: ["ore"], consumptionRate: 2 })],
-      defaultParams,
-      zeroNoiseRng,
+  it("does not mutate the input array", () => {
+    const input = [entry({ produces: ["food"], productionRate: 10 })];
+    const snapshot = input[0].stock;
+    simulateEconomyTick(input, PARAMS);
+    expect(input[0].stock).toBe(snapshot);
+  });
+});
+
+describe("buildMarketTickEntry", () => {
+  const prosperityParams: ProsperityParams = {
+    decayRate: 0.03, maxGain: 0.1, targetVolume: 50,
+    min: -1, max: 1, multAtMin: 0.3, multAtZero: 0.7, multAtMax: 1.3,
+  };
+
+  it("scales production and consumption by the prosperity multiplier", () => {
+    const e = buildMarketTickEntry(
+      {
+        goodId: "food",
+        stock: 100,
+        economyType: "agricultural",
+        produces: ["food"],
+        consumes: [],
+        volatility: 1,
+        baseProductionRate: 10,
+        baseConsumptionRate: undefined,
+        govConsumptionBoost: 0,
+        traits: [],
+        prosperity: 1, // multAtMax = 1.3
+      },
+      prosperityParams,
     );
-    expect(full.supply).toBeCloseTo(40 - 2 * consScale, 5);
-    expect(result.supply).toBeGreaterThan(full.supply);
+    expect(e.productionRate).toBeCloseTo(13, 5); // 10 * 1.3
+    expect(e.stock).toBe(100);
   });
 
-  it("dampens reversion via reversionMult", () => {
-    // Supply=100, target=60. Normal reversion: (60-100)*0.05 = -2 → 98
-    // With reversionMult=0.5: (60-100)*(0.05*0.5) = -1 → 99
-    const entry = makeEntry({ supply: 100, demand: 60, reversionMult: 0.5 });
-    const [result] = simulateEconomyTick([entry], defaultParams, zeroNoiseRng);
-    expect(result.supply).toBeCloseTo(99, 0);
-
-    // Without dampening: supply should be 98
-    const [nodamp] = simulateEconomyTick(
-      [makeEntry({ supply: 100, demand: 60 })],
-      defaultParams,
-      zeroNoiseRng,
+  it("folds the government consumption boost into the consumption rate", () => {
+    const e = buildMarketTickEntry(
+      {
+        goodId: "food",
+        stock: 100,
+        economyType: "tech",
+        produces: [],
+        consumes: ["food"],
+        volatility: 1,
+        baseProductionRate: undefined,
+        baseConsumptionRate: 10,
+        govConsumptionBoost: 5,
+        traits: [],
+        prosperity: 0, // multAtZero = 0.7
+      },
+      prosperityParams,
     );
-    expect(nodamp.supply).toBeCloseTo(98, 0);
+    expect(e.consumptionRate).toBeCloseTo((10 + 5) * 0.7, 5); // (base + boost) * mult
   });
 
-  it("defaults produce identical results to no modifiers", () => {
-    const plain = makeEntry({ supply: 80, demand: 50, produces: ["ore"], productionRate: 3 });
-    const withDefaults = makeEntry({
-      supply: 80, demand: 50, produces: ["ore"], productionRate: 3,
-      supplyTargetMult: 1,
-      demandTargetMult: 1,
-      productionMult: 1.0,
-      consumptionMult: 1.0,
-      reversionMult: 1.0,
-    });
-    const rng1 = sequenceRng([0.3, 0.7]);
-    const rng2 = sequenceRng([0.3, 0.7]);
-    const [r1] = simulateEconomyTick([plain], defaultParams, rng1);
-    const [r2] = simulateEconomyTick([withDefaults], defaultParams, rng2);
-    expect(r1.supply).toBe(r2.supply);
-    expect(r1.demand).toBe(r2.demand);
+  it("makes a non-consumer a consumer when only a government boost is present", () => {
+    const e = buildMarketTickEntry(
+      {
+        goodId: "food",
+        stock: 100,
+        economyType: "tech",
+        produces: [],
+        consumes: ["food"],
+        volatility: 1,
+        baseProductionRate: undefined,
+        baseConsumptionRate: undefined,
+        govConsumptionBoost: 5,
+        traits: [],
+        prosperity: 0, // multAtZero = 0.7
+      },
+      prosperityParams,
+    );
+    expect(e.consumptionRate).toBeCloseTo(5 * 0.7, 5); // boost-only branch
   });
 
-  it("combined modifiers converge toward scaled equilibrium", () => {
-    // Large demand multiplier + dampened reversion: run many ticks
-    let entries = [makeEntry({
-      supply: 60, demand: 60,
-      demandTargetMult: 2.0, // target demand: 60 × 2.0 = 120
-      reversionMult: 0.5,
-    })];
-    for (let i = 0; i < 200; i++) {
-      entries = simulateEconomyTick(entries, defaultParams, zeroNoiseRng);
-      // Re-apply modifiers each tick (they persist)
-      entries = entries.map((e) => ({
-        ...e,
-        demandTargetMult: 2.0,
-        reversionMult: 0.5,
-      }));
-    }
-    // Demand should have converged toward 120
-    expect(entries[0].demand).toBeGreaterThan(100);
+  it("leaves consumption undefined when there is no base rate and no boost", () => {
+    const e = buildMarketTickEntry(
+      {
+        goodId: "food",
+        stock: 100,
+        economyType: "tech",
+        produces: [],
+        consumes: [],
+        volatility: 1,
+        baseProductionRate: undefined,
+        baseConsumptionRate: undefined,
+        govConsumptionBoost: 0,
+        traits: [],
+        prosperity: 0,
+      },
+      prosperityParams,
+    );
+    expect(e.consumptionRate).toBeUndefined();
+  });
+});
+
+// ── Prosperity system ───────────────────────────────────────────
+
+describe("updateProsperity", () => {
+  const params: ProsperityParams = {
+    decayRate: 0.03, maxGain: 0.1, targetVolume: 50,
+    min: -1, max: 1, multAtMin: 0.3, multAtZero: 0.7, multAtMax: 1.3,
+  };
+
+  it("gains from trade volume, capped at maxGain", () => {
+    expect(updateProsperity(0, 50, params)).toBeCloseTo(0.1, 5); // full target → maxGain
+    expect(updateProsperity(0, 500, params)).toBeCloseTo(0.1, 5); // 10× target still caps
+    expect(updateProsperity(0, 25, params)).toBeCloseTo(0.05, 5); // half target → half gain
+  });
+
+  it("decays toward zero by at most decayRate, never overshooting", () => {
+    expect(updateProsperity(0.5, 0, params)).toBeCloseTo(0.47, 5); // 0.5 − 0.03
+    expect(updateProsperity(-0.5, 0, params)).toBeCloseTo(-0.47, 5); // pulls up toward 0
+    expect(updateProsperity(0.02, 0, params)).toBeCloseTo(0, 5); // decay clipped to |current|
+  });
+
+  it("clamps the result to [min, max]", () => {
+    expect(updateProsperity(0.98, 50, params)).toBe(1); // 0.98 − 0.03 + 0.1 = 1.05 → 1
+  });
+});
+
+describe("getProsperityMultiplier", () => {
+  const params: ProsperityParams = {
+    decayRate: 0.03, maxGain: 0.1, targetVolume: 50,
+    min: -1, max: 1, multAtMin: 0.3, multAtZero: 0.7, multAtMax: 1.3,
+  };
+
+  it("hits the anchor multipliers at -1, 0, +1", () => {
+    expect(getProsperityMultiplier(-1, params)).toBeCloseTo(0.3, 5);
+    expect(getProsperityMultiplier(0, params)).toBeCloseTo(0.7, 5);
+    expect(getProsperityMultiplier(1, params)).toBeCloseTo(1.3, 5);
+  });
+
+  it("interpolates linearly within each half", () => {
+    expect(getProsperityMultiplier(-0.5, params)).toBeCloseTo(0.5, 5); // midpoint of [0.3, 0.7]
+    expect(getProsperityMultiplier(0.5, params)).toBeCloseTo(1.0, 5); // midpoint of [0.7, 1.3]
+  });
+});
+
+describe("getProsperityLabel", () => {
+  it("maps prosperity values to bands at their boundaries", () => {
+    expect(getProsperityLabel(-0.6)).toBe("Crisis");
+    expect(getProsperityLabel(-0.5)).toBe("Crisis"); // inclusive upper edge
+    expect(getProsperityLabel(-0.3)).toBe("Disrupted");
+    expect(getProsperityLabel(-0.1)).toBe("Disrupted");
+    expect(getProsperityLabel(0)).toBe("Stagnant");
+    expect(getProsperityLabel(0.3)).toBe("Stagnant");
+    expect(getProsperityLabel(0.5)).toBe("Active");
+    expect(getProsperityLabel(0.7)).toBe("Active");
+    expect(getProsperityLabel(0.9)).toBe("Booming");
+    expect(getProsperityLabel(1)).toBe("Booming");
   });
 });
 

@@ -1,29 +1,34 @@
 /**
  * Pure trade validation and calculation engine.
  * No database dependency — operates entirely on passed-in values.
+ *
+ * Stock model: a trade moves a single `stockDelta` (buy: -qty, sell: +qty).
+ * Buys are capped at floor(stock - stockMin) (the market keeps a reserve);
+ * sells at floor(stockMax - stock) (can't sell into a full warehouse). The
+ * `totalPrice` is computed by the caller via quoteTrade (integrated slippage +
+ * spread), so this engine never sees a flat per-unit price.
  */
 
 import type { ShipStatus } from "../types/game";
 
-/** Fraction of traded quantity that affects market demand (e.g. 0.1 = 10%). */
-export const TRADE_DEMAND_IMPACT_FACTOR = 0.1;
-
 export interface TradeDelta {
   creditsDelta: number; // positive = player gains credits (sell), negative = player spends (buy)
   cargoQuantityDelta: number; // positive = player gains cargo (buy), negative = player loses (sell)
-  supplyDelta: number; // positive = supply increases (sell adds supply), negative (buy removes supply)
-  demandDelta: number; // positive = demand increases (buy increases demand), negative (sell decreases)
+  stockDelta: number; // negative = stock removed (buy), positive = stock added (sell)
   totalPrice: number; // absolute price of the trade
 }
 
 export interface TradeParams {
   type: "buy" | "sell";
   quantity: number;
-  unitPrice: number;
+  /** Precomputed total (quoteTrade.totalPrice, after spread + any rep multiplier). */
+  totalPrice: number;
   playerCredits: number;
   currentCargoUsed: number;
   cargoMax: number;
-  currentSupply: number;
+  currentStock: number;
+  stockMin: number;
+  stockMax: number;
   currentGoodQuantityInCargo: number;
 }
 
@@ -37,11 +42,13 @@ export function validateAndCalculateTrade(
   const {
     type,
     quantity,
-    unitPrice,
+    totalPrice,
     playerCredits,
     currentCargoUsed,
     cargoMax,
-    currentSupply,
+    currentStock,
+    stockMin,
+    stockMax,
     currentGoodQuantityInCargo,
   } = params;
 
@@ -49,10 +56,7 @@ export function validateAndCalculateTrade(
     return { ok: false, error: "Quantity must be a positive integer." };
   }
 
-  const totalPrice = quantity * unitPrice;
-
   if (type === "buy") {
-    // Validate: player can afford it
     if (totalPrice > playerCredits) {
       return {
         ok: false,
@@ -60,7 +64,6 @@ export function validateAndCalculateTrade(
       };
     }
 
-    // Validate: cargo space available
     if (currentCargoUsed + quantity > cargoMax) {
       return {
         ok: false,
@@ -68,11 +71,11 @@ export function validateAndCalculateTrade(
       };
     }
 
-    // Validate: station has enough supply
-    if (quantity > currentSupply) {
+    const available = Math.floor(currentStock - stockMin);
+    if (quantity > available) {
       return {
         ok: false,
-        error: `Not enough supply at station. Requested ${quantity}, available ${currentSupply}.`,
+        error: `Not enough available to buy. Requested ${quantity}, available ${Math.max(0, available)}.`,
       };
     }
 
@@ -81,8 +84,7 @@ export function validateAndCalculateTrade(
       delta: {
         creditsDelta: -totalPrice,
         cargoQuantityDelta: quantity,
-        supplyDelta: -quantity,
-        demandDelta: Math.round(quantity * TRADE_DEMAND_IMPACT_FACTOR),
+        stockDelta: -quantity,
         totalPrice,
       },
     };
@@ -96,13 +98,20 @@ export function validateAndCalculateTrade(
     };
   }
 
+  const capacity = Math.floor(stockMax - currentStock);
+  if (quantity > capacity) {
+    return {
+      ok: false,
+      error: `The market can't absorb that much. Sellable ${Math.max(0, capacity)}.`,
+    };
+  }
+
   return {
     ok: true,
     delta: {
       creditsDelta: totalPrice,
       cargoQuantityDelta: -quantity,
-      supplyDelta: quantity,
-      demandDelta: -Math.round(quantity * TRADE_DEMAND_IMPACT_FACTOR),
+      stockDelta: quantity,
       totalPrice,
     },
   };

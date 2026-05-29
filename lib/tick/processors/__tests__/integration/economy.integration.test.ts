@@ -6,7 +6,6 @@ import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
 import {
   ECONOMY_CONSTANTS,
-  EQUILIBRIUM_TARGETS,
   PROSPERITY_DECAY_RATE,
   PROSPERITY_MAX_GAIN,
   PROSPERITY_TARGET_VOLUME,
@@ -24,12 +23,9 @@ import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
 const { prisma } = useIntegrationDb();
 
 const simParams: EconomySimParams = {
-  reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-  noiseReferenceLevel: ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL,
   minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
   maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
-  equilibrium: EQUILIBRIUM_TARGETS,
 };
 
 const prosperityParams: ProsperityParams = {
@@ -51,10 +47,9 @@ describe("economyProcessor (integration)", () => {
   });
 
   /**
-   * Run the processor body directly with a seeded RNG. Per-tick noise (±3-5
-   * units) is larger than per-tick reversion (~1-3 units), so behavioral
-   * assertions against `Math.random` were flaky. A fixed seed pins the
-   * outcome — assertions still check direction-of-travel, not exact values.
+   * Run the processor body directly with a seeded RNG. Per-tick noise (±3) is
+   * small but can mask a single tick's production/consumption, so behavioral
+   * tests run many ticks and assert direction-of-travel, not exact values.
    */
   async function runProcessor(
     tick: number,
@@ -75,37 +70,59 @@ describe("economyProcessor (integration)", () => {
     );
   }
 
-  it("markets with extreme supply/demand drift toward equilibrium", async () => {
-    // Agricultural produces food (target supply ~160, demand ~136). Start
-    // both supply and demand far from target. With a seeded RNG (default
-    // seed 42) the per-tick reversion pull beats noise and both values
-    // move toward equilibrium.
-    const foodGoodId = universe.goodIds["food"];
-    const stationId = universe.stations.agricultural;
+  /** First tick >= `from` whose round-robin index lands on `regionIndex`. */
+  function tickForRegion(from: number, regionIndex: number, regionCount: number): number {
+    let t = from;
+    while (t % regionCount !== regionIndex) t++;
+    return t;
+  }
 
-    const extremeSupply = 5;
-    const extremeDemand = 195;
+  it("raises a producer's stock and drains a consumer's stock over ticks", async () => {
+    // Agricultural PRODUCES food (federation region); industrial CONSUMES food
+    // (corporate region). Seed both at the same mid stock and run each region's
+    // tick repeatedly — production should push the producer up, consumption
+    // should pull the consumer down, both staying inside [MIN, MAX].
+    const foodGoodId = universe.goodIds["food"];
+    const producerStation = universe.stations.agricultural;
+    const consumerStation = universe.stations.industrial;
 
     await prisma.stationMarket.update({
-      where: { stationId_goodId: { stationId, goodId: foodGoodId } },
-      data: { supply: extremeSupply, demand: extremeDemand },
+      where: { stationId_goodId: { stationId: producerStation, goodId: foodGoodId } },
+      data: { stock: 80 },
+    });
+    await prisma.stationMarket.update({
+      where: { stationId_goodId: { stationId: consumerStation, goodId: foodGoodId } },
+      data: { stock: 80 },
     });
 
     const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
     const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
+    const corpIdx = regions.findIndex((r) => r.id === universe.regions.corporate);
 
-    let targetTick = 10;
-    while (targetTick % regions.length !== fedIdx) targetTick++;
+    // Run ~12 economy ticks for each region.
+    for (let i = 0; i < 12; i++) {
+      await runProcessor(tickForRegion(10 + i * regions.length, fedIdx, regions.length));
+      await runProcessor(tickForRegion(10 + i * regions.length, corpIdx, regions.length));
+    }
 
-    await runProcessor(targetTick);
-
-    const marketAfter = await prisma.stationMarket.findUnique({
-      where: { stationId_goodId: { stationId, goodId: foodGoodId } },
+    const producer = await prisma.stationMarket.findUnique({
+      where: { stationId_goodId: { stationId: producerStation, goodId: foodGoodId } },
+    });
+    const consumer = await prisma.stationMarket.findUnique({
+      where: { stationId_goodId: { stationId: consumerStation, goodId: foodGoodId } },
     });
 
-    expect(marketAfter).not.toBeNull();
-    expect(marketAfter!.supply).toBeGreaterThan(extremeSupply);
-    expect(marketAfter!.demand).toBeLessThan(extremeDemand);
+    expect(producer!.stock).toBeGreaterThan(80);
+    expect(consumer!.stock).toBeLessThan(80);
+
+    // Stock stays within the global band.
+    for (const m of [producer!, consumer!]) {
+      expect(m.stock).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
+      expect(m.stock).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+    }
+
+    // Cross-system: the producing system holds more food than the consuming one.
+    expect(producer!.stock).toBeGreaterThan(consumer!.stock);
   });
 
   it("only the target region's markets change (round-robin)", async () => {
@@ -113,42 +130,33 @@ describe("economyProcessor (integration)", () => {
     const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
     const corpIdx = regions.findIndex((r) => r.id === universe.regions.corporate);
 
-    // Set distinctive values on a corporate-region market (industrial station)
+    // Set a distinctive stock on a corporate-region market (industrial station).
     const oreGoodId = universe.goodIds["ore"];
     const corpStationId = universe.stations.industrial;
 
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId: corpStationId, goodId: oreGoodId } },
-      data: { supply: 199, demand: 199 },
+      data: { stock: 150 },
     });
 
-    // Run on a tick that targets the FEDERATION region (not corporate)
-    let fedTick = 10;
-    while (fedTick % regions.length !== fedIdx) fedTick++;
-
+    // Run on a tick that targets the FEDERATION region (not corporate).
+    const fedTick = tickForRegion(10, fedIdx, regions.length);
     await runProcessor(fedTick);
 
-    // Corporate market should be unchanged
     const corpMarket = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId: corpStationId, goodId: oreGoodId } },
     });
-    expect(corpMarket!.supply).toBe(199);
-    expect(corpMarket!.demand).toBe(199);
+    expect(corpMarket!.stock).toBe(150);
 
-    // Now run on corporate tick
-    let corpTick = 10;
-    while (corpTick % regions.length !== corpIdx) corpTick++;
+    // Now run on the corporate tick.
+    let corpTick = tickForRegion(10, corpIdx, regions.length);
     if (corpTick === fedTick) corpTick += regions.length;
-
     await runProcessor(corpTick);
 
-    // Corporate market should now be changed
     const corpMarketAfter = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId: corpStationId, goodId: oreGoodId } },
     });
-    expect(
-      corpMarketAfter!.supply !== 199 || corpMarketAfter!.demand !== 199,
-    ).toBe(true);
+    expect(corpMarketAfter!.stock).not.toBe(150);
   });
 
   it("result contains economyTick global event with correct region", async () => {

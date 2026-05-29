@@ -28,9 +28,9 @@ import type { PriceHistoryEntry } from "@/lib/engine/snapshot";
 /** Flat market row — one per (system, good) — needed to compute prices. */
 export interface MarketView {
   systemId: string;
+  /** Canonical good key (resolved by the adapter) so the price curve anchors correctly. */
   goodId: string;
-  supply: number;
-  demand: number;
+  stock: number;
   basePrice: number;
   priceFloor: number;
   priceCeiling: number;

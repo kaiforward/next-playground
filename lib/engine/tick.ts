@@ -1,7 +1,11 @@
 /**
- * Economy simulation tick engine.
- * Mean-reverting drift: supply/demand pull toward equilibrium targets
- * with production/consumption effects and random noise.
+ * Economy simulation tick engine — single-stock model.
+ *
+ * Each market holds one `stock` value. Producers add stock (self-limiting near
+ * the ceiling), consumers drain it (self-limiting near the floor), then noise is
+ * applied and the value is clamped to [minLevel, maxLevel]. There is no
+ * mean-reversion and no `demand` axis — equilibrium emerges spatially via the
+ * trade-flow processor. See docs/planned/stock-based-market-economy.md §3.
  *
  * All functions are pure — no DB or constant imports.
  */
@@ -12,178 +16,98 @@ import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
 
 export interface MarketTickEntry {
   goodId: string;
-  supply: number;
-  demand: number;
-  basePrice: number;
+  stock: number;
   economyType: string;
   produces: string[];
   consumes: string[];
-  /** Multiplier on the supply equilibrium target. Default 1. */
-  supplyTargetMult?: number;
-  /** Multiplier on the demand equilibrium target. Default 1. */
-  demandTargetMult?: number;
-  /** Multiplier on production rate. Default 1.0. */
-  productionMult?: number;
-  /** Multiplier on consumption rate. Default 1.0. */
-  consumptionMult?: number;
-  /** Multiplier on reversion rate (dampening). Default 1.0. */
-  reversionMult?: number;
-  /** Per-good base production rate. Overrides params.productionRate when present. */
+  /** Per-good base production rate (undefined/0 = not a producer of this good). */
   productionRate?: number;
-  /** Per-good base consumption rate. Overrides params.consumptionRate when present. */
+  /** Per-good base consumption rate (undefined/0 = not a consumer of this good). */
   consumptionRate?: number;
+  /** Multiplier on production rate from events. Default 1.0. */
+  productionMult?: number;
+  /** Multiplier on consumption rate from events. Default 1.0. */
+  consumptionMult?: number;
   /** Per-good volatility multiplier on noise amplitude. Default 1.0. */
   volatility?: number;
-  /** Per-good equilibrium target for producing systems. Overrides params.equilibrium.produces. */
-  equilibriumProduces?: { supply: number; demand: number };
-  /** Per-good equilibrium target for consuming systems. Overrides params.equilibrium.consumes. */
-  equilibriumConsumes?: { supply: number; demand: number };
 }
 
 export interface EconomySimParams {
-  reversionRate: number;
   noiseAmplitude: number;
-  noiseReferenceLevel: number;
   minLevel: number;
   maxLevel: number;
-  equilibrium: {
-    produces: { supply: number; demand: number };
-    consumes: { supply: number; demand: number };
-    neutral: { supply: number; demand: number };
-  };
 }
 
 /**
- * Get the equilibrium target for a good at a station based on
- * whether the station's economy produces or consumes that good.
+ * Self-limiting scale factor (sqrt curve). Returns 0 at the boundary and 1 at
+ * the opposite extreme; sqrt keeps rates active through mid-range and only drops
+ * sharply near the extremes.
  */
-function getEquilibrium(
-  entry: MarketTickEntry,
-  params: EconomySimParams,
-): { supply: number; demand: number } {
-  if (entry.produces.includes(entry.goodId)) return entry.equilibriumProduces ?? params.equilibrium.produces;
-  if (entry.consumes.includes(entry.goodId)) return entry.equilibriumConsumes ?? params.equilibrium.consumes;
-  return params.equilibrium.neutral;
-}
-
-/**
- * Drift a single value toward its target with noise.
- *
- * Mean reversion: pull toward target by reversionRate fraction of the gap.
- * Noise: random uniform in [-noiseAmplitude, +noiseAmplitude].
- */
-function driftValue(
-  current: number,
-  target: number,
-  reversionRate: number,
-  noise: number,
+function selfLimitingFactor(
+  value: number,
   min: number,
   max: number,
+  direction: "produce" | "consume",
 ): number {
-  const reversion = (target - current) * reversionRate;
-  return clamp(current + reversion + noise, min, max);
-}
-
-/**
- * Self-limiting scale factor (sqrt curve).
- * Returns 0 at the boundary and 1 at the opposite extreme.
- * Uses sqrt to keep rates active through mid-range — only drops sharply near extremes.
- */
-function selfLimitingFactor(value: number, min: number, max: number, direction: "produce" | "consume"): number {
   const range = max - min;
   if (range <= 0) return 0;
-  const ratio = direction === "produce"
-    ? (max - value) / range   // production slows as supply approaches ceiling
-    : (value - min) / range;  // consumption slows as supply approaches floor
+  const ratio =
+    direction === "produce"
+      ? (max - value) / range // production slows as stock approaches the ceiling
+      : (value - min) / range; // consumption slows as stock approaches the floor
   return Math.sqrt(Math.max(0, Math.min(1, ratio)));
 }
 
 /**
- * Simulate one economy tick across all market entries using mean-reverting drift.
+ * Simulate one economy tick across all market entries.
  *
- * For each entry:
- *   1. Compute equilibrium target based on economy type relationship to good
- *   2. Apply mean-reversion pull toward target (reversionRate × gap)
- *   3. Apply self-limiting production effect (scales down near ceiling)
- *   4. Apply self-limiting consumption effect (scales down near floor)
- *   5. Add random noise
- *   6. Clamp to [minLevel, maxLevel]
- *
- * Accepts an optional RNG for deterministic testing; defaults to Math.random.
- * Returns a new array (does not mutate input).
+ * For each entry: apply self-limiting production (if a producer), self-limiting
+ * consumption (if a consumer), then noise, then clamp to [minLevel, maxLevel].
+ * Accepts an optional RNG for deterministic testing. Returns a new array.
  */
 export function simulateEconomyTick(
   markets: MarketTickEntry[],
   params: EconomySimParams,
   rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { reversionRate, noiseAmplitude, noiseReferenceLevel, minLevel, maxLevel } = params;
+  const { noiseAmplitude, minLevel, maxLevel } = params;
 
   return markets.map((entry) => {
-    const target = getEquilibrium(entry, params);
+    let stock = entry.stock;
 
-    // Apply modifier multipliers to equilibrium targets (default 1)
-    const effectiveSupplyTarget = target.supply * (entry.supplyTargetMult ?? 1);
-    const effectiveDemandTarget = target.demand * (entry.demandTargetMult ?? 1);
-
-    // Apply reversion dampening (default 1.0 = no change)
-    const effectiveReversion = reversionRate * (entry.reversionMult ?? 1);
-
-    // Per-good volatility scales noise amplitude (default 1.0)
-    const baseNoise = noiseAmplitude * (entry.volatility ?? 1);
-
-    // Scale noise proportionally to target level so small markets (neutral goods)
-    // get less absolute noise and large markets (producers) get more.
-    const supplyNoise = (rng() * 2 - 1) * baseNoise * (effectiveSupplyTarget / noiseReferenceLevel);
-    const demandNoise = (rng() * 2 - 1) * baseNoise * (effectiveDemandTarget / noiseReferenceLevel);
-
-    // Start with mean-reverting drift toward modified targets
-    let supply = driftValue(entry.supply, effectiveSupplyTarget, effectiveReversion, supplyNoise, minLevel, maxLevel);
-    let demand = driftValue(entry.demand, effectiveDemandTarget, effectiveReversion, demandNoise, minLevel, maxLevel);
-
-    // Apply per-good base rates with modifier multipliers
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
+    if (effectiveProduction > 0 && entry.produces.includes(entry.goodId)) {
+      stock += effectiveProduction * selfLimitingFactor(stock, minLevel, maxLevel, "produce");
+    }
+
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
-
-    // Production: producers generate supply
-    // Self-limiting: scales down as supply approaches ceiling (warehouses full)
-    if (entry.produces.includes(entry.goodId)) {
-      const prodScale = selfLimitingFactor(supply, minLevel, maxLevel, "produce");
-      supply = clamp(supply + effectiveProduction * prodScale, minLevel, maxLevel);
+    if (effectiveConsumption > 0 && entry.consumes.includes(entry.goodId)) {
+      stock -= effectiveConsumption * selfLimitingFactor(stock, minLevel, maxLevel, "consume");
     }
 
-    // Consumption: consumers deplete supply
-    // Self-limiting: scales down as supply approaches floor (nothing to consume)
-    if (entry.consumes.includes(entry.goodId)) {
-      const consScale = selfLimitingFactor(supply, minLevel, maxLevel, "consume");
-      supply = clamp(supply - effectiveConsumption * consScale, minLevel, maxLevel);
-    }
+    const noise = (rng() * 2 - 1) * noiseAmplitude * (entry.volatility ?? 1);
+    stock = clamp(stock + noise, minLevel, maxLevel);
 
-    return { ...entry, supply, demand };
+    return { ...entry, stock };
   });
 }
 
 // ── Tick entry builder ──────────────────────────────────────────
 
 /**
- * Pre-resolved inputs for building a MarketTickEntry.
- * Callers resolve data-source-specific values (DB vs SimWorld)
- * into this common shape; the builder handles shared computation
- * (trait bonus, prosperity scaling, rate assembly).
+ * Pre-resolved inputs for building a MarketTickEntry. Callers resolve
+ * data-source-specific values (DB vs SimWorld) into this common shape; the
+ * builder handles shared computation (trait bonus, gov consumption boost,
+ * prosperity scaling).
  */
 export interface TickEntryInput {
   goodId: string;
-  supply: number;
-  demand: number;
-  basePrice: number;
+  stock: number;
   economyType: string;
   produces: string[];
   consumes: string[];
   /** Volatility after government scaling. */
   volatility: number;
-  /** Per-good equilibrium overrides (after gov spread adjustment). */
-  equilibriumProduces?: { supply: number; demand: number };
-  equilibriumConsumes?: { supply: number; demand: number };
   /** Base production rate from economy type (undefined = not a producer). */
   baseProductionRate?: number;
   /** Base consumption rate from economy type (undefined = not a consumer). */
@@ -197,11 +121,10 @@ export interface TickEntryInput {
 }
 
 /**
- * Build a MarketTickEntry from pre-resolved inputs.
- *
- * Computes: trait production bonus, consumption with gov boost,
- * prosperity multiplier on both rates. Callers spread event
- * modifier fields (supplyTargetMult, etc.) on top if present.
+ * Build a MarketTickEntry from pre-resolved inputs. Computes the trait
+ * production bonus, folds the government consumption boost into the consumption
+ * rate, and applies the prosperity multiplier equally to both rates. Callers
+ * spread event productionMult/consumptionMult on top if present.
  */
 export function buildMarketTickEntry(
   input: TickEntryInput,
@@ -209,38 +132,28 @@ export function buildMarketTickEntry(
 ): MarketTickEntry {
   const prosperityMult = getProsperityMultiplier(input.prosperity, prosperityParams);
 
-  // Trait production bonus: effectiveRate = baseRate × (1 + traitBonus)
   const traitBonus = computeTraitProductionBonus(input.traits, input.goodId);
-  const productionBeforeProsperity = input.baseProductionRate != null
-    ? input.baseProductionRate * (1 + traitBonus)
-    : undefined;
+  const productionBeforeProsperity =
+    input.baseProductionRate != null ? input.baseProductionRate * (1 + traitBonus) : undefined;
 
-  // Consumption with government boost
-  const consumptionBeforeProsperity = input.baseConsumptionRate != null
-    ? input.baseConsumptionRate + input.govConsumptionBoost
-    : input.govConsumptionBoost > 0 ? input.govConsumptionBoost : undefined;
-
-  // Apply prosperity multiplier to both production and consumption equally
-  const productionRate = productionBeforeProsperity != null
-    ? productionBeforeProsperity * prosperityMult
-    : undefined;
-  const consumptionRate = consumptionBeforeProsperity != null
-    ? consumptionBeforeProsperity * prosperityMult
-    : undefined;
+  const consumptionBeforeProsperity =
+    input.baseConsumptionRate != null
+      ? input.baseConsumptionRate + input.govConsumptionBoost
+      : input.govConsumptionBoost > 0
+        ? input.govConsumptionBoost
+        : undefined;
 
   return {
     goodId: input.goodId,
-    supply: input.supply,
-    demand: input.demand,
-    basePrice: input.basePrice,
+    stock: input.stock,
     economyType: input.economyType,
     produces: input.produces,
     consumes: input.consumes,
-    productionRate,
-    consumptionRate,
+    productionRate:
+      productionBeforeProsperity != null ? productionBeforeProsperity * prosperityMult : undefined,
+    consumptionRate:
+      consumptionBeforeProsperity != null ? consumptionBeforeProsperity * prosperityMult : undefined,
     volatility: input.volatility,
-    equilibriumProduces: input.equilibriumProduces,
-    equilibriumConsumes: input.equilibriumConsumes,
   };
 }
 

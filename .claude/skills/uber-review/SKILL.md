@@ -47,6 +47,15 @@ Mechanical reviewers: conventions, silent-failures.
 - Use `headRefOid` as the sha and `headRefName` as the branch.
 - Use `headRepository.nameWithOwner` for permalink format (PR mode output, added in PR 3).
 
+#### 1.1. Check out the PR branch (PR mode only) — REQUIRED
+
+Reviewer and validator agents `Read` source files for context (db-integrity, security, and silent-failures need whole-file context to confirm transaction boundaries, auth gates, and call sites — the diff hunk alone is not enough). Those reads resolve against the **working tree**, which in PR mode usually sits on the PR's **base** branch. Without this step, agents review **pre-PR code** and emit false positives — most dangerously, spurious "won't compile" findings from cross-chunk renames they can't see, and a worthless "security clean" against the wrong code.
+
+So before dispatching any agent, check out the PR head so the tree matches the diff:
+- Bash: `git fetch origin <headRefName>` then `git checkout <headRefName>`.
+
+No need to restore the original branch afterward — fixes land on this branch anyway. (If the tree is dirty and checkout would fail, skip it and instead tell every agent to rely only on the provided chunk diff and not Read source.)
+
 ### 1.5. Classify each changed file
 
 For each file in the diff, assign one classification:

@@ -45,8 +45,7 @@ export interface SimMarketEntry {
   systemId: string;
   goodId: string;
   basePrice: number;
-  supply: number;
-  demand: number;
+  stock: number;
   priceFloor: number;
   priceCeiling: number;
 }
@@ -245,16 +244,15 @@ export interface GovernmentSellEntry {
 export interface MarketSnapshot {
   systemId: string;
   goodId: string;
-  supply: number;
-  demand: number;
+  stock: number;
   price: number;
 }
 
 export interface MarketHealthSummary {
   /** Per-good average price standard deviation across systems (high = trade opportunity). */
   priceDispersion: { goodId: string; avgStdDev: number }[];
-  /** Per-good average distance from equilibrium at simulation end. */
-  equilibriumDrift: { goodId: string; avgSupplyDrift: number; avgDemandDrift: number }[];
+  /** Per-good average distance of stock from its targetStock at simulation end. */
+  stockDrift: { goodId: string; avgStockDrift: number }[];
 }
 
 // ── Event impact ────────────────────────────────────────────────

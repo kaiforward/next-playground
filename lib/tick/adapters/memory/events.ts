@@ -179,16 +179,22 @@ export class InMemoryEventsWorld implements EventsWorld {
     for (const shock of shocks) {
       const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
       if (!market) continue;
-      const current =
-        shock.parameter === "supply" ? market.supply : market.demand;
+      if (!isFinite(shock.value)) continue;
       const delta =
         shock.mode === "percentage"
-          ? Math.round(current * shock.value)
+          ? Math.round(market.stock * shock.value)
           : shock.value;
-      const next = Math.max(minLevel, Math.min(maxLevel, current + delta));
-      if (shock.parameter === "supply") market.supply = next;
-      else market.demand = next;
+      // Single-stock model: a "supply" shock moves stock directly; a "demand"
+      // shock moves it inversely (more demand → scarcer → lower stock).
+      const signed = shock.parameter === "supply" ? delta : -delta;
+      // Accumulate unclamped, then clamp once below — parity with the Prisma
+      // adapter, which only clamps at write time. Clamping per-shock here would
+      // diverge when ≥2 shocks hit the same market in one tick.
+      market.stock += signed;
       touched.add(market);
+    }
+    for (const market of touched) {
+      market.stock = Math.max(minLevel, Math.min(maxLevel, market.stock));
     }
     return Promise.resolve(touched.size);
   }
