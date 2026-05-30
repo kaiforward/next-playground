@@ -57,11 +57,10 @@ export interface SimConstants {
     maxGlobal: number;
     maxBatchSpawn: number;
     modifierCaps: {
-      minTargetMult: number;
-      maxTargetMult: number;
+      minAnchorMult: number;
+      maxAnchorMult: number;
       minMultiplier: number;
       maxMultiplier: number;
-      minReversionMult: number;
     };
   };
   ships: Record<string, { fuel: number; cargo: number; speed: number; hullMax: number; shieldMax: number; firepower: number; evasion: number; stealth: number; price: number }>;
