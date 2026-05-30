@@ -126,12 +126,13 @@ export class PrismaEconomyWorld implements EconomyWorld {
 
     const ids = updates.map((u) => u.id);
     const stocks = updates.map((u) => (isFinite(u.stock) ? u.stock : 0));
+    const anchors = updates.map((u) => (isFinite(u.anchorMult) ? u.anchorMult : 1));
 
     await this.tx.$executeRaw`
       UPDATE "StationMarket" AS sm
-      SET "stock" = batch."stock"
-      FROM unnest(${ids}::text[], ${stocks}::double precision[])
-        AS batch("id", "stock")
+      SET "stock" = batch."stock", "anchorMult" = batch."anchorMult"
+      FROM unnest(${ids}::text[], ${stocks}::double precision[], ${anchors}::double precision[])
+        AS batch("id", "stock", "anchorMult")
       WHERE sm."id" = batch."id"`;
   }
 

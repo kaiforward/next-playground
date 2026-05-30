@@ -174,4 +174,50 @@ describe("economyProcessor (integration)", () => {
     expect(payload.regionName).toBe(targetRegion.name);
     expect(payload.marketCount).toBeGreaterThan(0);
   });
+
+  it("writes anchorMult from an active anchor_shift modifier", async () => {
+    // goodIds["food"] is the DB CUID used for StationMarket lookups.
+    // EventModifier.goodId stores the canonical good KEY ("food"), not the DB id.
+    const foodDbId = universe.goodIds["food"];
+    const agriSystemId = universe.systems.agricultural;
+    const agriStationId = universe.stations.agricultural;
+
+    // Anchor-shift modifier targeting the agricultural system for food (value 2.0).
+    const event = await prisma.gameEvent.create({
+      data: {
+        type: "bumper_harvest",
+        phase: "active",
+        systemId: agriSystemId,
+        regionId: universe.regions.federation,
+        startTick: 0,
+        phaseStartTick: 0,
+        phaseDuration: 2_000_000_000,
+        severity: 1.0,
+      },
+    });
+    await prisma.eventModifier.create({
+      data: {
+        eventId: event.id,
+        domain: "economy",
+        type: "anchor_shift",
+        targetType: "system",
+        targetId: agriSystemId,
+        goodId: "food", // canonical good key, not DB id
+        parameter: "target_stock",
+        value: 2.0,
+      },
+    });
+
+    // Run on the tick that processes the federation region (contains agri system).
+    const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
+    const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
+    const fedTick = tickForRegion(10, fedIdx, regions.length);
+    await runProcessor(fedTick);
+
+    const updated = await prisma.stationMarket.findUnique({
+      where: { stationId_goodId: { stationId: agriStationId, goodId: foodDbId } },
+    });
+
+    expect(updated?.anchorMult).toBeCloseTo(2.0);
+  });
 });

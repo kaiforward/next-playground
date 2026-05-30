@@ -23,6 +23,7 @@ import {
 } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
+import { aggregateModifiers } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
@@ -135,10 +136,14 @@ export async function runEconomyProcessor(
 
   const simulated = simulateEconomyTick(tickEntries, simParams, rng);
 
-  const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
-    id: m.id,
-    stock: simulated[i].stock,
-  }));
+  const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
+    const mods = modifiersBySystem.get(m.systemId) ?? [];
+    const anchorMult =
+      mods.length > 0
+        ? aggregateModifiers(mods, m.goodId, modifierCaps).anchorMult
+        : 1;
+    return { id: m.id, stock: simulated[i].stock, anchorMult };
+  });
 
   await world.applyMarketUpdates(marketUpdates);
   await world.applyProsperityUpdates(prosperityUpdates);

@@ -63,6 +63,8 @@ export interface ProsperityView {
 export interface MarketUpdate {
   id: string;
   stock: number;
+  /** Active pricing-anchor multiplier from event modifiers (1 = none). */
+  anchorMult: number;
 }
 
 /**
