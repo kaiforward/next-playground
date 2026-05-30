@@ -17,6 +17,7 @@ import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useMapMode } from "@/lib/hooks/use-map-mode";
+import { useProsperity } from "@/lib/hooks/use-prosperity";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
@@ -59,6 +60,7 @@ export function StarMap({
 
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
+  const prosperityBySystem = useProsperity(mapMode === "prosperity");
   const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
 
@@ -68,6 +70,7 @@ export function StarMap({
 
   // ── Price overlay control state (good picker + comparison panel) ──
   const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
+  const [priceMode, setPriceMode] = useState<"buy" | "sell">("buy");
   const [comparisonOpen, setComparisonOpen] = useState(false);
 
   // ── Price heatmap data (per-system price for the selected good) ──
@@ -199,6 +202,7 @@ export function StarMap({
     systemRegionMap,
     regionMap,
     priceHeatmap: heatmapData,
+    priceMode,
   });
 
   // ── Selected in-transit unit + ETA (drives the compact card) ──
@@ -314,6 +318,7 @@ export function StarMap({
         onReady={handleReady}
         regionInfos={regionInfos}
         mapMode={mapMode}
+        prosperityBySystem={prosperityBySystem}
         onViewportChange={onViewportChange}
         connections={allConnections}
         currentTick={currentTick}
@@ -344,6 +349,8 @@ export function StarMap({
         setPriceGoodId={setPriceGoodId}
         goods={goods}
         onOpenComparisonTable={() => setComparisonOpen(true)}
+        priceMode={priceMode}
+        setPriceMode={setPriceMode}
       />
 
       {/* Navigation mode banner */}

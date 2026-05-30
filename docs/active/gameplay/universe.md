@@ -108,10 +108,10 @@ In-transit markers are the player's own ships, so they stay visible even across 
 
 The map's controls float at the bottom-left in a dock (`components/map/map-controls-dock.tsx`) that stacks panels upward. The main panel (`map-overlay-controls.tsx`, state in `lib/hooks/use-map-overlays.ts`) holds two vertically-stacked sections:
 
-- **Territory** (single-select) — Political / Regions / None faction/region polygons (the map mode).
+- **Mode** (single-select) — Political / Regions / Prosperity / None. Political and Regions paint faction/region polygons; **Prosperity** paints a per-system Voronoi choropleth tinted cold→warm by each system's prosperity (Crisis → Booming), with an inline legend under the selector. None hides the territory band.
 - **Overlays** (multi-select) — Fleet, Events, Price, Trade-flow, Ship Routes. Each row carries its glyph element's colour so the panel doubles as the key; the price-ramp, trade-flow tier, and routes legends appear in hover tooltips beside the row so they cost no permanent height.
 
-When the Price overlay is on, a separate **Price panel** (`map-price-panel.tsx`) — the good-picker plus a jump to cross-system comparison — floats above the main panel, kept independent so picking a good never reflows the main panel. The dock is the single owner of panel layout; further context panels slot in as siblings.
+When the Price overlay is on, a separate **Price panel** (`map-price-panel.tsx`) — the good-picker, a **buy/sell sub-toggle** that flips the deal-quality tint perspective, plus a jump to cross-system comparison — floats above the main panel, kept independent so picking a good never reflows the main panel. The price overlay (a per-system halo) is orthogonal to the Mode tint, so it can ride on top of the prosperity choropleth. The dock is the single owner of panel layout; further context panels slot in as siblings.
 
 Overlays govern *ambient* clutter, not data access: with Fleet or Events off, a system's pills are hidden ambiently but still **reveal on hover or selection**. The always-on skeleton — economy core, halo, gateway ring, jump lanes, moving ships — is never gated by a toggle. Overlay state persists per session.
 

@@ -7,6 +7,7 @@ import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { priceRampColor } from "@/lib/utils/price-ramp";
 import { formatCredits } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/form/segmented-control";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
@@ -17,7 +18,11 @@ type SortKey = "price" | "stock" | "hops";
 type SortDir = "asc" | "desc";
 type FilterMode = "all" | "buy" | "sell";
 
-const FILTER_MODES: FilterMode[] = ["all", "buy", "sell"];
+const FILTER_OPTIONS: ReadonlyArray<{ value: FilterMode; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "buy", label: "Buy" },
+  { value: "sell", label: "Sell" },
+];
 
 interface MarketComparisonPanelProps {
   goodId: string;
@@ -127,21 +132,16 @@ function MarketComparisonContent({
         </button>
       </header>
 
-      {/* Filter chips */}
-      <div className="flex gap-1.5 px-4 py-2 border-b border-border">
-        {FILTER_MODES.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`text-xs px-2 py-1 uppercase tracking-wider ${
-              filter === f
-                ? "bg-accent/20 text-text-accent border border-accent/40"
-                : "bg-surface-hover text-text-secondary border border-border"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+      {/* Deal-type filter */}
+      <div className="px-4 py-2 border-b border-border">
+        <SegmentedControl
+          ariaLabel="Filter by deal type"
+          name="comparisonFilter"
+          value={filter}
+          onChange={setFilter}
+          options={FILTER_OPTIONS}
+          size="md"
+        />
       </div>
 
       {/* Sortable header */}
@@ -174,7 +174,11 @@ function MarketComparisonContent({
           <EmptyState message={`No visible systems carry ${goodName} matching this filter.`} />
         )}
         {rows.map((r) => {
-          const color = priceRampColor(r.currentPrice, r.basePrice);
+          const color = priceRampColor(
+            r.currentPrice,
+            r.basePrice,
+            filter === "sell" ? "sell" : "buy",
+          );
           const isOrigin = r.systemId === fromSystemId;
           return (
             <div

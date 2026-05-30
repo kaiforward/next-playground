@@ -329,6 +329,11 @@ export interface MarketComparisonEntry {
   stock: number;
 }
 
+export interface ProsperityEntry {
+  systemId: string;
+  prosperity: number;
+}
+
 export interface TradeHistoryEntry {
   id: string;
   stationId: string;

@@ -2,6 +2,7 @@
 
 import type { MarketEntry } from "@/lib/types/game";
 import { getPriceTrendPct } from "@/lib/utils/market";
+import { priceRampColor } from "@/lib/utils/price-ramp";
 import { formatCredits } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -81,26 +82,21 @@ export function MarketTable({
     {
       key: "priceTrend",
       label: "Trend",
+      sortable: true,
+      getValue: (row) => getPriceTrendPct(row.currentPrice, row.basePrice),
       render: (row) => {
         const diff = row.currentPrice - row.basePrice;
+        if (diff === 0) return <span className="text-text-secondary">--</span>;
         const pct = getPriceTrendPct(row.currentPrice, row.basePrice).toFixed(1);
-        if (diff > 0) {
-          return (
-            <span className="text-green-400 font-medium">
-              <TrendIcon direction="up" className="mr-1" />
-              +{pct}%
-            </span>
-          );
-        }
-        if (diff < 0) {
-          return (
-            <span className="text-red-400 font-medium">
-              <TrendIcon direction="down" className="mr-1" />
-              {pct}%
-            </span>
-          );
-        }
-        return <span className="text-text-secondary">--</span>;
+        // Value convention (default buy perspective): above base = premium (red),
+        // below = bargain (green). Arrow still shows direction.
+        const color = priceRampColor(row.currentPrice, row.basePrice) ?? undefined;
+        return (
+          <span style={{ color }} className="font-medium">
+            <TrendIcon direction={diff > 0 ? "up" : "down"} className="mr-1" />
+            {diff > 0 ? "+" : ""}{pct}%
+          </span>
+        );
       },
     },
     ...(onCompareGood

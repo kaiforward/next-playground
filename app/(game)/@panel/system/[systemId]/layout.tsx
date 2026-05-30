@@ -13,6 +13,8 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EconomyBadge } from "@/components/ui/economy-badge";
+import { ProsperityBadge } from "@/components/ui/prosperity-badge";
+import { useProsperity } from "@/lib/hooks/use-prosperity";
 import { TabList, TabLink } from "@/components/ui/tabs";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { MapPinIcon } from "@/components/ui/icons";
@@ -25,6 +27,7 @@ function SystemPanelContent({
   children: React.ReactNode;
 }) {
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
+  const prosperity = useProsperity().get(systemId);
   const { fleet } = useFleet();
   const { convoys } = useConvoys();
   const allMissions = useSystemAllMissions(systemId);
@@ -61,6 +64,7 @@ function SystemPanelContent({
   const subtitle = (
     <span className="inline-flex items-center gap-2">
       {systemInfo && <EconomyBadge economyType={systemInfo.economyType} />}
+      {prosperity !== undefined && <ProsperityBadge prosperity={prosperity} />}
       {systemInfo?.isGateway && <Badge color="amber">Gateway</Badge>}
       {regionInfo && (
         <span className="text-text-secondary">{regionInfo.name}</span>

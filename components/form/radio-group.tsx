@@ -1,8 +1,9 @@
 "use client";
 
-import { useId } from "react";
+import { Fragment, useId, type ReactNode } from "react";
 import { tv, type VariantProps } from "tailwind-variants";
 import { choiceRow, formSlots, formSizeVariants } from "./form-slots";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const radioRowVariants = tv({
   base: choiceRow.base,
@@ -36,7 +37,11 @@ interface RadioGroupProps<T extends string> {
   name: string;
   value: T;
   onChange: (value: T) => void;
-  options: ReadonlyArray<{ value: T; label: string }>;
+  /**
+   * Each option may carry an optional `tooltip` legend, revealed on
+   * hover/keyboard-focus of that row (requires an ancestor `TooltipProvider`).
+   */
+  options: ReadonlyArray<{ value: T; label: string; tooltip?: ReactNode }>;
   size?: RadioGroupSize;
 }
 
@@ -45,7 +50,9 @@ interface RadioGroupProps<T extends string> {
  * direct children are `radio`s (sr-only native inputs inside styled labels) —
  * no intervening list markup. The visible affordance is a round indicator
  * pinned to the right of each row; pair with `CheckboxInput` for a consistent
- * control family (same row, square vs round indicator).
+ * control family (same row, square vs round indicator). An option with a
+ * `tooltip` wraps its row in a Radix tooltip (no permanent height) — the row
+ * stays a direct child of the group since the trigger renders `asChild`.
  */
 export function RadioGroup<T extends string>({
   label,
@@ -75,8 +82,8 @@ export function RadioGroup<T extends string>({
       >
         {options.map((option) => {
           const active = option.value === value;
-          return (
-            <label key={option.value} className={radioRowVariants({ active, size })}>
+          const row = (
+            <label className={radioRowVariants({ active, size })}>
               <input
                 type="radio"
                 name={name}
@@ -88,6 +95,15 @@ export function RadioGroup<T extends string>({
               <span className="truncate">{option.label}</span>
               <span className={radioDotVariants({ active })} aria-hidden />
             </label>
+          );
+
+          if (!option.tooltip) return <Fragment key={option.value}>{row}</Fragment>;
+
+          return (
+            <Tooltip key={option.value}>
+              <TooltipTrigger asChild>{row}</TooltipTrigger>
+              <TooltipContent side="right">{option.tooltip}</TooltipContent>
+            </Tooltip>
           );
         })}
       </div>

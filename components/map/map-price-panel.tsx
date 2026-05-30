@@ -2,7 +2,13 @@
 
 import { useMemo } from "react";
 import { SelectInput } from "@/components/form/select-input";
+import { SegmentedControl } from "@/components/form/segmented-control";
 import { Button } from "@/components/ui/button";
+
+const PRICE_MODE_OPTIONS: ReadonlyArray<{ value: "buy" | "sell"; label: string }> = [
+  { value: "buy", label: "Buy" },
+  { value: "sell", label: "Sell" },
+];
 
 interface MapPricePanelProps {
   /** Selected good for the heatmap. Null until one is picked. */
@@ -12,6 +18,9 @@ interface MapPricePanelProps {
   goods: { id: string; name: string }[];
   /** Open the cross-system comparison panel. Shown only once a good is picked. */
   onOpenComparisonTable: () => void;
+  /** Buy/sell perspective for the deal-quality tint. */
+  priceMode: "buy" | "sell";
+  setPriceMode: (mode: "buy" | "sell") => void;
 }
 
 /**
@@ -25,6 +34,8 @@ export function MapPricePanel({
   setPriceGoodId,
   goods,
   onOpenComparisonTable,
+  priceMode,
+  setPriceMode,
 }: MapPricePanelProps) {
   const options = useMemo<{ value: string | null; label: string }[]>(
     () => [
@@ -41,6 +52,14 @@ export function MapPricePanel({
         </h3>
       </div>
       <div className="px-3 py-2 space-y-2">
+        <SegmentedControl
+          ariaLabel="Price perspective"
+          name="priceMode"
+          value={priceMode}
+          onChange={setPriceMode}
+          options={PRICE_MODE_OPTIONS}
+          size="sm"
+        />
         <SelectInput<string | null>
           label="Good"
           size="sm"

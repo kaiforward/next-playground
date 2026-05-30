@@ -1,5 +1,6 @@
 import type { EconomyType } from "@/lib/types/game";
 import type { GoodEquilibrium } from "@/lib/constants/goods";
+import type { ProsperityParams } from "@/lib/engine/tick";
 
 /** Economy simulation constants — used by seed (initial stock) and the economy tick (noise + bounds). */
 export const ECONOMY_CONSTANTS = {
@@ -51,6 +52,18 @@ export const PROSPERITY_TARGET_VOLUME = 50;
 export const PROSPERITY_MULT_AT_MIN = 0.3;   // at prosperity = -1
 export const PROSPERITY_MULT_AT_ZERO = 0.7;  // at prosperity = 0
 export const PROSPERITY_MULT_AT_MAX = 1.3;   // at prosperity = +1
+
+/** Assembled live-game prosperity params — shared by the economy processor and UI helpers. */
+export const PROSPERITY_PARAMS: ProsperityParams = {
+  decayRate: PROSPERITY_DECAY_RATE,
+  maxGain: PROSPERITY_MAX_GAIN,
+  targetVolume: PROSPERITY_TARGET_VOLUME,
+  min: PROSPERITY_MIN,
+  max: PROSPERITY_MAX,
+  multAtMin: PROSPERITY_MULT_AT_MIN,
+  multAtZero: PROSPERITY_MULT_AT_ZERO,
+  multAtMax: PROSPERITY_MULT_AT_MAX,
+};
 
 // ── Self-sufficiency factors ──────────────────────────────────
 
