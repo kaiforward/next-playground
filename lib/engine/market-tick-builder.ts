@@ -10,7 +10,7 @@
 
 import { GOODS } from "@/lib/constants/goods";
 import { type GovernmentDefinition } from "@/lib/constants/government";
-import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
+import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry, type ProsperityParams } from "@/lib/engine/tick";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { EconomyType } from "@/lib/types/game";
@@ -37,13 +37,7 @@ export interface MarketTickInput {
   /** Active economy modifiers for this system (already filtered). */
   modifiers: ModifierRow[];
   /** Modifier caps from constants. */
-  modifierCaps: {
-    minTargetMult: number;
-    maxTargetMult: number;
-    minMultiplier: number;
-    maxMultiplier: number;
-    minReversionMult: number;
-  };
+  modifierCaps: ModifierCaps;
 }
 
 /**
@@ -82,10 +76,11 @@ export function resolveMarketTickEntry(
 
   if (input.modifiers.length === 0) return entry;
 
-  // Only production/consumption multipliers affect the stock tick. The legacy
-  // supply_target/demand_target/reversion_dampening modifiers have no analogue
-  // in the single-stock model and are intentionally not applied (see spec §6);
-  // events still shape the economy via rate multipliers and (future) stock shocks.
+  // Only production/consumption rate multipliers affect the stock tick.
+  // supply_target/demand_target modifiers have been converted to anchor_shift,
+  // which affects PRICING via the stored anchorMult (computed by the economy
+  // processor each tick), not the stock delta. Events also shape the economy
+  // via stock shocks (applied separately).
   const agg = aggregateModifiers(input.modifiers, input.goodId, input.modifierCaps);
   return {
     ...entry,
