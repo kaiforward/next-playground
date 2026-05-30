@@ -4,6 +4,7 @@ import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-color
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
+import { PROSPERITY_RAMP_STOPS } from "@/lib/utils/prosperity";
 import { RadioGroup } from "@/components/form/radio-group";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import {
@@ -16,6 +17,7 @@ import {
 const MODE_LABELS: Record<MapMode, string> = {
   political: "Political",
   regions: "Regions",
+  prosperity: "Prosperity",
   none: "None",
 };
 
@@ -79,14 +81,15 @@ export function MapOverlayControls({
           </h3>
         </div>
 
-        <SectionHeading>Territory</SectionHeading>
+        <SectionHeading>Mode</SectionHeading>
         <RadioGroup
-          ariaLabel="Territory"
+          ariaLabel="Mode"
           name="mapMode"
           value={mode}
           onChange={setMode}
           options={TERRITORY_OPTIONS}
         />
+        {mode === "prosperity" && <ProsperityRampLegend />}
 
         <div className="border-t border-border" />
         <SectionHeading>Overlays</SectionHeading>
@@ -161,6 +164,30 @@ function PriceRampLegend() {
         <span>0.6×</span>
         <span>base</span>
         <span>1.4×</span>
+      </div>
+    </div>
+  );
+}
+
+const PROSPERITY_RAMP = [
+  PROSPERITY_RAMP_STOPS.Crisis,
+  PROSPERITY_RAMP_STOPS.Disrupted,
+  PROSPERITY_RAMP_STOPS.Stagnant,
+  PROSPERITY_RAMP_STOPS.Active,
+  PROSPERITY_RAMP_STOPS.Booming,
+].join(", ");
+
+function ProsperityRampLegend() {
+  return (
+    <div className="px-3 pb-2">
+      <div
+        className="h-2 w-full"
+        style={{ background: `linear-gradient(to right, ${PROSPERITY_RAMP})` }}
+        aria-hidden
+      />
+      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>Crisis</span>
+        <span>Booming</span>
       </div>
     </div>
   );
