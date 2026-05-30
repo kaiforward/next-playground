@@ -44,10 +44,10 @@ function makeDefinition(
         modifiers: [
           {
             domain: "economy",
-            type: "equilibrium_shift",
+            type: "anchor_shift",
             target: "system",
             goodId: "fuel",
-            parameter: "demand_target",
+            parameter: "target_stock",
             value: 1.5,
           },
         ],
@@ -136,11 +136,11 @@ describe("buildModifiersForPhase", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toEqual({
       domain: "economy",
-      type: "equilibrium_shift",
+      type: "anchor_shift",
       targetType: "system",
       targetId: "sys-1",
       goodId: "fuel",
-      parameter: "demand_target",
+      parameter: "target_stock",
       value: 1.5,
     });
   });
@@ -152,11 +152,11 @@ describe("buildModifiersForPhase", () => {
       durationRange: [10, 20] satisfies [number, number],
       modifiers: [{
         domain: "economy" as const,
-        type: "equilibrium_shift" as const,
+        type: "anchor_shift" as const,
         target: "region" as const,
         goodId: "ore",
-        parameter: "supply_target",
-        value: 20,
+        parameter: "target_stock",
+        value: 2.0,
       }],
     };
     const rows = buildModifiersForPhase(regionPhase, "sys-1", "reg-1", 1.0);
@@ -164,7 +164,7 @@ describe("buildModifiersForPhase", () => {
     expect(rows[0].targetId).toBe("reg-1");
   });
 
-  it("scales equilibrium_shift values by lerping toward 1.0", () => {
+  it("scales anchor_shift values by lerping toward 1.0", () => {
     const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0.5);
     // value = 1.5, severity = 0.5 → 1 + (1.5 - 1) × 0.5 = 1.25
     expect(rows[0].value).toBe(1.25);
@@ -176,7 +176,7 @@ describe("buildModifiersForPhase", () => {
     expect(rows[0].value).toBe(0.75);
   });
 
-  it("returns full severity at 1.0 (equilibrium_shift)", () => {
+  it("returns full severity at 1.0 (anchor_shift)", () => {
     const rows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 1.0);
     expect(rows[0].value).toBe(1.5);
   });
@@ -188,7 +188,7 @@ describe("buildModifiersForPhase", () => {
 
   it("returns neutral values at severity 0", () => {
     const shiftRows = buildModifiersForPhase(def.phases[0], "sys-1", "reg-1", 0);
-    expect(shiftRows[0].value).toBe(1.0); // equilibrium_shift lerps to 1.0
+    expect(shiftRows[0].value).toBe(1.0); // anchor_shift lerps to 1.0
 
     const multRows = buildModifiersForPhase(def.phases[1], "sys-1", "reg-1", 0);
     expect(multRows[0].value).toBe(1.0); // rate_multiplier lerps to 1.0
