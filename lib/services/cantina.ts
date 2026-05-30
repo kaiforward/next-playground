@@ -2,7 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import { getMarket } from "./market";
 import { getActiveEvents } from "./events";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { buildMarketEntry } from "./market-entry";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { toGovernmentType } from "@/lib/types/guards";
 import {
   generateLocalTips,
   generateNeighborTips,
@@ -60,7 +62,7 @@ export async function getBartenderTips(
         where: { systemId: neighborId },
         select: {
           id: true,
-          system: { select: { name: true } },
+          system: { select: { name: true, faction: { select: { governmentType: true } } } },
           markets: {
             include: {
               good: {
@@ -77,20 +79,12 @@ export async function getBartenderTips(
         },
       });
       if (station) {
-        const entries: MarketEntry[] = station.markets.map((m) => ({
-          goodId: m.good.id,
-          goodName: m.good.name,
-          basePrice: m.good.basePrice,
-          currentPrice: calculatePrice(
-            m.good.basePrice,
-            m.supply,
-            m.demand,
-            m.good.priceFloor,
-            m.good.priceCeiling,
-          ),
-          supply: m.supply,
-          demand: m.demand,
-        }));
+        const govDef = station.system.faction
+          ? GOVERNMENT_TYPES[toGovernmentType(station.system.faction.governmentType)]
+          : undefined;
+        const entries: MarketEntry[] = station.markets.map((m) =>
+          buildMarketEntry(m.good.id, m.good, m.stock, govDef, m.anchorMult),
+        );
         neighborMarkets.push({
           systemName: station.system.name,
           entries,

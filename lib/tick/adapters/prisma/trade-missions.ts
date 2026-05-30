@@ -6,7 +6,7 @@ import type {
   MissionCreate,
   TradeMissionsWorld,
 } from "@/lib/tick/world/trade-missions-world";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { persistPlayerNotifications } from "@/lib/tick/helpers";
 import { toEventTypeId } from "@/lib/types/guards";
@@ -58,18 +58,18 @@ export class PrismaTradeMissionsWorld implements TradeMissionsWorld {
         station: { select: { systemId: true } },
       },
     });
-    return rows.map((m) => ({
-      systemId: m.station.systemId,
-      goodId: GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.id,
-      currentPrice: calculatePrice(
-        m.good.basePrice,
-        m.supply,
-        m.demand,
-        m.good.priceFloor,
-        m.good.priceCeiling,
-      ),
-      basePrice: m.good.basePrice,
-    }));
+    return rows.map((m) => {
+      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.id;
+      return {
+        systemId: m.station.systemId,
+        goodId: goodKey,
+        currentPrice: spotPrice(
+          curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.anchorMult),
+          m.stock,
+        ),
+        basePrice: m.good.basePrice,
+      };
+    });
   }
 
   async getActiveEvents(): Promise<ActiveEventView[]> {

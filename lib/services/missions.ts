@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { getGameWorld } from "@/lib/services/world";
@@ -96,12 +98,10 @@ async function buildPriceLookup(
       goodMap = new Map();
       lookup.set(systemId, goodMap);
     }
-    const price = calculatePrice(
-      entry.good.basePrice,
-      entry.supply,
-      entry.demand,
-      entry.good.priceFloor,
-      entry.good.priceCeiling,
+    const goodKey = GOOD_NAME_TO_KEY.get(entry.good.name) ?? entry.goodId;
+    const price = spotPrice(
+      curveForGood(goodKey, entry.good.basePrice, entry.good.priceFloor, entry.good.priceCeiling, entry.anchorMult),
+      entry.stock,
     );
     goodMap.set(entry.goodId, price);
   }
@@ -347,16 +347,13 @@ export async function deliverMission(
       throw new Error("MARKET_UNAVAILABLE");
     }
 
-    const freshUnitPrice = calculatePrice(
-      freshMarket.good.basePrice,
-      freshMarket.supply,
-      freshMarket.demand,
-      freshMarket.good.priceFloor,
-      freshMarket.good.priceCeiling,
+    const goodKey = GOOD_NAME_TO_KEY.get(freshMarket.good.name) ?? freshMarket.goodId;
+    const freshUnitPrice = spotPrice(
+      curveForGood(goodKey, freshMarket.good.basePrice, freshMarket.good.priceFloor, freshMarket.good.priceCeiling, freshMarket.anchorMult),
+      freshMarket.stock,
     );
     const goodsValue = freshUnitPrice * freshMission.quantity;
     const totalCredit = goodsValue + freshMission.reward;
-    const demandDelta = -Math.round(freshMission.quantity * 0.1);
 
     // Decrement cargo
     const newQty = freshCargo.quantity - freshMission.quantity;
@@ -369,13 +366,14 @@ export async function deliverMission(
       });
     }
 
-    // Update market supply/demand (sell adds supply, reduces demand)
+    // Mission delivery is a sell — it adds goods to the destination's stock.
+    const nextStock = Math.max(
+      STOCK_MIN,
+      Math.min(STOCK_MAX, freshMarket.stock + freshMission.quantity),
+    );
     await tx.stationMarket.update({
       where: { id: freshMarket.id },
-      data: {
-        supply: Math.max(0, freshMarket.supply + freshMission.quantity),
-        demand: Math.max(0, freshMarket.demand + demandDelta),
-      },
+      data: { stock: nextStock },
     });
 
     // Credit player: goods sale value + mission reward

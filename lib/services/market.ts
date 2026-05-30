@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { buildMarketEntry } from "./market-entry";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { ServiceError } from "./errors";
 import type { MarketEntry, TradeHistoryEntry } from "@/lib/types/game";
-import { toTradeType } from "@/lib/types/guards";
+import { toTradeType, toGovernmentType } from "@/lib/types/guards";
 
 /**
  * Get market data for the station in the given system.
@@ -13,11 +14,16 @@ export async function getMarket(
 ): Promise<{ stationId: string; entries: MarketEntry[] }> {
   const station = await prisma.station.findUnique({
     where: { systemId },
+    include: { system: { select: { faction: { select: { governmentType: true } } } } },
   });
 
   if (!station) {
     throw new ServiceError("No station found in this system.", 404);
   }
+
+  const govDef = station.system.faction
+    ? GOVERNMENT_TYPES[toGovernmentType(station.system.faction.governmentType)]
+    : undefined;
 
   const marketEntries = await prisma.stationMarket.findMany({
     where: { stationId: station.id },
@@ -28,16 +34,9 @@ export async function getMarket(
     },
   });
 
-  const entries: MarketEntry[] = marketEntries.map((m) => ({
-    goodId: m.good.id,
-    goodName: m.good.name,
-    basePrice: m.good.basePrice,
-    // Price uses the raw float ratio (smoother signal); supply/demand are floored
-    // for display so the player never sees fractional goods.
-    currentPrice: calculatePrice(m.good.basePrice, m.supply, m.demand, m.good.priceFloor, m.good.priceCeiling),
-    supply: Math.floor(m.supply),
-    demand: Math.floor(m.demand),
-  }));
+  const entries: MarketEntry[] = marketEntries.map((m) =>
+    buildMarketEntry(m.good.id, m.good, m.stock, govDef, m.anchorMult),
+  );
 
   return { stationId: station.id, entries };
 }

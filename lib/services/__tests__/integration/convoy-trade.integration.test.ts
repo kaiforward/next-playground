@@ -40,7 +40,7 @@ describe("executeConvoyTrade (integration)", () => {
     });
   });
 
-  it("buy succeeds: credits deducted, cargo distributed across member ships, market supply decreased", async () => {
+  it("buy succeeds: credits deducted, cargo distributed across member ships, market stock decreased", async () => {
     const result = await executeConvoyTrade(player.playerId, convoyId, {
       stationId: universe.stations.agricultural,
       goodId: universe.goodIds["food"],

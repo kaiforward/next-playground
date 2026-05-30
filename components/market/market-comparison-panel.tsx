@@ -13,7 +13,7 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 const MAX_HOPS = 6;
 const GRID_COLS = "grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_64px]";
 
-type SortKey = "price" | "supply" | "hops";
+type SortKey = "price" | "stock" | "hops";
 type SortDir = "asc" | "desc";
 type FilterMode = "all" | "buy" | "sell";
 
@@ -84,13 +84,13 @@ function MarketComparisonContent({
           ? a.hops ?? Number.POSITIVE_INFINITY
           : sortKey === "price"
             ? a.currentPrice
-            : a.supply;
+            : a.stock;
       const bv =
         sortKey === "hops"
           ? b.hops ?? Number.POSITIVE_INFINITY
           : sortKey === "price"
             ? b.currentPrice
-            : b.supply;
+            : b.stock;
       return (av - bv) * sign;
     });
     return sorted;
@@ -160,10 +160,10 @@ function MarketComparisonContent({
           Price
         </button>
         <button
-          onClick={() => toggleSort("supply")}
+          onClick={() => toggleSort("stock")}
           className="text-left hover:text-text-primary"
         >
-          Supply
+          Stock
         </button>
         <span></span>
       </div>
@@ -198,7 +198,7 @@ function MarketComparisonContent({
               >
                 {formatCredits(r.currentPrice)}
               </span>
-              <span className="text-text-secondary font-mono">{r.supply}</span>
+              <span className="text-text-secondary font-mono">{r.stock}</span>
               {!isOrigin && (
                 <Button
                   onClick={() => onSelectSystem(r.systemId)}

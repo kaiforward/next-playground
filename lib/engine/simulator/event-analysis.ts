@@ -7,7 +7,7 @@
  */
 
 import type { EventTypeId } from "@/lib/constants/events";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import type {
   SimWorld,
   SimMarketEntry,
@@ -29,7 +29,7 @@ function snapshotPrices(
     .filter((m) => m.systemId === systemId)
     .map((m) => ({
       goodId: m.goodId,
-      price: calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling),
+      price: spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling, m.anchorMult), m.stock),
     }));
 }
 

@@ -55,7 +55,7 @@ describe("Simulator", () => {
       expect(world.players.filter((p) => p.strategy === "random")).toHaveLength(2);
     });
 
-    it("initializes markets at equilibrium", () => {
+    it("initializes markets with derived stock", () => {
       const config: SimConfig = {
         tickCount: 1,
         bots: [],
@@ -63,13 +63,10 @@ describe("Simulator", () => {
       };
       const world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
 
-      // Markets should initialize at equilibrium — values between floor and ceiling,
-      // within bounds of producer/consumer/neutral targets (including self-sufficiency blends)
+      // Markets should initialize with a positive stock within the global band.
       for (const market of world.markets) {
-        expect(market.supply).toBeGreaterThan(0);
-        expect(market.demand).toBeGreaterThan(0);
-        expect(market.supply).toBeLessThanOrEqual(DEFAULT_SIM_CONSTANTS.economy.maxLevel);
-        expect(market.demand).toBeLessThanOrEqual(DEFAULT_SIM_CONSTANTS.economy.maxLevel);
+        expect(market.stock).toBeGreaterThan(0);
+        expect(market.stock).toBeLessThanOrEqual(DEFAULT_SIM_CONSTANTS.economy.maxLevel);
       }
     });
   });
@@ -101,7 +98,7 @@ describe("Simulator", () => {
       const ctx = defaultCtx();
 
       // Record initial market state
-      const initialSupplies = world.markets.slice(0, 10).map((m) => m.supply);
+      const initialStocks = world.markets.slice(0, 10).map((m) => m.stock);
 
       // Run 100 ticks
       for (let i = 0; i < 100; i++) {
@@ -109,8 +106,8 @@ describe("Simulator", () => {
       }
 
       // At least some markets should have changed
-      const finalSupplies = world.markets.slice(0, 10).map((m) => m.supply);
-      const anyChanged = initialSupplies.some((s, i) => s !== finalSupplies[i]);
+      const finalStocks = world.markets.slice(0, 10).map((m) => m.stock);
+      const anyChanged = initialStocks.some((s, i) => s !== finalStocks[i]);
       expect(anyChanged).toBe(true);
     });
 

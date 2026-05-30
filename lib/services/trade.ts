@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
-import { toShipStatus } from "@/lib/types/guards";
+import { getSpread, STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
+import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { toShipStatus, toGovernmentType } from "@/lib/types/guards";
 import { getReputationTier } from "@/lib/constants/reputation";
+import { buildMarketEntry } from "./market-entry";
 import { accrueTradeReputationInTx } from "./reputation";
 import { SHIP_INCLUDE } from "./fleet";
 import type { ShipTradeRequest, ShipTradeResult } from "@/lib/types/api";
@@ -66,12 +70,17 @@ export async function executeTrade(
   // at the same time so reputation gating + multipliers can be applied below.
   const station = await prisma.station.findUnique({
     where: { systemId: ship.systemId },
-    include: { system: { select: { factionId: true } } },
+    include: {
+      system: { select: { factionId: true, faction: { select: { governmentType: true } } } },
+    },
   });
   if (!station || station.id !== stationId) {
     return { ok: false, error: "Station is not in the ship's current system.", status: 400 };
   }
   const factionId = station.system.factionId;
+  const govDef = station.system.faction
+    ? GOVERNMENT_TYPES[toGovernmentType(station.system.faction.governmentType)]
+    : undefined;
 
   // Look up the market entry
   const marketEntry = await prisma.stationMarket.findUnique({
@@ -82,17 +91,22 @@ export async function executeTrade(
     return { ok: false, error: "Good not available at this station.", status: 404 };
   }
 
-  const basePrice = calculatePrice(
+  // Integrated-slippage quote priced off current stock + the government spread.
+  const goodKey = GOOD_NAME_TO_KEY.get(marketEntry.good.name) ?? marketEntry.good.name;
+  const curve = curveForGood(
+    goodKey,
     marketEntry.good.basePrice,
-    marketEntry.supply,
-    marketEntry.demand,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
+    marketEntry.anchorMult,
   );
+  const spread = getSpread(govDef);
+  const quote = quoteTrade(curve, marketEntry.stock, quantity, type, spread);
 
-  // Reputation gating + multiplier. Systems without a faction (transient
-  // mid-cutover state) trade at neutral. Hostile standing blocks the trade.
-  let unitPrice = basePrice;
+  // Reputation gating + multiplier (stacks on the quote, as before). Systems
+  // without a faction (transient mid-cutover state) trade at neutral; hostile
+  // standing blocks the trade.
+  let totalPrice = quote.totalPrice;
   if (factionId) {
     const repRow = await prisma.playerFactionReputation.findUnique({
       where: { playerId_factionId: { playerId, factionId } },
@@ -107,8 +121,9 @@ export async function executeTrade(
       };
     }
     const mult = type === "buy" ? tier.buyMultiplier : tier.sellMultiplier;
-    unitPrice = Math.round(basePrice * mult);
+    totalPrice = Math.round(totalPrice * mult);
   }
+  const unitPrice = Math.round(totalPrice / quantity); // for trade history
 
   const currentCargoUsed = ship.cargo.reduce((sum, c) => sum + c.quantity, 0);
   const existingCargo = ship.cargo.find((c) => c.goodId === goodId);
@@ -117,11 +132,13 @@ export async function executeTrade(
   const result = validateFleetTrade({
     type,
     quantity,
-    unitPrice,
+    totalPrice,
     playerCredits: player.credits,
     currentCargoUsed,
     cargoMax: ship.cargoMax,
-    currentSupply: Math.floor(marketEntry.supply),
+    currentStock: marketEntry.stock,
+    stockMin: STOCK_MIN,
+    stockMax: STOCK_MAX,
     currentGoodQuantityInCargo,
     shipStatus: toShipStatus(ship.status),
   });
@@ -210,13 +227,13 @@ export async function executeTrade(
       const freshMarket = await tx.stationMarket.findUnique({
         where: { id: marketEntry.id },
       });
-
+      const nextStock = Math.max(
+        STOCK_MIN,
+        Math.min(STOCK_MAX, (freshMarket?.stock ?? 0) + delta.stockDelta),
+      );
       const market = await tx.stationMarket.update({
         where: { id: marketEntry.id },
-        data: {
-          supply: Math.max(0, (freshMarket?.supply ?? 0) + delta.supplyDelta),
-          demand: Math.max(0, (freshMarket?.demand ?? 0) + delta.demandDelta),
-        },
+        data: { stock: nextStock },
         include: { good: true },
       });
 
@@ -261,26 +278,17 @@ export async function executeTrade(
     return { ok: false, error: "Failed to fetch updated ship state.", status: 500 };
   }
 
-  const newPrice = calculatePrice(
-    updatedMarket.good.basePrice,
-    updatedMarket.supply,
-    updatedMarket.demand,
-    updatedMarket.good.priceFloor,
-    updatedMarket.good.priceCeiling,
-  );
-
   return {
     ok: true,
     data: {
       ship: serializeShip(freshShip),
-      updatedMarket: {
-        goodId: updatedMarket.goodId,
-        goodName: updatedMarket.good.name,
-        basePrice: updatedMarket.good.basePrice,
-        currentPrice: newPrice,
-        supply: updatedMarket.supply,
-        demand: updatedMarket.demand,
-      },
+      updatedMarket: buildMarketEntry(
+        updatedMarket.goodId,
+        updatedMarket.good,
+        updatedMarket.stock,
+        govDef,
+        updatedMarket.anchorMult,
+      ),
     },
   };
 }

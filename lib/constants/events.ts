@@ -29,11 +29,11 @@ export type EventTypeId =
 
 export interface ModifierTemplate {
   domain: "economy" | "navigation";
-  type: "equilibrium_shift" | "rate_multiplier" | "reversion_dampening";
+  type: "equilibrium_shift" | "anchor_shift" | "rate_multiplier";
   target: "system" | "region";
   goodId?: string | null;
-  parameter: string; // "supply_target", "demand_target", "production_rate", "consumption_rate", "reversion_rate"
-  value: number;     // Absolute for shifts, multiplier for rates/dampening
+  parameter: string; // "target_stock" (anchor_shift), "production_rate"/"consumption_rate" (rate_multiplier), "danger_level" (equilibrium_shift/navigation)
+  value: number;     // Multiplier (anchor_shift, rate_multiplier) or additive (navigation danger_level)
 }
 
 export interface ShockTemplate {
@@ -97,21 +97,18 @@ export const EVENT_COVERAGE_TARGET = 0.25;
 
 /** Safety caps for aggregated modifier values. */
 export const MODIFIER_CAPS = {
-  /** Minimum equilibrium target multiplier (never fully zero out targets). */
-  minTargetMult: 0.1,
-  /** Maximum equilibrium target multiplier. */
-  maxTargetMult: 4.0,
+  /** Minimum anchor multiplier (never fully zero out the anchor). */
+  minAnchorMult: 0.1,
+  /** Maximum anchor multiplier. */
+  maxAnchorMult: 4.0,
   /** Minimum rate multiplier (never fully zero out production). */
   minMultiplier: 0.1,
   /** Maximum rate multiplier. */
   maxMultiplier: 3.0,
-  /** Minimum reversion multiplier (reversion always wins). */
-  minReversionMult: 0.2,
 } as const;
 
 // ── Event definitions ───────────────────────────────────────────
-// NOTE: equilibrium_shift values are MULTIPLIERS (1.0 = no change, 2.0 = double target, 0.5 = halve).
-// danger_level values remain additive (directly added to base danger).
+// NOTE: anchor_shift values are MULTIPLIERS on a good's pricing anchor (1.0 = no change, 2.0 = double = pricier, 0.5 = half = cheaper). danger_level values remain additive.
 
 const innerSystemConflict: EventDefinition = {
   type: "inner_system_conflict",
@@ -128,8 +125,8 @@ const innerSystemConflict: EventDefinition = {
       durationRange: [30, 60],
       notification: "Tensions are rising at {systemName}. Fuel and machinery demand increasing.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 1.4 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.5 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "fuel", parameter: "target_stock", value: 1.4 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.5 },
       ],
     },
     {
@@ -138,8 +135,8 @@ const innerSystemConflict: EventDefinition = {
       durationRange: [20, 40],
       notification: "Conflict escalates at {systemName}. Production declining.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 1.8 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "fuel", parameter: "target_stock", value: 1.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.8 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.5 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.08 },
       ],
@@ -150,10 +147,9 @@ const innerSystemConflict: EventDefinition = {
       durationRange: [80, 150],
       notification: "Conflict rages at {systemName}! Heavy production disruption.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 2.5 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 2.0 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "fuel", parameter: "target_stock", value: 2.5 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 2.0 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.2 },
-        { domain: "economy", type: "reversion_dampening", target: "system", goodId: null, parameter: "reversion_rate", value: 0.3 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.2 },
       ],
       shocks: [
@@ -170,8 +166,8 @@ const innerSystemConflict: EventDefinition = {
       durationRange: [50, 100],
       notification: "Fighting subsides at {systemName}. Rebuilding begins — electronics and food in demand.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "electronics", parameter: "demand_target", value: 1.8 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 1.6 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "electronics", parameter: "target_stock", value: 1.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.6 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.5 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
       ],
@@ -182,8 +178,8 @@ const innerSystemConflict: EventDefinition = {
       durationRange: [40, 80],
       notification: "{systemName} is recovering from the conflict.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "electronics", parameter: "demand_target", value: 1.2 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 1.15 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "electronics", parameter: "target_stock", value: 1.2 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.15 },
       ],
     },
   ],
@@ -217,9 +213,8 @@ const plague: EventDefinition = {
       notification: "The plague spreads at {systemName}. Medical supplies desperately needed.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.1 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 2.0 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 2.0 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
-        { domain: "economy", type: "reversion_dampening", target: "system", goodId: null, parameter: "reversion_rate", value: 0.5 },
       ],
       shocks: [
         { target: "system", goodId: "food", parameter: "supply", value: -0.5, mode: "percentage" },
@@ -240,7 +235,7 @@ const plague: EventDefinition = {
       notification: "The plague at {systemName} is being contained.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.4 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 1.6 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 1.6 },
       ],
     },
     {
@@ -250,7 +245,6 @@ const plague: EventDefinition = {
       notification: "{systemName} is recovering from the plague.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.7 },
-        { domain: "economy", type: "reversion_dampening", target: "system", goodId: null, parameter: "reversion_rate", value: 0.5 },
       ],
     },
   ],
@@ -271,9 +265,9 @@ const tradeFestival: EventDefinition = {
       durationRange: [40, 80],
       notification: "A trade festival begins at {systemName}! Luxury and food demand surging.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "luxuries", parameter: "demand_target", value: 2.0 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 1.4 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "demand_target", value: 1.2 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "luxuries", parameter: "target_stock", value: 2.0 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.4 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: null, parameter: "target_stock", value: 1.2 },
       ],
     },
   ],
@@ -293,8 +287,8 @@ const conflictSpillover: EventDefinition = {
       durationRange: [40, 80],
       notification: "Conflict spills over to {systemName}. Fuel and machinery demand rising.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "fuel", parameter: "demand_target", value: 1.4 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.3 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "fuel", parameter: "target_stock", value: 1.4 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.3 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.8 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.08 },
       ],
@@ -317,7 +311,7 @@ const plagueRisk: EventDefinition = {
       notification: "Plague risk at {systemName}. Food production threatened.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.6 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 1.3 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 1.3 },
       ],
     },
   ],
@@ -338,7 +332,7 @@ const miningBoom: EventDefinition = {
       durationRange: [20, 30],
       notification: "A rich mineral deposit has been found at {systemName}! Ore production ramping up.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ore", parameter: "supply_target", value: 1.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "ore", parameter: "target_stock", value: 0.56 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "ore", parameter: "production_rate", value: 1.5 },
       ],
     },
@@ -348,10 +342,10 @@ const miningBoom: EventDefinition = {
       durationRange: [60, 100],
       notification: "Mining boom at {systemName}! Ore floods the market, settlers demand food and luxuries.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ore", parameter: "supply_target", value: 2.5 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "ore", parameter: "target_stock", value: 0.40 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "ore", parameter: "production_rate", value: 2.0 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 1.4 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "luxuries", parameter: "demand_target", value: 1.5 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.4 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "luxuries", parameter: "target_stock", value: 1.5 },
       ],
       spread: [
         {
@@ -369,7 +363,7 @@ const miningBoom: EventDefinition = {
       notification: "Mining at {systemName} reaches peak output. Food demand surging.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "ore", parameter: "production_rate", value: 1.8 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 1.6 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.6 },
       ],
     },
     {
@@ -379,7 +373,7 @@ const miningBoom: EventDefinition = {
       notification: "Mineral deposits at {systemName} running thin. Ore production declining.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "ore", parameter: "production_rate", value: 0.5 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ore", parameter: "supply_target", value: 0.7 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "ore", parameter: "target_stock", value: 1.43 },
       ],
     },
   ],
@@ -399,8 +393,7 @@ const oreGlut: EventDefinition = {
       durationRange: [30, 50],
       notification: "Ore surplus from nearby mining boom depresses prices at {systemName}.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ore", parameter: "supply_target", value: 1.6 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "ore", parameter: "demand_target", value: 0.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "ore", parameter: "target_stock", value: 0.50 },
       ],
     },
   ],
@@ -420,9 +413,7 @@ const supplyShortage: EventDefinition = {
       durationRange: [30, 60],
       notification: "Supply shortage at {systemName}! Prices rising across the board.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "supply_target", value: 0.5 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "demand_target", value: 1.5 },
-        { domain: "economy", type: "reversion_dampening", target: "system", goodId: null, parameter: "reversion_rate", value: 0.5 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: null, parameter: "target_stock", value: 3.0 },
       ],
       shocks: [
         { target: "system", goodId: "food", parameter: "supply", value: -0.5, mode: "percentage" },
@@ -446,8 +437,8 @@ const pirateRaid: EventDefinition = {
       durationRange: [40, 80],
       notification: "Pirates raid shipping lanes near {systemName}! Navigation hazardous.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "supply_target", value: 0.6 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "weapons", parameter: "demand_target", value: 2.0 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: null, parameter: "target_stock", value: 1.67 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "weapons", parameter: "target_stock", value: 2.0 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.2 },
       ],
       shocks: [
@@ -460,7 +451,7 @@ const pirateRaid: EventDefinition = {
       durationRange: [20, 40],
       notification: "Crackdown on pirates near {systemName}. Machinery needed for repairs.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.6 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.6 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
       ],
     },
@@ -495,7 +486,6 @@ const solarStorm: EventDefinition = {
       notification: "Solar storm at {systemName} subsiding. Production slowly resuming.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.3 },
-        { domain: "economy", type: "reversion_dampening", target: "system", goodId: null, parameter: "reversion_rate", value: 0.3 },
       ],
     },
   ],
@@ -518,8 +508,8 @@ const refugeeCrisis: EventDefinition = {
       durationRange: [20, 40],
       notification: "Refugees flood into {systemName}. Food and medicine in high demand.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 1.6 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 1.4 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.6 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 1.4 },
       ],
       shocks: [
         { target: "system", goodId: "food", parameter: "supply", value: -0.3, mode: "percentage" },
@@ -531,8 +521,8 @@ const refugeeCrisis: EventDefinition = {
       durationRange: [40, 80],
       notification: "Overcrowding at {systemName}. Food and medicine critically short.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 2.0 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 1.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 2.0 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 1.8 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.7 },
         { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.08 },
       ],
@@ -551,8 +541,8 @@ const refugeeCrisis: EventDefinition = {
       durationRange: [30, 60],
       notification: "Refugees at {systemName} beginning to settle. Demand easing.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "food", parameter: "demand_target", value: 1.3 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "medicine", parameter: "demand_target", value: 1.15 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.3 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 1.15 },
       ],
     },
   ],
@@ -573,8 +563,7 @@ const tradeEmbargo: EventDefinition = {
       durationRange: [20, 40],
       notification: "Trade embargo imposed at {systemName}! Supply lines severed.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "supply_target", value: 0.6 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "demand_target", value: 1.4 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: null, parameter: "target_stock", value: 2.33 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.7 },
       ],
     },
@@ -584,10 +573,8 @@ const tradeEmbargo: EventDefinition = {
       durationRange: [40, 80],
       notification: "Embargo enforcement tightens at {systemName}. Shortages worsen.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "supply_target", value: 0.4 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "demand_target", value: 1.7 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: null, parameter: "target_stock", value: 4.0 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.5 },
-        { domain: "economy", type: "reversion_dampening", target: "system", goodId: null, parameter: "reversion_rate", value: 0.4 },
       ],
       shocks: [
         { target: "system", goodId: "electronics", parameter: "supply", value: -0.5, mode: "percentage" },
@@ -600,8 +587,7 @@ const tradeEmbargo: EventDefinition = {
       durationRange: [30, 60],
       notification: "Embargo at {systemName} is being eased. Trade resuming slowly.",
       modifiers: [
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "supply_target", value: 0.8 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: null, parameter: "demand_target", value: 1.2 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: null, parameter: "target_stock", value: 1.5 },
       ],
     },
   ],
@@ -623,7 +609,7 @@ const techBreakthrough: EventDefinition = {
       notification: "Breakthrough research at {systemName}! Electronics production surging.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "electronics", parameter: "production_rate", value: 1.5 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.4 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.4 },
       ],
     },
     {
@@ -633,8 +619,8 @@ const techBreakthrough: EventDefinition = {
       notification: "Innovation wave at {systemName}. Electronics output at record levels.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "electronics", parameter: "production_rate", value: 2.5 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "electronics", parameter: "supply_target", value: 1.8 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "electronics", parameter: "target_stock", value: 0.56 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.8 },
       ],
     },
     {
@@ -644,8 +630,8 @@ const techBreakthrough: EventDefinition = {
       notification: "New technology from {systemName} spreading across the sector.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "electronics", parameter: "production_rate", value: 1.5 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "electronics", parameter: "supply_target", value: 1.3 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.2 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "electronics", parameter: "target_stock", value: 0.77 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.2 },
       ],
     },
   ],
@@ -681,7 +667,7 @@ const asteroidStrike: EventDefinition = {
       notification: "Aftermath of asteroid strike at {systemName}. Rebuilding underway.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.3 },
-        { domain: "economy", type: "equilibrium_shift", target: "system", goodId: "machinery", parameter: "demand_target", value: 1.8 },
+        { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.8 },
       ],
     },
     {

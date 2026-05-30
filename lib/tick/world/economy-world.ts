@@ -9,7 +9,7 @@
  */
 
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
-import type { ModifierRow } from "@/lib/engine/events";
+import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
 import type { EconomyType, GovernmentType } from "@/lib/types/game";
 import type {
   EconomySimParams,
@@ -36,8 +36,7 @@ export interface MarketView {
   systemId: string;
   goodId: string;
   basePrice: number;
-  supply: number;
-  demand: number;
+  stock: number;
   economyType: EconomyType;
   /** Government of the system's owning faction — read per-market post-cutover. */
   governmentType: GovernmentType;
@@ -63,8 +62,9 @@ export interface ProsperityView {
 /** Result of one market simulation step — written back via applyMarketUpdates. */
 export interface MarketUpdate {
   id: string;
-  supply: number;
-  demand: number;
+  stock: number;
+  /** Active pricing-anchor multiplier from event modifiers (1 = none). */
+  anchorMult: number;
 }
 
 /**
@@ -99,7 +99,7 @@ export interface EconomyWorld {
   /** Current prosperity + accumulated trade volume for the given systems. */
   getProsperity(systemIds: string[]): Promise<ProsperityView[]>;
 
-  /** Bulk-write market supply/demand. */
+  /** Bulk-write market stock. */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
 
   /** Bulk-write prosperity and subtract captured volume from accumulators. */
@@ -115,11 +115,5 @@ export interface EconomyProcessorParams {
   /** Prosperity decay/gain/range params. */
   prosperityParams: ProsperityParams;
   /** Caps applied when aggregating event modifiers per market. */
-  modifierCaps: {
-    minTargetMult: number;
-    maxTargetMult: number;
-    minMultiplier: number;
-    maxMultiplier: number;
-    minReversionMult: number;
-  };
+  modifierCaps: ModifierCaps;
 }

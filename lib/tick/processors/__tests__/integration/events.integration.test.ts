@@ -181,12 +181,12 @@ describe("eventsProcessor (integration)", () => {
         {
           eventId: event.id,
           domain: "economy",
-          type: "equilibrium_shift",
+          type: "anchor_shift",
           targetType: "system",
           targetId: universe.systems.agricultural,
           goodId: null,
-          parameter: "demand_target",
-          value: 25,
+          parameter: "target_stock",
+          value: 1.5,
         },
         {
           eventId: event.id,

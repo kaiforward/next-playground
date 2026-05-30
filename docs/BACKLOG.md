@@ -15,11 +15,13 @@ Well-defined, can start now.
 - **[M] Hazard chain reactions** — When a `high` hazard good has an incident, it can trigger `low` hazard goods in the same hold (fuel + weapons = cascading disaster). Makes carrying multiple hazardous goods exponentially risky rather than linearly. Depends on hazard incidents shipping first.
 - **[S] Smuggler suspicion / escalating heat** — Track per-player per-region suspicion level. Each successful smuggle raises it, getting caught resets but raises the base inspection rate permanently. Creates emergent "smuggler reputation" without a formal system. Decay over time.
 - **[S] Bribe system for inspections** — When caught with contraband, option to pay a bribe (2× the fine) to avoid confiscation. Corrupt governments (corporate, frontier) accept more often. Federation almost never. Money sink that rewards cash reserves.
+- **[S] Simulator hot-loop cost (deferred from PR81 review)** — `findOpportunities` (`lib/engine/simulator/strategies/helpers.ts`) does an O(totalMarkets) `world.markets.find()` inside a `reachable × localGoods` double loop, and `getPrice` rebuilds a `MarketCurve` via `curveForGood` on every call. Offline calibration harness only (not user-facing), but a real algorithmic blow-up at universe scale. Fix: build a `Map<systemId|goodId, entry>` once per tick; cache the curve on `SimMarketEntry`. Same `curveForGood`-per-call allocation also affects `snapshot.ts`/`market-analysis.ts`/`trade-flow.ts`. Natural fit for PR 3 (calibration).
 
 ## Needs Design
 
 Direction is clear, approach needs a design doc before implementation.
 
+- **[M] Decouple reputation reward from market price** — Favourable rep multipliers act as a negative spread; to avoid reopening the instant-resell exploit they're capped at ±2% (almost cosmetic). Move the real reputation reward off the price spread entirely: reduced taxes/tariffs/docking fees, access to restricted goods or higher quantity caps, better mission rewards. Then rep can be impactful without threatening the no-instant-resell-profit invariant. See `lib/constants/reputation.ts` and the anti-arbitrage test in its `__tests__`.
 - **[M] Reversion rate tuning** — Current 5% base reversion may be too aggressive. Slower reversion means player trades leave a bigger, longer-lasting mark. Per-good rates now in place — see simulator metrics for balance data.
 
 ## Future

@@ -134,13 +134,13 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     };
   }, [market]);
 
-  // Supply distribution pie data — ThemedPieChart handles "Other" grouping
-  const supplyData = useMemo(() => {
-    const totalSupply = market.reduce((sum, e) => sum + e.supply, 0);
-    if (totalSupply === 0) return [];
+  // Stock distribution pie data — ThemedPieChart handles "Other" grouping
+  const stockData = useMemo(() => {
+    const totalStock = market.reduce((sum, e) => sum + e.stock, 0);
+    if (totalStock === 0) return [];
     return market.map((e) => ({
       name: e.goodName,
-      value: e.supply,
+      value: e.stock,
       fill: getGoodColor(e.goodName),
     }));
   }, [market]);
@@ -289,17 +289,17 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </CardContent>
         </Card>
 
-        {/* Supply Distribution */}
+        {/* Stock Distribution */}
         <Card variant="bordered" padding="md" className="flex flex-col">
-          <CardHeader title="Supply Distribution" />
+          <CardHeader title="Stock Distribution" />
           <CardContent className="flex-1 min-h-0">
-            {supplyData.length === 0 ? (
+            {stockData.length === 0 ? (
               <EmptyState message="No market data." />
             ) : (
               <ThemedPieChart
-                data={supplyData}
+                data={stockData}
                 otherThreshold={0.05}
-                formatter={(value) => [`${value ?? 0} units`, "Supply"]}
+                formatter={(value) => [`${value ?? 0} units`, "In Stock"]}
               />
             )}
           </CardContent>

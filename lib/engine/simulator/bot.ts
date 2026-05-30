@@ -3,7 +3,8 @@
  * Handles: refuel → sell cargo → evaluate strategy → buy + navigate.
  */
 
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
 
 import { findShortestPathCached } from "./pathfinding-cache";
 import type { TradeStrategy } from "./strategies/types";
@@ -60,19 +61,14 @@ export function executeBotTick(
     );
     if (!market) continue;
 
-    const price = calculatePrice(market.basePrice, market.supply, market.demand, market.priceFloor, market.priceCeiling);
+    const price = spotPrice(curveForGood(market.goodId, market.basePrice, market.priceFloor, market.priceCeiling, market.anchorMult), market.stock);
     const revenue = price * cargo.quantity;
     player = { ...player, credits: player.credits + revenue };
 
-    // Apply market impact: selling adds supply, reduces demand
-    const demandDelta = -Math.round(cargo.quantity * constants.bots.tradeImpactFactor);
+    // Selling adds stock at the destination.
     markets = markets.map((m) =>
       m === market
-        ? {
-            ...m,
-            supply: m.supply + cargo.quantity,
-            demand: Math.max(5, m.demand + demandDelta),
-          }
+        ? { ...m, stock: Math.min(STOCK_MAX, m.stock + cargo.quantity) }
         : m,
     );
 
@@ -109,10 +105,10 @@ export function executeBotTick(
     );
 
     if (buyMarket) {
-      const price = calculatePrice(buyMarket.basePrice, buyMarket.supply, buyMarket.demand, buyMarket.priceFloor, buyMarket.priceCeiling);
+      const price = spotPrice(curveForGood(buyMarket.goodId, buyMarket.basePrice, buyMarket.priceFloor, buyMarket.priceCeiling, buyMarket.anchorMult), buyMarket.stock);
       const totalCost = price * decision.buyQuantity;
 
-      if (totalCost <= player.credits && buyMarket.supply >= decision.buyQuantity) {
+      if (totalCost <= player.credits && buyMarket.stock - STOCK_MIN >= decision.buyQuantity) {
         player = { ...player, credits: player.credits - totalCost };
         ship = {
           ...ship,
@@ -122,15 +118,10 @@ export function executeBotTick(
           ],
         };
 
-        // Apply market impact: buying removes supply, adds demand
-        const demandDelta = Math.round(decision.buyQuantity * constants.bots.tradeImpactFactor);
+        // Buying removes stock at the source.
         markets = markets.map((m) =>
           m === buyMarket
-            ? {
-                ...m,
-                supply: m.supply - decision.buyQuantity,
-                demand: m.demand + demandDelta,
-              }
+            ? { ...m, stock: Math.max(STOCK_MIN, m.stock - decision.buyQuantity) }
             : m,
         );
 

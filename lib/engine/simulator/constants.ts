@@ -5,7 +5,6 @@
 
 import {
   ECONOMY_CONSTANTS,
-  EQUILIBRIUM_TARGETS,
   PROSPERITY_DECAY_RATE,
   PROSPERITY_MAX_GAIN,
   PROSPERITY_TARGET_VOLUME,
@@ -25,21 +24,15 @@ import {
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { type ModifierCaps } from "@/lib/engine/events";
 
 // ── Types ────────────────────────────────────────────────────────
 
 export interface SimConstants {
   economy: {
-    reversionRate: number;
     noiseAmplitude: number;
-    noiseReferenceLevel: number;
     minLevel: number;
     maxLevel: number;
-  };
-  equilibrium: {
-    produces: { supply: number; demand: number };
-    consumes: { supply: number; demand: number };
-    neutral: { supply: number; demand: number };
   };
   /** Read-only snapshot of pricing clamps (not overridable in v1). */
   pricing: {
@@ -55,7 +48,6 @@ export interface SimConstants {
     hazard: string;
     priceFloor: number;
     priceCeiling: number;
-    equilibrium: { produces: { supply: number; demand: number }; consumes: { supply: number; demand: number } };
   }>;
   fuel: {
     refuelCostPerUnit: number;
@@ -65,13 +57,7 @@ export interface SimConstants {
     maxPerSystem: number;
     maxGlobal: number;
     maxBatchSpawn: number;
-    modifierCaps: {
-      minTargetMult: number;
-      maxTargetMult: number;
-      minMultiplier: number;
-      maxMultiplier: number;
-      minReversionMult: number;
-    };
+    modifierCaps: ModifierCaps;
   };
   ships: Record<string, { fuel: number; cargo: number; speed: number; hullMax: number; shieldMax: number; firepower: number; evasion: number; stealth: number; price: number }>;
   universe: {
@@ -110,11 +96,6 @@ export interface SimConstants {
 /** Deep-partial version for overrides — every leaf is optional. */
 export type SimConstantOverrides = {
   economy?: Partial<SimConstants["economy"]>;
-  equilibrium?: {
-    produces?: Partial<SimConstants["equilibrium"]["produces"]>;
-    consumes?: Partial<SimConstants["equilibrium"]["consumes"]>;
-    neutral?: Partial<SimConstants["equilibrium"]["neutral"]>;
-  };
   pricing?: Partial<SimConstants["pricing"]>;
   goods?: Record<string, Partial<SimConstants["goods"][string]>>;
   fuel?: Partial<SimConstants["fuel"]>;
@@ -142,7 +123,6 @@ function buildDefaults(): SimConstants {
       hazard: def.hazard,
       priceFloor: def.priceFloor,
       priceCeiling: def.priceCeiling,
-      equilibrium: { produces: { ...def.equilibrium.produces }, consumes: { ...def.equilibrium.consumes } },
     };
   }
 
@@ -163,16 +143,9 @@ function buildDefaults(): SimConstants {
 
   return {
     economy: {
-      reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
       noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-      noiseReferenceLevel: ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL,
       minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
       maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
-    },
-    equilibrium: {
-      produces: { ...EQUILIBRIUM_TARGETS.produces },
-      consumes: { ...EQUILIBRIUM_TARGETS.consumes },
-      neutral: { ...EQUILIBRIUM_TARGETS.neutral },
     },
     pricing: {
       minMultiplier: 0.5,
@@ -237,11 +210,6 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
 
   return {
     economy: { ...base.economy, ...overrides.economy },
-    equilibrium: {
-      produces: { ...base.equilibrium.produces, ...overrides.equilibrium?.produces },
-      consumes: { ...base.equilibrium.consumes, ...overrides.equilibrium?.consumes },
-      neutral: { ...base.equilibrium.neutral, ...overrides.equilibrium?.neutral },
-    },
     pricing: base.pricing, // read-only, not overridable
     goods: mergeRecord(base.goods, overrides.goods),
     fuel: { ...base.fuel, ...overrides.fuel },

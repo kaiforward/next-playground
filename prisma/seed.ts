@@ -2,8 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { GOODS } from "@/lib/constants/goods";
-import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
-import { EQUILIBRIUM_TARGETS, getConsumeEquilibrium } from "@/lib/constants/economy";
+import { getInitialStock } from "@/lib/constants/market-economy";
 import {
   UNIVERSE_GEN,
   REGION_NAMES,
@@ -154,31 +153,14 @@ async function main() {
     // Create market entries for each good
     const stationId = created.station!.id;
     const econ = toEconomyType(sys.economyType);
-    const produces = getProducedGoods(econ);
-    const consumes = getConsumedGoods(econ);
 
-    for (const [goodKey, goodRec] of Object.entries(goodRecords)) {
-      const isProduced = produces.includes(goodKey);
-      const isConsumed = consumes.includes(goodKey);
-      const goodEq = GOODS[goodKey]?.equilibrium;
-
-      const target = isProduced
-        ? (goodEq?.produces ?? EQUILIBRIUM_TARGETS.produces)
-        : isConsumed
-          ? (goodEq
-              ? getConsumeEquilibrium(econ, goodKey, goodEq)
-              : EQUILIBRIUM_TARGETS.consumes)
-          : EQUILIBRIUM_TARGETS.neutral;
-
-      await prisma.stationMarket.create({
-        data: {
-          stationId,
-          goodId: goodRec.id,
-          supply: target.supply,
-          demand: target.demand,
-        },
-      });
-    }
+    await prisma.stationMarket.createMany({
+      data: Object.entries(goodRecords).map(([goodKey, goodRec]) => ({
+        stationId,
+        goodId: goodRec.id,
+        stock: getInitialStock(econ, goodKey),
+      })),
+    });
   }
   const totalTraits = universe.systems.reduce((sum, s) => sum + s.traits.length, 0);
   console.log(

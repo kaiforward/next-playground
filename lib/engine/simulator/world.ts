@@ -14,7 +14,7 @@ import {
 import { toGovernmentType } from "@/lib/types/guards";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
-import { getConsumeEquilibrium } from "@/lib/constants/economy";
+import { getInitialStock } from "@/lib/constants/market-economy";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -96,18 +96,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
 
   for (const sys of systems) {
     for (const [goodKey, goodDef] of goodEntries) {
-      const isProduced = goodKey in sys.produces;
-      const isConsumed = goodKey in sys.consumes;
       const goodConst = constants.goods[goodKey];
-      const goodEq = goodConst?.equilibrium;
-
-      const target = isProduced
-        ? (goodEq?.produces ?? constants.equilibrium.produces)
-        : isConsumed
-          ? (goodEq
-              ? getConsumeEquilibrium(sys.economyType, goodKey, goodEq)
-              : constants.equilibrium.consumes)
-          : constants.equilibrium.neutral;
 
       // Use overridden base price if available, otherwise the good definition's price
       const basePrice = goodConst?.basePrice ?? goodDef.basePrice;
@@ -116,8 +105,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         systemId: sys.id,
         goodId: goodKey,
         basePrice,
-        supply: target.supply,
-        demand: target.demand,
+        stock: getInitialStock(sys.economyType, goodKey),
+        anchorMult: 1,
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
       });

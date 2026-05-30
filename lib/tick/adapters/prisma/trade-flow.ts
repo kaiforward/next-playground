@@ -104,8 +104,8 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
       systemId: m.station.systemId,
       goodId: GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name,
       basePrice: m.good.basePrice,
-      supply: m.supply,
-      demand: m.demand,
+      stock: m.stock,
+      anchorMult: m.anchorMult,
       priceFloor: m.good.priceFloor,
       priceCeiling: m.good.priceCeiling,
     }));
@@ -129,14 +129,13 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
     if (updates.length === 0) return;
 
     const ids = updates.map((u) => u.id);
-    const supplies = updates.map((u) => (isFinite(u.supply) ? u.supply : 0));
-    const demands = updates.map((u) => (isFinite(u.demand) ? u.demand : 0));
+    const stocks = updates.map((u) => (isFinite(u.stock) ? u.stock : 0));
 
     await this.tx.$executeRaw`
       UPDATE "StationMarket" AS sm
-      SET "supply" = batch."supply", "demand" = batch."demand"
-      FROM unnest(${ids}::text[], ${supplies}::double precision[], ${demands}::double precision[])
-        AS batch("id", "supply", "demand")
+      SET "stock" = batch."stock"
+      FROM unnest(${ids}::text[], ${stocks}::double precision[])
+        AS batch("id", "stock")
       WHERE sm."id" = batch."id"`;
   }
 

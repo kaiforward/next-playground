@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveConstants, DEFAULT_SIM_CONSTANTS } from "../simulator/constants";
-import { ECONOMY_CONSTANTS, EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
 import {
@@ -16,18 +16,9 @@ describe("SimConstants", () => {
   describe("resolveConstants() defaults", () => {
     it("economy matches ECONOMY_CONSTANTS", () => {
       const c = resolveConstants();
-      expect(c.economy.reversionRate).toBe(ECONOMY_CONSTANTS.REVERSION_RATE);
       expect(c.economy.noiseAmplitude).toBe(ECONOMY_CONSTANTS.NOISE_AMPLITUDE);
-      expect(c.economy.noiseReferenceLevel).toBe(ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL);
       expect(c.economy.minLevel).toBe(ECONOMY_CONSTANTS.MIN_LEVEL);
       expect(c.economy.maxLevel).toBe(ECONOMY_CONSTANTS.MAX_LEVEL);
-    });
-
-    it("equilibrium matches EQUILIBRIUM_TARGETS", () => {
-      const c = resolveConstants();
-      expect(c.equilibrium.produces).toEqual(EQUILIBRIUM_TARGETS.produces);
-      expect(c.equilibrium.consumes).toEqual(EQUILIBRIUM_TARGETS.consumes);
-      expect(c.equilibrium.neutral).toEqual(EQUILIBRIUM_TARGETS.neutral);
     });
 
     it("goods base prices match GOODS", () => {
@@ -42,14 +33,6 @@ describe("SimConstants", () => {
       for (const [key, def] of Object.entries(GOODS)) {
         expect(c.goods[key].priceFloor).toBe(def.priceFloor);
         expect(c.goods[key].priceCeiling).toBe(def.priceCeiling);
-      }
-    });
-
-    it("goods equilibrium targets match GOODS", () => {
-      const c = resolveConstants();
-      for (const [key, def] of Object.entries(GOODS)) {
-        expect(c.goods[key].equilibrium.produces).toEqual(def.equilibrium.produces);
-        expect(c.goods[key].equilibrium.consumes).toEqual(def.equilibrium.consumes);
       }
     });
 
@@ -117,8 +100,8 @@ describe("SimConstants", () => {
 
   describe("resolveConstants() with overrides", () => {
     it("overrides a single economy field", () => {
-      const c = resolveConstants({ economy: { reversionRate: 0.1 } });
-      expect(c.economy.reversionRate).toBe(0.1);
+      const c = resolveConstants({ economy: { minLevel: 10 } });
+      expect(c.economy.minLevel).toBe(10);
       // Other fields preserved
       expect(c.economy.noiseAmplitude).toBe(ECONOMY_CONSTANTS.NOISE_AMPLITUDE);
     });
@@ -137,9 +120,9 @@ describe("SimConstants", () => {
 
     it("overrides events modifier caps", () => {
       const c = resolveConstants({
-        events: { modifierCaps: { maxTargetMult: 8.0 } },
+        events: { modifierCaps: { maxAnchorMult: 8.0 } },
       });
-      expect(c.events.modifierCaps.maxTargetMult).toBe(8.0);
+      expect(c.events.modifierCaps.maxAnchorMult).toBe(8.0);
       // Other cap fields preserved
       expect(c.events.modifierCaps.minMultiplier).toBe(MODIFIER_CAPS.minMultiplier);
     });

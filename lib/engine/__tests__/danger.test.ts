@@ -27,12 +27,12 @@ function makeDangerMod(value: number, overrides: Partial<ModifierRow> = {}): Mod
 function makeEconomyMod(overrides: Partial<ModifierRow> = {}): ModifierRow {
   return {
     domain: "economy",
-    type: "equilibrium_shift",
+    type: "anchor_shift",
     targetType: "system",
     targetId: "sys-1",
     goodId: "fuel",
-    parameter: "demand_target",
-    value: 30,
+    parameter: "target_stock",
+    value: 1.5,
     ...overrides,
   };
 }
@@ -45,7 +45,7 @@ describe("aggregateDangerLevel", () => {
   });
 
   it("returns 0 when no danger_level modifiers (only economy modifiers)", () => {
-    const mods = [makeEconomyMod(), makeEconomyMod({ parameter: "supply_target" })];
+    const mods = [makeEconomyMod(), makeEconomyMod({ parameter: "target_stock", value: 0.6 })];
     expect(aggregateDangerLevel(mods)).toBe(0);
   });
 

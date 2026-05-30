@@ -181,65 +181,53 @@ export class PrismaEventsWorld implements EventsWorld {
       where: { station: { systemId: { in: systemIds } } },
       select: {
         id: true,
-        supply: true,
-        demand: true,
+        stock: true,
         goodId: true,
         station: { select: { systemId: true } },
       },
     });
     if (allMarkets.length === 0) return 0;
 
-    const marketByKey = new Map<
-      string,
-      { id: string; supply: number; demand: number }
-    >();
+    const marketByKey = new Map<string, { id: string; stock: number }>();
     for (const m of allMarkets) {
       marketByKey.set(`${m.station.systemId}|${m.goodId}`, {
         id: m.id,
-        supply: m.supply,
-        demand: m.demand,
+        stock: m.stock,
       });
     }
 
-    // Aggregate shock deltas. Both modes honored at this layer.
+    // Aggregate shock deltas onto the single stock axis. A "supply" shock moves
+    // stock directly; a "demand" shock moves it inversely (more demand →
+    // scarcer → lower stock). Both modes honored at this layer.
     const touchedIds = new Set<string>();
     for (const shock of shocks) {
       const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
       if (!market) continue;
+      if (!isFinite(shock.value)) continue;
 
       const delta =
-        shock.mode === "percentage"
-          ? Math.round(
-              (shock.parameter === "supply" ? market.supply : market.demand) *
-                shock.value,
-            )
-          : shock.value;
-
-      if (shock.parameter === "supply") market.supply += delta;
-      else market.demand += delta;
+        shock.mode === "percentage" ? Math.round(market.stock * shock.value) : shock.value;
+      market.stock += shock.parameter === "supply" ? delta : -delta;
       touchedIds.add(market.id);
     }
 
     if (touchedIds.size === 0) return 0;
 
     const ids: string[] = [];
-    const supplies: number[] = [];
-    const demands: number[] = [];
+    const stocks: number[] = [];
 
     for (const market of marketByKey.values()) {
       if (!touchedIds.has(market.id)) continue;
       ids.push(market.id);
-      const s = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.supply));
-      const d = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.demand));
-      supplies.push(isFinite(s) ? s : 0);
-      demands.push(isFinite(d) ? d : 0);
+      const s = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.stock));
+      stocks.push(isFinite(s) ? s : 0);
     }
 
     await this.tx.$executeRaw`
       UPDATE "StationMarket" AS sm
-      SET "supply" = batch."supply", "demand" = batch."demand"
-      FROM unnest(${ids}::text[], ${supplies}::double precision[], ${demands}::double precision[])
-        AS batch("id", "supply", "demand")
+      SET "stock" = batch."stock"
+      FROM unnest(${ids}::text[], ${stocks}::double precision[])
+        AS batch("id", "stock")
       WHERE sm."id" = batch."id"`;
 
     return ids.length;

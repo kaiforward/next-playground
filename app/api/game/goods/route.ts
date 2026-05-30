@@ -5,9 +5,13 @@ import { getGoods } from "@/lib/services/goods";
 import type { GoodsResponse } from "@/lib/types/api";
 
 /**
- * Static catalog of all goods. Cached for the session — goods don't change
- * at runtime. `private` (not `public`) per project convention for auth-gated
- * routes; TanStack Query handles the in-memory side.
+ * Static catalog of all goods. Goods don't change at runtime, but their DB
+ * `cuid()` ids DO change on a reseed — so we must NOT hold a long HTTP cache, or
+ * the browser serves stale good ids after a reseed and any id-keyed lookup
+ * (e.g. the map price overlay -> /market/by-good/[id]) 404s. `no-cache` lets the
+ * browser store the response but revalidate before use, so a reseed self-heals
+ * on the next load; `staleTime: Infinity` in `useGoods` still avoids in-session
+ * refetches. `private` (not `public`) per convention for auth-gated routes.
  */
 export function GET() {
   return withServiceErrors("GET /api/game/goods", async () => {
@@ -17,7 +21,7 @@ export function GET() {
     const goods = await getGoods();
     return NextResponse.json<GoodsResponse>(
       { data: { goods } },
-      { headers: { "Cache-Control": "private, max-age=86400" } },
+      { headers: { "Cache-Control": "private, no-cache" } },
     );
   });
 }

@@ -58,29 +58,25 @@ export function MarketTable({
       ),
     },
     {
-      key: "currentPrice",
-      label: "Current Price",
+      key: "stock",
+      label: "In Stock",
       sortable: true,
-      getValue: (row) => row.currentPrice,
-      render: (row) => (
-        <span className="font-semibold text-text-primary">
-          {formatCredits(row.currentPrice)}
-        </span>
-      ),
+      getValue: (row) => row.stock,
+      render: (row) => <span className="font-mono">{row.stock}</span>,
     },
     {
-      key: "supply",
-      label: "Supply",
+      key: "buyPrice",
+      label: "Buy",
       sortable: true,
-      getValue: (row) => row.supply,
-      render: (row) => <>{row.supply}</>,
+      getValue: (row) => row.buyPrice,
+      render: (row) => <span className="font-mono text-text-secondary">{formatCredits(row.buyPrice)}</span>,
     },
     {
-      key: "demand",
-      label: "Demand",
+      key: "sellPrice",
+      label: "Sell",
       sortable: true,
-      getValue: (row) => row.demand,
-      render: (row) => <>{row.demand}</>,
+      getValue: (row) => row.sellPrice,
+      render: (row) => <span className="font-mono text-text-secondary">{formatCredits(row.sellPrice)}</span>,
     },
     {
       key: "priceTrend",

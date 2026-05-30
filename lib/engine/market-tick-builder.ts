@@ -1,29 +1,35 @@
 /**
  * Shared market tick entry builder.
  *
- * Both the live economy processor and the simulator need to construct
- * MarketTickEntry objects with the same pipeline:
- *   good constants → government scaling → self-sufficiency → trait bonus
- *   → prosperity → event modifiers
- *
- * This module provides a single function that does all of that,
- * eliminating the duplication that could cause sim/game divergence.
+ * Both the live economy processor and the simulator build MarketTickEntry
+ * objects through the same pipeline: good constants → government volatility
+ * scaling → trait bonus → prosperity → event production/consumption modifiers.
+ * (The legacy equilibrium-spread / self-sufficiency steps are gone — there is
+ * no equilibrium target in the stock model.)
  */
 
 import { GOODS } from "@/lib/constants/goods";
-import { getConsumeEquilibrium } from "@/lib/constants/economy";
-import { adjustEquilibriumSpread, type GovernmentDefinition } from "@/lib/constants/government";
-import { aggregateModifiers, type ModifierRow } from "@/lib/engine/events";
+import { type GovernmentDefinition } from "@/lib/constants/government";
+import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry, type ProsperityParams } from "@/lib/engine/tick";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { EconomyType } from "@/lib/types/game";
 
+/** Result of resolving a market tick: the stock-sim entry plus the pricing anchor. */
+export interface ResolvedMarketTick {
+  /** Input to the stock simulation (production/consumption rates, volatility, …). */
+  entry: MarketTickEntry;
+  /**
+   * Pricing-anchor multiplier from active `anchor_shift` modifiers (1 = none).
+   * Computed here so the caller need not re-aggregate the same modifiers.
+   */
+  anchorMult: number;
+}
+
 /** Data-source-agnostic input for building a market tick entry. */
 export interface MarketTickInput {
   goodId: string;
-  supply: number;
-  demand: number;
-  basePrice: number;
+  stock: number;
   economyType: EconomyType;
   /** List of good IDs this system produces. */
   produces: string[];
@@ -33,7 +39,7 @@ export interface MarketTickInput {
   baseProductionRate?: number;
   /** Base consumption rate for this good at this economy type (undefined = not a consumer). */
   baseConsumptionRate?: number;
-  /** Government definition for the region (undefined if no government). */
+  /** Government definition for the system's owning faction (undefined if none). */
   govDef?: GovernmentDefinition;
   /** System traits (already validated). */
   traits: GeneratedTrait[];
@@ -42,82 +48,58 @@ export interface MarketTickInput {
   /** Active economy modifiers for this system (already filtered). */
   modifiers: ModifierRow[];
   /** Modifier caps from constants. */
-  modifierCaps: {
-    minTargetMult: number;
-    maxTargetMult: number;
-    minMultiplier: number;
-    maxMultiplier: number;
-    minReversionMult: number;
-  };
+  modifierCaps: ModifierCaps;
 }
 
 /**
- * Build a complete MarketTickEntry from data-source-agnostic inputs.
- *
- * Handles the full pipeline: good constants → government volatility scaling →
- * self-sufficiency → government equilibrium spread → trait bonuses →
- * prosperity multiplier → event modifier aggregation.
- *
- * Used by both the live economy processor and the simulator to ensure
- * identical market tick logic.
+ * Resolve a market tick from data-source-agnostic inputs. Used by both the live
+ * economy processor and the simulator so the tick logic is identical. Returns
+ * the stock-sim `entry` and the pricing `anchorMult` (derived from the same
+ * modifier aggregation) so the caller never re-aggregates.
  */
 export function resolveMarketTickEntry(
   input: MarketTickInput,
   prosperityParams: ProsperityParams,
-): MarketTickEntry {
+): ResolvedMarketTick {
   const goodDef = GOODS[input.goodId];
 
-  // Government: scale volatility
+  // Government scales volatility (amplifies/dampens noise).
   const baseVolatility = goodDef?.volatility ?? 1;
   const volatility = input.govDef
     ? baseVolatility * input.govDef.volatilityModifier
     : baseVolatility;
 
-  // Self-sufficiency: adjust consume targets per economy type
-  let equilibriumProduces = goodDef?.equilibrium.produces;
-  let equilibriumConsumes = goodDef
-    ? getConsumeEquilibrium(input.economyType, input.goodId, goodDef.equilibrium)
-    : undefined;
+  const entry = buildMarketTickEntry(
+    {
+      goodId: input.goodId,
+      stock: input.stock,
+      economyType: input.economyType,
+      produces: input.produces,
+      consumes: input.consumes,
+      volatility,
+      baseProductionRate: input.baseProductionRate,
+      baseConsumptionRate: input.baseConsumptionRate,
+      govConsumptionBoost: input.govDef?.consumptionBoosts[input.goodId] ?? 0,
+      traits: input.traits,
+      prosperity: input.prosperity,
+    },
+    prosperityParams,
+  );
 
-  // Government: scale equilibrium spread
-  if (input.govDef && input.govDef.equilibriumSpreadPct !== 0) {
-    if (equilibriumProduces) {
-      equilibriumProduces = adjustEquilibriumSpread(equilibriumProduces, input.govDef.equilibriumSpreadPct);
-    }
-    if (equilibriumConsumes) {
-      equilibriumConsumes = adjustEquilibriumSpread(equilibriumConsumes, input.govDef.equilibriumSpreadPct);
-    }
-  }
+  if (input.modifiers.length === 0) return { entry, anchorMult: 1 };
 
-  // Build the base entry (handles traits, prosperity, gov consumption boost)
-  const entry = buildMarketTickEntry({
-    goodId: input.goodId,
-    supply: input.supply,
-    demand: input.demand,
-    basePrice: input.basePrice,
-    economyType: input.economyType,
-    produces: input.produces,
-    consumes: input.consumes,
-    volatility,
-    equilibriumProduces,
-    equilibriumConsumes,
-    baseProductionRate: input.baseProductionRate,
-    baseConsumptionRate: input.baseConsumptionRate,
-    govConsumptionBoost: input.govDef?.consumptionBoosts[input.goodId] ?? 0,
-    traits: input.traits,
-    prosperity: input.prosperity,
-  }, prosperityParams);
-
-  // Apply event modifier aggregation
-  if (input.modifiers.length === 0) return entry;
-
+  // Only production/consumption rate multipliers affect the stock tick.
+  // supply_target/demand_target modifiers have been converted to anchor_shift,
+  // which affects PRICING via the stored anchorMult (returned here for the
+  // caller to persist), not the stock delta. Events also shape the economy
+  // via stock shocks (applied separately).
   const agg = aggregateModifiers(input.modifiers, input.goodId, input.modifierCaps);
   return {
-    ...entry,
-    supplyTargetMult: agg.supplyTargetMult,
-    demandTargetMult: agg.demandTargetMult,
-    productionMult: agg.productionMult,
-    consumptionMult: agg.consumptionMult,
-    reversionMult: agg.reversionMult,
+    entry: {
+      ...entry,
+      productionMult: agg.productionMult,
+      consumptionMult: agg.consumptionMult,
+    },
+    anchorMult: agg.anchorMult,
   };
 }

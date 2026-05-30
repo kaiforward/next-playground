@@ -4,10 +4,12 @@ import type { TradeType } from "@/lib/types/game";
 
 export interface TradeSchemaContext {
   tradeType: TradeType;
+  /** Per-unit price for the active side (buyPrice or sellPrice). */
   unitPrice: number;
   playerCredits: number;
   cargoSpaceAvailable: number;
-  supply: number;
+  /** Max units buyable from current stock (floor(stock - STOCK_MIN)). */
+  maxBuyable: number;
   currentCargoQuantity: number;
 }
 
@@ -40,11 +42,11 @@ export function createTradeSchema(ctx: TradeSchemaContext) {
           });
           return;
         }
-        if (quantity > ctx.supply) {
+        if (quantity > ctx.maxBuyable) {
           refineCtx.addIssue({
             code: "custom",
             path: ["quantity"],
-            message: `Not enough supply. Only ${ctx.supply} units available.`,
+            message: `Only ${ctx.maxBuyable} units available to buy.`,
           });
           return;
         }

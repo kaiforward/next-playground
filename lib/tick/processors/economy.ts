@@ -12,7 +12,6 @@ import {
 } from "@/lib/engine/tick";
 import {
   ECONOMY_CONSTANTS,
-  EQUILIBRIUM_TARGETS,
   PROSPERITY_DECAY_RATE,
   PROSPERITY_MAX_GAIN,
   PROSPERITY_TARGET_VOLUME,
@@ -114,13 +113,11 @@ export async function runEconomyProcessor(
   // Build tick entries via the shared market-tick builder. After the Layer 2
   // cutover, government modifiers are resolved per-market (border regions can
   // contain systems owned by different factions) rather than once per region.
-  const tickEntries: MarketTickEntry[] = markets.map((m) =>
+  const resolved = markets.map((m) =>
     resolveMarketTickEntry(
       {
         goodId: m.goodId,
-        supply: m.supply,
-        demand: m.demand,
-        basePrice: m.basePrice,
+        stock: m.stock,
         economyType: m.economyType,
         produces: m.produces,
         consumes: m.consumes,
@@ -136,12 +133,15 @@ export async function runEconomyProcessor(
     ),
   );
 
+  const tickEntries: MarketTickEntry[] = resolved.map((r) => r.entry);
   const simulated = simulateEconomyTick(tickEntries, simParams, rng);
 
+  // anchorMult comes straight off the resolved tick — the builder already
+  // aggregated the system's modifiers, so there's no second aggregation pass.
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
     id: m.id,
-    supply: simulated[i].supply,
-    demand: simulated[i].demand,
+    stock: simulated[i].stock,
+    anchorMult: resolved[i].anchorMult,
   }));
 
   await world.applyMarketUpdates(marketUpdates);
@@ -182,12 +182,9 @@ const prosperityParams: ProsperityParams = {
 };
 
 const simParams: EconomySimParams = {
-  reversionRate: ECONOMY_CONSTANTS.REVERSION_RATE,
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-  noiseReferenceLevel: ECONOMY_CONSTANTS.NOISE_REFERENCE_LEVEL,
   minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
   maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
-  equilibrium: EQUILIBRIUM_TARGETS,
 };
 
 export const economyProcessor: TickProcessor = {

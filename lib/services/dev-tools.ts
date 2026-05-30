@@ -7,11 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { processors, sortProcessors } from "@/lib/tick/registry";
 import type { TickContext } from "@/lib/tick/types";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
-import { EQUILIBRIUM_TARGETS } from "@/lib/constants/economy";
-import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
-import { GOODS } from "@/lib/constants/goods";
+import { getInitialStock } from "@/lib/constants/market-economy";
+import { GOODS, GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
-import { calculatePrice } from "@/lib/engine/pricing";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import { toEconomyType, isEventTypeId } from "@/lib/types/guards";
 
 // ── Result types ────────────────────────────────────────────────
@@ -229,8 +228,7 @@ export interface EconomySnapshotSystem {
   markets: {
     goodId: string;
     goodName: string;
-    supply: number;
-    demand: number;
+    stock: number;
     price: number;
   }[];
 }
@@ -251,13 +249,15 @@ export async function getEconomySnapshot(): Promise<ServiceResult<{ systems: Eco
     systemId: sys.id,
     systemName: sys.name,
     economyType: sys.economyType,
-    markets: (sys.station?.markets ?? []).map((m) => ({
-      goodId: m.goodId,
-      goodName: m.good.name,
-      supply: m.supply,
-      demand: m.demand,
-      price: calculatePrice(m.good.basePrice, m.supply, m.demand, m.good.priceFloor, m.good.priceCeiling),
-    })),
+    markets: (sys.station?.markets ?? []).map((m) => {
+      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.goodId;
+      return {
+        goodId: m.goodId,
+        goodName: m.good.name,
+        stock: m.stock,
+        price: spotPrice(curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.anchorMult), m.stock),
+      };
+    }),
   }));
 
   return { ok: true, data: { systems: result } };
@@ -285,30 +285,33 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
       Object.entries(GOODS).map(([key, def]) => [def.name, key]),
     );
 
-    let resetCount = 0;
+    // Collect (id, stock) pairs and bulk-write with a single unnest() UPDATE.
+    // A per-row update loop blows the 30s tx timeout at 10K scale (~60–120K
+    // rows). Mirrors PrismaEconomyWorld.applyMarketUpdates.
+    const ids: string[] = [];
+    const stocks: number[] = [];
     for (const m of markets) {
       const econ = toEconomyType(m.station.system.economyType);
       const goodKey = goodKeyByName.get(m.good.name) ?? m.good.name;
-      const produces = getProducedGoods(econ);
-      const consumes = getConsumedGoods(econ);
-
-      const isProduced = produces.includes(goodKey);
-      const isConsumed = consumes.includes(goodKey);
-      const goodEq = GOODS[goodKey]?.equilibrium;
-      const target = isProduced
-        ? (goodEq?.produces ?? EQUILIBRIUM_TARGETS.produces)
-        : isConsumed
-          ? (goodEq?.consumes ?? EQUILIBRIUM_TARGETS.consumes)
-          : EQUILIBRIUM_TARGETS.neutral;
-
-      await tx.stationMarket.update({
-        where: { id: m.id },
-        data: { supply: target.supply, demand: target.demand },
-      });
-      resetCount++;
+      ids.push(m.id);
+      stocks.push(getInitialStock(econ, goodKey));
     }
 
-    return { marketsReset: resetCount, eventsCleared: eventCount };
+    if (ids.length > 0) {
+      // anchorMult resets to 1 alongside stock: all events (and their
+      // anchor_shift modifiers) were just deleted, so the neutral anchor is the
+      // correct clean-slate value. Without this, a stale non-1 anchorMult would
+      // skew read-path prices until the round-robin economy processor next
+      // reaches each market's region.
+      await tx.$executeRaw`
+        UPDATE "StationMarket" AS sm
+        SET "stock" = batch."stock", "anchorMult" = 1
+        FROM unnest(${ids}::text[], ${stocks}::double precision[])
+          AS batch("id", "stock")
+        WHERE sm."id" = batch."id"`;
+    }
+
+    return { marketsReset: ids.length, eventsCleared: eventCount };
   });
 
   return { ok: true, data: result };

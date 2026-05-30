@@ -67,8 +67,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         systemId: m.systemId,
         goodId: m.goodId,
         basePrice: m.basePrice,
-        supply: m.supply,
-        demand: m.demand,
+        stock: m.stock,
         economyType: sys.economyType,
         governmentType: sys.governmentType,
         produces: Object.keys(sys.produces),
@@ -129,8 +128,8 @@ export class InMemoryEconomyWorld implements EconomyWorld {
       if (!u) return m;
       return {
         ...m,
-        supply: isFinite(u.supply) ? u.supply : 0,
-        demand: isFinite(u.demand) ? u.demand : 0,
+        stock: isFinite(u.stock) ? u.stock : 0,
+        anchorMult: isFinite(u.anchorMult) ? u.anchorMult : 1,
       };
     });
     return Promise.resolve();

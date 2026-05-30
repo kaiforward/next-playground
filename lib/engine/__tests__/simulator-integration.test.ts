@@ -4,7 +4,7 @@ import { simulateWorldTick } from "../simulator/economy";
 import { runSimulation } from "../simulator/runner";
 import { DEFAULT_SIM_CONSTANTS } from "../simulator/constants";
 import { mulberry32 } from "../universe-gen";
-import { calculatePrice } from "../pricing";
+import { spotPrice, curveForGood } from "../market-pricing";
 import type { SimConfig, SimRunContext } from "../simulator/types";
 
 /** Build a default SimRunContext for tests. */
@@ -90,11 +90,11 @@ describe("Simulator Integration", () => {
         seed: 42,
       };
 
-      const overrides = { economy: { reversionRate: 0.1 } };
+      const overrides = { economy: { noiseAmplitude: 0.1 } };
       const results = await runSimulation(config, overrides);
 
       expect(results.overrides).toEqual(overrides);
-      expect(results.constants.economy.reversionRate).toBe(0.1);
+      expect(results.constants.economy.noiseAmplitude).toBe(0.1);
     });
 
     it("includes label in results when provided", async () => {
@@ -132,7 +132,7 @@ describe("Simulator Integration", () => {
         for (const m of world.markets) {
           pricesBefore.set(
             `${m.systemId}:${m.goodId}`,
-            calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling),
+            spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock),
           );
         }
 
@@ -145,7 +145,7 @@ describe("Simulator Integration", () => {
           if (!gov || !econ) continue;
           const before = pricesBefore.get(mKey);
           if (before === undefined || m.basePrice === 0) continue;
-          const after = calculatePrice(m.basePrice, m.supply, m.demand, m.priceFloor, m.priceCeiling);
+          const after = spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock);
           const change = Math.abs(after - before) / m.basePrice;
           const groupKey = `${gov}:${econ}`;
           const existing = changesByGovEcon.get(groupKey) ?? [];
@@ -179,13 +179,13 @@ describe("Simulator Integration", () => {
       }
     });
 
-    it("government consumption boosts deplete supply faster", { timeout: 60_000 }, async () => {
+    it("government consumption boosts deplete stock faster", { timeout: 60_000 }, async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
       const ctx = defaultCtx({ disableRandomEvents: true });
 
-      // Run 500 ticks so consumption boosts deplete supply clearly
+      // Run 500 ticks so consumption boosts deplete stock clearly
       for (let i = 0; i < 500; i++) {
         world = await simulateWorldTick(world, rng, ctx);
       }
@@ -197,7 +197,7 @@ describe("Simulator Integration", () => {
         systemInfo.set(sys.id, { gov: sys.governmentType, econ: sys.economyType });
       }
 
-      // Group medicine supply by economy type, then compare fed vs non-fed
+      // Group medicine stock by economy type, then compare fed vs non-fed
       const byEcon: Record<string, { fed: number[]; other: number[] }> = {};
       for (const m of world.markets) {
         if (m.goodId !== "medicine") continue;
@@ -205,14 +205,14 @@ describe("Simulator Integration", () => {
         if (!info) continue;
         if (!byEcon[info.econ]) byEcon[info.econ] = { fed: [], other: [] };
         if (info.gov === "federation") {
-          byEcon[info.econ].fed.push(m.supply);
+          byEcon[info.econ].fed.push(m.stock);
         } else {
-          byEcon[info.econ].other.push(m.supply);
+          byEcon[info.econ].other.push(m.stock);
         }
       }
 
       // For economy types with both fed and non-fed systems,
-      // federation should have lower supply (boosted consumption depletes more)
+      // federation should have lower stock (boosted consumption depletes more)
       let comparisons = 0;
       let fedLower = 0;
       for (const { fed, other } of Object.values(byEcon)) {
