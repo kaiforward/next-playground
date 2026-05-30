@@ -4,20 +4,10 @@ import { seedTestUniverse } from "@/lib/test-utils/fixtures";
 import type { TestUniverse } from "@/lib/test-utils/fixtures";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
-import {
-  ECONOMY_CONSTANTS,
-  PROSPERITY_DECAY_RATE,
-  PROSPERITY_MAX_GAIN,
-  PROSPERITY_TARGET_VOLUME,
-  PROSPERITY_MIN,
-  PROSPERITY_MAX,
-  PROSPERITY_MULT_AT_MIN,
-  PROSPERITY_MULT_AT_ZERO,
-  PROSPERITY_MULT_AT_MAX,
-} from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, PROSPERITY_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { mulberry32 } from "@/lib/engine/universe-gen";
-import type { EconomySimParams, ProsperityParams } from "@/lib/engine/tick";
+import type { EconomySimParams } from "@/lib/engine/tick";
 import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
 
 const { prisma } = useIntegrationDb();
@@ -28,16 +18,9 @@ const simParams: EconomySimParams = {
   maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
 };
 
-const prosperityParams: ProsperityParams = {
-  decayRate: PROSPERITY_DECAY_RATE,
-  maxGain: PROSPERITY_MAX_GAIN,
-  targetVolume: PROSPERITY_TARGET_VOLUME,
-  min: PROSPERITY_MIN,
-  max: PROSPERITY_MAX,
-  multAtMin: PROSPERITY_MULT_AT_MIN,
-  multAtZero: PROSPERITY_MULT_AT_ZERO,
-  multAtMax: PROSPERITY_MULT_AT_MAX,
-};
+// Use the same canonical params object the live economy processor reads, so a
+// mis-assembled field in PROSPERITY_PARAMS is caught here end-to-end.
+const prosperityParams = PROSPERITY_PARAMS;
 
 describe("economyProcessor (integration)", () => {
   let universe: TestUniverse;
