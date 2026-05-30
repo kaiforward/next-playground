@@ -1,29 +1,14 @@
 import type { EconomyType } from "@/lib/types/game";
+import type { GoodEquilibrium } from "@/lib/constants/goods";
 
-/** Economy simulation constants — used by seed (initial values) and economy processor (drift). */
+/** Economy simulation constants — used by seed (initial stock) and the economy tick (noise + bounds). */
 export const ECONOMY_CONSTANTS = {
-  /** How quickly supply/demand revert to equilibrium (0-1, fraction per tick). */
-  REVERSION_RATE: 0.02,
   /** Random noise amplitude (+/- units per tick). */
   NOISE_AMPLITUDE: 3,
-  /** Supply/demand floor. */
+  /** Stock floor. */
   MIN_LEVEL: 5,
-  /** Supply/demand ceiling. */
+  /** Stock ceiling. */
   MAX_LEVEL: 200,
-  /**
-   * Reference market level for noise scaling.
-   * Noise amplitude is proportional to (target / reference) so that
-   * small markets (neutral goods) get less absolute noise and large
-   * markets (producers) get proportionally more.
-   */
-  NOISE_REFERENCE_LEVEL: 75,
-} as const;
-
-/** Equilibrium targets by good relationship to economy type. */
-export const EQUILIBRIUM_TARGETS = {
-  produces: { supply: 90, demand: 60 },
-  consumes: { supply: 60, demand: 85 },
-  neutral: { supply: 20, demand: 23 },
 } as const;
 
 // ── Prosperity constants ────────────────────────────────────────
@@ -91,27 +76,20 @@ export const SELF_SUFFICIENCY: Record<EconomyType, Record<string, number>> = {
 };
 
 /**
- * Compute adjusted consume equilibrium targets for a specific economy type.
- * Blends between base consumer targets and producer targets using the
- * self-sufficiency factor.
+ * Compute a consumer's seed stock for a good at a specific economy type. Blends
+ * from the base consumer level toward the producer level by the self-sufficiency
+ * factor, so a self-sufficient consumer seeds higher (reads cheaper).
  *
- * Formula:
- *   supply = baseConsume.supply + s * (produce.supply - baseConsume.supply)
- *   demand = baseConsume.demand - s * (baseConsume.demand - produce.demand)
- *
- * Higher self-sufficiency → supply closer to producer levels → lower prices.
+ *   stock = baseConsume + s * (produce - baseConsume)
  */
 export function getConsumeEquilibrium(
   economyType: EconomyType,
   goodId: string,
-  goodEquilibrium: { produces: { supply: number; demand: number }; consumes: { supply: number; demand: number } },
-): { supply: number; demand: number } {
+  goodEquilibrium: GoodEquilibrium,
+): number {
   const s = SELF_SUFFICIENCY[economyType]?.[goodId] ?? 0;
   if (s === 0) return goodEquilibrium.consumes;
 
   const { produces, consumes } = goodEquilibrium;
-  return {
-    supply: Math.round(consumes.supply + s * (produces.supply - consumes.supply)),
-    demand: Math.round(consumes.demand - s * (consumes.demand - produces.demand)),
-  };
+  return Math.round(consumes + s * (produces - consumes));
 }

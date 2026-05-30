@@ -1,8 +1,10 @@
 import type { GoodTier, Hazard } from "@/lib/types/game";
 
 export interface GoodEquilibrium {
-  produces: { supply: number; demand: number };
-  consumes: { supply: number; demand: number };
+  /** Seed stock at a system that produces this good (seeds high → reads cheap). */
+  produces: number;
+  /** Seed stock at a system that consumes this good (seeds low → reads expensive). */
+  consumes: number;
 }
 
 export interface GoodDefinition {
@@ -24,7 +26,7 @@ export interface GoodDefinition {
 
 export const GOODS: Record<string, GoodDefinition> = {
   // ── Tier 0 — Raw ──────────────────────────────────────────────
-  // High volume (150-160 supply), widest ratio spread (~20%).
+  // Deep, liquid markets (high stock anchor ~111-129), thin per-unit margin.
   // Cheap per unit, always available, bread-and-butter early game income.
   // A shuttle pilot with 500cr fills cargo with these.
   water: {
@@ -39,9 +41,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.0,
     equilibrium: {
-      // buy ~21.3, sell ~26.4, margin ~5.1/unit
-      produces: { supply: 160, demand: 136 },
-      consumes: { supply: 110, demand: 116 },
+      produces: 160,
+      consumes: 110,
     },
   },
   food: {
@@ -56,9 +57,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.0,
     equilibrium: {
-      // buy ~26.1, sell ~31.1, margin ~5.0/unit
-      produces: { supply: 155, demand: 135 },
-      consumes: { supply: 110, demand: 114 },
+      produces: 155,
+      consumes: 110,
     },
   },
   ore: {
@@ -73,9 +73,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.0,
     equilibrium: {
-      // buy ~30.0, sell ~36.2, margin ~6.2/unit
-      produces: { supply: 155, demand: 133 },
-      consumes: { supply: 115, demand: 119 },
+      produces: 155,
+      consumes: 115,
     },
   },
   textiles: {
@@ -90,14 +89,13 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.0,
     equilibrium: {
-      // buy ~30.1, sell ~35.9, margin ~5.8/unit
-      produces: { supply: 150, demand: 129 },
-      consumes: { supply: 110, demand: 113 },
+      produces: 150,
+      consumes: 110,
     },
   },
 
   // ── Tier 1 — Processed ────────────────────────────────────────
-  // Medium volume (78-90 supply), moderate ratio spread (~17-20%).
+  // Medium-depth markets (stock anchor ~67-75), moderate per-unit margin.
   // Better per-unit margin but needs more capital to trade.
   // Mid-game income — becomes viable once you have a few thousand credits.
   fuel: {
@@ -112,9 +110,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.5,
     equilibrium: {
-      // buy ~29.2, sell ~37.3, margin ~8.2/unit
-      produces: { supply: 90, demand: 75 },
-      consumes: { supply: 60, demand: 64 },
+      produces: 90,
+      consumes: 60,
     },
   },
   metals: {
@@ -129,9 +126,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.5,
     equilibrium: {
-      // buy ~38.1, sell ~47.3, margin ~9.2/unit
-      produces: { supply: 85, demand: 72 },
-      consumes: { supply: 58, demand: 61 },
+      produces: 85,
+      consumes: 58,
     },
   },
   chemicals: {
@@ -146,9 +142,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.5,
     equilibrium: {
-      // buy ~47.4, sell ~56.9, margin ~9.5/unit
-      produces: { supply: 80, demand: 69 },
-      consumes: { supply: 56, demand: 58 },
+      produces: 80,
+      consumes: 56,
     },
   },
   medicine: {
@@ -163,14 +158,13 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.5,
     equilibrium: {
-      // buy ~56.7, sell ~67.4, margin ~10.7/unit
-      produces: { supply: 78, demand: 68 },
-      consumes: { supply: 55, demand: 57 },
+      produces: 78,
+      consumes: 55,
     },
   },
 
   // ── Tier 2 — Advanced ─────────────────────────────────────────
-  // Scarce (38-45 supply), tightest ratio spread (~12-17%).
+  // Thin, scarce markets (low stock anchor ~31-35), high per-unit price swing.
   // Highest absolute margin per unit but can't fill cargo from one system.
   // Late-game income — needs big capital AND multi-system routes.
   electronics: {
@@ -185,9 +179,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 3.0,
     equilibrium: {
-      // buy ~69.3, sell ~82.9, margin ~13.6/unit
-      produces: { supply: 45, demand: 39 },
-      consumes: { supply: 28, demand: 29 },
+      produces: 45,
+      consumes: 28,
     },
   },
   machinery: {
@@ -202,9 +195,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 3.0,
     equilibrium: {
-      // buy ~88.1, sell ~103.7, margin ~15.6/unit
-      produces: { supply: 42, demand: 37 },
-      consumes: { supply: 27, demand: 28 },
+      produces: 42,
+      consumes: 27,
     },
   },
   weapons: {
@@ -219,9 +211,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 3.0,
     equilibrium: {
-      // buy ~108.0, sell ~124.8, margin ~16.8/unit
-      produces: { supply: 40, demand: 36 },
-      consumes: { supply: 25, demand: 26 },
+      produces: 40,
+      consumes: 25,
     },
   },
   luxuries: {
@@ -236,9 +227,8 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 3.0,
     equilibrium: {
-      // buy ~138.2, sell ~156.3, margin ~18.1/unit
-      produces: { supply: 38, demand: 35 },
-      consumes: { supply: 24, demand: 25 },
+      produces: 38,
+      consumes: 24,
     },
   },
 } as const;

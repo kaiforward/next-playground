@@ -8,7 +8,7 @@ The economy needs sustained inter-system trade pressure. Production and consumpt
 
 ## Solution
 
-Trade is simulated as **goods flowing along graph edges** driven by local price differences. There are no merchant entities — the universe contains thousands of unseen merchants in lore, and the simulation captures the *economic effect* of their traffic at a fraction of the cost. Each flow is recorded as an event, and the same supply/demand bookkeeping a player trade would produce is applied to both endpoints.
+Trade is simulated as **goods flowing along graph edges** driven by local price differences. There are no merchant entities — the universe contains thousands of unseen merchants in lore, and the simulation captures the *economic effect* of their traffic at a fraction of the cost. Each flow is recorded as an event, and the same single stock delta a player trade would produce is applied to both endpoints.
 
 ---
 
@@ -22,7 +22,7 @@ Only the steepest gradient on the edge gets to move that run — multi-good cove
 
 When a gradient clears the threshold, the simulator decides how many units to move by taking the smallest of three constraints — how much room the destination has, how much surplus the source can spare without dropping below its floor, and the per-edge budget — and then scales that by the gradient's strength. Steeper gradients move closer to the full budget; near-threshold gradients move only a sliver. The result is rounded down to whole units.
 
-The chosen quantity then flows from the cheap side to the expensive side. Both markets see the exact deltas a player trade would produce: supply leaves the source and arrives at the destination, with a smaller demand signal applied in the opposite direction to mirror the buy/sell intent. Mid-run state is mutated in place so later edges in the same region see the new prices and adapt — chains emerge when one move opens up a new gradient for a neighboring edge.
+The chosen quantity then flows from the cheap side to the expensive side. Both markets see the exact delta a player trade would produce: a single stock value leaves the source and arrives at the destination. Mid-run state is mutated in place so later edges in the same region see the new prices and adapt — chains emerge when one move opens up a new gradient for a neighboring edge.
 
 ### Tick Cadence
 
@@ -30,14 +30,14 @@ The processor runs every tick, but each tick it picks **one region** to work on,
 
 A full universe sweep therefore takes `regions × cadence_interval` ticks. There is one hard invariant: the sweep must finish before flow events get pruned. If a region's events were aged out before the round-robin returned to it, the player-facing overlay would show permanent gaps in that region's history. The processor logs a warning if the invariant is in danger of being violated.
 
-By design, the trade-flow processor declares a dependency on the economy processor: within a single tick, the region's prices settle from production, consumption, and reversion *before* the trade simulator reads them. This avoids flow firing against stale gradients.
+By design, the trade-flow processor declares a dependency on the economy processor: within a single tick, the region's prices settle from production and consumption *before* the trade simulator reads them. This avoids flow firing against stale gradients.
 
 ### What Gets Recorded
 
 Two surfaces come out of each run:
 
 - **A per-edge event log.** Every flow appended to a rolling-window table that captures the tick, the direction, the good, and the quantity. Indexes by source, destination, and good give the map overlay and the per-system detail panel cheap queries. A pruning step on every active run drops anything older than the configured history window.
-- **Per-system volume increments.** Both endpoints of the move have the volume accumulator on their `Market` row incremented in the same atomic write that adjusts supply and demand. This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active regions become booming whether or not players show up.
+- **Per-system volume increments.** Both endpoints of the move have the volume accumulator on their `Market` row incremented in the same atomic write that adjusts stock. This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active regions become booming whether or not players show up.
 
 ### Trade Routes
 

@@ -29,16 +29,16 @@ Configurable universe scale controlled by `UNIVERSE_SCALE` env var — currently
 Every system has 2–4 traits (physical properties — asteroid belts, habitable worlds, precursor ruins, gravitational anomalies, etc.) with quality tiers (1–3). 45+ traits across 5 categories (planetary, orbital, resource, phenomena, legacy) with per-economy-type affinity scores. Economy type (agricultural, extraction, refinery, industrial, tech, core) is derived bottom-up by summing strong (value 2) affinities scaled by quality — no direct assignment, no region biasing. The first trait roll is guaranteed to have a strong affinity so every system has a clear economic signal. Trait quality scales production modifiers per good, modifies danger baselines, gates survey missions, and influences event spawning. The faction-facing extensions (economy nudge on conquest, facility placement, war targets) live in the planned [Facilities](./planned/facilities.md) doc.
 
 ### Economy — [detailed spec](./active/gameplay/economy.md)
-12 goods in 3 tiers (raw, processed, advanced) traded at station markets. Prices emerge from supply/demand ratios. Markets drift toward equilibrium through mean reversion, modified by production/consumption flows, random noise, event modifiers, government effects, and system trait production bonuses. Each economy type specializes in producing certain goods and consuming others, creating natural trade routes. Trait quality scales production rates — a tier-3 asteroid belt system produces significantly more ore than a tier-1.
+12 goods in 3 tiers (raw, processed, advanced) traded at station markets. Prices emerge from a single stock value per market via a pricing-anchor curve, with intra-trade slippage and a bid-ask spread that make same-station round-trips unprofitable. Stock evolves through self-limiting production/consumption, random noise, event modifiers, government effects, and system trait production bonuses — equilibrium emerges from production/consumption balance plus spatial trade flow, with no mean-reversion and no separate demand axis. Each economy type specializes in producing certain goods and consuming others, creating natural trade routes. Trait quality scales production rates — a tier-3 asteroid belt system produces significantly more ore than a tier-1.
 
 ### Trade Simulation (Edge Flow) — [detailed spec](./active/gameplay/trade-simulation.md)
-Goods flow along jump-lane edges driven by local price gradients, supplying the inter-system trade pressure player density alone cannot. No merchant entities — the simulator applies the same supply/demand bookkeeping a player trade would, and writes to the same volume accumulator used by the prosperity multiplier. Runs one region per tick in round-robin order, with player activity scaling edge flow back via wall-clock displacement so the simulator stays out of the way in busy regions. Flow events feed a map overlay and a per-system "Trade Activity" panel (top imports/exports, volume sparkline) — routes are inferred from the event log, not stored.
+Goods flow along jump-lane edges driven by local price gradients, supplying the inter-system trade pressure player density alone cannot. No merchant entities — the simulator applies the same single stock delta a player trade would, and writes to the same volume accumulator used by the prosperity multiplier. Runs one region per tick in round-robin order, with player activity scaling edge flow back via wall-clock displacement so the simulator stays out of the way in busy regions. Flow events feed a map overlay and a per-system "Trade Activity" panel (top imports/exports, volume sparkline) — routes are inferred from the event log, not stored.
 
 ### Events — [detailed spec](./active/gameplay/events.md)
 12 primary event types (inner_system_conflict, plague, trade_festival, mining_boom, ore_glut, supply_shortage, pirate_raid, solar_storm, refugee_crisis, trade_embargo, tech_breakthrough, asteroid_strike), 2 child events that spread from parents (conflict_spillover, plague_risk), and 3 relations-owned event types spawned exclusively by the relations processor (border_conflict, pact_under_negotiation, alliance_dissolved — see Inter-Faction Relations below). Events spawn randomly (weighted by government type), progress through multi-phase arcs, apply modifiers to markets and navigation danger, and spread to neighboring systems. Each phase has distinct economic and danger effects.
 
 ### Trading & Missions — [detailed spec](./active/gameplay/trading.md)
-Players buy and sell goods at station markets. Prices update dynamically based on supply/demand. Trade missions are auto-generated delivery contracts — import missions at high-price systems, export missions at low-price systems, and event-themed missions during active events. Missions reward credits on delivery plus the goods' sale value.
+Players buy and sell goods at station markets. Prices update dynamically based on each good's stock. Trade missions are auto-generated delivery contracts — import missions at high-price systems, export missions at low-price systems, and event-themed missions during active events. Missions reward credits on delivery plus the goods' sale value.
 
 ### Navigation & Fleet — [detailed spec](./active/gameplay/navigation.md)
 Travel along jump-lane connections. Travel time scales with the ship's `speed` stat (faster ships = fewer ticks). Ships can be grouped into convoys for collective travel and trade; the convoy moves at the slowest member's speed and all members contribute firepower to a shared escort pool. On arrival, cargo passes through a 5-stage danger pipeline: hazard incidents, import duty, contraband inspection, event-based cargo loss, and hull/shield damage. Hull at 0 disables a ship (cargo lost, needs repair). Shields regenerate on dock.
@@ -115,7 +115,7 @@ flowchart TD
     EC -- "price extremes trigger<br/>mission generation" --> TM
     EC -- "current prices" --> PS
 
-    TF -- "supply/demand deltas<br/>+ volume increments" --> EC
+    TF -- "stock deltas<br/>+ volume increments" --> EC
     TF -- "cross-faction trade volume<br/>(positive drift driver)" --> REL
 
     FA -- "per-system government<br/>(via factionId)" --> GOV
@@ -142,7 +142,7 @@ flowchart TD
 
     BT -- "resolves rounds, applies<br/>ship damage + rewards" --> NF
 
-    NF -- "trade at destination<br/>(buy/sell affects supply/demand)" --> EC
+    NF -- "trade at destination<br/>(buy/sell affects stock)" --> EC
     NF -- "successful trade →<br/>+0.5 rep (capped per tick)" --> REP
 
     OM -- "generates patrol/survey/bounty<br/>from danger + traits" --> BT
@@ -153,7 +153,7 @@ Key interactions:
 - **Events → Navigation**: Danger modifiers increase cargo loss risk on ship arrival
 - **Events → Trade Missions**: Active events generate themed delivery contracts with bonus rewards
 - **Economy → Trade Flow**: Trade flow reads each region's prices *after* economy has settled them this tick, so gradients reflect current production/consumption state
-- **Trade Flow → Economy**: Each flow writes the same supply/demand deltas and volume accumulator increments a player trade would — booming/stagnant prosperity multipliers respond to edge flow exactly like player traffic
+- **Trade Flow → Economy**: Each flow writes the same stock delta and volume accumulator increments a player trade would — booming/stagnant prosperity multipliers respond to edge flow exactly like player traffic
 - **Economy → Trade Missions**: Price extremes (>2x or <0.5x base) trigger mission generation
 - **System Traits → Operational Missions**: Systems with survey-eligible traits (precursor_ruins, gravitational_anomaly, etc.) generate survey missions
 - **Danger Levels → Operational Missions**: High-danger systems generate patrol and bounty missions. Enemy tier scales with danger

@@ -289,7 +289,7 @@ Multiplier values are tuning numbers — live in `REPUTATION_TIERS` as a single 
 
 ### Price Modifier Mechanism
 
-Reputation affects trade prices as a **transaction multiplier** — it modifies what the player pays/receives, not the displayed market price. Market prices remain universal (driven by supply/demand), so all players see the same price information. Reputation is your personal competitive edge.
+Reputation affects trade prices as a **transaction multiplier** — it modifies what the player pays/receives, not the displayed market price. Market prices remain universal (driven by each good's stock), so all players see the same price information. Reputation is your personal competitive edge.
 
 - **Buying**: `market_price × buy_multiplier` — higher reputation = lower multiplier = cheaper purchases
 - **Selling**: `market_price × sell_multiplier` — higher reputation = higher multiplier = more profit
