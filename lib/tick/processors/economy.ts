@@ -10,17 +10,7 @@ import {
   type MarketTickEntry,
   type ProsperityParams,
 } from "@/lib/engine/tick";
-import {
-  ECONOMY_CONSTANTS,
-  PROSPERITY_DECAY_RATE,
-  PROSPERITY_MAX_GAIN,
-  PROSPERITY_TARGET_VOLUME,
-  PROSPERITY_MIN,
-  PROSPERITY_MAX,
-  PROSPERITY_MULT_AT_MIN,
-  PROSPERITY_MULT_AT_ZERO,
-  PROSPERITY_MULT_AT_MAX,
-} from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, PROSPERITY_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -170,16 +160,7 @@ export async function runEconomyProcessor(
 
 // ── Live-game wiring ──────────────────────────────────────────────
 
-const prosperityParams: ProsperityParams = {
-  decayRate: PROSPERITY_DECAY_RATE,
-  maxGain: PROSPERITY_MAX_GAIN,
-  targetVolume: PROSPERITY_TARGET_VOLUME,
-  min: PROSPERITY_MIN,
-  max: PROSPERITY_MAX,
-  multAtMin: PROSPERITY_MULT_AT_MIN,
-  multAtZero: PROSPERITY_MULT_AT_ZERO,
-  multAtMax: PROSPERITY_MULT_AT_MAX,
-};
+const prosperityParams: ProsperityParams = PROSPERITY_PARAMS;
 
 const simParams: EconomySimParams = {
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
