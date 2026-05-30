@@ -46,6 +46,8 @@ export interface SimMarketEntry {
   goodId: string;
   basePrice: number;
   stock: number;
+  /** Stored pricing-anchor multiplier (1 = none); written by the economy processor. */
+  anchorMult: number;
   priceFloor: number;
   priceCeiling: number;
 }
