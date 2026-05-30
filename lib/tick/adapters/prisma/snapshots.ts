@@ -23,6 +23,7 @@ export class PrismaSnapshotsWorld implements SnapshotsWorld {
     const rows = await this.tx.stationMarket.findMany({
       select: {
         stock: true,
+        anchorMult: true,
         good: {
           select: { name: true, basePrice: true, priceFloor: true, priceCeiling: true },
         },
@@ -35,6 +36,7 @@ export class PrismaSnapshotsWorld implements SnapshotsWorld {
       // The price curve anchors on the canonical good key, not the DB CUID.
       goodId: GOOD_NAME_TO_KEY.get(r.good.name) ?? r.good.name,
       stock: r.stock,
+      anchorMult: r.anchorMult,
       basePrice: r.good.basePrice,
       priceFloor: r.good.priceFloor,
       priceCeiling: r.good.priceCeiling,

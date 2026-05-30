@@ -31,6 +31,7 @@ export interface MarketView {
   /** Canonical good key (resolved by the adapter) so the price curve anchors correctly. */
   goodId: string;
   stock: number;
+  anchorMult: number;
   basePrice: number;
   priceFloor: number;
   priceCeiling: number;

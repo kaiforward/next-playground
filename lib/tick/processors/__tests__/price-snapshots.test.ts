@@ -21,6 +21,7 @@ function makeMarket(
     systemId,
     goodId,
     stock,
+    anchorMult: 1,
     basePrice: 100,
     // priceFloor/priceCeiling are multipliers, not absolute prices.
     priceFloor: 0.2,
