@@ -11,6 +11,7 @@ import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
 import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
+import { ProsperityTerritoryLayer } from "./layers/prosperity-territory-layer";
 import { FleetDotLayer } from "./layers/fleet-dot-layer";
 import { TradeFlowLayer } from "./layers/trade-flow-layer";
 import { EffectLayer } from "./layers/effect-layer";
@@ -39,6 +40,8 @@ export interface PixiMapCanvasProps {
    * `regions` shows economy colours, `none` hides both layers.
    */
   mapMode?: MapMode;
+  /** Per-system prosperity for the choropleth, or null when the mode is off. */
+  prosperityBySystem?: Map<string, number> | null;
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
   connections: ConnectionInfo[];
   currentTick: number;
@@ -63,6 +66,7 @@ interface PixiRefs {
   connectionLayer: ConnectionLayer;
   territoryLayer: TerritoryLayer;
   politicalTerritoryLayer: PoliticalTerritoryLayer;
+  prosperityTerritoryLayer: ProsperityTerritoryLayer;
   fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
   fleetTransitLayer: FleetTransitLayer;
@@ -80,6 +84,7 @@ export function PixiMapCanvas({
   onReady,
   regionInfos,
   mapMode = "political",
+  prosperityBySystem,
   onViewportChange,
   connections,
   currentTick,
@@ -191,6 +196,11 @@ export function PixiMapCanvas({
       const politicalTerritoryLayer = new PoliticalTerritoryLayer();
       world.addChild(politicalTerritoryLayer.container);
 
+      // Prosperity choropleth — a 4th mode in the territory band. Only one
+      // territory mode is visible at a time, so it never stacks with the above.
+      const prosperityTerritoryLayer = new ProsperityTerritoryLayer();
+      world.addChild(prosperityTerritoryLayer.container);
+
       const fleetDotLayer = new FleetDotLayer();
       world.addChild(fleetDotLayer.container);
 
@@ -267,6 +277,7 @@ export function PixiMapCanvas({
 
         territoryLayer.updateVisibility(lod);
         politicalTerritoryLayer.updateVisibility(lod);
+        prosperityTerritoryLayer.updateVisibility(lod);
         fleetDotLayer.updateVisibility(lod);
 
         // Trade-flow overlay: layer alpha multiplies the system fade so the
@@ -293,7 +304,7 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer,
+        politicalTerritoryLayer, prosperityTerritoryLayer, fleetDotLayer, tradeFlowLayer,
         fleetTransitLayer, effectLayer,
       };
       setPixiReady(true);
@@ -313,6 +324,7 @@ export function PixiMapCanvas({
           refs.connectionLayer.destroy();
           refs.territoryLayer.destroy();
           refs.politicalTerritoryLayer.destroy();
+          refs.prosperityTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
           refs.fleetTransitLayer.destroy();
           refs.effectLayer.destroy();
@@ -345,6 +357,7 @@ export function PixiMapCanvas({
 
     p.territoryLayer.sync(atlasData.systems, regionInfos);
     p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions);
+    p.prosperityTerritoryLayer.sync(atlasData.systems);
   }, [atlasData.systems, atlasData.factions, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
@@ -356,6 +369,7 @@ export function PixiMapCanvas({
     if (!p || !pixiReady) return;
     p.territoryLayer.container.visible = mapMode === "regions";
     p.politicalTerritoryLayer.setActive(mapMode === "political");
+    p.prosperityTerritoryLayer.container.visible = mapMode === "prosperity";
   }, [mapMode, pixiReady]);
 
   // ── Update player presence highlights (lightweight fill-only redraw) ──
@@ -371,6 +385,13 @@ export function PixiMapCanvas({
     }
     p.territoryLayer.setPlayerPresence(playerRegionIds);
   }, [mapData.systems, pixiReady]);
+
+  // ── Prosperity choropleth fills (lightweight redraw on data change) ──
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.prosperityTerritoryLayer.setProsperity(prosperityBySystem ?? new Map());
+  }, [prosperityBySystem, pixiReady]);
 
   // ── Sync fleet presence dots (systems with ships) ──────────────────
   useEffect(() => {
