@@ -176,6 +176,8 @@ Boom amplifies both sides equally — no corrective tug-of-war. A booming system
 
 **Timing**: With 24 regions and round-robin, each system is processed every ~24 ticks. At 0.03 decay/run, prosperity goes from 1.0 to ~0 in ~33 runs (~800 ticks).
 
+**UI surfaces:** Per-system prosperity appears as a label badge (e.g. "Booming") plus a muted "Production & Consumption ×N" effect descriptor on the system **Overview** and **Market** screens, and as a cold→warm per-system Voronoi **choropleth** map mode. Both surfaces read from one tick-scoped feed (`/api/game/systems/prosperity` via `useProsperity`) and share the same cold→warm colour ramp. The map keeps two disjoint colour axes: **green↔red** is reserved for price deal-quality (mode-aware buy/sell), **cold↔warm** for prosperity — so the prosperity choropleth and the price halo overlay can coexist without colour collision.
+
 ### Event-Driven Anchor Shifts
 
 Events can shift a good's **pricing anchor** — the stock level at which mid price equals base price. This is distinct from a one-time stock shock (which moves stock immediately and persistently); an anchor shift changes *what price a given stock level reads as* for the duration of the event, without touching stock itself.
