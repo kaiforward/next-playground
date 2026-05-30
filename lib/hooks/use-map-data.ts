@@ -117,6 +117,7 @@ interface UseMapDataOptions {
   systemRegionMap: Map<string, string>;
   regionMap: Map<string, { id: string; name: string }>;
   priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
+  priceMode: "buy" | "sell";
 }
 
 // ── Hook ────────────────────────────────────────────────────────
@@ -135,6 +136,7 @@ export function useMapData({
   systemRegionMap,
   regionMap,
   priceHeatmap,
+  priceMode,
 }: UseMapDataOptions): MapData {
   // ── Ship counts per system (docked only) ──────────────────────
   const shipsAtSystem = useMemo(() => {
@@ -318,7 +320,7 @@ export function useMapData({
         ? "visible"
         : "unknown";
       const price = priceHeatmap?.get(system.id) ?? null;
-      const priceTint = price ? priceRampColorPixi(price.currentPrice, price.basePrice) : null;
+      const priceTint = price ? priceRampColorPixi(price.currentPrice, price.basePrice, priceMode) : null;
       const priceDelta = price
         ? Math.round((price.currentPrice / price.basePrice - 1) * 100)
         : null;
@@ -340,7 +342,7 @@ export function useMapData({
         priceDelta,
       };
     });
-  }, [universe.systems, shipsAtSystem, dockedSoloShips, dockedConvoys, nodeNavigationStates, eventsPerSystem, visibleSystemIds, priceHeatmap]);
+  }, [universe.systems, shipsAtSystem, dockedSoloShips, dockedConvoys, nodeNavigationStates, eventsPerSystem, visibleSystemIds, priceHeatmap, priceMode]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {

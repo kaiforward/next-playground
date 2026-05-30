@@ -68,6 +68,7 @@ export function StarMap({
 
   // ── Price overlay control state (good picker + comparison panel) ──
   const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
+  const [priceMode, setPriceMode] = useState<"buy" | "sell">("buy");
   const [comparisonOpen, setComparisonOpen] = useState(false);
 
   // ── Price heatmap data (per-system price for the selected good) ──
@@ -199,6 +200,7 @@ export function StarMap({
     systemRegionMap,
     regionMap,
     priceHeatmap: heatmapData,
+    priceMode,
   });
 
   // ── Selected in-transit unit + ETA (drives the compact card) ──
@@ -344,6 +346,8 @@ export function StarMap({
         setPriceGoodId={setPriceGoodId}
         goods={goods}
         onOpenComparisonTable={() => setComparisonOpen(true)}
+        priceMode={priceMode}
+        setPriceMode={setPriceMode}
       />
 
       {/* Navigation mode banner */}

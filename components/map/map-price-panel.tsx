@@ -12,6 +12,9 @@ interface MapPricePanelProps {
   goods: { id: string; name: string }[];
   /** Open the cross-system comparison panel. Shown only once a good is picked. */
   onOpenComparisonTable: () => void;
+  /** Buy/sell perspective for the deal-quality tint. */
+  priceMode: "buy" | "sell";
+  setPriceMode: (mode: "buy" | "sell") => void;
 }
 
 /**
@@ -25,6 +28,8 @@ export function MapPricePanel({
   setPriceGoodId,
   goods,
   onOpenComparisonTable,
+  priceMode,
+  setPriceMode,
 }: MapPricePanelProps) {
   const options = useMemo<{ value: string | null; label: string }[]>(
     () => [
@@ -41,6 +46,22 @@ export function MapPricePanel({
         </h3>
       </div>
       <div className="px-3 py-2 space-y-2">
+        <div className="flex gap-1.5">
+          {(["buy", "sell"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setPriceMode(m)}
+              className={`flex-1 text-[10px] px-2 py-1 uppercase tracking-wider ${
+                priceMode === m
+                  ? "bg-accent/20 text-text-accent border border-accent/40"
+                  : "bg-surface-hover text-text-secondary border border-border"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
         <SelectInput<string | null>
           label="Good"
           size="sm"

@@ -14,6 +14,8 @@ interface MapControlsDockProps {
   setPriceGoodId: (goodId: string | null) => void;
   goods: { id: string; name: string }[];
   onOpenComparisonTable: () => void;
+  priceMode: "buy" | "sell";
+  setPriceMode: (mode: "buy" | "sell") => void;
 }
 
 /**
@@ -32,6 +34,8 @@ export function MapControlsDock({
   setPriceGoodId,
   goods,
   onOpenComparisonTable,
+  priceMode,
+  setPriceMode,
 }: MapControlsDockProps) {
   return (
     <div className="absolute bottom-4 left-4 z-20 flex flex-col items-start gap-2">
@@ -41,6 +45,8 @@ export function MapControlsDock({
           setPriceGoodId={setPriceGoodId}
           goods={goods}
           onOpenComparisonTable={onOpenComparisonTable}
+          priceMode={priceMode}
+          setPriceMode={setPriceMode}
         />
       )}
       <MapOverlayControls
