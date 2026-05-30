@@ -103,16 +103,19 @@ export function quoteTrade(
  * Build a MarketCurve for a good from its DB/definition fields. `targetStock`
  * is derived (PR 2) / calibrated (PR 3) in lib/constants/market-economy.ts; the
  * float floor/ceiling multipliers come straight off the good.
+ * An optional anchorMult (default 1, supplied from the market row's stored
+ * anchorMult) scales the anchor for active events; see the stock-economy spec §6.1.
  */
 export function curveForGood(
   goodId: string,
   basePrice: number,
   floorMult: number,
   ceilingMult: number,
+  anchorMult: number = 1,
 ): MarketCurve {
   return {
     basePrice,
-    targetStock: getTargetStock(goodId),
+    targetStock: getTargetStock(goodId) * anchorMult,
     k: DEFAULT_ELASTICITY,
     floorMult,
     ceilingMult,
