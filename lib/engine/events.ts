@@ -51,13 +51,10 @@ export interface ModifierRow {
 
 /** Aggregated modifier effects for a single market entry. */
 export interface AggregatedModifiers {
-  /** Compound multiplier on supply equilibrium target. Default 1. */
-  supplyTargetMult: number;
-  /** Compound multiplier on demand equilibrium target. Default 1. */
-  demandTargetMult: number;
+  /** Compound multiplier on the good's pricing anchor (targetStock). Default 1. */
+  anchorMult: number;
   productionMult: number;
   consumptionMult: number;
-  reversionMult: number;
 }
 
 /** Decision to spawn a new event. */
@@ -72,11 +69,10 @@ export interface SpawnDecision {
 
 /** Caps applied during aggregation. */
 export interface ModifierCaps {
-  minTargetMult: number;
-  maxTargetMult: number;
+  minAnchorMult: number;
+  maxAnchorMult: number;
   minMultiplier: number;
   maxMultiplier: number;
-  minReversionMult: number;
 }
 
 /** Spawn constraints. */
@@ -114,8 +110,9 @@ export function checkPhaseTransition(
  * Scale a modifier template value by event severity.
  *
  * All modifier types lerp toward 1.0: `1 + (value - 1) × severity`.
- * For equilibrium_shift (now a multiplier), 2.0 at severity 0.5 → 1.5.
- * For rate_multiplier/reversion_dampening, same formula.
+ * For anchor_shift (a multiplier), 2.0 at severity 0.5 → 1.5; rate_multiplier
+ * uses the same formula. Navigation equilibrium_shift (danger_level) is additive
+ * and handled elsewhere.
  */
 function scaleValue(
   template: ModifierTemplate,
@@ -156,41 +153,34 @@ export function buildModifiersForPhase(
  * Aggregate a list of active modifiers into a single effect bundle.
  *
  * Filters to modifiers matching `goodId` (including null goodId which applies
- * to all goods). Equilibrium shifts compound (multiply), rate multipliers
- * compound, dampening takes min. Safety caps applied at the end.
+ * to all goods). Anchor shifts compound (multiply); rate multipliers compound.
+ * Safety caps applied at the end.
  */
 export function aggregateModifiers(
   modifiers: ModifierRow[],
   goodId: string,
   caps: ModifierCaps,
 ): AggregatedModifiers {
-  let supplyTargetMult = 1;
-  let demandTargetMult = 1;
+  let anchorMult = 1;
   let productionMult = 1;
   let consumptionMult = 1;
-  let reversionMult = 1;
 
   for (const mod of modifiers) {
     // Match: modifier applies to this good specifically, or to all goods (null)
     if (mod.goodId !== null && mod.goodId !== goodId) continue;
 
-    if (mod.type === "equilibrium_shift") {
-      if (mod.parameter === "supply_target") supplyTargetMult *= mod.value;
-      else if (mod.parameter === "demand_target") demandTargetMult *= mod.value;
+    if (mod.type === "anchor_shift") {
+      if (mod.parameter === "target_stock") anchorMult *= mod.value;
     } else if (mod.type === "rate_multiplier") {
       if (mod.parameter === "production_rate") productionMult *= mod.value;
       else if (mod.parameter === "consumption_rate") consumptionMult *= mod.value;
-    } else if (mod.type === "reversion_dampening") {
-      if (mod.parameter === "reversion_rate") reversionMult = Math.min(reversionMult, mod.value);
     }
   }
 
   return {
-    supplyTargetMult: clamp(supplyTargetMult, caps.minTargetMult, caps.maxTargetMult),
-    demandTargetMult: clamp(demandTargetMult, caps.minTargetMult, caps.maxTargetMult),
+    anchorMult: clamp(anchorMult, caps.minAnchorMult, caps.maxAnchorMult),
     productionMult: clamp(productionMult, caps.minMultiplier, caps.maxMultiplier),
     consumptionMult: clamp(consumptionMult, caps.minMultiplier, caps.maxMultiplier),
-    reversionMult: clamp(reversionMult, caps.minReversionMult, 1.0),
   };
 }
 

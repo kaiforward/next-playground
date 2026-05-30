@@ -20,11 +20,10 @@ type ModifierCaps = typeof MODIFIER_CAPS;
 // ── Helpers ─────────────────────────────────────────────────────
 
 const defaultCaps: ModifierCaps = {
-  minTargetMult: 0.1,
-  maxTargetMult: 4.0,
+  minAnchorMult: 0.1,
+  maxAnchorMult: 4.0,
   minMultiplier: 0.1,
   maxMultiplier: 3.0,
-  minReversionMult: 0.2,
 };
 
 function makeDefinition(
@@ -207,37 +206,44 @@ describe("aggregateModifiers", () => {
   it("returns defaults when no modifiers match", () => {
     const result = aggregateModifiers([], "fuel", defaultCaps);
     expect(result).toEqual({
-      supplyTargetMult: 1,
-      demandTargetMult: 1,
+      anchorMult: 1,
       productionMult: 1,
       consumptionMult: 1,
-      reversionMult: 1,
     });
   });
 
-  it("compounds equilibrium shift multipliers for matching good", () => {
+  it("compounds anchor shifts for matching good", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 1.5 },
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 1.4 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "target_stock", value: 1.5 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "target_stock", value: 1.4 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetMult).toBeCloseTo(2.1); // 1.5 × 1.4
+    expect(result.anchorMult).toBeCloseTo(2.1); // 1.5 × 1.4
   });
 
-  it("includes null-goodId modifiers (applies to all goods)", () => {
+  it("includes null-goodId anchor shifts (apply to all goods)", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "demand_target", value: 1.3 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "target_stock", value: 1.3 },
     ];
     const result = aggregateModifiers(mods, "luxuries", defaultCaps);
-    expect(result.demandTargetMult).toBeCloseTo(1.3);
+    expect(result.anchorMult).toBeCloseTo(1.3);
   });
 
-  it("excludes modifiers for a different good", () => {
+  it("compounds null-goodId and per-good anchor shifts together", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "ore", parameter: "demand_target", value: 2.0 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "target_stock", value: 1.67 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "weapons", parameter: "target_stock", value: 2.0 },
+    ];
+    const result = aggregateModifiers(mods, "weapons", defaultCaps);
+    expect(result.anchorMult).toBeCloseTo(3.34); // 1.67 × 2.0
+  });
+
+  it("excludes anchor shifts for a different good", () => {
+    const mods: ModifierRow[] = [
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "ore", parameter: "target_stock", value: 2.0 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetMult).toBe(1);
+    expect(result.anchorMult).toBe(1);
   });
 
   it("multiplies rate multipliers", () => {
@@ -249,33 +255,24 @@ describe("aggregateModifiers", () => {
     expect(result.productionMult).toBeCloseTo(0.4); // 0.5 × 0.8
   });
 
-  it("takes min for reversion dampening", () => {
+  it("caps anchor to maxAnchorMult", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "reversion_dampening", targetType: "system", targetId: "sys-1", goodId: null, parameter: "reversion_rate", value: 0.7 },
-      { domain: "economy", type: "reversion_dampening", targetType: "system", targetId: "sys-1", goodId: null, parameter: "reversion_rate", value: 0.5 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "target_stock", value: 3.0 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "target_stock", value: 2.0 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.reversionMult).toBe(0.5);
+    expect(result.anchorMult).toBe(4.0); // 6.0 capped at maxAnchorMult
   });
 
-  it("caps multiplier to maxTargetMult", () => {
+  it("caps anchor to minAnchorMult", () => {
     const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 3.0 },
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 2.0 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "target_stock", value: 0.05 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetMult).toBe(4.0); // 3.0 × 2.0 = 6.0, capped at maxTargetMult 4.0
+    expect(result.anchorMult).toBe(0.1); // capped at minAnchorMult
   });
 
-  it("caps multiplier to minTargetMult", () => {
-    const mods: ModifierRow[] = [
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "supply_target", value: 0.05 },
-    ];
-    const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.supplyTargetMult).toBe(0.1); // capped at minTargetMult
-  });
-
-  it("caps multiplier to minMultiplier", () => {
+  it("caps rate multiplier to minMultiplier", () => {
     const mods: ModifierRow[] = [
       { domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "sys-1", goodId: null, parameter: "production_rate", value: 0.05 },
     ];
@@ -283,29 +280,15 @@ describe("aggregateModifiers", () => {
     expect(result.productionMult).toBe(0.1);
   });
 
-  it("caps reversion mult to minReversionMult", () => {
-    const mods: ModifierRow[] = [
-      { domain: "economy", type: "reversion_dampening", targetType: "system", targetId: "sys-1", goodId: null, parameter: "reversion_rate", value: 0.1 },
-    ];
-    const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.reversionMult).toBe(0.2);
-  });
-
   it("handles combined modifiers from multiple events", () => {
     const mods: ModifierRow[] = [
-      // Conflict: demand multiplier on fuel
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "demand_target", value: 1.8 },
-      // Conflict: production halved
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: "fuel", parameter: "target_stock", value: 1.8 },
       { domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "sys-1", goodId: null, parameter: "production_rate", value: 0.4 },
-      // Conflict: reversion dampened
-      { domain: "economy", type: "reversion_dampening", targetType: "system", targetId: "sys-1", goodId: null, parameter: "reversion_rate", value: 0.5 },
-      // Festival: all demand up
-      { domain: "economy", type: "equilibrium_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "demand_target", value: 1.2 },
+      { domain: "economy", type: "anchor_shift", targetType: "system", targetId: "sys-1", goodId: null, parameter: "target_stock", value: 1.2 },
     ];
     const result = aggregateModifiers(mods, "fuel", defaultCaps);
-    expect(result.demandTargetMult).toBeCloseTo(2.16); // 1.8 × 1.2
+    expect(result.anchorMult).toBeCloseTo(2.16); // 1.8 × 1.2
     expect(result.productionMult).toBe(0.4);
-    expect(result.reversionMult).toBe(0.5);
   });
 });
 

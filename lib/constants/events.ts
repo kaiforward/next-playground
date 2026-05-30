@@ -29,10 +29,10 @@ export type EventTypeId =
 
 export interface ModifierTemplate {
   domain: "economy" | "navigation";
-  type: "equilibrium_shift" | "rate_multiplier" | "reversion_dampening";
+  type: "equilibrium_shift" | "anchor_shift" | "rate_multiplier";
   target: "system" | "region";
   goodId?: string | null;
-  parameter: string; // "supply_target", "demand_target", "production_rate", "consumption_rate", "reversion_rate"
+  parameter: string; // "target_stock" (anchor_shift), "production_rate"/"consumption_rate" (rate_multiplier), "danger_level" (equilibrium_shift/navigation)
   value: number;     // Absolute for shifts, multiplier for rates/dampening
 }
 
@@ -97,21 +97,18 @@ export const EVENT_COVERAGE_TARGET = 0.25;
 
 /** Safety caps for aggregated modifier values. */
 export const MODIFIER_CAPS = {
-  /** Minimum equilibrium target multiplier (never fully zero out targets). */
-  minTargetMult: 0.1,
-  /** Maximum equilibrium target multiplier. */
-  maxTargetMult: 4.0,
+  /** Minimum anchor multiplier (never fully zero out the anchor). */
+  minAnchorMult: 0.1,
+  /** Maximum anchor multiplier. */
+  maxAnchorMult: 4.0,
   /** Minimum rate multiplier (never fully zero out production). */
   minMultiplier: 0.1,
   /** Maximum rate multiplier. */
   maxMultiplier: 3.0,
-  /** Minimum reversion multiplier (reversion always wins). */
-  minReversionMult: 0.2,
 } as const;
 
 // ── Event definitions ───────────────────────────────────────────
-// NOTE: equilibrium_shift values are MULTIPLIERS (1.0 = no change, 2.0 = double target, 0.5 = halve).
-// danger_level values remain additive (directly added to base danger).
+// NOTE: anchor_shift values are MULTIPLIERS on a good's pricing anchor (1.0 = no change, 2.0 = double = pricier, 0.5 = half = cheaper). danger_level values remain additive.
 
 const innerSystemConflict: EventDefinition = {
   type: "inner_system_conflict",
