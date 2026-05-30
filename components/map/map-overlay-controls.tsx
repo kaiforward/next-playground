@@ -45,7 +45,13 @@ const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
   { key: "shipRoutes", label: "Ship Routes", swatch: "#38bdf8", legend: "routes" },
 ];
 
-const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] }));
+const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({
+  value: m,
+  label: MODE_LABELS[m],
+  // Prosperity's tint→meaning mapping isn't self-evident, so carry a hover/focus
+  // legend in a tooltip — matching the Overlays section, no permanent height.
+  tooltip: m === "prosperity" ? <ProsperityRampLegend /> : undefined,
+}));
 
 interface MapOverlayControlsProps {
   mode: MapMode;
@@ -89,7 +95,6 @@ export function MapOverlayControls({
           onChange={setMode}
           options={TERRITORY_OPTIONS}
         />
-        {mode === "prosperity" && <ProsperityRampLegend />}
 
         <div className="border-t border-border" />
         <SectionHeading>Overlays</SectionHeading>
@@ -179,7 +184,10 @@ const PROSPERITY_RAMP = [
 
 function ProsperityRampLegend() {
   return (
-    <div className="px-3 pb-2">
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Prosperity
+      </h5>
       <div
         className="h-2 w-full"
         style={{ background: `linear-gradient(to right, ${PROSPERITY_RAMP})` }}
