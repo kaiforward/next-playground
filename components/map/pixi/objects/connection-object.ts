@@ -45,24 +45,24 @@ export class ConnectionObject extends Container {
     this.connectionId = data.id;
     this.styleFingerprint = fingerprint;
 
-    // Pick edge style
-    const style = data.isGateway
-      ? EDGE.region
-      : data.isRoute
-        ? EDGE.route
-        : data.isDimmed
-          ? EDGE.dimmed
-          : EDGE.default;
-
     this.line.clear();
 
-    if (data.isRoute || data.isGateway) {
-      // Solid line for route and gateway connections
+    if (data.isGateway) {
+      // Gateway trunk route — amber "lit pathway": a wide soft glow underlay
+      // with a crisp core line stroked over it.
+      for (const s of [EDGE.gatewayGlow, EDGE.gateway]) {
+        this.line.moveTo(fromX, fromY);
+        this.line.lineTo(toX, toY);
+        this.line.stroke({ color: s.color, width: s.width, alpha: s.alpha });
+      }
+    } else if (data.isRoute) {
+      // Solid line for the active route
       this.line.moveTo(fromX, fromY);
       this.line.lineTo(toX, toY);
-      this.line.stroke({ color: style.color, width: style.width, alpha: style.alpha });
+      this.line.stroke({ color: EDGE.route.color, width: EDGE.route.width, alpha: EDGE.route.alpha });
     } else {
-      // Dashed line
+      // Dashed line for ordinary connections
+      const style = data.isDimmed ? EDGE.dimmed : EDGE.default;
       drawDashedLine(this.line, fromX, fromY, toX, toY, style.color, style.alpha, style.width);
     }
 

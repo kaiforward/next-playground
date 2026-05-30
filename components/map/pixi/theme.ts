@@ -72,7 +72,11 @@ export const EDGE = {
   default:  { color: 0x94a3b8, alpha: 0.4,  width: 1.5 },
   dimmed:   { color: 0x94a3b8, alpha: 0.12, width: 1.0 },
   route:    { color: 0x63b3ed, alpha: 0.9,  width: 2.5 },
-  region:   { color: 0x94a3b8, alpha: 0.5,  width: 3.0 },
+  // Gateway trunk routes — amber "lit pathway": a wide soft glow under a crisp
+  // core line. Amber matches TEXT_COLORS.gateway so gateway edges and labels
+  // share one identity (replaces the old per-system fuchsia gateway ring).
+  gateway:     { color: 0xf59e0b, alpha: 0.85, width: 2.5 },
+  gatewayGlow: { color: 0xf59e0b, alpha: 0.15, width: 7.0 },
 } as const;
 
 // ── Event dot colors ─────────────────────────────────────────────
@@ -132,21 +136,19 @@ export const SIZES = {
 } as const;
 
 // ── Glyph radial budget (world units, glyph-local) ───────────────
-// Each concentric element owns a fixed radius band so price, gateway, and
+// Each concentric element owns a fixed radius band so price, fleet, and
 // navigation indicators never collide. See docs map-layer-reconciliation §2.
 export const GLYPH = {
   coreRadius:        12,   // economy core (unchanged, matches SIZES.systemCoreRadius)
   haloRadius:        20,   // soft-body lens (was the 40px glow — pulled in)
   haloAlpha:         0.16, // economy default
   haloPriceAlpha:    0.5,  // when the halo carries the price ramp
-  gatewayRingRadius: 28,
-  gatewayRingWidth:  3,
+  fleetRingRadius:   28,   // sky-blue ring when the player has fleet docked here
+  fleetRingWidth:    3,
   navRingRadius:     34,   // outermost, dashed
   navRingWidth:      3,
+  selectedRingWidth: 4,    // selection ring — brighter + thicker than nav rings
 } as const;
-
-// Gateway: reserved magenta, used by nothing else on the map.
-export const GATEWAY_COLOR = 0xe879f9; // fuchsia-400
 
 // ── Unified corner-pill geometry (all four corners share this) ───
 export const PILL = {
