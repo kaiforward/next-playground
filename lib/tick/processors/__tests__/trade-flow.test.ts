@@ -63,6 +63,7 @@ function makeMarket(
     goodId,
     basePrice: 100,
     stock,
+    anchorMult: 1,
     priceFloor: 0.2,
     priceCeiling: 5.0,
   };

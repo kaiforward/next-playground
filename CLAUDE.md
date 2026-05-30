@@ -19,11 +19,11 @@ Browser-based multiplayer space trading game.
 The simulator is a **calibration harness**, not a game feature — it runs the same economy tick the live game does, with synthetic "bots" providing trading pressure (`lib/engine/simulator/bot.ts`). There are no NPC bots in the live game; the simulator is for validating economy changes against equilibrium targets before they hit players.
 
 - `npx prisma db seed` — Seed database (scale controlled by `UNIVERSE_SCALE` in `.env`: `"default"` = 600 systems/7K map, `"10k"` = 10,000 systems/25K map)
-- `npx prisma db push` — Push schema changes to SQLite
+- `npx prisma db push` — Push schema changes to PostgreSQL
 
 ## Tech Stack
 
-Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, SQLite via better-sqlite3, Prisma 7 (driver adapter), NextAuth v5 (JWT/Credentials), TanStack Query v5 (Suspense mode), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
+Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, PostgreSQL via Prisma 7 (`prisma-client` generator + `@prisma/adapter-pg`), NextAuth v5 (JWT/Credentials), TanStack Query v5 (Suspense mode), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
 
 **Prisma 7 gotcha**: Seed command lives in `prisma.config.ts` under `migrations.seed`, not in `package.json`. Command: `npx tsx --tsconfig tsconfig.json prisma/seed.ts`.
 
@@ -108,5 +108,5 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 ## Troubleshooting
 
 When hitting errors, don't fix symptoms directly. Step back and search for the canonical
-implementation pattern for the specific tool combination (e.g. "Next.js 16 + Prisma 7 + SQLite
+implementation pattern for the specific tool combination (e.g. "Next.js 16 + Prisma 7 + PostgreSQL
 setup"). Official docs and standard patterns resolve issues faster than iterating on type errors.

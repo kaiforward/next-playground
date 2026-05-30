@@ -100,7 +100,7 @@ async function buildPriceLookup(
     }
     const goodKey = GOOD_NAME_TO_KEY.get(entry.good.name) ?? entry.goodId;
     const price = spotPrice(
-      curveForGood(goodKey, entry.good.basePrice, entry.good.priceFloor, entry.good.priceCeiling),
+      curveForGood(goodKey, entry.good.basePrice, entry.good.priceFloor, entry.good.priceCeiling, entry.anchorMult),
       entry.stock,
     );
     goodMap.set(entry.goodId, price);
@@ -349,7 +349,7 @@ export async function deliverMission(
 
     const goodKey = GOOD_NAME_TO_KEY.get(freshMarket.good.name) ?? freshMarket.goodId;
     const freshUnitPrice = spotPrice(
-      curveForGood(goodKey, freshMarket.good.basePrice, freshMarket.good.priceFloor, freshMarket.good.priceCeiling),
+      curveForGood(goodKey, freshMarket.good.basePrice, freshMarket.good.priceFloor, freshMarket.good.priceCeiling, freshMarket.anchorMult),
       freshMarket.stock,
     );
     const goodsValue = freshUnitPrice * freshMission.quantity;

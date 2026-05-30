@@ -105,6 +105,7 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
       goodId: GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name,
       basePrice: m.good.basePrice,
       stock: m.stock,
+      anchorMult: m.anchorMult,
       priceFloor: m.good.priceFloor,
       priceCeiling: m.good.priceCeiling,
     }));

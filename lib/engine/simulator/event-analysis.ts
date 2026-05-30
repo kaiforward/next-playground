@@ -29,7 +29,7 @@ function snapshotPrices(
     .filter((m) => m.systemId === systemId)
     .map((m) => ({
       goodId: m.goodId,
-      price: spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock),
+      price: spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling, m.anchorMult), m.stock),
     }));
 }
 

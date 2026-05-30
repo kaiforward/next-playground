@@ -9,7 +9,7 @@
  */
 
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
-import type { ModifierRow } from "@/lib/engine/events";
+import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
 import type { EconomyType, GovernmentType } from "@/lib/types/game";
 import type {
   EconomySimParams,
@@ -63,6 +63,8 @@ export interface ProsperityView {
 export interface MarketUpdate {
   id: string;
   stock: number;
+  /** Active pricing-anchor multiplier from event modifiers (1 = none). */
+  anchorMult: number;
 }
 
 /**
@@ -113,11 +115,5 @@ export interface EconomyProcessorParams {
   /** Prosperity decay/gain/range params. */
   prosperityParams: ProsperityParams;
   /** Caps applied when aggregating event modifiers per market. */
-  modifierCaps: {
-    minTargetMult: number;
-    maxTargetMult: number;
-    minMultiplier: number;
-    maxMultiplier: number;
-    minReversionMult: number;
-  };
+  modifierCaps: ModifierCaps;
 }

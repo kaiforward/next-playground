@@ -35,7 +35,7 @@ export async function getMarket(
   });
 
   const entries: MarketEntry[] = marketEntries.map((m) =>
-    buildMarketEntry(m.good.id, m.good, m.stock, govDef),
+    buildMarketEntry(m.good.id, m.good, m.stock, govDef, m.anchorMult),
   );
 
   return { stationId: station.id, entries };

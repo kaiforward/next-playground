@@ -106,6 +106,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         goodId: goodKey,
         basePrice,
         stock: getInitialStock(sys.economyType, goodKey),
+        anchorMult: 1,
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
       });

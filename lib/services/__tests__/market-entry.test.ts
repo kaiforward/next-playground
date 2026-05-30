@@ -35,6 +35,12 @@ describe("curveForGoodRow", () => {
     const { goodKey } = curveForGoodRow({ ...FOOD, name: "Not A Real Good" });
     expect(goodKey).toBe("Not A Real Good");
   });
+
+  it("scales targetStock by anchorMult (anchorMult=2 doubles targetStock)", () => {
+    const base = curveForGoodRow(FOOD);
+    const shifted = curveForGoodRow(FOOD, 2);
+    expect(shifted.curve.targetStock).toBe(base.curve.targetStock * 2);
+  });
 });
 
 describe("buildMarketEntry", () => {
@@ -86,5 +92,25 @@ describe("buildMarketEntry", () => {
   it("floors stock so the player never sees fractional goods", () => {
     const entry = buildMarketEntry("good-1", FOOD, 140.9);
     expect(entry.stock).toBe(140);
+  });
+
+  it("anchorMult raises currentPrice at a stock level that is unclamped for both anchors", () => {
+    // food: basePrice=30, ceiling=2×=60, targetStock=111.
+    // At stock=130 (above targetStock=111, below 2×targetStock=222):
+    //   anchorMult=1 → 30*(111/130)^1 ≈ 25.6 → rounds to 26 (below ceiling ✓)
+    //   anchorMult=2 → 30*(222/130)^1 ≈ 51.2 → rounds to 51 (below ceiling ✓)
+    // Both are unclamped, so the shift is clearly visible in the output price.
+    const testStock = 130;
+    const base = buildMarketEntry("good-1", FOOD, testStock);
+    const shifted = buildMarketEntry("good-1", FOOD, testStock, undefined, 2);
+    expect(shifted.currentPrice).toBeGreaterThan(base.currentPrice);
+  });
+
+  it("default (no anchorMult arg) equals passing anchorMult=1 explicitly", () => {
+    const entry = buildMarketEntry("good-1", FOOD, stock);
+    const explicit = buildMarketEntry("good-1", FOOD, stock, undefined, 1);
+    expect(entry.currentPrice).toBe(explicit.currentPrice);
+    expect(entry.buyPrice).toBe(explicit.buyPrice);
+    expect(entry.sellPrice).toBe(explicit.sellPrice);
   });
 });

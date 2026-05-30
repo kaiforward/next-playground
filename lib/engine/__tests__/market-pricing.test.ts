@@ -192,4 +192,16 @@ describe("curveForGood", () => {
     const curve = curveForGood("water", 25, 0.5, 2.0);
     expect(midPriceAt(curve, getTargetStock("water"))).toBe(25);
   });
+
+  it("scales targetStock by anchorMult when provided", () => {
+    const base = curveForGood("water", 25, 0.5, 2.0);
+    const shifted = curveForGood("water", 25, 0.5, 2.0, 2);
+    expect(shifted.targetStock).toBeCloseTo(base.targetStock * 2);
+  });
+
+  it("defaults anchorMult to 1 (anchor unchanged)", () => {
+    const a = curveForGood("water", 25, 0.5, 2.0);
+    const b = curveForGood("water", 25, 0.5, 2.0, 1);
+    expect(a.targetStock).toBe(b.targetStock);
+  });
 });

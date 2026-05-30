@@ -255,7 +255,7 @@ export async function getEconomySnapshot(): Promise<ServiceResult<{ systems: Eco
         goodId: m.goodId,
         goodName: m.good.name,
         stock: m.stock,
-        price: spotPrice(curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling), m.stock),
+        price: spotPrice(curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.anchorMult), m.stock),
       };
     }),
   }));
@@ -298,9 +298,14 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
     }
 
     if (ids.length > 0) {
+      // anchorMult resets to 1 alongside stock: all events (and their
+      // anchor_shift modifiers) were just deleted, so the neutral anchor is the
+      // correct clean-slate value. Without this, a stale non-1 anchorMult would
+      // skew read-path prices until the round-robin economy processor next
+      // reaches each market's region.
       await tx.$executeRaw`
         UPDATE "StationMarket" AS sm
-        SET "stock" = batch."stock"
+        SET "stock" = batch."stock", "anchorMult" = 1
         FROM unnest(${ids}::text[], ${stocks}::double precision[])
           AS batch("id", "stock")
         WHERE sm."id" = batch."id"`;

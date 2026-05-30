@@ -24,6 +24,7 @@ import {
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { type ModifierCaps } from "@/lib/engine/events";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -56,13 +57,7 @@ export interface SimConstants {
     maxPerSystem: number;
     maxGlobal: number;
     maxBatchSpawn: number;
-    modifierCaps: {
-      minTargetMult: number;
-      maxTargetMult: number;
-      minMultiplier: number;
-      maxMultiplier: number;
-      minReversionMult: number;
-    };
+    modifierCaps: ModifierCaps;
   };
   ships: Record<string, { fuel: number; cargo: number; speed: number; hullMax: number; shieldMax: number; firepower: number; evasion: number; stealth: number; price: number }>;
   universe: {

@@ -126,7 +126,11 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     this.markets = this.markets.map((m) => {
       const u = byKey.get(`${m.systemId}|${m.goodId}`);
       if (!u) return m;
-      return { ...m, stock: isFinite(u.stock) ? u.stock : 0 };
+      return {
+        ...m,
+        stock: isFinite(u.stock) ? u.stock : 0,
+        anchorMult: isFinite(u.anchorMult) ? u.anchorMult : 1,
+      };
     });
     return Promise.resolve();
   }
