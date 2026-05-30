@@ -1,6 +1,6 @@
 /**
  * Constants for the stock-based market economy. See
- * docs/planned/stock-based-market-economy.md.
+ * docs/active/gameplay/economy.md.
  */
 
 import { ECONOMY_CONSTANTS, getConsumeEquilibrium } from "@/lib/constants/economy";

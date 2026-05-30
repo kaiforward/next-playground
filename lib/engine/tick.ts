@@ -5,7 +5,7 @@
  * the ceiling), consumers drain it (self-limiting near the floor), then noise is
  * applied and the value is clamped to [minLevel, maxLevel]. There is no
  * mean-reversion and no `demand` axis — equilibrium emerges spatially via the
- * trade-flow processor. See docs/planned/stock-based-market-economy.md §3.
+ * trade-flow processor. See docs/active/gameplay/economy.md (Per-Tick Simulation).
  *
  * All functions are pure — no DB or constant imports.
  */
