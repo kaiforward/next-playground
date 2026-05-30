@@ -143,7 +143,7 @@ Concrete economic modifiers per government type. These are the live shipped valu
 | Militarist | 1.3× | +10% | 0.05 | — | 10% / 1.3× | weapons, fuel, machinery |
 | Theocratic | 0.8× | -5% | 0.03 | weapons, chemicals, luxuries | 10% / 1.4× | food, medicine, textiles |
 
-> **Planned (tuning pass):** the original design called for per-tier nuance in equilibrium spread — e.g. Technocratic should be wide for tier-2 goods but narrow for tier-0 basics; Theocratic narrow for basics and wide for restricted. Today every government applies a single flat `equilibriumSpreadPct` to all goods. The `goodCategoryModifiers?` field is declared on `GovernmentDefinition` for the follow-up tuning pass, but unused.
+> **Planned (tuning pass):** the original design called for per-tier nuance in equilibrium spread — e.g. Technocratic should be wide for tier-2 goods but narrow for tier-0 basics; Theocratic narrow for basics and wide for restricted. Today every government applies a single flat `equilibriumSpreadPct` to all goods. A `goodCategoryModifiers`-style field would be added to `GovernmentDefinition` during that tuning pass to support per-tier spread nuance — it is not currently declared on the interface.
 
 ---
 

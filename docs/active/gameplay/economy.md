@@ -88,20 +88,18 @@ This creates price variety between systems consuming the same good. Full factor 
 
 ## Government Types
 
-4 government types shape regional market behavior (4 more planned). Every type has trade-offs — buffs balanced by debuffs.
+All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-| Government | Volatility | Spread | Tax Rate | Danger | Contraband | Identity |
-|---|---|---|---|---|---|---|
-| Federation | 0.8x (stable) | -10% (tight) | 12% | 0.0 | Weapons | Balanced, regulated, safe |
-| Corporate | 0.9x | -5% | 10% | 0.02 | None | Best margins, volatile |
-| Authoritarian | 0.7x (very stable) | -15% (very tight) | 15% | 0.0 | Weapons, Chemicals | Safest, most restricted |
-| Frontier | 1.5x (chaotic) | +20% (wide) | 0% | 0.1 | None | Highest profit, highest risk |
-| Cooperative | TBD | TBD | TBD | TBD | TBD | Rock-solid, low margins |
-| Technocratic | TBD | TBD | TBD | TBD | TBD | Premium on advanced goods |
-| Militarist | TBD | TBD | TBD | TBD | TBD | War economy, resource hungry |
-| Theocratic | TBD | TBD | TBD | TBD | TBD | Premium on basics, vice banned |
-
-(4 new types designed, modifiers to be defined during implementation — see [faction-system.md](./faction-system.md) S1)
+| Government | Volatility | Eq. Spread | Tax | Inspection | Danger | Contraband | Taxed goods | Consumption boosts |
+|---|---|---|---|---|---|---|---|---|
+| Federation | 0.8× | -10% | 12% | 1.2× | 0.00 | weapons | chemicals | medicine |
+| Corporate | 0.9× | -5% | 10% | 0.8× | 0.02 | — | — | luxuries |
+| Authoritarian | 0.7× | -15% | 15% | 1.5× | 0.00 | weapons, chemicals | — | weapons, fuel |
+| Frontier | 1.5× | +20% | 0% | 0.0× | 0.10 | — | — | — |
+| Cooperative | 0.7× | -10% | 10% | 1.0× | 0.00 | luxuries | — | food, medicine |
+| Technocratic | 1.0× | +5% | 8% | 0.6× | 0.01 | — | water, food | electronics |
+| Militarist | 1.3× | +10% | 10% | 1.3× | 0.05 | — | electronics, machinery | weapons, fuel, machinery |
+| Theocratic | 0.8× | -5% | 10% | 1.4× | 0.03 | weapons, chemicals, luxuries | — | food, medicine, textiles |
 
 ### Government Effects on Gameplay
 - **Volatility modifier**: Scales price-noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
@@ -177,6 +175,25 @@ Each system has a `prosperity` value from -1.0 (crisis) to +1.0 (booming).
 Boom amplifies both sides equally — no corrective tug-of-war. A booming system has more goods flowing in and out, not a directional correction.
 
 **Timing**: With 24 regions and round-robin, each system is processed every ~24 ticks. At 0.03 decay/run, prosperity goes from 1.0 to ~0 in ~33 runs (~800 ticks).
+
+### Event-Driven Anchor Shifts
+
+Events can shift a good's **pricing anchor** — the stock level at which mid price equals base price. This is distinct from a one-time stock shock (which moves stock immediately and persistently); an anchor shift changes *what price a given stock level reads as* for the duration of the event, without touching stock itself.
+
+**Modifier**: `anchor_shift` (`parameter: "target_stock"`). The value is a **multiplier** applied to `targetStock`:
+- `> 1` — raises the anchor → goods read as scarcer → higher prices ("demand spike")
+- `< 1` — lowers the anchor → goods read as more plentiful → cheaper prices
+- `= 1` — no change (identity)
+- `goodId: null` — applies to all goods at the target station; setting a specific `goodId` targets one good only
+- Multiple active shifts on the same good **compound** (multiply together)
+
+**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same round-robin cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` applies `targetStock = getTargetStock(good) × anchorMult` before evaluating the price curve, so the shift flows automatically through every price read path — player trade, convoy, missions, market display, cross-system comparison, price-history snapshots, and trade-flow gradient.
+
+**Safety cap**: `anchorMult` is clamped to **[0.1, 4.0]** — a single good can at most become 4× as expensive (or 10× as cheap) via anchor shift.
+
+**Summary wording** (what players see): "X demand up" / "X demand down" — anchored to the player's mental model of demand spikes, not the internal multiplier.
+
+See [events.md](./events.md) for the full modifier catalog and event definitions.
 
 ---
 
