@@ -174,7 +174,11 @@ function MarketComparisonContent({
           <EmptyState message={`No visible systems carry ${goodName} matching this filter.`} />
         )}
         {rows.map((r) => {
-          const color = priceRampColor(r.currentPrice, r.basePrice);
+          const color = priceRampColor(
+            r.currentPrice,
+            r.basePrice,
+            filter === "sell" ? "sell" : "buy",
+          );
           const isOrigin = r.systemId === fromSystemId;
           return (
             <div
