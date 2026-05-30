@@ -31,6 +31,8 @@ export const queryKeys = {
   dynamicVisible: ["dynamicVisible"] as const,
   // Trade flow overlay (tick-scoped, gated by overlay toggle)
   tradeFlow: ["tradeFlow"] as const,
+  // All-systems prosperity (tick-scoped — badge + map choropleth)
+  prosperity: ["prosperity"] as const,
   // Per-system trade flow detail (system overview panel)
   systemTradeFlowAll: ["systemTradeFlow"] as const,
   systemTradeFlow: (systemId: string) => ["systemTradeFlow", systemId] as const,
