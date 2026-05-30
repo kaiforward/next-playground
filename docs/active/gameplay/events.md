@@ -63,11 +63,10 @@ Events apply modifiers that alter market behavior and navigation danger.
 ### Economy Modifiers
 | Modifier Type | Effect | Example |
 |---|---|---|
-| Equilibrium shift | Moves supply/demand target up or down | War: +80 fuel demand, +60 machinery demand |
+| Anchor shift | Multiplies a good's pricing anchor (`targetStock`) for the event's duration. `>1` raises the anchor → higher prices (surfaces in UI as "demand up"); `<1` lowers it → cheaper ("demand down"). `goodId: null` applies to all goods. Multiple anchor shifts on the same good compound (multiply). | War active conflict: fuel x2.5, machinery x2.0 |
 | Rate multiplier | Scales production or consumption rate | War: production x0.4 (60% reduction) |
-| Reversion dampening | Slows price recovery toward equilibrium | Plague: reversion x0.5 (prices stay disrupted longer) |
 
-Modifiers are aggregated per system: shifts sum linearly, multipliers multiply together, reversion takes the most restrictive. All capped: shifts ±100, multipliers [0.1, 3.0], reversion [0.2, 1.0].
+The anchor for each good is stored as `StationMarket.anchorMult` (default `1`). The economy processor recomputes it every tick from the system's active anchor-shift modifiers (same writer/cadence as `stock`) and writes it alongside stock. Reads are pure: price, trade limits, and trade-flow calculations all derive `targetStock = getTargetStock(good) × anchorMult`. Modifiers are aggregated per system: anchor shifts multiply together, rate multipliers multiply together. Caps: anchor multiplier [0.1, 4.0], rate multiplier [0.1, 3.0].
 
 ### Navigation Modifiers
 Danger level modifiers increase cargo loss risk on ship arrival. Applied as equilibrium shift on `danger_level` parameter. Stacks with government danger baseline.
@@ -102,7 +101,7 @@ One-time market jolts applied when a phase starts. Directly modify supply or dem
 
 ## System Interactions
 
-- **Economy**: Events apply modifiers that shift equilibrium, multiply rates, and dampen reversion (see [economy.md](./economy.md))
+- **Economy**: Events apply modifiers that shift the pricing anchor (`anchor_shift`) and multiply production/consumption rates (`rate_multiplier`); shocks deliver one-time stock jolts (see [economy.md](./economy.md))
 - **Trade missions**: Event-linked missions spawn with thematic goods and 1.5x reward bonus (see [trading.md](./trading.md))
 - **Navigation**: Danger modifiers increase cargo loss on arrival (see [navigation.md](./navigation.md))
 - **Tick engine**: Events processor runs every tick, before economy processor (see [tick-engine.md](../engineering/tick-engine.md))
