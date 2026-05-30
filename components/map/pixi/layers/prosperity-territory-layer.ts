@@ -57,9 +57,11 @@ export class ProsperityTerritoryLayer {
       for (const poly of multiPoly) {
         const exterior = poly[0];
         if (!exterior || exterior.length < 3) continue;
-        this.graphics.poly(exterior.flat());
+        // Flatten once — reused for both the fill and stroke passes.
+        const points = exterior.flat();
+        this.graphics.poly(points);
         this.graphics.fill({ color, alpha: TERRITORY.fillAlpha });
-        this.graphics.poly(exterior.flat());
+        this.graphics.poly(points);
         this.graphics.stroke({
           color,
           alpha: TERRITORY.strokeAlpha,
