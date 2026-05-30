@@ -113,9 +113,27 @@ The single mean-reverting `demand` value is removed entirely. The single mean-re
 
 ## 6. Events, Government, Prosperity
 
-- **Events** modify the economy by one of: shifting `targetStock` (move the neutral point), scaling production/consumption rates, or applying a one-time direct `stock` shock. This replaces today's dual supply-target + demand-target shifts with a single anchor shift — fewer numbers to keep coherent.
+- **Events** modify the economy by one of: an **anchor shift** (move the good's pricing anchor `targetStock` — see §6.1), scaling production/consumption rates, or applying a one-time direct `stock` shock. The anchor shift replaces today's dual supply-target + demand-target shifts with a single multiplier — fewer numbers to keep coherent.
 - **Government** scales the **spread `s`** (Frontier tight margins, Authoritarian wide) and the noise/volatility amplitude. Tax interaction with spread to be decided during implementation (fold in vs. additive).
 - **Prosperity** scales production & consumption rates equally (unchanged from today).
+
+### 6.1 Anchor shift — concrete design (approved 2026-05-30)
+
+**Why a distinct mechanism.** An anchor shift changes the *price level* a good holds for the event's duration **without moving `stock`**. It is distinct from a stock shock: a shock is a one-time inventory kick that production/consumption (and player arbitrage) erode within a few ticks; an anchor shift sustains a higher/lower price the whole time the event is active — the stock-model equivalent of a war keeping fuel expensive even as traders pour fuel in. The old dual model got this "for free" from mean-reversion toward a shifted equilibrium target; the stock model deleted mean-reversion (§3), so the anchor needs an explicit home.
+
+**Modifier.** New economy modifier `type: "anchor_shift"`, `parameter: "target_stock"`, `value` = multiplier on the anchor (`>1` pricier, `<1` cheaper). Severity-scaled by the existing lerp-toward-1.0 (`scaleValue`). Navigation `equilibrium_shift` / `danger_level` is unchanged.
+
+**Storage + write (the architectural choice).** The active anchor is stored on the row: `StationMarket.anchorMult Float @default(1)`. The economy processor recomputes it per market each tick from the system's active `anchor_shift` modifiers (via `aggregateModifiers`) and writes it in `MarketUpdate` alongside `stock` — same writer, same round-robin cadence. This mirrors the shipped supply/demand behavior (the processor bakes the event effect into stored row state; reads stay pure), made explicit because `stock` no longer self-absorbs the shift via reversion. **Rejected alternative:** threading active modifiers into `curveForGood` at each of the ~14 read sites — spreads event-awareness across all readers, adds modifier fetches to hot list paths, and risks silent price drift if a site is missed.
+
+**Read path.** `curveForGood(good, base, floor, ceil, anchorMult = 1)` derives `targetStock = getTargetStock(good) × anchorMult`. The cap is applied at write time, so reads just multiply. Every pricing site selects `anchorMult` off the market row and passes it; the default `1` keeps reference/non-market curves correct.
+
+**Conversion from the legacy targets.** The old price effect of an event was `demandTargetMult / supplyTargetMult`; new price at fixed stock scales linearly with the anchor (`k=1`). So each legacy phase converts mechanically — **`anchorMult = demandTargetMult / supplyTargetMult` per good** (default each to 1; emit one `anchor_shift` per good, plus one for `goodId: null` all-goods shifts). This preserves both direction and magnitude. Worked conversions: fuel `demand 1.4` → `1.4`; ore `supply 1.8` → `0.56`; all-goods `supply 0.5 + demand 1.5` → `3.0`; ore `supply 1.6 + demand 0.8` → `0.5`; ore depletion `supply 0.7` → `1.43`. Values are sim-validated and any cap-saturating outliers hand-softened.
+
+**Caps.** `MODIFIER_CAPS.minTargetMult` / `maxTargetMult` (0.1 / 4.0) are **repurposed** as the anchor cap (`minAnchorMult` / `maxAnchorMult`) — `anchor_shift` is a target multiplier and needs the same bounding.
+
+**Cleanup (removed as truly dead).** The `reversion_dampening` modifier type, `AggregatedModifiers.reversionMult`, `MODIFIER_CAPS.minReversionMult`, and the legacy `supply_target` / `demand_target` parameters in the event defs. `AggregatedModifiers` collapses `supplyTargetMult` + `demandTargetMult` into one `anchorMult`.
+
+**Surfaces.** `summarizePhaseEffects` reads `anchor_shift` and keeps player-facing **"X demand up/down"** wording (high demand = high price is the familiar mental model, and it matches the notification copy). Stock shocks are unchanged. Live + simulator run the same processor body and pricing functions, so the simulator validates anchor price impact end-to-end.
 
 ## 7. Data & UI Surfaces
 
