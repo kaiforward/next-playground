@@ -25,7 +25,7 @@ export const STOCK_MAX = ECONOMY_CONSTANTS.MAX_LEVEL;
  * matches where the universe settles, but goods touched by every economy type
  * (no neutral markets to hold the average up) settle well below that midpoint —
  * so their anchor is pinned to the measured equilibrium instead. Measured via
- * the simulator; see scripts/balance-analysis.ts and docs/plans/stock-economy-pr3-calibration.md.
+ * the simulator; see scripts/balance-analysis.ts and docs/active/gameplay/economy.md.
  */
 const CALIBRATED_TARGET_STOCK: Record<string, number> = {
   water: 116,

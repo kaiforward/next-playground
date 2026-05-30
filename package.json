@@ -10,8 +10,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "simulate": "tsx scripts/simulate.ts",
-    "index": "node scripts/generate-module-index.mjs"
+    "simulate": "tsx scripts/simulate.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

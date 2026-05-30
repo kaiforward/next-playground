@@ -18,7 +18,6 @@ Browser-based multiplayer space trading game.
 
 The simulator is a **calibration harness**, not a game feature — it runs the same economy tick the live game does, with synthetic "bots" providing trading pressure (`lib/engine/simulator/bot.ts`). There are no NPC bots in the live game; the simulator is for validating economy changes against equilibrium targets before they hit players.
 
-- `npm run index` — Regenerate `docs/MODULE_INDEX.md` (shared module export inventory)
 - `npx prisma db seed` — Seed database (scale controlled by `UNIVERSE_SCALE` in `.env`: `"default"` = 600 systems/7K map, `"10k"` = 10,000 systems/25K map)
 - `npx prisma db push` — Push schema changes to SQLite
 
@@ -38,12 +37,9 @@ Core layers (fixed roles — see CLAUDE.md conventions for rules):
 - `app/(game)/` — Game UI pages. `app/(auth)/` — Auth pages.
 - `prisma/` — Schema and seed script.
 
-Shared modules (utils, hooks, constants, components) are inventoried in `docs/MODULE_INDEX.md` — run `npm run index` to regenerate.
-
 ## Docs
 
 Functional spec: `docs/SPEC.md` — master game spec with system interaction map. Read this first.
-Module index: `docs/MODULE_INDEX.md` — auto-generated inventory of all shared exports (utils, hooks, components, constants). Regenerate with `npm run index`.
 
 Design docs (under `docs/`):
 - `docs/active/` — Implemented systems, split by type: `gameplay/` (economy, events, trading, trade-simulation, navigation, universe, system-traits, faction-system, combat, notifications, …), `engineering/` (tick-engine, processor-architecture, map-data-loading), `design-system/` (theme)
