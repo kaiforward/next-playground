@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, FLEET, GLYPH, GATEWAY_COLOR, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, FLEET, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -79,7 +79,7 @@ export class SystemObject extends Container {
   private glow: Graphics;
   private core: Graphics;
   private highlight: Graphics;
-  private gatewayRing: Graphics;
+  private fleetRing: Graphics;
   private navigationRing: Graphics;
   private nameBg: Graphics;
   private nameLabel: Text;
@@ -100,7 +100,7 @@ export class SystemObject extends Container {
   private currentVisibility: SystemVisibility = "unknown";
   private currentSoloShipCount = 0;
   private currentConvoyCount = 0;
-  private currentIsGateway = false;
+  private hasFleet = false;
   private currentSelected = false;
   private currentEventTypes: string[] = [];
   private currentPriceTint: number | null = null;
@@ -130,10 +130,12 @@ export class SystemObject extends Container {
     this.glow = new Graphics();
     this.addChild(this.glow);
 
-    // Gateway ring (magenta) — outside the halo, below the core.
-    this.gatewayRing = new Graphics();
-    this.gatewayRing.visible = false;
-    this.addChild(this.gatewayRing);
+    // Fleet-presence ring (sky-blue) — outside the halo, below the core. Shows
+    // when the player has any fleet docked here; the at-range cue the gateway
+    // ring used to be.
+    this.fleetRing = new Graphics();
+    this.fleetRing.visible = false;
+    this.addChild(this.fleetRing);
 
     // Navigation ring (behind core)
     this.navigationRing = new Graphics();
@@ -197,7 +199,6 @@ export class SystemObject extends Container {
     const shipChanged =
       data.dockedShipCount !== this.currentSoloShipCount ||
       data.dockedConvoyCount !== this.currentConvoyCount;
-    const gatewayChanged = data.isGateway !== this.currentIsGateway;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
     const eventsChanged = eventTypes !== this.currentEventTypes.join(",");
@@ -268,17 +269,16 @@ export class SystemObject extends Container {
       this.currentSoloShipCount = data.dockedShipCount;
       this.currentConvoyCount = data.dockedConvoyCount;
       this.redrawDockedPills();
-    }
 
-    if (gatewayChanged) {
-      this.currentIsGateway = data.isGateway;
-      this.gatewayRing.clear();
-      if (data.isGateway) {
-        this.gatewayRing.visible = true;
-        this.gatewayRing.circle(0, 0, GLYPH.gatewayRingRadius);
-        this.gatewayRing.stroke({ color: GATEWAY_COLOR, width: GLYPH.gatewayRingWidth });
-      } else {
-        this.gatewayRing.visible = false;
+      // Fleet-presence ring: one sky-blue ring whenever any fleet (ship or
+      // convoy) is docked — matches the single blue zoomed-out fleet dot. The
+      // pills still break down ship vs convoy. Visibility (overlay / hover /
+      // select gating) is finalised in setLOD via `hasFleet`.
+      this.hasFleet = data.dockedShipCount > 0 || data.dockedConvoyCount > 0;
+      this.fleetRing.clear();
+      if (this.hasFleet) {
+        this.fleetRing.circle(0, 0, GLYPH.fleetRingRadius);
+        this.fleetRing.stroke({ color: FLEET.pillFill, width: GLYPH.fleetRingWidth });
       }
     }
 
@@ -453,6 +453,11 @@ export class SystemObject extends Container {
     const revealFleet = this.showFleet || reveal;
     const revealEvents = this.showEvents || reveal;
 
+    // Fleet-presence ring follows the same gating as the fleet pills (so the
+    // Fleet overlay declutters the ring too); held full-size at low zoom as the
+    // at-range cue.
+    this.fleetRing.visible = revealFleet && this.hasFleet;
+
     const showShip = revealFleet && this.currentSoloShipCount > 0;
     this.shipPill.container.visible = showShip;
     if (showShip) this.stagePillContent(showContent, contentAlpha, this.shipPill.glyph, this.shipPill.count);
@@ -494,9 +499,16 @@ export class SystemObject extends Container {
    *  dashed stroke on circle()). Each dash is its own subpath so no chords
    *  connect them. */
   private strokeDashedRing(g: Graphics, radius: number, color: number, width: number, alpha = 1) {
-    const dash = 0.5;  // radians drawn
-    const gap = 0.32;  // radians skipped
-    for (let a = 0; a < Math.PI * 2; a += dash + gap) {
+    // Target dash/gap (radians). They're rescaled to a whole number of dashes so
+    // the pattern tiles the circle exactly — otherwise the leftover at the
+    // 0-radian seam is a short gap and the first/last dashes nearly collide.
+    const targetDash = 0.5;
+    const targetGap = 0.32;
+    const count = Math.max(1, Math.round((Math.PI * 2) / (targetDash + targetGap)));
+    const period = (Math.PI * 2) / count;
+    const dash = period * (targetDash / (targetDash + targetGap));
+    for (let i = 0; i < count; i++) {
+      const a = i * period;
       g.moveTo(Math.cos(a) * radius, Math.sin(a) * radius);
       g.arc(0, 0, radius, a, a + dash);
     }
@@ -513,8 +525,9 @@ export class SystemObject extends Container {
     this.cursor = "pointer";
 
     if (isSelected && !state) {
-      // Selected system (no navigation) — subtle dashed focus ring, white + faint.
-      this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, 0xffffff, GLYPH.navRingWidth, 0.5);
+      // Selected system (no navigation) — bright white dashed focus ring, thicker
+      // than the nav rings so the selection reads clearly at a glance.
+      this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, 0xffffff, GLYPH.selectedRingWidth, 1);
     }
 
     if (!state) return;
