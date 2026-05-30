@@ -2,7 +2,13 @@
 
 import { useMemo } from "react";
 import { SelectInput } from "@/components/form/select-input";
+import { SegmentedControl } from "@/components/form/segmented-control";
 import { Button } from "@/components/ui/button";
+
+const PRICE_MODE_OPTIONS: ReadonlyArray<{ value: "buy" | "sell"; label: string }> = [
+  { value: "buy", label: "Buy" },
+  { value: "sell", label: "Sell" },
+];
 
 interface MapPricePanelProps {
   /** Selected good for the heatmap. Null until one is picked. */
@@ -46,22 +52,14 @@ export function MapPricePanel({
         </h3>
       </div>
       <div className="px-3 py-2 space-y-2">
-        <div className="flex gap-1.5">
-          {(["buy", "sell"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setPriceMode(m)}
-              className={`flex-1 text-[10px] px-2 py-1 uppercase tracking-wider ${
-                priceMode === m
-                  ? "bg-accent/20 text-text-accent border border-accent/40"
-                  : "bg-surface-hover text-text-secondary border border-border"
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          ariaLabel="Price perspective"
+          name="priceMode"
+          value={priceMode}
+          onChange={setPriceMode}
+          options={PRICE_MODE_OPTIONS}
+          size="sm"
+        />
         <SelectInput<string | null>
           label="Good"
           size="sm"
