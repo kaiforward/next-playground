@@ -98,6 +98,7 @@ export async function executeTrade(
     marketEntry.good.basePrice,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
+    marketEntry.anchorMult,
   );
   const spread = getSpread(govDef);
   const quote = quoteTrade(curve, marketEntry.stock, quantity, type, spread);

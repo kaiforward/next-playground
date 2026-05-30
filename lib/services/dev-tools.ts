@@ -255,7 +255,7 @@ export async function getEconomySnapshot(): Promise<ServiceResult<{ systems: Eco
         goodId: m.goodId,
         goodName: m.good.name,
         stock: m.stock,
-        price: spotPrice(curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling), m.stock),
+        price: spotPrice(curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.anchorMult), m.stock),
       };
     }),
   }));
