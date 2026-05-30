@@ -23,7 +23,6 @@ import {
 } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
-import { aggregateModifiers } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
@@ -114,7 +113,7 @@ export async function runEconomyProcessor(
   // Build tick entries via the shared market-tick builder. After the Layer 2
   // cutover, government modifiers are resolved per-market (border regions can
   // contain systems owned by different factions) rather than once per region.
-  const tickEntries: MarketTickEntry[] = markets.map((m) =>
+  const resolved = markets.map((m) =>
     resolveMarketTickEntry(
       {
         goodId: m.goodId,
@@ -134,16 +133,16 @@ export async function runEconomyProcessor(
     ),
   );
 
+  const tickEntries: MarketTickEntry[] = resolved.map((r) => r.entry);
   const simulated = simulateEconomyTick(tickEntries, simParams, rng);
 
-  const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
-    const mods = modifiersBySystem.get(m.systemId) ?? [];
-    const anchorMult =
-      mods.length > 0
-        ? aggregateModifiers(mods, m.goodId, modifierCaps).anchorMult
-        : 1;
-    return { id: m.id, stock: simulated[i].stock, anchorMult };
-  });
+  // anchorMult comes straight off the resolved tick — the builder already
+  // aggregated the system's modifiers, so there's no second aggregation pass.
+  const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
+    id: m.id,
+    stock: simulated[i].stock,
+    anchorMult: resolved[i].anchorMult,
+  }));
 
   await world.applyMarketUpdates(marketUpdates);
   await world.applyProsperityUpdates(prosperityUpdates);
