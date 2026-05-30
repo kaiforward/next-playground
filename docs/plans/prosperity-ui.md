@@ -34,15 +34,22 @@ Prosperity colours *areas* → it's a mode. Price is a per-system halo → it st
 
 ---
 
-## Part 1 — Shared plumbing: expose `prosperity`
+## Part 1 — Shared plumbing: a dedicated tick-scoped prosperity feed
 
-`StarSystem.prosperity` (Float, −1..+1, `prisma/schema.prisma`) is computed/stored every tick but exposed to **zero** API/service/type/component today. Both UI surfaces read it from the all-systems universe payload the map already uses.
+`StarSystem.prosperity` (Float, −1..+1, `prisma/schema.prisma`) is computed/stored every tick but exposed to **zero** API/service/type/component today.
 
-- `lib/services/universe.ts` — add `prosperity: true` to the `getUniverse()` `starSystem.findMany` select (~L30–42) and map it into the returned object (~L93–107). This is the critical path: the badge reads via `useSystemInfo` → `useUniverse` → `getUniverse`, and the map reads the same all-systems payload. (`getSystemDetail` does **not** need it unless a future screen reads prosperity from the detail endpoint.)
-- `lib/types/game.ts` — add `prosperity: number` to `StarSystemInfo` (~L254–266). Flows automatically through `UniverseData`.
-- `lib/hooks/use-system-info.ts` / `useUniverse` — no change needed; value rides along.
+**Decision (revised after reading the map data-flow):** the map does **not** read `getUniverse` — it builds its `universe` from the static `atlas` payload, and overlays live per-system data (price) via a separate tick-scoped fetch (`PriceHeatmapDataFetcher` → `useMarketComparison`). And `getUniverse` is the heavy static identity payload (regions+systems+connections+factions); folding a *mutable* field into it would force the whole payload to refetch to refresh prosperity — the exact "don't tie tick-scoped data to a static payload" anti-pattern.
 
-**Data-freshness flag (verify in build):** prosperity changes slowly (~800 ticks to decay 1→0) but it *does* change, so the badge/choropleth should refresh as systems boom/bust. It is **tick-scoped, not viewport-scoped** (a stable per-system attribute) — fetch once per tick for all systems, use client-side; do **not** key it to viewport bounds (per the map-data memory note). Confirm `useUniverse`'s invalidation cadence refreshes it; if `getUniverse` is treated as static, prosperity may need a light tick-scoped refresh or a small dedicated all-systems prosperity query.
+So both surfaces share **one dedicated tick-scoped feed**, mirroring `useTradeFlow`:
+- `lib/types/game.ts` — add `ProsperityEntry { systemId: string; prosperity: number }`.
+- `lib/types/api.ts` — add `ProsperityResponse = ApiResponse<{ systems: ProsperityEntry[] }>`.
+- `lib/services/prosperity.ts` (new) — `getProsperityBySystem(): Promise<ProsperityEntry[]>` (`findMany` selecting `id, prosperity`).
+- `app/api/game/systems/prosperity/route.ts` (new) — auth-gated (`requirePlayer`), `Cache-Control: private, no-cache` (per the auth-gated-cache memory rule).
+- `lib/hooks/use-prosperity.ts` (new) — `useProsperity(active)` → `Map<systemId, number>`, `useQuery` with `staleTime: 10_000`, `enabled: active`. Shared `["prosperity"]` cache key.
+
+Both consumers share the one cache entry: the **badge** (panel) calls `useProsperity(true)`; the **map** calls `useProsperity(mapMode === "prosperity")` — gated like the price overlay so we don't fetch when the choropleth isn't shown. `getUniverse`/`StarSystemInfo` stay untouched.
+
+**Scale flag (verify in build):** the feed is all-systems; at 10K that's a 2-column, 10K-row query. Cheap and tick-cached, and the panel already pays an all-systems cost via `useUniverse`. If it ever matters, a per-system variant can back the badge — noted, not built.
 
 ---
 
@@ -108,8 +115,8 @@ Coexistence: prosperity (mode, area fill) + price (overlay, halo) + trade-flow/f
 
 ## Files touched (summary)
 
-**Plumbing/types:** `lib/services/universe.ts`, `lib/types/game.ts`, `lib/types/map.ts`
-**New:** `components/ui/prosperity-badge.tsx`, `lib/utils/prosperity-ramp.ts`, `components/map/pixi/layers/prosperity-territory-layer.ts`
+**Plumbing/types:** `lib/types/game.ts` (`ProsperityEntry`), `lib/types/api.ts`, `lib/types/map.ts` (`MapMode`), `lib/query/keys.ts`, `lib/constants/economy.ts` (`PROSPERITY_PARAMS`), `lib/tick/processors/economy.ts` (use the extracted const)
+**New:** `lib/services/prosperity.ts`, `app/api/game/systems/prosperity/route.ts`, `lib/hooks/use-prosperity.ts`, `lib/utils/prosperity.ts`, `components/ui/prosperity-badge.tsx`, `components/map/pixi/layers/prosperity-territory-layer.ts`
 **Badge:** `app/(game)/@panel/system/[systemId]/layout.tsx`
 **#87/#85 market:** `components/trade/market-table.tsx`, `lib/utils/price-ramp.ts`, `components/market/market-comparison-panel.tsx`
 **#85 map:** `lib/hooks/use-map-data.ts`, `components/map/pixi/objects/system-object.ts`, map price-overlay control (dock/panel)
