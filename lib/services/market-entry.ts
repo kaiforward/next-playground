@@ -18,11 +18,11 @@ export interface PricedGood {
 }
 
 /** Resolve the canonical good key + price curve for a DB good row. */
-export function curveForGoodRow(good: PricedGood): { goodKey: string; curve: MarketCurve } {
+export function curveForGoodRow(good: PricedGood, anchorMult: number = 1): { goodKey: string; curve: MarketCurve } {
   const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.name;
   return {
     goodKey,
-    curve: curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling),
+    curve: curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling, anchorMult),
   };
 }
 
@@ -31,14 +31,19 @@ export function curveForGoodRow(good: PricedGood): { goodKey: string; curve: Mar
  * buy/sell prices use the bid-ask spread for the system's government; the
  * integrated-slippage total for a real trade is computed separately in
  * executeTrade. `stock` is floored so the player never sees fractional goods.
+ *
+ * `anchorMult` is the market row's stored pricing anchor (written by the economy
+ * processor each tick when an anchor_shift event is active; defaults to 1).
+ * Prices reflect the active-event anchor so display matches execution.
  */
 export function buildMarketEntry(
   goodId: string,
   good: PricedGood,
   stock: number,
   govDef?: GovernmentDefinition,
+  anchorMult: number = 1,
 ): MarketEntry {
-  const { curve } = curveForGoodRow(good);
+  const { curve } = curveForGoodRow(good, anchorMult);
   const spread = getSpread(govDef);
   return {
     goodId,

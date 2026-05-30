@@ -337,6 +337,7 @@ export async function executeConvoyTrade(
         updatedMarket.good,
         updatedMarket.stock,
         govDef,
+        updatedMarket.anchorMult,
       ),
     },
   };

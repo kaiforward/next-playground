@@ -287,6 +287,7 @@ export async function executeTrade(
         updatedMarket.good,
         updatedMarket.stock,
         govDef,
+        updatedMarket.anchorMult,
       ),
     },
   };

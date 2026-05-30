@@ -44,17 +44,17 @@ export async function getMarketComparison(
     },
     select: {
       stock: true,
+      anchorMult: true,
       station: { select: { systemId: true } },
     },
   });
 
   const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.id;
-  const curve = curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling);
 
   const entries: MarketComparisonEntry[] = markets.map((m) => ({
     systemId: m.station.systemId,
     basePrice: good.basePrice,
-    currentPrice: spotPrice(curve, m.stock),
+    currentPrice: spotPrice(curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling, m.anchorMult), m.stock),
     stock: Math.floor(m.stock),
   }));
 
