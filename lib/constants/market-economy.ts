@@ -20,17 +20,32 @@ export const STOCK_MIN = ECONOMY_CONSTANTS.MIN_LEVEL;
 export const STOCK_MAX = ECONOMY_CONSTANTS.MAX_LEVEL;
 
 /**
- * Pricing anchor: the stock level where the mid price equals basePrice.
- *
- * PR 2 derives this mechanically from the legacy per-good supply band — the
- * midpoint of the producer and consumer supply targets — so producers (seeded
- * high) read cheap and consumers (seeded low) read expensive. PR 3 replaces
- * this with calibrated per-good values.
+ * Calibrated pricing anchors (PR 3). The pricing anchor is the stock level where
+ * mid price === basePrice. For most goods the legacy supply-band midpoint already
+ * matches where the universe settles, but goods touched by every economy type
+ * (no neutral markets to hold the average up) settle well below that midpoint —
+ * so their anchor is pinned to the measured equilibrium instead. Measured via
+ * the simulator; see scripts/balance-analysis.ts and docs/plans/stock-economy-pr3-calibration.md.
+ */
+const CALIBRATED_TARGET_STOCK: Record<string, number> = {
+  water: 116,
+  food: 111,
+  ore: 129,
+  textiles: 124,
+  chemicals: 73,
+};
+
+/**
+ * Pricing anchor: the stock level where the mid price equals basePrice. Uses a
+ * calibrated per-good value where one exists, falling back to the legacy
+ * supply-band midpoint (which already matches equilibrium for the rest).
  */
 export function getTargetStock(goodId: string): number {
+  const calibrated = CALIBRATED_TARGET_STOCK[goodId];
+  if (calibrated != null) return calibrated;
   const eq = GOODS[goodId]?.equilibrium;
   if (!eq) return Math.round((STOCK_MIN + STOCK_MAX) / 2);
-  return Math.round((eq.produces.supply + eq.consumes.supply) / 2);
+  return Math.round((eq.produces + eq.consumes) / 2);
 }
 
 /**
@@ -41,9 +56,9 @@ export function getTargetStock(goodId: string): number {
 export function getInitialStock(economyType: EconomyType, goodId: string): number {
   const eq = GOODS[goodId]?.equilibrium;
   if (!eq) return getTargetStock(goodId);
-  if (getProducedGoods(economyType).includes(goodId)) return eq.produces.supply;
+  if (getProducedGoods(economyType).includes(goodId)) return eq.produces;
   if (getConsumedGoods(economyType).includes(goodId)) {
-    return getConsumeEquilibrium(economyType, goodId, eq).supply;
+    return getConsumeEquilibrium(economyType, goodId, eq);
   }
   return getTargetStock(goodId);
 }

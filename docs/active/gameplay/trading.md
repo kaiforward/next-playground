@@ -8,21 +8,21 @@ Player-driven buying and selling of goods at station markets, plus auto-generate
 
 ### Buying
 - Player selects a good, quantity, and which docked ship to load
-- Constraints: sufficient credits, ship has cargo space, station has supply
-- On purchase: credits deducted, cargo added to ship, market supply decreases, market demand increases slightly (10% of quantity traded)
-- Price is calculated at transaction time from current supply/demand ratio
+- Constraints: sufficient credits, ship has cargo space, station has stock above its floor (max buyable = `floor(stock − MIN)`)
+- On purchase: credits deducted, cargo added to ship, market stock decreases by the quantity bought
+- Price is calculated at transaction time from the good's stock, with intra-trade slippage (each unit priced along the curve it moves) and a bid-ask spread
 
 ### Selling
 - Player selects a good from ship cargo and quantity to sell
-- Constraints: ship has the good in sufficient quantity, ship is docked
-- On sale: credits added, cargo removed from ship, market supply increases, market demand decreases slightly (10% of quantity)
+- Constraints: ship has the good in sufficient quantity, ship is docked, station has headroom below its ceiling (max sellable = `floor(MAX − stock)`)
+- On sale: credits added, cargo removed from ship, market stock increases by the quantity sold
 
 ### Price Impact
-Every trade nudges the market: buying reduces supply and raises demand (prices go up slightly), selling increases supply and reduces demand (prices go down slightly). The 10% demand adjustment means large trades have a noticeable but not overwhelming impact.
+Every trade moves the single stock value: buying lowers stock (price rises), selling raises stock (price falls). Because each unit is priced at the midpoint of the stock step it causes (slippage), large trades pay progressively worse prices — and a buy followed by an immediate sell-back walks the same curve back and loses the bid-ask spread, so same-station round-trips never profit.
 
 ### Market Data
 Players can view at each system:
-- Current price, supply, and demand for all 12 goods
+- Current price and in-stock level for all 12 goods (with buy/sell quotes)
 - Recent trade history (last 50 trades — good, price, quantity, buy/sell, player)
 - Price history charts from periodic snapshots (up to 1000 ticks of trend data)
 
@@ -32,11 +32,11 @@ Players can view at each system:
 
 Quality-of-life surfaces that support the buy / sell / compare loop:
 
-- **Integer quantities** — supply and demand are floored for both display and trade validation, so the number shown is exactly the maximum you can act on (flooring never overstates what's available; the underlying economy math stays fractional).
+- **Integer quantities** — stock and the derived trade limits (max buyable = `floor(stock − MIN)`, max sellable = `floor(MAX − stock)`) are floored for both display and trade validation, so the number shown is exactly the maximum you can act on (flooring never overstates what's available; the underlying economy math stays fractional).
 - **System detail panel** — selecting a system on the map opens a hub: status (economy / gateway / danger / region / faction), one-click shortcuts to that system's Market / Ships / Contracts tabs, an active-event banner, and cards for docked ships and convoys with inline **Navigate** (enters map nav-mode for that unit) and **Trade** actions.
 - **Cross-system price comparison** — answers "where is good X cheapest / most expensive" across the systems you can see, via two surfaces fed by one by-good lookup:
   - **Price heatmap overlay** tints visible systems by `currentPrice / basePrice` along a green → amber → red ramp (deep bargain to buy → neutral → premium to sell).
-  - **Comparison panel** is a sortable table of price, floored supply/demand, and jump distance from the system you're viewing, with Buy / Sell / All filters and a jump-to action.
+  - **Comparison panel** is a sortable table of price, in-stock level, and jump distance from the system you're viewing, with Buy / Sell / All filters and a jump-to action.
 
 ---
 
@@ -100,7 +100,7 @@ reward = 3 CR/unit x quantity x 1.25^hops x tierMult x eventMult
 
 ## System Interactions
 
-- **Economy**: Trade prices emerge from supply/demand simulation. Player trades nudge markets. Price extremes trigger mission generation (see [economy.md](./economy.md))
+- **Economy**: Trade prices emerge from the single-stock market simulation. Player trades nudge markets. Price extremes trigger mission generation (see [economy.md](./economy.md))
 - **Events**: Event-linked missions spawn thematic delivery contracts with bonus rewards. Events disrupt markets creating trading opportunities (see [events.md](./events.md))
 - **Navigation**: Travel time and fuel costs determine which missions are profitable. Cargo loss on arrival affects delivered quantities (see [navigation.md](./navigation.md))
 - **Faction system** (planned): Faction reputation will unlock exclusive missions, affect prices, and enable war contribution missions (see [faction-system.md](./faction-system.md))

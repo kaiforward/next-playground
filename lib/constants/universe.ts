@@ -5,11 +5,14 @@ import type { EconomyType } from "@/lib/types/game";
  * Rate = units of supply generated per tick. Higher = faster replenishment.
  */
 export const ECONOMY_PRODUCTION: Record<EconomyType, Record<string, number>> = {
-  agricultural: { food: 5, textiles: 4 },
-  extraction:   { ore: 4, water: 5 },
-  refinery:     { fuel: 3, metals: 3, chemicals: 2 },
+  // Rates balanced (PR-3) so universe-wide production ≈ consumption capacity per
+  // good (C/P ≈ 1), removing the systematic deficit that made every good sit
+  // below its price anchor. See scripts/balance-analysis.ts.
+  agricultural: { food: 10, textiles: 4 },
+  extraction:   { ore: 6, water: 13 },
+  refinery:     { fuel: 5, metals: 6, chemicals: 8 },
   industrial:   { machinery: 2, weapons: 1 },
-  tech:         { electronics: 2, medicine: 2 },
+  tech:         { electronics: 3, medicine: 3 },
   core:         { luxuries: 1 },
 };
 

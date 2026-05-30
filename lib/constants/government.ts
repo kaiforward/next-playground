@@ -23,23 +23,6 @@ export interface GovernmentDefinition {
   consumptionBoosts: Record<string, number>;
 }
 
-/**
- * Adjust equilibrium supply/demand targets by a spread percentage.
- * Positive spreadPct widens the gap (frontier), negative tightens it (authoritarian).
- */
-export function adjustEquilibriumSpread(
-  target: { supply: number; demand: number },
-  spreadPct: number,
-): { supply: number; demand: number } {
-  const mid = (target.supply + target.demand) / 2;
-  const halfSpread = (target.supply - target.demand) / 2;
-  const scaled = halfSpread * (1 + spreadPct / 100);
-  return {
-    supply: Math.round(mid + scaled),
-    demand: Math.round(mid - scaled),
-  };
-}
-
 /** Government type definitions. */
 export const GOVERNMENT_TYPES: Record<GovernmentType, GovernmentDefinition> = {
   federation: {

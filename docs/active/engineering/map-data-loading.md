@@ -53,7 +53,7 @@ Source: `lib/services/dynamic-tiles.ts`, `app/api/game/systems/dynamic/route.ts`
 
 ### System detail (on click)
 
-Full per-system detail (description, traits, prices, supply/demand, active events, docked ships) loads on demand when a system is clicked, via the existing system-detail endpoint. Visible systems return full intel; unknown systems return atlas-level data only.
+Full per-system detail (description, traits, prices, stock, active events, docked ships) loads on demand when a system is clicked, via the existing system-detail endpoint. Visible systems return full intel; unknown systems return atlas-level data only.
 
 ---
 
