@@ -50,9 +50,10 @@ Prosperity colours *areas* → it's a mode. Price is a per-system halo → it st
 
 The Overview tab and Market tab **share one layout** (`app/(game)/@panel/system/[systemId]/layout.tsx`); its subtitle row (~L61–69) already holds `EconomyBadge` + `Gateway`. One `ProsperityBadge` dropped there covers **both tabs in a single insertion** — exactly what #86 asks for.
 
-- **New** `components/ui/prosperity-badge.tsx` — props `{ prosperity: number }`. Renders the label (`getProsperityLabel` from `lib/engine/tick.ts`, the existing pure helper) accented with the continuous cold→warm ramp colour (shared util, Part 5), e.g. `Booming · 1.3×` with the multiplier from `getProsperityMultiplier`. Including the multiplier is recommended — it ties the label to the mechanical effect.
-- Place after `EconomyBadge` in the layout subtitle. Always shown (Stagnant included) — it's informative even at baseline.
-- Badge accent uses the **same** `prosperityRampColor` as the map mode so the two surfaces speak one colour language (rather than mapping onto the discrete `Badge` palette, which lacks enough warm steps).
+- **New** `components/ui/prosperity-badge.tsx` — props `{ prosperity: number }`. The badge itself shows **only the label** (`getProsperityLabel` from `lib/engine/tick.ts`, the existing pure helper), accented with the continuous cold→warm ramp colour (shared util, Part 5) — e.g. `Booming`.
+- **Adjacent rich descriptor** — muted text next to the badge spelling out the mechanical effect: `Production & Consumption ×1.3`, with the factor from `getProsperityMultiplier(prosperity, PROSPERITY_*)`. It adapts across states — `×0.3` (Crisis) … `×0.7` (Stagnant) … `×1.3` (Booming) — so it's correct everywhere, not just when boosted. The multiplier is ~1.0× around *Active* (~+0.5); below that throughput is reduced, so the descriptor uses the **bare factor** (optionally suffixed "boosted"/"reduced") rather than a hard-coded "up by".
+- Place after `EconomyBadge` in the layout subtitle. Always shown (Stagnant included). If badge + descriptor crowd the header subtitle, the descriptor falls back to a hover tooltip on the badge or the Overview summary card — but default is inline next to the badge per the design call.
+- Badge accent uses the **same** `prosperityRampColor` as the map mode so the two surfaces speak one colour language (rather than the discrete `Badge` palette, which lacks enough warm steps).
 
 ---
 
@@ -98,7 +99,7 @@ Work items:
 - **New** `lib/utils/prosperity-ramp.ts` — `prosperityRampColor(value): string` (CSS, for the badge) + `prosperityRampColorPixi(value): number` (for the layer). Mirrors `price-ramp.ts`. Diverging cold→warm: slate-blue (−1) → grey (0) → amber (+1). Shared by Part 2 and Part 5.
 - **New** `components/map/pixi/layers/prosperity-territory-layer.ts` — copy `TerritoryLayer`, group by `systemId` (no union), fill each cell via `prosperityRampColorPixi(system.prosperity)`. ~80–120 lines.
 - `components/map/pixi/pixi-map-canvas.tsx` — wire the new mode into the mode-activation logic (~L350–359), feeding per-system prosperity from the universe payload.
-- `components/map/map-overlay-controls.tsx` (~L67–116) — add the `prosperity` radio to the Territory group; **rename the section heading "Territory" → "Colour by"** ("regions" already colours by economy, not territory, so the new name is more accurate). Add a cold→warm **legend** like the price overlay has.
+- `components/map/map-overlay-controls.tsx` (~L67–116) — add the `prosperity` radio to the mode group; **rename the section heading "Territory" → "Mode"** (these radios *are* the mutually-exclusive map modes; "regions" already colours by economy, not territory, so "Mode" is the accurate umbrella). Add a cold→warm **legend** like the price overlay has.
 - `components/map/map-session.ts` — mode already persists to sessionStorage via `useMapMode`; the new enum value rides along (confirm no exhaustive switch breaks).
 
 Coexistence: prosperity (mode, area fill) + price (overlay, halo) + trade-flow/fleet/events (overlays) all render together on distinct channels.
@@ -120,7 +121,7 @@ Reused (read-only): `lib/engine/tick.ts` (`getProsperityLabel`, `getProsperityMu
 - **Prosperity data freshness** on the map/badge — confirm tick-scoped refresh (Part 1).
 - **Point-cloud tint** is *not* needed (fill covers far zoom) — confirm fill alpha is legible at universe zoom.
 - **`getProsperityLabel` thresholds** (Crisis ≤−0.5, Disrupted ≤−0.1, Stagnant ≤0.3, Active ≤0.7, Booming >0.7) are the source of truth; the `economy.md` table's anchor points differ slightly — badge uses the code helper.
-- Badge multiplier display (`·1.3×`) — confirm with user during build if it reads as clutter.
+- Badge layout — label-only badge + adjacent `Production & Consumption ×N` descriptor (user decision). Watch header crowding; tooltip / Overview-card fallback if it's too busy.
 
 ## Out of scope (YAGNI)
 - Turning "Trend" into a real time-series trend (vs last snapshot). Stays deviation-from-base; only recoloured.
