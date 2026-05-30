@@ -108,6 +108,7 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
         goodId: m.goodId,
         basePrice: m.basePrice,
         stock: m.stock,
+        anchorMult: m.anchorMult,
         priceFloor: m.priceFloor,
         priceCeiling: m.priceCeiling,
       });
