@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { TRAIT_MIGRATION } from "../trait-migration";
 import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "../bodies";
+import type { TraitId } from "@/lib/types/game";
 import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 import {
   SURVEY_ELIGIBLE_TRAITS, SALVAGE_ELIGIBLE_TRAITS, RECON_ELIGIBLE_TRAITS,
@@ -24,7 +25,7 @@ describe("TRAIT_MIGRATION", () => {
   });
 
   it("every mission-eligible trait survives as a feature", () => {
-    const eligible = new Set<string>([
+    const eligible = new Set<TraitId>([
       ...SURVEY_ELIGIBLE_TRAITS, ...SALVAGE_ELIGIBLE_TRAITS, ...RECON_ELIGIBLE_TRAITS,
     ]);
     for (const traitId of eligible) {
