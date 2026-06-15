@@ -86,6 +86,52 @@ export type TraitCategory =
 
 export type QualityTier = 1 | 2 | 3;
 
+// ── Physical substrate (economy-simulation SP1) ───────────────────
+
+/** The seven locked tier-0 resource types a body's resource base spans. */
+export type ResourceType =
+  | "gas"
+  | "minerals"
+  | "ore"
+  | "biomass"
+  | "arable"
+  | "water"
+  | "radioactive";
+
+/** A magnitude per resource type. Used for body resource bases and system aggregates. */
+export type ResourceVector = Record<ResourceType, number>;
+
+/** Sun class — gates which body archetypes a system can roll. */
+export type SunClass = "blue_white" | "yellow" | "orange_dwarf" | "red_dwarf";
+
+/** Body archetype ids (one per curated world/belt kind). */
+export type BodyArchetypeId =
+  | "garden_world"
+  | "ocean_world"
+  | "jungle_world"
+  | "arid_world"
+  | "volcanic_world"
+  | "frozen_world"
+  | "barren_rock"
+  | "gas_giant"
+  | "asteroid_belt";
+
+/** Richness-modifier ids — rare multipliers on a single resource (the old "resource traits"). */
+export type RichnessModifierId =
+  | "hydrocarbon_deposits"
+  | "fertile_soil"
+  | "coral_reefs"
+  | "tectonic_concentration"
+  | "mineral_moons"
+  | "ice_rings"
+  | "rare_earth"
+  | "heavy_metals"
+  | "organic_compounds"
+  | "helium3"
+  | "radioactive_lode"
+  | "superdense"
+  | "glacial_aquifer";
+
 export type GovernmentType =
   | "federation"
   | "corporate"
