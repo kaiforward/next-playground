@@ -14,13 +14,13 @@ describe("TRAIT_MIGRATION", () => {
 
   it("archetype targets are valid body archetypes", () => {
     for (const m of Object.values(TRAIT_MIGRATION)) {
-      if (m.kind === "archetype") expect(BODY_ARCHETYPES[m.archetype]).toBeDefined();
+      if (m.kind === "archetype") expect(BODY_ARCHETYPES[m.archetype].id).toBe(m.archetype);
     }
   });
 
   it("richness targets are valid richness modifiers", () => {
     for (const m of Object.values(TRAIT_MIGRATION)) {
-      if (m.kind === "richness") expect(RICHNESS_MODIFIERS[m.modifier]).toBeDefined();
+      if (m.kind === "richness") expect(RICHNESS_MODIFIERS[m.modifier].id).toBe(m.modifier);
     }
   });
 

@@ -25,6 +25,13 @@ describe("BODY_ARCHETYPES", () => {
   it("the id key matches the entry's id field", () => {
     for (const id of ARCHETYPE_IDS) expect(BODY_ARCHETYPES[id].id).toBe(id);
   });
+
+  it("volcanic_world is the only archetype with a nonzero danger baseline", () => {
+    expect(BODY_ARCHETYPES.volcanic_world.dangerBaseline).toBe(0.05);
+    for (const id of ARCHETYPE_IDS.filter((a) => a !== "volcanic_world")) {
+      expect(BODY_ARCHETYPES[id].dangerBaseline).toBe(0);
+    }
+  });
 });
 
 describe("SUN_CLASSES", () => {

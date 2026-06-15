@@ -205,11 +205,24 @@ model StarSystem {
   prosperity       Float   @default(0)
   tradeVolumeAccum Int     @default(0)
 
+  // ── Physical substrate (economy-simulation SP1) ──
+  sunClass         String  @default("yellow")  // SunClass — overwritten at PR3 reseed
+  population       Int     @default(0)          // abstract magnitude
+  popCap           Float   @default(0)          // Σ(body popCapWeight × size)
+  aggGas           Float   @default(0)
+  aggMinerals      Float   @default(0)
+  aggOre           Float   @default(0)
+  aggBiomass       Float   @default(0)
+  aggArable        Float   @default(0)
+  aggWater         Float   @default(0)
+  aggRadioactive   Float   @default(0)
+
   region            Region             @relation(fields: [regionId], references: [id])
   faction           Faction?           @relation("FactionTerritory", fields: [factionId], references: [id])
   factionHomeworld  Faction?           @relation("FactionHomeworld")
   station           Station?
   traits            SystemTrait[]
+  bodies            SystemBody[]
   ships             Ship[]             @relation("ShipCurrentSystem")
   incomingShips     Ship[]             @relation("ShipDestination")
   convoys           Convoy[]           @relation("ConvoyCurrentSystem")
@@ -229,6 +242,28 @@ model StarSystem {
   @@index([regionId])
   @@index([factionId])
   @@index([x, y])
+}
+
+model SystemBody {
+  id                String  @id @default(cuid())
+  systemId          String
+  bodyType          String  // BodyArchetypeId
+  habitable         Boolean @default(false)
+  size              Float   @default(1)
+  // Resource base — scalar columns (one ResourceVector). Caps on tier-0 yield.
+  resGas            Float   @default(0)
+  resMinerals       Float   @default(0)
+  resOre            Float   @default(0)
+  resBiomass        Float   @default(0)
+  resArable         Float   @default(0)
+  resWater          Float   @default(0)
+  resRadioactive    Float   @default(0)
+  popCapWeight      Float   @default(0)
+  richnessModifiers String[] @default([])  // RichnessModifierId[]
+
+  system StarSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
+
+  @@index([systemId])
 }
 
 model SystemTrait {
