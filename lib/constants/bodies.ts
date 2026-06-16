@@ -81,27 +81,27 @@ export interface SunClassDef {
 
 export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
   yellow: {
-    id: "yellow", name: "Yellow (Sol-like)", weight: 35, bodyCount: { min: 2, max: 5 },
+    id: "yellow", name: "Yellow (Sol-like)", weight: 45, bodyCount: { min: 2, max: 5 },
     archetypeWeights: {
-      garden_world: 4, ocean_world: 3, jungle_world: 3, arid_world: 2,
-      volcanic_world: 1, frozen_world: 1, barren_rock: 2, gas_giant: 2, asteroid_belt: 2,
+      garden_world: 6, ocean_world: 4, jungle_world: 4, arid_world: 2,
+      volcanic_world: 1, frozen_world: 1, barren_rock: 1, gas_giant: 1, asteroid_belt: 1,
     },
   },
   blue_white: {
-    id: "blue_white", name: "Blue–white (hot)", weight: 20, bodyCount: { min: 1, max: 4 },
+    id: "blue_white", name: "Blue–white (hot)", weight: 13, bodyCount: { min: 1, max: 4 },
     archetypeWeights: {
       volcanic_world: 4, barren_rock: 3, asteroid_belt: 3, arid_world: 1, gas_giant: 1,
     },
   },
   orange_dwarf: {
-    id: "orange_dwarf", name: "Orange dwarf (cool)", weight: 25, bodyCount: { min: 2, max: 4 },
+    id: "orange_dwarf", name: "Orange dwarf (cool)", weight: 30, bodyCount: { min: 2, max: 4 },
     archetypeWeights: {
-      garden_world: 1, ocean_world: 3, jungle_world: 1, arid_world: 2,
-      frozen_world: 3, barren_rock: 2, gas_giant: 2, asteroid_belt: 2,
+      garden_world: 2, ocean_world: 4, jungle_world: 2, arid_world: 2,
+      frozen_world: 3, barren_rock: 1, gas_giant: 2, asteroid_belt: 1,
     },
   },
   red_dwarf: {
-    id: "red_dwarf", name: "Red dwarf (cold)", weight: 20, bodyCount: { min: 1, max: 3 },
+    id: "red_dwarf", name: "Red dwarf (cold)", weight: 12, bodyCount: { min: 1, max: 3 },
     archetypeWeights: {
       arid_world: 1, frozen_world: 3, barren_rock: 3, gas_giant: 3, asteroid_belt: 3,
     },
