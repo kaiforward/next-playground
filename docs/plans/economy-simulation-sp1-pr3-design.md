@@ -101,13 +101,14 @@ in Part 2**, when production/consumption derive from bodies + population directl
 
 ## 5. Persistence helpers (PR3a)
 
-- **Column↔vector bridge** in `lib/engine/resources.ts` (now has callers): `bodyResourceColumns(v)` →
-  `{ resGas, … }`, `aggregateColumns(v)` → `{ aggGas, … }`, `resourceVectorFromColumns(row)`,
-  `sumResourceVectors(...)`.
-- **DB guards** in `lib/types/guards.ts`: `toSunClass`, `toBodyArchetypeId`, `toResourceType`,
-  `toRichnessModifierId` — for reading `SystemBody.bodyType` / `StarSystem.sunClass` /
-  `SystemBody.richnessModifiers[]` back from the DB.
-- **Seed rewrite** (`prisma/seed.ts`) — **batched**, fixing the existing per-system `await create` N+1 loop
+- **Column↔vector bridge** in `lib/engine/resources.ts` — **writes + aggregate only**: `bodyResourceColumns(v)` →
+  `{ resGas, … }`, `aggregateColumns(v)` → `{ aggGas, … }`, `sumResourceVectors(...)`. The read-back helper
+  `resourceVectorFromColumns(row)` and the four **DB guards** (`toSunClass`, `toBodyArchetypeId`,
+  `toResourceType`, `toRichnessModifierId`) are **deferred to PR3b** — PR3a never reads the substrate back from the
+  DB, so adding them now would be dead code (against the "no orphaned code" convention). They land in PR3b with
+  their first readers (LOCATIONS / danger).
+- **Seed rewrite** (`prisma/seed.ts`) — **batched** (chunked under Postgres's 65535 bind-parameter ceiling),
+  fixing the existing per-system `await create` N+1 loop
   (the roadmap's "batch the market seed writes too" → yes):
   1. `createManyAndReturn` `StarSystem` rows (economyType, x/y, region, isGateway, description, **sunClass,
      population, popCap, agg***) → ids.
@@ -125,8 +126,9 @@ in Part 2**, when production/consumption derive from bodies + population directl
 New / rewritten:
 - `lib/engine/body-gen.ts` (+ test) — sun/body/feature/population rolls + aggregate.
 - `lib/engine/economy-shim.ts` (+ test) — `deriveEconomyTypeLabel`.
-- `lib/engine/resources.ts` — bridge helpers (+ test additions).
-- `lib/types/guards.ts` — 4 substrate guards.
+- `lib/engine/resources.ts` — bridge write/aggregate helpers (`aggregateColumns`, `bodyResourceColumns`,
+  `sumResourceVectors`) (+ test additions). (Read-back helper + DB guards deferred to PR3b — §5.)
+- `lib/constants/substrate-gen.ts` — `SUBSTRATE_GEN` tuning constants.
 - `lib/engine/universe-gen.ts` — rewritten `generateSystems` (calls body-gen + shim); extended `GeneratedSystem`;
   rewritten `universe-gen.test.ts` assertions (sun-gated bodies, populated, resource-bearing).
 - `prisma/seed.ts` — batched substrate persistence + full reseed.
@@ -150,6 +152,9 @@ engine / tick / adapters, `computeSystemDanger`. Economy plays via the shim.
 - **Danger from bodies**: add a denormalized danger column on `StarSystem` (small additive migration), populate
   at seed from `Σ BODY_ARCHETYPES[body.bodyType].dangerBaseline`, and add it inside `computeSystemDanger`
   (`lib/engine/danger.ts`) alongside the existing feature-danger + event + government terms.
+- **DB read-back helpers** (their first readers land here): `resourceVectorFromColumns(row)` in `resources.ts` +
+  the four guards `toSunClass`/`toBodyArchetypeId`/`toResourceType`/`toRichnessModifierId` in `lib/types/guards.ts`
+  — for reading `SystemBody`/`sunClass`/`richnessModifiers[]` back when LOCATIONS/danger consume bodies.
 - **Docs**: update `docs/active/gameplay/system-traits.md` (two-layer bodies/features model) + map docs; move the
   substrate spec `planned → active` per the SPEC lifecycle.
 
