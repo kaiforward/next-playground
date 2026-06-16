@@ -1,12 +1,14 @@
 /**
- * Layer 0 Data Validation — Post-implementation stabilization tests.
+ * Layer 0 Data Validation — multi-seed generation invariants.
  *
- * Validates the foundational invariants from MIGRATION-NOTES.md §After Layer 0:
- * 1. Trait quality distributions match rarity targets (50% tier 1, 35% tier 2, 15% tier 3)
- * 2. Economy type derivation produces even distributions (each type 10–20% share)
- * 3. Every system has at least one strong-affinity trait (first-roll guarantee)
+ * Validates substrate-era (economy-simulation SP1) invariants across many seeds:
+ * 1. Feature quality tiers match rarity targets (50% tier 1, 35% tier 2, 15% tier 3).
+ * 2. All six economy types appear and none dominates — the "coherent + healthy"
+ *    bar. Economy types now derive from the physical substrate, so an even split
+ *    is neither expected nor wanted (cores/extraction are pluralities).
+ * 3. The trait catalog keeps a balanced strong-affinity spread (catalog data;
+ *    affinities are retired in a later PR).
  *
- * These properties are foundational — later layers build on them but don't change them.
  * Tests run full universe generation across multiple seeds for statistical confidence.
  */
 
@@ -122,7 +124,10 @@ describe("Economy type distribution across seeds", () => {
     }
   });
 
-  it("no economy type exceeds 25% or falls below 8% in any seed", () => {
+  it("no economy type dominates (>50%) in any seed", () => {
+    // Substrate-era bar: types derive from physical substrate, so an even split
+    // is not expected. The invariant is "all present" (covered above) + "none
+    // runs away with the galaxy". Matches the generateSystems distribution test.
     for (const universe of universes) {
       const counts: Record<string, number> = {};
       for (const econ of ALL_ECONOMY_TYPES) counts[econ] = 0;
@@ -135,71 +140,8 @@ describe("Economy type distribution across seeds", () => {
         const share = counts[econ] / total;
         expect(
           share,
-          `${econ} at ${(share * 100).toFixed(1)}% — too high (>25%)`,
-        ).toBeLessThan(0.25);
-        expect(
-          share,
-          `${econ} at ${(share * 100).toFixed(1)}% — too low (<8%)`,
-        ).toBeGreaterThan(0.08);
-      }
-    }
-  });
-
-  it("aggregate distribution across all seeds is within 10–20% per type", () => {
-    const counts: Record<string, number> = {};
-    for (const econ of ALL_ECONOMY_TYPES) counts[econ] = 0;
-    let total = 0;
-
-    for (const universe of universes) {
-      for (const system of universe.systems) {
-        counts[system.economyType]++;
-        total++;
-      }
-    }
-
-    // Ideal: 16.7% each. Allow 10–23% range.
-    for (const econ of ALL_ECONOMY_TYPES) {
-      const share = counts[econ] / total;
-      expect(
-        share,
-        `${econ} aggregate: ${(share * 100).toFixed(1)}%`,
-      ).toBeGreaterThan(0.10);
-      expect(
-        share,
-        `${econ} aggregate: ${(share * 100).toFixed(1)}%`,
-      ).toBeLessThan(0.23);
-    }
-  });
-});
-
-// ── 3. Strong-Affinity Guarantee ────────────────────────────────
-
-describe("Strong-affinity trait guarantee", () => {
-  it("every system has at least one trait with a strong (value 2) affinity", () => {
-    for (const universe of universes) {
-      for (const system of universe.systems) {
-        const hasStrongAffinity = system.traits.some((t) => {
-          const def = TRAITS[t.traitId];
-          return Object.values(def.economyAffinity).some((v) => v === 2);
-        });
-        expect(
-          hasStrongAffinity,
-          `System ${system.name} (seed ${universe.systems[0]?.name?.split("-")[0]}) has no strong-affinity trait`,
-        ).toBe(true);
-      }
-    }
-  });
-
-  it("first trait of every system has a strong affinity", () => {
-    for (const universe of universes) {
-      for (const system of universe.systems) {
-        const firstTrait = system.traits[0];
-        const def = TRAITS[firstTrait.traitId];
-        const hasStrong = Object.values(def.economyAffinity).some((v) => v === 2);
-        expect(
-          hasStrong,
-          `System ${system.name}: first trait ${firstTrait.traitId} lacks strong affinity`,
-        ).toBe(true);
+          `${econ} at ${(share * 100).toFixed(1)}% — dominates (>50%)`,
+        ).toBeLessThan(0.5);
       }
     }
   });
