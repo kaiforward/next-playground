@@ -3,9 +3,10 @@
  * Deterministic given a seed value via mulberry32 PRNG.
  */
 
-import type { EconomyType } from "@/lib/types/game";
+import type { EconomyType, ResourceVector, SunClass } from "@/lib/types/game";
 import type { GeneratedTrait } from "./trait-gen";
-import { generateSystemTraits, deriveEconomyType } from "./trait-gen";
+import { generateSubstrate, type GeneratedBody } from "./body-gen";
+import { deriveEconomyTypeLabel } from "./economy-shim";
 import {
   generateFactions,
   assignSystemFactions,
@@ -26,6 +27,13 @@ export interface GeneratedSystem {
   index: number;
   name: string;
   economyType: EconomyType;
+  /** Physical substrate (economy-simulation SP1). */
+  sunClass: SunClass;
+  bodies: GeneratedBody[];
+  aggregate: ResourceVector;
+  popCap: number;
+  population: number;
+  /** Narrative features (the pruned trait subset). */
   traits: GeneratedTrait[];
   x: number;
   y: number;
@@ -355,11 +363,11 @@ export function generateSystems(
   // Track per-region system count for naming
   const regionLocalCount: number[] = new Array(regions.length).fill(0);
 
-  // Step 3: Build GeneratedSystem for each point
+  // Step 3: Build GeneratedSystem for each point from its physical substrate
   const systems: GeneratedSystem[] = [];
   for (let i = 0; i < points.length; i++) {
-    const traits = generateSystemTraits(rng);
-    const economyType = deriveEconomyType(traits, rng);
+    const substrate = generateSubstrate(rng);
+    const economyType = deriveEconomyTypeLabel(substrate.aggregate, substrate.population);
     const regionIndex = regionAssignments[i];
     const localIndex = regionLocalCount[regionIndex]++;
 
@@ -367,7 +375,12 @@ export function generateSystems(
       index: i,
       name: `${regions[regionIndex].name}-${localIndex + 1}`,
       economyType,
-      traits,
+      sunClass: substrate.sunClass,
+      bodies: substrate.bodies,
+      aggregate: substrate.aggregate,
+      popCap: substrate.popCap,
+      population: substrate.population,
+      traits: substrate.features,
       x: points[i].x,
       y: points[i].y,
       regionIndex,
