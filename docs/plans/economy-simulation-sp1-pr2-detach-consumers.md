@@ -17,7 +17,7 @@ Sever the danger / mission / rendering consumers from the trait fields that PR3 
 ## Code map (verified, from exploration)
 
 - `computeTraitDanger` — `lib/engine/trait-gen.ts:102-111` (sums `TRAITS[id].dangerModifier` over **all** traits). Wrapped by `computeSystemDanger` — `lib/engine/danger.ts:131-141` (+ event nav modifiers + gov baseline, clamped `[0,0.5]`). Danger is **not persisted** — computed on the fly.
-- `computeTraitDanger` call sites (4): `lib/tick/processors/ship-arrivals.ts:111`, `lib/tick/processors/missions.ts:133`, `lib/services/missions-v2.ts:461`, `lib/engine/simulator/economy.ts:90`.
+- `computeTraitDanger` call sites (**5**, signature stable → no per-site change): `lib/tick/processors/ship-arrivals.ts:111`, `lib/tick/processors/missions.ts:133`, `lib/services/missions-v2.ts:461`, `lib/engine/simulator/economy.ts:90`, and `app/(game)/@panel/system/[systemId]/page.tsx:153` (client-side system-panel danger readout — the original code map missed this one). Re-basing the function body covers all five.
 - `enrichTraits` — `lib/utils/traits.ts:16-30`; call sites: `app/(game)/@panel/system/[systemId]/page.tsx:91`, `.../explore/page.tsx:87`, `.../layout.tsx:49`, `components/map/system-detail-panel.tsx:255`.
 - Mission selectors — `lib/engine/mission-gen.ts`: survey `:111`, salvage `:203`, recon `:252` (read `traitId` + `quality` only, against `*_ELIGIBLE_TRAITS` from `lib/constants/missions.ts`).
 - Events — `lib/engine/events.ts:208` `selectEventToSpawn`; `SystemSnapshot` (`:32`) is `{ id, economyType, regionId }` — **already trait-free**. No change needed.
@@ -34,11 +34,18 @@ Sever the danger / mission / rendering consumers from the trait fields that PR3 
 - Update the danger test to assert: feature-trait danger summed; archetype/richness danger excluded. Add a comment pointing to this doc's design-decision section.
 - Leave `computeSystemDanger` (event + gov + clamp) untouched — the 4 call sites need no change (signature stable).
 
-### Task 3 — Route rendering through the accessor
-- At the 4 `enrichTraits` call sites (or inside `enrichTraits`/a wrapper), filter to `getFeatureTraits` first so the system-detail panels show only narrative features. Decide one consistent insertion point (prefer filtering once, centrally). Verify `<TraitList>` still renders.
+### Task 3 — Rendering: confirm decoupled (no code; display filter deferred to PR3)
+> **Revised during execution.** The original "filter once, centrally (inside `enrichTraits`)" is **wrong**: `enrichTraits` feeds **three** consumer kinds, not one —
+> - `<TraitList>` display (`page.tsx:323`, `system-detail-panel.tsx:255`),
+> - `deriveSystemLocations` (explore — `layout.tsx:49`, `explore/page.tsx:87`), which **legitimately** maps archetype/richness traits → explore locations (`asteroid_belt`→asteroid field, `gas_giant`→gas platform, `habitable_world`→planet surface, the whole `mining_outpost` set…), and
+> - `getPopulationLabel` + trait counts (`page.tsx:160/211/316/320`).
+>
+> Filtering inside `enrichTraits` would gut explore and shift population. The `<TraitList>` display is already prune-safe on its own — it maps whatever IDs are present, so post-reseed it shows features-only with **zero code change** (same posture as events, Task 5). Explore-locations + population derive from generated traits and belong to **PR3's generation/substrate rewrite** (note: `LOCATIONS.traitRequirement: TraitId[]` becomes a compile error once PR3 narrows `TraitId`; PR3 rewires locations to body archetypes and population to real substrate population).
+>
+> **Decision (user-approved): defer the display filter to PR3; no rendering change in PR2.**
 
-### Task 4 — Route mission selectors through the accessor (belt-and-suspenders)
-- Survey/salvage/recon (`lib/engine/mission-gen.ts`) filter candidate traits through `getFeatureTraits` before matching the eligible sets. Behaviour-preserving today (all eligible traits are features — PR1 test guarantees it); makes the prune safe. Keep minimal.
+### Task 4 — Missions: confirm decoupled (no code)
+> **Revised during execution.** The survey/salvage/recon eligible sets are **all features**, enforced by `lib/constants/__tests__/trait-migration.test.ts` ("every mission-eligible trait survives as a feature"). Archetype/richness traits therefore never match an eligible set in **any** timeline (pre- or post-reseed), so routing candidates through `getFeatureTraits` is a **provable no-op** — no failing test can be written for it, and the selectors survive PR3's prune unchanged. Missions are **safe-by-invariant; no code change.**
 
 ### Task 5 — Events: confirm decoupled (no code)
 - Confirm `selectEventToSpawn` / `selectEventsToSpawn` read only `economyType`/`regionId` (already verified). Note in the PR description; no change.
