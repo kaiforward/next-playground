@@ -76,8 +76,23 @@ describe("getFeatureTraits", () => {
     expect(getFeatureTraits(traits)).toEqual([]);
   });
 
-  it("filters the full catalog down to the 31 feature survivors", () => {
+  it("filters the full catalog down to exactly the 31 feature survivors", () => {
+    // Identity guard, not just count: a TRAIT_MIGRATION edit that swaps a feature for
+    // an archetype/richness trait keeps the total at 31, so a length-only check would
+    // pass silently. Listed in catalog order; both sides sorted before comparison.
+    const expectedFeatures: TraitId[] = [
+      "tidally_locked_world", "crystalline_formations", "geothermal_vents",
+      "exotic_matter_traces", "binary_star", "lagrange_stations", "captured_rogue_body",
+      "deep_space_beacon", "nebula_proximity", "solar_flare_activity", "gravitational_anomaly",
+      "dark_nebula", "precursor_ruins", "subspace_rift", "pulsar_proximity",
+      "ion_storm_corridor", "bioluminescent_ecosystem", "signal_anomaly", "xenobiology_preserve",
+      "ancient_minefield", "pirate_stronghold", "ancient_trade_route", "generation_ship_wreckage",
+      "orbital_ring_remnant", "seed_vault", "colonial_capital", "free_port_declaration",
+      "shipbreaking_yards", "derelict_fleet", "abandoned_station", "smuggler_haven",
+    ];
     const all = ALL_TRAIT_IDS.map((id) => makeTrait(id));
-    expect(getFeatureTraits(all)).toHaveLength(31);
+    expect(getFeatureTraits(all).map((t) => t.traitId).sort()).toEqual(
+      [...expectedFeatures].sort(),
+    );
   });
 });

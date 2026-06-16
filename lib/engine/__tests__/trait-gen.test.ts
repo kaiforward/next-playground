@@ -157,12 +157,12 @@ describe("computeTraitDanger", () => {
 
   it("stacks multiple feature danger modifiers", () => {
     const traits = [makeTrait("dark_nebula", 3), makeTrait("subspace_rift", 2)];
-    expect(computeTraitDanger(traits)).toBeCloseTo(0.14); // 0.06 + 0.08
+    expect(computeTraitDanger(traits)).toBe(0.14); // 0.06 + 0.08 (exact in IEEE-754)
   });
 
   it("positive and negative feature modifiers cancel out", () => {
     const traits = [makeTrait("dark_nebula", 1), makeTrait("lagrange_stations", 2)];
-    expect(computeTraitDanger(traits)).toBeCloseTo(0.03); // 0.06 - 0.03
+    expect(computeTraitDanger(traits)).toBe(0.03); // 0.06 - 0.03 (exact in IEEE-754)
   });
 
   it("excludes archetype and richness trait danger (feature-only re-base)", () => {
