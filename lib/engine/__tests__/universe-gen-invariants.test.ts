@@ -1,5 +1,5 @@
 /**
- * Layer 0 Data Validation — multi-seed generation invariants.
+ * Universe-generation invariants — multi-seed statistical validation.
  *
  * Validates substrate-era (economy-simulation SP1) invariants across many seeds:
  * 1. Feature quality tiers match rarity targets (50% tier 1, 35% tier 2, 15% tier 3).
