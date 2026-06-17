@@ -9,13 +9,37 @@ import {
   ACTIVE_SCALE,
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
-import { toEconomyType } from "@/lib/types/guards";
 import { deriveDominantEconomy } from "@/lib/engine/faction-gen";
+import { aggregateColumns, bodyResourceColumns } from "@/lib/engine/resources";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL environment variable is required");
 const adapter = new PrismaPg({ connectionString: url });
 const prisma = new PrismaClient({ adapter });
+
+const CHUNK_SIZE = 2000;
+
+/** Insert rows in chunks (fire-and-forget) to stay under Postgres's param ceiling. */
+async function createManyChunked<T>(
+  rows: T[],
+  insert: (batch: T[]) => Promise<{ count: number }>,
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    await insert(rows.slice(i, i + CHUNK_SIZE));
+  }
+}
+
+/** Insert rows in chunks, accumulating the returned rows. */
+async function createManyAndReturnChunked<T, R>(
+  rows: T[],
+  insert: (batch: T[]) => Promise<R[]>,
+): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    out.push(...(await insert(rows.slice(i, i + CHUNK_SIZE))));
+  }
+  return out;
+}
 
 async function main() {
   console.log(
@@ -120,51 +144,95 @@ async function main() {
   }
   console.log(`  Created ${regionIds.length} regions`);
 
-  // ── Seed systems + stations + markets ──
-  const systemIds: string[] = new Array(universe.systems.length);
+  // ── Seed systems (batched) ──
+  // Names are @unique, so we map returned ids back to the generator index by name.
+  const createdSystems = await createManyAndReturnChunked(
+    universe.systems,
+    (batch) =>
+      prisma.starSystem.createManyAndReturn({
+        data: batch.map((sys) => ({
+          name: sys.name,
+          economyType: sys.economyType,
+          x: sys.x,
+          y: sys.y,
+          description: sys.description,
+          regionId: regionIds[sys.regionIndex],
+          isGateway: sys.isGateway,
+          sunClass: sys.sunClass,
+          population: sys.population,
+          popCap: sys.popCap,
+          ...aggregateColumns(sys.aggregate),
+        })),
+        select: { id: true, name: true },
+      }),
+  );
+  const systemIdByName = new Map(createdSystems.map((s) => [s.name, s.id]));
+  const systemIds: string[] = universe.systems.map((s) => {
+    const id = systemIdByName.get(s.name);
+    if (!id) throw new Error(`System "${s.name}" missing from createManyAndReturn result`);
+    return id;
+  });
 
-  for (const sys of universe.systems) {
-    const regionId = regionIds[sys.regionIndex];
-    const stationName = `${sys.name} Station`;
+  // ── Seed stations (batched, one per system) ──
+  const createdStations = await createManyAndReturnChunked(
+    universe.systems,
+    (batch) =>
+      prisma.station.createManyAndReturn({
+        data: batch.map((sys) => ({
+          name: `${sys.name} Station`,
+          systemId: systemIds[sys.index],
+        })),
+        select: { id: true, systemId: true },
+      }),
+  );
+  const stationIdBySystemId = new Map(createdStations.map((s) => [s.systemId, s.id]));
 
-    const created = await prisma.starSystem.create({
-      data: {
-        name: sys.name,
-        economyType: sys.economyType,
-        x: sys.x,
-        y: sys.y,
-        description: sys.description,
-        regionId,
-        isGateway: sys.isGateway,
-        station: {
-          create: { name: stationName },
-        },
-        traits: {
-          create: sys.traits.map((t) => ({
-            traitId: t.traitId,
-            quality: t.quality,
-          })),
-        },
-      },
-      include: { station: true },
-    });
-    systemIds[sys.index] = created.id;
+  // ── Seed markets (batched, every system × good) ──
+  const marketData = universe.systems.flatMap((sys) => {
+    const stationId = stationIdBySystemId.get(systemIds[sys.index]);
+    if (!stationId) throw new Error(`Station missing for system "${sys.name}"`);
+    return Object.entries(goodRecords).map(([goodKey, goodRec]) => ({
+      stationId,
+      goodId: goodRec.id,
+      stock: getInitialStock(sys.economyType, goodKey),
+    }));
+  });
+  await createManyChunked(marketData, (batch) =>
+    prisma.stationMarket.createMany({ data: batch }),
+  );
 
-    // Create market entries for each good
-    const stationId = created.station!.id;
-    const econ = toEconomyType(sys.economyType);
+  // ── Seed bodies (batched) ──
+  const bodyData = universe.systems.flatMap((sys) =>
+    sys.bodies.map((b) => ({
+      systemId: systemIds[sys.index],
+      bodyType: b.bodyType,
+      habitable: b.habitable,
+      size: b.size,
+      ...bodyResourceColumns(b.resourceBase),
+      popCapWeight: b.popCapWeight,
+      richnessModifiers: b.richnessModifiers,
+    })),
+  );
+  await createManyChunked(bodyData, (batch) =>
+    prisma.systemBody.createMany({ data: batch }),
+  );
 
-    await prisma.stationMarket.createMany({
-      data: Object.entries(goodRecords).map(([goodKey, goodRec]) => ({
-        stationId,
-        goodId: goodRec.id,
-        stock: getInitialStock(econ, goodKey),
-      })),
-    });
-  }
-  const totalTraits = universe.systems.reduce((sum, s) => sum + s.traits.length, 0);
+  // ── Seed feature traits (batched) ──
+  const traitData = universe.systems.flatMap((sys) =>
+    sys.traits.map((t) => ({
+      systemId: systemIds[sys.index],
+      traitId: t.traitId,
+      quality: t.quality,
+    })),
+  );
+  await createManyChunked(traitData, (batch) =>
+    prisma.systemTrait.createMany({ data: batch }),
+  );
+
+  const totalBodies = bodyData.length;
+  const totalTraits = traitData.length;
   console.log(
-    `  Created ${universe.systems.length} star systems with stations, markets, and ${totalTraits} traits`,
+    `  Created ${universe.systems.length} star systems with stations, markets, ${totalBodies} bodies, and ${totalTraits} feature traits`,
   );
 
   // ── Compute and store dominant economy per region ──
@@ -260,24 +328,22 @@ async function main() {
   });
   console.log(`  Created ${relationRows.length} faction relation rows`);
 
-  // ── Seed price history (one row per system) ──
-  for (const sysId of systemIds) {
-    await prisma.priceHistory.create({
-      data: { systemId: sysId, entries: "[]" },
-    });
-  }
+  // ── Seed price history (batched, one row per system) ──
+  await createManyChunked(
+    systemIds.map((systemId) => ({ systemId, entries: "[]" })),
+    (batch) => prisma.priceHistory.createMany({ data: batch }),
+  );
   console.log(`  Created ${systemIds.length} price history rows`);
 
-  // ── Seed connections (already bidirectional from generator) ──
-  for (const conn of universe.connections) {
-    await prisma.systemConnection.create({
-      data: {
-        fromSystemId: systemIds[conn.fromSystemIndex],
-        toSystemId: systemIds[conn.toSystemIndex],
-        fuelCost: conn.fuelCost,
-      },
-    });
-  }
+  // ── Seed connections (batched; already bidirectional from generator) ──
+  await createManyChunked(
+    universe.connections.map((conn) => ({
+      fromSystemId: systemIds[conn.fromSystemIndex],
+      toSystemId: systemIds[conn.toSystemIndex],
+      fuelCost: conn.fuelCost,
+    })),
+    (batch) => prisma.systemConnection.createMany({ data: batch }),
+  );
   console.log(`  Created ${universe.connections.length} connections`);
 
   // ── Seed GameWorld singleton ──

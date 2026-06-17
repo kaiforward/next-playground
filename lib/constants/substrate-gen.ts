@@ -26,6 +26,6 @@ export const SUBSTRATE_GEN = {
   ECON_POP_HIGH: 1000,        // population reference for "high population"
   ECON_POP_HIGH_FRAC: 0.6,    // popNorm ≥ this → developed economy
   ECON_RAW_DOMINANT: 0.5,     // raw share ≥ this → extraction / industrial
-  ECON_FOOD_DOMINANT: 0.45,   // food share ≥ this → agricultural
+  ECON_FOOD_DOMINANT: 0.35,   // food share ≥ this → agricultural
   ECON_RAW_MIXED: 0.3,        // below this raw share + high pop → tech
 } as const;
