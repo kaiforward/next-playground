@@ -29,6 +29,8 @@ export interface SimSystem {
   consumes: Record<string, number>;
   /** System traits from generation (used for production modifiers). */
   traits: { traitId: string; quality: number }[];
+  /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
+  bodyDanger: number;
   /** Prosperity value (-1 to +1). Trade-driven, amplifies production and consumption equally. */
   prosperity: number;
   /** Accumulated trade volume (quantity bought+sold) since last economy processor run. */

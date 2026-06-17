@@ -33,6 +33,8 @@ export interface GeneratedSystem {
   aggregate: ResourceVector;
   popCap: number;
   population: number;
+  /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
+  bodyDanger: number;
   /** Narrative features (the pruned trait subset). */
   traits: GeneratedTrait[];
   x: number;
@@ -380,6 +382,7 @@ export function generateSystems(
       aggregate: substrate.aggregate,
       popCap: substrate.popCap,
       population: substrate.population,
+      bodyDanger: substrate.bodyDanger,
       traits: substrate.features,
       x: points[i].x,
       y: points[i].y,

@@ -312,6 +312,7 @@ export async function startMission(
       targetSystem: {
         select: {
           name: true,
+          bodyDanger: true,
           faction: { select: { governmentType: true } },
           traits: { select: { traitId: true, quality: true } },
         },
@@ -459,7 +460,12 @@ export async function startMission(
         quality: toQualityTier(t.quality),
       }));
       const traitDanger = computeTraitDanger(destTraits);
-      const danger = computeSystemDanger(navModifiers, govBaseline, traitDanger);
+      const danger = computeSystemDanger(
+        navModifiers,
+        govBaseline,
+        traitDanger,
+        mission.targetSystem?.bodyDanger ?? 0,
+      );
 
       const playerStats = derivePlayerCombatStats(freshShip);
       const enemyTier = mission.enemyTier

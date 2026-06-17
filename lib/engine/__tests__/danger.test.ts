@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   aggregateDangerLevel,
+  computeSystemDanger,
   rollCargoLoss,
   rollHazardIncidents,
   applyImportDuty,
@@ -75,6 +76,29 @@ describe("aggregateDangerLevel", () => {
       makeEconomyMod(),
     ];
     expect(aggregateDangerLevel(mods)).toBeCloseTo(0.1);
+  });
+});
+
+// ── computeSystemDanger ─────────────────────────────────────────
+
+describe("computeSystemDanger", () => {
+  it("sums event modifiers, gov baseline, trait danger, and body danger", () => {
+    // 0.1 (event) + 0.05 (gov) + 0.03 (trait) + 0.05 (body) = 0.23
+    expect(computeSystemDanger([makeDangerMod(0.1)], 0.05, 0.03, 0.05)).toBeCloseTo(0.23);
+  });
+
+  it("includes body danger with no other terms (volcanic re-base)", () => {
+    expect(computeSystemDanger([], 0, 0, 0.05)).toBeCloseTo(0.05);
+  });
+
+  it("clamps the total to MAX_DANGER", () => {
+    expect(computeSystemDanger([makeDangerMod(0.4)], 0.3, 0.2, 0.2)).toBe(
+      DANGER_CONSTANTS.MAX_DANGER,
+    );
+  });
+
+  it("clamps the total to 0 (negative trait danger cannot go below zero)", () => {
+    expect(computeSystemDanger([], 0, -0.5, 0)).toBe(0);
   });
 });
 

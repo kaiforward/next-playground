@@ -32,6 +32,8 @@ export interface GeneratedSubstrate {
   aggregate: ResourceVector;
   popCap: number;
   population: number;
+  /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
+  bodyDanger: number;
   features: GeneratedTrait[];
 }
 
@@ -148,6 +150,10 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
   }
 
   const aggregate = sumResourceVectors(bodies.map((b) => b.resourceBase));
+  const bodyDanger = bodies.reduce(
+    (sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline,
+    0,
+  );
 
   const rawCap = bodies.reduce((sum, b) => sum + b.popCapWeight * b.size, 0);
   const popCap = rawCap * SUBSTRATE_GEN.POP_SCALE;
@@ -163,5 +169,5 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
 
   const features = rollFeatures(rng);
 
-  return { sunClass, bodies, aggregate, popCap, population, features };
+  return { sunClass, bodies, aggregate, popCap, population, bodyDanger, features };
 }

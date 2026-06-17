@@ -134,7 +134,7 @@ export async function runOpMissionsProcessor(
     const systemMods = modsBySystem.get(system.id) ?? [];
     dangerLevels.set(
       system.id,
-      computeSystemDanger(systemMods, govBaseline, traitDanger),
+      computeSystemDanger(systemMods, govBaseline, traitDanger, system.bodyDanger),
     );
   }
 

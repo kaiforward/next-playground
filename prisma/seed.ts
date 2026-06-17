@@ -162,6 +162,7 @@ async function main() {
           population: sys.population,
           popCap: sys.popCap,
           ...aggregateColumns(sys.aggregate),
+          bodyDanger: sys.bodyDanger,
         })),
         select: { id: true, name: true },
       }),
