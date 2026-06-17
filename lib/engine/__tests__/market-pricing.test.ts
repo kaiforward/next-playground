@@ -174,34 +174,35 @@ describe("quoteTrade", () => {
 });
 
 import { curveForGood } from "../market-pricing";
-import { getTargetStock } from "@/lib/constants/market-economy";
+import { TARGET_COVER } from "@/lib/constants/market-economy";
 
 describe("curveForGood", () => {
-  it("assembles a MarketCurve from good fields + derived targetStock", () => {
-    const curve = curveForGood("water", 25, 0.5, 2.0);
+  it("anchors the curve at TARGET_COVER × demandRate (per-system reference)", () => {
+    const curve = curveForGood(25, 0.5, 2.0, 3);
     expect(curve).toEqual({
       basePrice: 25,
-      targetStock: getTargetStock("water"),
+      targetStock: TARGET_COVER * 3,
       k: 1,
       floorMult: 0.5,
       ceilingMult: 2.0,
     });
   });
 
-  it("prices at base when stock equals the derived target", () => {
-    const curve = curveForGood("water", 25, 0.5, 2.0);
-    expect(midPriceAt(curve, getTargetStock("water"))).toBe(25);
+  it("prices at base when stock equals the per-system reference", () => {
+    const demandRate = 3;
+    const curve = curveForGood(25, 0.5, 2.0, demandRate);
+    expect(midPriceAt(curve, TARGET_COVER * demandRate)).toBe(25);
   });
 
-  it("scales targetStock by anchorMult when provided", () => {
-    const base = curveForGood("water", 25, 0.5, 2.0);
-    const shifted = curveForGood("water", 25, 0.5, 2.0, 2);
+  it("scales the reference by anchorMult", () => {
+    const base = curveForGood(25, 0.5, 2.0, 3);
+    const shifted = curveForGood(25, 0.5, 2.0, 3, 2);
     expect(shifted.targetStock).toBeCloseTo(base.targetStock * 2);
   });
 
-  it("defaults anchorMult to 1 (anchor unchanged)", () => {
-    const a = curveForGood("water", 25, 0.5, 2.0);
-    const b = curveForGood("water", 25, 0.5, 2.0, 1);
-    expect(a.targetStock).toBe(b.targetStock);
+  it("a higher demandRate gives a deeper market (higher reference)", () => {
+    const thin = curveForGood(25, 0.5, 2.0, 1);
+    const deep = curveForGood(25, 0.5, 2.0, 8);
+    expect(deep.targetStock).toBeGreaterThan(thin.targetStock);
   });
 });

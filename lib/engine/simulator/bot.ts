@@ -61,7 +61,7 @@ export function executeBotTick(
     );
     if (!market) continue;
 
-    const price = spotPrice(curveForGood(market.goodId, market.basePrice, market.priceFloor, market.priceCeiling, market.anchorMult), market.stock);
+    const price = spotPrice(curveForGood(market.basePrice, market.priceFloor, market.priceCeiling, market.demandRate, market.anchorMult), market.stock);
     const revenue = price * cargo.quantity;
     player = { ...player, credits: player.credits + revenue };
 
@@ -105,7 +105,7 @@ export function executeBotTick(
     );
 
     if (buyMarket) {
-      const price = spotPrice(curveForGood(buyMarket.goodId, buyMarket.basePrice, buyMarket.priceFloor, buyMarket.priceCeiling, buyMarket.anchorMult), buyMarket.stock);
+      const price = spotPrice(curveForGood(buyMarket.basePrice, buyMarket.priceFloor, buyMarket.priceCeiling, buyMarket.demandRate, buyMarket.anchorMult), buyMarket.stock);
       const totalCost = price * decision.buyQuantity;
 
       if (totalCost <= player.credits && buyMarket.stock - STOCK_MIN >= decision.buyQuantity) {

@@ -4,7 +4,6 @@ import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-u
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
 import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
 import { getSpread } from "@/lib/constants/market-economy";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 
 // Recompute the exact quote the service should charge, independently of the
@@ -16,10 +15,10 @@ async function expectedQuote(
   stock: number,
   quantity: number,
   type: "buy" | "sell",
+  demandRate: number,
 ) {
   const good = await prisma.good.findUniqueOrThrow({ where: { id: goodId } });
-  const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.name;
-  const curve = curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling);
+  const curve = curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, demandRate);
   const spread = getSpread(GOVERNMENT_TYPES.federation);
   return quoteTrade(curve, stock, quantity, type, spread);
 }
@@ -56,7 +55,7 @@ describe("executeTrade (integration)", () => {
     expect(marketBefore).not.toBeNull();
 
     // Pre-compute the exact total the service should charge for this buy.
-    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "buy");
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "buy", marketBefore!.demandRate);
 
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
@@ -108,7 +107,7 @@ describe("executeTrade (integration)", () => {
     });
 
     // Pre-compute the exact proceeds the service should pay for this sell.
-    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "sell");
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "sell", marketBefore!.demandRate);
 
     const result = await executeTrade(player.playerId, shipId, {
       stationId,

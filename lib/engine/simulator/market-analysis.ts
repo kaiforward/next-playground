@@ -19,7 +19,7 @@ export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
     systemId: m.systemId,
     goodId: m.goodId,
     stock: m.stock,
-    price: spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling, m.anchorMult), m.stock),
+    price: spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock),
   }));
 }
 
@@ -44,7 +44,7 @@ function computePriceDispersion(
   // Group prices by good
   const pricesByGood = new Map<string, number[]>();
   for (const m of world.markets) {
-    const price = spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling, m.anchorMult), m.stock);
+    const price = spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock);
     let prices = pricesByGood.get(m.goodId);
     if (!prices) {
       prices = [];

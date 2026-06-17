@@ -15,7 +15,7 @@ import type { SimWorld, SimShip, SimMarketEntry } from "../types";
 
 /** Get the current price for a market entry. */
 export function getPrice(m: SimMarketEntry): number {
-  return spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling, m.anchorMult), m.stock);
+  return spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock);
 }
 
 /** Get market entries for a specific system. */

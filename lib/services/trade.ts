@@ -4,7 +4,6 @@ import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
 import { getSpread, STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { toShipStatus, toGovernmentType } from "@/lib/types/guards";
 import { getReputationTier } from "@/lib/constants/reputation";
 import { buildMarketEntry } from "./market-entry";
@@ -92,12 +91,11 @@ export async function executeTrade(
   }
 
   // Integrated-slippage quote priced off current stock + the government spread.
-  const goodKey = GOOD_NAME_TO_KEY.get(marketEntry.good.name) ?? marketEntry.good.name;
   const curve = curveForGood(
-    goodKey,
     marketEntry.good.basePrice,
     marketEntry.good.priceFloor,
     marketEntry.good.priceCeiling,
+    marketEntry.demandRate,
     marketEntry.anchorMult,
   );
   const spread = getSpread(govDef);
@@ -286,6 +284,7 @@ export async function executeTrade(
         updatedMarket.goodId,
         updatedMarket.good,
         updatedMarket.stock,
+        updatedMarket.demandRate,
         govDef,
         updatedMarket.anchorMult,
       ),

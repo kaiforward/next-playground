@@ -42,7 +42,7 @@ describe("takeMarketSnapshot", () => {
     expect(snaps[0].goodId).toBe("water");
     expect(snaps[0].stock).toBe(200);
     expect(snaps[0].price).toBe(
-      spotPrice(curveForGood("water", 100, 0.2, 5.0), 200),
+      spotPrice(curveForGood(100, 0.2, 5.0, 1), 200),
     );
   });
 });

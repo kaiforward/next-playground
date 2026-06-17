@@ -8,7 +8,6 @@ import {
 } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 
 // Mock the prisma import so mission service uses our test client
@@ -133,13 +132,13 @@ describe("trade mission lifecycle (integration)", () => {
       });
       expect(marketBefore).not.toBeNull();
 
-      const goodKey = GOOD_NAME_TO_KEY.get(marketBefore!.good.name) ?? "food";
       const expectedUnitPrice = spotPrice(
         curveForGood(
-          goodKey,
           marketBefore!.good.basePrice,
           marketBefore!.good.priceFloor,
           marketBefore!.good.priceCeiling,
+          marketBefore!.demandRate,
+          marketBefore!.anchorMult,
         ),
         marketBefore!.stock,
       );

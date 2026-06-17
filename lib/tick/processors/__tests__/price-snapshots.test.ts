@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { runPriceSnapshotsProcessor } from "../price-snapshots";
 import { InMemorySnapshotsWorld } from "@/lib/tick/adapters/memory/snapshots";
 import { MAX_SNAPSHOTS } from "@/lib/constants/snapshot";
+import { TARGET_COVER } from "@/lib/constants/market-economy";
 import type { MarketView } from "@/lib/tick/world/snapshots-world";
 import type { PriceHistoryEntry } from "@/lib/engine/snapshot";
 import type { TickContext } from "@/lib/tick/types";
@@ -32,11 +33,12 @@ function makeMarket(
 
 describe("runPriceSnapshotsProcessor", () => {
   it("appends a snapshot entry to each system with markets", async () => {
+    // demandRate is 1, so the per-system reference is TARGET_COVER.
     const world = new InMemorySnapshotsWorld(
       [
-        makeMarket("sys-a", "iron", 103), // unknown good → targetStock 103 → price == base
-        makeMarket("sys-a", "food", 160), // stock > targetStock(133) → cheap
-        makeMarket("sys-b", "iron", 50), // stock < targetStock → dear
+        makeMarket("sys-a", "iron", TARGET_COVER), // stock == reference → price == base
+        makeMarket("sys-a", "food", TARGET_COVER * 3), // stock > reference → cheap
+        makeMarket("sys-b", "iron", TARGET_COVER / 2), // stock < reference → dear
       ],
       ["sys-a", "sys-b"],
     );
@@ -48,7 +50,7 @@ describe("runPriceSnapshotsProcessor", () => {
     expect(a).toHaveLength(1);
     expect(b).toHaveLength(1);
     expect(a[0].tick).toBe(20);
-    expect(a[0].prices.iron).toBe(100); // stock == targetStock → basePrice
+    expect(a[0].prices.iron).toBe(100); // stock == reference → basePrice
     expect(a[0].prices.food).toBeLessThan(100); // abundant stock → below base
     expect(b[0].prices.iron).toBeGreaterThan(100); // scarce stock → above base
 
