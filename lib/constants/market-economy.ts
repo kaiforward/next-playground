@@ -4,7 +4,6 @@
  */
 
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
-import { GOODS } from "@/lib/constants/goods";
 import { physicalRates } from "@/lib/engine/physical-economy";
 import type { GovernmentDefinition } from "@/lib/constants/government";
 import type { ResourceVector } from "@/lib/types/game";
@@ -29,6 +28,14 @@ export const TARGET_COVER = 50;
  */
 export const MIN_DEMAND = 0.05;
 
+/**
+ * Seed-cover multipliers on the per-system reference: a pure consumer seeds at
+ * SEED_COVER_MIN (shallow cover → dear), a pure producer at SEED_COVER_MAX (deep
+ * cover → cheap), blended by producer share. First-draft; calibrated in 3b.
+ */
+export const SEED_COVER_MIN = 0.5;
+export const SEED_COVER_MAX = 1.5;
+
 /** Global stock bounds — reuse the legacy supply floor/ceiling. */
 export const STOCK_MIN = ECONOMY_CONSTANTS.MIN_LEVEL;
 export const STOCK_MAX = ECONOMY_CONSTANTS.MAX_LEVEL;
@@ -50,26 +57,24 @@ export function marketDemandRate(
 }
 
 /**
- * Initial stock for a market at seed/reset time, from the system's net balance
- * for the good. A net producer seeds high (toward the producer equilibrium →
- * reads cheap); a net consumer seeds low (toward the consumer equilibrium →
- * reads dear); a balanced or inert market seeds at the pricing anchor. The
- * producer share blends continuously between the two equilibria.
+ * Initial stock for a market at seed/reset time, derived from the system's net
+ * balance for the good around its per-system days-of-supply reference
+ * (TARGET_COVER × demandRate). A net producer seeds with deeper cover (reads
+ * cheap), a net consumer with shallower cover (reads dear); a balanced or inert
+ * market seeds at the reference (reads at base price). Clamped to the stock band.
  */
 export function getInitialStock(
   aggregate: ResourceVector,
   population: number,
   goodId: string,
 ): number {
-  const eq = GOODS[goodId]?.equilibrium;
-  if (!eq) return Math.round((STOCK_MIN + STOCK_MAX) / 2);
-
+  const reference = TARGET_COVER * marketDemandRate(aggregate, population, goodId);
   const { production, consumption } = physicalRates(goodId, aggregate, population);
   const total = production + consumption;
-  if (total <= 0) return Math.round((STOCK_MIN + STOCK_MAX) / 2);
 
-  const producerShare = production / total; // 1 = pure producer, 0 = pure consumer
-  return Math.round(eq.consumes + producerShare * (eq.produces - eq.consumes));
+  const producerShare = total > 0 ? production / total : 0.5; // 1 producer, 0 consumer
+  const coverMult = SEED_COVER_MIN + producerShare * (SEED_COVER_MAX - SEED_COVER_MIN);
+  return Math.round(Math.max(STOCK_MIN, Math.min(STOCK_MAX, reference * coverMult)));
 }
 
 /**

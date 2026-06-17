@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   STOCK_MIN,
   STOCK_MAX,
+  TARGET_COVER,
   getSpread,
+  getInitialStock,
   marketDemandRate,
   MIN_DEMAND,
 } from "../market-economy";
@@ -35,6 +37,37 @@ describe("marketDemandRate", () => {
 
   it("floors at MIN_DEMAND for an unknown good", () => {
     expect(marketDemandRate(makeResourceVector({}), 1000, "not_a_good")).toBe(MIN_DEMAND);
+  });
+});
+
+describe("getInitialStock", () => {
+  it("seeds a net producer above its reference (deeper cover → cheap)", () => {
+    // Water-rich, low-pop system: strong net water producer.
+    const agg = makeResourceVector({ water: 12 });
+    const reference = TARGET_COVER * marketDemandRate(agg, 100, "water");
+    const seed = getInitialStock(agg, 100, "water");
+    expect(seed).toBeGreaterThan(reference);
+  });
+
+  it("seeds a net consumer below its reference (shallower cover → dear)", () => {
+    const agg = makeResourceVector({ water: 0 });
+    const reference = TARGET_COVER * marketDemandRate(agg, 2000, "water");
+    const seed = getInitialStock(agg, 2000, "water");
+    expect(seed).toBeLessThan(reference);
+  });
+
+  it("a net producer seeds deeper than a net consumer at the same population", () => {
+    // Same population → same reference, so the seeds compare directly: the
+    // producer's deeper cover shows up as a strictly higher stock.
+    const producer = getInitialStock(makeResourceVector({ water: 12 }), 500, "water");
+    const consumer = getInitialStock(makeResourceVector({ water: 0 }), 500, "water");
+    expect(producer).toBeGreaterThan(consumer);
+  });
+
+  it("clamps seeds to the stock band", () => {
+    const seed = getInitialStock(makeResourceVector({ water: 0 }), 100000, "water");
+    expect(seed).toBeGreaterThanOrEqual(STOCK_MIN);
+    expect(seed).toBeLessThanOrEqual(STOCK_MAX);
   });
 });
 
