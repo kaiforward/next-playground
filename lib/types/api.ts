@@ -24,6 +24,11 @@ import type {
   TraitCategory,
   QualityTier,
   PlayerNotificationInfo,
+  ResourceType,
+  ResourceVector,
+  SunClass,
+  BodyArchetypeId,
+  RichnessModifierId,
 } from "./game";
 import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
 
@@ -104,6 +109,37 @@ export type SystemDetailData =
       visibility: "unknown";
     };
 export type SystemDetailResponse = ApiResponse<SystemDetailData>;
+
+// ── System substrate (economy-simulation SP1) ────────────────────
+export interface RichnessModifierView {
+  id: RichnessModifierId;
+  name: string;
+  resource: ResourceType;
+  multiplier: number;
+}
+export interface BodyView {
+  id: string;
+  bodyType: BodyArchetypeId;
+  archetypeName: string;
+  habitable: boolean;
+  size: number;
+  popCapWeight: number;
+  resources: ResourceVector;
+  richness: RichnessModifierView[];
+}
+/** Physical substrate for one system — discriminated on fog-of-war visibility. */
+export type SystemSubstrateData =
+  | {
+      visibility: "visible";
+      sunClass: SunClass;
+      population: number;
+      popCap: number;
+      aggregate: ResourceVector;
+      bodies: BodyView[];
+    }
+  | { visibility: "unknown" };
+export type SystemSubstrateResponse = ApiResponse<SystemSubstrateData>;
+
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
 export type GoodsResponse = ApiResponse<{ goods: GoodInfo[] }>;
