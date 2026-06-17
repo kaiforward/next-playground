@@ -17,6 +17,7 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TradeActivityPanel } from "@/components/system/trade-activity-panel";
+import { AstrographyTeaser } from "@/components/system/astrography-teaser";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
 import { formatCredits } from "@/lib/utils/format";
@@ -247,6 +248,14 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Astrography teaser — own boundary so its substrate fetch never blocks
+          the overview, and pre-warms the Astrography tab's cache. */}
+      <div className="mb-6">
+        <QueryBoundary>
+          <AstrographyTeaser systemId={systemId} />
+        </QueryBoundary>
+      </div>
 
       {/* Market row — snapshot + pie chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
