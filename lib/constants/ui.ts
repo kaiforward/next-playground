@@ -1,8 +1,7 @@
 import type { EVENT_DEFINITIONS } from "./events";
 import type { MissionType } from "./missions";
 import type { EnemyTier } from "./combat";
-import type { NotificationType } from "@/lib/types/game";
-import type { SunClass } from "@/lib/types/game";
+import type { NotificationType, SunClass } from "@/lib/types/game";
 
 /** Mapping from event type to Badge/dot color. */
 export const EVENT_TYPE_BADGE_COLOR: Record<
