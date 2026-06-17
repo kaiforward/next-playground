@@ -18,17 +18,13 @@ describe("stock bounds", () => {
 });
 
 describe("getTargetStock", () => {
-  it("returns the calibrated anchor for re-anchored goods", () => {
-    // Staples touched by every economy type (no neutral markets to hold the
-    // average up) settle below the supply-band midpoint, so their anchor is
-    // pinned to the measured equilibrium (PR 3 calibration).
-    expect(getTargetStock("water")).toBe(116);
-    expect(getTargetStock("food")).toBe(111);
-  });
-
-  it("falls back to the supply-band midpoint for uncalibrated goods", () => {
-    // luxuries: produces.supply 38, consumes.supply 24 -> round((38+24)/2)=31
-    expect(getTargetStock("luxuries")).toBe(31);
+  it("returns the measured anchor for every good", () => {
+    // Universal consumption means every good settles at its own level (no
+    // neutral markets to hold the average up), so all twelve are pinned to
+    // their simulator-measured equilibrium rather than the supply-band midpoint.
+    expect(getTargetStock("water")).toBe(122);
+    expect(getTargetStock("food")).toBe(101);
+    expect(getTargetStock("luxuries")).toBe(39);
   });
 
   it("falls back to the mid stock band for unknown goods", () => {

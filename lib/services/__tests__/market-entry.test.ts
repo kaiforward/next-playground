@@ -95,10 +95,10 @@ describe("buildMarketEntry", () => {
   });
 
   it("anchorMult raises currentPrice at a stock level that is unclamped for both anchors", () => {
-    // food: basePrice=30, ceiling=2×=60, targetStock=111.
-    // At stock=130 (above targetStock=111, below 2×targetStock=222):
-    //   anchorMult=1 → 30*(111/130)^1 ≈ 25.6 → rounds to 26 (below ceiling ✓)
-    //   anchorMult=2 → 30*(222/130)^1 ≈ 51.2 → rounds to 51 (below ceiling ✓)
+    // food: basePrice=30, floor=0.5×=15, ceiling=2×=60, targetStock=101.
+    // At stock=130 (above targetStock=101, below 2×targetStock=202):
+    //   anchorMult=1 → 30*(101/130)^1 ≈ 23.3 → rounds to 23 (above floor ✓)
+    //   anchorMult=2 → 30*(202/130)^1 ≈ 46.6 → rounds to 47 (below ceiling ✓)
     // Both are unclamped, so the shift is clearly visible in the output price.
     const testStock = 130;
     const base = buildMarketEntry("good-1", FOOD, testStock);

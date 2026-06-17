@@ -49,8 +49,8 @@ describe("takeMarketSnapshot", () => {
 
 describe("computeMarketHealth — stock drift", () => {
   it("averages drift per good, signs it vs targetStock, and sorts by |drift|", () => {
-    // water target ≈135: stocks 200 & 140 → drifts +65 & +5 → avg +35 (above target).
-    // luxuries target ≈31: stock 20 → drift −11 (below target).
+    // water target 122: stocks 200 & 140 → drifts +78 & +18 → avg +48 (above target).
+    // luxuries target 39: stock 20 → drift −19 (below target).
     const { stockDrift } = computeMarketHealth(
       world([
         market("sys-1", "water", 200),

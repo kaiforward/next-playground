@@ -9,7 +9,7 @@ import {
 // ── buildPriceEntry ─────────────────────────────────────────────
 
 describe("buildPriceEntry", () => {
-  // Calibrated targetStock: food=111, water=116. mid = basePrice * (target / stock).
+  // Calibrated targetStock: food=101, water=122. mid = basePrice * (target / stock).
   const markets: MarketInput[] = [
     { systemId: "sys-1", goodId: "food", stock: 100, basePrice: 20 },
     { systemId: "sys-1", goodId: "water", stock: 50, basePrice: 40 },
@@ -22,12 +22,12 @@ describe("buildPriceEntry", () => {
 
     const sys1 = result.get("sys-1")!;
     expect(sys1.tick).toBe(100);
-    expect(sys1.prices["food"]).toBe(22); // round(20 * 111/100) = 22
-    expect(sys1.prices["water"]).toBe(93); // round(40 * 116/50) = 93
+    expect(sys1.prices["food"]).toBe(20); // round(20 * 101/100) = 20
+    expect(sys1.prices["water"]).toBe(98); // round(40 * 122/50) = 98
 
     const sys2 = result.get("sys-2")!;
     expect(sys2.tick).toBe(100);
-    expect(sys2.prices["food"]).toBe(11); // round(20 * 111/200) = 11
+    expect(sys2.prices["food"]).toBe(10); // round(20 * 101/200) = 10
   });
 
   it("returns empty map for empty input", () => {

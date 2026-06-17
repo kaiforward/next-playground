@@ -20,25 +20,37 @@ export const STOCK_MIN = ECONOMY_CONSTANTS.MIN_LEVEL;
 export const STOCK_MAX = ECONOMY_CONSTANTS.MAX_LEVEL;
 
 /**
- * Calibrated pricing anchors (PR 3). The pricing anchor is the stock level where
- * mid price === basePrice. For most goods the legacy supply-band midpoint already
- * matches where the universe settles, but goods touched by every economy type
- * (no neutral markets to hold the average up) settle well below that midpoint —
- * so their anchor is pinned to the measured equilibrium instead. Measured via
- * the simulator; see scripts/balance-analysis.ts and docs/active/gameplay/economy.md.
+ * Pricing anchors — the stock level where a good's mid price equals its basePrice.
+ * Measured by running the simulator (`npm run simulate`) to a stable state and
+ * reading each good's mean settling stock from the stock-drift report.
+ *
+ * Every good is pinned because consumption is universal (every system consumes
+ * every good), so there are no neutral markets to hold a good's average at the
+ * supply-band midpoint — each good settles at its own level. See
+ * docs/active/gameplay/economy.md.
  */
 const CALIBRATED_TARGET_STOCK: Record<string, number> = {
-  water: 116,
-  food: 111,
-  ore: 129,
-  textiles: 124,
-  chemicals: 73,
+  // Tier 0.
+  water: 122,
+  food: 101,
+  ore: 127,
+  textiles: 108,
+  // Tier 1.
+  fuel: 85,
+  metals: 90,
+  chemicals: 81,
+  medicine: 79,
+  // Tier 2.
+  electronics: 47,
+  machinery: 46,
+  weapons: 46,
+  luxuries: 39,
 };
 
 /**
- * Pricing anchor: the stock level where the mid price equals basePrice. Uses a
- * calibrated per-good value where one exists, falling back to the legacy
- * supply-band midpoint (which already matches equilibrium for the rest).
+ * Pricing anchor: the stock level where the mid price equals basePrice. Uses the
+ * measured per-good anchor, falling back to the supply-band midpoint for any good
+ * without one.
  */
 export function getTargetStock(goodId: string): number {
   const calibrated = CALIBRATED_TARGET_STOCK[goodId];

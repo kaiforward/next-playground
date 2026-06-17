@@ -181,7 +181,7 @@ describe("curveForGood", () => {
     const curve = curveForGood("water", 25, 0.5, 2.0);
     expect(curve).toEqual({
       basePrice: 25,
-      targetStock: getTargetStock("water"), // 135
+      targetStock: getTargetStock("water"),
       k: 1,
       floorMult: 0.5,
       ceilingMult: 2.0,
