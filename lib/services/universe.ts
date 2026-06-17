@@ -3,6 +3,7 @@ import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, BodyView } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { substrateGoodRates } from "@/lib/engine/physical-economy";
 import { toSunClass, toBodyArchetypeId, toRichnessModifierId } from "@/lib/types/guards";
 import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
@@ -290,5 +291,6 @@ export async function getSystemSubstrate(
     popCap: system.popCap,
     aggregate,
     bodies,
+    goods: substrateGoodRates(aggregate, system.population),
   };
 }

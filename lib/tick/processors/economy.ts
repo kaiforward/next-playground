@@ -108,9 +108,6 @@ export async function runEconomyProcessor(
       {
         goodId: m.goodId,
         stock: m.stock,
-        economyType: m.economyType,
-        produces: m.produces,
-        consumes: m.consumes,
         baseProductionRate: m.baseProductionRate,
         baseConsumptionRate: m.baseConsumptionRate,
         govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,

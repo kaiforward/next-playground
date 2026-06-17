@@ -21,46 +21,42 @@ function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
   return {
     goodId: "food",
     stock: 100,
-    economyType: "agricultural",
-    produces: [],
-    consumes: [],
     ...over,
   };
 }
 
 describe("simulateEconomyTick — production", () => {
   it("raises stock for a producer, self-limiting near the ceiling", () => {
-    const mid = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, stock: 100 })], PARAMS);
+    const mid = simulateEconomyTick([entry({ productionRate: 10, stock: 100 })], PARAMS);
     expect(mid[0].stock).toBeGreaterThan(100);
-    const high = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, stock: 199 })], PARAMS);
+    const high = simulateEconomyTick([entry({ productionRate: 10, stock: 199 })], PARAMS);
     expect(high[0].stock - 199).toBeLessThan(mid[0].stock - 100); // slows near MAX
     expect(high[0].stock).toBeLessThanOrEqual(200); // clamped
   });
 
-  it("does nothing for a good the system does not produce", () => {
-    const out = simulateEconomyTick([entry({ produces: ["water"], productionRate: 10, stock: 100 })], PARAMS);
-    expect(out[0].stock).toBe(100);
+  it("does nothing when the production rate is zero or undefined", () => {
+    expect(simulateEconomyTick([entry({ productionRate: 0, stock: 100 })], PARAMS)[0].stock).toBe(100);
+    expect(simulateEconomyTick([entry({ stock: 100 })], PARAMS)[0].stock).toBe(100);
   });
 
   it("applies event production multipliers", () => {
-    const base = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, stock: 100 })], PARAMS);
-    const boosted = simulateEconomyTick([entry({ produces: ["food"], productionRate: 10, productionMult: 2, stock: 100 })], PARAMS);
+    const base = simulateEconomyTick([entry({ productionRate: 10, stock: 100 })], PARAMS);
+    const boosted = simulateEconomyTick([entry({ productionRate: 10, productionMult: 2, stock: 100 })], PARAMS);
     expect(boosted[0].stock - 100).toBeGreaterThan(base[0].stock - 100);
   });
 });
 
 describe("simulateEconomyTick — consumption", () => {
   it("lowers stock for a consumer, self-limiting near the floor", () => {
-    const mid = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, stock: 100 })], PARAMS);
+    const mid = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
     expect(mid[0].stock).toBeLessThan(100);
-    const low = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, stock: 6 })], PARAMS);
+    const low = simulateEconomyTick([entry({ consumptionRate: 10, stock: 6 })], PARAMS);
     expect(low[0].stock).toBeGreaterThanOrEqual(5); // clamped at MIN
   });
 
   it("applies event consumption multipliers", () => {
-    const base = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, stock: 100 })], PARAMS);
-    const boosted = simulateEconomyTick([entry({ consumes: ["food"], consumptionRate: 10, consumptionMult: 2, stock: 100 })], PARAMS);
-    // A 2× multiplier drains more stock than the base rate.
+    const base = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
+    const boosted = simulateEconomyTick([entry({ consumptionRate: 10, consumptionMult: 2, stock: 100 })], PARAMS);
     expect(100 - boosted[0].stock).toBeGreaterThan(100 - base[0].stock);
   });
 });
@@ -77,7 +73,7 @@ describe("simulateEconomyTick — noise", () => {
   });
 
   it("does not mutate the input array", () => {
-    const input = [entry({ produces: ["food"], productionRate: 10 })];
+    const input = [entry({ productionRate: 10 })];
     const snapshot = input[0].stock;
     simulateEconomyTick(input, PARAMS);
     expect(input[0].stock).toBe(snapshot);
@@ -95,9 +91,6 @@ describe("buildMarketTickEntry", () => {
       {
         goodId: "food",
         stock: 100,
-        economyType: "agricultural",
-        produces: ["food"],
-        consumes: [],
         volatility: 1,
         baseProductionRate: 10,
         baseConsumptionRate: undefined,
@@ -116,30 +109,23 @@ describe("buildMarketTickEntry", () => {
       {
         goodId: "food",
         stock: 100,
-        economyType: "agricultural",
-        produces: ["food"],
-        consumes: [],
         volatility: 1,
         baseProductionRate: 10,
         baseConsumptionRate: undefined,
         govConsumptionBoost: 0,
         traits: [{ traitId: "precursor_ruins", quality: 3 }],
-        prosperity: 1, // multAtMax = 1.3
+        prosperity: 1,
       },
       prosperityParams,
     );
-    // Same as the traits-free case above: prosperity multiplier only, no trait bonus.
     expect(e.productionRate).toBeCloseTo(13, 5);
   });
 
-  it("folds the government consumption boost into the consumption rate", () => {
+  it("folds the government consumption boost into a consumed good's rate", () => {
     const e = buildMarketTickEntry(
       {
         goodId: "food",
         stock: 100,
-        economyType: "tech",
-        produces: [],
-        consumes: ["food"],
         volatility: 1,
         baseProductionRate: undefined,
         baseConsumptionRate: 10,
@@ -152,24 +138,21 @@ describe("buildMarketTickEntry", () => {
     expect(e.consumptionRate).toBeCloseTo((10 + 5) * 0.7, 5); // (base + boost) * mult
   });
 
-  it("makes a non-consumer a consumer when only a government boost is present", () => {
+  it("ignores a government boost on a good the system does not consume", () => {
     const e = buildMarketTickEntry(
       {
         goodId: "food",
         stock: 100,
-        economyType: "tech",
-        produces: [],
-        consumes: ["food"],
         volatility: 1,
         baseProductionRate: undefined,
         baseConsumptionRate: undefined,
         govConsumptionBoost: 5,
         traits: [],
-        prosperity: 0, // multAtZero = 0.7
+        prosperity: 0,
       },
       prosperityParams,
     );
-    expect(e.consumptionRate).toBeCloseTo(5 * 0.7, 5); // boost-only branch
+    expect(e.consumptionRate).toBeUndefined(); // no base rate ⇒ boost cannot create consumption
   });
 
   it("leaves consumption undefined when there is no base rate and no boost", () => {
@@ -177,9 +160,6 @@ describe("buildMarketTickEntry", () => {
       {
         goodId: "food",
         stock: 100,
-        economyType: "tech",
-        produces: [],
-        consumes: [],
         volatility: 1,
         baseProductionRate: undefined,
         baseConsumptionRate: undefined,

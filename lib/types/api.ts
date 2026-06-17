@@ -31,6 +31,7 @@ import type {
   RichnessModifierId,
 } from "./game";
 import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
+import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 
 // ── Responses ────────────────────────────────────────────────────
 
@@ -136,9 +137,12 @@ export type SystemSubstrateData =
       popCap: number;
       aggregate: ResourceVector;
       bodies: BodyView[];
+      /** Per-good production/consumption computed from this system's substrate. */
+      goods: SubstrateGoodRate[];
     }
   | { visibility: "unknown" };
 export type SystemSubstrateResponse = ApiResponse<SystemSubstrateData>;
+export type { SubstrateGoodRate };
 
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;

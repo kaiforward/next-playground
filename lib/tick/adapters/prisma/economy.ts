@@ -10,8 +10,6 @@ import type {
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import {
-  getProducedGoods,
-  getConsumedGoods,
   getProductionRate,
   getConsumptionRate,
 } from "@/lib/constants/universe";
@@ -77,10 +75,7 @@ export class PrismaEconomyWorld implements EconomyWorld {
         goodId: goodKey,
         basePrice: m.good.basePrice,
         stock: m.stock,
-        economyType,
         governmentType,
-        produces: getProducedGoods(economyType),
-        consumes: getConsumedGoods(economyType),
         baseProductionRate: getProductionRate(economyType, goodKey),
         baseConsumptionRate: getConsumptionRate(economyType, goodKey),
         traits: m.station.system.traits.map((t) => ({
