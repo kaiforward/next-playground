@@ -152,11 +152,34 @@ engine / tick / adapters, `computeSystemDanger`. Economy plays via the shim.
 - **Danger from bodies**: add a denormalized danger column on `StarSystem` (small additive migration), populate
   at seed from `Σ BODY_ARCHETYPES[body.bodyType].dangerBaseline`, and add it inside `computeSystemDanger`
   (`lib/engine/danger.ts`) alongside the existing feature-danger + event + government terms.
-- **DB read-back helpers** (their first readers land here): `resourceVectorFromColumns(row)` in `resources.ts` +
-  the four guards `toSunClass`/`toBodyArchetypeId`/`toResourceType`/`toRichnessModifierId` in `lib/types/guards.ts`
-  — for reading `SystemBody`/`sunClass`/`richnessModifiers[]` back when LOCATIONS/danger consume bodies.
+- **DB read-back helpers** — ✅ **shipped early in the Astrography UI PR (#93)**, not here. That PR was the
+  substrate's first DB reader, so it landed `resourceVectorFromColumns(source, prefix)` in `resources.ts` +
+  `toSunClass`/`toBodyArchetypeId`/`toRichnessModifierId` in `lib/types/guards.ts` with their first readers. Only
+  `toResourceType` stays deferred — and it has **no consumer** (resource types come from the keyed column bridge,
+  never validated per-row), so it is dropped from scope. This is what makes PR3b a pure prune.
 - **Docs**: update `docs/active/gameplay/system-traits.md` (two-layer bodies/features model) + map docs; move the
   substrate spec `planned → active` per the SPEC lifecycle.
+
+### 7.1 Build sequence (commit ordering)
+
+PR3b is breaking: narrowing `TraitId` and deleting the archetype/richness `TRAITS` entries stops the tree
+compiling until every consumer is gone. So **retire consumers first, narrow the union last** — each commit
+compiles. Authored in full at `docs/plans/economy-simulation-sp1-pr3b-build.md`.
+
+1. **Retire `computeTraitProductionBonus`** (`trait-gen.ts:22` + tick call `tick.ts:135` + test block). Independent
+   of the union; economy keeps playing via the shim. Gate: `npm run simulate` healthy.
+2. **Danger from bodies** (additive, independent): add `StarSystem.bodyDanger` `Float` column → populate at seed
+   from `Σ BODY_ARCHETYPES[body.bodyType].dangerBaseline` → add the term to `computeSystemDanger` (4th param) +
+   thread it through its 4 callers. Gate: volcanic systems regain danger; mission volumes sane.
+3. **Rewire `deriveSystemLocations`** → read bodies (archetype + richness) + feature traits instead of
+   `traitRequirement`; plumb bodies into the explore page via the `useSystemSubstrate` hook (shipped in #93);
+   rewrite `locations.test.ts`. Drops the archetype/richness `TraitId` dependency.
+4. **Narrow `TraitId`** to the 31 features (`game.ts`) + delete the 21 archetype/richness `TRAITS` entries +
+   strip `economyAffinity`/`productionGoods` from `TraitDefinition` (`traits.ts`) + shrink `TRAIT_IDS`
+   (`guards.ts`) + delete the affinity-balance invariant test (`universe-gen-invariants.test.ts:158`). Gate:
+   `tsc --noEmit` clean.
+5. **Docs**: rewrite `system-traits.md` (strip affinity/production §2, add bodies+features model), move the
+   substrate spec `planned → active`. (Leave the `economy-simulation-sp1-*` plan docs until SP1 → main.)
 
 ---
 
