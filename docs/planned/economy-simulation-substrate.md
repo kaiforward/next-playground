@@ -1,6 +1,6 @@
 # Economy Simulation — Sub-Project 1: Physical Substrate & Population
 
-Status: **SP1 Parts 1–2 shipped** (Part 2, 2026-06-17 — economy onto the substrate); Part 3 (emergent pricing) a forward sketch — created 2026-05-31. The built physical-substrate model (bodies, richness, features, derived economy type) and the substrate-driven economy are documented in [system-traits.md](../active/gameplay/system-traits.md) and [economy.md](../active/gameplay/economy.md) (active); this spec retains the full design rationale and the Part 3 plan. It is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13), decomposing SP1 into shippable parts; the build plans (`docs/plans/…`) and implementation hang off it.
+Status: **SP1 Parts 1–2 shipped** (Part 2, 2026-06-17 — economy onto the substrate); **Part 3 (emergent pricing) design locked** 2026-06-17, build in progress. The built physical-substrate model (bodies, richness, features, derived economy type) and the substrate-driven economy are documented in [system-traits.md](../active/gameplay/system-traits.md) and [economy.md](../active/gameplay/economy.md) (active); this spec retains the full design rationale and the Part 3 plan. It is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13), decomposing SP1 into shippable parts; the build plans (`docs/plans/…`) and implementation hang off it.
 
 Read the [vision](./economy-simulation-vision.md) first — this spec assumes its model (physical substrate, population keystone, days-of-supply pricing, dissolved economy type) and does not re-argue it.
 
@@ -41,7 +41,7 @@ SP1 is large. It ships as three independently-shippable parts, bottom-up. Each p
 |---|---|---|
 | **Part 1 — Physical hierarchy + generation + reseed** (this spec, §3–§7) | New `SystemBody` schema, sun-gated archetype generation, resource bases, abstract `population` derived + partial/varied seeding, narrative survivors → features, **consumers detached**. The economy keeps running unchanged via a **derived economy-type shim** (a one-function transition, not a migration). | The generation/schema rework is verified **in isolation** before the economy engine is touched. |
 | **Part 2 — Economy onto the substrate** (design locked §8.1) | Production = resource base × labour(population); consumption = population × per-capita need. Economy type demoted to a pure derived label. `ECONOMY_PRODUCTION` / `ECONOMY_CONSUMPTION` / `SELF_SUFFICIENCY` deleted. Pricing still anchor-based. | The physical drivers replace the rate tables. |
-| **Part 3 — Emergent pricing** (sketch §8.2) | Days-of-supply pricing replaces the anchor curve. `CALIBRATED_TARGET_STOCK` + the `equilibrium` seed pair deleted. The slippage + bid-ask spread anti-exploit guard carries over. | The anchor magic-constant is gone; price is a readout of physical state. |
+| **Part 3 — Emergent pricing** (design locked §8.2) | Days-of-supply pricing replaces the anchor curve. `CALIBRATED_TARGET_STOCK` + the `equilibrium` seed pair deleted. The slippage + bid-ask spread anti-exploit guard carries over. | The anchor magic-constant is gone; price is a readout of physical state. |
 
 **Why Part 1 lands alone.** A full reseed plus a rebuilt generator (universe-gen, trait-gen, seed, schema, map trait rendering) is a wide, high-surface change. Landing it behind the shim — with the economy engine *untouched* — means we can validate "the new universe generates coherent, populated, resource-bearing systems and the game still plays identically" before we change a single line of the economy tick. The shim is one derivation function (bodies → economy-type label), deleted in Part 2.
 
@@ -172,9 +172,9 @@ This keeps `ECONOMY_PRODUCTION` / `ECONOMY_CONSUMPTION` / `SELF_SUFFICIENCY` and
 
 ---
 
-## 8. Parts 2 & 3 — Part 2 locked, Part 3 a sketch
+## 8. Parts 2 & 3 — both designs locked
 
-Part 2's design is locked below (§8.1) — created 2026-06-17, after Part 1 shipped. Part 3 (§8.2) remains a forward sketch. The code-heavy build plan (files, interfaces, PR phasing, tests) for Part 2 lives transiently in `docs/plans/` and is deleted when Part 2 ships; §8.1 is the durable functional design.
+Part 2's design is locked below (§8.1) — created 2026-06-17, after Part 1 shipped; it shipped the same day. Part 3's design is locked in §8.2 — created 2026-06-17, picking up directly after Part 2. The code-heavy build plan (files, interfaces, PR phasing, tests) for each part lives transiently in `docs/plans/` and is deleted when the part ships; §8.1 / §8.2 are the durable functional designs.
 
 ### 8.1 Part 2 — Economy onto the substrate (locked design)
 
@@ -241,11 +241,57 @@ All four phases landed on the shared branch; 2c + 2d were combined into one fina
 
 Days-of-supply pricing (Part 3); population dynamics / unrest / migration (SP2); supply-chain input-gating, the 26-good roster, and facilities (SP3); event physical-perturbation redesign (SP4).
 
-### 8.2 Part 3 — Emergent pricing
-- Replace the anchor curve with **days-of-supply**: `cover = stock / local_demand_rate`; `price ↑ as cover ↓` (vision §6). `local_demand_rate` is available because Part 2 made consumption population-scaled.
-- Delete `CALIBRATED_TARGET_STOCK`, `getTargetStock`, the `equilibrium` seed pair, and the anchor-midpoint fallback.
-- Carry over the **slippage + bid-ask spread** round-trip guard (the economy-resell invariant — instant resell stopped by the symmetric spread, rep perks bounded under it) — bounded, symmetric.
-- Price moves **gradual and bounded per tick** (vision §6).
+### 8.2 Part 3 — Emergent pricing (locked design)
+
+**Goal.** Replace the global per-good pricing anchor with a **per-system days-of-supply** reference, so price becomes a readout of physical state (how many ticks of cover a warehouse holds against *local* demand) rather than a tuned global constant. This deletes the magic number that started the whole redesign (`CALIBRATED_TARGET_STOCK`). Ships standalone against SP1's **static** population — it needs only the per-system demand rate, which Part 2's population-scaled consumption already provides.
+
+#### 8.2.1 The reframe — same curve, per-system reference
+
+The key realisation: days-of-supply is the **same power-law curve** the economy already uses, with a per-system reference replacing the global anchor. With `cover = stock / demandRate` and `price = basePrice × (TARGET_COVER / cover)^k`:
+
+```
+reference = TARGET_COVER × demandRate × anchorMult
+price     = basePrice × (reference / stock)^k
+```
+
+So `midPriceAt`, the integrated-slippage trade pricing (`tradeAvgMidPrice`), the bid-ask spread, and the entire round-trip-exploit guard are **untouched** — the curve shape is identical; only the *source* of the reference stock changes. `curveForGood` stops calling `getTargetStock` / `CALIBRATED_TARGET_STOCK` and instead consumes a per-market `demandRate`. The per-good market-depth gradient (deep, liquid staples vs thin, swingy luxuries) that the 12-entry anchor table hand-tuned now **emerges** from the per-good consumption needs: a high-need staple gets a high `demandRate` → high reference → deep market; a low-need luxury gets a thin one. Fewer magic numbers, more principled.
+
+#### 8.2.2 Locked decisions (2026-06-17)
+
+| Fork | Decision | Rationale |
+|---|---|---|
+| **`demandRate` definition** | **Base physical demand only** — `max(perCapitaNeed(good) × population, MIN_DEMAND)` | Government `consumptionBoost` and prosperity are deliberately **excluded** from the reference: they already move price *through stock* (they drain it faster, lowering cover), so folding them into the reference too would double-count. `MIN_DEMAND` floors the denominator so a near-empty system gives a finite cover instead of a degenerate zero. |
+| **`demandRate` storage** | **New `StationMarket.demandRate` column**, written at **seed** | Mirrors the existing `anchorMult` per-market pricing input exactly — every read path already loads the market row, so threading is purely additive (no new joins, no population/aggregate plumbing into ~12 call sites). Static while population is static (SP1); when SP2 makes population dynamic, the economy processor rewrites it per-tick alongside `anchorMult` — a natural extension, not a rework. |
+| **`TARGET_COVER`** | **Single global constant**, simulator-calibrated | Replaces the entire `CALIBRATED_TARGET_STOCK` table with one number. Per-good depth comes from per-good needs (above). Fallback lever if a single value can't hold all 12 goods in the `[5, 200]` band: split to per-tier. |
+| **Calibration target** | **Stable + tradeable** (not "growing") | Population is static in SP1, so "stable-but-growing" (vision §3.4, [§9](#9-reseed--simulator-implications)) can't be calibrated here — nothing grows. Part 3 targets the same coarse bar as Part 2: stocks in `[5, 200]`, price dispersion exists, bots profit, greedy ≫ random. "Growing" is deferred to SP2's consequence loop. |
+
+#### 8.2.3 Seeding
+
+`getInitialStock` is rewritten to seed around each market's **per-system reference** (`TARGET_COVER × demandRate`), scaled by the good's net balance: a net producer seeds with **deeper cover** (more stock → reads cheap), a net consumer with **shallower cover** (less stock → reads dear). The producer share — `production / (production + consumption)` — blends continuously, exactly as today, but around the emergent per-system reference instead of the deleted `equilibrium` seed pair. Clamped to `[STOCK_MIN, STOCK_MAX]`.
+
+#### 8.2.4 What this deletes / keeps
+
+- **Delete:** `CALIBRATED_TARGET_STOCK`, `getTargetStock`, the `equilibrium` seed pair on each good (`goods.ts`), and the anchor-midpoint fallback.
+- **Keep:** integrated slippage, the bid-ask spread (`getSpread` / `DEFAULT_SPREAD` / government spread scaling), `STOCK_MIN` / `STOCK_MAX`, `DEFAULT_ELASTICITY`, and the round-trip guard (the [economy-resell invariant](../active/gameplay/economy.md) — instant resell stopped by the symmetric spread, rep perks bounded under it). `anchorMult` also stays: `anchor_shift` events now multiply the **per-system reference**, so events keep working unchanged (their physical-perturbation redesign is SP4, out of scope).
+
+#### 8.2.5 Known limitation — pragmatic, solved downstream
+
+A high-population system has a high `demandRate` → high reference → it reads **structurally dear** for every good it doesn't produce (a populous world is short of its imports). This is the *intended* emergent behaviour. The risk: if calibration pushes references past `STOCK_MAX` for typical core populations, those prices pin to the ceiling and lose dispersion. `TARGET_COVER` calibration ([§8.2.6](#826-calibration)) centres references mid-band; the stock-drift report is watched for ceiling-pinning. The genuine fix — build-space making production profiles actually diverge ([vision §8.3](./economy-simulation-vision.md)) and population dynamics relieving structural shortage — is SP2/SP3. Part 3 is deliberately "closer, not perfect": it makes price a faithful readout; later systems make the underlying state richer.
+
+#### 8.2.6 Calibration
+
+`npm run simulate` sets `TARGET_COVER` (and nudges per-capita needs only if a single cover can't hold all goods in band) for a **stable, tradeable** economy: stocks in `[5, 200]`, real price dispersion, bots profit, greedy ≫ random. **Coarse only** — differentiation is the SP3 build-space lever, not Part 3 coefficient-tuning.
+
+#### 8.2.7 Shipping shape (PRs)
+
+Two phases, matching Part 2's shape. Unlike Part 2, there is **no no-op intermediate**: the `curveForGood` signature change forces all callers, and flipping the reference changes every price at once, so 3a is an atomic cutover.
+
+1. **3a — Cutover:** add the `StationMarket.demandRate` column + seed-write it; reframe `curveForGood` to take `demandRate` and apply `TARGET_COVER`; thread `demandRate` through all read sites (services, tick adapters, snapshots, trade-flow) and the simulator's `SimMarketEntry`; rewrite `getInitialStock`; delete `CALIBRATED_TARGET_STOCK` / `getTargetStock` / `equilibrium`. Fully unit-tested. **Reseed required** (new column + new seed stocks).
+2. **3b — Calibrate + docs:** simulator pass to set `TARGET_COVER`; rewrite [economy.md](../active/gameplay/economy.md)'s pricing-anchor sections to days-of-supply; mark §8.2 / §9 shipped here; delete the transient `docs/plans/` build plan.
+
+#### 8.2.8 Out of scope (Part 3)
+
+Population dynamics / unrest / migration and the "stable-but-growing" calibration target (SP2); build-space production divergence, the 26-good roster, and facilities (SP3); event physical-perturbation redesign (SP4).
 
 ---
 
@@ -253,7 +299,9 @@ Days-of-supply pricing (Part 3); population dynamics / unrest / migration (SP2);
 
 - **Full reseed is mandatory** — `SystemBody`, the aggregates, and `population` are all new, and generation is rebuilt. Consistent with the project's "full reseed at sub-project start" norm.
 - **Simulator (Part 1):** because the economy still runs via the shim, the simulator's economy tick is **unaffected**; it only needs the synthetic world to carry a derived `economyType` (as today). No new sim modelling in Part 1.
-- **Simulator (Parts 2–3):** the simulator's remit extends to "find a **seedable, stable-but-growing** start state" (vision §3.4) and to model population and days-of-supply pricing. Deferred to those parts.
+- **Simulator (Part 2, shipped):** validated a stable, tradeable economy in the `[5, 200]` band and recalibrated the anchors to the substrate equilibrium.
+- **Simulator (Part 3):** models days-of-supply pricing and calibrates the single `TARGET_COVER` against the **static**-population economy. Target is **stable + tradeable** (§8.2.2) — *not* "growing", which needs population to move.
+- **Simulator (SP2):** the "find a **seedable, stable-but-growing** start state" remit (vision §3.4) lands with SP2's population dynamics — the only point at which "growing" is something the simulator can observe.
 
 ---
 
