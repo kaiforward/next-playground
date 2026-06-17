@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { labourFactor, physicalRates } from "../physical-economy";
+import { labourFactor, physicalRates, substrateGoodRates } from "../physical-economy";
 import { makeResourceVector } from "../resources";
 import { LABOUR_HALF_POP, GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { GOOD_NAMES } from "@/lib/constants/goods";
 
 const AGG = makeResourceVector({ water: 10, ore: 5, arable: 8 });
 
@@ -66,9 +67,6 @@ describe("physicalRates — consumption", () => {
     expect(physicalRates("not_a_good", AGG, 1000).consumption).toBe(0);
   });
 });
-
-import { substrateGoodRates } from "../physical-economy";
-import { GOOD_NAMES } from "@/lib/constants/goods";
 
 describe("substrateGoodRates", () => {
   it("returns one entry per good in GOOD_NAMES order", () => {
