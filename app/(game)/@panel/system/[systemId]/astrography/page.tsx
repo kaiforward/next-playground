@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { ResourceVectorBars } from "@/components/system/resource-vector-bars";
+import { SubstrateTradeBars } from "@/components/system/substrate-trade-bars";
 import { BodyCard } from "@/components/system/body-card";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { formatNumber } from "@/lib/utils/format";
@@ -23,7 +24,7 @@ function AstrographyContent({ systemId }: { systemId: string }) {
     );
   }
 
-  const { sunClass, population, popCap, aggregate, bodies } = substrate;
+  const { sunClass, population, popCap, aggregate, bodies, goods } = substrate;
   const popCapInt = Math.round(popCap);
 
   return (
@@ -65,6 +66,17 @@ function AstrographyContent({ systemId }: { systemId: string }) {
             <ResourceVectorBars vector={aggregate} />
           </div>
         </div>
+      </Card>
+
+      {/* Trade profile — per-good production vs consumption from the substrate */}
+      <Card variant="bordered" padding="md">
+        <SectionHeader as="h4" className="mb-1">
+          Trade profile · net production
+        </SectionHeader>
+        <p className="mb-3 text-xs text-text-tertiary">
+          What this system&apos;s resources and population produce against what they consume
+        </p>
+        <SubstrateTradeBars goods={goods} />
       </Card>
 
       {/* Bodies */}
