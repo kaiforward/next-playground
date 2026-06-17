@@ -9,6 +9,8 @@ export interface MarketInput {
   priceCeiling?: number;
   /** Stored pricing-anchor multiplier (1 = none). */
   anchorMult?: number;
+  /** Days-of-supply pricing denominator (perCapitaNeed × population, floored). */
+  demandRate: number;
 }
 
 export interface PriceHistoryEntry {

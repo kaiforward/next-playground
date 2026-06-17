@@ -32,6 +32,8 @@ export interface MarketView {
   goodId: string;
   stock: number;
   anchorMult: number;
+  /** Days-of-supply pricing denominator (perCapitaNeed × population, floored). */
+  demandRate: number;
   basePrice: number;
   priceFloor: number;
   priceCeiling: number;

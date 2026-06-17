@@ -106,6 +106,7 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
       basePrice: m.good.basePrice,
       stock: m.stock,
       anchorMult: m.anchorMult,
+      demandRate: m.demandRate,
       priceFloor: m.good.priceFloor,
       priceCeiling: m.good.priceCeiling,
     }));

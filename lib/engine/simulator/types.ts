@@ -50,6 +50,8 @@ export interface SimMarketEntry {
   stock: number;
   /** Stored pricing-anchor multiplier (1 = none); written by the economy processor. */
   anchorMult: number;
+  /** Per-capita-need × population (floored) — the days-of-supply pricing denominator. */
+  demandRate: number;
   priceFloor: number;
   priceCeiling: number;
 }

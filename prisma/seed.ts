@@ -2,7 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock } from "@/lib/constants/market-economy";
+import { getInitialStock, marketDemandRate } from "@/lib/constants/market-economy";
 import {
   UNIVERSE_GEN,
   REGION_NAMES,
@@ -196,6 +196,7 @@ async function main() {
       stationId,
       goodId: goodRec.id,
       stock: getInitialStock(sys.aggregate, sys.population, goodKey),
+      demandRate: marketDemandRate(sys.aggregate, sys.population, goodKey),
     }));
   });
   await createManyChunked(marketData, (batch) =>

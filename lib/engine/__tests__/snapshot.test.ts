@@ -11,9 +11,9 @@ import {
 describe("buildPriceEntry", () => {
   // Calibrated targetStock: food=101, water=122. mid = basePrice * (target / stock).
   const markets: MarketInput[] = [
-    { systemId: "sys-1", goodId: "food", stock: 100, basePrice: 20 },
-    { systemId: "sys-1", goodId: "water", stock: 50, basePrice: 40 },
-    { systemId: "sys-2", goodId: "food", stock: 200, basePrice: 20 },
+    { systemId: "sys-1", goodId: "food", stock: 100, basePrice: 20, demandRate: 1 },
+    { systemId: "sys-1", goodId: "water", stock: 50, basePrice: 40, demandRate: 1 },
+    { systemId: "sys-2", goodId: "food", stock: 200, basePrice: 20, demandRate: 1 },
   ];
 
   it("groups markets by system and computes spot prices from stock", () => {
@@ -37,7 +37,7 @@ describe("buildPriceEntry", () => {
 
   it("handles zero stock (ceiling price)", () => {
     const result = buildPriceEntry(
-      [{ systemId: "sys-1", goodId: "food", stock: 0, basePrice: 20 }],
+      [{ systemId: "sys-1", goodId: "food", stock: 0, basePrice: 20, demandRate: 1 }],
       10,
     );
     expect(result.get("sys-1")!.prices["food"]).toBe(100); // 5.0 * 20
@@ -46,7 +46,7 @@ describe("buildPriceEntry", () => {
   it("clamps price to the floor when stock is abundant", () => {
     // stock vastly exceeds target → price floors at 0.2 * basePrice
     const result = buildPriceEntry(
-      [{ systemId: "sys-1", goodId: "food", stock: 100000, basePrice: 100 }],
+      [{ systemId: "sys-1", goodId: "food", stock: 100000, basePrice: 100, demandRate: 1 }],
       10,
     );
     expect(result.get("sys-1")!.prices["food"]).toBe(20); // 0.2 * 100

@@ -12,7 +12,7 @@ function market(
   goodId: string,
   stock: number,
 ): SimMarketEntry {
-  return { systemId, goodId, basePrice: 100, stock, anchorMult: 1, priceFloor: 0.2, priceCeiling: 5.0 };
+  return { systemId, goodId, basePrice: 100, stock, anchorMult: 1, demandRate: 1, priceFloor: 0.2, priceCeiling: 5.0 };
 }
 
 /** Minimal SimWorld — the analysis functions only read `markets`. */

@@ -109,6 +109,7 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
         basePrice: m.basePrice,
         stock: m.stock,
         anchorMult: m.anchorMult,
+        demandRate: m.demandRate,
         priceFloor: m.priceFloor,
         priceCeiling: m.priceCeiling,
       });
