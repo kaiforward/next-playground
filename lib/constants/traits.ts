@@ -31,10 +31,10 @@ export const QUALITY_TIERS: Record<
 
 // ── Trait catalog ─────────────────────────────────────────────────
 //
-// 31 narrative feature traits across 5 categories — the survivors of the
-// economy-simulation substrate rebuild. World/body and abundant-resource
-// traits became body archetypes + richness modifiers; features carry only
-// flavour, quality descriptions, and danger.
+// The narrative feature traits across 5 categories. A feature carries only
+// flavour, quality descriptions, and an optional danger modifier — a system's
+// world/body type and resource abundance live on bodies + richness modifiers
+// (BODY_ARCHETYPES / RICHNESS_MODIFIERS in bodies.ts), not here.
 
 export const TRAITS: Record<TraitId, TraitDefinition> = {
   // ── Planetary Bodies ────────────────────────────────────────────

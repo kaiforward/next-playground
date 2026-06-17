@@ -172,9 +172,9 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
 
 // ── Site derivation maps ────────────────────────────────────────
 //
-// Exploration sites now derive from the physical substrate: each body archetype
+// Exploration sites derive from the physical substrate: each body archetype
 // opens one site, any richness modifier opens an extraction site, and narrative
-// feature traits open their thematic site. (economy-simulation SP1 PR3b)
+// feature traits open their thematic site.
 
 /** Each of the 9 body archetypes surfaces one exploration site. */
 const BODY_ARCHETYPE_TO_LOCATION: Record<BodyArchetypeId, LocationTypeId> = {
@@ -192,11 +192,7 @@ const BODY_ARCHETYPE_TO_LOCATION: Record<BodyArchetypeId, LocationTypeId> = {
 /** Any richness modifier on a body opens an extraction site. */
 const RICHNESS_LOCATION: LocationTypeId = "mining_outpost";
 
-/**
- * The 31 narrative feature traits → their thematic site. Keyed by the feature
- * subset of TraitId; a `Partial` record since archetype/richness ids (still in
- * TraitId until PR3b Phase 4) carry no site.
- */
+/** Each narrative feature trait maps to its thematic exploration site. */
 const FEATURE_TO_LOCATION: Partial<Record<TraitId, LocationTypeId>> = {
   // planetary
   tidally_locked_world: "planet_surface",

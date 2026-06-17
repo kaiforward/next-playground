@@ -10,9 +10,8 @@ function makeTrait(traitId: TraitId, quality: QualityTier = 1): GeneratedTrait {
 
 // ── computeTraitDanger ───────────────────────────────────────────
 //
-// Sums dangerModifier over a system's feature traits (all TraitIds are
-// features now). Body-type environmental danger is summed separately as
-// bodyDanger — see computeSystemDanger.
+// Sums dangerModifier over a system's feature traits. Body-type environmental
+// danger is summed separately as bodyDanger — see computeSystemDanger.
 
 describe("computeTraitDanger", () => {
   it("returns 0 for a feature trait with no danger modifier", () => {

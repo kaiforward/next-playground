@@ -18,9 +18,9 @@ export type EconomyType =
 
 // ── System trait types ────────────────────────────────────────────
 
-// The 31 narrative feature traits — the survivors of the economy-simulation
-// substrate rebuild. World/body and abundant-resource traits became body
-// archetypes (BodyArchetypeId) + richness modifiers (RichnessModifierId).
+// The narrative feature traits a system can have. A system's physical makeup
+// lives elsewhere: world/body type as bodies (BodyArchetypeId) and abundant
+// resources as richness modifiers (RichnessModifierId).
 export type TraitId =
   // Planetary (2)
   | "tidally_locked_world"
