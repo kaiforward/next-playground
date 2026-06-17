@@ -23,6 +23,7 @@ import type {
   SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
+import { makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -43,28 +44,30 @@ function buildFixture(): {
     name: "Test Region",
   };
 
+  // Arable-rich, low-pop producers: food production ≈ 4/tick, tiny consumption.
   const producers = ["a", "b"].map<SimSystem>((id) => ({
     id,
     name: id.toUpperCase(),
     economyType: "agricultural",
     regionId: "r1",
     governmentType: "federation",
-    produces: { food: 4 },
-    consumes: {},
+    aggregate: makeResourceVector({ arable: 16 }),
+    population: 100,
     traits: [],
     bodyDanger: 0,
     prosperity: 0,
     tradeVolumeAccum: 0,
   }));
 
+  // Arable-barren, populous consumers: food consumption ≈ 4/tick, no production.
   const consumers = ["c", "d"].map<SimSystem>((id) => ({
     id,
     name: id.toUpperCase(),
     economyType: "tech",
     regionId: "r1",
     governmentType: "federation",
-    produces: {},
-    consumes: { food: 4 },
+    aggregate: emptyResourceVector(),
+    population: 1000,
     traits: [],
     bodyDanger: 0,
     prosperity: 0,

@@ -4,7 +4,7 @@
  */
 
 import type { EventTypeId } from "@/lib/constants/events";
-import type { EconomyType, GovernmentType } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SimConstants, SimConstantOverrides } from "./constants";
 import type { SimAdjacencyList } from "./pathfinding-cache";
@@ -23,10 +23,10 @@ export interface SimSystem {
   regionId: string;
   /** Owning faction's government — sourced per-system after the Layer 2 cutover. */
   governmentType: GovernmentType;
-  /** Goods this economy type produces, keyed by goodId → rate. */
-  produces: Record<string, number>;
-  /** Goods this economy type consumes, keyed by goodId → rate. */
-  consumes: Record<string, number>;
+  /** System aggregate resource vector — drives substrate production rates. */
+  aggregate: ResourceVector;
+  /** Abstract population magnitude — drives labour + per-capita consumption. */
+  population: number;
   /** System traits from generation (used for production modifiers). */
   traits: { traitId: string; quality: number }[];
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */

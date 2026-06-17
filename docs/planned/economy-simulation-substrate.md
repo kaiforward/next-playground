@@ -207,6 +207,8 @@ Every system consumes every good; higher tier → lower per-capita need. Self-su
 
 **Emergent geography:** raw goods flow resource-rich frontier → core; manufactured goods flow populous core → frontier.
 
+**This baseline is deliberately coarse — differentiation is SP2/SP3, not Part 2.** Tier-1/2 production is labour-only with *no space competition*: a body's population and its industrial output both scale off the same `labourFactor`, so a populous world is a net producer of nearly every manufactured good (it never has to choose people *over* factories). Consequently, in Parts 2–3 the import/export geography is shallow and the economy-type label is **loose flavour** — the label is a substrate classifier ([§7](#7-part-1--the-derived-economy-type-shim)), independent of net trade, so a water-rich system can top its exports with water yet read as "core". This is expected, not a calibration bug. The lever that makes economies genuinely differentiate is the **shared build-space budget** (vision §8.3) where housing competes with industry for finite space — scoped to **SP3**, with the consequence loop (growth/decline/migration) in **SP2**. Part 2's calibration target is therefore "**non-degenerate and tradeable**", not "differentiated"; making the label emergent-from-production only becomes meaningful once SP3 makes production profiles diverge.
+
 #### 8.1.3 What this replaces / deletes
 
 - `ECONOMY_PRODUCTION`, `ECONOMY_CONSUMPTION` (`universe.ts`) → two substrate-driven tables: a `GOOD_PRODUCTION` driver map (good → coeff + optional resource) and `GOOD_CONSUMPTION` per-capita needs.
@@ -224,7 +226,7 @@ Deleting the rate tables breaks the system Overview's **Produces / Consumes** li
 
 #### 8.1.6 Calibration
 
-`npm run simulate` validates a stable-but-trading economy within the `[5, 200]` stock band, re-measures the anchors, and tunes the production/consumption coefficients to sane prices. **Coarse calibration only** — fine balance is SP3's job.
+`npm run simulate` validates a stable-but-trading economy within the `[5, 200]` stock band, re-measures the anchors, and tunes the production/consumption coefficients to sane prices. **Coarse calibration only** — the target is a **non-degenerate, tradeable** economy (stocks in band, price dispersion exists, bots profit, greedy ≫ random), *not* a differentiated one. Differentiation needs the SP3 build-space lever (see the coarse-baseline note in §8.1.2); fine balance is SP3's job. Do not chase richer import/export geography by over-tuning the Part 2 coefficients.
 
 #### 8.1.7 Shipping shape (~4 phase PRs, squashed into the shared branch)
 

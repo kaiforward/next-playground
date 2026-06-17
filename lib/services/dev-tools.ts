@@ -11,7 +11,8 @@ import { getInitialStock } from "@/lib/constants/market-economy";
 import { GOODS, GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { toEconomyType, isEventTypeId } from "@/lib/types/guards";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { isEventTypeId } from "@/lib/types/guards";
 
 // ── Result types ────────────────────────────────────────────────
 
@@ -291,10 +292,18 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
     const ids: string[] = [];
     const stocks: number[] = [];
     for (const m of markets) {
-      const econ = toEconomyType(m.station.system.economyType);
+      const sys = m.station.system;
+      const aggregate = resourceVectorFromColumns(
+        {
+          aggGas: sys.aggGas, aggMinerals: sys.aggMinerals, aggOre: sys.aggOre,
+          aggBiomass: sys.aggBiomass, aggArable: sys.aggArable,
+          aggWater: sys.aggWater, aggRadioactive: sys.aggRadioactive,
+        },
+        "agg",
+      );
       const goodKey = goodKeyByName.get(m.good.name) ?? m.good.name;
       ids.push(m.id);
-      stocks.push(getInitialStock(econ, goodKey));
+      stocks.push(getInitialStock(aggregate, sys.population, goodKey));
     }
 
     if (ids.length > 0) {

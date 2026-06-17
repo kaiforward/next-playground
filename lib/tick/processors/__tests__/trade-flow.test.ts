@@ -10,6 +10,7 @@ import type {
   SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
+import { emptyResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -44,8 +45,8 @@ function makeSystem(id: string): SimSystem {
     economyType: "extraction",
     regionId: "r1",
     governmentType: "federation",
-    produces: {},
-    consumes: {},
+    aggregate: emptyResourceVector(),
+    population: 0,
     traits: [],
     bodyDanger: 0,
     prosperity: 0,

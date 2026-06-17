@@ -22,7 +22,7 @@ export const SUBSTRATE_GEN = {
   POP_FILL_MAX: 0.9,
   /** Narrative feature count per system, uniform inclusive. */
   FEATURE_COUNT: { min: 0, max: 2 },
-  /** Economy-type shim thresholds (see economy-shim.ts). */
+  /** Economy-type classifier thresholds (see lib/engine/economy-type.ts). */
   ECON_POP_HIGH: 1000,        // population reference for "high population"
   ECON_POP_HIGH_FRAC: 0.6,    // popNorm ≥ this → developed economy
   ECON_RAW_DOMINANT: 0.5,     // raw share ≥ this → extraction / industrial

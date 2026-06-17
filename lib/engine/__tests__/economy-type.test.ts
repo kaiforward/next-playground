@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveEconomyTypeLabel } from "../economy-shim";
+import { deriveEconomyTypeLabel } from "../economy-type";
 import { makeResourceVector } from "../resources";
 
 describe("deriveEconomyTypeLabel", () => {

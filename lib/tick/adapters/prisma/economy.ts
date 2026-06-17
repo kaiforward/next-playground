@@ -9,12 +9,10 @@ import type {
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { physicalRates } from "@/lib/engine/physical-economy";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import type { ResourceVector } from "@/lib/types/game";
 import {
-  getProductionRate,
-  getConsumptionRate,
-} from "@/lib/constants/universe";
-import {
-  toEconomyType,
   toGovernmentType,
   toTraitId,
   toQualityTier,
@@ -23,9 +21,10 @@ import {
 /**
  * Live-game adapter for the economy processor.
  *
- * Resolves economy-type derived fields (produces/consumes, base rates) at
- * read time so the processor body never reaches into constants. Bulk writes
- * via `unnest()` SQL — same pattern as the events adapter.
+ * Resolves each market's base production/consumption rates from the owning
+ * system's physical substrate (aggregate resource vector + population) at read
+ * time so the processor body never reaches into constants. Bulk writes via
+ * `unnest()` SQL — same pattern as the events adapter.
  */
 export class PrismaEconomyWorld implements EconomyWorld {
   constructor(private tx: TxClient) {}
@@ -59,26 +58,43 @@ export class PrismaEconomyWorld implements EconomyWorld {
       },
     });
 
+    // One aggregate vector per system (a system's 12 markets share it).
+    const aggBySystem = new Map<string, ResourceVector>();
+
     return rows.map((m) => {
-      const economyType = toEconomyType(m.station.system.economyType);
+      const sys = m.station.system;
+      let aggregate = aggBySystem.get(sys.id);
+      if (!aggregate) {
+        aggregate = resourceVectorFromColumns(
+          {
+            aggGas: sys.aggGas, aggMinerals: sys.aggMinerals, aggOre: sys.aggOre,
+            aggBiomass: sys.aggBiomass, aggArable: sys.aggArable,
+            aggWater: sys.aggWater, aggRadioactive: sys.aggRadioactive,
+          },
+          "agg",
+        );
+        aggBySystem.set(sys.id, aggregate);
+      }
+
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
+      const { production, consumption } = physicalRates(goodKey, aggregate, sys.population);
       // After the Layer 2 cutover every system has a non-null factionId. The
       // `?? "frontier"` fallback covers the only legitimate gap: a system the
       // adapter sees mid-write before its factionId is set. Frontier is the
       // safe default (lowest-stability profile).
-      const governmentType = m.station.system.faction
-        ? toGovernmentType(m.station.system.faction.governmentType)
+      const governmentType = sys.faction
+        ? toGovernmentType(sys.faction.governmentType)
         : "frontier";
       return {
         id: m.id,
-        systemId: m.station.system.id,
+        systemId: sys.id,
         goodId: goodKey,
         basePrice: m.good.basePrice,
         stock: m.stock,
         governmentType,
-        baseProductionRate: getProductionRate(economyType, goodKey),
-        baseConsumptionRate: getConsumptionRate(economyType, goodKey),
-        traits: m.station.system.traits.map((t) => ({
+        baseProductionRate: production > 0 ? production : undefined,
+        baseConsumptionRate: consumption > 0 ? consumption : undefined,
+        traits: sys.traits.map((t) => ({
           traitId: toTraitId(t.traitId),
           quality: toQualityTier(t.quality),
         })),

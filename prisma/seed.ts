@@ -195,7 +195,7 @@ async function main() {
     return Object.entries(goodRecords).map(([goodKey, goodRec]) => ({
       stationId,
       goodId: goodRec.id,
-      stock: getInitialStock(sys.economyType, goodKey),
+      stock: getInitialStock(sys.aggregate, sys.population, goodKey),
     }));
   });
   await createManyChunked(marketData, (batch) =>

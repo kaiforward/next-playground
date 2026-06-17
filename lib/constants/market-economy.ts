@@ -3,11 +3,11 @@
  * docs/active/gameplay/economy.md.
  */
 
-import { ECONOMY_CONSTANTS, getConsumeEquilibrium } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
-import { getProducedGoods, getConsumedGoods } from "@/lib/constants/universe";
+import { physicalRates } from "@/lib/engine/physical-economy";
 import type { GovernmentDefinition } from "@/lib/constants/government";
-import type { EconomyType } from "@/lib/types/game";
+import type { ResourceVector } from "@/lib/types/game";
 
 /** Price-curve elasticity. k=1 reproduces the legacy demand/supply hyperbola. */
 export const DEFAULT_ELASTICITY = 1;
@@ -49,18 +49,26 @@ export function getTargetStock(goodId: string): number {
 }
 
 /**
- * Initial stock for a market at seed/reset time, by the system's relationship
- * to the good. Producers start above target (cheap), consumers below (expensive,
- * blended by self-sufficiency), neutrals at target (price == base).
+ * Initial stock for a market at seed/reset time, from the system's net balance
+ * for the good. A net producer seeds high (toward the producer equilibrium →
+ * reads cheap); a net consumer seeds low (toward the consumer equilibrium →
+ * reads dear); a balanced or inert market seeds at the pricing anchor. The
+ * producer share blends continuously between the two equilibria.
  */
-export function getInitialStock(economyType: EconomyType, goodId: string): number {
+export function getInitialStock(
+  aggregate: ResourceVector,
+  population: number,
+  goodId: string,
+): number {
   const eq = GOODS[goodId]?.equilibrium;
   if (!eq) return getTargetStock(goodId);
-  if (getProducedGoods(economyType).includes(goodId)) return eq.produces;
-  if (getConsumedGoods(economyType).includes(goodId)) {
-    return getConsumeEquilibrium(economyType, goodId, eq);
-  }
-  return getTargetStock(goodId);
+
+  const { production, consumption } = physicalRates(goodId, aggregate, population);
+  const total = production + consumption;
+  if (total <= 0) return getTargetStock(goodId);
+
+  const producerShare = production / total; // 1 = pure producer, 0 = pure consumer
+  return Math.round(eq.consumes + producerShare * (eq.produces - eq.consumes));
 }
 
 /**

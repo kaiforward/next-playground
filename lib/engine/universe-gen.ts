@@ -6,7 +6,7 @@
 import type { EconomyType, ResourceVector, SunClass } from "@/lib/types/game";
 import type { GeneratedTrait } from "./trait-gen";
 import { generateSubstrate, type GeneratedBody } from "./body-gen";
-import { deriveEconomyTypeLabel } from "./economy-shim";
+import { deriveEconomyTypeLabel } from "./economy-type";
 import {
   generateFactions,
   assignSystemFactions,

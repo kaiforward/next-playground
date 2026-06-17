@@ -208,6 +208,8 @@ Crucially, **a resource-base entry is a *cap on a category*, not a pre-placed oc
 
 This creates a three-way pull on every body — **extract / manufacture / house more people** — and the emergent jewel: **over-industrialize a garden world and it can no longer feed its own population → decline → cascade.** Development competes with subsistence.
 
+**Population is capacity you raise, not units you place.** A body's baseline population cap is derived at generation from size × habitability (a garden world is a large cap; an asteroid belt ~0). The housing entry in the shared budget is a **coarse population centre** — building it raises the cap significantly and competes for the same space as extraction and manufacturing, so growing a megacity carries a real opportunity cost against industry. Population then *fills* the current cap organically, gated by being fed ([§7](#7-consequences--the-living-world)) — agents raise ceilings, the passive physics loop fills them. This keeps population mostly derived and low-detail while still letting two identical garden worlds diverge — farm-export world vs. dense population hub — based on what the owning faction builds and what its neighbours need. Because demand is multi-channel ([§5.1](#51-three-demand-channels)), **an industrial system is a faction decision answering construction + military demand, not a population by-product** — which is what lets a deliberately low-population forge world exist, spending its space on factories and importing its food.
+
 ### 8.4 Baseline vs development
 
 The **baseline NPC economy** comes from bodies × population auto-working their resource base, so **markets function with zero player facilities** (the hybrid principle from [production.md §1](./production.md)). Slots/buildings are the **development layer** (player + faction) that boosts or redirects output on top. "Everything derives from generation" and "markets work without players" both hold.
@@ -219,6 +221,8 @@ Exact slot counts, the NPC-baseline-vs-player split, and build UI are facilities
 ## 9. Economy type, dissolved
 
 Economy type stops being an assigned category that drives rate tables. Production comes from bodies; consumption from population. **"Economy type" becomes a derived descriptor** — we call a system "Extraction" because that's what its bodies and population happen to make — with **no mechanical role**. This retires `ECONOMY_PRODUCTION`, `ECONOMY_CONSUMPTION`, and `SELF_SUFFICIENCY` entirely (done in phases — stand up the physical drivers first, delete the tables once redundant).
+
+The label only becomes meaningfully *differentiated* once build-space ([§8.3](#83-shared-build-space-budget)) makes production profiles actually diverge. In the pre-facilities baseline (where production is labour-driven with no space competition) a populous world produces a little of everything, so the label is **loose flavour** until the development layer lands — see the coarse-baseline note in [economy-simulation-substrate.md §8.1](./economy-simulation-substrate.md).
 
 ---
 

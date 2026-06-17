@@ -12,7 +12,6 @@ import {
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { toGovernmentType } from "@/lib/types/guards";
-import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock } from "@/lib/constants/market-economy";
 import type { SimConstants } from "./constants";
@@ -75,8 +74,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       economyType: econ,
       regionId: `region-${s.regionIndex}`,
       governmentType: toGovernmentType(owningFaction.governmentType),
-      produces: ECONOMY_PRODUCTION[econ] ?? {},
-      consumes: ECONOMY_CONSUMPTION[econ] ?? {},
+      aggregate: s.aggregate,
+      population: s.population,
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
       bodyDanger: s.bodyDanger,
       prosperity: 0,
@@ -106,7 +105,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         systemId: sys.id,
         goodId: goodKey,
         basePrice,
-        stock: getInitialStock(sys.economyType, goodKey),
+        stock: getInitialStock(sys.aggregate, sys.population, goodKey),
         anchorMult: 1,
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,

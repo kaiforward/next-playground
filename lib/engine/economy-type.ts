@@ -1,13 +1,10 @@
 /**
- * Derived economy-type SHIM (economy-simulation SP1 Part 1).
+ * Economy-type classifier — maps a system's aggregate resource vector +
+ * population to one of the six `EconomyType` labels.
  *
- * Economy type used to be derived from trait affinities. Those are gone — the
- * economic signal now comes from a system's physical substrate. This single
- * function maps the aggregate resource vector + population to one of the six
- * legacy `EconomyType` labels, so `getInitialStock`, `ECONOMY_PRODUCTION/
- * CONSUMPTION`, the economy tick, and `Region.dominantEconomy` keep working
- * unchanged. DELETED in SP1 Part 2 when production/consumption derive from
- * bodies + population directly. Thresholds are tuned via the simulator.
+ * Display-only: it drives UI economy badges and `Region.dominantEconomy`.
+ * Nothing in the economy tick reads it — production and consumption derive
+ * from the physical substrate directly. Thresholds are tuned via the simulator.
  */
 import type { EconomyType, ResourceVector } from "@/lib/types/game";
 import { RESOURCE_TYPES } from "./resources";

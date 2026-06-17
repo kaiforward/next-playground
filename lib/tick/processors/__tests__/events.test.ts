@@ -14,6 +14,7 @@ import type {
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SystemShock } from "@/lib/tick/world/events-world";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { emptyResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -40,8 +41,8 @@ function makeSystem(id: string, regionId: string): SimSystem {
     economyType: "extraction",
     regionId,
     governmentType: "frontier",
-    produces: {},
-    consumes: {},
+    aggregate: emptyResourceVector(),
+    population: 0,
     traits: [],
     bodyDanger: 0,
     prosperity: 0,

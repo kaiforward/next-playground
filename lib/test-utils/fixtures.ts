@@ -7,7 +7,8 @@
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock } from "@/lib/constants/market-economy";
-import type { Doctrine, EconomyType, GovernmentType } from "@/lib/types/game";
+import { makeResourceVector, aggregateColumns } from "@/lib/engine/resources";
+import type { Doctrine, GovernmentType, ResourceVector } from "@/lib/types/game";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -128,6 +129,13 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     },
   });
 
+  // Representative substrates so the physical economy yields distinguishable
+  // producer/consumer geography: arable/water mid-pop breadbasket, ore/mineral
+  // populous forge, low-resource populous tech hub.
+  const agriSubstrate = { aggregate: makeResourceVector({ arable: 10, water: 6, biomass: 4 }), population: 400 };
+  const indSubstrate = { aggregate: makeResourceVector({ ore: 8, minerals: 8, gas: 3 }), population: 1500 };
+  const techSubstrate = { aggregate: makeResourceVector({ water: 4, biomass: 1 }), population: 1500 };
+
   // Systems first (faction homeworld FK requires them to exist), then factions,
   // then bind systems to their owning faction.
   const agriSystem = await prisma.starSystem.create({
@@ -137,6 +145,8 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       x: 10,
       y: 10,
       regionId: fedRegion.id,
+      population: agriSubstrate.population,
+      ...aggregateColumns(agriSubstrate.aggregate),
     },
   });
 
@@ -147,6 +157,8 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       x: 50,
       y: 10,
       regionId: corpRegion.id,
+      population: indSubstrate.population,
+      ...aggregateColumns(indSubstrate.aggregate),
     },
   });
 
@@ -157,6 +169,8 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       x: 90,
       y: 10,
       regionId: corpRegion.id,
+      population: techSubstrate.population,
+      ...aggregateColumns(techSubstrate.aggregate),
     },
   });
 
@@ -230,20 +244,20 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     goodIds[key] = good.id;
   }
 
-  // Markets — each station gets all 12 goods at its derived initial stock.
-  const stationSystems: { stationId: string; economyType: EconomyType }[] = [
-    { stationId: agriStation.id, economyType: "agricultural" },
-    { stationId: indStation.id, economyType: "industrial" },
-    { stationId: techStation.id, economyType: "tech" },
+  // Markets — each station gets all 12 goods seeded from its substrate net balance.
+  const stationSystems: { stationId: string; aggregate: ResourceVector; population: number }[] = [
+    { stationId: agriStation.id, ...agriSubstrate },
+    { stationId: indStation.id, ...indSubstrate },
+    { stationId: techStation.id, ...techSubstrate },
   ];
 
-  for (const { stationId, economyType } of stationSystems) {
+  for (const { stationId, aggregate, population } of stationSystems) {
     for (const key of Object.keys(GOODS)) {
       await prisma.stationMarket.create({
         data: {
           stationId,
           goodId: goodIds[key],
-          stock: getInitialStock(economyType, key),
+          stock: getInitialStock(aggregate, population, key),
         },
       });
     }

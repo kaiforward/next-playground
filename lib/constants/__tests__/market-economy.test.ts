@@ -7,6 +7,8 @@ import {
   getSpread,
 } from "../market-economy";
 import { GOVERNMENT_TYPES } from "../government";
+import { GOODS } from "../goods";
+import { makeResourceVector } from "@/lib/engine/resources";
 
 describe("stock bounds", () => {
   it("reuses the legacy supply band", () => {
@@ -35,27 +37,28 @@ describe("getTargetStock", () => {
 });
 
 describe("getInitialStock", () => {
-  it("seeds producers high (above target -> cheap)", () => {
-    // agricultural produces food (produces.supply 155)
-    expect(getInitialStock("agricultural", "food")).toBe(155);
-    expect(getInitialStock("agricultural", "food")).toBeGreaterThan(getTargetStock("food"));
+  it("seeds a net producer high (toward produces -> cheap)", () => {
+    // Water-rich, low-pop system: strong net water producer.
+    const seed = getInitialStock(makeResourceVector({ water: 12 }), 100, "water");
+    expect(seed).toBeGreaterThan(getTargetStock("water"));
+    expect(seed).toBeLessThanOrEqual(GOODS.water.equilibrium.produces);
   });
 
-  it("seeds consumers below producers, blended by self-sufficiency", () => {
-    // tech consumes food (self-sufficiency 0.15) -> blended between consumes.supply
-    // (110) and produces.supply (155), below the producer seed. The cheap/expensive
-    // spread vs the anchor is an emergent steady-state property (see simulator), not
-    // a seed-time guarantee now that the anchor sits at the equilibrium.
-    const consumerSeed = getInitialStock("tech", "food");
-    const producerSeed = getInitialStock("agricultural", "food");
+  it("seeds a net consumer low (toward consumes -> dear)", () => {
+    // Water-barren, populous system: pure net water consumer.
+    const consumerSeed = getInitialStock(makeResourceVector({ water: 0 }), 2000, "water");
+    const producerSeed = getInitialStock(makeResourceVector({ water: 12 }), 100, "water");
+    expect(consumerSeed).toBe(GOODS.water.equilibrium.consumes);
     expect(consumerSeed).toBeLessThan(producerSeed);
-    expect(consumerSeed).toBeGreaterThanOrEqual(110);
-    expect(consumerSeed).toBeLessThanOrEqual(155);
   });
 
-  it("seeds neutral goods at the target (-> price == base)", () => {
-    // a good the economy neither produces nor consumes resolves to targetStock
-    expect(getInitialStock("agricultural", "weapons")).toBe(getTargetStock("weapons"));
+  it("seeds at the target when the system has no production or consumption", () => {
+    // Zero population -> no rates on either axis -> the pricing anchor.
+    expect(getInitialStock(makeResourceVector({ water: 12 }), 0, "water")).toBe(getTargetStock("water"));
+  });
+
+  it("seeds an unknown good at its target", () => {
+    expect(getInitialStock(makeResourceVector({}), 1000, "not_a_good")).toBe(getTargetStock("not_a_good"));
   });
 });
 
