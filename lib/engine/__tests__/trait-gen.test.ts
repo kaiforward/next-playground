@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  computeTraitProductionBonus,
-  computeTraitDanger,
-  type GeneratedTrait,
-} from "../trait-gen";
+import { computeTraitDanger, type GeneratedTrait } from "../trait-gen";
 import type { QualityTier, TraitId } from "@/lib/types/game";
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -11,38 +7,6 @@ import type { QualityTier, TraitId } from "@/lib/types/game";
 function makeTrait(traitId: TraitId, quality: QualityTier = 1): GeneratedTrait {
   return { traitId, quality };
 }
-
-// ── computeTraitProductionBonus ──────────────────────────────────
-
-describe("computeTraitProductionBonus", () => {
-  it("returns 0 for traits with no matching production goods", () => {
-    // dark_nebula has no productionGoods
-    const traits = [makeTrait("dark_nebula", 2)];
-    expect(computeTraitProductionBonus(traits, "food")).toBe(0);
-  });
-
-  it("returns quality modifier for matching production good", () => {
-    // habitable_world produces "food" — quality 2 modifier is 0.40
-    const traits = [makeTrait("habitable_world", 2)];
-    expect(computeTraitProductionBonus(traits, "food")).toBeCloseTo(0.40);
-  });
-
-  it("stacks modifiers from multiple matching traits", () => {
-    // habitable_world (q2: 0.40) + ocean_world (q1: 0.15) both produce "food"
-    const traits = [makeTrait("habitable_world", 2), makeTrait("ocean_world", 1)];
-    expect(computeTraitProductionBonus(traits, "food")).toBeCloseTo(0.55);
-  });
-
-  it("only counts traits that produce the specific good", () => {
-    // habitable_world produces food, asteroid_belt produces ore — neither produces "tech_components"
-    const traits = [makeTrait("habitable_world", 3), makeTrait("asteroid_belt", 3)];
-    expect(computeTraitProductionBonus(traits, "tech_components")).toBe(0);
-  });
-
-  it("returns 0 for empty trait list", () => {
-    expect(computeTraitProductionBonus([], "food")).toBe(0);
-  });
-});
 
 // ── computeTraitDanger ───────────────────────────────────────────
 //

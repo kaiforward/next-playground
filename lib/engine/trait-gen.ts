@@ -1,9 +1,9 @@
 /**
- * Trait-derived production bonus and danger — pure functions, zero DB dependency.
+ * Trait-derived danger — a pure function, zero DB dependency.
  */
 
 import type { QualityTier, TraitId } from "@/lib/types/game";
-import { TRAITS, QUALITY_TIERS } from "@/lib/constants/traits";
+import { TRAITS } from "@/lib/constants/traits";
 import { getFeatureTraits } from "@/lib/utils/traits";
 
 // ── Output types ────────────────────────────────────────────────
@@ -11,26 +11,6 @@ import { getFeatureTraits } from "@/lib/utils/traits";
 export interface GeneratedTrait {
   traitId: TraitId;
   quality: QualityTier;
-}
-
-// ── Production bonus ────────────────────────────────────────────
-
-/**
- * Compute the production bonus from a system's traits for a specific good.
- * Returns a multiplier offset: effectiveRate = baseRate × (1 + bonus).
- */
-export function computeTraitProductionBonus(
-  traits: GeneratedTrait[],
-  goodId: string,
-): number {
-  let bonus = 0;
-  for (const { traitId, quality } of traits) {
-    const def = TRAITS[traitId];
-    if (def.productionGoods.includes(goodId)) {
-      bonus += QUALITY_TIERS[quality].modifier;
-    }
-  }
-  return bonus;
 }
 
 /**

@@ -12,7 +12,6 @@
 
 import { clamp } from "@/lib/utils/math";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
-import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
 
 export interface MarketTickEntry {
   goodId: string;
@@ -121,10 +120,10 @@ export interface TickEntryInput {
 }
 
 /**
- * Build a MarketTickEntry from pre-resolved inputs. Computes the trait
- * production bonus, folds the government consumption boost into the consumption
- * rate, and applies the prosperity multiplier equally to both rates. Callers
- * spread event productionMult/consumptionMult on top if present.
+ * Build a MarketTickEntry from pre-resolved inputs. Folds the government
+ * consumption boost into the consumption rate and applies the prosperity
+ * multiplier equally to both rates. Callers spread event
+ * productionMult/consumptionMult on top if present.
  */
 export function buildMarketTickEntry(
   input: TickEntryInput,
@@ -132,9 +131,8 @@ export function buildMarketTickEntry(
 ): MarketTickEntry {
   const prosperityMult = getProsperityMultiplier(input.prosperity, prosperityParams);
 
-  const traitBonus = computeTraitProductionBonus(input.traits, input.goodId);
   const productionBeforeProsperity =
-    input.baseProductionRate != null ? input.baseProductionRate * (1 + traitBonus) : undefined;
+    input.baseProductionRate != null ? input.baseProductionRate : undefined;
 
   const consumptionBeforeProsperity =
     input.baseConsumptionRate != null
