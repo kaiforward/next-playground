@@ -5,9 +5,12 @@ import {
   getTargetStock,
   getInitialStock,
   getSpread,
+  marketDemandRate,
+  MIN_DEMAND,
 } from "../market-economy";
 import { GOVERNMENT_TYPES } from "../government";
 import { GOODS } from "../goods";
+import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { makeResourceVector } from "@/lib/engine/resources";
 
 describe("stock bounds", () => {
@@ -55,6 +58,27 @@ describe("getInitialStock", () => {
 
   it("seeds an unknown good at its target", () => {
     expect(getInitialStock(makeResourceVector({}), 1000, "not_a_good")).toBe(getTargetStock("not_a_good"));
+  });
+});
+
+describe("marketDemandRate", () => {
+  it("returns per-capita-need × population for a populated system", () => {
+    const rate = marketDemandRate(makeResourceVector({}), 1000, "water");
+    expect(rate).toBeCloseTo(GOOD_CONSUMPTION.water * 1000);
+  });
+
+  it("scales linearly with population", () => {
+    const low = marketDemandRate(makeResourceVector({}), 500, "food");
+    const high = marketDemandRate(makeResourceVector({}), 1000, "food");
+    expect(high).toBeCloseTo(low * 2);
+  });
+
+  it("floors at MIN_DEMAND for a zero-population system", () => {
+    expect(marketDemandRate(makeResourceVector({}), 0, "luxuries")).toBe(MIN_DEMAND);
+  });
+
+  it("floors at MIN_DEMAND for an unknown good", () => {
+    expect(marketDemandRate(makeResourceVector({}), 1000, "not_a_good")).toBe(MIN_DEMAND);
   });
 });
 
