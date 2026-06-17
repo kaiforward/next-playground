@@ -4,7 +4,7 @@ import {
   computeMarketHealth,
 } from "../market-analysis";
 import type { SimWorld, SimMarketEntry } from "../types";
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { TARGET_COVER } from "@/lib/constants/market-economy";
 
 function market(
   systemId: string,
@@ -33,23 +33,23 @@ function world(markets: SimMarketEntry[]): SimWorld {
 
 describe("takeMarketSnapshot", () => {
   it("emits one snapshot per market with the spot price at its stock", () => {
-    const m = market("sys-1", "water", 200);
+    // demandRate 1, anchorMult 1 ⇒ reference stock = TARGET_COVER. Holding stock
+    // at the reference prices the good at base — concrete yet TARGET_COVER-agnostic.
+    const m = market("sys-1", "water", TARGET_COVER);
     const snaps = takeMarketSnapshot(world([m]));
 
     expect(snaps).toHaveLength(1);
     expect(snaps[0].systemId).toBe("sys-1");
     expect(snaps[0].goodId).toBe("water");
-    expect(snaps[0].stock).toBe(200);
-    expect(snaps[0].price).toBe(
-      spotPrice(curveForGood(100, 0.2, 5.0, 1), 200),
-    );
+    expect(snaps[0].stock).toBe(TARGET_COVER);
+    expect(snaps[0].price).toBe(100); // stock == reference ⇒ spot price == basePrice
   });
 });
 
 describe("computeMarketHealth — stock drift", () => {
   it("averages drift per good, signs it vs the per-system reference, and sorts by |drift|", () => {
-    // The market() fixture uses basePrice 100, demandRate 1, anchorMult 1, so
-    // every market's reference is curveForGood(100, 0.2, 5.0, 1).targetStock.
+    // The market() fixture uses demandRate 1 and anchorMult 1, so every market's
+    // reference is exactly TARGET_COVER (= TARGET_COVER × demandRate × anchorMult).
     // water: stocks 200 & 140 → both above the reference → avg drift positive.
     // luxuries: stock 20 → below the reference → drift negative.
     const { stockDrift } = computeMarketHealth(
@@ -60,9 +60,8 @@ describe("computeMarketHealth — stock drift", () => {
       ]),
     );
 
-    const reference = curveForGood(100, 0.2, 5.0, 1).targetStock;
-    const expectedWater = (200 + 140) / 2 - reference;
-    const expectedLux = 20 - reference;
+    const expectedWater = (200 + 140) / 2 - TARGET_COVER;
+    const expectedLux = 20 - TARGET_COVER;
 
     // |water drift| > |luxuries drift| → water sorts first.
     expect(stockDrift[0].goodId).toBe("water");
@@ -72,6 +71,18 @@ describe("computeMarketHealth — stock drift", () => {
     const lux = stockDrift.find((d) => d.goodId === "luxuries");
     expect(lux?.avgStockDrift).toBeCloseTo(expectedLux, 5);
     expect(lux?.avgStockDrift).toBeLessThan(0); // below reference
+  });
+
+  it("scales the per-market reference by anchorMult", () => {
+    // anchorMult shifts the reference (TARGET_COVER × demandRate × anchorMult). A
+    // stock just above the anchorMult-1 reference reads below it once doubled.
+    const stock = TARGET_COVER + 10;
+    const { stockDrift: base } = computeMarketHealth(world([market("sys-1", "water", stock)]));
+    const { stockDrift: shifted } = computeMarketHealth(
+      world([{ ...market("sys-1", "water", stock), anchorMult: 2 }]),
+    );
+    expect(base[0].avgStockDrift).toBeGreaterThan(0); // above reference TARGET_COVER
+    expect(shifted[0].avgStockDrift).toBeLessThan(0); // below reference 2 × TARGET_COVER
   });
 });
 

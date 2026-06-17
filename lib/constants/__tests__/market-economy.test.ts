@@ -69,6 +69,13 @@ describe("getInitialStock", () => {
     expect(seed).toBeGreaterThanOrEqual(STOCK_MIN);
     expect(seed).toBeLessThanOrEqual(STOCK_MAX);
   });
+
+  it("seeds an unknown (inert) good at the stock floor", () => {
+    // No production or consumption → the total===0 producerShare fallback (0.5),
+    // and demandRate floors at MIN_DEMAND, so the reference (TARGET_COVER × 0.05)
+    // sits below STOCK_MIN and the seed clamps up to the floor.
+    expect(getInitialStock(makeResourceVector({}), 1000, "not_a_good")).toBe(STOCK_MIN);
+  });
 });
 
 describe("getSpread", () => {

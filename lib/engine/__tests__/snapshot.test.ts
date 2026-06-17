@@ -20,7 +20,7 @@ describe("buildPriceEntry", () => {
   ];
 
   // Mirror buildPriceEntry's own curve so the expectations track TARGET_COVER
-  // through Part 3b recalibration instead of baking in a numeric price.
+  // through any recalibration instead of baking in a numeric price.
   const priceFor = (basePrice: number, stock: number, demandRate: number) =>
     spotPrice(curveForGood(basePrice, 0.2, 5.0, demandRate), stock);
 

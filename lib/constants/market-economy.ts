@@ -18,20 +18,20 @@ export const DEFAULT_SPREAD = 0.05;
  * Days of cover (stock ÷ local demand rate) at which a good's mid price equals
  * its basePrice. The single global reference that replaces the per-good anchor
  * table — per-good market depth now emerges from per-good demand rates.
- * First-draft; Part 3b calibrates this via `npm run simulate`.
+ * First-draft value; tuned via `npm run simulate`.
  */
 export const TARGET_COVER = 50;
 
 /**
  * Floor on the days-of-supply denominator so a near-empty system yields a finite
- * cover instead of a divide-by-zero / zero reference. First-draft; calibrated in 3b.
+ * cover instead of a divide-by-zero / zero reference. First-draft value; tuned via `npm run simulate`.
  */
 export const MIN_DEMAND = 0.05;
 
 /**
  * Seed-cover multipliers on the per-system reference: a pure consumer seeds at
  * SEED_COVER_MIN (shallow cover → dear), a pure producer at SEED_COVER_MAX (deep
- * cover → cheap), blended by producer share. First-draft; calibrated in 3b.
+ * cover → cheap), blended by producer share. First-draft values; tuned via `npm run simulate`.
  */
 export const SEED_COVER_MIN = 0.5;
 export const SEED_COVER_MAX = 1.5;
@@ -68,8 +68,9 @@ export function getInitialStock(
   population: number,
   goodId: string,
 ): number {
-  const reference = TARGET_COVER * marketDemandRate(aggregate, population, goodId);
   const { production, consumption } = physicalRates(goodId, aggregate, population);
+  // reference = TARGET_COVER × demandRate; demandRate is floored consumption (see marketDemandRate).
+  const reference = TARGET_COVER * Math.max(consumption, MIN_DEMAND);
   const total = production + consumption;
 
   const producerShare = total > 0 ? production / total : 0.5; // 1 producer, 0 consumer

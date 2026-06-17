@@ -124,6 +124,13 @@ describe("trade mission lifecycle (integration)", () => {
       });
       expect(playerBefore).not.toBeNull();
       const stationId = universe.stations.agricultural;
+      // Exercise the active-event anchor multiplier end-to-end: a non-unity
+      // anchorMult must flow through both the expected-price preview below and
+      // deliverMission's own re-priced payout, and the two must agree.
+      await prisma.stationMarket.update({
+        where: { stationId_goodId: { stationId, goodId: universe.goodIds["food"] } },
+        data: { anchorMult: 2 },
+      });
       const marketBefore = await prisma.stationMarket.findUnique({
         where: {
           stationId_goodId: { stationId, goodId: universe.goodIds["food"] },
@@ -131,6 +138,7 @@ describe("trade mission lifecycle (integration)", () => {
         include: { good: true },
       });
       expect(marketBefore).not.toBeNull();
+      expect(marketBefore!.anchorMult).toBe(2);
 
       const expectedUnitPrice = spotPrice(
         curveForGood(

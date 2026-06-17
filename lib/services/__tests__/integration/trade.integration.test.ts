@@ -16,9 +16,10 @@ async function expectedQuote(
   quantity: number,
   type: "buy" | "sell",
   demandRate: number,
+  anchorMult: number = 1,
 ) {
   const good = await prisma.good.findUniqueOrThrow({ where: { id: goodId } });
-  const curve = curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, demandRate);
+  const curve = curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, demandRate, anchorMult);
   const spread = getSpread(GOVERNMENT_TYPES.federation);
   return quoteTrade(curve, stock, quantity, type, spread);
 }
@@ -55,7 +56,7 @@ describe("executeTrade (integration)", () => {
     expect(marketBefore).not.toBeNull();
 
     // Pre-compute the exact total the service should charge for this buy.
-    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "buy", marketBefore!.demandRate);
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "buy", marketBefore!.demandRate, marketBefore!.anchorMult);
 
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
@@ -107,7 +108,7 @@ describe("executeTrade (integration)", () => {
     });
 
     // Pre-compute the exact proceeds the service should pay for this sell.
-    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "sell", marketBefore!.demandRate);
+    const quote = await expectedQuote(foodGoodId, marketBefore!.stock, 5, "sell", marketBefore!.demandRate, marketBefore!.anchorMult);
 
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
