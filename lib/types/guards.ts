@@ -61,30 +61,21 @@ const REPUTATION_STANDINGS: ReadonlySet<string> = new Set<ReputationStanding>([
 const QUALITY_TIERS: ReadonlySet<number> = new Set<QualityTier>([1, 2, 3]);
 
 const TRAIT_IDS: ReadonlySet<string> = new Set<TraitId>([
-  // Planetary Bodies
-  "habitable_world", "ocean_world", "volcanic_world", "frozen_world",
-  "tidally_locked_world", "desert_world", "jungle_world",
-  "geothermal_vents", "hydrocarbon_seas", "fertile_lowlands",
-  "coral_archipelago", "tectonic_forge",
-  // Orbital Features
-  "asteroid_belt", "gas_giant", "mineral_rich_moons", "ring_system",
-  "binary_star", "lagrange_stations", "captured_rogue_body",
-  "deep_space_beacon",
-  // Resource Deposits
-  "rare_earth_deposits", "heavy_metal_veins", "organic_compounds",
-  "crystalline_formations", "helium3_reserves", "exotic_matter_traces",
-  "radioactive_deposits", "superdense_core", "glacial_aquifer",
+  // Planetary
+  "tidally_locked_world", "geothermal_vents",
+  // Orbital
+  "binary_star", "lagrange_stations", "captured_rogue_body", "deep_space_beacon",
+  // Resource
+  "crystalline_formations", "exotic_matter_traces",
   // Phenomena & Anomalies
   "nebula_proximity", "solar_flare_activity", "gravitational_anomaly",
   "dark_nebula", "precursor_ruins", "subspace_rift", "pulsar_proximity",
-  "ion_storm_corridor", "bioluminescent_ecosystem",
-  "signal_anomaly", "xenobiology_preserve", "ancient_minefield",
-  "pirate_stronghold",
+  "ion_storm_corridor", "bioluminescent_ecosystem", "signal_anomaly",
+  "xenobiology_preserve", "ancient_minefield", "pirate_stronghold",
   // Infrastructure & Legacy
   "ancient_trade_route", "generation_ship_wreckage", "orbital_ring_remnant",
   "seed_vault", "colonial_capital", "free_port_declaration",
-  "shipbreaking_yards", "derelict_fleet", "abandoned_station",
-  "smuggler_haven",
+  "shipbreaking_yards", "derelict_fleet", "abandoned_station", "smuggler_haven",
 ]);
 
 const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([

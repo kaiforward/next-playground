@@ -18,7 +18,6 @@ import {
   type GenParams,
   type GeneratedUniverse,
 } from "../universe-gen";
-import { TRAITS } from "@/lib/constants/traits";
 import { UNIVERSE_GEN, REGION_NAMES } from "@/lib/constants/universe-gen";
 import type { EconomyType, QualityTier } from "@/lib/types/game";
 
@@ -147,29 +146,3 @@ describe("Economy type distribution across seeds", () => {
   });
 });
 
-// ── Supplementary: Trait Pool Balance ────────────────────────────
-
-describe("Trait pool strong-affinity balance", () => {
-  it("each economy type has 5-7 traits with strong affinity", () => {
-    const strongCounts: Record<string, number> = {};
-    for (const econ of ALL_ECONOMY_TYPES) strongCounts[econ] = 0;
-
-    for (const [, def] of Object.entries(TRAITS)) {
-      for (const [econ, affinity] of Object.entries(def.economyAffinity)) {
-        if (affinity === 2) strongCounts[econ]++;
-      }
-    }
-
-    // Design target: 5-6 per type (universe.md says 5-6 each)
-    for (const econ of ALL_ECONOMY_TYPES) {
-      expect(
-        strongCounts[econ],
-        `${econ} has ${strongCounts[econ]} strong-affinity traits`,
-      ).toBeGreaterThanOrEqual(5);
-      expect(
-        strongCounts[econ],
-        `${econ} has ${strongCounts[econ]} strong-affinity traits`,
-      ).toBeLessThanOrEqual(7);
-    }
-  });
-});

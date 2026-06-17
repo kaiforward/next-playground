@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { deriveSystemLocations, LOCATIONS } from "../locations";
-import { enrichTraits, isFeatureTrait } from "@/lib/utils/traits";
+import { enrichTraits } from "@/lib/utils/traits";
 import { TRAITS, ALL_TRAIT_IDS } from "@/lib/constants/traits";
 import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
 import { makeResourceVector } from "@/lib/engine/resources";
@@ -199,7 +199,7 @@ describe("LOCATIONS catalog coverage", () => {
   });
 
   it("every feature trait maps to exactly one valid system location (no orphans)", () => {
-    const featureIds = ALL_TRAIT_IDS.filter((id) => isFeatureTrait(id));
+    const featureIds = ALL_TRAIT_IDS;
     expect(featureIds.length).toBe(31);
     for (const id of featureIds) {
       const result = deriveSystemLocations([], makeFeatures([[id, 1]]));

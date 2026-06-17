@@ -5,12 +5,11 @@
  * and narrative features. Replaces the old trait-rolling path.
  */
 import type {
-  BodyArchetypeId, ResourceVector, RichnessModifierId, SunClass, TraitId,
+  BodyArchetypeId, ResourceVector, RichnessModifierId, SunClass,
 } from "@/lib/types/game";
 import { BODY_ARCHETYPES, SUN_CLASSES, RICHNESS_MODIFIERS, type SunClassDef } from "@/lib/constants/bodies";
 import { makeResourceVector, sumResourceVectors, RESOURCE_TYPES } from "./resources";
 import { ALL_TRAIT_IDS, QUALITY_TIERS } from "@/lib/constants/traits";
-import { TRAIT_MIGRATION } from "@/lib/constants/trait-migration";
 import { toQualityTier } from "@/lib/types/guards";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import type { GeneratedTrait } from "./trait-gen";
@@ -36,10 +35,6 @@ export interface GeneratedSubstrate {
   bodyDanger: number;
   features: GeneratedTrait[];
 }
-
-/** The 31 narrative feature trait ids — the survivors of the substrate rebuild. */
-export const FEATURE_TRAIT_IDS: readonly TraitId[] =
-  ALL_TRAIT_IDS.filter((id) => TRAIT_MIGRATION[id].kind === "feature");
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -123,7 +118,7 @@ function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
 
 function rollFeatures(rng: RNG): GeneratedTrait[] {
   const count = randInt(rng, SUBSTRATE_GEN.FEATURE_COUNT.min, SUBSTRATE_GEN.FEATURE_COUNT.max);
-  const pool = [...FEATURE_TRAIT_IDS];
+  const pool = [...ALL_TRAIT_IDS];
   const features: GeneratedTrait[] = [];
   for (let i = 0; i < count && pool.length > 0; i++) {
     const idx = Math.floor(rng() * pool.length);

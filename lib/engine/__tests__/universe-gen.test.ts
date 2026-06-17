@@ -20,7 +20,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { RESOURCE_TYPES } from "@/lib/engine/resources";
-import { isFeatureTrait } from "@/lib/utils/traits";
+import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -289,7 +289,7 @@ describe("generateSystems", () => {
     for (const sys of systems) {
       expect(sys.traits.length).toBeGreaterThanOrEqual(0);
       expect(sys.traits.length).toBeLessThanOrEqual(2);
-      for (const t of sys.traits) expect(isFeatureTrait(t.traitId)).toBe(true);
+      for (const t of sys.traits) expect(ALL_TRAIT_IDS).toContain(t.traitId);
     }
   });
 
