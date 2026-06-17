@@ -1,6 +1,6 @@
 # Economy Simulation — Sub-Project 1: Physical Substrate & Population
 
-Status: **SP1 Part 1 shipped**; Parts 2–3 are forward design — created 2026-05-31. The built physical-substrate model (bodies, richness, features, derived economy type) is documented in [system-traits.md](../active/gameplay/system-traits.md) (active); this spec retains the full design rationale and the Part 2–3 plan. It is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13), decomposing SP1 into shippable parts; the build plans (`docs/plans/…`) and implementation hang off it.
+Status: **SP1 Part 1 shipped**; **Part 2 design locked** (§8.1, 2026-06-17); Part 3 a forward sketch — created 2026-05-31. The built physical-substrate model (bodies, richness, features, derived economy type) is documented in [system-traits.md](../active/gameplay/system-traits.md) (active); this spec retains the full design rationale and the Part 2–3 plan. It is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13), decomposing SP1 into shippable parts; the build plans (`docs/plans/…`) and implementation hang off it.
 
 Read the [vision](./economy-simulation-vision.md) first — this spec assumes its model (physical substrate, population keystone, days-of-supply pricing, dissolved economy type) and does not re-argue it.
 
@@ -40,7 +40,7 @@ SP1 is large. It ships as three independently-shippable parts, bottom-up. Each p
 | Part | Scope | Ships when |
 |---|---|---|
 | **Part 1 — Physical hierarchy + generation + reseed** (this spec, §3–§7) | New `SystemBody` schema, sun-gated archetype generation, resource bases, abstract `population` derived + partial/varied seeding, narrative survivors → features, **consumers detached**. The economy keeps running unchanged via a **derived economy-type shim** (a one-function transition, not a migration). | The generation/schema rework is verified **in isolation** before the economy engine is touched. |
-| **Part 2 — Economy onto the substrate** (sketch §8.1) | Production = resource base × labour(population); consumption = population × per-capita need. Economy type demoted to a pure derived label. `ECONOMY_PRODUCTION` / `ECONOMY_CONSUMPTION` / `SELF_SUFFICIENCY` deleted. Pricing still anchor-based. | The physical drivers replace the rate tables. |
+| **Part 2 — Economy onto the substrate** (design locked §8.1) | Production = resource base × labour(population); consumption = population × per-capita need. Economy type demoted to a pure derived label. `ECONOMY_PRODUCTION` / `ECONOMY_CONSUMPTION` / `SELF_SUFFICIENCY` deleted. Pricing still anchor-based. | The physical drivers replace the rate tables. |
 | **Part 3 — Emergent pricing** (sketch §8.2) | Days-of-supply pricing replaces the anchor curve. `CALIBRATED_TARGET_STOCK` + the `equilibrium` seed pair deleted. The slippage + bid-ask spread anti-exploit guard carries over. | The anchor magic-constant is gone; price is a readout of physical state. |
 
 **Why Part 1 lands alone.** A full reseed plus a rebuilt generator (universe-gen, trait-gen, seed, schema, map trait rendering) is a wide, high-surface change. Landing it behind the shim — with the economy engine *untouched* — means we can validate "the new universe generates coherent, populated, resource-bearing systems and the game still plays identically" before we change a single line of the economy tick. The shim is one derivation function (bodies → economy-type label), deleted in Part 2.
@@ -172,14 +172,70 @@ This keeps `ECONOMY_PRODUCTION` / `ECONOMY_CONSUMPTION` / `SELF_SUFFICIENCY` and
 
 ---
 
-## 8. Parts 2 & 3 — sketches (detailed later)
+## 8. Parts 2 & 3 — Part 2 locked, Part 3 a sketch
 
-### 8.1 Part 2 — Economy onto the substrate
-- **Production** of a tier-0 good at a system = `f(aggregate resource magnitude, labour=population)` — gated by the resource cap and available labour. The economy `World`/adapters read the denormalized aggregates + population instead of economy-type rate tables.
-- **Consumption** (civilian) = `population × per-capita need`.
-- Delete `ECONOMY_PRODUCTION`, `ECONOMY_CONSUMPTION`, `SELF_SUFFICIENCY`, and the shim (§7). Economy type → display-only label.
-- Pricing **still anchor-based** through this part.
-- Open: the resource→good mapping for tier 1+ (current 12-good roster vs the planned 26-good roster — [production-roster.md](./production-roster.md)) is a Part 2 decision; Part 1 only establishes the seven tier-0 resource caps.
+Part 2's design is locked below (§8.1) — created 2026-06-17, after Part 1 shipped. Part 3 (§8.2) remains a forward sketch. The code-heavy build plan (files, interfaces, PR phasing, tests) for Part 2 lives transiently in `docs/plans/` and is deleted when Part 2 ships; §8.1 is the durable functional design.
+
+### 8.1 Part 2 — Economy onto the substrate (locked design)
+
+**Goal.** Rewire the economy tick so production and consumption derive from a system's physical substrate (the denormalized `agg*` resource vector + `population` on `StarSystem`) instead of economy-type rate tables. Economy type becomes a display-only descriptor. Pricing stays anchor-based (Part 3 makes it emergent). Population stays static — the consequence loop (unrest / growth / migration) is SP2, not here.
+
+#### 8.1.1 Locked decisions (2026-06-17)
+
+| Fork | Decision | Rationale |
+|---|---|---|
+| **Goods roster** | **Keep the 12-good roster** | The 26-good roster ([production-roster.md](./production-roster.md)) belongs to the facilities / supply-chain sub-project (SP3). Expanding now adds new goods, markets, UI, and balance surface — premature facilities work — *without* saving the tier-1+ rework, which SP3 forces regardless. Consequence: the four resources with no tier-0 good (gas, minerals, biomass, radioactive) stay economically inert until SP3. |
+| **Tier-1/2 production driver** | **Labour-only** (population); no resource gate | Matches vision §8.2 (tier-1+ is space/labour-bound, not deposit-bound). Least throwaway: SP3 multiplies a local-input-availability term onto the *same* labour term. Flatter intra-tier geography in the interim is acceptable — real balancing waits for SP3. |
+| **Economy type** | **Display-only label**, derived at generation | Still drives UI badges + `Region.dominantEconomy`. The classifier (today's shim, §7) survives, renamed out of "shim" framing; nothing in the tick reads it. |
+
+#### 8.1.2 The physical-driver model
+
+**Production** — one descriptor per good, `{ coeff, resource? }`:
+```
+prodRate(good, sys) = coeff(good) × labourFactor(population)
+                      × (resource-driven ? aggregate[resource(good)] : 1)
+```
+- Tier-0 (resource-driven): `water ← water`, `ore ← ore`, `food ← arable`, `textiles ← arable` (arable splits between the two via differing coeffs). Scales with both deposit magnitude *and* labour.
+- Tier-1/2 (labour-only): `coeff × labourFactor(population)`, no resource term. Higher tiers carry smaller coeffs (luxuries rarest).
+- `labourFactor(population)` is a normalized, soft-saturating scalar — a fixed per-system value since population is static. Its shape and all coeffs are simulator-tuned.
+
+**Consumption** — universal, population-scaled:
+```
+consRate(good, sys) = perCapitaNeed(good) × population
+```
+Every system consumes every good; higher tier → lower per-capita need. Self-sufficiency disappears (a producer simply runs a positive net balance — no seed blend). The government `consumptionBoost` and the prosperity multiplier still layer on top exactly as today.
+
+**Emergent geography:** raw goods flow resource-rich frontier → core; manufactured goods flow populous core → frontier.
+
+#### 8.1.3 What this replaces / deletes
+
+- `ECONOMY_PRODUCTION`, `ECONOMY_CONSUMPTION` (`universe.ts`) → two substrate-driven tables: a `GOOD_PRODUCTION` driver map (good → coeff + optional resource) and `GOOD_CONSUMPTION` per-capita needs.
+- `SELF_SUFFICIENCY` + `getConsumeEquilibrium` (`economy.ts`) → gone; seeding derives from the new net balance.
+- The economy-type **shim** (§7) loses its economic role; the classifier survives for display only.
+- `MarketTickEntry` sheds `economyType` / `produces` / `consumes`; `simulateEconomyTick` gates on `rate > 0` directly. A pure `physicalRates(goodId, aggregate, population)` engine fn becomes the single source of the formula, shared by the live processor and the simulator.
+
+#### 8.1.4 Pricing & seeding (anchor stays)
+
+`getTargetStock` / `CALIBRATED_TARGET_STOCK` carry over structurally; the per-good equilibria shift under the new drivers, so the calibrated values are **re-measured via the simulator**. `getInitialStock` is rewritten to seed each market from the sign + magnitude of its new net balance (net producer → high/cheap, net consumer → low/dear). The anchor mechanism itself is deleted in Part 3.
+
+#### 8.1.5 UI — surface the real values
+
+Deleting the rate tables breaks the system Overview's **Produces / Consumes** lists (they read the constant tables today). They are rewired to show the **real per-system** production/consumption computed from that system's substrate, served by extending the Part 1 per-system substrate read service — which keeps the lean map-wide universe payload untouched. The faked population label (derived from economy type + trait count) is replaced with the real `population` magnitude. The economy-type badge is unaffected (the label survives). A polish pass adds net import/export indicators and per-good bars on the Astrography substrate tab.
+
+#### 8.1.6 Calibration
+
+`npm run simulate` validates a stable-but-trading economy within the `[5, 200]` stock band, re-measures the anchors, and tunes the production/consumption coefficients to sane prices. **Coarse calibration only** — fine balance is SP3's job.
+
+#### 8.1.7 Shipping shape (~4 phase PRs, squashed into the shared branch)
+
+1. **2a — Engine + constants + substrate-service compute:** new tables, pure `physicalRates`, `MarketTickEntry` simplification, and the substrate read service extended to return per-good production/consumption. No live behaviour change yet (old tables still drive the tick). Fully unit-tested.
+2. **2b — Cutover + UI swap + deletes:** wire the live + sim adapters to the new drivers; swap the Overview lists to the substrate-service values and fix the population stat; delete the three tables + shim role; rewrite `getInitialStock`. Engine and UI flip together — no broken intermediate.
+3. **2c — Calibrate + docs:** simulator pass, recalibrate anchors/coeffs, update `economy.md` + `system-traits.md` + `SPEC.md`, mark Part 2 done.
+4. **2d — Display polish:** net import/export indicators, per-good production/consumption bars on the Astrography substrate tab, population magnitude readout.
+
+#### 8.1.8 Out of scope (Part 2)
+
+Days-of-supply pricing (Part 3); population dynamics / unrest / migration (SP2); supply-chain input-gating, the 26-good roster, and facilities (SP3); event physical-perturbation redesign (SP4).
 
 ### 8.2 Part 3 — Emergent pricing
 - Replace the anchor curve with **days-of-supply**: `cover = stock / local_demand_rate`; `price ↑ as cover ↓` (vision §6). `local_demand_rate` is available because Part 2 made consumption population-scaled.
