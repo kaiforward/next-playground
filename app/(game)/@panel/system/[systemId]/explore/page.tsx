@@ -3,6 +3,7 @@
 import { use, useMemo } from "react";
 import Link from "next/link";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
+import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { enrichTraits } from "@/lib/utils/traits";
 import {
   deriveSystemLocations,
@@ -81,13 +82,13 @@ function LocationCard({
 
 function ExploreContent({ systemId }: { systemId: string }) {
   const { systemInfo } = useSystemInfo(systemId);
+  const substrate = useSystemSubstrate(systemId);
 
   const locations = useMemo(() => {
-    const traits = systemInfo?.traits
-      ? enrichTraits(systemInfo.traits)
-      : [];
-    return deriveSystemLocations(traits);
-  }, [systemInfo?.traits]);
+    const bodies = substrate.visibility === "visible" ? substrate.bodies : [];
+    const features = systemInfo?.traits ? enrichTraits(systemInfo.traits) : [];
+    return deriveSystemLocations(bodies, features);
+  }, [substrate, systemInfo?.traits]);
 
   const stationLocations = useMemo(
     () => locations.filter((l) => l.category === "station"),

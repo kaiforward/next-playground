@@ -1,13 +1,43 @@
 import { describe, it, expect } from "vitest";
 import { deriveSystemLocations, LOCATIONS } from "../locations";
-import { enrichTraits } from "@/lib/utils/traits";
+import { enrichTraits, isFeatureTrait } from "@/lib/utils/traits";
 import { TRAITS, ALL_TRAIT_IDS } from "@/lib/constants/traits";
-import type { SystemTraitInfo, TraitId, QualityTier } from "@/lib/types/game";
+import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
+import { makeResourceVector } from "@/lib/engine/resources";
+import type {
+  SystemTraitInfo,
+  TraitId,
+  QualityTier,
+  BodyArchetypeId,
+  RichnessModifierId,
+} from "@/lib/types/game";
+import type { BodyView } from "@/lib/types/api";
 
-/** Helper: build a SystemTraitInfo from ID + quality and enrich it. */
-function makeTraits(
-  pairs: Array<[TraitId, QualityTier]>,
-) {
+/** Build a BodyView from an archetype + optional richness modifiers. */
+function makeBody(
+  bodyType: BodyArchetypeId,
+  richness: RichnessModifierId[] = [],
+): BodyView {
+  const arch = BODY_ARCHETYPES[bodyType];
+  return {
+    id: `body-${bodyType}`,
+    bodyType,
+    archetypeName: arch.name,
+    habitable: arch.habitable,
+    size: 1,
+    popCapWeight: arch.popCapWeight,
+    resources: makeResourceVector({}),
+    richness: richness.map((id) => ({
+      id,
+      name: RICHNESS_MODIFIERS[id].name,
+      resource: RICHNESS_MODIFIERS[id].resource,
+      multiplier: RICHNESS_MODIFIERS[id].multiplier,
+    })),
+  };
+}
+
+/** Build enriched feature traits from ID + quality pairs. */
+function makeFeatures(pairs: Array<[TraitId, QualityTier]>) {
   const raw: SystemTraitInfo[] = pairs.map(([traitId, quality]) => ({
     traitId,
     quality,
@@ -16,9 +46,8 @@ function makeTraits(
 }
 
 describe("deriveSystemLocations", () => {
-  it("always includes station locations even with no traits", () => {
-    const result = deriveSystemLocations([]);
-
+  it("always includes the 4 station locations with no bodies or features", () => {
+    const result = deriveSystemLocations([], []);
     const stationIds = result
       .filter((l) => l.category === "station")
       .map((l) => l.id);
@@ -31,8 +60,7 @@ describe("deriveSystemLocations", () => {
   });
 
   it("station locations have null quality/trait fields", () => {
-    const result = deriveSystemLocations([]);
-
+    const result = deriveSystemLocations([], []);
     for (const loc of result.filter((l) => l.category === "station")) {
       expect(loc.quality).toBeNull();
       expect(loc.qualityLabel).toBeNull();
@@ -41,139 +69,143 @@ describe("deriveSystemLocations", () => {
     }
   });
 
-  it("returns system locations matching traits", () => {
-    const traits = makeTraits([["asteroid_belt", 2]]);
-    const result = deriveSystemLocations(traits);
-
+  it("a body archetype yields its mapped site with no quality tier", () => {
+    const result = deriveSystemLocations([makeBody("asteroid_belt")], []);
     const systemLocs = result.filter((l) => l.category === "system");
+
     expect(systemLocs).toHaveLength(1);
     expect(systemLocs[0].id).toBe("asteroid_field");
-    expect(systemLocs[0].quality).toBe(2);
-    expect(systemLocs[0].matchedTraitId).toBe("asteroid_belt");
+    expect(systemLocs[0].quality).toBeNull();
+    expect(systemLocs[0].matchedTraitId).toBeNull();
   });
 
-  it("deduplicates: multiple traits mapping to same location keep highest quality", () => {
-    // habitable_world and desert_world both map to planet_surface
-    const traits = makeTraits([
-      ["habitable_world", 1],
-      ["desert_world", 3],
-    ]);
-    const result = deriveSystemLocations(traits);
-
-    const planetSurface = result.find((l) => l.id === "planet_surface");
-    expect(planetSurface).toBeDefined();
-    expect(planetSurface!.quality).toBe(3);
-    expect(planetSurface!.matchedTraitId).toBe("desert_world");
+  it("habitable and non-habitable worlds both yield planet_surface", () => {
+    expect(
+      deriveSystemLocations([makeBody("garden_world")], []).some(
+        (l) => l.id === "planet_surface",
+      ),
+    ).toBe(true);
+    expect(
+      deriveSystemLocations([makeBody("volcanic_world")], []).some(
+        (l) => l.id === "planet_surface",
+      ),
+    ).toBe(true);
   });
 
-  it("deduplicates: when qualities are equal, first trait wins", () => {
-    const traits = makeTraits([
-      ["habitable_world", 2],
-      ["desert_world", 2],
-    ]);
-    const result = deriveSystemLocations(traits);
-
-    const planetSurface = result.find((l) => l.id === "planet_surface");
-    expect(planetSurface).toBeDefined();
-    expect(planetSurface!.quality).toBe(2);
-    // First trait in the array wins when quality is equal (not strictly replaced)
-    expect(planetSurface!.matchedTraitId).toBe("habitable_world");
+  it("a gas giant yields a gas harvesting platform", () => {
+    const result = deriveSystemLocations([makeBody("gas_giant")], []);
+    expect(result.some((l) => l.id === "gas_harvesting_platform")).toBe(true);
   });
 
-  it("produces multiple system locations for diverse trait sets", () => {
-    const traits = makeTraits([
-      ["asteroid_belt", 2],
-      ["precursor_ruins", 3],
-      ["smuggler_haven", 1],
-    ]);
-    const result = deriveSystemLocations(traits);
-
-    const systemIds = result
-      .filter((l) => l.category === "system")
-      .map((l) => l.id);
-
-    expect(systemIds).toContain("asteroid_field");
-    expect(systemIds).toContain("ruins_expedition");
-    expect(systemIds).toContain("smuggler_den");
-    expect(systemIds).toHaveLength(3);
-  });
-
-  it("uses the enriched trait description for traitDescription", () => {
-    const traits = makeTraits([["gas_giant", 3]]);
-    const result = deriveSystemLocations(traits);
-
-    const gasLoc = result.find((l) => l.id === "gas_harvesting_platform");
-    expect(gasLoc).toBeDefined();
-    expect(gasLoc!.traitDescription).toBe(
-      TRAITS.gas_giant.descriptions[3],
+  it("a body richness modifier yields a mining outpost alongside the archetype site", () => {
+    const result = deriveSystemLocations(
+      [makeBody("asteroid_belt", ["heavy_metals"])],
+      [],
     );
+    const ids = result.map((l) => l.id);
+    expect(ids).toContain("mining_outpost");
+    expect(ids).toContain("asteroid_field");
   });
 
-  it("includes quality label from trait tier", () => {
-    const traits = makeTraits([["rare_earth_deposits", 1]]);
-    const result = deriveSystemLocations(traits);
+  it("a feature yields its mapped site carrying the feature's quality", () => {
+    const result = deriveSystemLocations([], makeFeatures([["precursor_ruins", 3]]));
+    const ruins = result.find((l) => l.id === "ruins_expedition");
 
-    const mining = result.find((l) => l.id === "mining_outpost");
-    expect(mining).toBeDefined();
-    expect(mining!.qualityLabel).toBe("Marginal");
+    expect(ruins).toBeDefined();
+    expect(ruins!.quality).toBe(3);
+    expect(ruins!.matchedTraitId).toBe("precursor_ruins");
+    expect(ruins!.traitDescription).toBe(TRAITS.precursor_ruins.descriptions[3]);
+  });
+
+  it("dedup: highest-quality feature wins for the same site", () => {
+    // colonial_capital + precursor_ruins both → ruins_expedition
+    const result = deriveSystemLocations(
+      [],
+      makeFeatures([
+        ["colonial_capital", 1],
+        ["precursor_ruins", 3],
+      ]),
+    );
+    const ruins = result.find((l) => l.id === "ruins_expedition");
+    expect(ruins!.quality).toBe(3);
+    expect(ruins!.matchedTraitId).toBe("precursor_ruins");
+  });
+
+  it("dedup: equal-quality features keep the first seen", () => {
+    const result = deriveSystemLocations(
+      [],
+      makeFeatures([
+        ["colonial_capital", 2],
+        ["precursor_ruins", 2],
+      ]),
+    );
+    const ruins = result.find((l) => l.id === "ruins_expedition");
+    expect(ruins!.matchedTraitId).toBe("colonial_capital");
+  });
+
+  it("dedup: a quality-bearing feature overrides a body-derived site of the same type", () => {
+    // asteroid_belt body → asteroid_field; ancient_minefield feature → asteroid_field
+    const result = deriveSystemLocations(
+      [makeBody("asteroid_belt")],
+      makeFeatures([["ancient_minefield", 2]]),
+    );
+    const af = result.filter((l) => l.id === "asteroid_field");
+    expect(af).toHaveLength(1);
+    expect(af[0].quality).toBe(2);
+    expect(af[0].matchedTraitId).toBe("ancient_minefield");
+  });
+
+  it("produces multiple distinct sites from a mixed substrate", () => {
+    const result = deriveSystemLocations(
+      [makeBody("gas_giant"), makeBody("asteroid_belt", ["rare_earth"])],
+      makeFeatures([["smuggler_haven", 1]]),
+    );
+    const ids = result.filter((l) => l.category === "system").map((l) => l.id);
+
+    expect(ids).toContain("gas_harvesting_platform");
+    expect(ids).toContain("asteroid_field");
+    expect(ids).toContain("mining_outpost");
+    expect(ids).toContain("smuggler_den");
   });
 });
 
-describe("LOCATIONS catalog", () => {
+describe("LOCATIONS catalog coverage", () => {
   it("every location has a unique id matching its key", () => {
     for (const [key, loc] of Object.entries(LOCATIONS)) {
       expect(loc.id).toBe(key);
     }
   });
 
-  it("station locations have null traitRequirement", () => {
-    const stations = Object.values(LOCATIONS).filter(
-      (l) => l.category === "station",
-    );
-    for (const loc of stations) {
-      expect(loc.traitRequirement).toBeNull();
-    }
-  });
-
-  it("system locations have non-empty traitRequirement arrays", () => {
-    const systemLocs = Object.values(LOCATIONS).filter(
-      (l) => l.category === "system",
-    );
-    for (const loc of systemLocs) {
-      expect(loc.traitRequirement).not.toBeNull();
-      expect(loc.traitRequirement!.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("every trait in the game maps to at least one system location", () => {
-    const coveredTraits = new Set<string>();
-    for (const loc of Object.values(LOCATIONS)) {
-      if (loc.traitRequirement) {
-        for (const traitId of loc.traitRequirement) {
-          coveredTraits.add(traitId);
-        }
-      }
-    }
-
-    for (const traitId of ALL_TRAIT_IDS) {
+  it("every body archetype maps to a valid system location", () => {
+    for (const arch of Object.values(BODY_ARCHETYPES)) {
+      const result = deriveSystemLocations([makeBody(arch.id)], []);
+      const systemLocs = result.filter((l) => l.category === "system");
       expect(
-        coveredTraits.has(traitId),
-        `Trait "${traitId}" is not mapped to any location`,
+        systemLocs.length,
+        `archetype "${arch.id}" produced no system location`,
+      ).toBeGreaterThan(0);
+      for (const l of systemLocs) expect(LOCATIONS[l.id]).toBeDefined();
+    }
+  });
+
+  it("every richness modifier yields a mining outpost", () => {
+    for (const mod of Object.values(RICHNESS_MODIFIERS)) {
+      const result = deriveSystemLocations([makeBody("asteroid_belt", [mod.id])], []);
+      expect(
+        result.some((l) => l.id === "mining_outpost"),
+        `richness "${mod.id}" did not yield a mining outpost`,
       ).toBe(true);
     }
   });
 
-  it("every traitRequirement references a valid TraitId", () => {
-    const validTraits = new Set(ALL_TRAIT_IDS);
-    for (const loc of Object.values(LOCATIONS)) {
-      if (loc.traitRequirement) {
-        for (const traitId of loc.traitRequirement) {
-          expect(
-            validTraits.has(traitId),
-            `Location "${loc.id}" references unknown trait "${traitId}"`,
-          ).toBe(true);
-        }
-      }
+  it("every feature trait maps to exactly one valid system location (no orphans)", () => {
+    const featureIds = ALL_TRAIT_IDS.filter((id) => isFeatureTrait(id));
+    expect(featureIds.length).toBe(31);
+    for (const id of featureIds) {
+      const result = deriveSystemLocations([], makeFeatures([[id, 1]]));
+      const systemLocs = result.filter((l) => l.category === "system");
+      expect(systemLocs.length, `feature "${id}" produced no site`).toBe(1);
+      expect(LOCATIONS[systemLocs[0].id]).toBeDefined();
     }
   });
 });
