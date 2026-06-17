@@ -19,3 +19,8 @@ export function formatRelativeTime(timestamp: number): string {
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
 }
+
+/** Format a plain number with locale thousands separators, rounded (no suffix). */
+export function formatNumber(value: number): string {
+  return Math.round(value).toLocaleString();
+}

@@ -1,7 +1,7 @@
 import type { EVENT_DEFINITIONS } from "./events";
 import type { MissionType } from "./missions";
 import type { EnemyTier } from "./combat";
-import type { NotificationType } from "@/lib/types/game";
+import type { NotificationType, SunClass } from "@/lib/types/game";
 
 /** Mapping from event type to Badge/dot color. */
 export const EVENT_TYPE_BADGE_COLOR: Record<
@@ -173,6 +173,17 @@ export const CHART_THEME = {
   tooltipTextColor: "#fff",
   tooltipLabelColor: "#999",
 } as const;
+
+// ── Sun class colors (for star glyphs) ───────────────────────
+
+/** Star-glyph swatch color per sun class (presentation only; the display label
+ *  comes from the SUN_CLASSES catalog). */
+export const SUN_CLASS_COLORS: Record<SunClass, string> = {
+  yellow: "#facc15",
+  blue_white: "#93c5fd",
+  orange_dwarf: "#fb923c",
+  red_dwarf: "#f87171",
+};
 
 // ── Good colors (for charts) ─────────────────────────────────
 
