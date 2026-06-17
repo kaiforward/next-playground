@@ -6,6 +6,7 @@
 import type { EconomyType, QualityTier, TraitId } from "@/lib/types/game";
 import { TRAITS, ALL_TRAIT_IDS, QUALITY_TIERS } from "@/lib/constants/traits";
 import { toTraitId, toQualityTier, toEconomyType } from "@/lib/types/guards";
+import { getFeatureTraits } from "@/lib/utils/traits";
 import { TRAIT_COUNT } from "@/lib/constants/universe-gen";
 import type { RNG } from "./universe-gen";
 import { weightedPick, randInt } from "./universe-gen";
@@ -98,10 +99,15 @@ export function computeTraitProductionBonus(
 /**
  * Sum the danger modifiers from a system's traits.
  * Positive values increase danger, negative values reduce it.
+ *
+ * Only FEATURE-kind traits contribute. The archetype/richness danger traits
+ * (volcanic_world, habitable_world, radioactive_deposits) stop contributing here —
+ * real body-type danger is wired from SystemBody rows in PR3. See
+ * docs/plans/economy-simulation-sp1-pr2-detach-consumers.md ("Design decision").
  */
 export function computeTraitDanger(traits: GeneratedTrait[]): number {
   let total = 0;
-  for (const { traitId } of traits) {
+  for (const { traitId } of getFeatureTraits(traits)) {
     const def = TRAITS[traitId];
     if (def.dangerModifier) {
       total += def.dangerModifier;
