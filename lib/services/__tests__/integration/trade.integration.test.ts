@@ -138,6 +138,11 @@ describe("executeTrade (integration)", () => {
     const foodGoodId = universe.goodIds["food"];
     const stationId = universe.stations.agricultural;
 
+    const marketBefore = await prisma.stationMarket.findUnique({
+      where: { stationId_goodId: { stationId, goodId: foodGoodId } },
+    });
+    expect(marketBefore).not.toBeNull();
+
     const buy = await executeTrade(player.playerId, shipId, {
       stationId,
       goodId: foodGoodId,
@@ -162,7 +167,7 @@ describe("executeTrade (integration)", () => {
     const marketAfter = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId, goodId: foodGoodId } },
     });
-    expect(Math.round(marketAfter!.stock)).toBe(155); // agricultural food initial stock
+    expect(Math.round(marketAfter!.stock)).toBe(Math.round(marketBefore!.stock));
   });
 
   it("buy fails with insufficient credits", async () => {
