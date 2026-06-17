@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants/locations";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeColor } from "@/components/ui/badge";
@@ -118,8 +119,9 @@ function ExploreContent({ systemId }: { systemId: string }) {
         </div>
       </section>
 
-      {/* System Locations */}
-      {systemLocations.length > 0 && (
+      {/* System Locations — derived from surveyed bodies + features. Hidden until
+          the system is surveyed; show a hint there rather than an unexplained gap. */}
+      {systemLocations.length > 0 ? (
         <section>
           <SectionHeader className="mb-3">
             System Locations
@@ -134,6 +136,15 @@ function ExploreContent({ systemId }: { systemId: string }) {
             ))}
           </div>
         </section>
+      ) : (
+        substrate.visibility !== "visible" && (
+          <section>
+            <SectionHeader className="mb-3">
+              System Locations
+            </SectionHeader>
+            <EmptyState message="Survey this system to reveal its exploration sites." />
+          </section>
+        )
       )}
     </div>
   );

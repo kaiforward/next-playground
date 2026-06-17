@@ -57,6 +57,9 @@ describe("deriveSystemLocations", () => {
     expect(stationIds).toContain("market_hall");
     expect(stationIds).toContain("repair_bay");
     expect(stationIds).toHaveLength(4);
+
+    // No bodies and no features → no system-category sites at all.
+    expect(result.filter((l) => l.category === "system")).toHaveLength(0);
   });
 
   it("station locations have null quality/trait fields", () => {
@@ -113,6 +116,7 @@ describe("deriveSystemLocations", () => {
 
     expect(ruins).toBeDefined();
     expect(ruins!.quality).toBe(3);
+    expect(ruins!.qualityLabel).toBe("Exceptional");
     expect(ruins!.matchedTraitId).toBe("precursor_ruins");
     expect(ruins!.traitDescription).toBe(TRAITS.precursor_ruins.descriptions[3]);
   });

@@ -111,6 +111,27 @@ describe("buildMarketTickEntry", () => {
     expect(e.stock).toBe(100);
   });
 
+  it("ignores traits when computing production — they no longer grant a bonus", () => {
+    const e = buildMarketTickEntry(
+      {
+        goodId: "food",
+        stock: 100,
+        economyType: "agricultural",
+        produces: ["food"],
+        consumes: [],
+        volatility: 1,
+        baseProductionRate: 10,
+        baseConsumptionRate: undefined,
+        govConsumptionBoost: 0,
+        traits: [{ traitId: "precursor_ruins", quality: 3 }],
+        prosperity: 1, // multAtMax = 1.3
+      },
+      prosperityParams,
+    );
+    // Same as the traits-free case above: prosperity multiplier only, no trait bonus.
+    expect(e.productionRate).toBeCloseTo(13, 5);
+  });
+
   it("folds the government consumption boost into the consumption rate", () => {
     const e = buildMarketTickEntry(
       {
