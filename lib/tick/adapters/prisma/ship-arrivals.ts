@@ -33,6 +33,7 @@ export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
         destination: {
           select: {
             name: true,
+            bodyDanger: true,
             faction: { select: { governmentType: true } },
             traits: { select: { traitId: true, quality: true } },
           },
@@ -68,6 +69,7 @@ export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
               traitId: toTraitId(t.traitId),
               quality: toQualityTier(t.quality),
             })),
+            bodyDanger: s.destination.bodyDanger,
           }
         : null,
       upgradeSlots: s.upgradeSlots,

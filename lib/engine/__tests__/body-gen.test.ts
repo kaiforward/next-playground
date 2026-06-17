@@ -1,21 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { mulberry32 } from "../universe-gen";
-import { generateSubstrate, FEATURE_TRAIT_IDS } from "../body-gen";
-import { SUN_CLASSES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
+import { generateSubstrate } from "../body-gen";
+import { SUN_CLASSES, RICHNESS_MODIFIERS, BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 import { RESOURCE_TYPES } from "../resources";
-import { isFeatureTrait } from "@/lib/utils/traits";
 
 function sample(n: number) {
   const rng = mulberry32(42);
   return Array.from({ length: n }, () => generateSubstrate(rng));
 }
-
-describe("FEATURE_TRAIT_IDS", () => {
-  it("is exactly the 31 narrative survivors", () => {
-    expect(FEATURE_TRAIT_IDS.length).toBe(31);
-    for (const id of FEATURE_TRAIT_IDS) expect(isFeatureTrait(id)).toBe(true);
-  });
-});
 
 describe("generateSubstrate", () => {
   it("rolls a valid sun class and at least one body", () => {
@@ -63,7 +56,21 @@ describe("generateSubstrate", () => {
       expect(s.features.length).toBeLessThanOrEqual(2);
       const ids = s.features.map((f) => f.traitId);
       expect(new Set(ids).size).toBe(ids.length);
-      for (const f of s.features) expect(isFeatureTrait(f.traitId)).toBe(true);
+      for (const f of s.features) expect(ALL_TRAIT_IDS).toContain(f.traitId);
+    }
+  });
+
+  it("bodyDanger sums the body archetype danger baselines", () => {
+    for (const s of sample(300)) {
+      const expected = s.bodies.reduce(
+        (sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline,
+        0,
+      );
+      expect(s.bodyDanger).toBeCloseTo(expected, 6);
+      // Only volcanic_world carries a baseline (0.05); danger-free systems are 0.
+      const hasVolcanic = s.bodies.some((b) => b.bodyType === "volcanic_world");
+      if (hasVolcanic) expect(s.bodyDanger).toBeGreaterThan(0);
+      else expect(s.bodyDanger).toBe(0);
     }
   });
 

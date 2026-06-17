@@ -109,8 +109,8 @@ export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
 };
 
 // ── Richness modifiers ────────────────────────────────────────────
-// Rare multipliers on a single resource (the old "resource traits"). multiplier &
-// rarity are first-draft, tuned in PR3. id matches the TRAIT_MIGRATION richness target.
+// Rare multipliers on a single resource of an eligible body (e.g. heavy_metals →
+// ore ×1.6). multiplier and rarity are hand-tuned starting values.
 
 export interface RichnessModifier {
   id: RichnessModifierId;

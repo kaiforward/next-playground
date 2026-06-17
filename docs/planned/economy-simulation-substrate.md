@@ -1,6 +1,6 @@
 # Economy Simulation — Sub-Project 1: Physical Substrate & Population
 
-Status: **Design / not yet built** — created 2026-05-31. This is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13). It settles the open sequencing fork (vision §13) and decomposes SP1 into shippable parts. It is the design that the build plan (`docs/plans/…`) and the implementation hang off.
+Status: **SP1 Part 1 shipped**; Parts 2–3 are forward design — created 2026-05-31. The built physical-substrate model (bodies, richness, features, derived economy type) is documented in [system-traits.md](../active/gameplay/system-traits.md) (active); this spec retains the full design rationale and the Part 2–3 plan. It is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13), decomposing SP1 into shippable parts; the build plans (`docs/plans/…`) and implementation hang off it.
 
 Read the [vision](./economy-simulation-vision.md) first — this spec assumes its model (physical substrate, population keystone, days-of-supply pricing, dissolved economy type) and does not re-argue it.
 
@@ -236,6 +236,6 @@ To keep Part 1 a clean, shippable foundation:
 ## 13. Relationship to existing docs
 
 - **[economy-simulation-vision.md](./economy-simulation-vision.md)** — the north star; this spec implements its SP1 (§13) and settles its sequencing fork.
-- **[system-traits.md](../active/gameplay/system-traits.md)** (active) — superseded by the two-layer bodies/features model; update when Part 1 ships.
+- **[system-traits.md](../active/gameplay/system-traits.md)** (active) — now documents the shipped two-layer bodies/features model (Part 1).
 - **[production.md](./production.md)** / **[production-roster.md](./production-roster.md)** (planned) — the population stat and tier-0 resource→good mapping align here; consumed by Part 2.
 - **[economy.md](../active/gameplay/economy.md)** (active) — pricing-anchor + economy-type sections retired across Parts 2–3; slippage/spread + stock substrate carry forward.

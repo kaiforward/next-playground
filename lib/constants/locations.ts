@@ -1,5 +1,6 @@
-import type { TraitId, QualityTier } from "@/lib/types/game";
+import type { TraitId, QualityTier, BodyArchetypeId } from "@/lib/types/game";
 import type { EnrichedTrait } from "@/lib/utils/traits";
+import type { BodyView } from "@/lib/types/api";
 
 // ── Location type IDs ───────────────────────────────────────────
 
@@ -9,7 +10,7 @@ export type LocationTypeId =
   | "docking_bay"
   | "market_hall"
   | "repair_bay"
-  // System (trait-derived)
+  // System (body- and feature-derived)
   | "planet_surface"
   | "asteroid_field"
   | "gas_harvesting_platform"
@@ -32,20 +33,18 @@ export interface LocationDefinition {
   description: string;
   icon: string;
   available: boolean;
-  /** Trait categories that map to this location. Null for station locations. */
-  traitRequirement: TraitId[] | null;
 }
 
 // ── Derived location (returned by deriveSystemLocations) ────────
 
 export interface DerivedLocation extends LocationDefinition {
-  /** Quality tier of the matched trait (highest if multiple match). Null for station locations. */
+  /** Quality tier of the matched feature. Null for station + body/richness-derived sites. */
   quality: QualityTier | null;
-  /** Display label for the quality tier. Null for station locations. */
+  /** Display label for the quality tier. Null when quality is null. */
   qualityLabel: string | null;
-  /** The enriched description from the matched trait. Null for station locations. */
+  /** Enriched description from the matched feature. Null for non-feature sites. */
   traitDescription: string | null;
-  /** The trait that matched this location. Null for station locations. */
+  /** The feature trait that matched this location. Null for non-feature sites. */
   matchedTraitId: TraitId | null;
 }
 
@@ -61,7 +60,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "A dimly-lit watering hole where traders swap stories and play cards.",
     icon: "\uD83C\uDF7A",
     available: true,
-    traitRequirement: null,
   },
   docking_bay: {
     id: "docking_bay",
@@ -70,7 +68,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Berths for ships of all sizes. Maintenance crews bustle between hulls.",
     icon: "\uD83D\uDE80",
     available: false,
-    traitRequirement: null,
   },
   market_hall: {
     id: "market_hall",
@@ -79,7 +76,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "The station's commercial heart where merchants haggle over bulk contracts.",
     icon: "\uD83C\uDFEA",
     available: false,
-    traitRequirement: null,
   },
   repair_bay: {
     id: "repair_bay",
@@ -88,10 +84,9 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Welding sparks and the hiss of hydraulics. Ships come out better than new.",
     icon: "\uD83D\uDD27",
     available: false,
-    traitRequirement: null,
   },
 
-  // ── System Locations (trait-derived) ──────────────────────────
+  // ── System Locations (body- and feature-derived) ──────────────
 
   planet_surface: {
     id: "planet_surface",
@@ -100,17 +95,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Landfall on the primary world. What you find depends on the terrain.",
     icon: "\uD83C\uDF0D",
     available: false,
-    traitRequirement: [
-      "habitable_world",
-      "ocean_world",
-      "volcanic_world",
-      "frozen_world",
-      "tidally_locked_world",
-      "desert_world",
-      "jungle_world",
-      "fertile_lowlands",
-      "coral_archipelago",
-    ],
   },
   asteroid_field: {
     id: "asteroid_field",
@@ -119,12 +103,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Dense rock and ice. Prospectors, miners, and the occasional pirate.",
     icon: "\u2604\uFE0F",
     available: false,
-    traitRequirement: [
-      "asteroid_belt",
-      "ring_system",
-      "ancient_minefield",
-      "captured_rogue_body",
-    ],
   },
   gas_harvesting_platform: {
     id: "gas_harvesting_platform",
@@ -133,7 +111,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Orbital skimmers dip into the giant's atmosphere to collect fuel.",
     icon: "\uD83C\uDF2C\uFE0F",
     available: false,
-    traitRequirement: ["gas_giant", "hydrocarbon_seas", "helium3_reserves"],
   },
   orbital_platform: {
     id: "orbital_platform",
@@ -142,11 +119,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "A constellation of platforms at stable Lagrange points.",
     icon: "\uD83D\uDEF0\uFE0F",
     available: false,
-    traitRequirement: [
-      "lagrange_stations",
-      "deep_space_beacon",
-      "orbital_ring_remnant",
-    ],
   },
   mining_outpost: {
     id: "mining_outpost",
@@ -155,18 +127,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Heavy machinery and hard workers extracting riches from the rock.",
     icon: "\u26CF\uFE0F",
     available: false,
-    traitRequirement: [
-      "mineral_rich_moons",
-      "rare_earth_deposits",
-      "heavy_metal_veins",
-      "crystalline_formations",
-      "superdense_core",
-      "glacial_aquifer",
-      "tectonic_forge",
-      "geothermal_vents",
-      "radioactive_deposits",
-      "organic_compounds",
-    ],
   },
   research_station: {
     id: "research_station",
@@ -175,14 +135,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Scientists probe the unknown. Discoveries here reshape what's possible.",
     icon: "\uD83D\uDD2C",
     available: false,
-    traitRequirement: [
-      "exotic_matter_traces",
-      "gravitational_anomaly",
-      "signal_anomaly",
-      "xenobiology_preserve",
-      "bioluminescent_ecosystem",
-      "pulsar_proximity",
-    ],
   },
   ruins_expedition: {
     id: "ruins_expedition",
@@ -191,7 +143,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Ancient structures from a civilization lost to time. Handle with care.",
     icon: "\uD83C\uDFDB\uFE0F",
     available: false,
-    traitRequirement: ["precursor_ruins", "colonial_capital", "seed_vault"],
   },
   salvage_yard: {
     id: "salvage_yard",
@@ -200,12 +151,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Hulks and debris fields. One pilot's wreckage is another's treasure.",
     icon: "\u2699\uFE0F",
     available: false,
-    traitRequirement: [
-      "generation_ship_wreckage",
-      "derelict_fleet",
-      "abandoned_station",
-      "shipbreaking_yards",
-    ],
   },
   anomaly_site: {
     id: "anomaly_site",
@@ -214,14 +159,6 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "Reality bends here. Sensors glitch and compasses spin.",
     icon: "\uD83C\uDF00",
     available: false,
-    traitRequirement: [
-      "subspace_rift",
-      "nebula_proximity",
-      "dark_nebula",
-      "ion_storm_corridor",
-      "solar_flare_activity",
-      "binary_star",
-    ],
   },
   smuggler_den: {
     id: "smuggler_den",
@@ -230,13 +167,73 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
     description: "If you know the right people, anything can be arranged.",
     icon: "\uD83D\uDC7E",
     available: false,
-    traitRequirement: [
-      "pirate_stronghold",
-      "smuggler_haven",
-      "ancient_trade_route",
-      "free_port_declaration",
-    ],
   },
+};
+
+// ── Site derivation maps ────────────────────────────────────────
+//
+// Exploration sites derive from the physical substrate: each body archetype
+// opens one site, any richness modifier opens an extraction site, and narrative
+// feature traits open their thematic site.
+
+/** Each of the 9 body archetypes surfaces one exploration site. */
+const BODY_ARCHETYPE_TO_LOCATION: Record<BodyArchetypeId, LocationTypeId> = {
+  garden_world: "planet_surface",
+  ocean_world: "planet_surface",
+  jungle_world: "planet_surface",
+  arid_world: "planet_surface",
+  volcanic_world: "planet_surface",
+  frozen_world: "planet_surface",
+  barren_rock: "planet_surface",
+  gas_giant: "gas_harvesting_platform",
+  asteroid_belt: "asteroid_field",
+};
+
+/** Any richness modifier on a body opens an extraction site. */
+const RICHNESS_LOCATION: LocationTypeId = "mining_outpost";
+
+/** Each narrative feature trait maps to its thematic exploration site. */
+const FEATURE_TO_LOCATION: Partial<Record<TraitId, LocationTypeId>> = {
+  // planetary
+  tidally_locked_world: "planet_surface",
+  // asteroid
+  ancient_minefield: "asteroid_field",
+  captured_rogue_body: "asteroid_field",
+  // mining
+  crystalline_formations: "mining_outpost",
+  geothermal_vents: "mining_outpost",
+  // orbital
+  lagrange_stations: "orbital_platform",
+  deep_space_beacon: "orbital_platform",
+  orbital_ring_remnant: "orbital_platform",
+  // research
+  exotic_matter_traces: "research_station",
+  gravitational_anomaly: "research_station",
+  signal_anomaly: "research_station",
+  xenobiology_preserve: "research_station",
+  bioluminescent_ecosystem: "research_station",
+  pulsar_proximity: "research_station",
+  // ruins
+  precursor_ruins: "ruins_expedition",
+  colonial_capital: "ruins_expedition",
+  seed_vault: "ruins_expedition",
+  // salvage
+  generation_ship_wreckage: "salvage_yard",
+  derelict_fleet: "salvage_yard",
+  abandoned_station: "salvage_yard",
+  shipbreaking_yards: "salvage_yard",
+  // anomaly
+  subspace_rift: "anomaly_site",
+  nebula_proximity: "anomaly_site",
+  dark_nebula: "anomaly_site",
+  ion_storm_corridor: "anomaly_site",
+  solar_flare_activity: "anomaly_site",
+  binary_star: "anomaly_site",
+  // smuggler
+  pirate_stronghold: "smuggler_den",
+  smuggler_haven: "smuggler_den",
+  ancient_trade_route: "smuggler_den",
+  free_port_declaration: "smuggler_den",
 };
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -245,38 +242,32 @@ const STATION_LOCATIONS: LocationDefinition[] = Object.values(LOCATIONS).filter(
   (l) => l.category === "station",
 );
 
-const SYSTEM_LOCATIONS: LocationDefinition[] = Object.values(LOCATIONS).filter(
-  (l) => l.category === "system",
-);
-
-/** Build a lookup from TraitId → LocationDefinition for system locations. */
-function buildTraitToLocationMap(): Map<TraitId, LocationDefinition> {
-  const map = new Map<TraitId, LocationDefinition>();
-  for (const loc of SYSTEM_LOCATIONS) {
-    if (loc.traitRequirement) {
-      for (const traitId of loc.traitRequirement) {
-        map.set(traitId, loc);
-      }
-    }
-  }
-  return map;
+/** A site with no quality tier — bodies and richness modifiers carry no tier. */
+function bodyDerived(locId: LocationTypeId): DerivedLocation {
+  return {
+    ...LOCATIONS[locId],
+    quality: null,
+    qualityLabel: null,
+    traitDescription: null,
+    matchedTraitId: null,
+  };
 }
-
-const TRAIT_TO_LOCATION = buildTraitToLocationMap();
 
 // ── Derivation engine ───────────────────────────────────────────
 
 /**
- * Derive available locations for a system based on its traits.
+ * Derive available locations for a system from its bodies + feature traits.
  *
- * Returns station locations (always present) + system locations
- * matching the system's traits. Deduplicates: if multiple traits
- * map to the same location, the highest-quality trait wins.
+ * Returns station locations (always present) + system locations from the
+ * substrate: body archetypes, richness modifiers, and feature traits.
+ * Deduplicates by location id — a quality-bearing feature outranks a
+ * body/richness-derived site of the same type, the highest-quality feature
+ * wins among features, and ties keep the first seen.
  */
 export function deriveSystemLocations(
-  traits: EnrichedTrait[],
+  bodies: BodyView[],
+  features: EnrichedTrait[],
 ): DerivedLocation[] {
-  // Station locations (always returned)
   const stationResults: DerivedLocation[] = STATION_LOCATIONS.map((loc) => ({
     ...loc,
     quality: null,
@@ -285,31 +276,35 @@ export function deriveSystemLocations(
     matchedTraitId: null,
   }));
 
-  // System locations — deduplicate by location ID, keep highest quality
-  const bestByLocation = new Map<
-    LocationTypeId,
-    { loc: LocationDefinition; trait: EnrichedTrait }
-  >();
+  const bestByLocation = new Map<LocationTypeId, DerivedLocation>();
 
-  for (const trait of traits) {
-    const loc = TRAIT_TO_LOCATION.get(trait.traitId);
-    if (!loc) continue;
+  const consider = (candidate: DerivedLocation) => {
+    const existing = bestByLocation.get(candidate.id);
+    if (!existing || (candidate.quality ?? 0) > (existing.quality ?? 0)) {
+      bestByLocation.set(candidate.id, candidate);
+    }
+  };
 
-    const existing = bestByLocation.get(loc.id);
-    if (!existing || trait.quality > existing.trait.quality) {
-      bestByLocation.set(loc.id, { loc, trait });
+  // Bodies → archetype site + (when enriched) an extraction site. No quality tier.
+  for (const body of bodies) {
+    consider(bodyDerived(BODY_ARCHETYPE_TO_LOCATION[body.bodyType]));
+    if (body.richness.length > 0) {
+      consider(bodyDerived(RICHNESS_LOCATION));
     }
   }
 
-  const systemResults: DerivedLocation[] = [...bestByLocation.values()].map(
-    ({ loc, trait }) => ({
-      ...loc,
-      quality: trait.quality,
-      qualityLabel: trait.qualityLabel,
-      traitDescription: trait.description,
-      matchedTraitId: trait.traitId,
-    }),
-  );
+  // Features → thematic site, carrying the feature's quality + description.
+  for (const feature of features) {
+    const locId = FEATURE_TO_LOCATION[feature.traitId];
+    if (!locId) continue;
+    consider({
+      ...LOCATIONS[locId],
+      quality: feature.quality,
+      qualityLabel: feature.qualityLabel,
+      traitDescription: feature.description,
+      matchedTraitId: feature.traitId,
+    });
+  }
 
-  return [...stationResults, ...systemResults];
+  return [...stationResults, ...bestByLocation.values()];
 }

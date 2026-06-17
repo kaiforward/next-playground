@@ -104,7 +104,7 @@ describe("selectSurveyCandidates", () => {
   it("generates survey missions for systems with eligible traits", () => {
     const systems = [
       makeSystem("a", [{ traitId: "precursor_ruins", quality: 2 }]),
-      makeSystem("b", [{ traitId: "habitable_world", quality: 3 }]),
+      makeSystem("b", [{ traitId: "geothermal_vents", quality: 3 }]),
     ];
 
     const candidates = selectSurveyCandidates(systems, 100, alwaysPass);
@@ -115,7 +115,7 @@ describe("selectSurveyCandidates", () => {
 
   it("skips systems without eligible traits", () => {
     const systems = [
-      makeSystem("a", [{ traitId: "asteroid_belt", quality: 2 }]),
+      makeSystem("a", [{ traitId: "geothermal_vents", quality: 2 }]),
     ];
 
     const candidates = selectSurveyCandidates(systems, 100, alwaysPass);
@@ -239,7 +239,7 @@ describe("selectSalvageCandidates", () => {
   it("generates salvage missions for systems with eligible traits", () => {
     const systems = [
       makeSystem("a", [{ traitId: "generation_ship_wreckage", quality: 2 }]),
-      makeSystem("b", [{ traitId: "habitable_world", quality: 3 }]),
+      makeSystem("b", [{ traitId: "geothermal_vents", quality: 3 }]),
     ];
 
     const candidates = selectSalvageCandidates(systems, 100, alwaysPass);
@@ -250,7 +250,7 @@ describe("selectSalvageCandidates", () => {
 
   it("skips systems without eligible traits", () => {
     const systems = [
-      makeSystem("a", [{ traitId: "asteroid_belt", quality: 2 }]),
+      makeSystem("a", [{ traitId: "geothermal_vents", quality: 2 }]),
     ];
 
     const candidates = selectSalvageCandidates(systems, 100, alwaysPass);
@@ -336,7 +336,7 @@ describe("selectReconCandidates", () => {
 
   it("skips high-danger systems without eligible traits", () => {
     const systems = [
-      makeSystem("a", [{ traitId: "asteroid_belt", quality: 2 }]),
+      makeSystem("a", [{ traitId: "geothermal_vents", quality: 2 }]),
     ];
     const danger = new Map([["a", 0.3]]);
 
@@ -427,7 +427,7 @@ describe("generateOpMissionCandidates", () => {
   });
 
   it("returns empty for safe system with no eligible traits", () => {
-    const systems = [makeSystem("a", [{ traitId: "asteroid_belt", quality: 1 }])];
+    const systems = [makeSystem("a", [{ traitId: "geothermal_vents", quality: 1 }])];
     const danger = new Map([["a", 0.05]]);
 
     const candidates = generateOpMissionCandidates(systems, danger, 100, alwaysPass);

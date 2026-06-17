@@ -1,274 +1,125 @@
-# System Traits
+# System Substrate & Traits
 
-Status: **Active** — shipped (Layer 0 of the migration roadmap).
+Status: **Active** — physical substrate + narrative features shipped (Economy Simulation SP1 Part 1).
 
-What makes individual systems unique. Traits are permanent physical properties of a system — its stars, planets, moons, orbital features, resource deposits, and anomalies — that drive economy derivation, production rates, danger baselines, and event flavour.
+What makes each system unique now has two layers:
 
-**Design principle**: Traits are geology; economy is civilisation's interpretation of that geology. Two systems with the same economy type can feel completely different because their underlying traits are different. A top-tier extraction system on a massive asteroid belt is a galactic powerhouse. A marginal extraction system scraping a thin ring system is just getting by.
+1. **Physical substrate** — a system's sun, its bodies, and the resources those bodies hold. This is the economic foundation: it drives economy type, population, and (in later SP1 parts) production directly.
+2. **Narrative features** — flavourful, named properties (precursor ruins, pirate strongholds, anomalies, derelict fleets). Features gate missions and exploration sites and adjust danger, but carry **no economic role**.
 
-**Implementation**: Trait catalog in `lib/constants/traits.ts`. Generation pipeline in `lib/engine/trait-gen.ts` and `lib/engine/system-gen.ts`. Trait-driven danger in `lib/engine/danger.ts`.
+**Design principle**: geology is the substrate; civilisation interprets it. Two systems with the same economy-type label can feel completely different because their bodies, richness, and features differ.
+
+**Implementation**: substrate generation in `lib/engine/body-gen.ts` + `lib/engine/universe-gen.ts`; sun/archetype/richness constants in `lib/constants/bodies.ts`; the feature catalog in `lib/constants/traits.ts`; danger in `lib/engine/danger.ts`; exploration sites in `lib/constants/locations.ts`. Full design and the SP1 forward plan (Parts 2–3): [economy-simulation-substrate.md](../../planned/economy-simulation-substrate.md).
 
 ---
 
-## 1. Trait Model
+## 1. The physical substrate
 
-Traits are permanent physical properties generated at world creation. They do not change (with rare event-driven exceptions).
+Generated bottom-up per system at world creation; persisted as `SystemBody` rows plus denormalized aggregates on `StarSystem` (so the per-tick economy never joins the bodies table).
 
-### Core Properties
+### 1.1 Sun class
 
-| Property | Type | Description |
+Each system rolls one **sun**, weighted. Its class gates which body archetypes can form and how many bodies the system has (`SUN_CLASSES` in `lib/constants/bodies.ts`):
+
+| Sun class | Character | Favours |
 |---|---|---|
-| trait | TraitType | Identifier (e.g. "asteroid_belt", "habitable_world") |
-| category | TraitCategory | Planetary, Orbital, Resource, Phenomena, Legacy |
-| quality | 1–3 | How good this instance is. Tier 1 = marginal, tier 2 = solid, tier 3 = exceptional |
-| economyAffinity | Record<EconomyType, number> | How strongly this trait supports each economy type (0 = irrelevant, 1 = minor, 2 = strong) |
-| productionModifier | Record<Good, number> | Per-good production rate bonus from this trait |
-| description | string | Flavour text that varies by quality tier |
+| Yellow (sol-like) | Temperate, most permissive | Habitable subtypes, balanced mixes |
+| Blue–white (hot) | High-energy inner system | Volcanic, barren rock, asteroid belts |
+| Orange dwarf (cool) | Dim, long-lived | Ocean/ice worlds, gas, marginal habitables |
+| Red dwarf (cold) | Faint frontier | Frozen worlds, gas giants, belts; sparse population |
 
-A system has **2–4 traits**, rolled at generation. More traits = more complex system identity, more potential economy types, more reasons for different parties to value it.
+### 1.2 Bodies (archetypes)
 
-### 1.1 Trait Categories
+A system has one sun + 1–N bodies. Each body carries an **archetype**, a **size**, a **base resource vector** over the seven resource types `{ gas, minerals, ore, biomass, arable, water, radioactive }`, and a **population-capacity weight**. Magnitude per type = `archetypeProfile × size × variance (× richness)` — a cap on how much of the corresponding good the body can yield.
 
-#### Planetary Bodies
+| Archetype | Habitable | Resource lean | Pop cap | Notes |
+|---|:--:|---|:--:|---|
+| Garden world | ✓ | arable, water, biomass | High | The breadbasket |
+| Ocean world | ✓ | water, biomass | High | Aquaculture + modest arable |
+| Jungle world | ✓ | biomass, arable | Med | Biomass-dominant |
+| Arid world | ✓ | minerals, ore | Low | Barely habitable |
+| Volcanic world | ✗ | ore, radioactive | V.low | Ore-rich; **adds danger** (0.05 baseline) |
+| Frozen world | ✗ | water, gas | V.low | Ice + some gas |
+| Barren rock | ✗ | minerals, ore | V.low | Generic mineral/ore |
+| Gas giant | ✗ | gas | V.low | Fuel feedstock |
+| Asteroid belt | ✗ | minerals, ore | V.low | Mining backbone |
 
-| Trait | Economy Affinity | Description |
-|---|---|---|
-| Habitable world | Agricultural (2), Core (2) | Atmosphere, water, arable land. Quality tiers: marginal (thin atmosphere, limited water) → garden world (earth-like paradise). Higher tier = more food production, larger population |
-| Ocean world | Agricultural (2), Extraction (1) | Mostly water surface. Aquaculture, marine biology, deep-sea mineral extraction |
-| Volcanic world | Extraction (2), Refinery (1) | Geothermal energy, minerals pushed to surface, rare earth deposits. Hostile but resource-rich |
-| Frozen world | Extraction (1) | Ice mining — water ice, frozen gases, cryogenic compounds. Steady but unglamorous |
-| Tidally locked world | Tech (1), Extraction (1) | Permanent day/night hemispheres. Unique research on the terminator line. Rare crystalline formations on the frozen dark side |
-| Desert world | Extraction (1), Industrial (1) | Mineral-rich surface, easy open-pit mining. Solar energy abundance. Low habitability but ideal for automated industry |
-| Jungle world | Agricultural (1), Tech (1) | Dense biosphere, biodiversity hotspot. Food production plus unique biological compounds |
-| Geothermal vents | Refinery (2), Extraction (1) | Subsurface heat drives chemical processing and fuel synthesis |
-| Hydrocarbon seas | Refinery (2), Extraction (1) | Liquid methane/ethane/ammonia seas. Rich chemical feedstock for refineries |
-| Fertile lowlands | Agricultural (2) | Expansive low-lying terrain with rich soil. Pure farming country |
-| Coral archipelago | Agricultural (2), Extraction (1) | Shallow marine ecosystems. Aquaculture, marine biology, seafloor mineral extraction |
-| Tectonic forge | Industrial (2), Extraction (1) | Extreme geological forces create natural pressure chambers and mineral concentrations |
+### 1.3 Richness modifiers
 
-#### Orbital Features
+The old resource-flavoured traits (heavy-metal veins, helium-3 reserves, rare-earth deposits, glacial aquifer…) are now **richness modifiers**: rare rolls onto a body that multiply one resource magnitude (e.g. heavy metals → ore ×1.6). 13 of them in `RICHNESS_MODIFIERS`. They surface narratively in the body's description and open a mining-outpost exploration site (§4).
 
-| Trait | Economy Affinity | Description |
-|---|---|---|
-| Asteroid belt | Extraction (2) | Ore, metals, ice. The backbone of extraction economies |
-| Gas giant | Extraction (2), Refinery (1) | Hydrogen, helium-3, rare atmospheric gases. Fuel harvesting and chemical feedstock |
-| Mineral-rich moons | Extraction (1), Industrial (1) | Low-gravity mining, easy orbital launch. Multiple moons = multiple mining sites |
-| Ring system | Extraction (1) | Ice and dust rings — water, silicates, trace metals. Easier to harvest than asteroid belts |
-| Binary star | Refinery (2), Tech (1) | Enormous energy output powers industrial refining at scale. Navigation hazard — higher base danger |
-| Lagrange stations | Industrial (2), Core (1) | Stable orbital points ideal for large structures. Reduces construction and maintenance costs |
-| Captured rogue body | Extraction (1), Tech (1) | Wandering planetoid gravitationally captured. Unusual composition |
-| Deep space beacon | Core (2) | Major navigation and communications hub. Draws traffic, commerce, and information exchange |
+### 1.4 Aggregate & population
 
-#### Resource Deposits
+- **Aggregate resource vector** = element-wise sum of the system's body vectors, denormalized onto `StarSystem` (`aggGas`, `aggOre`, …) for the economy hot path.
+- **Population** = `Σ(body pop-cap weight × size) × fill`, an abstract magnitude seeded **partial and varied by habitability** — developed core worlds seed near (but under) capacity; frontier rocks seed near-empty. Static in Part 1 (no growth/decline yet).
 
-| Trait | Economy Affinity | Description |
-|---|---|---|
-| Rare earth deposits | Extraction (1), Tech (2) | Critical for electronics manufacturing |
-| Heavy metal veins | Extraction (1), Industrial (2) | Titanium, tungsten, uranium. Military and industrial applications |
-| Organic compounds | Agricultural (1), Refinery (1) | Complex hydrocarbons, pre-biotic chemistry. Pharmaceutical feedstock, synthetic materials |
-| Crystalline formations | Tech (2), Extraction (1) | Piezoelectric, optical, data storage. Rare |
-| Helium-3 reserves | Extraction (1), Refinery (2) | Fusion fuel. Enormously valuable. Always strategically important |
-| Exotic matter traces | Tech (2) | Extremely rare. Anomalous materials outside standard physics |
-| Radioactive deposits | Extraction (1), Industrial (1) | Fissile materials, isotopes. Power generation, weapons, medical applications. Increases system danger baseline |
-| Superdense core | Extraction (2) | Ultra-dense planetary core with extreme mineral concentrations. Dangerous but enormously productive |
-| Glacial aquifer | Extraction (2) | Vast underground frozen water reserves. Industrial-scale water and chemical extraction |
+---
 
-#### Phenomena & Anomalies
+## 2. Economy type (derived from the substrate)
 
-| Trait | Economy Affinity | Description |
-|---|---|---|
-| Nebula proximity | Tech (1), Extraction (1) | Rare gas harvesting from nebula edge. Sensor interference creates natural concealment |
-| Solar flare activity | Refinery (1) | Hyperactive star. Massive energy availability but periodic danger spikes |
-| Gravitational anomaly | Tech (2) | Unexplained gravitational distortion. Pure research value |
-| Dark nebula | — | Blocks sensors and navigation. Higher danger, harder to reach. Frontier/criminal affinity |
-| Precursor ruins | Tech (2), Core (1) | Remnants of an ancient civilisation. Archaeological research, recovered technology |
-| Subspace rift | Tech (2) | Unstable spacetime anomaly. Extremely rare, 2–3 in the entire galaxy |
-| Pulsar proximity | Tech (1), Industrial (1) | Regular electromagnetic pulses. Energy harvesting, unique radiation effects on materials |
-| Ion storm corridor | Refinery (2) | Charged particle streams from stellar wind interactions. Dangerous to navigate but enables industrial-scale catalysis |
-| Bioluminescent ecosystem | Agricultural (2), Tech (1) | Exotic biological systems. Pharmaceutical research and agricultural applications |
-| Signal anomaly | Tech (1) | Repeating, possibly artificial signals of unknown origin. Pure research draw — listening arrays decode structured transmissions |
-| Xenobiology preserve | Agricultural (1), Tech (1) | Protected zone of non-terrestrial life. Controlled research yields pharmaceutical and agricultural breakthroughs |
-| Ancient minefield | Tech (1) | Dormant automated mines from a forgotten conflict. Navigation hazard — higher base danger — but the intelligence locked within is valuable |
-| Pirate stronghold | — | Fortified raider base hidden in the system. No economic affinity; raises base danger and disrupts commerce |
+Economy type is **not assigned** — it is a derived label. `deriveEconomyTypeLabel(aggregate, population)` maps a system's dominant resources plus its population to one of six types:
 
-#### Infrastructure & Legacy
+`agricultural · extraction · refinery · industrial · tech · core`
 
-| Trait | Economy Affinity | Description |
-|---|---|---|
-| Ancient trade route | Core (2), Industrial (1) | Historically significant junction. Established commerce, higher baseline trade volume |
-| Generation ship wreckage | Industrial (1), Extraction (1) | Massive derelict from the colonisation era. Salvage operations |
-| Orbital ring remnant | Industrial (2), Core (1) | Partially intact megastructure. Can be restored or expanded |
-| Seed vault | Agricultural (2), Tech (1) | Preserved biological archive. Unique genetic material, crop strains |
-| Colonial capital | Core (2), Industrial (1) | Seat of an early colonial administration. Established institutions, population density |
-| Free port declaration | Core (2) | Historically declared open-trade zone. Tariff-free commerce attracts merchants |
-| Shipbreaking yards | Industrial (2), Extraction (1) | Orbital scrapyards. Recycled metals, salvaged components feed local industry |
-| Derelict fleet | Extraction (1), Industrial (1) | A graveyard of warships from a forgotten campaign. Salvage rights yield rare alloys and intact components |
-| Abandoned station | Industrial (1), Core (1) | A decommissioned megastation. Reclamation recovers industrial equipment; if restored, could anchor a new hub |
-| Smuggler haven | Core (1) | Concealed berths, black markets, and information brokers. Contraband flows freely; minor core (trade hub) affinity |
+- arable/biomass-dominant → `agricultural`
+- ore/minerals/gas/radioactive-dominant → `extraction`
+- high population + balanced mix → `core` / `industrial`
+- refinery/tech fall out of the remaining mixes
 
-### 1.2 Quality Tiers
+> **Part 1 transition note**: the economy engine still runs on the stock model, reading production/consumption rate tables keyed by this derived label (a one-function shim). SP1 Part 2 will derive production from body resources + labour (population) and consumption from population directly, demoting economy type to a display-only label. See the [substrate spec](../../planned/economy-simulation-substrate.md) §7–§8.
 
-Every trait instance has a quality tier (1–3) rolled at generation:
+---
 
-| Tier | Label | Production modifier | Rarity |
-|---|---|---|---|
-| 1 | Marginal | +10–20% | Common (~50% of rolls) |
-| 2 | Solid | +30–50% | Uncommon (~35%) |
-| 3 | Exceptional | +60–100% | Rare (~15%) |
+## 3. Narrative features (the traits)
 
-Quality affects:
-- Production rate modifiers for goods associated with the trait
-- Flavour description (a tier-1 asteroid belt is "sparse debris field"; tier-3 is "dense, mineral-rich belt stretching across the system")
-- Strategic value — tier-3 traits in rare categories are genuine attraction points for player attention
+The 31 surviving traits in `lib/constants/traits.ts`. A system rolls 0–2 features. Each feature has: `id`, `category`, a quality tier (1–3) with per-tier `descriptions`, an optional `dangerModifier`, and an optional `negative` flag. **Features carry no economy role** — no affinity, no production goods; the economic signal comes entirely from bodies.
 
-### 1.3 Negative Traits
-
-Some traits have downsides that create risk/reward trade-offs:
-
-| Trait | Downside |
+| Category | Features |
 |---|---|
-| Volcanic world | Higher base danger, periodic eruption events |
-| Binary star | Navigation hazard, increased travel danger |
-| Radioactive deposits | Higher base danger, crew health events (future) |
-| Solar flare activity | Periodic danger spikes, market disruption |
-| Dark nebula | Sensor interference, higher danger, smuggling haven |
-| Subspace rift | Unstable, high danger, unpredictable events |
-| Ion storm corridor | Periodic charged particle surges disrupt navigation and station operations |
-| Ancient minefield | Dormant mines make navigation perilous, higher base danger |
-| Pirate stronghold | Raiding fleets disrupt commerce, high base danger, lawless space |
+| Planetary | tidally_locked_world, geothermal_vents |
+| Orbital | binary_star, lagrange_stations, captured_rogue_body, deep_space_beacon |
+| Resource | crystalline_formations, exotic_matter_traces |
+| Phenomena | nebula_proximity, solar_flare_activity, gravitational_anomaly, dark_nebula, precursor_ruins, subspace_rift, pulsar_proximity, ion_storm_corridor, bioluminescent_ecosystem, signal_anomaly, xenobiology_preserve, ancient_minefield, pirate_stronghold |
+| Legacy | ancient_trade_route, generation_ship_wreckage, orbital_ring_remnant, seed_vault, colonial_capital, free_port_declaration, shipbreaking_yards, derelict_fleet, abandoned_station, smuggler_haven |
 
-These traits tend to appear in frontier/lawless space, creating the high-risk-high-reward zones that adventurous players seek out.
+### 3.1 Quality tiers
 
----
+Every feature instance rolls a tier (`QUALITY_TIERS`): 1 Marginal (~50%), 2 Solid (~35%), 3 Exceptional (~15%). Quality selects the flavour description and signals strategic value. It no longer scales production (features have no production role).
 
-## 2. Trait-to-Economy Derivation
+### 3.2 Danger-bearing features
 
-Economy type is not assigned directly — it emerges from a system's traits.
-
-### 2.1 Affinity Scoring
-
-Economy type is derived from a system's traits using **strong affinities only** (value 2). Minor affinities (value 1) represent secondary connections — flavour, production bonuses, future mechanics — but do not influence economy derivation. This keeps the signal clean and avoids noise from traits that have many minor affinities (e.g. extraction).
-
-```
-For each economy type:
-  affinity score = sum of (strong_affinity × trait quality) for all system traits
-  (only traits with affinity value 2 for that economy type are counted)
-```
-
-The economy type with the highest affinity score becomes the system's economy. Ties are broken by random selection (seeded).
-
-**Guaranteed strong-affinity roll**: During trait generation, every system's first trait is drawn from the pool of traits that have at least one strong (value 2) affinity. This ensures every system has a clear economy signal — no system falls through to fallback logic. Remaining traits (1–3) are rolled from the full pool using normal weighting.
-
-**Example**: A system with asteroid belt (quality 3) and mineral-rich moons (quality 2):
-- Extraction: (2 × 3) = 6 (asteroid belt has strong extraction affinity)
-- Industrial: 0 (mineral-rich moons has minor industrial, not counted)
-- Everything else: 0
-
-→ Extraction economy. Only the asteroid belt's strong affinity drives the score.
-
-**Example**: A system with lagrange stations (quality 2) and heavy metal veins (quality 2):
-- Industrial: (2 × 2) + (2 × 2) = 8 (both have strong industrial affinity)
-- Core: (1 × 2) = 0 (lagrange stations has minor core, not counted)
-
-→ Industrial economy. Both traits align strongly.
-
-**Example**: A system with habitable world (quality 2) and rare earth deposits (quality 3):
-- Agricultural: (2 × 2) = 4 (habitable world has strong agricultural)
-- Tech: (2 × 3) = 6 (rare earth has strong tech)
-
-→ Tech economy. Under a different faction that valued food production, this system could be redeveloped as agricultural. Interesting territory.
-
-### 2.2 Faction Influence on Economy
-
-When a faction controls a system, their government type can nudge the economy derivation. This creates the scenario where a system's economy could change when it changes hands in a war.
-
-- Government type provides a small affinity bonus to its preferred economy types
-- This bonus is weaker than trait affinity — traits still dominate, but close calls can flip
-- Economy changes when territory changes hands are disruptive — market chaos for several ticks as the system retools
-
-`[PENDING: faction-system]`
-
-### 2.3 Core Economy Exception
-
-Core economies are special — they represent political/trade capitals rather than natural resource exploitation. Core status comes from:
-
-- High trait affinity for core (habitable world + ancient trade route + lagrange stations) — **shipped**
-- Faction homeworld designation (always core regardless of traits) — `[PENDING: faction-system]`
-- High connectivity in the jump lane graph (trade hub position) — partially shipped via centrality-based starting-system selection
-
-This means core economies can't appear in isolated frontier systems no matter what traits they roll — you need either the right traits, the right political status, or the right location.
+Some features raise system danger via `dangerModifier`: dark_nebula (+0.06), subspace_rift (+0.08), pirate_stronghold (+0.08), ancient_minefield (+0.05), ion_storm_corridor (+0.04), binary_star (+0.03), solar_flare_activity (+0.03). lagrange_stations is the lone reducer (−0.03). These tend to cluster in frontier/lawless space — the high-risk-high-reward zones.
 
 ---
 
-## 3. Region-System Relationship
+## 4. Interactions with other systems
 
-### Design Philosophy
+### Navigation & danger
 
-Regions provide **spatial organisation**, not economic identity. All regions use a neutral palette and generic space names. Economy types emerge purely from traits — no region biases economy distribution. This ensures fairness once factions ship: no faction gets an unfair advantage or disadvantage based on where they spawn.
+`computeSystemDanger` sums four terms, clamped to `[0, 0.5]`: event navigation modifiers + government baseline + **feature danger** (`computeTraitDanger` over `dangerModifier`) + **body danger** (`Σ` archetype danger baselines — volcanic worlds). See [navigation.md](./navigation.md).
 
-Strategic interest comes from **trait quality and scarcity** (rare tier-3 traits, unique phenomena), not from economy clustering.
+### Exploration sites
 
-> **Note**: An earlier design used 8 "region themes" (garden heartland, mineral frontier, etc.) that lightly weighted trait selection. This was removed because: (1) themes created weak economy clustering that didn't add meaningful variety, (2) faction fairness is better served by uniform randomness, and (3) more regions with uniform generation produce more natural variety than 8 themed regions.
+The explore screen derives sites from the substrate (`deriveSystemLocations`, `lib/constants/locations.ts`): each body archetype opens a site (planet surface / gas platform / asteroid field), any richness modifier opens a mining outpost, and each feature opens its thematic site (research station, ruins expedition, salvage yard, anomaly site, smuggler's den, …).
 
-### Generation Pipeline
+### Operational missions
 
-1. **Place regions**: Regions placed via Poisson-disc sampling on the map. Names picked sequentially from a flat pool of generic space names.
-2. **Assign government**: Uniform distribution across government types. Coverage guarantee ensures all types appear.
-3. **Roll traits per system**: Each system rolls 2–4 traits uniformly. The **first trait** is guaranteed to have at least one strong (value 2) economy affinity (see §2.1). Remaining traits are drawn from the full pool with equal weights.
-4. **Derive economy per system**: Score strong affinities per §2.1, assign economy type.
-5. **Derive region economy label**: The region's displayed economy type = the most common economy type among its systems, stored as `dominantEconomy` on the Region model. Computed at seed time. Re-derived when system economies change (e.g., faction conquest in Layer 2 — tracked in `MIGRATION-NOTES.md` §1). `[PENDING: faction-system]` for the re-derivation hook
-6. **Select starting system**: Centrality-based — find region closest to map center, then pick core economy system closest to that region's center.
-
-### No Coherence Enforcement
-
-There is **no minimum percentage** for economy type distribution within a region. The generation relies on the balanced strong affinity pool (§2.1) and guaranteed strong-affinity first roll to produce naturally varied regions. With uniform trait weights and traits balanced across 6 economy types (5–6 strong affinities each), economy spread is naturally even (~16% each ±3%).
-
----
-
-## 4. Trait Interactions with Other Systems
+Feature traits gate operational mission eligibility (`lib/constants/missions.ts`): **survey** (precursor_ruins, gravitational_anomaly, exotic_matter_traces, …), **salvage** (generation_ship_wreckage, derelict_fleet, …), and **recon** (dark_nebula, pirate_stronghold, ancient_minefield, …).
 
 ### Events
 
-System traits influence event spawning and effects:
-- **Mining boom** events are more impactful at systems with extraction traits (higher quality = bigger boom)
-- **Solar storm** events are more likely at systems with solar flare activity or binary star traits
-- **Plague** events hit harder at systems with habitable world traits (larger population)
-- **Pirate raid** events are more likely at systems with dark nebula or nebula proximity (concealment)
-- Future event types could be trait-gated — a "precursor awakening" event can only spawn at systems with precursor ruins
+Event spawn weighting reads features + government type (not the old economic traits). E.g. pirate raids favour dark_nebula/nebula_proximity (concealment); solar storms favour solar_flare_activity/binary_star.
 
-### Navigation & Danger
+### Faction system
 
-Some traits modify the base danger of a system:
-- Binary star, radioactive deposits, solar flare activity, dark nebula, subspace rift all increase base danger
-- Habitable world, lagrange stations decrease base danger (established infrastructure, better rescue capability)
-- These stack with government and event danger modifiers
-
-### Operational Missions
-
-- **Survey missions** are generated from trait-rich systems. Survey-eligible traits (precursor_ruins, gravitational_anomaly, exotic_matter_traces, etc.) seed survey opportunities for scout-role ships
-
-### Faction System
-
-Traits define what makes territory worth fighting over. **`[PENDING: faction-system]`** for everything in this sub-section:
-
-- **Rare traits** (exotic matter, precursor ruins, subspace rift) are natural war objectives
-- **Quality tier-3 traits** make systems economically valuable enough to justify a war's cost
-- **Trait diversity** within a faction's territory determines economic resilience
-- When systems change hands, the conquering faction's government may shift the economy type (§2.2)
-
-### Trading & Future Production Lines
-
-Traits lay the groundwork for supply chain mechanics:
-
-- Trait production modifiers scale per-good rates today (shipped)
-- Some goods may only be producible at systems with specific traits (crystalline formations → advanced optics, organic compounds → pharmaceuticals) — `[PENDING: production-system]`
-- Rare traits could gate access to rare goods — `[PENDING: production-system]`
+Rare features (exotic matter, precursor ruins, subspace rift) and high-yield bodies make territory worth fighting over. `[PENDING: faction-system]`
 
 ---
 
 ## Related Design Docs
 
+- **[Economy Simulation — Substrate (SP1 spec)](../../planned/economy-simulation-substrate.md)** — full design, decisions, and the Part 2–3 forward plan
 - **[Universe](./universe.md)** — region/system structure, map rendering, generation pipeline
-- **[Economy](./economy.md)** — how trait production modifiers feed into market simulation
-- **[Events](./events.md)** — trait-driven event spawning and effects
-- **[Facilities (planned)](../../planned/facilities.md)** — faction-owned facilities seeded from traits; depends on Faction System
+- **[Economy](./economy.md)** — how the derived economy type feeds the market simulation
+- **[Events](./events.md)** — feature-driven event spawning and effects
+- **[Facilities (planned)](../../planned/facilities.md)** — faction-owned facilities seeded from the substrate

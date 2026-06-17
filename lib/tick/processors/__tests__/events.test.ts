@@ -43,6 +43,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     produces: {},
     consumes: {},
     traits: [],
+    bodyDanger: 0,
     prosperity: 0,
     tradeVolumeAccum: 0,
   };

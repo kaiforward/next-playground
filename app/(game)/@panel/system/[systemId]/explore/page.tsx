@@ -3,6 +3,7 @@
 import { use, useMemo } from "react";
 import Link from "next/link";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
+import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { enrichTraits } from "@/lib/utils/traits";
 import {
   deriveSystemLocations,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/constants/locations";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeColor } from "@/components/ui/badge";
@@ -81,13 +83,13 @@ function LocationCard({
 
 function ExploreContent({ systemId }: { systemId: string }) {
   const { systemInfo } = useSystemInfo(systemId);
+  const substrate = useSystemSubstrate(systemId);
 
   const locations = useMemo(() => {
-    const traits = systemInfo?.traits
-      ? enrichTraits(systemInfo.traits)
-      : [];
-    return deriveSystemLocations(traits);
-  }, [systemInfo?.traits]);
+    const bodies = substrate.visibility === "visible" ? substrate.bodies : [];
+    const features = systemInfo?.traits ? enrichTraits(systemInfo.traits) : [];
+    return deriveSystemLocations(bodies, features);
+  }, [substrate, systemInfo?.traits]);
 
   const stationLocations = useMemo(
     () => locations.filter((l) => l.category === "station"),
@@ -117,8 +119,9 @@ function ExploreContent({ systemId }: { systemId: string }) {
         </div>
       </section>
 
-      {/* System Locations */}
-      {systemLocations.length > 0 && (
+      {/* System Locations — derived from surveyed bodies + features. Hidden until
+          the system is surveyed; show a hint there rather than an unexplained gap. */}
+      {systemLocations.length > 0 ? (
         <section>
           <SectionHeader className="mb-3">
             System Locations
@@ -133,6 +136,15 @@ function ExploreContent({ systemId }: { systemId: string }) {
             ))}
           </div>
         </section>
+      ) : (
+        substrate.visibility !== "visible" && (
+          <section>
+            <SectionHeader className="mb-3">
+              System Locations
+            </SectionHeader>
+            <EmptyState message="Survey this system to reveal its exploration sites." />
+          </section>
+        )
       )}
     </div>
   );

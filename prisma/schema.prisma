@@ -216,6 +216,7 @@ model StarSystem {
   aggArable        Float   @default(0)
   aggWater         Float   @default(0)
   aggRadioactive   Float   @default(0)
+  bodyDanger       Float   @default(0)  // Σ body-archetype danger baselines
 
   region            Region             @relation(fields: [regionId], references: [id])
   faction           Faction?           @relation("FactionTerritory", fields: [factionId], references: [id])

@@ -52,6 +52,7 @@ function buildFixture(): {
     produces: { food: 4 },
     consumes: {},
     traits: [],
+    bodyDanger: 0,
     prosperity: 0,
     tradeVolumeAccum: 0,
   }));
@@ -65,6 +66,7 @@ function buildFixture(): {
     produces: {},
     consumes: { food: 4 },
     traits: [],
+    bodyDanger: 0,
     prosperity: 0,
     tradeVolumeAccum: 0,
   }));

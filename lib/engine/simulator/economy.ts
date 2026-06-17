@@ -93,7 +93,7 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
           quality: toQualityTier(t.quality),
         })))
       : 0;
-    const danger = computeSystemDanger(navMods, govBaseline, traitDanger);
+    const danger = computeSystemDanger(navMods, govBaseline, traitDanger, destSystem?.bodyDanger ?? 0);
 
     // Stage 1: Hazard incidents
     const enriched = cargo

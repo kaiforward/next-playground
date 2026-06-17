@@ -78,6 +78,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       produces: ECONOMY_PRODUCTION[econ] ?? {},
       consumes: ECONOMY_CONSUMPTION[econ] ?? {},
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
+      bodyDanger: s.bodyDanger,
       prosperity: 0,
       tradeVolumeAccum: 0,
     };

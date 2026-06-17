@@ -18,39 +18,21 @@ export type EconomyType =
 
 // ── System trait types ────────────────────────────────────────────
 
+// The narrative feature traits a system can have. A system's physical makeup
+// lives elsewhere: world/body type as bodies (BodyArchetypeId) and abundant
+// resources as richness modifiers (RichnessModifierId).
 export type TraitId =
-  // Planetary Bodies (12)
-  | "habitable_world"
-  | "ocean_world"
-  | "volcanic_world"
-  | "frozen_world"
+  // Planetary (2)
   | "tidally_locked_world"
-  | "desert_world"
-  | "jungle_world"
   | "geothermal_vents"
-  | "hydrocarbon_seas"
-  | "fertile_lowlands"
-  | "coral_archipelago"
-  | "tectonic_forge"
-  // Orbital Features (8)
-  | "asteroid_belt"
-  | "gas_giant"
-  | "mineral_rich_moons"
-  | "ring_system"
+  // Orbital (4)
   | "binary_star"
   | "lagrange_stations"
   | "captured_rogue_body"
   | "deep_space_beacon"
-  // Resource Deposits (9)
-  | "rare_earth_deposits"
-  | "heavy_metal_veins"
-  | "organic_compounds"
+  // Resource (2)
   | "crystalline_formations"
-  | "helium3_reserves"
   | "exotic_matter_traces"
-  | "radioactive_deposits"
-  | "superdense_core"
-  | "glacial_aquifer"
   // Phenomena & Anomalies (13)
   | "nebula_proximity"
   | "solar_flare_activity"

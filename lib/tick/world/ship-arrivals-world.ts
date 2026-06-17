@@ -44,6 +44,8 @@ export interface ArrivingShipView {
     name: string;
     governmentType: GovernmentType | null;
     traits: GeneratedTrait[];
+    /** Σ body-archetype danger baselines for the destination system. */
+    bodyDanger: number;
   } | null;
   upgradeSlots: UpgradeSlotView[];
   convoyId: string | null;

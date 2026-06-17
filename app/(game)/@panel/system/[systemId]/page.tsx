@@ -18,10 +18,11 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TradeActivityPanel } from "@/components/system/trade-activity-panel";
 import { AstrographyTeaser } from "@/components/system/astrography-teaser";
+import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
 import { formatCredits } from "@/lib/utils/format";
-import { getPopulationLabel, getDangerInfo } from "@/lib/utils/system";
+import { getPopulationLabel } from "@/lib/utils/system";
 import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -155,7 +156,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     (systemInfo?.traits ?? []).map((t) => ({ traitId: t.traitId, quality: t.quality })),
   );
   const totalDanger = traitDanger + govDef.dangerBaseline;
-  const danger = getDangerInfo(totalDanger);
 
   // Population
   const populationLabel = getPopulationLabel(economyType, traits.length);
@@ -215,7 +215,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 <span className="text-sm text-text-primary">{connectionCount}</span>
               </StatRow>
               <StatRow label="Danger">
-                <Badge color={danger.color}>{danger.label}</Badge>
+                <SystemDangerBadge systemId={systemId} baseDanger={totalDanger} />
               </StatRow>
               {systemInfo?.isGateway && (
                 <StatRow label="Gateway">
