@@ -25,11 +25,11 @@ These systems are implemented and functional. Each has a detailed design doc.
 ### Universe & Map — [detailed spec](./active/gameplay/universe.md)
 Configurable universe scale controlled by `UNIVERSE_SCALE` env var — currently supports up to ~10,000 systems across 60 regions in a 25,000×25,000 map, with the goal of scaling as high as possible. Systems are connected by jump lanes forming a navigable graph. Each system belongs to one faction (which sets its government type) and one region (which contributes a `dominantEconomy` label for orientation). The map uses a WebGL canvas (Pixi.js) with a two-tier rendering pipeline: a point cloud shows all systems as dots at universe zoom, while tile-based viewport loading fetches detailed system data only for visible tiles at close zoom. A LOD engine crossfades between tiers — zoomed out shows the point cloud, Voronoi-derived region boundaries, fleet presence dots, and region name labels; zooming in progressively reveals system names, economy badges, ship counts, event indicators, and connection fuel costs. A map-mode toggle paints the territory polygons by faction (default), by region, by a cold→warm per-system **prosperity** choropleth, or hides them entirely; an additive trade-flow overlay sits on top of any mode, and the price overlay (a per-system halo) carries a buy/sell sub-toggle and can ride on top of the prosperity choropleth (price uses a green↔red deal-quality ramp, kept disjoint from the cold↔warm prosperity ramp). Gateway systems serve as chokepoints for inter-region travel. Data loading at this scale and per-player fog-of-war visibility are detailed in [map-data-loading](./active/engineering/map-data-loading.md).
 
-### System Traits — [detailed spec](./active/gameplay/system-traits.md)
-Every system has 2–4 traits (physical properties — asteroid belts, habitable worlds, precursor ruins, gravitational anomalies, etc.) with quality tiers (1–3). 45+ traits across 5 categories (planetary, orbital, resource, phenomena, legacy) with per-economy-type affinity scores. Economy type (agricultural, extraction, refinery, industrial, tech, core) is derived bottom-up by summing strong (value 2) affinities scaled by quality — no direct assignment, no region biasing. The first trait roll is guaranteed to have a strong affinity so every system has a clear economic signal. Trait quality scales production modifiers per good, modifies danger baselines, gates survey missions, and influences event spawning. The faction-facing extensions (economy nudge on conquest, facility placement, war targets) live in the planned [Facilities](./planned/facilities.md) doc.
+### System Substrate & Traits — [detailed spec](./active/gameplay/system-traits.md)
+Every system is built from a physical substrate — a sun (its class gates composition), 1–N bodies (planets, asteroid belts, gas giants) each carrying a resource vector over seven resource types, and rare richness modifiers that multiply a body's resource — plus 0–2 narrative features. Economy type (agricultural, extraction, refinery, industrial, tech, core) is derived bottom-up from the system's aggregate body resources and population — no direct assignment, no region biasing. Features (precursor ruins, anomalies, derelict fleets, etc.) carry no economic role: they have quality tiers (1–3), modify danger baselines, gate survey/salvage/recon missions and exploration sites, and influence event spawning. The faction-facing extensions (economy nudge on conquest, facility placement, war targets) live in the planned [Facilities](./planned/facilities.md) doc.
 
 ### Economy — [detailed spec](./active/gameplay/economy.md)
-12 goods in 3 tiers (raw, processed, advanced) traded at station markets. Prices emerge from a single stock value per market via a pricing-anchor curve, with intra-trade slippage and a bid-ask spread that make same-station round-trips unprofitable. Stock evolves through self-limiting production/consumption, random noise, event modifiers, government effects, and system trait production bonuses — equilibrium emerges from production/consumption balance plus spatial trade flow, with no mean-reversion and no separate demand axis. Each economy type specializes in producing certain goods and consuming others, creating natural trade routes. Trait quality scales production rates — a tier-3 asteroid belt system produces significantly more ore than a tier-1. A per-system **prosperity** value (crisis → booming) scales production and consumption together; it surfaces as a label badge on the system Overview and Market screens and as the map's prosperity choropleth.
+12 goods in 3 tiers (raw, processed, advanced) traded at station markets. Prices emerge from a single stock value per market via a pricing-anchor curve, with intra-trade slippage and a bid-ask spread that make same-station round-trips unprofitable. Stock evolves through self-limiting production/consumption, random noise, event modifiers, and government effects — equilibrium emerges from production/consumption balance plus spatial trade flow, with no mean-reversion and no separate demand axis. Each economy type specializes in producing certain goods and consuming others, creating natural trade routes; a system's economy type is itself derived from its physical substrate (aggregate body resources + population). A per-system **prosperity** value (crisis → booming) scales production and consumption together; it surfaces as a label badge on the system Overview and Market screens and as the map's prosperity choropleth.
 
 ### Trade Simulation (Edge Flow) — [detailed spec](./active/gameplay/trade-simulation.md)
 Goods flow along jump-lane edges driven by local price gradients, supplying the inter-system trade pressure player density alone cannot. No merchant entities — the simulator applies the same single stock delta a player trade would, and writes to the same volume accumulator used by the prosperity multiplier. Runs one region per tick in round-robin order, with player activity scaling edge flow back via wall-clock displacement so the simulator stays out of the way in busy regions. Flow events feed a map overlay and a per-system "Trade Activity" panel (top imports/exports, volume sparkline) — routes are inferred from the event log, not stored.
@@ -92,7 +92,7 @@ flowchart TD
     FA[Factions]
     GOV[Government Types]
     REP[Player Reputation]
-    TR[System Traits]
+    TR["System Substrate & Traits"]
     PS[Price Snapshots]
     NP[Notification Prune]
 
@@ -129,9 +129,8 @@ flowchart TD
 
     REP -- "buy/sell multipliers,<br/>hostile trade denial" --> NF
 
-    TR -- "production rate bonuses<br/>(quality-scaled)" --> EC
-    TR -- "economy type derivation<br/>(strong affinities)" --> EC
-    TR -- "survey-eligible traits" --> OM
+    TR -- "economy type derivation<br/>(body resources + population)" --> EC
+    TR -- "survey/salvage/recon<br/>feature gating" --> OM
 
     SH -- "hull / stealth / evasion<br/>+ module bonuses" --> NF
     SH -- "firepower → escort<br/>damage reduction" --> NF
@@ -166,7 +165,7 @@ Key interactions:
 - **Trade Flow → Relations**: Cross-faction trade volume is a positive drift driver (capped per drift tick)
 - **Navigation → Reputation**: Successful trades at faction-owned markets accrue +0.5 reputation with the owning faction, capped at +2.0 per faction per tick
 - **Reputation → Navigation**: Per-faction standing applies a transaction multiplier to buy/sell prices (Champion best, Hostile denies trade) — the displayed market price is unchanged
-- **System Traits → Economy**: Trait quality scales production rates per good. Economy type is derived from trait strong affinities at generation
+- **Substrate → Economy**: Economy type is derived from a system's aggregate body resources and population at generation. Narrative features carry no economic role
 - **Ships → Navigation**: Hull, stealth, and evasion stats (plus matching upgrade modules) modify danger pipeline outcomes through diminishing returns. Convoy firepower feeds escort damage reduction. Speed determines transit duration
 - **Tick Engine → All**: Orchestrates processor execution order and broadcasts results via SSE
 

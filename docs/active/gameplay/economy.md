@@ -224,9 +224,9 @@ PLAYER TRADES  anytime (not tick-locked) - buy lowers stock, sell raises
 Viewed another way, the simulation stacks four layers from static to real-time:
 
 ```
-1  Base identity (static)      economy type -> produce/consume rates;
+1  Base identity (static)      bodies (resources + population) -> economy type;
+                               economy type -> produce/consume rates;
                                self-sufficiency -> import dependence;
-                               traits -> per-good production bonuses;
                                government -> volatility, spread, boosts
 2  Tick evolution (each tick)  self-limiting production/consumption,
                                prosperity, noise, clamp, edge flow
