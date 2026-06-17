@@ -1,10 +1,10 @@
 # System Substrate & Traits
 
-Status: **Active** — physical substrate + narrative features shipped (Economy Simulation SP1 Part 1).
+Status: **Active** — physical substrate + narrative features shipped (Economy Simulation SP1 Part 1); the economy now derives production and consumption from the substrate directly (SP1 Part 2).
 
 What makes each system unique now has two layers:
 
-1. **Physical substrate** — a system's sun, its bodies, and the resources those bodies hold. This is the economic foundation: it drives economy type, population, and (in later SP1 parts) production directly.
+1. **Physical substrate** — a system's sun, its bodies, and the resources those bodies hold. This is the economic foundation: it drives economy type, population, and production/consumption directly.
 2. **Narrative features** — flavourful, named properties (precursor ruins, pirate strongholds, anomalies, derelict fleets). Features gate missions and exploration sites and adjust danger, but carry **no economic role**.
 
 **Design principle**: geology is the substrate; civilisation interprets it. Two systems with the same economy-type label can feel completely different because their bodies, richness, and features differ.
@@ -66,7 +66,7 @@ Economy type is **not assigned** — it is a derived label. `deriveEconomyTypeLa
 - high population + balanced mix → `core` / `industrial`
 - refinery/tech fall out of the remaining mixes
 
-> **Part 1 transition note**: the economy engine still runs on the stock model, reading production/consumption rate tables keyed by this derived label (a one-function shim). SP1 Part 2 will derive production from body resources + labour (population) and consumption from population directly, demoting economy type to a display-only label. See the [substrate spec](../../planned/economy-simulation-substrate.md) §7–§8.
+> **Display-only label**: nothing in the economy tick reads economy type. Production derives from body resources + labour (population) and consumption from population directly (SP1 Part 2, see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`. See the [substrate spec](../../planned/economy-simulation-substrate.md) §7–§8.1.
 
 ---
 
@@ -120,6 +120,6 @@ Rare features (exotic matter, precursor ruins, subspace rift) and high-yield bod
 
 - **[Economy Simulation — Substrate (SP1 spec)](../../planned/economy-simulation-substrate.md)** — full design, decisions, and the Part 2–3 forward plan
 - **[Universe](./universe.md)** — region/system structure, map rendering, generation pipeline
-- **[Economy](./economy.md)** — how the derived economy type feeds the market simulation
+- **[Economy](./economy.md)** — how the substrate drives production, consumption, and market pricing
 - **[Events](./events.md)** — feature-driven event spawning and effects
 - **[Facilities (planned)](../../planned/facilities.md)** — faction-owned facilities seeded from the substrate

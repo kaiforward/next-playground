@@ -1,6 +1,6 @@
 # Economy Simulation — Sub-Project 1: Physical Substrate & Population
 
-Status: **SP1 Part 1 shipped**; **Part 2 design locked** (§8.1, 2026-06-17); Part 3 a forward sketch — created 2026-05-31. The built physical-substrate model (bodies, richness, features, derived economy type) is documented in [system-traits.md](../active/gameplay/system-traits.md) (active); this spec retains the full design rationale and the Part 2–3 plan. It is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13), decomposing SP1 into shippable parts; the build plans (`docs/plans/…`) and implementation hang off it.
+Status: **SP1 Parts 1–2 shipped** (Part 2, 2026-06-17 — economy onto the substrate); Part 3 (emergent pricing) a forward sketch — created 2026-05-31. The built physical-substrate model (bodies, richness, features, derived economy type) and the substrate-driven economy are documented in [system-traits.md](../active/gameplay/system-traits.md) and [economy.md](../active/gameplay/economy.md) (active); this spec retains the full design rationale and the Part 3 plan. It is the sub-project spec for **Sub-Project 1** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13), decomposing SP1 into shippable parts; the build plans (`docs/plans/…`) and implementation hang off it.
 
 Read the [vision](./economy-simulation-vision.md) first — this spec assumes its model (physical substrate, population keystone, days-of-supply pricing, dissolved economy type) and does not re-argue it.
 
@@ -228,12 +228,14 @@ Deleting the rate tables breaks the system Overview's **Produces / Consumes** li
 
 `npm run simulate` validates a stable-but-trading economy within the `[5, 200]` stock band, re-measures the anchors, and tunes the production/consumption coefficients to sane prices. **Coarse calibration only** — the target is a **non-degenerate, tradeable** economy (stocks in band, price dispersion exists, bots profit, greedy ≫ random), *not* a differentiated one. Differentiation needs the SP3 build-space lever (see the coarse-baseline note in §8.1.2); fine balance is SP3's job. Do not chase richer import/export geography by over-tuning the Part 2 coefficients.
 
-#### 8.1.7 Shipping shape (~4 phase PRs, squashed into the shared branch)
+#### 8.1.7 Shipping shape (shipped 2026-06-17)
 
-1. **2a — Engine + constants + substrate-service compute:** new tables, pure `physicalRates`, `MarketTickEntry` simplification, and the substrate read service extended to return per-good production/consumption. No live behaviour change yet (old tables still drive the tick). Fully unit-tested.
-2. **2b — Cutover + UI swap + deletes:** wire the live + sim adapters to the new drivers; swap the Overview lists to the substrate-service values and fix the population stat; delete the three tables + shim role; rewrite `getInitialStock`. Engine and UI flip together — no broken intermediate.
-3. **2c — Calibrate + docs:** simulator pass, recalibrate anchors/coeffs, update `economy.md` + `system-traits.md` + `SPEC.md`, mark Part 2 done.
-4. **2d — Display polish:** net import/export indicators, per-good production/consumption bars on the Astrography substrate tab, population magnitude readout.
+All four phases landed on the shared branch; 2c + 2d were combined into one final PR.
+
+1. ✅ **2a — Engine + constants + substrate-service compute:** new tables, pure `physicalRates`, `MarketTickEntry` simplification, and the substrate read service extended to return per-good production/consumption. No live behaviour change yet (old tables still drove the tick). Fully unit-tested.
+2. ✅ **2b — Cutover + UI swap + deletes:** wired the live + sim adapters to the new drivers; swapped the Overview lists to the substrate-service values and fixed the population stat; deleted the three tables + shim role; rewrote `getInitialStock`. Engine and UI flipped together — no broken intermediate.
+3. ✅ **2c — Calibrate + docs:** simulator pass, all twelve anchors recalibrated to the substrate equilibrium (coeffs left untouched — the economy was already non-degenerate), `economy.md` + `system-traits.md` + `SPEC.md` updated.
+4. ✅ **2d — Display polish:** per-good production/consumption diverging bars with net import/export indicators on the Astrography substrate tab. Population magnitude readout shipped in 2b.
 
 #### 8.1.8 Out of scope (Part 2)
 

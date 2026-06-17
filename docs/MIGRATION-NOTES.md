@@ -230,12 +230,12 @@ To be designed during implementation of each respective system.
 **Rebuilt** (on `feat/economy-simulation`; system-traits.md): a **physical substrate** (sun, bodies, resource-base vectors, richness, population) drives economy type and population; traits survive only as narrative **features** with no economic role. Danger and exploration sites derive from bodies + features.
 
 **Key deltas**:
-- Economy type is derived from the substrate via a transitional shim (`lib/engine/economy-shim.ts`), not trait-affinity scoring. The trait production bonus is removed.
+- Economy type is derived from the substrate by a display-only classifier (`lib/engine/economy-type.ts`), not trait-affinity scoring; production and consumption derive from the substrate directly (resources + population). The trait production bonus is removed.
 - Population is generated from the substrate (habitable bodies' capacity), not from traits.
 - Danger sums a body-derived `StarSystem.bodyDanger` term; exploration sites come from `deriveSystemLocations(bodies, features)`.
 - `TraitId` is narrowed 52 → 31 (features only); the trait-migration scaffolding is removed.
 
-**Status**: SP1 Part 1 shipped (on branch). Part 2 (economy natively onto the substrate, retiring the shim) and Part 3 (emergent days-of-supply pricing) are forward design — see [economy-simulation-substrate.md](./planned/economy-simulation-substrate.md) §8. Delete this item once SP1 fully lands on `main` and the active docs reflect the final model.
+**Status**: SP1 Parts 1–2 shipped (on branch): the substrate drives production/consumption directly and economy type is a display-only label. Part 3 (emergent days-of-supply pricing) is forward design — see [economy-simulation-substrate.md](./planned/economy-simulation-substrate.md) §8.2. Delete this item once SP1 fully lands on `main` and the active docs reflect the final model.
 
 ---
 

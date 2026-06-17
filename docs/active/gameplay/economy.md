@@ -12,7 +12,7 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 ### Tier 0 — Raw Materials
 
-Deep, liquid markets (high stock anchor ~111–129), thin per-unit margin. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these.
+Deep, liquid markets (high stock anchor ~101–127), thin per-unit margin. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these.
 
 | Good | Base Price | Volatility | Hazard | Price Range |
 |---|---|---|---|---|
@@ -23,7 +23,7 @@ Deep, liquid markets (high stock anchor ~111–129), thin per-unit margin. Cheap
 
 ### Tier 1 — Processed Goods
 
-Medium-depth markets (stock anchor ~67–75), moderate per-unit margin. Better margin but needs more capital. Mid-game income.
+Medium-depth markets (stock anchor ~79–90), moderate per-unit margin. Better margin but needs more capital. Mid-game income.
 
 | Good | Base Price | Volatility | Hazard | Price Range |
 |---|---|---|---|---|
@@ -34,7 +34,7 @@ Medium-depth markets (stock anchor ~67–75), moderate per-unit margin. Better m
 
 ### Tier 2 — Advanced Goods
 
-Thin, scarce markets (low stock anchor ~31–35), high per-unit price swing. Highest absolute margin per unit but can't fill cargo from one system. Late-game income — needs big capital AND multi-system routes.
+Thin, scarce markets (low stock anchor ~39–47), high per-unit price swing. Highest absolute margin per unit but can't fill cargo from one system. Late-game income — needs big capital AND multi-system routes.
 
 | Good | Base Price | Volatility | Hazard | Price Range |
 |---|---|---|---|---|
@@ -47,7 +47,7 @@ Thin, scarce markets (low stock anchor ~31–35), high per-unit price swing. Hig
 
 Each good has a single **pricing anchor** (`targetStock`) — the stock level at which mid price equals base price. Stock above the anchor reads cheap (surplus); below reads expensive (shortage). The anchor's *magnitude* sets the market's **depth**: a high anchor (staples) means a deep, liquid market where large trades barely move price; a low anchor (luxuries) means a thin market where a small trade swings the price hard. This is why the same price formula gives staples flat prices and advanced goods volatile ones — and it's intentional.
 
-Anchors are **calibrated**, not guessed: most goods use the midpoint of their producer/consumer seed-stock levels, but goods touched by *every* economy type (water, food, ore, textiles, chemicals) settle below that midpoint — they have no neutral markets to hold the average up — so their anchor is pinned to the stock level the universe actually settles at, measured via the simulator (`scripts/balance-analysis.ts`). The anchor *is* the natural galactic balance; deviations from it are what create trade signal.
+Anchors are **calibrated**, not guessed. Because consumption is universal — every system consumes every good — no good keeps neutral markets to hold its average at the producer/consumer seed midpoint, so all twelve anchors are pinned to the stock level the universe actually settles at. They are re-measured by running the simulator (`npm run simulate`) to a stable state and reading each good's mean settling stock off its stock-drift report. The anchor *is* the natural galactic balance; deviations from it are what create trade signal.
 
 The good's `equilibrium` field gives the **seed stock** for producers (high → cheap) vs consumers (low → expensive); the steady-state spread then emerges from production/consumption + spatial flow. Full values in `lib/constants/goods.ts`; anchors in `lib/constants/market-economy.ts`.
 
@@ -56,33 +56,31 @@ Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in 
 
 ---
 
-## Economy Types
+## Production & Consumption
 
-6 economy types define what a system produces and consumes, each with per-good production/consumption rates (units/tick). Production rates are **balanced against universe-wide consumption** (≈ equal production and consumption capacity per good) so no good is systematically drained or flooded across the galaxy — see `scripts/balance-analysis.ts`.
+Production and consumption are **physical** — they derive from each system's substrate (its aggregate resource vector + population), not from an economy-type rate table. One pure function, `physicalRates(goodId, aggregate, population)` (`lib/engine/physical-economy.ts`), is the single source of the formula, shared by the live tick, the simulator, and the substrate read service. Economy type no longer drives the tick; it is a derived display label (see [system-traits.md](./system-traits.md)).
 
-| Type | Produces (rate/tick) | Consumes (rate/tick) |
-|---|---|---|
-| Agricultural | Food (10), Textiles (4) | Water (4), Chemicals (3), Machinery (1), Medicine (1) |
-| Extraction | Water (13), Ore (6) | Food (3), Fuel (3), Textiles (2), Machinery (1) |
-| Refinery | Fuel (5), Metals (6), Chemicals (8) | Ore (4), Water (3), Food (1) |
-| Industrial | Machinery (2), Weapons (1) | Metals (3), Electronics (2), Chemicals (2), Fuel (2), Water (2), Food (2), Ore (2), Textiles (1) |
-| Tech | Electronics (3), Medicine (3) | Metals (2), Chemicals (2), Food (2), Luxuries (1), Water (1) |
-| Core | Luxuries (1) | Food (3), Textiles (2), Electronics (2), Medicine (2), Water (2), Weapons (1) |
+**Production** — one driver per good, `{ coeff, resource? }` in `lib/constants/physical-economy.ts`:
+```
+prodRate = coeff × labourFactor(population) × (resource-driven ? aggregate[resource] : 1)
+```
+- **Tier 0** goods are *resource-driven*: `water ← water`, `food ← arable`, `ore ← ore`, `textiles ← arable` (arable splits between food and textiles via differing coeffs). They scale with both a body-resource deposit *and* labour, so a water-rich, populated world is a strong net water exporter.
+- **Tier 1–2** goods are *labour-only*: `coeff × labourFactor(population)`, no resource gate. Higher tiers carry smaller coeffs (luxuries rarest). The four resources with no tier-0 good (gas, minerals, biomass, radioactive) stay economically inert until the facilities sub-project gives them inputs.
+- `labourFactor(population) = population / (population + LABOUR_HALF_POP)` — a soft-saturating scalar in [0, 1), a fixed per-system value while population is static.
 
-This creates natural supply chains: Extraction produces ore, Refinery consumes ore and produces metals, Industrial consumes metals and produces machinery. Disrupting any link cascades through the chain. Producer rates are deliberately higher than a single system's local consumption because each producer type supplies many consumer types across the galaxy — the surplus is what flows out along trade routes.
+**Consumption** — universal and population-scaled:
+```
+consRate = perCapitaNeed(good) × population
+```
+Every system consumes every good; higher tier → lower per-capita need. A system runs a positive **net balance** for a good when its production exceeds its consumption — that surplus is what flows out along trade routes.
 
-These per-good rates are the actual rates used by both the live game and the simulator via `resolveMarketTickEntry` (`lib/engine/market-tick-builder.ts`).
+**Emergent geography:** raw goods flow resource-rich frontier → core; manufactured goods flow populous core → frontier. The geography is deliberately **coarse** at this stage: tier-1+ production is labour-only with no competition for build space, so a populous world net-produces nearly every manufactured good. Genuine specialisation (housing vs. industry competing for finite body space) arrives with the facilities sub-project; until then the economy-type label is loose flavour, not a promise about net trade.
 
-### Self-Sufficiency Factors
+All coefficients and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller coeff and smaller need). The government `consumptionBoost` and the prosperity multiplier layer on top exactly as before.
 
-Different economy types have different self-sufficiency for goods they consume. An Agricultural system consuming water (s=0.5, has irrigation) seeds with more stock — and reads cheaper — than a Tech system consuming water (s=0.1, imports everything).
+### Market Seeding
 
-Self-sufficiency blends a consumer's seed stock from the base consumer level toward the producer level:
-- `s = 0.0` — fully dependent on imports (lowest seed stock, most expensive)
-- `s = 0.5` — partly self-sufficient (mid seed stock)
-- `s = 1.0` — meets own needs (seed stock matches producer levels)
-
-This creates price variety between systems consuming the same good. Full factor table in `lib/constants/economy.ts`.
+At seed/reset time each market's starting stock comes from its **net balance** for the good (`getInitialStock`, `lib/constants/market-economy.ts`): a net producer seeds high (toward the good's producer equilibrium → reads cheap), a net consumer seeds low (toward the consumer equilibrium → reads dear), and a balanced or inert market seeds at the pricing anchor. The producer share — `production / (production + consumption)` — blends continuously between the two equilibria. The old per-economy-type self-sufficiency table is gone; import dependence now falls directly out of the substrate.
 
 ---
 
@@ -133,8 +131,8 @@ A trade of `q` units moves stock from `S` to `S∓q`, and price moves the whole 
 Each good at each station is updated:
 
 1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the anchor.
-2. **Self-limiting production** — producing systems add stock, scaled by `sqrt((MAX − stock) / (MAX − MIN))`. Near the ceiling, production approaches zero (warehouses full).
-3. **Self-limiting consumption** — consuming systems remove stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left).
+2. **Self-limiting production** — the system's substrate-derived production rate adds stock, scaled by `sqrt((MAX − stock) / (MAX − MIN))`. Near the ceiling, production approaches zero (warehouses full).
+3. **Self-limiting consumption** — its population-scaled consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left).
 4. **Prosperity multiplier** — both production and consumption rates are scaled by the system's prosperity multiplier (0.3x crisis to 1.3x booming).
 5. **Noise** — random walk scaled by good volatility and government modifier (base amplitude ±3 units).
 6. **Clamp** — stock bounded to [5, 200].
@@ -148,8 +146,8 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 | Bid-ask spread `s` | 0.05 base | Buy/sell gap; scaled by government; makes round-trips lose |
 | Noise amplitude | ±3 base | Micro-volatility, scaled by volatility × government |
 | Min/max stock | 5 / 200 | Stock bounds (ceiling price at MIN, floor price at MAX) |
-| Production rate | 1-13 per good | Per economy type, scaled by self-limiting + prosperity |
-| Consumption rate | 1-4 per good | Per economy type, scaled by self-limiting + prosperity |
+| Production rate | substrate-driven | `coeff × labour(pop) × resource`; scaled by self-limiting + prosperity |
+| Consumption rate | population-scaled | `perCapitaNeed × population`; scaled by self-limiting + prosperity |
 | Price history | Rolling window | Snapshots recorded periodically (`lib/engine/snapshot.ts`) |
 
 ### Prosperity System
@@ -224,9 +222,9 @@ PLAYER TRADES  anytime (not tick-locked) - buy lowers stock, sell raises
 Viewed another way, the simulation stacks four layers from static to real-time:
 
 ```
-1  Base identity (static)      bodies (resources + population) -> economy type;
-                               economy type -> produce/consume rates;
-                               self-sufficiency -> import dependence;
+1  Base identity (static)      bodies (resources + population) -> per-good
+                               produce/consume rates (physicalRates);
+                               net balance -> seed stock + import dependence;
                                government -> volatility, spread, boosts
 2  Tick evolution (each tick)  self-limiting production/consumption,
                                prosperity, noise, clamp, edge flow
