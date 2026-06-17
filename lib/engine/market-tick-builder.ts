@@ -13,8 +13,6 @@ import { type GovernmentDefinition } from "@/lib/constants/government";
 import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry, type ProsperityParams } from "@/lib/engine/tick";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
-import type { EconomyType } from "@/lib/types/game";
-
 /** Result of resolving a market tick: the stock-sim entry plus the pricing anchor. */
 export interface ResolvedMarketTick {
   /** Input to the stock simulation (production/consumption rates, volatility, …). */
@@ -30,14 +28,9 @@ export interface ResolvedMarketTick {
 export interface MarketTickInput {
   goodId: string;
   stock: number;
-  economyType: EconomyType;
-  /** List of good IDs this system produces. */
-  produces: string[];
-  /** List of good IDs this system consumes. */
-  consumes: string[];
-  /** Base production rate for this good at this economy type (undefined = not a producer). */
+  /** Base production rate for this good (undefined = not a producer). */
   baseProductionRate?: number;
-  /** Base consumption rate for this good at this economy type (undefined = not a consumer). */
+  /** Base consumption rate for this good (undefined = not a consumer). */
   baseConsumptionRate?: number;
   /** Government definition for the system's owning faction (undefined if none). */
   govDef?: GovernmentDefinition;
@@ -73,9 +66,6 @@ export function resolveMarketTickEntry(
     {
       goodId: input.goodId,
       stock: input.stock,
-      economyType: input.economyType,
-      produces: input.produces,
-      consumes: input.consumes,
       volatility,
       baseProductionRate: input.baseProductionRate,
       baseConsumptionRate: input.baseConsumptionRate,

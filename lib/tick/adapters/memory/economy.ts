@@ -68,10 +68,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         goodId: m.goodId,
         basePrice: m.basePrice,
         stock: m.stock,
-        economyType: sys.economyType,
         governmentType: sys.governmentType,
-        produces: Object.keys(sys.produces),
-        consumes: Object.keys(sys.consumes),
         baseProductionRate: sys.produces[m.goodId],
         baseConsumptionRate: sys.consumes[m.goodId],
         traits: sys.traits.map((t) => ({
