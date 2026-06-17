@@ -66,3 +66,22 @@ describe("physicalRates — consumption", () => {
     expect(physicalRates("not_a_good", AGG, 1000).consumption).toBe(0);
   });
 });
+
+import { substrateGoodRates } from "../physical-economy";
+import { GOOD_NAMES } from "@/lib/constants/goods";
+
+describe("substrateGoodRates", () => {
+  it("returns one entry per good in GOOD_NAMES order", () => {
+    const rows = substrateGoodRates(AGG, 1000);
+    expect(rows.map((r) => r.goodId)).toEqual(GOOD_NAMES);
+  });
+
+  it("matches physicalRates for each good", () => {
+    const rows = substrateGoodRates(AGG, 1000);
+    for (const row of rows) {
+      const direct = physicalRates(row.goodId, AGG, 1000);
+      expect(row.production).toBeCloseTo(direct.production, 10);
+      expect(row.consumption).toBeCloseTo(direct.consumption, 10);
+    }
+  });
+});

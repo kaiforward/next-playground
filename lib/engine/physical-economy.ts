@@ -7,6 +7,7 @@
  * source of truth for the formula.
  */
 import type { ResourceVector } from "@/lib/types/game";
+import { GOOD_NAMES } from "@/lib/constants/goods";
 import {
   GOOD_PRODUCTION,
   GOOD_CONSUMPTION,
@@ -51,4 +52,22 @@ export function physicalRates(
   const consumption = need * Math.max(0, population);
 
   return { production, consumption };
+}
+
+/** Per-good production/consumption snapshot for one system — the read-service shape. */
+export interface SubstrateGoodRate {
+  goodId: string;
+  production: number;
+  consumption: number;
+}
+
+/** Production + consumption for every good at a system, in canonical good order. */
+export function substrateGoodRates(
+  aggregate: ResourceVector,
+  population: number,
+): SubstrateGoodRate[] {
+  return GOOD_NAMES.map((goodId) => {
+    const { production, consumption } = physicalRates(goodId, aggregate, population);
+    return { goodId, production, consumption };
+  });
 }
