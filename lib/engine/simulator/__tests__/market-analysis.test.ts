@@ -5,7 +5,6 @@ import {
 } from "../market-analysis";
 import type { SimWorld, SimMarketEntry } from "../types";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { getTargetStock } from "@/lib/constants/market-economy";
 
 function market(
   systemId: string,
@@ -48,9 +47,11 @@ describe("takeMarketSnapshot", () => {
 });
 
 describe("computeMarketHealth — stock drift", () => {
-  it("averages drift per good, signs it vs targetStock, and sorts by |drift|", () => {
-    // water target 122: stocks 200 & 140 → drifts +78 & +18 → avg +48 (above target).
-    // luxuries target 39: stock 20 → drift −19 (below target).
+  it("averages drift per good, signs it vs the per-system reference, and sorts by |drift|", () => {
+    // The market() fixture uses basePrice 100, demandRate 1, anchorMult 1, so
+    // every market's reference is curveForGood(100, 0.2, 5.0, 1).targetStock.
+    // water: stocks 200 & 140 → both above the reference → avg drift positive.
+    // luxuries: stock 20 → below the reference → drift negative.
     const { stockDrift } = computeMarketHealth(
       world([
         market("sys-1", "water", 200),
@@ -59,19 +60,18 @@ describe("computeMarketHealth — stock drift", () => {
       ]),
     );
 
-    const waterTarget = getTargetStock("water");
-    const luxTarget = getTargetStock("luxuries");
-    const expectedWater = (200 + 140) / 2 - waterTarget;
-    const expectedLux = 20 - luxTarget;
+    const reference = curveForGood(100, 0.2, 5.0, 1).targetStock;
+    const expectedWater = (200 + 140) / 2 - reference;
+    const expectedLux = 20 - reference;
 
     // |water drift| > |luxuries drift| → water sorts first.
     expect(stockDrift[0].goodId).toBe("water");
     expect(stockDrift[0].avgStockDrift).toBeCloseTo(expectedWater, 5);
-    expect(stockDrift[0].avgStockDrift).toBeGreaterThan(0); // above target
+    expect(stockDrift[0].avgStockDrift).toBeGreaterThan(0); // above reference
 
     const lux = stockDrift.find((d) => d.goodId === "luxuries");
     expect(lux?.avgStockDrift).toBeCloseTo(expectedLux, 5);
-    expect(lux?.avgStockDrift).toBeLessThan(0); // below target
+    expect(lux?.avgStockDrift).toBeLessThan(0); // below reference
   });
 });
 
@@ -79,8 +79,8 @@ describe("computeMarketHealth — price dispersion", () => {
   it("reports zero dispersion for a single-system good and positive for a split one", () => {
     const { priceDispersion } = computeMarketHealth(
       world([
-        market("sys-1", "water", 200), // price ≈ 68
-        market("sys-2", "water", 140), // price ≈ 96 → spread across systems
+        market("sys-1", "water", 200), // price ≈ 25
+        market("sys-2", "water", 140), // price ≈ 36 → spread across systems
         market("sys-1", "luxuries", 20), // single system → no dispersion
       ]),
     );
