@@ -107,6 +107,8 @@ export function prepareResourceBars(
   const trace: ResourceType[] = [];
   for (const type of types) {
     const value = vector[type];
+    // value <= 0 catches exact zeros; the relative clause needs max > 0 to
+    // avoid 0/0, so an all-zero vector collapses entirely via the first clause.
     const isTrace =
       collapseTrace && (value <= 0 || (max > 0 && value / max < TRACE_FRACTION));
     if (isTrace) {

@@ -126,6 +126,7 @@ describe("prepareResourceBars", () => {
     expect(entries.map((e) => e.type)).toEqual(["ore"]);
     expect(trace).toContain("gas");
     expect(trace).toContain("water");
+    expect(trace).toHaveLength(6);
   });
 
   it("puts every type in trace for an all-zero vector when collapsing", () => {
