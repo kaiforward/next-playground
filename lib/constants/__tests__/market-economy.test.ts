@@ -2,12 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   STOCK_MIN,
   STOCK_MAX,
-  getTargetStock,
-  getInitialStock,
+  TARGET_COVER,
   getSpread,
+  getInitialStock,
+  marketDemandRate,
+  MIN_DEMAND,
 } from "../market-economy";
 import { GOVERNMENT_TYPES } from "../government";
-import { GOODS } from "../goods";
+import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { makeResourceVector } from "@/lib/engine/resources";
 
 describe("stock bounds", () => {
@@ -17,44 +19,62 @@ describe("stock bounds", () => {
   });
 });
 
-describe("getTargetStock", () => {
-  it("returns the measured anchor for every good", () => {
-    // Universal consumption means every good settles at its own level (no
-    // neutral markets to hold the average up), so all twelve are pinned to
-    // their simulator-measured equilibrium rather than the supply-band midpoint.
-    expect(getTargetStock("water")).toBe(122);
-    expect(getTargetStock("food")).toBe(101);
-    expect(getTargetStock("luxuries")).toBe(39);
+describe("marketDemandRate", () => {
+  it("returns per-capita-need × population for a populated system", () => {
+    const rate = marketDemandRate(makeResourceVector({}), 1000, "water");
+    expect(rate).toBeCloseTo(GOOD_CONSUMPTION.water * 1000);
   });
 
-  it("falls back to the mid stock band for unknown goods", () => {
-    expect(getTargetStock("not_a_good")).toBe(Math.round((STOCK_MIN + STOCK_MAX) / 2));
+  it("scales linearly with population", () => {
+    const low = marketDemandRate(makeResourceVector({}), 500, "food");
+    const high = marketDemandRate(makeResourceVector({}), 1000, "food");
+    expect(high).toBeCloseTo(low * 2);
+  });
+
+  it("floors at MIN_DEMAND for a zero-population system", () => {
+    expect(marketDemandRate(makeResourceVector({}), 0, "luxuries")).toBe(MIN_DEMAND);
+  });
+
+  it("floors at MIN_DEMAND for an unknown good", () => {
+    expect(marketDemandRate(makeResourceVector({}), 1000, "not_a_good")).toBe(MIN_DEMAND);
   });
 });
 
 describe("getInitialStock", () => {
-  it("seeds a net producer high (toward produces -> cheap)", () => {
+  it("seeds a net producer above its reference (deeper cover → cheap)", () => {
     // Water-rich, low-pop system: strong net water producer.
-    const seed = getInitialStock(makeResourceVector({ water: 12 }), 100, "water");
-    expect(seed).toBeGreaterThan(getTargetStock("water"));
-    expect(seed).toBeLessThanOrEqual(GOODS.water.equilibrium.produces);
+    const agg = makeResourceVector({ water: 12 });
+    const reference = TARGET_COVER * marketDemandRate(agg, 100, "water");
+    const seed = getInitialStock(agg, 100, "water");
+    expect(seed).toBeGreaterThan(reference);
   });
 
-  it("seeds a net consumer low (toward consumes -> dear)", () => {
-    // Water-barren, populous system: pure net water consumer.
-    const consumerSeed = getInitialStock(makeResourceVector({ water: 0 }), 2000, "water");
-    const producerSeed = getInitialStock(makeResourceVector({ water: 12 }), 100, "water");
-    expect(consumerSeed).toBe(GOODS.water.equilibrium.consumes);
-    expect(consumerSeed).toBeLessThan(producerSeed);
+  it("seeds a net consumer below its reference (shallower cover → dear)", () => {
+    const agg = makeResourceVector({ water: 0 });
+    const reference = TARGET_COVER * marketDemandRate(agg, 2000, "water");
+    const seed = getInitialStock(agg, 2000, "water");
+    expect(seed).toBeLessThan(reference);
   });
 
-  it("seeds at the target when the system has no production or consumption", () => {
-    // Zero population -> no rates on either axis -> the pricing anchor.
-    expect(getInitialStock(makeResourceVector({ water: 12 }), 0, "water")).toBe(getTargetStock("water"));
+  it("a net producer seeds deeper than a net consumer at the same population", () => {
+    // Same population → same reference, so the seeds compare directly: the
+    // producer's deeper cover shows up as a strictly higher stock.
+    const producer = getInitialStock(makeResourceVector({ water: 12 }), 500, "water");
+    const consumer = getInitialStock(makeResourceVector({ water: 0 }), 500, "water");
+    expect(producer).toBeGreaterThan(consumer);
   });
 
-  it("seeds an unknown good at its target", () => {
-    expect(getInitialStock(makeResourceVector({}), 1000, "not_a_good")).toBe(getTargetStock("not_a_good"));
+  it("clamps seeds to the stock band", () => {
+    const seed = getInitialStock(makeResourceVector({ water: 0 }), 100000, "water");
+    expect(seed).toBeGreaterThanOrEqual(STOCK_MIN);
+    expect(seed).toBeLessThanOrEqual(STOCK_MAX);
+  });
+
+  it("seeds an unknown (inert) good at the stock floor", () => {
+    // No production or consumption → the total===0 producerShare fallback (0.5),
+    // and demandRate floors at MIN_DEMAND, so the reference (TARGET_COVER × 0.05)
+    // sits below STOCK_MIN and the seed clamps up to the floor.
+    expect(getInitialStock(makeResourceVector({}), 1000, "not_a_good")).toBe(STOCK_MIN);
   });
 });
 

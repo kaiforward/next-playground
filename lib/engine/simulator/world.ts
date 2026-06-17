@@ -13,7 +13,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { toGovernmentType } from "@/lib/types/guards";
 import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock } from "@/lib/constants/market-economy";
+import { getInitialStock, marketDemandRate } from "@/lib/constants/market-economy";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -107,6 +107,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         basePrice,
         stock: getInitialStock(sys.aggregate, sys.population, goodKey),
         anchorMult: 1,
+        demandRate: marketDemandRate(sys.aggregate, sys.population, goodKey),
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
       });

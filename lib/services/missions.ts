@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
@@ -98,9 +97,8 @@ async function buildPriceLookup(
       goodMap = new Map();
       lookup.set(systemId, goodMap);
     }
-    const goodKey = GOOD_NAME_TO_KEY.get(entry.good.name) ?? entry.goodId;
     const price = spotPrice(
-      curveForGood(goodKey, entry.good.basePrice, entry.good.priceFloor, entry.good.priceCeiling, entry.anchorMult),
+      curveForGood(entry.good.basePrice, entry.good.priceFloor, entry.good.priceCeiling, entry.demandRate, entry.anchorMult),
       entry.stock,
     );
     goodMap.set(entry.goodId, price);
@@ -347,9 +345,8 @@ export async function deliverMission(
       throw new Error("MARKET_UNAVAILABLE");
     }
 
-    const goodKey = GOOD_NAME_TO_KEY.get(freshMarket.good.name) ?? freshMarket.goodId;
     const freshUnitPrice = spotPrice(
-      curveForGood(goodKey, freshMarket.good.basePrice, freshMarket.good.priceFloor, freshMarket.good.priceCeiling, freshMarket.anchorMult),
+      curveForGood(freshMarket.good.basePrice, freshMarket.good.priceFloor, freshMarket.good.priceCeiling, freshMarket.demandRate, freshMarket.anchorMult),
       freshMarket.stock,
     );
     const goodsValue = freshUnitPrice * freshMission.quantity;

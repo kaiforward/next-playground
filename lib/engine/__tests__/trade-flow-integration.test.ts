@@ -99,6 +99,7 @@ function buildFixture(): {
       // Producers food-rich (high stock → cheap), consumers food-poor (low → dear).
       stock: isProducer ? 120 : 20,
       anchorMult: 1,
+      demandRate: 1,
       priceFloor: 0.2,
       priceCeiling: 5.0,
     });

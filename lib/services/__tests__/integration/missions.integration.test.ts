@@ -8,7 +8,6 @@ import {
 } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 
 // Mock the prisma import so mission service uses our test client
@@ -125,6 +124,13 @@ describe("trade mission lifecycle (integration)", () => {
       });
       expect(playerBefore).not.toBeNull();
       const stationId = universe.stations.agricultural;
+      // Exercise the active-event anchor multiplier end-to-end: a non-unity
+      // anchorMult must flow through both the expected-price preview below and
+      // deliverMission's own re-priced payout, and the two must agree.
+      await prisma.stationMarket.update({
+        where: { stationId_goodId: { stationId, goodId: universe.goodIds["food"] } },
+        data: { anchorMult: 2 },
+      });
       const marketBefore = await prisma.stationMarket.findUnique({
         where: {
           stationId_goodId: { stationId, goodId: universe.goodIds["food"] },
@@ -132,14 +138,15 @@ describe("trade mission lifecycle (integration)", () => {
         include: { good: true },
       });
       expect(marketBefore).not.toBeNull();
+      expect(marketBefore!.anchorMult).toBe(2);
 
-      const goodKey = GOOD_NAME_TO_KEY.get(marketBefore!.good.name) ?? "food";
       const expectedUnitPrice = spotPrice(
         curveForGood(
-          goodKey,
           marketBefore!.good.basePrice,
           marketBefore!.good.priceFloor,
           marketBefore!.good.priceCeiling,
+          marketBefore!.demandRate,
+          marketBefore!.anchorMult,
         ),
         marketBefore!.stock,
       );

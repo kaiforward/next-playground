@@ -334,6 +334,8 @@ model StationMarket {
   goodId    String
   stock      Float
   anchorMult Float    @default(1)
+  /** Per-capita-need × population (floored) — the days-of-supply denominator. Static while population is static; seed-written. */
+  demandRate Float    @default(1)
   updatedAt  DateTime @updatedAt
 
   station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)

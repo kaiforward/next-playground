@@ -8,7 +8,7 @@ import { processors, sortProcessors } from "@/lib/tick/registry";
 import type { TickContext } from "@/lib/tick/types";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
-import { GOODS, GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
@@ -251,12 +251,11 @@ export async function getEconomySnapshot(): Promise<ServiceResult<{ systems: Eco
     systemName: sys.name,
     economyType: sys.economyType,
     markets: (sys.station?.markets ?? []).map((m) => {
-      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.goodId;
       return {
         goodId: m.goodId,
         goodName: m.good.name,
         stock: m.stock,
-        price: spotPrice(curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.anchorMult), m.stock),
+        price: spotPrice(curveForGood(m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.demandRate, m.anchorMult), m.stock),
       };
     }),
   }));

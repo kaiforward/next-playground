@@ -64,7 +64,7 @@ export class PrismaTradeMissionsWorld implements TradeMissionsWorld {
         systemId: m.station.systemId,
         goodId: goodKey,
         currentPrice: spotPrice(
-          curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.anchorMult),
+          curveForGood(m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.demandRate, m.anchorMult),
           m.stock,
         ),
         basePrice: m.good.basePrice,
