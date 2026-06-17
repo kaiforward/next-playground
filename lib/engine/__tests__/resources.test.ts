@@ -136,4 +136,11 @@ describe("prepareResourceBars", () => {
     expect(entries).toEqual([]);
     expect(trace).toHaveLength(7);
   });
+
+  it("keeps all-zero entries with fraction 0 when not collapsing (no 0/0 NaN)", () => {
+    const { entries, trace } = prepareResourceBars(emptyResourceVector());
+    expect(entries).toHaveLength(7);
+    expect(entries.every((e) => e.fraction === 0)).toBe(true);
+    expect(trace).toEqual([]);
+  });
 });

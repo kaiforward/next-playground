@@ -10,4 +10,7 @@ describe("formatNumber", () => {
   it("groups thousands", () => {
     expect(formatNumber(4210)).toMatch(/^4\D?210$/);
   });
+  it("renders zero (e.g. an uninhabited system's population)", () => {
+    expect(formatNumber(0)).toBe("0");
+  });
 });
