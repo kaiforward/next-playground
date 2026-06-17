@@ -24,6 +24,9 @@ interface StarGlyphProps extends GlyphVariants {
  */
 export function StarGlyph({ sunClass, size, className }: StarGlyphProps) {
   const color = SUN_CLASS_COLORS[sunClass];
+  // Soft stellar glow in the sun-class color, scaled down for the small
+  // (teaser) glyph so it stays subtle next to body text.
+  const glow = size === "sm" ? `0 0 6px 1px ${color}88` : `0 0 13px 2px ${color}88`;
   return (
     <span
       aria-hidden
@@ -31,6 +34,7 @@ export function StarGlyph({ sunClass, size, className }: StarGlyphProps) {
       className={glyphVariants({ size, className })}
       style={{
         background: `radial-gradient(circle at 35% 35%, ${color}, ${color}99 60%, ${color}33)`,
+        boxShadow: glow,
       }}
     />
   );
