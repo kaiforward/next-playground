@@ -8,7 +8,7 @@ const TERRITORY_ALPHA_KEYS = [
 type TerritoryAlphaKey = (typeof TERRITORY_ALPHA_KEYS)[number];
 
 describe.each(TERRITORY_ALPHA_KEYS)(
-  "computeLOD — %s curve (PR 5/5 polish)",
+  "computeLOD — %s curve",
   (key: TerritoryAlphaKey) => {
     it("never culls the territory layer regardless of zoom", () => {
       for (const zoom of [0.05, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0]) {

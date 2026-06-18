@@ -205,8 +205,8 @@ model StarSystem {
   prosperity       Float   @default(0)
   tradeVolumeAccum Int     @default(0)
 
-  // ── Physical substrate (economy-simulation SP1) ──
-  sunClass         String  @default("yellow")  // SunClass — overwritten at PR3 reseed
+  // ── Physical substrate ──
+  sunClass         String  @default("yellow")  // SunClass; real value written at seed time
   population       Int     @default(0)          // abstract magnitude
   popCap           Float   @default(0)          // Σ(body popCapWeight × size)
   aggGas           Float   @default(0)
@@ -320,7 +320,7 @@ model Good {
   tradeMissions TradeMission[]
 }
 
-// Stock-based economy (PR 2 cutover): a single `stock` axis replaced the legacy
+// Stock-based economy: a single `stock` axis replaced the legacy
 // `supply` + `demand` columns. This was applied via `prisma db push` (no
 // migration file), which is fine for the dev workflow where the DB is reseeded
 // (`npx prisma db seed`) after a schema change.

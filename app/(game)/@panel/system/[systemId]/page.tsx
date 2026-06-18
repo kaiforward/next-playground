@@ -80,8 +80,8 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const allMissions = useSystemAllMissions(systemId);
   const substrate = useSystemSubstrate(systemId);
 
-  // Owning faction (post-Layer-2 source of government). Falls back to the
-  // region's dominant faction for the transient cutover state.
+  // Owning faction (the source of government). Falls back to the region's
+  // dominant faction when a system has no factionId yet.
   const factionInfo = useMemo(() => {
     if (!universeData) return null;
     const factionId = systemInfo?.factionId ?? regionInfo?.dominantFactionId ?? null;
@@ -152,8 +152,8 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     }));
   }, [market]);
 
-  // Danger — sourced from the system's owning faction (post-Layer-2). Region
-  // dominant gov is the fallback path for the transient cutover state.
+  // Danger — sourced from the system's owning faction's government. Region
+  // dominant gov is the fallback when a system has no factionId yet.
   const govType: GovernmentType =
     factionInfo?.governmentType ?? regionInfo?.dominantGovernmentType ?? "frontier";
   const govDef = GOVERNMENT_TYPES[govType];

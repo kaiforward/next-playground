@@ -132,7 +132,7 @@ export function StarMap({
     })),
   }), [atlas.regions, atlas.factions, mergedSystems, atlas.connections]);
 
-  // ── Foundation memos (stable across renders) ──────────────────
+  // ── Base memos (stable across renders) ────────────────────────
   const systemRegionMap = useMemo(
     () => buildSystemRegionMap(universe.systems),
     [universe.systems],

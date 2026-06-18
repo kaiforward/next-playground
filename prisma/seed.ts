@@ -304,9 +304,9 @@ async function main() {
 
   // ── Seed faction relations ──
   // One row per unordered (factionAId < factionBId) pair, initial score 0.
-  // Phase 3's relations processor drifts these from doctrine + government +
-  // border + trade-volume drivers — Foundation seeds at neutral so processor
-  // tuning has a clean baseline.
+  // The relations processor drifts these from doctrine + government +
+  // border + trade-volume drivers — seeding at neutral gives processor
+  // tuning a clean baseline.
   const relationRows: { factionAId: string; factionBId: string }[] = [];
   for (let i = 0; i < factionIds.length; i++) {
     for (let j = i + 1; j < factionIds.length; j++) {

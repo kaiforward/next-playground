@@ -7,7 +7,7 @@
  *    bar. Economy types now derive from the physical substrate, so an even split
  *    is neither expected nor wanted (cores/extraction are pluralities).
  * 3. The trait catalog keeps a balanced strong-affinity spread (catalog data;
- *    affinities are retired in a later PR).
+ *    affinities are vestigial, pending removal).
  *
  * Tests run full universe generation across multiple seeds for statistical confidence.
  */

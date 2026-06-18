@@ -1,5 +1,5 @@
 /**
- * One-off PR3a verification: report the generated galaxy's economy-type
+ * One-off verification: report the generated galaxy's economy-type
  * distribution, galaxy-wide aggregate resource totals, and the weakest region's
  * arable (food) share. Run: npx tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts
  */
