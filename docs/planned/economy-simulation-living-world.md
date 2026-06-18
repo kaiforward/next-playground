@@ -1,6 +1,6 @@
 # Economy Simulation — Sub-Project 2: The Living World (Population Dynamics & Consequences)
 
-Status: **Design locked** 2026-06-18 (brainstormed from the vision + SP1 substrate). This is the sub-project spec for **Sub-Project 2** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13 item 2, "Demand & consequence loop"). It assumes the shipped SP1 model — physical substrate, population-scaled consumption, days-of-supply pricing — and does not re-argue it. The code-heavy build plan hangs off this spec in `docs/plans/` and is deleted when SP2 ships.
+Status: **Design locked** 2026-06-18; **Part 0 shipped** 2026-06-18 (de-region diffusion — faction-bounded topology + work-budget slicing; calibrated `DISTANCE_DECAY = 0.1`, `EDGES_PER_TICK = 256`). **Part 1 not started.** This is the sub-project spec for **Sub-Project 2** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13 item 2, "Demand & consequence loop"). It assumes the shipped SP1 model — physical substrate, population-scaled consumption, days-of-supply pricing — and does not re-argue it. The code-heavy build plan hangs off this spec in `docs/plans/` and is deleted when SP2 ships.
 
 Read the [vision](./economy-simulation-vision.md) (§4 population keystone, §5 tick loop, §7 consequences, §10 rethinks) and [SP1 substrate spec](./economy-simulation-substrate.md) first.
 
@@ -77,6 +77,8 @@ A system's population is described by three tiers over two anchors. This taxonom
 ---
 
 ## 5. Part 0 — De-region the diffusion engine
+
+> **Shipped 2026-06-18.** Faction-bounded topology + work-budget edge slicing landed on the shared branch (Phase A — structural refactor; Phase B — calibration + docs). Calibrated constants: `DISTANCE_DECAY = 0.1`, `EDGES_PER_TICK = 256` (a full sweep is 4 ticks at default scale, 46 at 10K — both inside the 200-tick prune window). A simulator sweep confirmed the targets hold (stocks in `[5,200]`, distance-graded dispersion on long-haul goods, greedy ≫ random) with no far-system starvation. The durable topology description now lives in [trade-simulation.md](../active/gameplay/trade-simulation.md); this section retains the design rationale.
 
 **Goal.** Make goods diffusion flow over the topology it *should* have, with sharding as an independent, invisible performance concern.
 
