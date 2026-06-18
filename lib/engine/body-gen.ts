@@ -1,5 +1,5 @@
 /**
- * Substrate generation (economy-simulation SP1 PR3a) — pure, zero DB dependency,
+ * Substrate generation — pure, zero DB dependency,
  * deterministic given a seeded RNG. Rolls a system's sun class, body set,
  * per-body resource vectors + richness modifiers, aggregate vector, population,
  * and narrative features. Replaces the old trait-rolling path.

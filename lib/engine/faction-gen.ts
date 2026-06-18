@@ -251,7 +251,7 @@ function computeArchetypeCounts(total: number): ArchetypeAllocation[] {
   // so the totals match `total` exactly. Cluster gets at least 1 if any minors
   // are configured at all (per design — clusters are the "natural alliance"
   // archetype that needs at least 2 to express the pattern, but we don't
-  // require 2 in Foundation — a 1-faction cluster is fine).
+  // require 2 — a 1-faction cluster is fine).
   const counts: ArchetypeAllocation[] = [];
   let remaining = total;
   for (const { archetype, proportion } of MINOR_ARCHETYPE_DISTRIBUTION) {
@@ -637,7 +637,7 @@ function enforceMinorMinimum(
 
 /**
  * Mode of `economyType` across a region's systems. Used at seed time and
- * reserved for the conquest hook (lands with the War sub-project).
+ * reserved for the conquest hook (lands with the war system).
  * Ties broken alphabetically for determinism.
  */
 export function deriveDominantEconomy(

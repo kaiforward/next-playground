@@ -1,7 +1,7 @@
 /**
  * Universe-generation invariants — multi-seed statistical validation.
  *
- * Validates substrate-era (economy-simulation SP1) invariants across many seeds:
+ * Validates physical-substrate invariants across many seeds:
  * 1. Feature quality tiers match rarity targets (50% tier 1, 35% tier 2, 15% tier 3).
  * 2. All six economy types appear and none dominates — the "coherent + healthy"
  *    bar. Economy types now derive from the physical substrate, so an even split
@@ -124,7 +124,7 @@ describe("Economy type distribution across seeds", () => {
   });
 
   it("no economy type dominates (>50%) in any seed", () => {
-    // Substrate-era bar: types derive from physical substrate, so an even split
+    // Physical-substrate bar: types derive from physical substrate, so an even split
     // is not expected. The invariant is "all present" (covered above) + "none
     // runs away with the galaxy". Matches the generateSystems distribution test.
     for (const universe of universes) {

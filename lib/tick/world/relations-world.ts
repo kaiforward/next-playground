@@ -191,8 +191,8 @@ export interface RelationsProcessorParams {
    */
   rng?: () => number;
   /**
-   * Hook for War sub-project: contributes positive deltas to in-flight
-   * negotiation windows from diplomatic missions. No-op in Foundation.
+   * Hook for the war system: contributes positive deltas to in-flight
+   * negotiation windows from diplomatic missions. Not yet wired up.
    */
   pendingAllianceInfluence?: (
     pairs: { factionAId: string; factionBId: string }[],

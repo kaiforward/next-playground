@@ -154,7 +154,7 @@ export class PrismaOpMissionsWorld implements OpMissionsWorld {
       bodyDanger: s.bodyDanger,
       // `?? "frontier"` is the safe fallback for the only legitimate gap: a
       // system observed mid-write before its factionId column is populated.
-      // Post-cutover seed guarantees a non-null factionId on every system.
+      // The seed guarantees a non-null factionId on every system.
       governmentType: s.faction?.governmentType
         ? toGovernmentType(s.faction.governmentType)
         : "frontier",

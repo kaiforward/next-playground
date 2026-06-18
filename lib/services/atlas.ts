@@ -7,8 +7,8 @@ import { deriveRegionDominantFaction } from "@/lib/utils/region";
  * Lightweight map data: positions, economies, regions, connections.
  * No names, descriptions, or traits — those are fetched via static/dynamic tiles.
  *
- * After the Layer 2 cutover, each region's government is derived from its
- * dominant owning faction rather than stored on the region itself.
+ * Each region's government is derived from its dominant owning faction
+ * rather than stored on the region itself.
  */
 export async function getAtlas(): Promise<AtlasData> {
   const [regions, systems, connections, factions] = await Promise.all([

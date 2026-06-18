@@ -4,14 +4,14 @@ export interface DoctrineDefinition {
   name: string;
   description: string;
   /**
-   * Multiplier on baseline war-declaration probability. Foundation reads this
-   * to bias the alliance-negotiation outcome (higher = harder to ally with).
-   * War sub-project uses it directly for the declaration roll.
+   * Multiplier on baseline war-declaration probability. The relations processor
+   * reads this to bias the alliance-negotiation outcome (higher = harder to ally
+   * with); the war system will use it directly for the declaration roll.
    */
   declarationModifier: number;
   /**
-   * Stub for the War sub-project: multiplier on per-tick war exhaustion accrual.
-   * Lower = doctrine sustains long wars better. Unused in Foundation.
+   * Stub for the war system: multiplier on per-tick war exhaustion accrual.
+   * Lower = doctrine sustains long wars better. Not yet read.
    */
   exhaustionMultiplier: number;
 }

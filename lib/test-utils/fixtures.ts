@@ -109,8 +109,8 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     data: { id: "world", currentTick: 10, tickRate: 5000 },
   });
 
-  // Regions — government no longer lives on the region after Layer 2; each test
-  // system gets its government via its owning faction below.
+  // Regions — government does not live on the region; each test system gets its
+  // government via its owning faction below.
   const fedRegion = await prisma.region.create({
     data: {
       name: `${prefix}-Federation Space`,

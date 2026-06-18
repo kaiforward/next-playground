@@ -6,8 +6,8 @@ import { makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 export { RESOURCE_TYPES };
 
 // ── Body archetypes ───────────────────────────────────────────────
-// resourceBase magnitudes are RELATIVE weights (0–3), tuned to real
-// magnitudes in PR3 via variance × size × richness. (SP1 spec §3.2)
+// resourceBase magnitudes are RELATIVE weights (0–3), scaled to real
+// magnitudes via variance × size × richness.
 
 export interface BodyArchetype {
   id: BodyArchetypeId;
@@ -16,7 +16,7 @@ export interface BodyArchetype {
   resourceBase: ResourceVector;
   /** Relative population-capacity weight (band: High 12 / Med 7 / Low 3 / VeryLow 1). */
   popCapWeight: number;
-  /** Body-type danger contribution (consumed by PR2's danger-from-bodies derivation). */
+  /** Body-type danger contribution — summed into each system's body danger baseline. */
   dangerBaseline: number;
 }
 
@@ -69,7 +69,7 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
 };
 
 // ── Sun classes ───────────────────────────────────────────────────
-// weight = selection weight; archetypeWeights absent/0 = suppressed. (SP1 spec §3.1)
+// weight = selection weight; archetypeWeights absent/0 = suppressed.
 
 export interface SunClassDef {
   id: SunClass;

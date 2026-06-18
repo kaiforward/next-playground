@@ -16,7 +16,7 @@ export interface ReputationTier {
 }
 
 /**
- * Reputation tiers per layer-2-faction-foundation.md §3. Bounds are inclusive
+ * Reputation tiers (see faction-system.md §3 — player-faction reputation). Bounds are inclusive
  * and partition the score range [-100, +100] without gaps.
  *
  * Multiplier design — the favourable (positive-standing) multipliers act as a

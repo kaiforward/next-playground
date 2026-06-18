@@ -122,10 +122,9 @@ export async function runOpMissionsProcessor(
   const navModifiers = await world.getNavModifiersForSystems(systemIds);
   const modsBySystem = groupModifiersByTarget(navModifiers);
 
-  // Danger baseline now sources per-system from each system's owning faction
-  // (post-Layer-2 — see `SystemTraitView.governmentType`). Border regions can
-  // hold systems with different governments, so this can't fold up to a
-  // region-wide baseline anymore.
+  // Danger baseline sources per-system from each system's owning faction
+  // (see `SystemTraitView.governmentType`). Border regions can hold systems
+  // with different governments, so this can't fold up to a region-wide baseline.
   const dangerLevels = new Map<string, number>();
   for (const system of systems) {
     const govDef = GOVERNMENT_TYPES[system.governmentType];

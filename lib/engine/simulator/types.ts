@@ -21,7 +21,7 @@ export interface SimSystem {
   name: string;
   economyType: EconomyType;
   regionId: string;
-  /** Owning faction's government — sourced per-system after the Layer 2 cutover. */
+  /** Owning faction's government — sourced per-system. */
   governmentType: GovernmentType;
   /** System aggregate resource vector — drives substrate production rates. */
   aggregate: ResourceVector;

@@ -17,8 +17,8 @@ import type {
 } from "@/lib/engine/tick";
 
 /**
- * Region row needed for round-robin selection. Government no longer lives on
- * the region (factions own it per-system after Layer 2); see `MarketView.governmentType`.
+ * Region row needed for round-robin selection. Government does not live on the
+ * region (factions own it per-system); see `MarketView.governmentType`.
  */
 export interface RegionView {
   id: string;
@@ -37,7 +37,7 @@ export interface MarketView {
   goodId: string;
   basePrice: number;
   stock: number;
-  /** Government of the system's owning faction — read per-market post-cutover. */
+  /** Government of the system's owning faction — read per-market. */
   governmentType: GovernmentType;
   /** Base production rate for this good, if any. */
   baseProductionRate?: number;

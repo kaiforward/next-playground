@@ -14,8 +14,8 @@ export interface MajorFactionDefinition {
 /**
  * 8 majors — one per government — seeded from faction-system.md §6.
  * Doctrine + government pairings deliberately mix to produce emergent rivalries
- * (see faction-system.md §6 "Emergent Rivalries"). Foundation reads this at
- * world-gen time; the runtime faction model lives in the Faction table.
+ * (see faction-system.md §6 "Emergent Rivalries"). Read at world-gen time;
+ * the runtime faction model lives in the Faction table.
  */
 export const FACTION_ROSTER: readonly MajorFactionDefinition[] = [
   {
@@ -118,8 +118,8 @@ export const MINOR_NOUNS: readonly string[] = [
 export type MinorFactionArchetype = "buffer" | "frontier" | "enclave" | "cluster";
 
 /**
- * Proportional split for procedural minor placement, per faction-system.md §7.1
- * and layer-2-faction-foundation.md Phase 2. World-gen assigns ceil(N × proportion)
+ * Proportional split for procedural minor placement, per faction-system.md §7.1.
+ * World-gen assigns ceil(N × proportion)
  * to each archetype in declaration order; "cluster" absorbs the remainder so the
  * totals match the configured `MINOR_FACTION_COUNT` exactly.
  */

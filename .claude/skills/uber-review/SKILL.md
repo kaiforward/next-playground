@@ -448,6 +448,24 @@ If the `gh` command fails (e.g., network, auth), log a warning and proceed — t
 
 If the user has already commented `/uber-review` on the same PR head sha (i.e., the same head commit has a previous comment from this skill), append a "Re-run" note to the new comment rather than refusing. Detection: `gh pr view <#> --json comments --jq '.comments[].body'` and search for `/uber-review` markers.
 
+## 9. Merging after review (PR mode)
+
+Optional, human-gated, and **only** in PR mode. The review pipeline itself never merges — this section documents the hand-off after the findings are in. No flag triggers it automatically; run it only when the user asks to land the PR.
+
+1. **Apply the accepted fixes.** Edit the PR branch to address the findings the user wants fixed (skip the ones they wave off). Keep changes scoped to the review — don't fold in unrelated work.
+
+2. **Re-verify.** Run the project's checks and confirm they pass before claiming done: `tsc` clean and the relevant test suites green (`npx vitest run` for unit; add integration if the change touches the live DB path). Quote the actual output — never assert "tests pass" without running them.
+
+3. **Pause for a human sanity-check — REQUIRED.** Stop and ask the user to confirm before merging. Explicitly call out anything the review and its agents **cannot** validate — UI/visual changes, interaction or animation behaviour, anything that needs a running app or a human eye — and request an explicit go-ahead. Do not merge on implied approval.
+
+4. **Only after the user confirms**, finish the merge:
+   - Commit the fixes to the PR branch and push.
+   - Squash-merge into the base branch with a **clean, atomic, feature-describing** commit message — a concise subject plus a `--body-file` body describing *what the feature does*. No "address review feedback", no merge/PR-plumbing noise, no implementation-detail changelog (per the clean-history convention).
+   - Fast-forward the local base branch to the merged commit.
+   - Delete the merged phase branch (local **and** remote).
+
+This mirrors the shared-feature-branch workflow: phase branches squash into the shared branch as one clean commit each; the single PR to `main` comes later, when the whole feature is done.
+
 ## Error handling
 
 - **No diff**: exit early with a friendly message.

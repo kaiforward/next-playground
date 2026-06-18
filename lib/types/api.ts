@@ -111,7 +111,7 @@ export type SystemDetailData =
     };
 export type SystemDetailResponse = ApiResponse<SystemDetailData>;
 
-// ── System substrate (economy-simulation SP1) ────────────────────
+// ── System substrate ─────────────────────────────────────────────
 export interface RichnessModifierView {
   id: RichnessModifierId;
   name: string;
