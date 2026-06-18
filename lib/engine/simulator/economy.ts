@@ -4,10 +4,7 @@
  * See `docs/design/active/processor-architecture.md`.
  */
 
-import {
-  type EconomySimParams,
-  type ProsperityParams,
-} from "@/lib/engine/tick";
+import { type EconomySimParams } from "@/lib/engine/tick";
 import { scaleEventCaps } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -244,8 +241,6 @@ async function processSimEconomy(
     world.regions,
   );
 
-  const prosperityParams: ProsperityParams = constants.prosperity;
-
   const tickCtx: TickContext = {
     tx: undefined as never,
     tick: world.tick,
@@ -255,7 +250,6 @@ async function processSimEconomy(
   await runEconomyProcessor(economyWorld, tickCtx, {
     rng,
     simParams: buildSimParams(constants),
-    prosperityParams,
     modifierCaps: constants.events.modifierCaps,
   });
 
@@ -295,7 +289,7 @@ async function processSimTradeFlow(
     flowHistoryTicks: constants.tradeFlow.flowHistoryTicks,
     playerDisplacementFactor: constants.tradeFlow.playerDisplacementFactor,
     distanceDecay: constants.tradeFlow.distanceDecay,
-    prosperityTargetVolume: constants.prosperity.targetVolume,
+    playerVolumeTarget: constants.tradeFlow.playerVolumeTarget,
     minLevel: constants.economy.minLevel,
     maxLevel: constants.economy.maxLevel,
   });

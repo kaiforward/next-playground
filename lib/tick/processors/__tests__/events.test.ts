@@ -46,8 +46,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     population: 0,
     traits: [],
     bodyDanger: 0,
-    prosperity: 0,
-    tradeVolumeAccum: 0,
+    unrest: 0,
   };
 }
 

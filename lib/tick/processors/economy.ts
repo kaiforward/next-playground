@@ -5,12 +5,10 @@ import type {
 } from "../types";
 import {
   simulateEconomyTick,
-  updateProsperity,
   type EconomySimParams,
   type MarketTickEntry,
-  type ProsperityParams,
 } from "@/lib/engine/tick";
-import { ECONOMY_CONSTANTS, PROSPERITY_PARAMS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -20,7 +18,6 @@ import type {
   EconomyProcessorParams,
   EconomyWorld,
   MarketUpdate,
-  ProsperityUpdate,
 } from "@/lib/tick/world/economy-world";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
@@ -28,8 +25,7 @@ const DEBUG = process.env.DEBUG_ECONOMY === "1";
 /**
  * Pure processor body. Same logic runs against the Prisma adapter (live game)
  * or the in-memory adapter (simulator + unit tests). All knobs that differ
- * between live and sim (RNG, sim params, prosperity params) come in via
- * `params`.
+ * between live and sim (RNG, sim params) come in via `params`.
  *
  * Round-robin: one region per tick, picked from the adapter's region list.
  */
@@ -38,7 +34,7 @@ export async function runEconomyProcessor(
   ctx: TickContext,
   params: EconomyProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng, simParams, prosperityParams, modifierCaps } = params;
+  const { rng, simParams, modifierCaps } = params;
 
   const regions = await world.getRegions();
   if (regions.length === 0) {
@@ -81,43 +77,20 @@ export async function runEconomyProcessor(
     }
   }
 
-  // Prosperity: compute next value per system using current accum volume.
-  const prosperityViews = await world.getProsperity(systemIds);
-  const prosperityBySystem = new Map<string, number>();
-  const prosperityUpdates: ProsperityUpdate[] = [];
-
-  for (const view of prosperityViews) {
-    const newProsperity = updateProsperity(
-      view.prosperity,
-      view.tradeVolumeAccum,
-      prosperityParams,
-    );
-    prosperityBySystem.set(view.systemId, newProsperity);
-    prosperityUpdates.push({
-      systemId: view.systemId,
-      prosperity: newProsperity,
-      capturedVolume: view.tradeVolumeAccum,
-    });
-  }
-
   // Build tick entries via the shared market-tick builder. Government modifiers
   // are resolved per-market (border regions can contain systems owned by
   // different factions) rather than once per region.
   const resolved = markets.map((m) =>
-    resolveMarketTickEntry(
-      {
-        goodId: m.goodId,
-        stock: m.stock,
-        baseProductionRate: m.baseProductionRate,
-        baseConsumptionRate: m.baseConsumptionRate,
-        govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
-        traits: m.traits,
-        prosperity: prosperityBySystem.get(m.systemId) ?? 0,
-        modifiers: modifiersBySystem.get(m.systemId) ?? [],
-        modifierCaps,
-      },
-      prosperityParams,
-    ),
+    resolveMarketTickEntry({
+      goodId: m.goodId,
+      stock: m.stock,
+      baseProductionRate: m.baseProductionRate,
+      baseConsumptionRate: m.baseConsumptionRate,
+      govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
+      traits: m.traits,
+      modifiers: modifiersBySystem.get(m.systemId) ?? [],
+      modifierCaps,
+    }),
   );
 
   const tickEntries: MarketTickEntry[] = resolved.map((r) => r.entry);
@@ -132,7 +105,6 @@ export async function runEconomyProcessor(
   }));
 
   await world.applyMarketUpdates(marketUpdates);
-  await world.applyProsperityUpdates(prosperityUpdates);
 
   const modCount = rawModifiers.length;
   if (DEBUG) {
@@ -157,8 +129,6 @@ export async function runEconomyProcessor(
 
 // ── Live-game wiring ──────────────────────────────────────────────
 
-const prosperityParams: ProsperityParams = PROSPERITY_PARAMS;
-
 const simParams: EconomySimParams = {
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
   minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
@@ -176,7 +146,6 @@ export const economyProcessor: TickProcessor = {
     return runEconomyProcessor(world, ctx, {
       rng: Math.random,
       simParams,
-      prosperityParams,
       modifierCaps: MODIFIER_CAPS,
     });
   },

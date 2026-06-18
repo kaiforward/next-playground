@@ -51,12 +51,6 @@ export interface MarketUpdate {
   stock: number;
 }
 
-/** Increment to a system's tradeVolumeAccum (mirrors player-trade bookkeeping). */
-export interface VolumeIncrement {
-  systemId: string;
-  amount: number;
-}
-
 /** One flow event — appended to TradeFlow. */
 export interface FlowEventInsert {
   tick: number;
@@ -79,9 +73,6 @@ export interface TradeFlowWorld {
   /** Bulk-write market stock (absolute, already-clamped values). */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
 
-  /** Bulk-increment tradeVolumeAccum on systems. */
-  applyVolumeIncrements(increments: VolumeIncrement[]): Promise<void>;
-
   /** Append flow events to TradeFlow. */
   appendFlowEvents(events: FlowEventInsert[]): Promise<void>;
 
@@ -101,10 +92,10 @@ export interface TradeFlowProcessorParams {
   gradientSensitivity: number;
   /** Retention window for flow events (in ticks). */
   flowHistoryTicks: number;
-  /** Player activity fully displaces edge flow at this multiple of targetVolume. */
+  /** Player activity fully displaces edge flow at this multiple of playerVolumeTarget. */
   playerDisplacementFactor: number;
   /** Per-system target trade volume used to normalize player pressure. */
-  prosperityTargetVolume: number;
+  playerVolumeTarget: number;
   /** Stock floor — flow can't draw a market below this. */
   minLevel: number;
   /** Stock ceiling — flow can't push a market above this. */

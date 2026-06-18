@@ -3,8 +3,6 @@ import type {
   EconomyWorld,
   MarketUpdate,
   MarketView,
-  ProsperityUpdate,
-  ProsperityView,
   RegionView,
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
@@ -119,19 +117,6 @@ export class PrismaEconomyWorld implements EconomyWorld {
     return rows;
   }
 
-  async getProsperity(systemIds: string[]): Promise<ProsperityView[]> {
-    if (systemIds.length === 0) return [];
-    const rows = await this.tx.starSystem.findMany({
-      where: { id: { in: systemIds } },
-      select: { id: true, prosperity: true, tradeVolumeAccum: true },
-    });
-    return rows.map((r) => ({
-      systemId: r.id,
-      prosperity: r.prosperity,
-      tradeVolumeAccum: r.tradeVolumeAccum,
-    }));
-  }
-
   async applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {
     if (updates.length === 0) return;
 
@@ -145,23 +130,5 @@ export class PrismaEconomyWorld implements EconomyWorld {
       FROM unnest(${ids}::text[], ${stocks}::double precision[], ${anchors}::double precision[])
         AS batch("id", "stock", "anchorMult")
       WHERE sm."id" = batch."id"`;
-  }
-
-  async applyProsperityUpdates(updates: ProsperityUpdate[]): Promise<void> {
-    if (updates.length === 0) return;
-
-    const ids = updates.map((u) => u.systemId);
-    const prosperities = updates.map((u) =>
-      isFinite(u.prosperity) ? u.prosperity : 0,
-    );
-    const volumes = updates.map((u) => u.capturedVolume);
-
-    await this.tx.$executeRaw`
-      UPDATE "StarSystem" AS ss
-      SET "prosperity" = batch."prosperity",
-          "tradeVolumeAccum" = GREATEST(0, ss."tradeVolumeAccum" - batch."capturedVolume")
-      FROM unnest(${ids}::text[], ${prosperities}::double precision[], ${volumes}::integer[])
-        AS batch("id", "prosperity", "capturedVolume")
-      WHERE ss."id" = batch."id"`;
   }
 }

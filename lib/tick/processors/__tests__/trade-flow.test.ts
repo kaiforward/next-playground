@@ -17,7 +17,7 @@ const PARAMS: TradeFlowProcessorParams = {
   gradientSensitivity: 1.0,
   flowHistoryTicks: 200,
   playerDisplacementFactor: 2.0,
-  prosperityTargetVolume: 50,
+  playerVolumeTarget: 50,
   minLevel: 5,
   maxLevel: 200,
   distanceDecay: 0,
@@ -28,7 +28,7 @@ function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
     id, name: id, economyType: "extraction", regionId, factionId,
     governmentType: "federation",
     aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
-    population: 1000, traits: [], bodyDanger: 0, prosperity: 0, tradeVolumeAccum: 0,
+    population: 1000, traits: [], bodyDanger: 0, unrest: 0,
   };
 }
 

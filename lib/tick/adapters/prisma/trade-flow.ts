@@ -1,7 +1,7 @@
 import type { TxClient } from "@/lib/tick/types";
 import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
-  TradeFlowWorld, VolumeIncrement,
+  TradeFlowWorld,
 } from "@/lib/tick/world/trade-flow-world";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
@@ -106,18 +106,6 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
       FROM unnest(${ids}::text[], ${stocks}::double precision[])
         AS batch("id", "stock")
       WHERE sm."id" = batch."id"`;
-  }
-
-  async applyVolumeIncrements(increments: VolumeIncrement[]): Promise<void> {
-    if (increments.length === 0) return;
-    const ids = increments.map((i) => i.systemId);
-    const amounts = increments.map((i) => (isFinite(i.amount) ? Math.round(i.amount) : 0));
-    await this.tx.$executeRaw`
-      UPDATE "StarSystem" AS ss
-      SET "tradeVolumeAccum" = ss."tradeVolumeAccum" + batch."amount"
-      FROM unnest(${ids}::text[], ${amounts}::integer[])
-        AS batch("id", "amount")
-      WHERE ss."id" = batch."id"`;
   }
 
   async appendFlowEvents(events: FlowEventInsert[]): Promise<void> {

@@ -3,17 +3,7 @@
  * resolveConstants() builds a complete snapshot from imported defaults + optional overrides.
  */
 
-import {
-  ECONOMY_CONSTANTS,
-  PROSPERITY_DECAY_RATE,
-  PROSPERITY_MAX_GAIN,
-  PROSPERITY_TARGET_VOLUME,
-  PROSPERITY_MIN,
-  PROSPERITY_MAX,
-  PROSPERITY_MULT_AT_MIN,
-  PROSPERITY_MULT_AT_ZERO,
-  PROSPERITY_MULT_AT_MAX,
-} from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
 import {
@@ -68,16 +58,6 @@ export interface SimConstants {
     gatewaysPerBorder: number;
     intraRegionExtraEdges: number;
   };
-  prosperity: {
-    decayRate: number;
-    maxGain: number;
-    targetVolume: number;
-    min: number;
-    max: number;
-    multAtMin: number;
-    multAtZero: number;
-    multAtMax: number;
-  };
   tradeFlow: {
     edgesPerTick: number;
     distanceDecay: number;
@@ -86,6 +66,7 @@ export interface SimConstants {
     gradientSensitivity: number;
     flowHistoryTicks: number;
     playerDisplacementFactor: number;
+    playerVolumeTarget: number;
   };
   bots: {
     startingCredits: number;
@@ -105,7 +86,6 @@ export type SimConstantOverrides = {
   };
   ships?: Record<string, Partial<SimConstants["ships"][string]>>;
   universe?: Partial<SimConstants["universe"]>;
-  prosperity?: Partial<SimConstants["prosperity"]>;
   tradeFlow?: Partial<SimConstants["tradeFlow"]>;
   bots?: Partial<SimConstants["bots"]>;
 };
@@ -175,16 +155,6 @@ function buildDefaults(): SimConstants {
       gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
       intraRegionExtraEdges: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     },
-    prosperity: {
-      decayRate: PROSPERITY_DECAY_RATE,
-      maxGain: PROSPERITY_MAX_GAIN,
-      targetVolume: PROSPERITY_TARGET_VOLUME,
-      min: PROSPERITY_MIN,
-      max: PROSPERITY_MAX,
-      multAtMin: PROSPERITY_MULT_AT_MIN,
-      multAtZero: PROSPERITY_MULT_AT_ZERO,
-      multAtMax: PROSPERITY_MULT_AT_MAX,
-    },
     tradeFlow: {
       edgesPerTick: TRADE_SIMULATION.EDGES_PER_TICK,
       distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
@@ -193,6 +163,7 @@ function buildDefaults(): SimConstants {
       gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
       flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
       playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
+      playerVolumeTarget: TRADE_SIMULATION.PLAYER_VOLUME_TARGET,
     },
     bots: {
       startingCredits: 500,
@@ -218,7 +189,6 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
     events: mergeEvents(base.events, overrides.events),
     ships: mergeRecord(base.ships, overrides.ships),
     universe: { ...base.universe, ...overrides.universe },
-    prosperity: { ...base.prosperity, ...overrides.prosperity },
     tradeFlow: { ...base.tradeFlow, ...overrides.tradeFlow },
     bots: { ...base.bots, ...overrides.bots },
   };

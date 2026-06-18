@@ -4,7 +4,7 @@ import { seedTestUniverse } from "@/lib/test-utils/fixtures";
 import type { TestUniverse } from "@/lib/test-utils/fixtures";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
-import { ECONOMY_CONSTANTS, PROSPERITY_PARAMS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import type { EconomySimParams } from "@/lib/engine/tick";
@@ -17,10 +17,6 @@ const simParams: EconomySimParams = {
   minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
   maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
 };
-
-// Use the same canonical params object the live economy processor reads, so a
-// mis-assembled field in PROSPERITY_PARAMS is caught here end-to-end.
-const prosperityParams = PROSPERITY_PARAMS;
 
 describe("economyProcessor (integration)", () => {
   let universe: TestUniverse;
@@ -45,7 +41,6 @@ describe("economyProcessor (integration)", () => {
         return runEconomyProcessor(world, ctx, {
           rng: mulberry32(seed),
           simParams,
-          prosperityParams,
           modifierCaps: MODIFIER_CAPS,
         });
       },

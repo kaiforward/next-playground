@@ -1,6 +1,6 @@
 import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
-  TradeFlowWorld, VolumeIncrement,
+  TradeFlowWorld,
 } from "@/lib/tick/world/trade-flow-world";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type {
@@ -83,21 +83,6 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
       const u = byKey.get(`${m.systemId}|${m.goodId}`);
       if (!u) return m;
       return { ...m, stock: isFinite(u.stock) ? u.stock : 0 };
-    });
-    return Promise.resolve();
-  }
-
-  applyVolumeIncrements(increments: VolumeIncrement[]): Promise<void> {
-    if (increments.length === 0) return Promise.resolve();
-    const bySystem = new Map<string, number>();
-    for (const inc of increments) {
-      const amount = isFinite(inc.amount) ? Math.round(inc.amount) : 0;
-      bySystem.set(inc.systemId, (bySystem.get(inc.systemId) ?? 0) + amount);
-    }
-    this.systems = this.systems.map((s) => {
-      const delta = bySystem.get(s.id);
-      if (!delta) return s;
-      return { ...s, tradeVolumeAccum: s.tradeVolumeAccum + delta };
     });
     return Promise.resolve();
   }

@@ -11,10 +11,7 @@
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
 import type { GovernmentType } from "@/lib/types/game";
-import type {
-  EconomySimParams,
-  ProsperityParams,
-} from "@/lib/engine/tick";
+import type { EconomySimParams } from "@/lib/engine/tick";
 
 /**
  * Region row needed for round-robin selection. Government does not live on the
@@ -47,31 +44,12 @@ export interface MarketView {
   traits: GeneratedTrait[];
 }
 
-/** Prosperity + accumulated trade volume for one system. */
-export interface ProsperityView {
-  systemId: string;
-  prosperity: number;
-  tradeVolumeAccum: number;
-}
-
 /** Result of one market simulation step — written back via applyMarketUpdates. */
 export interface MarketUpdate {
   id: string;
   stock: number;
   /** Active pricing-anchor multiplier from event modifiers (1 = none). */
   anchorMult: number;
-}
-
-/**
- * Result of one prosperity step. `capturedVolume` is the trade volume that
- * fed into the prosperity calculation — adapters subtract it (clamped at 0)
- * from the running accumulator. Subtract-not-reset matters in live: trades
- * committed between `getProsperity` and `applyProsperityUpdates` aren't lost.
- */
-export interface ProsperityUpdate {
-  systemId: string;
-  prosperity: number;
-  capturedVolume: number;
 }
 
 export interface EconomyWorld {
@@ -91,14 +69,8 @@ export interface EconomyWorld {
     regionId: string,
   ): Promise<ModifierRow[]>;
 
-  /** Current prosperity + accumulated trade volume for the given systems. */
-  getProsperity(systemIds: string[]): Promise<ProsperityView[]>;
-
   /** Bulk-write market stock. */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
-
-  /** Bulk-write prosperity and subtract captured volume from accumulators. */
-  applyProsperityUpdates(updates: ProsperityUpdate[]): Promise<void>;
 }
 
 /** Per-tick params passed alongside the world. Sim and live differ here. */
@@ -107,8 +79,6 @@ export interface EconomyProcessorParams {
   rng: () => number;
   /** Economy simulation params (reversion, noise, clamps, equilibrium). */
   simParams: EconomySimParams;
-  /** Prosperity decay/gain/range params. */
-  prosperityParams: ProsperityParams;
   /** Caps applied when aggregating event modifiers per market. */
   modifierCaps: ModifierCaps;
 }
