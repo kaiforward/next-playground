@@ -14,20 +14,37 @@ import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
  * once per process. Each edge carries fuelCost for distance attenuation.
  * Sorted by "${a}|${b}" so the work-budget cursor is deterministic.
  *
- * The adjacency service is imported dynamically so the unit tests (memory
- * adapter only) don't transitively load lib/prisma.ts and trip its guard.
+ * Cleared by `invalidateAdjacencyCache()` (via the export below) so a reseed in
+ * integration tests rebuilds this alongside the faction map it derives from.
  */
 let cachedOpenEdges: EdgeView[] | null = null;
 
-async function getOpenEdgesCached(tx: TxClient): Promise<EdgeView[]> {
+/**
+ * Clear the process-level open-edge cache. Called from `invalidateAdjacencyCache`
+ * so one reseed hook sweeps every seed-derived cache. Exported (not inlined into
+ * the class) so it can run without a transaction client.
+ */
+export function invalidateTradeFlowEdgeCache(): void {
+  cachedOpenEdges = null;
+}
+
+async function getOpenEdgesCached(): Promise<EdgeView[]> {
   if (cachedOpenEdges) return cachedOpenEdges;
 
-  const { getSystemFactionMap } = await import("@/lib/services/adjacency");
-  const sysFaction = await getSystemFactionMap();
-
-  const conns = await tx.systemConnection.findMany({
-    select: { fromSystemId: true, toSystemId: true, fuelCost: true },
-  });
+  // Connections and faction assignments are static after seed, so read both off
+  // the tick transaction via the module-level prisma client — the one-time cold
+  // fill must not occupy a tick's transaction slot. Both are imported dynamically
+  // so the memory-adapter unit tests never transitively load lib/prisma.ts.
+  const [{ getSystemFactionMap }, { prisma }] = await Promise.all([
+    import("@/lib/services/adjacency"),
+    import("@/lib/prisma"),
+  ]);
+  const [sysFaction, conns] = await Promise.all([
+    getSystemFactionMap(),
+    prisma.systemConnection.findMany({
+      select: { fromSystemId: true, toSystemId: true, fuelCost: true },
+    }),
+  ]);
 
   cachedOpenEdges = buildOpenEdges(conns, sysFaction);
   return cachedOpenEdges;
@@ -37,7 +54,7 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
   constructor(private tx: TxClient) {}
 
   getOpenEdges(): Promise<EdgeView[]> {
-    return getOpenEdgesCached(this.tx);
+    return getOpenEdgesCached();
   }
 
   async getMarketSnapshotsForSystems(systemIds: string[]): Promise<MarketSnapshot[]> {
@@ -63,14 +80,19 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
     const result = new Map<string, number>();
     if (systemIds.length === 0) return result;
     const cutoff = new Date(Date.now() - TRADE_SIMULATION.PLAYER_VOLUME_WINDOW_MS);
-    const rows = await this.tx.tradeHistory.findMany({
-      where: { createdAt: { gt: cutoff }, station: { systemId: { in: systemIds } } },
-      select: { quantity: true, station: { select: { systemId: true } } },
-    });
-    for (const r of rows) {
-      const sid = r.station.systemId;
-      result.set(sid, (result.get(sid) ?? 0) + r.quantity);
-    }
+    // Sum quantity per system in PostgreSQL (Station↔System is 1:1) so this
+    // returns one row per system rather than one TradeHistory row per trade.
+    // SUM over an Int column comes back as bigint — convert with Number().
+    const rows = await this.tx.$queryRaw<
+      { systemId: string; total: bigint | null }[]
+    >`
+      SELECT st."systemId" AS "systemId", SUM(th.quantity) AS total
+      FROM "TradeHistory" th
+      JOIN "Station" st ON th."stationId" = st.id
+      WHERE th."createdAt" > ${cutoff}
+        AND st."systemId" = ANY(${systemIds}::text[])
+      GROUP BY st."systemId"`;
+    for (const r of rows) result.set(r.systemId, Number(r.total ?? 0));
     return result;
   }
 

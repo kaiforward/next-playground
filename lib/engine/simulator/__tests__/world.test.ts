@@ -25,5 +25,7 @@ describe("createSimWorld faction identity", () => {
       byGov.set(s.factionId ?? "", set);
     }
     expect(byGov.size).toBeGreaterThan(1); // multiple factions exist
+    // …and factionId actually groups: at least one faction owns multiple systems.
+    expect([...byGov.values()].some((set) => set.size > 1)).toBe(true);
   });
 });

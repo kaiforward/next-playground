@@ -5,6 +5,7 @@ import type { TradeFlowProcessorParams } from "@/lib/tick/world/trade-flow-world
 import type { TickContext } from "@/lib/tick/types";
 import type {
   SimConnection,
+  SimFlowEvent,
   SimMarketEntry,
   SimSystem,
 } from "@/lib/engine/simulator/types";
@@ -48,10 +49,11 @@ function makeWorld(opts: {
   systems: SimSystem[];
   markets: SimMarketEntry[];
   connections: SimConnection[];
+  flowEvents?: SimFlowEvent[];
   playerVolumeBySystem?: Map<string, number>;
 }) {
   return new InMemoryTradeFlowWorld(
-    { systems: opts.systems, markets: opts.markets, flowEvents: [] },
+    { systems: opts.systems, markets: opts.markets, flowEvents: opts.flowEvents ?? [] },
     opts.connections,
     opts.playerVolumeBySystem,
   );
@@ -106,8 +108,8 @@ describe("trade-flow: faction-bounded topology", () => {
 });
 
 describe("trade-flow: work-budget slicing", () => {
-  it("processes only edgesPerTick edges per tick, cycling over ticks", async () => {
-    // 3 same-faction edges (a-b, c-d, e-f), edgesPerTick = 1 → one edge per tick.
+  it("processes exactly one edge per tick and wraps the cursor", async () => {
+    // 3 same-faction edges sorted by key: a|b, c|d, e|f. edgesPerTick = 1.
     const systems = ["a", "b", "c", "d", "e", "f"].map((id) => sys(id, "f1"));
     const markets = [
       market("a", "food", 150), market("b", "food", 20),
@@ -118,12 +120,17 @@ describe("trade-flow: work-budget slicing", () => {
     const world = makeWorld({ systems, markets, connections });
     const p = { ...PARAMS, edgesPerTick: 1 };
 
-    // Edges are sorted by "a|b" key: a|b, c|d, e|f.
-    await runTradeFlowProcessor(world, ctx(0), p); // start = 0 → edge a|b
-    expect(world.flowEvents.map((e) => e.fromSystemId).sort()).toEqual(["a"]);
+    // Each tick advances the cursor by one edge; assert the exact edge that flowed
+    // this tick (filtering by tick isolates it from prior ticks' accumulated events).
+    const flowedAt = async (tick: number) => {
+      await runTradeFlowProcessor(world, ctx(tick), p);
+      return world.flowEvents.filter((e) => e.tick === tick).map((e) => e.fromSystemId);
+    };
 
-    await runTradeFlowProcessor(world, ctx(1), p); // start = 1 → edge c|d
-    expect(world.flowEvents.some((e) => e.fromSystemId === "c")).toBe(true);
+    expect(await flowedAt(0)).toEqual(["a"]); // start 0 → edge a|b
+    expect(await flowedAt(1)).toEqual(["c"]); // start 1 → edge c|d
+    expect(await flowedAt(2)).toEqual(["e"]); // start 2 → edge e|f
+    expect(await flowedAt(3)).toEqual(["a"]); // start (3 % 3) = 0 → wraps to a|b
   });
 });
 
@@ -147,5 +154,74 @@ describe("trade-flow: distance attenuation", () => {
     const nearQty = near.flowEvents[0]?.quantity ?? 0;
     const farQty = far.flowEvents[0]?.quantity ?? 0;
     expect(nearQty).toBeGreaterThan(farQty);
+  });
+});
+
+describe("trade-flow: flow controls", () => {
+  it("does NOT flow when the price gradient is below threshold", async () => {
+    // Real gradient (150 vs 20), but threshold set above any achievable gradient
+    // so the gradient guard suppresses flow.
+    const systems = [sys("a", "f1"), sys("b", "f1")];
+    const markets = [market("a", "food", 150), market("b", "food", 20)];
+    const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
+
+    await runTradeFlowProcessor(world, ctx(0), { ...PARAMS, gradientThreshold: 1000 });
+
+    expect(world.flowEvents.length).toBe(0);
+    expect(world.markets.find((m) => m.systemId === "a")!.stock).toBe(150);
+    expect(world.markets.find((m) => m.systemId === "b")!.stock).toBe(20);
+  });
+
+  it("caps flow quantity at the flow budget", async () => {
+    // Extreme gradient + large headroom/capacity so flowBudget is the binding cap.
+    const systems = [sys("a", "f1"), sys("b", "f1")];
+    const markets = [market("a", "food", 200), market("b", "food", 5)];
+    const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
+
+    await runTradeFlowProcessor(world, ctx(0), { ...PARAMS, flowBudget: 6 });
+
+    expect(world.flowEvents.length).toBe(1);
+    expect(world.flowEvents[0].quantity).toBeGreaterThan(0);
+    expect(world.flowEvents[0].quantity).toBeLessThanOrEqual(6);
+  });
+
+  it("throttles flow to zero under high player pressure", async () => {
+    // edgeVolume = 200 + 200 = 400; pressure = 400 / 50 = 8;
+    // displacement = clamp(8 * 2, 0, 1) = 1 → edgeBudget = flowBudget * 0 = 0 → no flow.
+    const systems = [sys("a", "f1"), sys("b", "f1")];
+    const markets = [market("a", "food", 150), market("b", "food", 20)];
+    const playerVolumeBySystem = new Map([
+      ["a", 200],
+      ["b", 200],
+    ]);
+    const world = makeWorld({
+      systems,
+      markets,
+      connections: [conn("a", "b")],
+      playerVolumeBySystem,
+    });
+
+    await runTradeFlowProcessor(world, ctx(0), PARAMS);
+
+    expect(world.flowEvents.length).toBe(0);
+    expect(world.markets.find((m) => m.systemId === "a")!.stock).toBe(150);
+    expect(world.markets.find((m) => m.systemId === "b")!.stock).toBe(20);
+  });
+
+  it("prunes flow events older than the retention window", async () => {
+    // Equal stock → no new flow, so only pruning acts on the seeded events.
+    const systems = [sys("a", "f1"), sys("b", "f1")];
+    const markets = [market("a", "food", 100), market("b", "food", 100)];
+    const flowEvents: SimFlowEvent[] = [
+      { tick: 5, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 4 },
+      { tick: 95, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 3 },
+    ];
+    const world = makeWorld({ systems, markets, connections: [conn("a", "b")], flowEvents });
+
+    // tick 200, flowHistoryTicks 100 → cutoff 100 → both seeded events pruned.
+    await runTradeFlowProcessor(world, ctx(200), { ...PARAMS, flowHistoryTicks: 100 });
+
+    expect(world.flowEvents.every((e) => e.tick >= 100)).toBe(true);
+    expect(world.flowEvents.length).toBe(0);
   });
 });

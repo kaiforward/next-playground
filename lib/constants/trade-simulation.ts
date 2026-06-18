@@ -12,14 +12,14 @@ export const TRADE_SIMULATION = {
    * EDGES_PER_TICK) ticks. Bounds per-tick DB work independently of faction size.
    *
    * MUST satisfy ceil(totalOpenEdges / EDGES_PER_TICK) < FLOW_HISTORY_TICKS,
-   * else flow events prune before the sweep returns (overlay gaps). Calibrated
-   * in Phase B against 10K scale.
+   * else flow events prune before the sweep returns (overlay gaps); the 10K-scale
+   * universe (largest open-edge count) is the binding case.
    */
   EDGES_PER_TICK: 256,
   /**
    * Distance attenuation coefficient. Per-edge flow is scaled by
    * 1/(1 + DISTANCE_DECAY · fuelCost), so costlier jumps move less and
-   * gateways (low fuelCost) move more. 0 = no attenuation. Set in Phase B.
+   * gateways (low fuelCost) move more. 0 = no attenuation.
    */
   DISTANCE_DECAY: 0,
   /** Max units of one good moved per edge per processor run. */

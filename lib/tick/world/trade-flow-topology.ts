@@ -23,7 +23,9 @@ export function buildOpenEdges(
   sysFaction: ReadonlyMap<string, string | null>,
 ): EdgeView[] {
   const seen = new Set<string>();
-  const edges: EdgeView[] = [];
+  // Carry each edge's sort key so it is built once (reused for dedup) rather than
+  // re-allocated twice per comparison inside the sort comparator.
+  const keyed: { edge: EdgeView; key: string }[] = [];
   for (const c of connections) {
     if (c.fromSystemId === c.toSystemId) continue;
     // null===null (both independent) is open; same non-null faction is open; else closed.
@@ -35,10 +37,8 @@ export function buildOpenEdges(
     const key = `${a}|${b}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    edges.push({ aSystemId: a, bSystemId: b, fuelCost: c.fuelCost });
+    keyed.push({ edge: { aSystemId: a, bSystemId: b, fuelCost: c.fuelCost }, key });
   }
-  edges.sort((x, y) =>
-    `${x.aSystemId}|${x.bSystemId}`.localeCompare(`${y.aSystemId}|${y.bSystemId}`),
-  );
-  return edges;
+  keyed.sort((x, y) => x.key.localeCompare(y.key));
+  return keyed.map((k) => k.edge);
 }
