@@ -24,7 +24,7 @@ The open-edge list is built once and cached for the process: each connection is 
 
 ### Distance Attenuation
 
-A jump's fuel cost stands in for its length. Each open edge scales its flow by `1 / (1 + DISTANCE_DECAY · fuelCost)`, so cheap local hops move close to the full budget while long, fuel-expensive jumps move only a fraction — most visibly the high-cost gateways that bridge two regions of the same faction. The effect is **distance-graded price dispersion**: staple goods equalize locally and stay cheap nearly everywhere, while high-value goods (luxuries, weapons) sustain larger price gaps across distance, rewarding long-haul arbitrage. At `DISTANCE_DECAY = 0` attenuation is off (every edge moves the full budget).
+A jump's fuel cost stands in for its length. Each open edge scales its flow by `1 / (1 + DISTANCE_DECAY · fuelCost)`, so cheap local hops move close to the full budget while long, fuel-expensive jumps move only a fraction — most visibly the high-cost gateways that bridge two regions of the same faction. The effect is **distance-graded price dispersion**: staple goods equalize locally and vary little across the map, while high-value goods (notably luxuries) sustain larger price gaps across distance, rewarding long-haul arbitrage. At `DISTANCE_DECAY = 0` attenuation is off (every edge moves the full budget).
 
 ### How a Flow is Decided
 
@@ -51,7 +51,7 @@ By design, the trade-flow processor declares a dependency on the economy process
 Two surfaces come out of each run:
 
 - **A per-edge event log.** Every flow appended to a rolling-window table that captures the tick, the direction, the good, and the quantity. Indexes by source, destination, and good give the map overlay and the per-system detail panel cheap queries. A pruning step on every active run drops anything older than the configured history window.
-- **Per-system volume increments.** Both endpoints of the move have the volume accumulator on their `Market` row incremented in the same atomic write that adjusts stock. This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active systems become booming whether or not players show up.
+- **Per-system volume increments.** Both endpoints of the move have their owning system's volume accumulator (`StarSystem.tradeVolumeAccum`) incremented inside the same tick transaction that adjusts stock (a separate bulk write from the stock update, but atomic with it). This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active systems become booming whether or not players show up.
 
 ### Trade Routes
 

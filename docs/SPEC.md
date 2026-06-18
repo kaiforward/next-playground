@@ -151,7 +151,7 @@ Key interactions:
 - **Events → Economy**: Event modifiers shift market equilibrium, multiply production/consumption rates, dampen price reversion
 - **Events → Navigation**: Danger modifiers increase cargo loss risk on ship arrival
 - **Events → Trade Missions**: Active events generate themed delivery contracts with bonus rewards
-- **Economy → Trade Flow**: Trade flow runs *after* the economy processor each tick (`dependsOn`), so gradients read the latest settled prices rather than stale ones — including this tick's update to whichever region economy just processed
+- **Economy → Trade Flow**: Trade flow runs *after* the economy processor each tick (`dependsOn`), so for any system the two both touch this tick, the economy's price update is committed before trade flow reads it — gradients never fire against mid-update state
 - **Trade Flow → Economy**: Each flow writes the same stock delta and volume accumulator increments a player trade would — booming/stagnant prosperity multipliers respond to edge flow exactly like player traffic
 - **Economy → Trade Missions**: Price extremes (>2x or <0.5x base) trigger mission generation
 - **System Traits → Operational Missions**: Systems with survey-eligible traits (precursor_ruins, gravitational_anomaly, etc.) generate survey missions

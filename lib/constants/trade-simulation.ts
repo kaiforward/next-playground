@@ -21,10 +21,11 @@ export const TRADE_SIMULATION = {
   /**
    * Distance attenuation coefficient. Per-edge flow is scaled by
    * 1/(1 + DISTANCE_DECAY · fuelCost), so costlier jumps move less. 0 = no
-   * attenuation. Calibrated to 0.1: cheap local hops (fuelCost ~8) still move
-   * ~54% of budget while high-fuel intra-faction gateways throttle toward ~18%,
-   * concentrating price dispersion on long-haul high-value goods (luxuries,
-   * weapons) without starving distant systems or pinning stock to a bound.
+   * attenuation. Calibrated to 0.1: the median local hop (fuelCost ~8.6) still
+   * moves ~54% of budget while high-fuel intra-faction gateways (fuelCost up to
+   * ~47) throttle toward ~18%, concentrating price dispersion on long-haul
+   * high-value goods (notably luxuries) without starving distant systems or
+   * pinning stock to a bound.
    */
   DISTANCE_DECAY: 0.1,
   /** Max units of one good moved per edge per processor run. */
