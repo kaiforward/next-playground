@@ -47,9 +47,9 @@ export const STOCK_MAX = ECONOMY_CONSTANTS.MAX_LEVEL;
 /**
  * The per-market demand rate — the days-of-supply denominator. Equals the
  * system's base physical consumption for the good (perCapitaNeed × population),
- * floored at MIN_DEMAND. Government consumptionBoost and prosperity are
- * deliberately excluded: they move price through stock, not through the
- * reference. Stored on StationMarket.demandRate and used to build the price curve.
+ * floored at MIN_DEMAND. Government consumptionBoost is deliberately excluded:
+ * it moves price through stock, not through the reference. Stored on
+ * StationMarket.demandRate and used to build the price curve.
  */
 export function marketDemandRate(
   aggregate: ResourceVector,

@@ -1,11 +1,11 @@
 /**
- * Integration: trade flow restores prosperity in an otherwise stagnant region.
+ * Integration: trade flow restores activity in an otherwise stagnant region.
  *
  * Runs the unified economy + trade-flow processor bodies together against an
  * in-memory world (no Prisma, no bots). Compares two parallel runs with the
  * same seeded RNG — one with flow enabled, one with FLOW_BUDGET=0 — and
- * asserts that flow drives volume accumulation, market drift away from the
- * starting equilibrium, and net prosperity gain.
+ * asserts that flow records cross-system flow events and drives consumer
+ * markets away from their starting shortage.
  */
 
 import { describe, it, expect } from "vitest";
@@ -56,8 +56,7 @@ function buildFixture(): {
     population: 100,
     traits: [],
     bodyDanger: 0,
-    prosperity: 0,
-    tradeVolumeAccum: 0,
+    unrest: 0,
   }));
 
   // Arable-barren, populous consumers: food consumption ≈ 4/tick, no production.
@@ -72,8 +71,7 @@ function buildFixture(): {
     population: 1000,
     traits: [],
     bodyDanger: 0,
-    prosperity: 0,
-    tradeVolumeAccum: 0,
+    unrest: 0,
   }));
 
   const systems = [...producers, ...consumers];
@@ -134,7 +132,6 @@ async function runScenario(
       minLevel: DEFAULT_SIM_CONSTANTS.economy.minLevel,
       maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
     },
-    prosperityParams: DEFAULT_SIM_CONSTANTS.prosperity,
     modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
   };
 
@@ -148,7 +145,7 @@ async function runScenario(
     flowHistoryTicks: 200,
     playerDisplacementFactor: 2.0,
     distanceDecay: 0,
-    prosperityTargetVolume: DEFAULT_SIM_CONSTANTS.prosperity.targetVolume,
+    playerVolumeTarget: DEFAULT_SIM_CONSTANTS.tradeFlow.playerVolumeTarget,
     minLevel: DEFAULT_SIM_CONSTANTS.economy.minLevel,
     maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
   };
@@ -195,24 +192,6 @@ describe("Trade flow integration", () => {
       0,
     );
     expect(totalQuantity).toBeGreaterThan(0);
-
-    // tradeVolumeAccum: at least one system records non-zero throughput
-    // before prosperity captures it. Asserted directly so the test still
-    // verifies the design's volume promise if prosperity scoring changes.
-    const maxVolumeWithFlow = Math.max(
-      ...withFlow.systems.map((s) => s.tradeVolumeAccum),
-    );
-    expect(maxVolumeWithFlow).toBeGreaterThan(0);
-
-    // With flow: at least one system finishes above zero prosperity.
-    const maxProsperityWithFlow = Math.max(
-      ...withFlow.systems.map((s) => s.prosperity),
-    );
-    const maxProsperityWithoutFlow = Math.max(
-      ...withoutFlow.systems.map((s) => s.prosperity),
-    );
-    expect(maxProsperityWithFlow).toBeGreaterThan(maxProsperityWithoutFlow);
-    expect(maxProsperityWithFlow).toBeGreaterThan(0);
   });
 
   it("moves consumer markets away from initial stock shortage", async () => {

@@ -10,7 +10,6 @@ import type {
   DynamicTileSystem,
   MarketEntry,
   MarketComparisonEntry,
-  ProsperityEntry,
   GoodInfo,
   TradeHistoryEntry,
   TradeType,
@@ -59,7 +58,6 @@ export interface TradeFlowEdgeInfo {
   perGood: Record<string, number>;
 }
 export type TradeFlowResponse = ApiResponse<{ edges: TradeFlowEdgeInfo[] }>;
-export type ProsperityResponse = ApiResponse<{ systems: ProsperityEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
   systemId: string;

@@ -202,13 +202,12 @@ model StarSystem {
   regionId         String
   factionId        String?
   isGateway        Boolean @default(false)
-  prosperity       Float   @default(0)
-  tradeVolumeAccum Int     @default(0)
 
   // ── Physical substrate ──
   sunClass         String  @default("yellow")  // SunClass; real value written at seed time
-  population       Int     @default(0)          // abstract magnitude
+  population       Float   @default(0)          // abstract magnitude
   popCap           Float   @default(0)          // Σ(body popCapWeight × size)
+  unrest           Float   @default(0)          // 0…1 — integral of demand-weighted dissatisfaction
   aggGas           Float   @default(0)
   aggMinerals      Float   @default(0)
   aggOre           Float   @default(0)

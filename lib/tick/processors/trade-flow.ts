@@ -1,11 +1,11 @@
 import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { ECONOMY_CONSTANTS, PROSPERITY_TARGET_VOLUME } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { PrismaTradeFlowWorld } from "@/lib/tick/adapters/prisma/trade-flow";
 import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
-  TradeFlowProcessorParams, TradeFlowWorld, VolumeIncrement,
+  TradeFlowProcessorParams, TradeFlowWorld,
 } from "@/lib/tick/world/trade-flow-world";
 
 let invariantWarned = false;
@@ -68,7 +68,6 @@ export async function runTradeFlowProcessor(
 
   const flowEvents: FlowEventInsert[] = [];
   const updatesByMarketId = new Map<string, MarketUpdate>();
-  const volumeBySystem = new Map<string, number>();
 
   for (const edge of slice) {
     const goodsA = goodsBySystem.get(edge.aSystemId);
@@ -110,7 +109,7 @@ export async function runTradeFlowProcessor(
     const edgeVolume =
       (playerVol.get(edge.aSystemId) ?? 0) + (playerVol.get(edge.bSystemId) ?? 0);
     const pressure =
-      params.prosperityTargetVolume > 0 ? edgeVolume / params.prosperityTargetVolume : 0;
+      params.playerVolumeTarget > 0 ? edgeVolume / params.playerVolumeTarget : 0;
     const displacement = Math.max(0, Math.min(1, pressure * params.playerDisplacementFactor));
     const edgeBudget = params.flowBudget * (1 - displacement);
     if (edgeBudget < 1) continue;
@@ -132,18 +131,11 @@ export async function runTradeFlowProcessor(
     mTo.stock = newToStock;
     updatesByMarketId.set(mFrom.id, { id: mFrom.id, stock: newFromStock });
     updatesByMarketId.set(mTo.id, { id: mTo.id, stock: newToStock });
-    volumeBySystem.set(fromSystemId, (volumeBySystem.get(fromSystemId) ?? 0) + quantity);
-    volumeBySystem.set(toSystemId, (volumeBySystem.get(toSystemId) ?? 0) + quantity);
     flowEvents.push({ tick: ctx.tick, fromSystemId, toSystemId, goodId: bestGoodId, quantity });
   }
 
   if (updatesByMarketId.size > 0) {
     await world.applyMarketUpdates([...updatesByMarketId.values()]);
-  }
-  if (volumeBySystem.size > 0) {
-    const increments: VolumeIncrement[] = [];
-    for (const [systemId, amount] of volumeBySystem) increments.push({ systemId, amount });
-    await world.applyVolumeIncrements(increments);
   }
   if (flowEvents.length > 0) {
     await world.appendFlowEvents(flowEvents);
@@ -173,7 +165,7 @@ export const tradeFlowProcessor: TickProcessor = {
       gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
       flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
       playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
-      prosperityTargetVolume: PROSPERITY_TARGET_VOLUME,
+      playerVolumeTarget: TRADE_SIMULATION.PLAYER_VOLUME_TARGET,
       minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
       maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
       distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
