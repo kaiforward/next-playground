@@ -61,7 +61,8 @@ const ConstantOverridesSchema = z.object({
     intraRegionExtraEdges: z.number().optional(),
   }).optional(),
   tradeFlow: z.object({
-    processEveryNTicks: z.number().int().min(1).optional(),
+    edgesPerTick: z.number().int().min(1).optional(),
+    distanceDecay: z.number().min(0).optional(),
     flowBudget: z.number().min(0).optional(),
     gradientThreshold: z.number().min(0).optional(),
     gradientSensitivity: z.number().min(0).optional(),

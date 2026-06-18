@@ -40,6 +40,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     name: id.toUpperCase(),
     economyType: "extraction",
     regionId,
+    factionId: "faction-0",
     governmentType: "frontier",
     aggregate: emptyResourceVector(),
     population: 0,

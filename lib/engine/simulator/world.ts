@@ -73,6 +73,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       name: s.name,
       economyType: econ,
       regionId: `region-${s.regionIndex}`,
+      factionId: `faction-${universe.systemFactionAssignments[s.index]}`,
       governmentType: toGovernmentType(owningFaction.governmentType),
       aggregate: s.aggregate,
       population: s.population,

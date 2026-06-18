@@ -79,7 +79,8 @@ export interface SimConstants {
     multAtMax: number;
   };
   tradeFlow: {
-    processEveryNTicks: number;
+    edgesPerTick: number;
+    distanceDecay: number;
     flowBudget: number;
     gradientThreshold: number;
     gradientSensitivity: number;
@@ -185,7 +186,8 @@ function buildDefaults(): SimConstants {
       multAtMax: PROSPERITY_MULT_AT_MAX,
     },
     tradeFlow: {
-      processEveryNTicks: TRADE_SIMULATION.PROCESS_EVERY_N_TICKS,
+      edgesPerTick: TRADE_SIMULATION.EDGES_PER_TICK,
+      distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
       flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
       gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
       gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,

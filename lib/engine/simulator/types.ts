@@ -21,6 +21,8 @@ export interface SimSystem {
   name: string;
   economyType: EconomyType;
   regionId: string;
+  /** Owning faction's stable id, or null for independent systems. Drives the faction-bounded flow topology. */
+  factionId: string | null;
   /** Owning faction's government — sourced per-system. */
   governmentType: GovernmentType;
   /** System aggregate resource vector — drives substrate production rates. */
