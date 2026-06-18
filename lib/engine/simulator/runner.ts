@@ -42,8 +42,8 @@ export async function runSimulation(
   // Build adjacency list once (connections don't change during simulation)
   const adjacencyList = buildSimAdjacencyList(world.connections);
 
-  // Build systemId → governmentType lookup. After the Layer 2 cutover, gov is a
-  // property of the owning faction (read off SimSystem directly), not the region.
+  // Build systemId → governmentType lookup. Government is a property of the
+  // owning faction (read off SimSystem directly), not the region.
   const systemToGov: Map<string, GovernmentType> = new Map(
     world.systems.map((s) => [s.id, s.governmentType]),
   );

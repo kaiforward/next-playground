@@ -102,7 +102,7 @@ export async function executeTrade(
   const quote = quoteTrade(curve, marketEntry.stock, quantity, type, spread);
 
   // Reputation gating + multiplier (stacks on the quote, as before). Systems
-  // without a faction (transient mid-cutover state) trade at neutral; hostile
+  // without a faction (transient seed state) trade at neutral; hostile
   // standing blocks the trade.
   let totalPrice = quote.totalPrice;
   if (factionId) {

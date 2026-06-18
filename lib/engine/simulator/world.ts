@@ -63,8 +63,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     name: r.name,
   }));
 
-  // Build systems — government now comes from the owning faction's definition,
-  // not the region. Mirrors the live cutover in `prisma/seed.ts`.
+  // Build systems — government comes from the owning faction's definition,
+  // not the region. Mirrors the live seed in `prisma/seed.ts`.
   const systems: SimSystem[] = universe.systems.map((s, i) => {
     const econ = s.economyType;
     const owningFaction = universe.factions[universe.systemFactionAssignments[s.index]];

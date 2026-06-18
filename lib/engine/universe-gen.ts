@@ -27,7 +27,7 @@ export interface GeneratedSystem {
   index: number;
   name: string;
   economyType: EconomyType;
-  /** Physical substrate (economy-simulation SP1). */
+  /** Physical substrate — sun class gates body composition. */
   sunClass: SunClass;
   bodies: GeneratedBody[];
   aggregate: ResourceVector;

@@ -9,7 +9,7 @@ describe("GOVERNMENT_TYPES", () => {
     }
   });
 
-  it("includes all 8 government types after Layer 2 expansion", () => {
+  it("includes all 8 government types", () => {
     expect(ALL_GOVERNMENT_TYPES).toHaveLength(8);
     expect(ALL_GOVERNMENT_TYPES).toEqual(
       expect.arrayContaining([

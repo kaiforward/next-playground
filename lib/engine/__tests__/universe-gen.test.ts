@@ -568,7 +568,7 @@ describe("faction generation", () => {
     }
   });
 
-  it("every minor faction holds at least 5 systems (post-Layer-2 floor)", () => {
+  it("every minor faction holds at least 5 systems (minimum floor)", () => {
     const params = defaultParams();
     const u = generateUniverse(params, REGION_NAMES);
     const sizeByFaction = new Map<number, number>();

@@ -78,10 +78,10 @@ export class PrismaEconomyWorld implements EconomyWorld {
 
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
       const { production, consumption } = physicalRates(goodKey, aggregate, sys.population);
-      // After the Layer 2 cutover every system has a non-null factionId. The
-      // `?? "frontier"` fallback covers the only legitimate gap: a system the
-      // adapter sees mid-write before its factionId is set. Frontier is the
-      // safe default (lowest-stability profile).
+      // Every seeded system has a non-null factionId. The `?? "frontier"`
+      // fallback covers the only legitimate gap: a system the adapter sees
+      // mid-write before its factionId is set. Frontier is the safe default
+      // (lowest-stability profile).
       const governmentType = sys.faction
         ? toGovernmentType(sys.faction.governmentType)
         : "frontier";

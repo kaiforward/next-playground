@@ -104,7 +104,7 @@ export function quoteTrade(
  * stock (where mid === basePrice) is the per-system days-of-supply anchor:
  * `TARGET_COVER × demandRate × anchorMult`. `demandRate` is the market's stored
  * local demand rate (perCapitaNeed × population, floored); `anchorMult` (default
- * 1) carries active anchor_shift events. See economy-simulation-substrate.md §8.2.
+ * 1) carries active anchor_shift events. See docs/active/gameplay/economy.md (pricing reference).
  */
 export function curveForGood(
   basePrice: number,

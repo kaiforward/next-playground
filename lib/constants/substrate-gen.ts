@@ -1,5 +1,5 @@
 /**
- * Tunable parameters for substrate generation (economy-simulation SP1 PR3a).
+ * Tunable parameters for substrate generation.
  * First-draft defaults; calibrated via `npm run simulate` + scripts/substrate-coherence.ts.
  */
 export const SUBSTRATE_GEN = {

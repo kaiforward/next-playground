@@ -258,7 +258,7 @@ describe("runTradeFlowProcessor", () => {
     expect(world.flowEvents.some((e) => e.tick === 10)).toBe(false);
   });
 
-  it("skips inter-region edges (PR 1 processes intra-region only)", async () => {
+  it("skips inter-region edges (processes intra-region only)", async () => {
     const otherRegion: SimRegion = {
       id: "r2",
       name: "Other Region",

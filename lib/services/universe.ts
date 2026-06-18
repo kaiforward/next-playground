@@ -19,7 +19,7 @@ import type { ShipPosition } from "@/lib/engine/visibility";
  * Get all regions, star systems, and connections.
  *
  * Region government is derived from each region's dominant owning faction
- * (post-Layer-2 cutover) rather than stored directly on the region.
+ * rather than stored directly on the region.
  */
 export async function getUniverse(): Promise<UniverseData> {
   const [regions, systems, connections, factions] = await Promise.all([
@@ -206,8 +206,8 @@ export async function getSystemDetail(
 }
 
 /**
- * Physical substrate for one system — the first DB reader of the PR3a
- * substrate columns. Visibility-gated: an unsurveyed (invisible) system
+ * Physical substrate for one system — reads the substrate columns.
+ * Visibility-gated: an unsurveyed (invisible) system
  * returns `{ visibility: "unknown" }` so a direct URL can't leak survey data.
  * Resolves catalog display data (archetype + richness names) server-side,
  * mirroring how getSystemDetail resolves trait names.

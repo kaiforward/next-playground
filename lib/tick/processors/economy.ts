@@ -100,9 +100,9 @@ export async function runEconomyProcessor(
     });
   }
 
-  // Build tick entries via the shared market-tick builder. After the Layer 2
-  // cutover, government modifiers are resolved per-market (border regions can
-  // contain systems owned by different factions) rather than once per region.
+  // Build tick entries via the shared market-tick builder. Government modifiers
+  // are resolved per-market (border regions can contain systems owned by
+  // different factions) rather than once per region.
   const resolved = markets.map((m) =>
     resolveMarketTickEntry(
       {
