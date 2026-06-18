@@ -10,6 +10,7 @@ import type {
   SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
+import { emptyResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -44,9 +45,10 @@ function makeSystem(id: string): SimSystem {
     economyType: "extraction",
     regionId: "r1",
     governmentType: "federation",
-    produces: {},
-    consumes: {},
+    aggregate: emptyResourceVector(),
+    population: 0,
     traits: [],
+    bodyDanger: 0,
     prosperity: 0,
     tradeVolumeAccum: 0,
   };
@@ -64,6 +66,7 @@ function makeMarket(
     basePrice: 100,
     stock,
     anchorMult: 1,
+    demandRate: 1,
     priceFloor: 0.2,
     priceCeiling: 5.0,
   };
@@ -255,7 +258,7 @@ describe("runTradeFlowProcessor", () => {
     expect(world.flowEvents.some((e) => e.tick === 10)).toBe(false);
   });
 
-  it("skips inter-region edges (PR 1 processes intra-region only)", async () => {
+  it("skips inter-region edges (processes intra-region only)", async () => {
     const otherRegion: SimRegion = {
       id: "r2",
       name: "Other Region",

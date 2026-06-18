@@ -1,4 +1,4 @@
-import { DEFAULT_ELASTICITY, getTargetStock } from "@/lib/constants/market-economy";
+import { DEFAULT_ELASTICITY, TARGET_COVER } from "@/lib/constants/market-economy";
 
 /**
  * A good's price curve at one station. Price is a function of a single
@@ -100,22 +100,22 @@ export function quoteTrade(
 }
 
 /**
- * Build a MarketCurve for a good from its DB/definition fields. `targetStock`
- * is derived (PR 2) / calibrated (PR 3) in lib/constants/market-economy.ts; the
- * float floor/ceiling multipliers come straight off the good.
- * An optional anchorMult (default 1, supplied from the market row's stored
- * anchorMult) scales the anchor for active events; see the stock-economy spec §6.1.
+ * Build a MarketCurve for a good from its DB/definition fields. The reference
+ * stock (where mid === basePrice) is the per-system days-of-supply anchor:
+ * `TARGET_COVER × demandRate × anchorMult`. `demandRate` is the market's stored
+ * local demand rate (perCapitaNeed × population, floored); `anchorMult` (default
+ * 1) carries active anchor_shift events. See docs/active/gameplay/economy.md (pricing reference).
  */
 export function curveForGood(
-  goodId: string,
   basePrice: number,
   floorMult: number,
   ceilingMult: number,
+  demandRate: number,
   anchorMult: number = 1,
 ): MarketCurve {
   return {
     basePrice,
-    targetStock: getTargetStock(goodId) * anchorMult,
+    targetStock: TARGET_COVER * demandRate * anchorMult,
     k: DEFAULT_ELASTICITY,
     floorMult,
     ceilingMult,

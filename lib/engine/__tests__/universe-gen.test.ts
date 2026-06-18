@@ -18,6 +18,9 @@ import {
   UNIVERSE_GEN,
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
+import { SUN_CLASSES } from "@/lib/constants/bodies";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
+import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -255,24 +258,50 @@ describe("generateSystems", () => {
     }
   });
 
-  it("derives economy types from traits with no region theme bias", () => {
+  it("assigns every system a sun class and at least one body", () => {
     const { systems } = makeRegionsAndSystems();
-    // With uniform trait weights, all 6 economy types should appear
+    for (const sys of systems) {
+      expect(SUN_CLASSES[sys.sunClass]).toBeDefined();
+      expect(sys.bodies.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("aggregate equals the element-wise sum of body resource bases", () => {
+    const { systems } = makeRegionsAndSystems();
+    for (const sys of systems.slice(0, 50)) {
+      for (const type of RESOURCE_TYPES) {
+        const summed = sys.bodies.reduce((acc, b) => acc + b.resourceBase[type], 0);
+        expect(sys.aggregate[type]).toBeCloseTo(summed, 6);
+      }
+    }
+  });
+
+  it("seeds population between 0 and pop cap", () => {
+    const { systems } = makeRegionsAndSystems();
+    for (const sys of systems) {
+      expect(sys.population).toBeGreaterThanOrEqual(0);
+      expect(sys.population).toBeLessThanOrEqual(sys.popCap);
+    }
+  });
+
+  it("rolls 0–2 features per system, all narrative survivors", () => {
+    const { systems } = makeRegionsAndSystems();
+    for (const sys of systems) {
+      expect(sys.traits.length).toBeGreaterThanOrEqual(0);
+      expect(sys.traits.length).toBeLessThanOrEqual(2);
+      for (const t of sys.traits) expect(ALL_TRAIT_IDS).toContain(t.traitId);
+    }
+  });
+
+  it("derives all six economy types from the substrate, none dominating", () => {
+    const { systems } = makeRegionsAndSystems();
     const econCounts = new Map<string, number>();
     for (const sys of systems) {
       econCounts.set(sys.economyType, (econCounts.get(sys.economyType) ?? 0) + 1);
     }
     expect(econCounts.size).toBe(6);
-    // No single type should dominate (>40% of all systems)
     for (const [, count] of econCounts) {
-      expect(count / systems.length).toBeLessThan(0.4);
-    }
-  });
-
-  it("every system has at least 2 traits", () => {
-    const { systems } = makeRegionsAndSystems();
-    for (const sys of systems) {
-      expect(sys.traits.length).toBeGreaterThanOrEqual(2);
+      expect(count / systems.length).toBeLessThan(0.5);
     }
   });
 
@@ -539,7 +568,7 @@ describe("faction generation", () => {
     }
   });
 
-  it("every minor faction holds at least 5 systems (post-Layer-2 floor)", () => {
+  it("every minor faction holds at least 5 systems (minimum floor)", () => {
     const params = defaultParams();
     const u = generateUniverse(params, REGION_NAMES);
     const sizeByFaction = new Map<number, number>();

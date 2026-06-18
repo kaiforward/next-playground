@@ -22,6 +22,9 @@ import type {
   OpMissionStatus,
   BattleStatus,
   EntityRef,
+  SunClass,
+  BodyArchetypeId,
+  RichnessModifierId,
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
 import { MODULES, type ModuleId } from "@/lib/constants/modules";
@@ -30,6 +33,7 @@ import type { EnemyTier } from "@/lib/constants/combat";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import type { UniverseScale } from "@/lib/constants/universe-gen";
 import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
+import { SUN_CLASSES, BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -57,30 +61,21 @@ const REPUTATION_STANDINGS: ReadonlySet<string> = new Set<ReputationStanding>([
 const QUALITY_TIERS: ReadonlySet<number> = new Set<QualityTier>([1, 2, 3]);
 
 const TRAIT_IDS: ReadonlySet<string> = new Set<TraitId>([
-  // Planetary Bodies
-  "habitable_world", "ocean_world", "volcanic_world", "frozen_world",
-  "tidally_locked_world", "desert_world", "jungle_world",
-  "geothermal_vents", "hydrocarbon_seas", "fertile_lowlands",
-  "coral_archipelago", "tectonic_forge",
-  // Orbital Features
-  "asteroid_belt", "gas_giant", "mineral_rich_moons", "ring_system",
-  "binary_star", "lagrange_stations", "captured_rogue_body",
-  "deep_space_beacon",
-  // Resource Deposits
-  "rare_earth_deposits", "heavy_metal_veins", "organic_compounds",
-  "crystalline_formations", "helium3_reserves", "exotic_matter_traces",
-  "radioactive_deposits", "superdense_core", "glacial_aquifer",
+  // Planetary
+  "tidally_locked_world", "geothermal_vents",
+  // Orbital
+  "binary_star", "lagrange_stations", "captured_rogue_body", "deep_space_beacon",
+  // Resource
+  "crystalline_formations", "exotic_matter_traces",
   // Phenomena & Anomalies
   "nebula_proximity", "solar_flare_activity", "gravitational_anomaly",
   "dark_nebula", "precursor_ruins", "subspace_rift", "pulsar_proximity",
-  "ion_storm_corridor", "bioluminescent_ecosystem",
-  "signal_anomaly", "xenobiology_preserve", "ancient_minefield",
-  "pirate_stronghold",
+  "ion_storm_corridor", "bioluminescent_ecosystem", "signal_anomaly",
+  "xenobiology_preserve", "ancient_minefield", "pirate_stronghold",
   // Infrastructure & Legacy
   "ancient_trade_route", "generation_ship_wreckage", "orbital_ring_remnant",
   "seed_vault", "colonial_capital", "free_port_declaration",
-  "shipbreaking_yards", "derelict_fleet", "abandoned_station",
-  "smuggler_haven",
+  "shipbreaking_yards", "derelict_fleet", "abandoned_station", "smuggler_haven",
 ]);
 
 const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([
@@ -349,8 +344,42 @@ const CANTINA_NPC_TYPES: ReadonlySet<string> = new Set<CantinaNpcType>([
   "bartender", "cautious_trader", "frontier_gambler", "sharp_smuggler", "station_regular",
 ]);
 
+const SUN_CLASS_IDS: ReadonlySet<string> = new Set(Object.keys(SUN_CLASSES));
+const BODY_ARCHETYPE_IDS: ReadonlySet<string> = new Set(Object.keys(BODY_ARCHETYPES));
+const RICHNESS_MODIFIER_IDS: ReadonlySet<string> = new Set(Object.keys(RICHNESS_MODIFIERS));
+
 export function isCantinaNpcType(value: string): value is CantinaNpcType {
   return CANTINA_NPC_TYPES.has(value);
+}
+
+export function isSunClass(value: string): value is SunClass {
+  return SUN_CLASS_IDS.has(value);
+}
+export function toSunClass(value: string): SunClass {
+  if (!SUN_CLASS_IDS.has(value)) {
+    throw new Error(`Invalid sun class: "${value}"`);
+  }
+  return value as SunClass;
+}
+
+export function isBodyArchetypeId(value: string): value is BodyArchetypeId {
+  return BODY_ARCHETYPE_IDS.has(value);
+}
+export function toBodyArchetypeId(value: string): BodyArchetypeId {
+  if (!BODY_ARCHETYPE_IDS.has(value)) {
+    throw new Error(`Invalid body archetype id: "${value}"`);
+  }
+  return value as BodyArchetypeId;
+}
+
+export function isRichnessModifierId(value: string): value is RichnessModifierId {
+  return RICHNESS_MODIFIER_IDS.has(value);
+}
+export function toRichnessModifierId(value: string): RichnessModifierId {
+  if (!RICHNESS_MODIFIER_IDS.has(value)) {
+    throw new Error(`Invalid richness modifier id: "${value}"`);
+  }
+  return value as RichnessModifierId;
 }
 
 export function toUniverseScale(value: string): UniverseScale {

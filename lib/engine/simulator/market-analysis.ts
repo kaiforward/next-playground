@@ -7,7 +7,6 @@
  */
 
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { getTargetStock } from "@/lib/constants/market-economy";
 import type { SimWorld, MarketSnapshot, MarketHealthSummary } from "./types";
 
 /** Default: sample every 50 ticks. */
@@ -19,7 +18,7 @@ export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
     systemId: m.systemId,
     goodId: m.goodId,
     stock: m.stock,
-    price: spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling, m.anchorMult), m.stock),
+    price: spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock),
   }));
 }
 
@@ -44,7 +43,7 @@ function computePriceDispersion(
   // Group prices by good
   const pricesByGood = new Map<string, number[]>();
   for (const m of world.markets) {
-    const price = spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling, m.anchorMult), m.stock);
+    const price = spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock);
     let prices = pricesByGood.get(m.goodId);
     if (!prices) {
       prices = [];
@@ -66,9 +65,11 @@ function computePriceDispersion(
 // ── Stock drift ─────────────────────────────────────────────────
 
 /**
- * For each good, compute the average distance of stock from its targetStock
- * across all systems. Positive drift = above target (cheap), negative = below
- * target (expensive). The further from zero, the more the pricing anchor is off.
+ * For each good, compute the average distance of stock from each market's
+ * per-system days-of-supply reference (TARGET_COVER × demandRate × anchorMult)
+ * across all systems. Positive drift = above reference (cheap), negative = below
+ * (expensive). The further from zero, the more stock has drifted from the level
+ * where the good prices at base.
  */
 function computeStockDrift(
   world: SimWorld,
@@ -76,7 +77,14 @@ function computeStockDrift(
   const driftsByGood = new Map<string, number[]>();
 
   for (const m of world.markets) {
-    const drift = m.stock - getTargetStock(m.goodId);
+    const reference = curveForGood(
+      m.basePrice,
+      m.priceFloor,
+      m.priceCeiling,
+      m.demandRate,
+      m.anchorMult,
+    ).targetStock;
+    const drift = m.stock - reference;
     let drifts = driftsByGood.get(m.goodId);
     if (!drifts) {
       drifts = [];

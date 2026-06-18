@@ -17,11 +17,12 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TradeActivityPanel } from "@/components/system/trade-activity-panel";
+import { AstrographyTeaser } from "@/components/system/astrography-teaser";
+import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
-import { formatCredits } from "@/lib/utils/format";
-import { getPopulationLabel, getDangerInfo } from "@/lib/utils/system";
-import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
+import { formatCredits, formatNumber } from "@/lib/utils/format";
+import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { GOODS } from "@/lib/constants/goods";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { getGoodColor } from "@/lib/constants/ui";
@@ -42,7 +43,7 @@ function GoodsList({ goods }: { goods: { name: string; rate: number }[] }) {
           className="inline-flex items-center gap-1 bg-surface px-2 py-0.5 text-sm text-text-primary"
         >
           {g.name}
-          <span className="text-text-tertiary text-xs">({g.rate}/t)</span>
+          <span className="text-text-tertiary text-xs">({g.rate.toFixed(1)}/t)</span>
         </span>
       ))}
     </div>
@@ -77,9 +78,10 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const { data: universeData } = useUniverse();
   const allMissions = useSystemAllMissions(systemId);
+  const substrate = useSystemSubstrate(systemId);
 
-  // Owning faction (post-Layer-2 source of government). Falls back to the
-  // region's dominant faction for the transient cutover state.
+  // Owning faction (the source of government). Falls back to the region's
+  // dominant faction when a system has no factionId yet.
   const factionInfo = useMemo(() => {
     if (!universeData) return null;
     const factionId = systemInfo?.factionId ?? regionInfo?.dominantFactionId ?? null;
@@ -105,21 +107,26 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     ).length;
   }, [universeData, systemId]);
 
-  // Economy info
+  // Economy info — net trade balance per good from the system's substrate.
+  // Production and consumption are both universal, so the lists partition the
+  // goods into net exporters (Produces) and net importers (Consumes).
   const economyType = systemInfo?.economyType ?? "extraction";
-  const producedGoods = useMemo(() => {
-    const rates = ECONOMY_PRODUCTION[economyType] ?? {};
-    return Object.entries(rates)
-      .map(([goodId, rate]) => ({ name: GOODS[goodId]?.name ?? goodId, rate }))
-      .sort((a, b) => b.rate - a.rate);
-  }, [economyType]);
-
-  const consumedGoods = useMemo(() => {
-    const rates = ECONOMY_CONSUMPTION[economyType] ?? {};
-    return Object.entries(rates)
-      .map(([goodId, rate]) => ({ name: GOODS[goodId]?.name ?? goodId, rate }))
-      .sort((a, b) => b.rate - a.rate);
-  }, [economyType]);
+  const { producedGoods, consumedGoods } = useMemo(() => {
+    if (substrate.visibility !== "visible") {
+      return { producedGoods: [], consumedGoods: [] };
+    }
+    const produced: { name: string; rate: number }[] = [];
+    const consumed: { name: string; rate: number }[] = [];
+    for (const g of substrate.goods) {
+      const net = g.production - g.consumption;
+      const name = GOODS[g.goodId]?.name ?? g.goodId;
+      if (net > 0) produced.push({ name, rate: net });
+      else if (net < 0) consumed.push({ name, rate: -net });
+    }
+    produced.sort((a, b) => b.rate - a.rate);
+    consumed.sort((a, b) => b.rate - a.rate);
+    return { producedGoods: produced, consumedGoods: consumed };
+  }, [substrate]);
 
   // Market snapshot — best premiums and biggest discounts
   const { bestPrices, cheapestSorted } = useMemo(() => {
@@ -145,8 +152,8 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     }));
   }, [market]);
 
-  // Danger — sourced from the system's owning faction (post-Layer-2). Region
-  // dominant gov is the fallback path for the transient cutover state.
+  // Danger — sourced from the system's owning faction's government. Region
+  // dominant gov is the fallback when a system has no factionId yet.
   const govType: GovernmentType =
     factionInfo?.governmentType ?? regionInfo?.dominantGovernmentType ?? "frontier";
   const govDef = GOVERNMENT_TYPES[govType];
@@ -154,10 +161,10 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     (systemInfo?.traits ?? []).map((t) => ({ traitId: t.traitId, quality: t.quality })),
   );
   const totalDanger = traitDanger + govDef.dangerBaseline;
-  const danger = getDangerInfo(totalDanger);
 
-  // Population
-  const populationLabel = getPopulationLabel(economyType, traits.length);
+  // Population — the real abstract magnitude from the substrate.
+  const populationLabel =
+    substrate.visibility === "visible" ? formatNumber(substrate.population) : "—";
 
   // Mission counts
   const tradeAvailable = allMissions.tradeMissions.available.length;
@@ -205,7 +212,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 <span className="text-sm text-white capitalize">{govDef.name}</span>
               </StatRow>
               <StatRow label="Population">
-                <span className="text-sm text-text-primary">{populationLabel}</span>
+                <span className="text-sm font-mono text-text-primary">{populationLabel}</span>
               </StatRow>
               <StatRow label="Traits">
                 <span className="text-sm text-text-primary">{traits.length}</span>
@@ -214,7 +221,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 <span className="text-sm text-text-primary">{connectionCount}</span>
               </StatRow>
               <StatRow label="Danger">
-                <Badge color={danger.color}>{danger.label}</Badge>
+                <SystemDangerBadge systemId={systemId} baseDanger={totalDanger} />
               </StatRow>
               {systemInfo?.isGateway && (
                 <StatRow label="Gateway">
@@ -247,6 +254,14 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Astrography teaser — own boundary so its substrate fetch never blocks
+          the overview, and pre-warms the Astrography tab's cache. */}
+      <div className="mb-6">
+        <QueryBoundary>
+          <AstrographyTeaser systemId={systemId} />
+        </QueryBoundary>
+      </div>
 
       {/* Market row — snapshot + pie chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

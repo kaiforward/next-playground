@@ -7,6 +7,7 @@ import type {
   RegionView,
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
+import { physicalRates } from "@/lib/engine/physical-economy";
 import { toTraitId, toQualityTier } from "@/lib/types/guards";
 import type {
   SimMarketEntry,
@@ -62,18 +63,16 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     for (const m of this.markets) {
       const sys = sysById.get(m.systemId);
       if (!sys || sys.regionId !== regionId) continue;
+      const { production, consumption } = physicalRates(m.goodId, sys.aggregate, sys.population);
       views.push({
         id: `${m.systemId}|${m.goodId}`,
         systemId: m.systemId,
         goodId: m.goodId,
         basePrice: m.basePrice,
         stock: m.stock,
-        economyType: sys.economyType,
         governmentType: sys.governmentType,
-        produces: Object.keys(sys.produces),
-        consumes: Object.keys(sys.consumes),
-        baseProductionRate: sys.produces[m.goodId],
-        baseConsumptionRate: sys.consumes[m.goodId],
+        baseProductionRate: production > 0 ? production : undefined,
+        baseConsumptionRate: consumption > 0 ? consumption : undefined,
         traits: sys.traits.map((t) => ({
           traitId: toTraitId(t.traitId),
           quality: toQualityTier(t.quality),

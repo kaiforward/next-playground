@@ -85,6 +85,14 @@ Patterns explicitly forbidden by `CLAUDE.md`. The Conventions agent uses this as
 - **Throttle (not debounce) for high-frequency render loops** — category: `debounce-in-render-loop`
   - Pixi ticker etc.
 
+## Comments
+
+- **Comments describe code, not plans** — category: `comment-references-plan`
+  - A comment must explain the code as it is: what it does, why, invariants, and gotchas — anchored to real symbols, files, and behavior.
+  - Never reference an implementation plan, build phase, PR number, sub-project, or migration stage (e.g. "PR3b Phase 4", "the substrate rebuild", "retired in Phase 1", "until SP1 ships"). These rot the moment the plan moves and mean nothing to a future reader of the code.
+  - Don't cite plan or design docs from code comments. (The spec's own `[PENDING: <system>]` markers live in `docs/`, not in code.)
+  - A temporary shim/workaround SHOULD be labelled temporary and state — in code terms — the condition that lets it go away (e.g. "drop once `X` is non-null everywhere"), but not by naming a plan, phase, or PR.
+
 ## Maintenance note
 
 This list grows. When a new project convention is discovered, add it here in the next PR alongside the fix. Categories are slugs for deterministic dedup — keep them lowercase-kebab-case and short.

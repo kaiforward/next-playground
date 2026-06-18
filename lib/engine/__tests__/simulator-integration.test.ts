@@ -132,7 +132,7 @@ describe("Simulator Integration", () => {
         for (const m of world.markets) {
           pricesBefore.set(
             `${m.systemId}:${m.goodId}`,
-            spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock),
+            spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock),
           );
         }
 
@@ -145,7 +145,7 @@ describe("Simulator Integration", () => {
           if (!gov || !econ) continue;
           const before = pricesBefore.get(mKey);
           if (before === undefined || m.basePrice === 0) continue;
-          const after = spotPrice(curveForGood(m.goodId, m.basePrice, m.priceFloor, m.priceCeiling), m.stock);
+          const after = spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock);
           const change = Math.abs(after - before) / m.basePrice;
           const groupKey = `${gov}:${econ}`;
           const existing = changesByGovEcon.get(groupKey) ?? [];

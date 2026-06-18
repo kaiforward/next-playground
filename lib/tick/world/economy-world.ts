@@ -10,15 +10,15 @@
 
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
-import type { EconomyType, GovernmentType } from "@/lib/types/game";
+import type { GovernmentType } from "@/lib/types/game";
 import type {
   EconomySimParams,
   ProsperityParams,
 } from "@/lib/engine/tick";
 
 /**
- * Region row needed for round-robin selection. Government no longer lives on
- * the region (factions own it per-system after Layer 2); see `MarketView.governmentType`.
+ * Region row needed for round-robin selection. Government does not live on the
+ * region (factions own it per-system); see `MarketView.governmentType`.
  */
 export interface RegionView {
   id: string;
@@ -37,16 +37,11 @@ export interface MarketView {
   goodId: string;
   basePrice: number;
   stock: number;
-  economyType: EconomyType;
-  /** Government of the system's owning faction — read per-market post-cutover. */
+  /** Government of the system's owning faction — read per-market. */
   governmentType: GovernmentType;
-  /** Good IDs this economy type produces. */
-  produces: string[];
-  /** Good IDs this economy type consumes. */
-  consumes: string[];
-  /** Base production rate for this good at this economy type, if any. */
+  /** Base production rate for this good, if any. */
   baseProductionRate?: number;
-  /** Base consumption rate for this good at this economy type, if any. */
+  /** Base consumption rate for this good, if any. */
   baseConsumptionRate?: number;
   /** System traits (already validated). */
   traits: GeneratedTrait[];

@@ -12,14 +12,10 @@
 
 import { clamp } from "@/lib/utils/math";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
-import { computeTraitProductionBonus } from "@/lib/engine/trait-gen";
 
 export interface MarketTickEntry {
   goodId: string;
   stock: number;
-  economyType: string;
-  produces: string[];
-  consumes: string[];
   /** Per-good base production rate (undefined/0 = not a producer of this good). */
   productionRate?: number;
   /** Per-good base consumption rate (undefined/0 = not a consumer of this good). */
@@ -61,8 +57,8 @@ function selfLimitingFactor(
 /**
  * Simulate one economy tick across all market entries.
  *
- * For each entry: apply self-limiting production (if a producer), self-limiting
- * consumption (if a consumer), then noise, then clamp to [minLevel, maxLevel].
+ * For each entry: applies production when `productionRate > 0`, consumption
+ * when `consumptionRate > 0`, then noise, then clamp to [minLevel, maxLevel].
  * Accepts an optional RNG for deterministic testing. Returns a new array.
  */
 export function simulateEconomyTick(
@@ -76,12 +72,12 @@ export function simulateEconomyTick(
     let stock = entry.stock;
 
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
-    if (effectiveProduction > 0 && entry.produces.includes(entry.goodId)) {
+    if (effectiveProduction > 0) {
       stock += effectiveProduction * selfLimitingFactor(stock, minLevel, maxLevel, "produce");
     }
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
-    if (effectiveConsumption > 0 && entry.consumes.includes(entry.goodId)) {
+    if (effectiveConsumption > 0) {
       stock -= effectiveConsumption * selfLimitingFactor(stock, minLevel, maxLevel, "consume");
     }
 
@@ -103,14 +99,11 @@ export function simulateEconomyTick(
 export interface TickEntryInput {
   goodId: string;
   stock: number;
-  economyType: string;
-  produces: string[];
-  consumes: string[];
   /** Volatility after government scaling. */
   volatility: number;
-  /** Base production rate from economy type (undefined = not a producer). */
+  /** Base production rate from the substrate driver (undefined = not a producer). */
   baseProductionRate?: number;
-  /** Base consumption rate from economy type (undefined = not a consumer). */
+  /** Base consumption rate from the substrate driver (undefined = not a consumer). */
   baseConsumptionRate?: number;
   /** Government consumption boost for this good. */
   govConsumptionBoost: number;
@@ -121,10 +114,10 @@ export interface TickEntryInput {
 }
 
 /**
- * Build a MarketTickEntry from pre-resolved inputs. Computes the trait
- * production bonus, folds the government consumption boost into the consumption
- * rate, and applies the prosperity multiplier equally to both rates. Callers
- * spread event productionMult/consumptionMult on top if present.
+ * Build a MarketTickEntry from pre-resolved inputs. Folds the government
+ * consumption boost into the consumption rate and applies the prosperity
+ * multiplier equally to both rates. Callers spread event
+ * productionMult/consumptionMult on top if present.
  */
 export function buildMarketTickEntry(
   input: TickEntryInput,
@@ -132,23 +125,17 @@ export function buildMarketTickEntry(
 ): MarketTickEntry {
   const prosperityMult = getProsperityMultiplier(input.prosperity, prosperityParams);
 
-  const traitBonus = computeTraitProductionBonus(input.traits, input.goodId);
   const productionBeforeProsperity =
-    input.baseProductionRate != null ? input.baseProductionRate * (1 + traitBonus) : undefined;
+    input.baseProductionRate != null ? input.baseProductionRate : undefined;
 
   const consumptionBeforeProsperity =
     input.baseConsumptionRate != null
       ? input.baseConsumptionRate + input.govConsumptionBoost
-      : input.govConsumptionBoost > 0
-        ? input.govConsumptionBoost
-        : undefined;
+      : undefined;
 
   return {
     goodId: input.goodId,
     stock: input.stock,
-    economyType: input.economyType,
-    produces: input.produces,
-    consumes: input.consumes,
     productionRate:
       productionBeforeProsperity != null ? productionBeforeProsperity * prosperityMult : undefined,
     consumptionRate:

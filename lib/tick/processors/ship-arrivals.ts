@@ -111,7 +111,12 @@ export async function runShipArrivalsProcessor(
     const traitDanger = ship.destination
       ? computeTraitDanger(ship.destination.traits)
       : 0;
-    const danger = computeSystemDanger(systemMods, govBaseline, traitDanger);
+    const danger = computeSystemDanger(
+      systemMods,
+      govBaseline,
+      traitDanger,
+      ship.destination?.bodyDanger ?? 0,
+    );
 
     // Mutable local cargo — each stage mutates the next stage's input.
     const localCargo = ship.cargo.map((c) => ({

@@ -4,7 +4,7 @@
  */
 
 import type { EventTypeId } from "@/lib/constants/events";
-import type { EconomyType, GovernmentType } from "@/lib/types/game";
+import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SimConstants, SimConstantOverrides } from "./constants";
 import type { SimAdjacencyList } from "./pathfinding-cache";
@@ -21,14 +21,16 @@ export interface SimSystem {
   name: string;
   economyType: EconomyType;
   regionId: string;
-  /** Owning faction's government — sourced per-system after the Layer 2 cutover. */
+  /** Owning faction's government — sourced per-system. */
   governmentType: GovernmentType;
-  /** Goods this economy type produces, keyed by goodId → rate. */
-  produces: Record<string, number>;
-  /** Goods this economy type consumes, keyed by goodId → rate. */
-  consumes: Record<string, number>;
+  /** System aggregate resource vector — drives substrate production rates. */
+  aggregate: ResourceVector;
+  /** Abstract population magnitude — drives labour + per-capita consumption. */
+  population: number;
   /** System traits from generation (used for production modifiers). */
   traits: { traitId: string; quality: number }[];
+  /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
+  bodyDanger: number;
   /** Prosperity value (-1 to +1). Trade-driven, amplifies production and consumption equally. */
   prosperity: number;
   /** Accumulated trade volume (quantity bought+sold) since last economy processor run. */
@@ -48,6 +50,8 @@ export interface SimMarketEntry {
   stock: number;
   /** Stored pricing-anchor multiplier (1 = none); written by the economy processor. */
   anchorMult: number;
+  /** Per-capita-need × population (floored) — the days-of-supply pricing denominator. */
+  demandRate: number;
   priceFloor: number;
   priceCeiling: number;
 }

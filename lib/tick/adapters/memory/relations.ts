@@ -63,7 +63,7 @@ interface MemoryRelationEvent {
 /**
  * In-memory adapter for the relations processor. Built for unit and
  * integration tests of the processor body; SimWorld doesn't model factions
- * directly today (PR 3 doesn't extend the simulator), so callers construct
+ * directly (the simulator has no relations layer), so callers construct
  * this adapter with explicit fixtures.
  *
  * Pair convention: factionAId < factionBId. Stored canonical; reads/writes

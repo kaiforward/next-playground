@@ -9,6 +9,8 @@ export interface MarketInput {
   priceCeiling?: number;
   /** Stored pricing-anchor multiplier (1 = none). */
   anchorMult?: number;
+  /** Days-of-supply pricing denominator (perCapitaNeed × population, floored). */
+  demandRate: number;
 }
 
 export interface PriceHistoryEntry {
@@ -35,7 +37,7 @@ export function buildPriceEntry(
   for (const [systemId, systemMarkets] of bySystem) {
     const prices: Record<string, number> = {};
     for (const m of systemMarkets) {
-      const curve = curveForGood(m.goodId, m.basePrice, m.priceFloor ?? 0.2, m.priceCeiling ?? 5.0, m.anchorMult ?? 1);
+      const curve = curveForGood(m.basePrice, m.priceFloor ?? 0.2, m.priceCeiling ?? 5.0, m.demandRate, m.anchorMult ?? 1);
       prices[m.goodId] = spotPrice(curve, m.stock);
     }
     result.set(systemId, { tick, prices });

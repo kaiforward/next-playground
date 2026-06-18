@@ -83,7 +83,7 @@ export async function getBartenderTips(
           ? GOVERNMENT_TYPES[toGovernmentType(station.system.faction.governmentType)]
           : undefined;
         const entries: MarketEntry[] = station.markets.map((m) =>
-          buildMarketEntry(m.good.id, m.good, m.stock, govDef, m.anchorMult),
+          buildMarketEntry(m.good.id, m.good, m.stock, m.demandRate, govDef, m.anchorMult),
         );
         neighborMarkets.push({
           systemName: station.system.name,

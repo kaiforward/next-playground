@@ -130,11 +130,11 @@ export async function runTradeFlowProcessor(
       if (!mA || !mB || mA.basePrice <= 0) continue;
 
       const priceA = spotPrice(
-        curveForGood(goodId, mA.basePrice, mA.priceFloor, mA.priceCeiling, mA.anchorMult),
+        curveForGood(mA.basePrice, mA.priceFloor, mA.priceCeiling, mA.demandRate, mA.anchorMult),
         mA.stock,
       );
       const priceB = spotPrice(
-        curveForGood(goodId, mB.basePrice, mB.priceFloor, mB.priceCeiling, mB.anchorMult),
+        curveForGood(mB.basePrice, mB.priceFloor, mB.priceCeiling, mB.demandRate, mB.anchorMult),
         mB.stock,
       );
       const gradient = (priceB - priceA) / mA.basePrice;

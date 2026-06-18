@@ -16,7 +16,7 @@ interface UniverseGenConfig {
   INTRA_REGION_BASE_FUEL: number;
   /** Max rejection sampling attempts before falling back to grid-jitter. */
   MAX_PLACEMENT_ATTEMPTS: number;
-  /** Minor factions seeded alongside the 8 majors. Consumed by Phase 2 world-gen. */
+  /** Minor factions seeded alongside the 8 majors. */
   MINOR_FACTION_COUNT: number;
 }
 

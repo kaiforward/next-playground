@@ -246,7 +246,7 @@ export class PrismaRelationsWorld implements RelationsWorld {
       if (!candidates || candidates.length === 0) continue;
       // Pick deterministically: first candidate. Refining to "lower-score
       // faction's side of the densest segment" is a future polish item — for
-      // Foundation any shared-border system is acceptable.
+      // now any shared-border system is acceptable.
       const pick = candidates[0];
       out.set(key, { systemId: pick.systemId, regionId: pick.regionId });
     }

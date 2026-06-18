@@ -1,6 +1,6 @@
 # Economy System
 
-The economy is a **single-stock** market simulation. Each `(station, good)` holds one value — `stock` — from which price, buy/sell rates, and the "how much can I trade" limits are all derived. Producers add stock (self-limiting near the ceiling), consumers drain it (self-limiting near the floor), and the spatial flow of goods between systems (trade-flow + player trades) is what separates cheap producer worlds from expensive consumer worlds. There is no separate `demand` axis and no mean-reversion — equilibrium emerges from production/consumption balance plus spatial flow.
+The economy is a **single-stock** market simulation. Each `(station, good)` holds one value — `stock` — from which price, buy/sell rates, and the "how much can I trade" limits are all derived. Producers add stock (self-limiting near the ceiling), consumers drain it (self-limiting near the floor), and the spatial flow of goods between systems (trade-flow + player trades) is what separates cheap producer worlds from expensive consumer worlds. There is no second free-floating `demand` value and no mean-reversion — equilibrium emerges from production/consumption balance plus spatial flow. (Each market does store a static per-system **demand rate**, but it only sets where the pricing curve is centred — it never evolves and never moves stock.)
 
 See [Design Rationale](#design-rationale) below for why this replaced the legacy dual supply/demand model and how it kills the instant buy→resell exploit.
 
@@ -12,7 +12,7 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 ### Tier 0 — Raw Materials
 
-Deep, liquid markets (high stock anchor ~111–129), thin per-unit margin. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these.
+Deep, liquid markets, thin per-unit margin. High population-driven demand gives them the deepest days-of-supply cover, so large trades barely move price. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these.
 
 | Good | Base Price | Volatility | Hazard | Price Range |
 |---|---|---|---|---|
@@ -23,7 +23,7 @@ Deep, liquid markets (high stock anchor ~111–129), thin per-unit margin. Cheap
 
 ### Tier 1 — Processed Goods
 
-Medium-depth markets (stock anchor ~67–75), moderate per-unit margin. Better margin but needs more capital. Mid-game income.
+Medium-depth markets, moderate per-unit margin. Lower per-capita demand than staples → shallower cover → price reacts more to each trade. Better margin but needs more capital. Mid-game income.
 
 | Good | Base Price | Volatility | Hazard | Price Range |
 |---|---|---|---|---|
@@ -34,7 +34,7 @@ Medium-depth markets (stock anchor ~67–75), moderate per-unit margin. Better m
 
 ### Tier 2 — Advanced Goods
 
-Thin, scarce markets (low stock anchor ~31–35), high per-unit price swing. Highest absolute margin per unit but can't fill cargo from one system. Late-game income — needs big capital AND multi-system routes.
+Thin, scarce markets, high per-unit price swing. Lowest per-capita demand → shallowest cover → a small trade swings price hard. Highest absolute margin per unit but can't fill cargo from one system. Late-game income — needs big capital AND multi-system routes.
 
 | Good | Base Price | Volatility | Hazard | Price Range |
 |---|---|---|---|---|
@@ -43,46 +43,51 @@ Thin, scarce markets (low stock anchor ~31–35), high per-unit price swing. Hig
 | Weapons | 120 | 2.0 | high | 0.5x-3.0x |
 | Luxuries | 150 | 1.8 | none | 0.5x-3.0x |
 
-### Per-Good Pricing Anchors
+### Per-System Pricing Reference (Days of Supply)
 
-Each good has a single **pricing anchor** (`targetStock`) — the stock level at which mid price equals base price. Stock above the anchor reads cheap (surplus); below reads expensive (shortage). The anchor's *magnitude* sets the market's **depth**: a high anchor (staples) means a deep, liquid market where large trades barely move price; a low anchor (luxuries) means a thin market where a small trade swings the price hard. This is why the same price formula gives staples flat prices and advanced goods volatile ones — and it's intentional.
+There is no per-good anchor table. The stock level at which a good's mid price equals its base price — its **reference** — is computed per `(station, good)` from local demand:
 
-Anchors are **calibrated**, not guessed: most goods use the midpoint of their producer/consumer seed-stock levels, but goods touched by *every* economy type (water, food, ore, textiles, chemicals) settle below that midpoint — they have no neutral markets to hold the average up — so their anchor is pinned to the stock level the universe actually settles at, measured via the simulator (`scripts/balance-analysis.ts`). The anchor *is* the natural galactic balance; deviations from it are what create trade signal.
+```
+demandRate = max( perCapitaNeed(good) × population , MIN_DEMAND )
+reference  = TARGET_COVER × demandRate × anchorMult
+```
 
-The good's `equilibrium` field gives the **seed stock** for producers (high → cheap) vs consumers (low → expensive); the steady-state spread then emerges from production/consumption + spatial flow. Full values in `lib/constants/goods.ts`; anchors in `lib/constants/market-economy.ts`.
+`TARGET_COVER` (40) is the **days of supply** — how many ticks of local consumption a market holds when it prices exactly at base. `demandRate` is the system's physical consumption rate for the good (see [Production & Consumption](#production--consumption)), floored at `MIN_DEMAND` so a near-empty system still yields a finite reference. `anchorMult` (default 1) carries active event anchor shifts (see [Event-Driven Anchor Shifts](#event-driven-anchor-shifts)). Stock above the reference reads cheap (surplus); below reads expensive (shortage).
+
+The reference's *magnitude* sets the market's **depth**, and that depth now emerges from each system's own demand rather than a hand-tuned per-good number: high-demand staples get a high reference (deep, liquid market — large trades barely move price), low-demand advanced goods get a low reference (thin market — a small trade swings price hard). This is why the same price formula gives staples flat prices and advanced goods volatile ones.
+
+`TARGET_COVER` is the single global pricing constant, **calibrated** via the simulator (`npm run simulate`): the chosen value maximises the minimum cross-system price dispersion across all twelve goods, so staples and advanced goods are both tradeable at once. Lower values pin advanced goods to the price floor (cheap everywhere); higher values pin staples to the ceiling (dear everywhere). Constants live in `lib/constants/market-economy.ts`; `demandRate` is stored on `StationMarket` and the reference is assembled in `curveForGood` (`lib/engine/market-pricing.ts`).
 
 ### Good Properties
 Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in data but not currently enforced for cargo. Reserved for future use.
 
 ---
 
-## Economy Types
+## Production & Consumption
 
-6 economy types define what a system produces and consumes, each with per-good production/consumption rates (units/tick). Production rates are **balanced against universe-wide consumption** (≈ equal production and consumption capacity per good) so no good is systematically drained or flooded across the galaxy — see `scripts/balance-analysis.ts`.
+Production and consumption are **physical** — they derive from each system's substrate (its aggregate resource vector + population), not from an economy-type rate table. One pure function, `physicalRates(goodId, aggregate, population)` (`lib/engine/physical-economy.ts`), is the single source of the formula, shared by the live tick, the simulator, and the substrate read service. Economy type no longer drives the tick; it is a derived display label (see [system-traits.md](./system-traits.md)).
 
-| Type | Produces (rate/tick) | Consumes (rate/tick) |
-|---|---|---|
-| Agricultural | Food (10), Textiles (4) | Water (4), Chemicals (3), Machinery (1), Medicine (1) |
-| Extraction | Water (13), Ore (6) | Food (3), Fuel (3), Textiles (2), Machinery (1) |
-| Refinery | Fuel (5), Metals (6), Chemicals (8) | Ore (4), Water (3), Food (1) |
-| Industrial | Machinery (2), Weapons (1) | Metals (3), Electronics (2), Chemicals (2), Fuel (2), Water (2), Food (2), Ore (2), Textiles (1) |
-| Tech | Electronics (3), Medicine (3) | Metals (2), Chemicals (2), Food (2), Luxuries (1), Water (1) |
-| Core | Luxuries (1) | Food (3), Textiles (2), Electronics (2), Medicine (2), Water (2), Weapons (1) |
+**Production** — one driver per good, `{ coeff, resource? }` in `lib/constants/physical-economy.ts`:
+```
+prodRate = coeff × labourFactor(population) × (resource-driven ? aggregate[resource] : 1)
+```
+- **Tier 0** goods are *resource-driven*: `water ← water`, `food ← arable`, `ore ← ore`, `textiles ← arable` (arable splits between food and textiles via differing coeffs). They scale with both a body-resource deposit *and* labour, so a water-rich, populated world is a strong net water exporter.
+- **Tier 1–2** goods are *labour-only*: `coeff × labourFactor(population)`, no resource gate. Higher tiers carry smaller coeffs (luxuries rarest). The four resources with no tier-0 good (gas, minerals, biomass, radioactive) stay economically inert until the facilities sub-project gives them inputs.
+- `labourFactor(population) = population / (population + LABOUR_HALF_POP)` — a soft-saturating scalar in [0, 1), a fixed per-system value while population is static.
 
-This creates natural supply chains: Extraction produces ore, Refinery consumes ore and produces metals, Industrial consumes metals and produces machinery. Disrupting any link cascades through the chain. Producer rates are deliberately higher than a single system's local consumption because each producer type supplies many consumer types across the galaxy — the surplus is what flows out along trade routes.
+**Consumption** — universal and population-scaled:
+```
+consRate = perCapitaNeed(good) × population
+```
+Every system consumes every good; higher tier → lower per-capita need. A system runs a positive **net balance** for a good when its production exceeds its consumption — that surplus is what flows out along trade routes.
 
-These per-good rates are the actual rates used by both the live game and the simulator via `resolveMarketTickEntry` (`lib/engine/market-tick-builder.ts`).
+**Emergent geography:** raw goods flow resource-rich frontier → core; manufactured goods flow populous core → frontier. The geography is deliberately **coarse** at this stage: tier-1+ production is labour-only with no competition for build space, so a populous world net-produces nearly every manufactured good. Genuine specialisation (housing vs. industry competing for finite body space) arrives with the facilities sub-project; until then the economy-type label is loose flavour, not a promise about net trade.
 
-### Self-Sufficiency Factors
+All coefficients and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller coeff and smaller need). The government `consumptionBoost` and the prosperity multiplier layer on top exactly as before.
 
-Different economy types have different self-sufficiency for goods they consume. An Agricultural system consuming water (s=0.5, has irrigation) seeds with more stock — and reads cheaper — than a Tech system consuming water (s=0.1, imports everything).
+### Market Seeding
 
-Self-sufficiency blends a consumer's seed stock from the base consumer level toward the producer level:
-- `s = 0.0` — fully dependent on imports (lowest seed stock, most expensive)
-- `s = 0.5` — partly self-sufficient (mid seed stock)
-- `s = 1.0` — meets own needs (seed stock matches producer levels)
-
-This creates price variety between systems consuming the same good. Full factor table in `lib/constants/economy.ts`.
+At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's days-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the [5, 200] stock band. The old per-economy-type self-sufficiency table is gone; import dependence now falls directly out of the substrate.
 
 ---
 
@@ -115,11 +120,13 @@ All 8 government types are implemented. Every type has trade-offs — buffs bala
 
 ### Price Formula
 ```
-mid     = clamp( basePrice × (targetStock / stock) ^ k ,  floor, ceiling )
-buyUnit = mid × (1 + s)        (what the player pays)
-sellUnit = mid × (1 − s)       (what the player receives)
+reference = TARGET_COVER × demandRate × anchorMult
+mid       = clamp( basePrice × (reference / stock) ^ k ,  floor, ceiling )
+buyUnit   = mid × (1 + s)        (what the player pays)
+sellUnit  = mid × (1 − s)        (what the player receives)
 ```
-- `stock = targetStock` → mid = basePrice. Above → cheaper, below → more expensive. If stock ≤ 0, price hits the ceiling.
+- `reference` — the per-system days-of-supply level where mid = base (see [Per-System Pricing Reference](#per-system-pricing-reference-days-of-supply)).
+- `stock = reference` → mid = basePrice. Above → cheaper, below → more expensive. If stock ≤ 0, price hits the ceiling.
 - `k` — elasticity exponent (steepness of the curve). Default **1** (reproduces the legacy hyperbola); higher `k` makes price react more sharply to the same stock gap.
 - `s` — bid-ask half-spread. Default **0.05**, scaled by government (see above).
 - `floor` / `ceiling` — per-good price multipliers on base price.
@@ -132,9 +139,9 @@ A trade of `q` units moves stock from `S` to `S∓q`, and price moves the whole 
 ### Per-Tick Simulation (runs once per region per tick, round-robin)
 Each good at each station is updated:
 
-1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the anchor.
-2. **Self-limiting production** — producing systems add stock, scaled by `sqrt((MAX − stock) / (MAX − MIN))`. Near the ceiling, production approaches zero (warehouses full).
-3. **Self-limiting consumption** — consuming systems remove stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left).
+1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
+2. **Self-limiting production** — the system's substrate-derived production rate adds stock, scaled by `sqrt((MAX − stock) / (MAX − MIN))`. Near the ceiling, production approaches zero (warehouses full).
+3. **Self-limiting consumption** — its population-scaled consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left).
 4. **Prosperity multiplier** — both production and consumption rates are scaled by the system's prosperity multiplier (0.3x crisis to 1.3x booming).
 5. **Noise** — random walk scaled by good volatility and government modifier (base amplitude ±3 units).
 6. **Clamp** — stock bounded to [5, 200].
@@ -148,8 +155,8 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 | Bid-ask spread `s` | 0.05 base | Buy/sell gap; scaled by government; makes round-trips lose |
 | Noise amplitude | ±3 base | Micro-volatility, scaled by volatility × government |
 | Min/max stock | 5 / 200 | Stock bounds (ceiling price at MIN, floor price at MAX) |
-| Production rate | 1-13 per good | Per economy type, scaled by self-limiting + prosperity |
-| Consumption rate | 1-4 per good | Per economy type, scaled by self-limiting + prosperity |
+| Production rate | substrate-driven | `coeff × labour(pop) × resource`; scaled by self-limiting + prosperity |
+| Consumption rate | population-scaled | `perCapitaNeed × population`; scaled by self-limiting + prosperity |
 | Price history | Rolling window | Snapshots recorded periodically (`lib/engine/snapshot.ts`) |
 
 ### Prosperity System
@@ -180,16 +187,16 @@ Boom amplifies both sides equally — no corrective tug-of-war. A booming system
 
 ### Event-Driven Anchor Shifts
 
-Events can shift a good's **pricing anchor** — the stock level at which mid price equals base price. This is distinct from a one-time stock shock (which moves stock immediately and persistently); an anchor shift changes *what price a given stock level reads as* for the duration of the event, without touching stock itself.
+Events can shift a good's **pricing reference** (the anchor) — the stock level at which mid price equals base price. This is distinct from a one-time stock shock (which moves stock immediately and persistently); an anchor shift changes *what price a given stock level reads as* for the duration of the event, without touching stock itself.
 
-**Modifier**: `anchor_shift` (`parameter: "target_stock"`). The value is a **multiplier** applied to `targetStock`:
-- `> 1` — raises the anchor → goods read as scarcer → higher prices ("demand spike")
-- `< 1` — lowers the anchor → goods read as more plentiful → cheaper prices
+**Modifier**: `anchor_shift` (`parameter: "target_stock"`). The value is a **multiplier** (`anchorMult`) applied to the per-system reference:
+- `> 1` — raises the reference → goods read as scarcer → higher prices ("demand spike")
+- `< 1` — lowers the reference → goods read as more plentiful → cheaper prices
 - `= 1` — no change (identity)
 - `goodId: null` — applies to all goods at the target station; setting a specific `goodId` targets one good only
 - Multiple active shifts on the same good **compound** (multiply together)
 
-**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same round-robin cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` applies `targetStock = getTargetStock(good) × anchorMult` before evaluating the price curve, so the shift flows automatically through every price read path — player trade, convoy, missions, market display, cross-system comparison, price-history snapshots, and trade-flow gradient.
+**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same round-robin cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — player trade, convoy, missions, market display, cross-system comparison, price-history snapshots, and trade-flow gradient.
 
 **Safety cap**: `anchorMult` is clamped to **[0.1, 4.0]** — a single good can at most become 4× as expensive (or 10× as cheap) via anchor shift.
 
@@ -206,7 +213,7 @@ The per-market steps above sit inside a larger ordering. Each tick processes **o
 ```
 EVENTS       run first  - stock shocks (one-time jolts) + modifiers
    |                      (ongoing: scale production/consumption rates,
-   |                      shift the anchor)
+   |                      shift the pricing reference)
    v
 ECONOMY      run second - per market: produce -> consume -> prosperity
    |                      scale -> noise -> clamp  (single stock value)
@@ -224,9 +231,10 @@ PLAYER TRADES  anytime (not tick-locked) - buy lowers stock, sell raises
 Viewed another way, the simulation stacks four layers from static to real-time:
 
 ```
-1  Base identity (static)      economy type -> produce/consume rates;
-                               self-sufficiency -> import dependence;
-                               traits -> per-good production bonuses;
+1  Base identity (static)      bodies (resources + population) -> per-good
+                               produce/consume rates (physicalRates);
+                               demand rate -> days-of-supply pricing reference;
+                               net balance -> seed stock + import dependence;
                                government -> volatility, spread, boosts
 2  Tick evolution (each tick)  self-limiting production/consumption,
                                prosperity, noise, clamp, edge flow
@@ -265,7 +273,7 @@ With T0 margins of ~5cr/unit and 50 cargo, a shuttle earns a few hundred cr/trip
 
 ## System Interactions
 
-- **Events** inject economic shocks — one-time stock jolts (immediate stock deltas), rate multipliers (production/consumption scale), and **anchor shifts** (the sustained price lever: multiply a good's pricing anchor for the event's duration, raising or lowering where "mid price = base price" sits). Anchor shifts and stock shocks are distinct: a shock moves stock immediately; an anchor shift changes *what price a given stock level reads as* for as long as the event is active. Both are live every tick across all read paths (player trade, convoy, missions, price history snapshots, trade-flow gradient). (see [events.md](./events.md))
+- **Events** inject economic shocks — one-time stock jolts (immediate stock deltas), rate multipliers (production/consumption scale), and **anchor shifts** (the sustained price lever: multiply a good's per-system pricing reference for the event's duration, raising or lowering where "mid price = base price" sits). Anchor shifts and stock shocks are distinct: a shock moves stock immediately; an anchor shift changes *what price a given stock level reads as* for as long as the event is active. Both are live every tick across all read paths (player trade, convoy, missions, price history snapshots, trade-flow gradient). (see [events.md](./events.md))
 - **Trade missions** are generated from price extremes — high prices spawn import missions, low prices spawn export missions (see [trading.md](./trading.md))
 - **Navigation danger** is partly driven by government danger baseline — affects cargo loss on arrival (see [navigation.md](./navigation.md))
 - **Faction system** (planned) will add faction-specific economic modifiers and war-driven market disruption (see [faction-system.md](./faction-system.md))

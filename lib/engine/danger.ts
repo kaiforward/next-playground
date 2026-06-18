@@ -125,16 +125,18 @@ export function aggregateDangerLevel(
 }
 
 /**
- * Compute total system danger from event modifiers, government baseline, and trait danger.
+ * Compute total system danger from event modifiers, government baseline,
+ * trait danger, and body danger (Σ body-archetype danger baselines).
  * Clamps result to [0, MAX_DANGER].
  */
 export function computeSystemDanger(
   modifiers: ModifierRow[],
   govBaseline: number,
   traitDanger: number,
+  bodyDanger: number,
 ): number {
   return clamp(
-    aggregateDangerLevel(modifiers) + govBaseline + traitDanger,
+    aggregateDangerLevel(modifiers) + govBaseline + traitDanger + bodyDanger,
     0,
     DANGER_CONSTANTS.MAX_DANGER,
   );

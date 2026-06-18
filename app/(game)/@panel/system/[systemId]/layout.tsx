@@ -46,13 +46,18 @@ function SystemPanelContent({
     allMissions.opMissions.available.length;
 
   const exploreCount = useMemo(() => {
-    const traits = systemInfo?.traits ? enrichTraits(systemInfo.traits) : [];
-    return deriveSystemLocations(traits).filter((l) => l.available).length;
+    // Counts *playable* locations for the tab badge. Availability is a static
+    // catalog flag (only the cantina mini-game today) and body-derived sites are
+    // all "coming soon", so the count is substrate-independent — no need to fetch
+    // bodies here and block every tab on the substrate query.
+    const features = systemInfo?.traits ? enrichTraits(systemInfo.traits) : [];
+    return deriveSystemLocations([], features).filter((l) => l.available).length;
   }, [systemInfo?.traits]);
 
   const basePath = `/system/${systemId}`;
   const tabs = [
     { label: "Overview", href: basePath, active: pathname === basePath, badge: 0 },
+    { label: "Astrography", href: `${basePath}/astrography`, active: pathname.startsWith(`${basePath}/astrography`), badge: 0 },
     { label: "Market", href: `${basePath}/market`, active: pathname.startsWith(`${basePath}/market`), badge: 0 },
     { label: "Ships", href: `${basePath}/ships`, active: pathname.startsWith(`${basePath}/ships`), badge: soloShipCount },
     { label: "Convoys", href: `${basePath}/convoys`, active: pathname.startsWith(`${basePath}/convoys`), badge: convoyCount },

@@ -18,39 +18,21 @@ export type EconomyType =
 
 // ── System trait types ────────────────────────────────────────────
 
+// The narrative feature traits a system can have. A system's physical makeup
+// lives elsewhere: world/body type as bodies (BodyArchetypeId) and abundant
+// resources as richness modifiers (RichnessModifierId).
 export type TraitId =
-  // Planetary Bodies (12)
-  | "habitable_world"
-  | "ocean_world"
-  | "volcanic_world"
-  | "frozen_world"
+  // Planetary (2)
   | "tidally_locked_world"
-  | "desert_world"
-  | "jungle_world"
   | "geothermal_vents"
-  | "hydrocarbon_seas"
-  | "fertile_lowlands"
-  | "coral_archipelago"
-  | "tectonic_forge"
-  // Orbital Features (8)
-  | "asteroid_belt"
-  | "gas_giant"
-  | "mineral_rich_moons"
-  | "ring_system"
+  // Orbital (4)
   | "binary_star"
   | "lagrange_stations"
   | "captured_rogue_body"
   | "deep_space_beacon"
-  // Resource Deposits (9)
-  | "rare_earth_deposits"
-  | "heavy_metal_veins"
-  | "organic_compounds"
+  // Resource (2)
   | "crystalline_formations"
-  | "helium3_reserves"
   | "exotic_matter_traces"
-  | "radioactive_deposits"
-  | "superdense_core"
-  | "glacial_aquifer"
   // Phenomena & Anomalies (13)
   | "nebula_proximity"
   | "solar_flare_activity"
@@ -85,6 +67,52 @@ export type TraitCategory =
   | "legacy";
 
 export type QualityTier = 1 | 2 | 3;
+
+// ── Physical substrate ────────────────────────────────────────────
+
+/** The seven locked tier-0 resource types a body's resource base spans. */
+export type ResourceType =
+  | "gas"
+  | "minerals"
+  | "ore"
+  | "biomass"
+  | "arable"
+  | "water"
+  | "radioactive";
+
+/** A magnitude per resource type. Used for body resource bases and system aggregates. */
+export type ResourceVector = Record<ResourceType, number>;
+
+/** Sun class — gates which body archetypes a system can roll. */
+export type SunClass = "blue_white" | "yellow" | "orange_dwarf" | "red_dwarf";
+
+/** Body archetype ids (one per curated world/belt kind). */
+export type BodyArchetypeId =
+  | "garden_world"
+  | "ocean_world"
+  | "jungle_world"
+  | "arid_world"
+  | "volcanic_world"
+  | "frozen_world"
+  | "barren_rock"
+  | "gas_giant"
+  | "asteroid_belt";
+
+/** Richness-modifier ids — rare multipliers on a single resource (the old "resource traits"). */
+export type RichnessModifierId =
+  | "hydrocarbon_deposits"
+  | "fertile_soil"
+  | "coral_reefs"
+  | "tectonic_concentration"
+  | "mineral_moons"
+  | "ice_rings"
+  | "rare_earth"
+  | "heavy_metals"
+  | "organic_compounds"
+  | "helium3"
+  | "radioactive_lode"
+  | "superdense"
+  | "glacial_aquifer";
 
 export type GovernmentType =
   | "federation"
@@ -122,7 +150,7 @@ export interface RegionInfo {
   dominantEconomy: EconomyType;
   /**
    * Most-represented faction across the region's systems, or null when no
-   * systems carry a factionId (defensive — post-Layer-2 reseed every system has one).
+   * systems carry a factionId (defensive — every seeded system has one).
    * Ties broken alphabetically by faction name.
    */
   dominantFactionId: string | null;
@@ -259,7 +287,7 @@ export interface StarSystemInfo {
   y: number;
   description: string;
   regionId: string;
-  /** Owning faction (null only during the transient mid-cutover state). */
+  /** Owning faction (null only in the transient seed state before factions are assigned). */
   factionId: string | null;
   isGateway: boolean;
   traits?: SystemTraitInfo[];
@@ -359,7 +387,7 @@ export interface AtlasSystem {
   x: number;
   y: number;
   regionId: string;
-  /** Owning faction. Null only during the transient pre-cutover seed state. */
+  /** Owning faction. Null only in the transient seed state before factions are assigned. */
   factionId: string | null;
   economyType: EconomyType;
   isGateway: boolean;

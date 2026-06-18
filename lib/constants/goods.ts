@@ -1,12 +1,5 @@
 import type { GoodTier, Hazard } from "@/lib/types/game";
 
-export interface GoodEquilibrium {
-  /** Seed stock at a system that produces this good (seeds high → reads cheap). */
-  produces: number;
-  /** Seed stock at a system that consumes this good (seeds low → reads expensive). */
-  consumes: number;
-}
-
 export interface GoodDefinition {
   name: string;
   description: string;
@@ -20,13 +13,11 @@ export interface GoodDefinition {
   priceFloor: number;
   /** Max price multiplier on basePrice. */
   priceCeiling: number;
-  /** Per-good equilibrium targets for producing and consuming systems. */
-  equilibrium: GoodEquilibrium;
 }
 
 export const GOODS: Record<string, GoodDefinition> = {
   // ── Tier 0 — Raw ──────────────────────────────────────────────
-  // Deep, liquid markets (high stock anchor ~111-129), thin per-unit margin.
+  // Deep, liquid markets, thin per-unit margin.
   // Cheap per unit, always available, bread-and-butter early game income.
   // A shuttle pilot with 500cr fills cargo with these.
   water: {
@@ -40,10 +31,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
-    equilibrium: {
-      produces: 160,
-      consumes: 110,
-    },
   },
   food: {
     name: "Food",
@@ -56,10 +43,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
-    equilibrium: {
-      produces: 155,
-      consumes: 110,
-    },
   },
   ore: {
     name: "Ore",
@@ -72,10 +55,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
-    equilibrium: {
-      produces: 155,
-      consumes: 115,
-    },
   },
   textiles: {
     name: "Textiles",
@@ -88,14 +67,10 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
-    equilibrium: {
-      produces: 150,
-      consumes: 110,
-    },
   },
 
   // ── Tier 1 — Processed ────────────────────────────────────────
-  // Medium-depth markets (stock anchor ~67-75), moderate per-unit margin.
+  // Medium-depth markets, moderate per-unit margin.
   // Better per-unit margin but needs more capital to trade.
   // Mid-game income — becomes viable once you have a few thousand credits.
   fuel: {
@@ -109,10 +84,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "low",
     priceFloor: 0.5,
     priceCeiling: 2.5,
-    equilibrium: {
-      produces: 90,
-      consumes: 60,
-    },
   },
   metals: {
     name: "Metals",
@@ -125,10 +96,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.5,
-    equilibrium: {
-      produces: 85,
-      consumes: 58,
-    },
   },
   chemicals: {
     name: "Chemicals",
@@ -141,10 +108,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "low",
     priceFloor: 0.5,
     priceCeiling: 2.5,
-    equilibrium: {
-      produces: 80,
-      consumes: 56,
-    },
   },
   medicine: {
     name: "Medicine",
@@ -157,14 +120,10 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.5,
-    equilibrium: {
-      produces: 78,
-      consumes: 55,
-    },
   },
 
   // ── Tier 2 — Advanced ─────────────────────────────────────────
-  // Thin, scarce markets (low stock anchor ~31-35), high per-unit price swing.
+  // Thin, scarce markets, high per-unit price swing.
   // Highest absolute margin per unit but can't fill cargo from one system.
   // Late-game income — needs big capital AND multi-system routes.
   electronics: {
@@ -178,10 +137,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 3.0,
-    equilibrium: {
-      produces: 45,
-      consumes: 28,
-    },
   },
   machinery: {
     name: "Machinery",
@@ -194,10 +149,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 3.0,
-    equilibrium: {
-      produces: 42,
-      consumes: 27,
-    },
   },
   weapons: {
     name: "Weapons",
@@ -210,10 +161,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "high",
     priceFloor: 0.5,
     priceCeiling: 3.0,
-    equilibrium: {
-      produces: 40,
-      consumes: 25,
-    },
   },
   luxuries: {
     name: "Luxuries",
@@ -226,10 +173,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 3.0,
-    equilibrium: {
-      produces: 38,
-      consumes: 24,
-    },
   },
 } as const;
 

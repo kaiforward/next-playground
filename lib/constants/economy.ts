@@ -1,5 +1,3 @@
-import type { EconomyType } from "@/lib/types/game";
-import type { GoodEquilibrium } from "@/lib/constants/goods";
 import type { ProsperityParams } from "@/lib/engine/tick";
 
 /** Economy simulation constants — used by seed (initial stock) and the economy tick (noise + bounds). */
@@ -64,45 +62,3 @@ export const PROSPERITY_PARAMS: ProsperityParams = {
   multAtZero: PROSPERITY_MULT_AT_ZERO,
   multAtMax: PROSPERITY_MULT_AT_MAX,
 };
-
-// ── Self-sufficiency factors ──────────────────────────────────
-
-/**
- * Per-economy-type self-sufficiency for consumed goods.
- * 0.0 = fully dependent on imports (current consumer baseline).
- * 1.0 = meets own needs (target matches producer levels).
- *
- * Only consumed goods need entries — produced goods already use
- * the producer equilibrium, and neutral goods use the neutral target.
- *
- * These factors create price variety: an Agricultural system consuming
- * water (s=0.5, has irrigation) pays less than a Tech system (s=0.05,
- * imports everything).
- */
-export const SELF_SUFFICIENCY: Record<EconomyType, Record<string, number>> = {
-  agricultural: { water: 0.5, machinery: 0.0, chemicals: 0.1, medicine: 0.0 },
-  extraction:   { food: 0.3, fuel: 0.1, machinery: 0.0, textiles: 0.15 },
-  refinery:     { ore: 0.1, water: 0.2, food: 0.25 },
-  industrial:   { metals: 0.1, electronics: 0.0, chemicals: 0.1, fuel: 0.1, water: 0.15, food: 0.2, ore: 0.15, textiles: 0.05 },
-  tech:         { metals: 0.0, chemicals: 0.05, luxuries: 0.0, water: 0.1, food: 0.15 },
-  core:         { food: 0.35, textiles: 0.25, electronics: 0.1, medicine: 0.1, weapons: 0.0, water: 0.3 },
-};
-
-/**
- * Compute a consumer's seed stock for a good at a specific economy type. Blends
- * from the base consumer level toward the producer level by the self-sufficiency
- * factor, so a self-sufficient consumer seeds higher (reads cheaper).
- *
- *   stock = baseConsume + s * (produce - baseConsume)
- */
-export function getConsumeEquilibrium(
-  economyType: EconomyType,
-  goodId: string,
-  goodEquilibrium: GoodEquilibrium,
-): number {
-  const s = SELF_SUFFICIENCY[economyType]?.[goodId] ?? 0;
-  if (s === 0) return goodEquilibrium.consumes;
-
-  const { produces, consumes } = goodEquilibrium;
-  return Math.round(consumes + s * (produces - consumes));
-}

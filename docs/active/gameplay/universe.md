@@ -26,14 +26,15 @@ Regions are purely geographic now — they group systems for naming, orientation
 
 ### System Traits & Economy Type
 
-Every system has **2–4 permanent traits** (quality tiers 1–3) that define its character and drive its economy type. Economy is derived **bottom-up** — summing the strong trait affinities, never assigned directly — and the first trait is guaranteed a strong affinity so every system has a clear economic signal. Trait quality also scales per-good production bonuses. The full trait catalog, affinity scoring, and derivation rules live in [system-traits.md](./system-traits.md).
+Every system is built from a **physical substrate** — a sun and its bodies (planets, asteroid belts, gas giants), each holding a resource vector — plus **0–2 narrative features**. Economy type is derived **bottom-up** from the system's aggregate body resources and population, never assigned directly. Features (precursor ruins, anomalies, derelict fleets) carry no economic role — they gate missions/exploration and adjust danger. The substrate model, feature catalog, and derivation rules live in [system-traits.md](./system-traits.md).
 
 ### Systems
 
 Each system has:
 - **Name**: Region-based naming (e.g., "Nexus-1-7")
-- **Economy type**: One of 6 types (agricultural, extraction, refinery, industrial, tech, core), derived from trait affinities
-- **Traits**: 2–4 system traits with quality tiers
+- **Economy type**: One of 6 types (agricultural, extraction, refinery, industrial, tech, core), derived from the system's aggregate body resources + population
+- **Bodies**: a sun + 1–N bodies, each with a resource vector (the economic substrate)
+- **Features**: 0–2 narrative traits with quality tiers
 - **Coordinates**: Fixed position via Poisson-disc sampling, assigned to nearest region
 - **Station**: Exactly one station with a market carrying all 12 goods
 - **Gateway flag**: 1-2 systems per region pair serve as inter-region connection points
@@ -176,7 +177,7 @@ The configurable universe and tile-based map renderer are in place — scale cei
 
 ## System Interactions
 
-- **Traits → Economy**: Trait affinities determine economy type. Trait quality scales production rates per good via the economy processor (see [economy.md](./economy.md))
+- **Substrate → Economy**: A system's aggregate body resources + population determine its economy-type label; production/consumption then run off that label (see [economy.md](./economy.md))
 - **Government → Economy**: A system's government type — sourced from its owning faction — determines its market modifiers (volatility, equilibrium, taxes). See [economy.md](./economy.md) and [faction-system.md](./faction-system.md) §1
 - **Navigation**: Connection graph defines travel routes and fuel costs. Gateway systems are strategic chokepoints (see [navigation.md](./navigation.md))
 - **Events**: Events spawn at specific systems based on economy type and affect neighboring systems via spread (see [events.md](./events.md))

@@ -5,16 +5,24 @@ import {
   type MarketInput,
   type PriceHistoryEntry,
 } from "../snapshot";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 
 // ── buildPriceEntry ─────────────────────────────────────────────
 
 describe("buildPriceEntry", () => {
-  // Calibrated targetStock: food=111, water=116. mid = basePrice * (target / stock).
+  // Price is the spot price off each market's per-system days-of-supply curve
+  // (reference = TARGET_COVER × demandRate). The fixtures omit floor/ceiling,
+  // so buildPriceEntry applies the 0.2×/5.0× defaults.
   const markets: MarketInput[] = [
-    { systemId: "sys-1", goodId: "food", stock: 100, basePrice: 20 },
-    { systemId: "sys-1", goodId: "water", stock: 50, basePrice: 40 },
-    { systemId: "sys-2", goodId: "food", stock: 200, basePrice: 20 },
+    { systemId: "sys-1", goodId: "food", stock: 100, basePrice: 20, demandRate: 1 },
+    { systemId: "sys-1", goodId: "water", stock: 50, basePrice: 40, demandRate: 1 },
+    { systemId: "sys-2", goodId: "food", stock: 200, basePrice: 20, demandRate: 1 },
   ];
+
+  // Mirror buildPriceEntry's own curve so the expectations track TARGET_COVER
+  // through any recalibration instead of baking in a numeric price.
+  const priceFor = (basePrice: number, stock: number, demandRate: number) =>
+    spotPrice(curveForGood(basePrice, 0.2, 5.0, demandRate), stock);
 
   it("groups markets by system and computes spot prices from stock", () => {
     const result = buildPriceEntry(markets, 100);
@@ -22,12 +30,14 @@ describe("buildPriceEntry", () => {
 
     const sys1 = result.get("sys-1")!;
     expect(sys1.tick).toBe(100);
-    expect(sys1.prices["food"]).toBe(22); // round(20 * 111/100) = 22
-    expect(sys1.prices["water"]).toBe(93); // round(40 * 116/50) = 93
+    expect(sys1.prices["food"]).toBe(priceFor(20, 100, 1));
+    expect(sys1.prices["water"]).toBe(priceFor(40, 50, 1));
 
     const sys2 = result.get("sys-2")!;
     expect(sys2.tick).toBe(100);
-    expect(sys2.prices["food"]).toBe(11); // round(20 * 111/200) = 11
+    expect(sys2.prices["food"]).toBe(priceFor(20, 200, 1));
+    // Same good, deeper stock at sys-2 ⇒ strictly cheaper than sys-1.
+    expect(sys2.prices["food"]).toBeLessThan(sys1.prices["food"]);
   });
 
   it("returns empty map for empty input", () => {
@@ -37,7 +47,7 @@ describe("buildPriceEntry", () => {
 
   it("handles zero stock (ceiling price)", () => {
     const result = buildPriceEntry(
-      [{ systemId: "sys-1", goodId: "food", stock: 0, basePrice: 20 }],
+      [{ systemId: "sys-1", goodId: "food", stock: 0, basePrice: 20, demandRate: 1 }],
       10,
     );
     expect(result.get("sys-1")!.prices["food"]).toBe(100); // 5.0 * 20
@@ -46,7 +56,7 @@ describe("buildPriceEntry", () => {
   it("clamps price to the floor when stock is abundant", () => {
     // stock vastly exceeds target → price floors at 0.2 * basePrice
     const result = buildPriceEntry(
-      [{ systemId: "sys-1", goodId: "food", stock: 100000, basePrice: 100 }],
+      [{ systemId: "sys-1", goodId: "food", stock: 100000, basePrice: 100, demandRate: 1 }],
       10,
     );
     expect(result.get("sys-1")!.prices["food"]).toBe(20); // 0.2 * 100

@@ -23,6 +23,8 @@ export interface SystemTraitView {
   name: string;
   governmentType: GovernmentType;
   traits: GeneratedTrait[];
+  /** Σ body-archetype danger baselines for this system. */
+  bodyDanger: number;
 }
 
 /** Mission that's eligible to be completed this tick (duration elapsed). */

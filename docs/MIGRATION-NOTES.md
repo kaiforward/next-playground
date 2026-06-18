@@ -14,13 +14,13 @@ The planned systems form layers. Each layer adds value independently and creates
 
 Enriches the physical universe that everything else builds on. No new gameplay systems — just richer world generation.
 
-| System | What it does | Stands alone? |
+| System | What it does | Status |
 |---|---|---|
-| ~~[System Traits](./active/gameplay/system-traits.md) §1–4~~ | Traits, quality tiers, trait-to-economy derivation, trait interactions with events and navigation | **Done** — moved from `planned/system-enrichment.md` to `active/system-traits.md` as part of doc cleanup. Traits drive economy derivation, neutral regions (no themes), EconomyBadge component, neutral map nodes. |
+| ~~System Traits~~ → [System Substrate & Traits](./active/gameplay/system-traits.md) | The physical + narrative foundation each system is built on | **Rebuilt by Economy Simulation SP1.** The original flat trait model (traits drove economy type via affinity scoring) shipped first, then was replaced by a two-layer model: a **physical substrate** (sun, bodies, resource vectors, richness) that drives economy type and population, and **narrative features** (the surviving traits) that gate missions / exploration / danger but carry no economic role. SP1 Part 1 is shipped; the design + Part 2–3 plan live in [economy-simulation-substrate.md](./planned/economy-simulation-substrate.md). |
 
-**Why first**: Every later system references traits — factions value them, ships dock at facilities built on them, missions are flavoured by them. Without traits, the rest of the planned systems have nothing to hang on.
+**Why first**: Every later system references the substrate or its features — factions value resource-rich territory, missions and exploration sites hang off features, danger reads body composition. Without the foundation, the rest of the planned systems have nothing to hang on.
 
-**What changes**: World generation pipeline. Economy type assignment moves from top-down (region identity) to bottom-up (trait affinity scoring). Active docs affected: universe.md, economy.md (production modifiers gain trait quality multipliers).
+**What changes**: World generation pipeline. Economy type is no longer assigned top-down (region identity) nor scored from trait affinity — it is derived bottom-up from the physical substrate (bodies → resource-base vectors → derived economy type) via the SP1 shim, with native substrate-driven production and pricing to follow in SP1 Parts 2–3. Active docs affected: system-traits.md, universe.md, economy.md.
 
 ### Layer 1 — Fleet Expansion (**Done**)
 
@@ -104,22 +104,24 @@ Three natural pause points in the roadmap where extended testing and stabilizati
 
 ### After Layer 0 — Data Validation
 
-**Risk**: Trait generation is the foundation for every later system. Bad distributions, broken affinity scoring, or monotonous regions cascade into factions, facilities, missions, and production. This is the one layer where mistakes are invisible to players but fatal to everything built on top.
+**Status**: SP1 Part 1 (the physical substrate) is shipped and validated on the `feat/economy-simulation` branch — the `simulate` calibration gate stays healthy on the substrate-derived economy. The checks below are the validation bar that applies (and that a reseed should re-clear); they now target the substrate, not the retired trait-affinity model.
+
+**Risk**: Substrate generation is the foundation for every later system. Bad resource-base distributions, a broken economy-type shim, or monotonous worlds cascade into factions, facilities, missions, and production. This is the one layer where mistakes are invisible to players but fatal to everything built on top.
 
 **Testing approach**: Primarily simulator-driven. No new gameplay to test in the browser — the player experience should feel similar but richer.
 
-- Run generation experiments across many seeds. Verify trait distributions match the rarity targets (50% tier 1, 35% tier 2, 15% tier 3)
-- Verify economy type derivation produces reasonable distributions — no economy type should dominate or be absent globally. Target: each type within 10–20% share (ideal 16.7% for 6 types)
-- Verify every system has at least one strong-affinity trait (guaranteed by the first-roll mechanism, but validate across seeds)
+- Run generation experiments across many seeds. Verify body-archetype and feature quality-tier distributions match their rarity targets (features: 50% Marginal, 35% Solid, 15% Exceptional)
+- Verify the substrate-derived economy type produces reasonable distributions — no economy type should dominate or be absent globally. Target: each type within 10–20% share (ideal 16.7% for 6 types)
+- Verify every system's substrate maps cleanly to a derived economy type (no system falls through the shim) and yields a coherent resource base
 - Compare old vs new generation side by side. The new universe should feel more varied and interesting, not just different
 - Stress test at target scale (1,000–2,000 systems) even if factions aren't implemented yet — validate that generation time, MST connection building, and map rendering hold up
-- Validate trait production modifier impact on economy simulation — run 500-tick simulations and compare price distributions with/without trait modifiers
+- Validate the substrate-derived economy keeps the 500-tick simulation healthy — run the `simulate` gate across strategies and confirm price distributions stay in band
 
-**Note**: Region economy coherence is NOT validated. An earlier design enforced 60% economy type agreement within regions but this was removed — uniform trait distribution with balanced strong affinities produces naturally varied regions without enforcement, and factions (Layer 2) need resource diversity across territory for fairness.
+**Note**: Region economy coherence is NOT validated. An earlier design enforced 60% economy type agreement within regions but this was removed — uniform substrate generation with varied resource bases produces naturally varied regions without enforcement, and factions (Layer 2) need resource diversity across territory for fairness.
 
-**Transition**: Clean cut. Old world generation is replaced wholesale by trait-based generation. Reseed the universe. No coexistence period.
+**Transition**: Clean cut. Old world generation is replaced wholesale by substrate-based generation. Reseed the universe. No coexistence period.
 
-**Proceed when**: Trait distributions are validated, economy derivation produces even type spread across seeds, and generation scales to target system count without performance issues.
+**Proceed when**: Substrate and feature distributions are validated, the substrate-derived economy type produces an even spread across seeds, and generation scales to target system count without performance issues.
 
 ### After Layers 1+2 — Systems Integration
 
@@ -196,12 +198,12 @@ Implemented and exceeded. `UNIVERSE_SCALE` env var supports `"default"` (600 sys
 
 **Active** (economy.md): 12 goods across 3 tiers. NPC production/consumption rates defined per economy type. Supply/demand range 5–200.
 
-**Planned** (production-roster.md, production.md): 26 market goods across 3 tiers + non-market tier 3 military assets. 14 new goods with production chains, NPC rates, and player production facilities. Supply/demand range increases to thousands. Population added as a system stat derived from traits.
+**Planned** (production-roster.md, production.md): 26 market goods across 3 tiers + non-market tier 3 military assets. 14 new goods with production chains, NPC rates, and player production facilities. Supply/demand range increases to thousands. (Population — once a planned addition here — is now a substrate-derived system stat, shipped in Economy Simulation SP1 Part 1.)
 
 **Key deltas**:
 - Economy type rate tables expand from 12 to 26 goods. Every good needs at least an incidental rate at every economy type — no exclusion matrix, availability is rate-driven.
 - Supply/demand range increases significantly (5–200 → thousands) to provide granularity for player production as a bounded fraction of total activity.
-- Population becomes a new system-level stat, derived from traits at world generation. Affects market absorption capacity, consumption scaling, and several other systems.
+- Population is a new system-level stat derived from the physical substrate (habitable bodies' capacity) at world generation — shipped in SP1 Part 1. Affects market absorption capacity, consumption scaling, and several other systems.
 - New tick processors: player facility operating costs, construction/upgrade timers, production cycle (recipe execution, input sourcing, output routing, market impact). See [Production §7](./planned/production.md) and [Player Facilities §7](./planned/player-facilities.md).
 - Government restrictions on military-tagged goods (from navigation-changes.md §4) become the only hard market exclusion.
 
@@ -218,6 +220,22 @@ The `relations` processor (inter-faction relation drift; border-conflict / pact 
 **Player facilities**: Facility production output.
 
 To be designed during implementation of each respective system.
+
+---
+
+### 8. Economy Foundation: Trait-Affinity → Physical Substrate (Economy Simulation SP1)
+
+**Active** (on `main`; economy.md, universe.md): economy type and production are driven by system traits — trait-affinity scoring assigns economy type, trait quality multiplies production, and population is trait-derived.
+
+**Rebuilt** (on `feat/economy-simulation`; system-traits.md): a **physical substrate** (sun, bodies, resource-base vectors, richness, population) drives economy type and population; traits survive only as narrative **features** with no economic role. Danger and exploration sites derive from bodies + features.
+
+**Key deltas**:
+- Economy type is derived from the substrate by a display-only classifier (`lib/engine/economy-type.ts`), not trait-affinity scoring; production and consumption derive from the substrate directly (resources + population). The trait production bonus is removed.
+- Population is generated from the substrate (habitable bodies' capacity), not from traits.
+- Danger sums a body-derived `StarSystem.bodyDanger` term; exploration sites come from `deriveSystemLocations(bodies, features)`.
+- `TraitId` is narrowed 52 → 31 (features only); the trait-migration scaffolding is removed.
+
+**Status**: SP1 Parts 1–2 shipped (on branch): the substrate drives production/consumption directly and economy type is a display-only label. Part 3 (emergent days-of-supply pricing) is forward design — see [economy-simulation-substrate.md](./planned/economy-simulation-substrate.md) §8.2. Delete this item once SP1 fully lands on `main` and the active docs reflect the final model.
 
 ---
 

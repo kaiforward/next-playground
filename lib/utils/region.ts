@@ -3,8 +3,8 @@ import type { SystemConnectionInfo } from "@/lib/types/game";
 /**
  * Pick the most-represented faction across a region's systems.
  * Ties broken alphabetically by faction name (`factionNameById`) for determinism.
- * Returns `null` only when the input list is empty — defensive against a pre-cutover
- * state where some systems have no factionId.
+ * Returns `null` only when the input list is empty — defensive against a
+ * transient seed state where some systems have no factionId.
  */
 export function deriveRegionDominantFaction(
   factionIdsInRegion: string[],

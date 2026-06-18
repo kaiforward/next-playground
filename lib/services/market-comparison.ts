@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { ServiceError } from "./errors";
 import { getPlayerVisibility } from "./visibility-cache";
 import type { MarketComparisonEntry } from "@/lib/types/game";
@@ -21,7 +20,7 @@ export async function getMarketComparison(
 ): Promise<{ goodId: string; entries: MarketComparisonEntry[] }> {
   const good = await prisma.good.findUnique({
     where: { id: goodId },
-    select: { id: true, name: true, basePrice: true, priceFloor: true, priceCeiling: true },
+    select: { id: true, basePrice: true, priceFloor: true, priceCeiling: true },
   });
 
   if (!good) {
@@ -45,16 +44,15 @@ export async function getMarketComparison(
     select: {
       stock: true,
       anchorMult: true,
+      demandRate: true,
       station: { select: { systemId: true } },
     },
   });
 
-  const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.id;
-
   const entries: MarketComparisonEntry[] = markets.map((m) => ({
     systemId: m.station.systemId,
     basePrice: good.basePrice,
-    currentPrice: spotPrice(curveForGood(goodKey, good.basePrice, good.priceFloor, good.priceCeiling, m.anchorMult), m.stock),
+    currentPrice: spotPrice(curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, m.demandRate, m.anchorMult), m.stock),
     stock: Math.floor(m.stock),
   }));
 

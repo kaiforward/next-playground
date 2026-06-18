@@ -14,8 +14,8 @@ import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 /**
  * Cached `regionId → unique unordered intra-region edges` map. The connection
  * graph and region assignments are static after seed, so we build this once
- * per process and reuse it across every tick. Replaces the per-tick
- * `tx.systemConnection.findMany` call that the PR 1 adapter shipped with.
+ * per process and reuse it across every tick. Replaces a per-tick
+ * `tx.systemConnection.findMany` call.
  *
  * The adjacency service is imported dynamically so that the unit tests, which
  * only exercise the pure processor body through the in-memory adapter, do not
@@ -82,7 +82,7 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
 
   async getEdgesForRegion(regionId: string): Promise<EdgeView[]> {
     // Both endpoints must be in the region — gateway/inter-region edges are
-    // skipped in PR 1 (the design defers cross-region flow to a later pass).
+    // skipped (cross-region flow is deferred to a later pass).
     // Reads from the process-level cache built once on first call.
     const byRegion = await getEdgesByRegion();
     return byRegion.get(regionId) ?? [];
@@ -106,6 +106,7 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
       basePrice: m.good.basePrice,
       stock: m.stock,
       anchorMult: m.anchorMult,
+      demandRate: m.demandRate,
       priceFloor: m.good.priceFloor,
       priceCeiling: m.good.priceCeiling,
     }));

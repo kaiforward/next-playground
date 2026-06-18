@@ -18,7 +18,7 @@ export type EventTypeId =
   | "trade_embargo"
   | "tech_breakthrough"
   | "asteroid_strike"
-  // Relations-spawned events (Layer 2 Foundation Phase 3). All carry weight: 0
+  // Relations-spawned events. All carry weight: 0
   // so the events processor never randomly spawns them; only the relations
   // processor creates them and tags the participant pair via GameEvent.metadata.
   | "border_conflict"
@@ -491,7 +491,7 @@ const solarStorm: EventDefinition = {
   ],
 };
 
-// ── Phase 3: New event types ────────────────────────────────────
+// ── Event definitions (continued) ───────────────────────────────
 
 const refugeeCrisis: EventDefinition = {
   type: "refugee_crisis",
@@ -682,7 +682,7 @@ const asteroidStrike: EventDefinition = {
   ],
 };
 
-// ── Phase 3 (Layer 2): Relations-spawned events ────────────────
+// ── Relations-spawned events ───────────────────────────────────
 
 /**
  * Border conflict: spawned by the relations processor when a faction pair

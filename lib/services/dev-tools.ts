@@ -8,10 +8,11 @@ import { processors, sortProcessors } from "@/lib/tick/registry";
 import type { TickContext } from "@/lib/tick/types";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
-import { GOODS, GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { toEconomyType, isEventTypeId } from "@/lib/types/guards";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { isEventTypeId } from "@/lib/types/guards";
 
 // ── Result types ────────────────────────────────────────────────
 
@@ -250,12 +251,11 @@ export async function getEconomySnapshot(): Promise<ServiceResult<{ systems: Eco
     systemName: sys.name,
     economyType: sys.economyType,
     markets: (sys.station?.markets ?? []).map((m) => {
-      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.goodId;
       return {
         goodId: m.goodId,
         goodName: m.good.name,
         stock: m.stock,
-        price: spotPrice(curveForGood(goodKey, m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.anchorMult), m.stock),
+        price: spotPrice(curveForGood(m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.demandRate, m.anchorMult), m.stock),
       };
     }),
   }));
@@ -291,10 +291,18 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
     const ids: string[] = [];
     const stocks: number[] = [];
     for (const m of markets) {
-      const econ = toEconomyType(m.station.system.economyType);
+      const sys = m.station.system;
+      const aggregate = resourceVectorFromColumns(
+        {
+          aggGas: sys.aggGas, aggMinerals: sys.aggMinerals, aggOre: sys.aggOre,
+          aggBiomass: sys.aggBiomass, aggArable: sys.aggArable,
+          aggWater: sys.aggWater, aggRadioactive: sys.aggRadioactive,
+        },
+        "agg",
+      );
       const goodKey = goodKeyByName.get(m.good.name) ?? m.good.name;
       ids.push(m.id);
-      stocks.push(getInitialStock(econ, goodKey));
+      stocks.push(getInitialStock(aggregate, sys.population, goodKey));
     }
 
     if (ids.length > 0) {

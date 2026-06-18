@@ -12,9 +12,8 @@ import {
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { toGovernmentType } from "@/lib/types/guards";
-import { ECONOMY_PRODUCTION, ECONOMY_CONSUMPTION } from "@/lib/constants/universe";
 import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock } from "@/lib/constants/market-economy";
+import { getInitialStock, marketDemandRate } from "@/lib/constants/market-economy";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -64,8 +63,8 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
     name: r.name,
   }));
 
-  // Build systems — government now comes from the owning faction's definition,
-  // not the region. Mirrors the live cutover in `prisma/seed.ts`.
+  // Build systems — government comes from the owning faction's definition,
+  // not the region. Mirrors the live seed in `prisma/seed.ts`.
   const systems: SimSystem[] = universe.systems.map((s, i) => {
     const econ = s.economyType;
     const owningFaction = universe.factions[universe.systemFactionAssignments[s.index]];
@@ -75,9 +74,10 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       economyType: econ,
       regionId: `region-${s.regionIndex}`,
       governmentType: toGovernmentType(owningFaction.governmentType),
-      produces: ECONOMY_PRODUCTION[econ] ?? {},
-      consumes: ECONOMY_CONSUMPTION[econ] ?? {},
+      aggregate: s.aggregate,
+      population: s.population,
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
+      bodyDanger: s.bodyDanger,
       prosperity: 0,
       tradeVolumeAccum: 0,
     };
@@ -105,8 +105,9 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         systemId: sys.id,
         goodId: goodKey,
         basePrice,
-        stock: getInitialStock(sys.economyType, goodKey),
+        stock: getInitialStock(sys.aggregate, sys.population, goodKey),
         anchorMult: 1,
+        demandRate: marketDemandRate(sys.aggregate, sys.population, goodKey),
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
       });

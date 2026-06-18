@@ -143,6 +143,7 @@ export class PrismaOpMissionsWorld implements OpMissionsWorld {
       select: {
         id: true,
         name: true,
+        bodyDanger: true,
         faction: { select: { governmentType: true } },
         traits: { select: { traitId: true, quality: true } },
       },
@@ -150,9 +151,10 @@ export class PrismaOpMissionsWorld implements OpMissionsWorld {
     return rows.map((s) => ({
       id: s.id,
       name: s.name,
+      bodyDanger: s.bodyDanger,
       // `?? "frontier"` is the safe fallback for the only legitimate gap: a
       // system observed mid-write before its factionId column is populated.
-      // Post-cutover seed guarantees a non-null factionId on every system.
+      // The seed guarantees a non-null factionId on every system.
       governmentType: s.faction?.governmentType
         ? toGovernmentType(s.faction.governmentType)
         : "frontier",
