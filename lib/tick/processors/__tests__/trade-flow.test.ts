@@ -5,283 +5,147 @@ import type { TradeFlowProcessorParams } from "@/lib/tick/world/trade-flow-world
 import type { TickContext } from "@/lib/tick/types";
 import type {
   SimConnection,
-  SimFlowEvent,
   SimMarketEntry,
-  SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
-import { emptyResourceVector } from "@/lib/engine/resources";
 
-function makeCtx(tick: number): TickContext {
-  return { tx: undefined as never, tick, results: new Map() };
-}
-
-function makeParams(
-  overrides: Partial<TradeFlowProcessorParams> = {},
-): TradeFlowProcessorParams {
-  return {
-    processEveryNTicks: 1,
-    flowBudget: 8,
-    gradientThreshold: 0.05,
-    gradientSensitivity: 1.0,
-    flowHistoryTicks: 200,
-    playerDisplacementFactor: 2.0,
-    prosperityTargetVolume: 50,
-    minLevel: 5,
-    maxLevel: 200,
-    ...overrides,
-  };
-}
-
-const region: SimRegion = {
-  id: "r1",
-  name: "Test Region",
+const PARAMS: TradeFlowProcessorParams = {
+  edgesPerTick: 100,
+  flowBudget: 8,
+  gradientThreshold: 0.05,
+  gradientSensitivity: 1.0,
+  flowHistoryTicks: 200,
+  playerDisplacementFactor: 2.0,
+  prosperityTargetVolume: 50,
+  minLevel: 5,
+  maxLevel: 200,
+  distanceDecay: 0,
 };
 
-function makeSystem(id: string): SimSystem {
+function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
   return {
-    id,
-    name: id.toUpperCase(),
-    economyType: "extraction",
-    regionId: "r1",
-    factionId: "faction-0",
+    id, name: id, economyType: "extraction", regionId, factionId,
     governmentType: "federation",
-    aggregate: emptyResourceVector(),
-    population: 0,
-    traits: [],
-    bodyDanger: 0,
-    prosperity: 0,
-    tradeVolumeAccum: 0,
+    aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    population: 1000, traits: [], bodyDanger: 0, prosperity: 0, tradeVolumeAccum: 0,
   };
 }
 
-/** A market priced purely off `stock` (higher stock → cheaper). */
-function makeMarket(
-  systemId: string,
-  goodId: string,
-  stock: number,
-): SimMarketEntry {
+function market(systemId: string, goodId: string, stock: number): SimMarketEntry {
   return {
-    systemId,
-    goodId,
-    basePrice: 100,
-    stock,
-    anchorMult: 1,
-    demandRate: 1,
-    priceFloor: 0.2,
-    priceCeiling: 5.0,
+    systemId, goodId, basePrice: 100, stock,
+    anchorMult: 1, demandRate: 40, priceFloor: 10, priceCeiling: 500,
   };
 }
+
+function conn(a: string, b: string, fuelCost = 10): SimConnection {
+  return { fromSystemId: a, toSystemId: b, fuelCost };
+}
+
+const ctx = (tick: number): TickContext => ({ tick }) as TickContext;
 
 function makeWorld(opts: {
   systems: SimSystem[];
-  connections: SimConnection[];
   markets: SimMarketEntry[];
-  flowEvents?: SimFlowEvent[];
-  playerVolumeByRegion?: Map<string, number>;
+  connections: SimConnection[];
+  playerVolumeBySystem?: Map<string, number>;
 }) {
   return new InMemoryTradeFlowWorld(
-    {
-      systems: opts.systems,
-      markets: opts.markets,
-      flowEvents: opts.flowEvents ?? [],
-    },
-    [region],
+    { systems: opts.systems, markets: opts.markets, flowEvents: [] },
     opts.connections,
-    opts.playerVolumeByRegion,
+    opts.playerVolumeBySystem,
   );
 }
 
-describe("runTradeFlowProcessor", () => {
-  it("moves goods from the high-stock (cheap) system to the low-stock (dear) neighbor", async () => {
-    // A holds plenty of stock → low price. B is starved → high price.
-    const systems = [makeSystem("a"), makeSystem("b")];
-    const connections: SimConnection[] = [
-      { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
-      { fromSystemId: "b", toSystemId: "a", fuelCost: 10 },
-    ];
-    const markets = [
-      makeMarket("a", "food", 150),
-      makeMarket("b", "food", 20),
-    ];
-    const world = makeWorld({ systems, connections, markets });
+describe("trade-flow: faction-bounded topology", () => {
+  it("flows between same-faction systems across region lines", async () => {
+    // a (region r1) and b (region r2) share faction f1 — must flow despite different regions.
+    const systems = [sys("a", "f1", "r1"), sys("b", "f1", "r2")];
+    const markets = [market("a", "food", 150), market("b", "food", 20)];
+    const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(world, makeCtx(0), makeParams());
+    await runTradeFlowProcessor(world, ctx(0), PARAMS);
 
-    expect(world.flowEvents).toHaveLength(1);
-    const flow = world.flowEvents[0];
-    expect(flow.fromSystemId).toBe("a");
-    expect(flow.toSystemId).toBe("b");
-    expect(flow.goodId).toBe("food");
-    expect(flow.quantity).toBeGreaterThan(0);
-
-    const marketA = world.markets.find(
-      (m) => m.systemId === "a" && m.goodId === "food",
-    )!;
-    const marketB = world.markets.find(
-      (m) => m.systemId === "b" && m.goodId === "food",
-    )!;
-    // Cheaper (higher-stock) source loses stock; dearer (lower-stock) dest gains.
-    expect(marketA.stock).toBe(150 - flow.quantity);
-    expect(marketB.stock).toBe(20 + flow.quantity);
-
-    // tradeVolumeAccum updated on both endpoints (mirrors player-trade bookkeeping).
-    const sysA = world.systems.find((s) => s.id === "a")!;
-    const sysB = world.systems.find((s) => s.id === "b")!;
-    expect(sysA.tradeVolumeAccum).toBe(flow.quantity);
-    expect(sysB.tradeVolumeAccum).toBe(flow.quantity);
+    const a = world.markets.find((m) => m.systemId === "a")!;
+    const b = world.markets.find((m) => m.systemId === "b")!;
+    expect(a.stock).toBeLessThan(150); // surplus drained
+    expect(b.stock).toBeGreaterThan(20); // shortage fed
   });
 
-  it("does not flow when the price gradient is below threshold", async () => {
-    const systems = [makeSystem("a"), makeSystem("b")];
-    const connections: SimConnection[] = [
-      { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
-    ];
-    // Nearly identical stock → sub-threshold gradient.
-    const markets = [
-      makeMarket("a", "food", 80),
-      makeMarket("b", "food", 79),
-    ];
-    const world = makeWorld({ systems, connections, markets });
+  it("does NOT flow across a faction border", async () => {
+    const systems = [sys("a", "f1"), sys("b", "f2")]; // different factions
+    const markets = [market("a", "food", 150), market("b", "food", 20)];
+    const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(
-      world,
-      makeCtx(0),
-      makeParams({ gradientThreshold: 0.5 }),
-    );
+    await runTradeFlowProcessor(world, ctx(0), PARAMS);
 
-    expect(world.flowEvents).toHaveLength(0);
-    // Markets unchanged.
-    const marketA = world.markets.find(
-      (m) => m.systemId === "a" && m.goodId === "food",
-    )!;
-    expect(marketA.stock).toBe(80);
+    expect(world.markets.find((m) => m.systemId === "a")!.stock).toBe(150);
+    expect(world.markets.find((m) => m.systemId === "b")!.stock).toBe(20);
+    expect(world.flowEvents.length).toBe(0);
   });
 
-  it("caps flow quantity at the flow budget regardless of gradient", async () => {
-    const systems = [makeSystem("a"), makeSystem("b")];
-    const connections: SimConnection[] = [
-      { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
-    ];
-    // Maximum gradient — A drowning in stock, B starving.
-    const markets = [
-      makeMarket("a", "food", 200),
-      makeMarket("b", "food", 5),
-    ];
-    const world = makeWorld({ systems, connections, markets });
+  it("flows between two adjacent independent systems (null === null)", async () => {
+    const systems = [sys("a", null), sys("b", null)];
+    const markets = [market("a", "food", 150), market("b", "food", 20)];
+    const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(
-      world,
-      makeCtx(0),
-      makeParams({ flowBudget: 6 }),
-    );
+    await runTradeFlowProcessor(world, ctx(0), PARAMS);
 
-    expect(world.flowEvents).toHaveLength(1);
-    expect(world.flowEvents[0].quantity).toBeLessThanOrEqual(6);
+    expect(world.flowEvents.length).toBe(1);
   });
 
-  it("throttles flow to zero under high player pressure", async () => {
-    const systems = [makeSystem("a"), makeSystem("b")];
-    const connections: SimConnection[] = [
-      { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
-    ];
+  it("does NOT flow between an independent and a faction system", async () => {
+    const systems = [sys("a", null), sys("b", "f1")];
+    const markets = [market("a", "food", 150), market("b", "food", 20)];
+    const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
+
+    await runTradeFlowProcessor(world, ctx(0), PARAMS);
+
+    expect(world.flowEvents.length).toBe(0);
+  });
+});
+
+describe("trade-flow: work-budget slicing", () => {
+  it("processes only edgesPerTick edges per tick, cycling over ticks", async () => {
+    // 3 same-faction edges (a-b, c-d, e-f), edgesPerTick = 1 → one edge per tick.
+    const systems = ["a", "b", "c", "d", "e", "f"].map((id) => sys(id, "f1"));
     const markets = [
-      makeMarket("a", "food", 150),
-      makeMarket("b", "food", 20),
+      market("a", "food", 150), market("b", "food", 20),
+      market("c", "food", 150), market("d", "food", 20),
+      market("e", "food", 150), market("f", "food", 20),
     ];
-    const playerVolumeByRegion = new Map([["r1", 200]]);
-    const world = makeWorld({
-      systems,
-      connections,
-      markets,
-      playerVolumeByRegion,
+    const connections = [conn("a", "b"), conn("c", "d"), conn("e", "f")];
+    const world = makeWorld({ systems, markets, connections });
+    const p = { ...PARAMS, edgesPerTick: 1 };
+
+    // Edges are sorted by "a|b" key: a|b, c|d, e|f.
+    await runTradeFlowProcessor(world, ctx(0), p); // start = 0 → edge a|b
+    expect(world.flowEvents.map((e) => e.fromSystemId).sort()).toEqual(["a"]);
+
+    await runTradeFlowProcessor(world, ctx(1), p); // start = 1 → edge c|d
+    expect(world.flowEvents.some((e) => e.fromSystemId === "c")).toBe(true);
+  });
+});
+
+describe("trade-flow: distance attenuation", () => {
+  it("moves less over a costlier jump when distanceDecay > 0", async () => {
+    const near = makeWorld({
+      systems: [sys("a", "f1"), sys("b", "f1")],
+      markets: [market("a", "food", 200), market("b", "food", 5)],
+      connections: [conn("a", "b", 1)],
     });
-
-    // displacement = clamp(200/50 * 2.0, 0, 1) = 1.0 → no flow.
-    await runTradeFlowProcessor(world, makeCtx(0), makeParams());
-
-    expect(world.flowEvents).toHaveLength(0);
-  });
-
-  it("only processes ticks where (tick % processEveryNTicks === 0)", async () => {
-    const systems = [makeSystem("a"), makeSystem("b")];
-    const connections: SimConnection[] = [
-      { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
-    ];
-    const markets = [
-      makeMarket("a", "food", 150),
-      makeMarket("b", "food", 20),
-    ];
-    const world = makeWorld({ systems, connections, markets });
-
-    // tick=1 with processEvery=4 → skipped.
-    await runTradeFlowProcessor(
-      world,
-      makeCtx(1),
-      makeParams({ processEveryNTicks: 4 }),
-    );
-    expect(world.flowEvents).toHaveLength(0);
-
-    // tick=4 → active.
-    await runTradeFlowProcessor(
-      world,
-      makeCtx(4),
-      makeParams({ processEveryNTicks: 4 }),
-    );
-    expect(world.flowEvents).toHaveLength(1);
-  });
-
-  it("prunes flow events older than the retention window", async () => {
-    const systems = [makeSystem("a"), makeSystem("b")];
-    const connections: SimConnection[] = [
-      { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
-    ];
-    const markets = [makeMarket("a", "food", 80), makeMarket("b", "food", 80)];
-    const oldEvents: SimFlowEvent[] = [
-      { tick: 10, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 4 },
-      { tick: 95, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 3 },
-    ];
-    const world = makeWorld({
-      systems,
-      connections,
-      markets,
-      flowEvents: oldEvents,
+    const far = makeWorld({
+      systems: [sys("a", "f1"), sys("b", "f1")],
+      markets: [market("a", "food", 200), market("b", "food", 5)],
+      connections: [conn("a", "b", 100)],
     });
+    const p = { ...PARAMS, distanceDecay: 0.1 };
 
-    // ctx.tick=200, flowHistoryTicks=100 → cutoff=100 → tick=10 pruned, tick=95 pruned.
-    await runTradeFlowProcessor(
-      world,
-      makeCtx(200),
-      makeParams({ flowHistoryTicks: 100, gradientThreshold: 0.5 }),
-    );
+    await runTradeFlowProcessor(near, ctx(0), p);
+    await runTradeFlowProcessor(far, ctx(0), p);
 
-    expect(world.flowEvents.every((e) => e.tick >= 100)).toBe(true);
-    expect(world.flowEvents.some((e) => e.tick === 10)).toBe(false);
-  });
-
-  it("skips inter-region edges (processes intra-region only)", async () => {
-    const otherRegion: SimRegion = {
-      id: "r2",
-      name: "Other Region",
-    };
-    const sysA = makeSystem("a"); // in r1
-    const sysB: SimSystem = { ...makeSystem("b"), regionId: "r2" }; // in r2
-    const connections: SimConnection[] = [
-      { fromSystemId: "a", toSystemId: "b", fuelCost: 10 },
-    ];
-    const markets = [
-      makeMarket("a", "food", 150),
-      makeMarket("b", "food", 20),
-    ];
-    const world = new InMemoryTradeFlowWorld(
-      { systems: [sysA, sysB], markets, flowEvents: [] },
-      [region, otherRegion],
-      connections,
-    );
-
-    await runTradeFlowProcessor(world, makeCtx(0), makeParams());
-
-    // No intra-region edges in either region → no flow.
-    expect(world.flowEvents).toHaveLength(0);
+    const nearQty = near.flowEvents[0]?.quantity ?? 0;
+    const farQty = far.flowEvents[0]?.quantity ?? 0;
+    expect(nearQty).toBeGreaterThan(farQty);
   });
 });

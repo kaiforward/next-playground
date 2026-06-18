@@ -7,18 +7,21 @@
 
 export const TRADE_SIMULATION = {
   /**
-   * Process flow every N ticks. The processor body picks one region per
-   * active tick via round-robin, so a full universe sweep takes
-   * `regions × PROCESS_EVERY_N_TICKS` ticks.
+   * Work-budget slice: edges processed per tick. The processor advances a cursor
+   * over the stable open-edge order, so a full sweep takes ceil(totalOpenEdges /
+   * EDGES_PER_TICK) ticks. Bounds per-tick DB work independently of faction size.
    *
-   * MUST satisfy `regions × PROCESS_EVERY_N_TICKS < FLOW_HISTORY_TICKS`,
-   * otherwise each region's flow events get pruned before the round-robin
-   * cycles back to it and the overlay shows permanent gaps. At 10K scale
-   * (60 regions), `PROCESS_EVERY_N_TICKS=4` would need 240-tick sweeps which
-   * exceeds the 200-tick history window — so we run every tick. The
-   * per-tick processor cost is still sub-millisecond per region in practice.
+   * MUST satisfy ceil(totalOpenEdges / EDGES_PER_TICK) < FLOW_HISTORY_TICKS,
+   * else flow events prune before the sweep returns (overlay gaps). Calibrated
+   * in Phase B against 10K scale.
    */
-  PROCESS_EVERY_N_TICKS: 1,
+  EDGES_PER_TICK: 256,
+  /**
+   * Distance attenuation coefficient. Per-edge flow is scaled by
+   * 1/(1 + DISTANCE_DECAY · fuelCost), so costlier jumps move less and
+   * gateways (low fuelCost) move more. 0 = no attenuation. Set in Phase B.
+   */
+  DISTANCE_DECAY: 0,
   /** Max units of one good moved per edge per processor run. */
   FLOW_BUDGET: 8,
   /**

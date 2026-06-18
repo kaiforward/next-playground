@@ -139,14 +139,15 @@ async function runScenario(
   };
 
   const flowParams = {
-    // Run flow every tick so the small fixture sees enough activity
+    // Process every edge each tick so the small fixture sees enough activity
     // within the tick budget to exercise the convergence path.
-    processEveryNTicks: 1,
+    edgesPerTick: 100,
     flowBudget,
     gradientThreshold: 0.05,
     gradientSensitivity: 1.0,
     flowHistoryTicks: 200,
     playerDisplacementFactor: 2.0,
+    distanceDecay: 0,
     prosperityTargetVolume: DEFAULT_SIM_CONSTANTS.prosperity.targetVolume,
     minLevel: DEFAULT_SIM_CONSTANTS.economy.minLevel,
     maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
@@ -167,7 +168,6 @@ async function runScenario(
         markets: curMarkets,
         flowEvents: curFlowEvents,
       },
-      [region],
       connections,
     );
     await runTradeFlowProcessor(flowWorld, makeCtx(t), flowParams);

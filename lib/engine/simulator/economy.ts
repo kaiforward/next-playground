@@ -278,7 +278,6 @@ async function processSimTradeFlow(
       markets: world.markets,
       flowEvents: world.flowEvents,
     },
-    world.regions,
     world.connections,
   );
 
@@ -289,12 +288,13 @@ async function processSimTradeFlow(
   };
 
   await runTradeFlowProcessor(flowWorld, tickCtx, {
-    processEveryNTicks: constants.tradeFlow.processEveryNTicks,
+    edgesPerTick: constants.tradeFlow.edgesPerTick,
     flowBudget: constants.tradeFlow.flowBudget,
     gradientThreshold: constants.tradeFlow.gradientThreshold,
     gradientSensitivity: constants.tradeFlow.gradientSensitivity,
     flowHistoryTicks: constants.tradeFlow.flowHistoryTicks,
     playerDisplacementFactor: constants.tradeFlow.playerDisplacementFactor,
+    distanceDecay: constants.tradeFlow.distanceDecay,
     prosperityTargetVolume: constants.prosperity.targetVolume,
     minLevel: constants.economy.minLevel,
     maxLevel: constants.economy.maxLevel,
