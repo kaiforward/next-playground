@@ -13,15 +13,21 @@ export const TRADE_SIMULATION = {
    *
    * MUST satisfy ceil(totalOpenEdges / EDGES_PER_TICK) < FLOW_HISTORY_TICKS,
    * else flow events prune before the sweep returns (overlay gaps); the 10K-scale
-   * universe (largest open-edge count) is the binding case.
+   * universe (largest open-edge count) is the binding case. Measured sweeps at
+   * 256: default scale (~825 open edges) = 4 ticks; 10K scale (~11.7K open edges)
+   * = 46 ticks — both well under FLOW_HISTORY_TICKS (200).
    */
   EDGES_PER_TICK: 256,
   /**
    * Distance attenuation coefficient. Per-edge flow is scaled by
-   * 1/(1 + DISTANCE_DECAY · fuelCost), so costlier jumps move less and
-   * gateways (low fuelCost) move more. 0 = no attenuation.
+   * 1/(1 + DISTANCE_DECAY · fuelCost), so costlier jumps move less. 0 = no
+   * attenuation. Calibrated to 0.1: the median local hop (fuelCost ~8.6) still
+   * moves ~54% of budget while high-fuel intra-faction gateways (fuelCost up to
+   * ~47) throttle toward ~18%, concentrating price dispersion on long-haul
+   * high-value goods (notably luxuries) without starving distant systems or
+   * pinning stock to a bound.
    */
-  DISTANCE_DECAY: 0,
+  DISTANCE_DECAY: 0.1,
   /** Max units of one good moved per edge per processor run. */
   FLOW_BUDGET: 8,
   /**

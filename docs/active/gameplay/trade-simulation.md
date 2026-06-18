@@ -14,30 +14,44 @@ Trade is simulated as **goods flowing along graph edges** driven by local price 
 
 ## Design
 
+### Topology — Which Edges Carry Flow
+
+Flow runs over the **intra-faction jump-lane graph**. An edge is *open* — eligible to carry goods — only when its two endpoints belong to the same faction; cross-faction edges are **closed**, so goods never diffuse across a sovereign border ("factions don't trade at all" until SP5 opens relation-weighted borders). Two adjacent **independent** systems (no faction on either side) are open to each other under the same rule, forming a permeable pool — but under current world-gen the faction flood-fill claims every system, so this independent-trade path is a **latent capability with no live data**, not an active gameplay route today. It activates when SP5 introduces faction agency and unclaimed space.
+
+Crucially, **region lines are no longer a flow boundary.** A faction's territory is grown by flood-filling the jump-lane graph outward from its homeworld, so it routinely spans several regions — and goods cross a region border freely whenever both sides share a faction. Regions remain a load-shard, aggregation, and gateway-rendering unit; the only hard wall is the sovereign (faction) border. This deliberately separates the *gameplay* boundary (who may trade) from the *performance* concern (how work is sharded) — the two the old region round-robin had fused.
+
+The open-edge list is built once and cached for the process: each connection is deduped to a single unordered edge, tagged with its fuel cost, and sorted by a stable key so the work cursor is deterministic across runs. It changes only on reseed (cleared via `invalidateAdjacencyCache`).
+
+### Distance Attenuation
+
+A jump's fuel cost stands in for its length. Each open edge scales its flow by `1 / (1 + DISTANCE_DECAY · fuelCost)`, so cheap local hops move close to the full budget while long, fuel-expensive jumps move only a fraction — most visibly the high-cost gateways that bridge two regions of the same faction. The effect is **distance-graded price dispersion**: staple goods equalize locally and vary little across the map, while high-value goods (notably luxuries) sustain larger price gaps across distance, rewarding long-haul arbitrage. At `DISTANCE_DECAY = 0` attenuation is off (every edge moves the full budget).
+
 ### How a Flow is Decided
 
-For every connection edge between two systems in the currently-processed region, the simulator looks at every good both systems trade. For each candidate good, it asks the same question: how much cheaper is it at one end than at the other, relative to that good's base price? That normalized price difference is the "gradient." Comparing as a fraction of base price keeps water and luxuries on the same scale.
+For every open edge in the current work slice, the simulator looks at every good both endpoints trade. For each candidate good, it asks the same question: how much cheaper is it at one end than at the other, relative to that good's base price? That normalized price difference is the "gradient." Comparing as a fraction of base price keeps water and luxuries on the same scale.
 
 Only the steepest gradient on the edge gets to move that run — multi-good coverage emerges naturally as the price landscape shifts and a different good takes the lead next time the edge fires. If the steepest gradient is below the configured threshold, the edge sits idle: tiny price wobbles shouldn't trigger churn.
 
 When a gradient clears the threshold, the simulator decides how many units to move by taking the smallest of three constraints — how much room the destination has, how much surplus the source can spare without dropping below its floor, and the per-edge budget — and then scales that by the gradient's strength. Steeper gradients move closer to the full budget; near-threshold gradients move only a sliver. The result is rounded down to whole units.
 
-The chosen quantity then flows from the cheap side to the expensive side. Both markets see the exact delta a player trade would produce: a single stock value leaves the source and arrives at the destination. Mid-run state is mutated in place so later edges in the same region see the new prices and adapt — chains emerge when one move opens up a new gradient for a neighboring edge.
+The chosen quantity then flows from the cheap side to the expensive side. Both markets see the exact delta a player trade would produce: a single stock value leaves the source and arrives at the destination. Mid-run state is mutated in place so later edges in the same slice see the new prices and adapt — chains emerge when one move opens up a new gradient for a neighboring edge.
 
-### Tick Cadence
+### Scheduling — Work-Budget Slice
 
-The processor runs every tick, but each tick it picks **one region** to work on, cycling through the universe in round-robin order. The position in the cycle is derived from `floor(tick / interval) % regions`, rather than the more obvious `tick % regions`, because the latter starves a fixed subset of regions whenever the cadence interval shares a factor with the region count.
+The processor runs every tick and processes a fixed **work budget** of `EDGES_PER_TICK` open edges, advancing a cursor over the stable open-edge order and wrapping around. A full universe sweep therefore takes `ceil(totalOpenEdges / EDGES_PER_TICK)` ticks.
 
-A full universe sweep therefore takes `regions × cadence_interval` ticks. There is one hard invariant: the sweep must finish before flow events get pruned. If a region's events were aged out before the round-robin returned to it, the player-facing overlay would show permanent gaps in that region's history. The processor logs a warning if the invariant is in danger of being violated.
+This decouples per-tick work from territory size: a sprawling empire and a city-state cost the same per tick, differing only in how many ticks their edges take to sweep. That is the whole point of de-regioning — the old scheduler walked one *region* per tick, fusing two unrelated concerns (how much work to do, a performance knob; and where flow may cross, a gameplay boundary). The faction topology now owns the boundary, and the edge slice owns the work budget, each tunable on its own.
 
-By design, the trade-flow processor declares a dependency on the economy processor: within a single tick, the region's prices settle from production and consumption *before* the trade simulator reads them. This avoids flow firing against stale gradients.
+There is one hard invariant: the sweep must finish before flow events get pruned. If an edge's events were aged out before the cursor returned to it, the player-facing overlay would show permanent gaps. So `ceil(totalOpenEdges / EDGES_PER_TICK)` must stay below `FLOW_HISTORY_TICKS`, and the processor logs a warning if it doesn't. With the calibrated `EDGES_PER_TICK = 256`, the sweep is **4 ticks at default scale** (~825 open edges) and **46 ticks at 10K scale** (~11.7K open edges) — both well inside the 200-tick window.
+
+By design, the trade-flow processor declares a dependency on the economy processor: within a single tick, prices settle from production and consumption *before* the trade simulator reads them. This avoids flow firing against stale gradients.
 
 ### What Gets Recorded
 
 Two surfaces come out of each run:
 
 - **A per-edge event log.** Every flow appended to a rolling-window table that captures the tick, the direction, the good, and the quantity. Indexes by source, destination, and good give the map overlay and the per-system detail panel cheap queries. A pruning step on every active run drops anything older than the configured history window.
-- **Per-system volume increments.** Both endpoints of the move have the volume accumulator on their `Market` row incremented in the same atomic write that adjusts stock. This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active regions become booming whether or not players show up.
+- **Per-system volume increments.** Both endpoints of the move have their owning system's volume accumulator (`StarSystem.tradeVolumeAccum`) incremented inside the same tick transaction that adjusts stock (a separate bulk write from the stock update, but atomic with it). This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active systems become booming whether or not players show up.
 
 ### Trade Routes
 
@@ -45,9 +59,9 @@ A "trade route" in the player's mind is a connected chain of edges all moving th
 
 ### Player Displacement
 
-When players are actively trading in a region, edge flow scales itself back so it isn't competing with them. The processor sums recent player trade volume in that region — using a wall-clock sliding window so bursts of player activity take effect immediately regardless of tick cadence — and uses it to compute a displacement value between 0 and 1. That value linearly throttles the per-edge budget. Full displacement means the per-edge budget rounds to zero and the processor skips its work for that region (pruning still runs); zero displacement means the budget is unaffected.
+When players are actively trading near an edge, that edge scales its own flow back so it isn't competing with them. The processor sums recent player trade volume at the edge's **two endpoint systems** — using a wall-clock sliding window so bursts of player activity take effect immediately regardless of tick cadence — and uses it to compute a displacement value between 0 and 1 that linearly throttles that edge's budget. Full displacement means the edge's budget rounds to zero and it is skipped (pruning still runs); zero displacement leaves the budget unaffected.
 
-The intent is conservation of attention: in dead regions, the simulator provides the trade pressure; in busy regions, the players are the trade pressure.
+The intent is conservation of attention: where players are quiet, the simulator provides the trade pressure; where they are busy, the players are. Displacement is now computed independently for every edge from its own endpoints — replacing the old per-region throttle, which moved in lockstep with the region round-robin.
 
 ---
 
@@ -67,7 +81,8 @@ Defined in `lib/constants/trade-simulation.ts`. These are the dials the simulato
 
 | Constant | Purpose |
 |---|---|
-| `PROCESS_EVERY_N_TICKS` | How often the round-robin advances. Bigger means slower, more deliberate trade; must satisfy `regions × this < FLOW_HISTORY_TICKS`. |
+| `EDGES_PER_TICK` | Work-budget slice size — open edges the cursor processes per tick. Bounds per-tick work independently of faction size; must satisfy `ceil(totalOpenEdges / EDGES_PER_TICK) < FLOW_HISTORY_TICKS`. Calibrated to **256** (4-tick sweep at default scale, 46 at 10K). |
+| `DISTANCE_DECAY` | Strength of distance attenuation in `1 / (1 + DISTANCE_DECAY · fuelCost)`. Higher means long jumps move less and dispersion concentrates on long-haul goods. Calibrated to **0.1**; `0` disables it. |
 | `FLOW_BUDGET` | Cap on how many units one edge can move in a single run. |
 | `GRADIENT_THRESHOLD` | Minimum normalized price gap, as a fraction of base price, before an edge fires at all. |
 | `GRADIENT_SENSITIVITY` | How aggressively the move size responds to gradient strength. 1.0 means a full-`basePrice` gap saturates the budget. |

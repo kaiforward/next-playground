@@ -208,7 +208,7 @@ See [events.md](./events.md) for the full modifier catalog and event definitions
 
 ## How It Composes Each Tick
 
-The per-market steps above sit inside a larger ordering. Each tick processes **one region** (round-robin); three processors touch its markets in sequence, and player trades layer on top in real time:
+The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor settles **one region**'s markets per tick (round-robin), and **event** modifiers plus player trades layer on top in real time. The **trade-flow** processor is the exception — since SP2 Part 0 it is no longer region-scoped, instead sweeping a work-budget slice of the **intra-faction** edge graph each tick (region lines ignored, faction borders closed; see [trade-simulation.md](./trade-simulation.md)):
 
 ```
 EVENTS       run first  - stock shocks (one-time jolts) + modifiers
@@ -218,8 +218,10 @@ EVENTS       run first  - stock shocks (one-time jolts) + modifiers
 ECONOMY      run second - per market: produce -> consume -> prosperity
    |                      scale -> noise -> clamp  (single stock value)
    v
-TRADE FLOW   run third  - goods flow along edges by mid-price gradient,
-   |                      moving a single stock delta from cheap to dear
+TRADE FLOW   run third  - goods flow along open intra-faction edges
+   |                      (region lines ignored, borders closed),
+   |                      distance-attenuated, by mid-price gradient;
+   |                      a single stock delta moves cheap -> dear
    v
 PROSPERITY   trade volume (edge flow + players) raises it toward booming;
              no trade decays it toward stagnant; events can force crisis
