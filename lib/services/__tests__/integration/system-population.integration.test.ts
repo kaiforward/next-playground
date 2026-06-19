@@ -61,6 +61,7 @@ describe("getSystemPopulation (integration)", () => {
     expect(data.unrest).toBeLessThanOrEqual(1);
     expect(data.striking).toBe(data.unrest >= STRIKE_PARAMS.threshold);
     expect(data.demand.length).toBeGreaterThan(0);
+    expect(data.demand.length).toBeLessThanOrEqual(6);
     expect(data.demand[0].demandRate).toBeGreaterThanOrEqual(data.demand[1].demandRate);
     expect(typeof data.demand[0].goodName).toBe("string");
   });
