@@ -11,6 +11,7 @@ import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
 import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
+import { StabilityTerritoryLayer } from "./layers/stability-territory-layer";
 import { FleetDotLayer } from "./layers/fleet-dot-layer";
 import { TradeFlowLayer } from "./layers/trade-flow-layer";
 import { EffectLayer } from "./layers/effect-layer";
@@ -49,6 +50,8 @@ export interface PixiMapCanvasProps {
   showEvents: boolean;
   selectedTransitId: string | null;
   onTransitClick: (unitId: string | null) => void;
+  /** Per-system unrest (0…1) for the stability choropleth, or empty when mode is off. */
+  stabilityBySystem?: Map<string, number>;
 }
 
 /** Holds all mutable Pixi references. Created once during mount. */
@@ -63,6 +66,7 @@ interface PixiRefs {
   connectionLayer: ConnectionLayer;
   territoryLayer: TerritoryLayer;
   politicalTerritoryLayer: PoliticalTerritoryLayer;
+  stabilityTerritoryLayer: StabilityTerritoryLayer;
   fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
   fleetTransitLayer: FleetTransitLayer;
@@ -88,6 +92,7 @@ export function PixiMapCanvas({
   showEvents,
   selectedTransitId,
   onTransitClick,
+  stabilityBySystem,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pixiRef = useRef<PixiRefs | null>(null);
@@ -191,6 +196,11 @@ export function PixiMapCanvas({
       const politicalTerritoryLayer = new PoliticalTerritoryLayer();
       world.addChild(politicalTerritoryLayer.container);
 
+      // Stability choropleth — a 4th mode in the territory band. Voronoi geometry
+      // mirrors the other territory layers; fills are redrawn from live unrest values.
+      const stabilityTerritoryLayer = new StabilityTerritoryLayer();
+      world.addChild(stabilityTerritoryLayer.container);
+
       const fleetDotLayer = new FleetDotLayer();
       world.addChild(fleetDotLayer.container);
 
@@ -267,6 +277,7 @@ export function PixiMapCanvas({
 
         territoryLayer.updateVisibility(lod);
         politicalTerritoryLayer.updateVisibility(lod);
+        stabilityTerritoryLayer.updateVisibility(lod);
         fleetDotLayer.updateVisibility(lod);
 
         // Trade-flow overlay: layer alpha multiplies the system fade so the
@@ -293,7 +304,7 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        politicalTerritoryLayer, fleetDotLayer, tradeFlowLayer,
+        politicalTerritoryLayer, stabilityTerritoryLayer, fleetDotLayer, tradeFlowLayer,
         fleetTransitLayer, effectLayer,
       };
       setPixiReady(true);
@@ -313,6 +324,7 @@ export function PixiMapCanvas({
           refs.connectionLayer.destroy();
           refs.territoryLayer.destroy();
           refs.politicalTerritoryLayer.destroy();
+          refs.stabilityTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
           refs.fleetTransitLayer.destroy();
           refs.effectLayer.destroy();
@@ -345,17 +357,19 @@ export function PixiMapCanvas({
 
     p.territoryLayer.sync(atlasData.systems, regionInfos);
     p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions);
+    p.stabilityTerritoryLayer.sync(atlasData.systems);
   }, [atlasData.systems, atlasData.factions, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
-  // Three modes: "political" shows the faction layer, "regions" shows the
-  // economy layer, "none" hides both. Per-frame LOD logic still runs on the
-  // hidden layers (cheap) so swapping back is instant.
+  // Four modes: "political" shows the faction layer, "regions" shows the
+  // economy layer, "stability" shows the unrest choropleth, "none" hides all.
+  // Per-frame LOD logic still runs on the hidden layers (cheap) so swapping is instant.
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
     p.territoryLayer.container.visible = mapMode === "regions";
     p.politicalTerritoryLayer.setActive(mapMode === "political");
+    p.stabilityTerritoryLayer.container.visible = mapMode === "stability";
   }, [mapMode, pixiReady]);
 
   // ── Update player presence highlights (lightweight fill-only redraw) ──
@@ -371,6 +385,13 @@ export function PixiMapCanvas({
     }
     p.territoryLayer.setPlayerPresence(playerRegionIds);
   }, [mapData.systems, pixiReady]);
+
+  // ── Stability choropleth fills (lightweight redraw on data change) ──
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.stabilityTerritoryLayer.setStability(stabilityBySystem ?? new Map());
+  }, [stabilityBySystem, pixiReady]);
 
   // ── Sync fleet presence dots (systems with ships) ──────────────────
   useEffect(() => {

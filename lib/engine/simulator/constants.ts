@@ -15,7 +15,7 @@ import { SHIP_TYPES } from "@/lib/constants/ships";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
-import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
+import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, MIGRATION_EDGES_PER_TICK } from "@/lib/constants/population";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -74,6 +74,13 @@ export interface SimConstants {
     dynamics: { growthRate: number; declineRate: number };
     strike: { threshold: number; floorMultiplier: number };
   };
+  migration: {
+    edgesPerTick: number;
+    weights: { contentment: number; headroom: number };
+    maxOutflowFraction: number;
+    gradientThreshold: number;
+    distanceDecay: number;
+  };
   bots: {
     startingCredits: number;
     refuelThreshold: number;
@@ -97,6 +104,9 @@ export type SimConstantOverrides = {
     unrest?: Partial<SimConstants["population"]["unrest"]>;
     dynamics?: Partial<SimConstants["population"]["dynamics"]>;
     strike?: Partial<SimConstants["population"]["strike"]>;
+  };
+  migration?: Partial<Omit<SimConstants["migration"], "weights">> & {
+    weights?: Partial<SimConstants["migration"]["weights"]>;
   };
   bots?: Partial<SimConstants["bots"]>;
 };
@@ -181,6 +191,13 @@ function buildDefaults(): SimConstants {
       dynamics: { ...POPULATION_PARAMS },
       strike: { ...STRIKE_PARAMS },
     },
+    migration: {
+      edgesPerTick: MIGRATION_EDGES_PER_TICK,
+      weights: { ...MIGRATION_PARAMS.weights },
+      maxOutflowFraction: MIGRATION_PARAMS.maxOutflowFraction,
+      gradientThreshold: MIGRATION_PARAMS.gradientThreshold,
+      distanceDecay: MIGRATION_PARAMS.distanceDecay,
+    },
     bots: {
       startingCredits: 500,
       refuelThreshold: 0.5,
@@ -210,6 +227,13 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
       unrest: { ...base.population.unrest, ...overrides.population?.unrest },
       dynamics: { ...base.population.dynamics, ...overrides.population?.dynamics },
       strike: { ...base.population.strike, ...overrides.population?.strike },
+    },
+    migration: {
+      edgesPerTick: overrides.migration?.edgesPerTick ?? base.migration.edgesPerTick,
+      weights: { ...base.migration.weights, ...overrides.migration?.weights },
+      maxOutflowFraction: overrides.migration?.maxOutflowFraction ?? base.migration.maxOutflowFraction,
+      gradientThreshold: overrides.migration?.gradientThreshold ?? base.migration.gradientThreshold,
+      distanceDecay: overrides.migration?.distanceDecay ?? base.migration.distanceDecay,
     },
     bots: { ...base.bots, ...overrides.bots },
   };

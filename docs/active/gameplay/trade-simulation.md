@@ -4,7 +4,7 @@ Status: **Active** — shipped.
 
 ## Problem
 
-The economy needs sustained inter-system trade pressure. Production and consumption alone have no spatial restoring force, so without trade every market drifts to its clamp boundary and systems sit at the stagnant prosperity multiplier (0.7×). Player density (10–50 players across 10K systems at scale) cannot supply that pressure on its own.
+The economy needs sustained inter-system trade pressure. Production and consumption alone have no spatial restoring force, so without trade every market drifts to its clamp boundary. Player density (10–50 players across 10K systems at scale) cannot supply that pressure on its own.
 
 ## Solution
 
@@ -46,12 +46,20 @@ There is one hard invariant: the sweep must finish before flow events get pruned
 
 By design, the trade-flow processor declares a dependency on the economy processor: within a single tick, prices settle from production and consumption *before* the trade simulator reads them. This avoids flow firing against stale gradients.
 
+### One Topology, Two Flows: Goods and People
+
+The same intra-faction open-edge topology and work-budget slice that carry goods also carry **population migration** (see [economy.md](./economy.md) — population dynamics and migration). Migration is a separate processor (`dependsOn: population`), but it reuses the same `SystemConnection` adjacency cache, the same distance-attenuation formula (`1 / (1 + DISTANCE_DECAY · fuelCost)`), and the same per-tick edge-cursor sharding.
+
+The shared topology means goods and people always move on the **same map**: a system bleeding population to a booming neighbour can still receive food shipments from it along the same jump lanes. Gateways (high fuel-cost connections between faction territory clumps) throttle both flows equally under the attenuation formula — a deliberate design choice that gives gateways strategic significance without building special-case gateway logic into either flow.
+
+Migration drives an **attractiveness gradient** rather than a price gradient: population flows toward neighbours with low unrest and high headroom (`popCap − population`), attenuated by distance. The flow is conserved (population relocated, not created or destroyed) and capped per tick to prevent ping-pong.
+
 ### What Gets Recorded
 
 Two surfaces come out of each run:
 
 - **A per-edge event log.** Every flow appended to a rolling-window table that captures the tick, the direction, the good, and the quantity. Indexes by source, destination, and good give the map overlay and the per-system detail panel cheap queries. A pruning step on every active run drops anything older than the configured history window.
-- **Per-system volume increments.** Both endpoints of the move have their owning system's volume accumulator (`StarSystem.tradeVolumeAccum`) incremented inside the same tick transaction that adjusts stock (a separate bulk write from the stock update, but atomic with it). This is the exact accumulator player trades write to, so the prosperity processor cannot tell — and does not need to tell — whether the volume came from a player or from edge flow. Active systems become booming whether or not players show up.
+- **Per-system volume increments.** Both endpoints of the move have their owning system's per-tick volume accumulator incremented inside the same tick transaction that adjusts stock (a separate bulk write from the stock update, but atomic with it).
 
 ### Trade Routes
 

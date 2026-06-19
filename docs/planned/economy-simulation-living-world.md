@@ -1,6 +1,6 @@
 # Economy Simulation — Sub-Project 2: The Living World (Population Dynamics & Consequences)
 
-Status: **Design locked** 2026-06-18; **Part 0 shipped** 2026-06-18 (de-region diffusion — faction-bounded topology + work-budget slicing; calibrated `DISTANCE_DECAY = 0.1`, `EDGES_PER_TICK = 256`). **Part 1 not started.** This is the sub-project spec for **Sub-Project 2** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13 item 2, "Demand & consequence loop"). It assumes the shipped SP1 model — physical substrate, population-scaled consumption, days-of-supply pricing — and does not re-argue it. The code-heavy build plan hangs off this spec in `docs/plans/` and is deleted when SP2 ships.
+Status: **Design locked** 2026-06-18; **Part 0 shipped** 2026-06-18 (de-region diffusion — faction-bounded topology + work-budget slicing; calibrated `DISTANCE_DECAY = 0.1`, `EDGES_PER_TICK = 256`). **Part 1 in progress** — PR1–PR3 landed 2026-06-19 (consequence loop, migration, stability map overlay); PR4 (population/stability system-UI readouts) pending. This is the sub-project spec for **Sub-Project 2** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13 item 2, "Demand & consequence loop"). It assumes the shipped SP1 model — physical substrate, population-scaled consumption, days-of-supply pricing — and does not re-argue it. The code-heavy build plan hangs off this spec in `docs/plans/` and is deleted when SP2 ships.
 
 Read the [vision](./economy-simulation-vision.md) (§4 population keystone, §5 tick loop, §7 consequences, §10 rethinks) and [SP1 substrate spec](./economy-simulation-substrate.md) first.
 
@@ -206,16 +206,17 @@ This is a **one-tick feedback loop, not a cycle**: unrest written this tick supp
 
 ---
 
-## 14. Open questions → resolved in the build plan
+## 14. Open questions → resolved (Part 1, 2026-06-19)
 
-- **Distance-attenuation curve** (per-hop decay shape) and the **work-budget slice size** for re-sharding.
-- **`unrest` dynamics** — `k`, `decay`, the strike threshold, and whether strike is stored (hysteresis) or derived each tick.
-- **Strike suppression shape** — hard halt vs steep multiplier.
-- **Growth/decline + migration coefficients** and the seed-fill fraction (sim-discovered).
-- **Satisfaction hand-off mechanism** — exactly how the economy processor surfaces per-system `delivered/demanded` to the population processor (transient store vs context field).
-- **Processor placement of migration** — a phase inside the `population` processor vs a sibling processor.
-- **Independent-system rule** — confirm whether the flood-fill leaves any `factionId = null`; if so, the permeable-pool rule.
-- **Schema specifics** — `unrest` column, optional `strikeActive`, the `population` type migration, and the prosperity-column drops.
+- **Distance-attenuation curve** and **work-budget slice size**: resolved in Part 0. `DISTANCE_DECAY = 0.1`, `EDGES_PER_TICK = 256`. Migration reuses the same topology and constants.
+- **`unrest` dynamics** — `k`, `decay`, strike threshold: resolved in Part 1. Strike is **derived each tick** from `unrest` (no stored flag, no hysteresis) — the suppression multiplier is a smooth function of `unrest` above the threshold, so the behaviour is reversible without a state transition. Coefficients sim-calibrated (stable-but-growing with no collapse/saturation).
+- **Strike suppression shape**: **smooth multiplier** (not a hard halt). Production is scaled by a continuous factor that approaches zero as `unrest` → 1, so strikes are graded rather than binary.
+- **Growth/decline + migration coefficients**: sim-discovered in Part 1 calibration. Stable-but-growing at mean `unrest` ~0.25, max ~0.66, ~6% population growth, 0 saturated/emptied systems.
+- **Satisfaction hand-off mechanism**: **in-memory `ctx.results`** (a transient field on the tick context). The economy processor writes per-system satisfaction there; the population processor reads it in the same tick. Not persisted, not broadcast.
+- **Processor placement of migration**: **separate `migration` processor** (`dependsOn: population`). Keeps the population processor focused on the consequence loop (unrest, growth/decline, `demandRate` rewrite) and migration as a clean orthogonal concern.
+- **Independent-system rule**: world-gen flood-fill claims every system, so no `factionId = null` exists in practice. The permeable-pool rule for independents is a **latent capability** — correct by construction, but with no live data today. Activates when SP5 introduces unclaimed space.
+- **Gateways**: **unified with goods** (no special migration treatment). Under `1 / (1 + DISTANCE_DECAY · fuelCost)`, gateways have a 2.5× fuel multiplier, so they are **high-friction** — they throttle both goods and population flow equally. A gateway-*preferred* migration attractiveness term (boosting migration through gateways) is a clean future additive term in the attractiveness function, deferred until gameplay feedback warrants it.
+- **Schema specifics**: `population` migrated to Float, `unrest` column added (0…1), `prosperity`/`tradeVolumeAccum` columns and all prosperity infrastructure dropped.
 
 ---
 
@@ -223,5 +224,5 @@ This is a **one-tick feedback loop, not a cycle**: unrest written this tick supp
 
 - **[economy-simulation-vision.md](./economy-simulation-vision.md)** — the north star; SP2 implements its §13 item 2 (demand & consequence loop) and resolves its §14 open items on migration mechanics and unrest thresholds. Rebellion and relation-weighted borders move to SP5; prosperity's fold (§10) lands here.
 - **[economy-simulation-substrate.md](./economy-simulation-substrate.md)** — SP1; SP2 builds on its static population, days-of-supply pricing, and the anticipated per-tick `demandRate` rewrite (§8.2.2).
-- **[economy.md](../active/gameplay/economy.md)** / **[system-traits.md](../active/gameplay/system-traits.md)** (active) — updated when SP2 ships (unrest/stability replaces prosperity; population becomes dynamic; diffusion topology section rewritten).
+- **[economy.md](../active/gameplay/economy.md)** / **[system-traits.md](../active/gameplay/system-traits.md)** (active) — updated through SP2 Part 1 PR3 (unrest/stability replaces prosperity; population is dynamic; diffusion topology section rewritten); the population/stability system-UI readouts follow in PR4.
 - **[faction-system.md](../active/gameplay/faction-system.md)** (active) — gains the SP5 hooks SP2 defers to it (rebellion, relation-weighted borders).

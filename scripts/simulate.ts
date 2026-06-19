@@ -22,7 +22,7 @@ import {
   buildExperimentResult,
 } from "../lib/engine/simulator/experiment";
 import { STRATEGY_NAMES } from "../lib/engine/simulator/strategies";
-import { summarizePopulation } from "../lib/engine/simulator/population-analysis";
+import { summarizePopulation, detectPingPong } from "../lib/engine/simulator/population-analysis";
 import type { SimConfig, BotConfig, SimResults } from "../lib/engine/simulator/types";
 
 // ── Argument parsing ────────────────────────────────────────────
@@ -74,7 +74,7 @@ function fmtNum(n: number): string {
 }
 
 function formatTable(results: SimResults): string {
-  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, constants } = results;
+  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, constants, populationSnapshots } = results;
 
   const lines: string[] = [];
 
@@ -212,6 +212,7 @@ function formatTable(results: SimResults): string {
     lines.push([pad(pHeaders[0], pWidths[0]), rpad(pHeaders[1], pWidths[1])].join(" | "));
     lines.push(pWidths.map((w) => "-".repeat(w)).join("-+-"));
 
+    const pingPong = detectPingPong(populationSnapshots);
     const pRows: [string, string][] = [
       ["Total start", fmtNum(pop.totalStart)],
       ["Total end", fmtNum(pop.totalEnd)],
@@ -221,6 +222,7 @@ function formatTable(results: SimResults): string {
       ["Saturated (≥98% cap)", String(pop.saturatedCount)],
       ["Emptied (≤1)", String(pop.emptiedCount)],
       ["Striking (≥threshold)", String(pop.strikingCount)],
+      ["Ping-pong (migration)", String(pingPong)],
     ];
     for (const [label, value] of pRows) {
       lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));

@@ -15,20 +15,24 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Processor Pipeline
 
-10 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+12 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
 
 ```
-Ship Arrivals ──────────────────────────────────┐
-  └→ Battles (depends on: ship-arrivals) ───────┤
-Events ─────────────────────────────────────────┤
-  └→ Economy (depends on: events) ──────────────┤
-  │    └→ Trade Flow (depends on: economy) ─────┤
+Ship Arrivals ────────────────────────────────────────┐
+  └→ Battles (depends on: ship-arrivals) ─────────────┤
+Events ──────────────────────────────────────────────┤
+  └→ Economy (depends on: events) ─────────────────── ┤
+  │    └→ Trade Flow (depends on: economy) ───────────┤
+  │    └→ Population (depends on: economy) ──────────┤
+  │         └→ Migration (depends on: population) ────┤
   │    └→ Trade Missions (depends on: events, economy)
   │    └→ Op Missions (depends on: events, economy)
-  │    └→ Price Snapshots (depends on: economy) ┘
+  │    └→ Price Snapshots (depends on: economy) ──────┘
   └→ Relations (depends on: events, every 3 ticks)
-Notification Prune (independent, every 50 ticks) ┘
+Notification Prune (independent, every 50 ticks)
 ```
+
+**Economy → Population in-memory handoff:** the economy processor records per-system satisfaction (`delivered_g / demanded_g` for each good it processes this tick) into `ctx.results` — a transient in-memory store that lives only for the duration of that tick. The population processor reads this from `ctx.results` in the same tick to compute dissatisfaction `D` and update `unrest` without an extra database round-trip. This data is never persisted or broadcast to clients.
 
 ### Processor Details
 
@@ -37,8 +41,10 @@ Notification Prune (independent, every 50 ticks) ┘
 | Ship Arrivals | Every tick | None | Lands ships that have reached their arrival tick. Runs 5-stage cargo danger pipeline (hazard, tax, contraband, loss, hull/shield damage). Notifies players of arrivals and losses |
 | Battles | Every tick | Ship Arrivals | Resolves active battle rounds (every 6 ticks). Updates strength/morale, checks for victory/defeat/retreat. Applies ship damage and credits rewards on resolution |
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
-| Economy | Every tick | Events | Simulates one region's markets per tick (round-robin). Applies event modifiers and government effects to each market's stock |
+| Economy | Every tick | Events | Simulates one region's markets per tick (round-robin). Applies event modifiers and government effects to each market's stock; applies strike suppression to production (derived from last tick's `unrest`). Records per-system satisfaction (`delivered / demanded`) into `ctx.results` for the population processor |
 | Trade Flow | Every tick (work-budget edge slice) | Economy | Simulates inter-system goods flow over the **intra-faction** edge graph (region lines ignored, faction borders closed), distance-attenuated by fuel cost. Each tick processes a slice of `EDGES_PER_TICK` open edges as a cursor sweeps the stable edge order, mutating stock at both endpoints, appending flow events, and incrementing per-system volume. Recent player trade volume at an edge's endpoints throttles that edge's budget toward zero (per-edge displacement). See [trade-simulation.md](../gameplay/trade-simulation.md) |
+| Population | Every tick | Economy | Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline (gated by satisfaction + unrest); rewrites `StationMarket.demandRate` for each system's new population level |
+| Migration | Every tick (work-budget edge slice) | Population | Relocates population (conserved) along the same intra-faction open-edge topology + work-budget slice as trade-flow; population flows down-unrest / up-headroom (`popCap − population`), distance-attenuated. Gateways throttle migration as they do goods. Produces boom/bust geography over time |
 | Trade Missions | Every 5 ticks | Events, Economy | Generates new missions from price extremes and active events. Expires unclaimed/overdue missions. Notifies players |
 | Op Missions | Every tick | Events, Economy | Generates patrol/survey/bounty/salvage/recon missions from danger levels and traits. Expires unclaimed missions. Completes timed missions. Fails missions with destroyed/disabled ships |
 | Relations | Every 3 ticks | Events | Drifts every faction pair's relation score (border length, cross-faction trade, doctrine, common enemies). Spawns `border_conflict`/`pact_under_negotiation`/`alliance_dissolved` events on threshold crossings, then resolves relations-owned event windows (forms/dissolves alliances, expires events). See [faction-system.md](../gameplay/faction-system.md) |

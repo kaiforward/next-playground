@@ -368,6 +368,12 @@ export interface TradeHistoryEntry {
   createdAt: string;
 }
 
+/** Per-system unrest reading for the stability choropleth overlay. */
+export interface StabilityEntry {
+  systemId: string;
+  unrest: number;
+}
+
 export interface UniverseData {
   regions: RegionInfo[];
   systems: StarSystemInfo[];

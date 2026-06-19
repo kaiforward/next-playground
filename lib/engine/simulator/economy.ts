@@ -22,10 +22,12 @@ import type { RNG } from "@/lib/engine/universe-gen";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { runPopulationProcessor } from "@/lib/tick/processors/population";
+import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
+import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import type { InjectionRequest } from "@/lib/tick/world/events-world";
 import type { EconomySignals, TickContext } from "@/lib/tick/types";
@@ -281,6 +283,23 @@ async function processSimPopulation(
   return { ...world, systems: popWorld.systems, markets: popWorld.markets };
 }
 
+// ── Migration (delegates to the unified processor) ──────────────
+
+async function processSimMigration(world: SimWorld, constants: SimConstants): Promise<SimWorld> {
+  const migWorld = new InMemoryMigrationWorld({ systems: world.systems }, world.connections);
+  const tickCtx: TickContext = { tx: undefined as never, tick: world.tick, results: new Map() };
+  await runMigrationProcessor(migWorld, tickCtx, {
+    edgesPerTick: constants.migration.edgesPerTick,
+    flow: {
+      weights: constants.migration.weights,
+      maxOutflowFraction: constants.migration.maxOutflowFraction,
+      gradientThreshold: constants.migration.gradientThreshold,
+      distanceDecay: constants.migration.distanceDecay,
+    },
+  });
+  return { ...world, systems: migWorld.systems };
+}
+
 // ── Trade flow (delegates to the unified processor) ─────────────
 
 async function processSimTradeFlow(
@@ -326,7 +345,7 @@ async function processSimTradeFlow(
 // ── Main entry point ────────────────────────────────────────────
 
 /**
- * Simulate one world tick: ship arrivals → events → economy → population → trade flow.
+ * Simulate one world tick: ship arrivals → events → economy → population → migration → trade flow.
  * Returns a new SimWorld. Async because the unified processors are async
  * (the in-memory adapters resolve immediately, but `await` still requires
  * an async caller).
@@ -341,6 +360,7 @@ export async function simulateWorldTick(
   w = await processSimEvents(w, rng, ctx);
   const eco = await processSimEconomy(w, rng, ctx.constants);
   w = await processSimPopulation(eco.world, eco.signals, ctx.constants);
+  w = await processSimMigration(w, ctx.constants);
   w = await processSimTradeFlow(w, ctx.constants);
   return w;
 }

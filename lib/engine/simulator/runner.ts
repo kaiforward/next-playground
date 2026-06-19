@@ -105,6 +105,9 @@ export async function runSimulation(
   // Market snapshots (sampled periodically)
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
 
+  // Population snapshots (sampled at the same interval as market snapshots)
+  const populationSnapshots: Array<Map<string, number>> = [];
+
   // Event lifecycle tracking
   const activeEventTracker = new Map<string, { type: EventTypeId; systemId: string; severity: number; startTick: number; sourceEventId: string | null; startPrices: { goodId: string; price: number }[] }>();
   const completedEvents: EventLifecycle[] = [];
@@ -133,6 +136,9 @@ export async function runSimulation(
     // 4. Sample market state at regular intervals
     if (world.tick % SNAPSHOT_INTERVAL === 0) {
       marketSnapshots.push({ tick: world.tick, markets: takeMarketSnapshot(world) });
+      const popSnap = new Map<string, number>();
+      for (const s of world.systems) popSnap.set(s.id, s.population);
+      populationSnapshots.push(popSnap);
     }
 
     // 5. Track event lifecycles (detect new + expired events)
@@ -182,5 +188,6 @@ export async function runSimulation(
     elapsedMs: performance.now() - start,
     finalWorld: world,
     initialPopulationTotal,
+    populationSnapshots,
   };
 }

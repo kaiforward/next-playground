@@ -80,7 +80,7 @@ The map uses a WebGL canvas (Pixi.js) with two rendering tiers that crossfade ba
 Each system renders as a layered glyph with a fixed radial budget so indicators never collide. Geometry lives in `components/map/pixi/theme.ts` (`GLYPH`/`PILL`); the glyph is assembled in `components/map/pixi/objects/system-object.ts`.
 
 - **Core (r ≤ 12)** — solid economy colour; the system's intrinsic identity, with a small highlight dot.
-- **Halo (r ≈ 20) — the overlay lens.** A translucent disc carrying the *active overlay*: a faint economy tint by default, recoloured to the price ramp when the Price overlay is on. Overlap-forgiving; the halo channel is designed to host future per-system lenses (danger, prosperity).
+- **Halo (r ≈ 20) — the overlay lens.** A translucent disc carrying the *active overlay*: a faint economy tint by default, recoloured to the price ramp when the Price overlay is on. Overlap-forgiving; the halo channel is designed to host future per-system lenses (danger, stability).
 - **Gateway ring (r ≈ 28)** — bright magenta (`#e879f9`, a hue reserved for gateways) stroke on inter-region gateway systems.
 - **Navigation ring (r ≈ 34, outermost, dashed)** — drawn only during routing, on the origin/destination, plus a subtle dashed focus ring on the selected system. `reachable` nodes keep a thin solid ring; `unreachable` dim to ~0.3 alpha.
 
@@ -109,10 +109,10 @@ In-transit markers are the player's own ships, so they stay visible even across 
 
 The map's controls float at the bottom-left in a dock (`components/map/map-controls-dock.tsx`) that stacks panels upward. The main panel (`map-overlay-controls.tsx`, state in `lib/hooks/use-map-overlays.ts`) holds two vertically-stacked sections:
 
-- **Mode** (single-select) — Political / Regions / Prosperity / None. Political and Regions paint faction/region polygons; **Prosperity** paints a per-system Voronoi choropleth tinted cold→warm by each system's prosperity (Crisis → Booming), with an inline legend under the selector. None hides the territory band.
+- **Mode** (single-select) — Political / Regions / Stability / None. Political and Regions paint faction/region polygons; **Stability** paints a per-system Voronoi choropleth tinted by each system's stability (the inverse of `unrest` — Stable, Tense, Unrest, Strike, Collapse), with an inline legend under the selector. None hides the territory band.
 - **Overlays** (multi-select) — Fleet, Events, Price, Trade-flow, Ship Routes. Each row carries its glyph element's colour so the panel doubles as the key; the price-ramp, trade-flow tier, and routes legends appear in hover tooltips beside the row so they cost no permanent height.
 
-When the Price overlay is on, a separate **Price panel** (`map-price-panel.tsx`) — the good-picker, a **buy/sell sub-toggle** that flips the deal-quality tint perspective, plus a jump to cross-system comparison — floats above the main panel, kept independent so picking a good never reflows the main panel. The price overlay (a per-system halo) is orthogonal to the Mode tint, so it can ride on top of the prosperity choropleth. The dock is the single owner of panel layout; further context panels slot in as siblings.
+When the Price overlay is on, a separate **Price panel** (`map-price-panel.tsx`) — the good-picker, a **buy/sell sub-toggle** that flips the deal-quality tint perspective, plus a jump to cross-system comparison — floats above the main panel, kept independent so picking a good never reflows the main panel. The price overlay (a per-system halo) is orthogonal to the Mode tint, so it can ride on top of the stability choropleth. The dock is the single owner of panel layout; further context panels slot in as siblings.
 
 Overlays govern *ambient* clutter, not data access: with Fleet or Events off, a system's pills are hidden ambiently but still **reveal on hover or selection**. The always-on skeleton — economy core, halo, gateway ring, jump lanes, moving ships — is never gated by a toggle. Overlay state persists per session.
 

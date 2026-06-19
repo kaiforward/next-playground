@@ -83,7 +83,7 @@ Every system consumes every good; higher tier → lower per-capita need. A syste
 
 **Emergent geography:** raw goods flow resource-rich frontier → core; manufactured goods flow populous core → frontier. The geography is deliberately **coarse** at this stage: tier-1+ production is labour-only with no competition for build space, so a populous world net-produces nearly every manufactured good. Genuine specialisation (housing vs. industry competing for finite body space) arrives with the facilities sub-project; until then the economy-type label is loose flavour, not a promise about net trade.
 
-All coefficients and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller coeff and smaller need). The government `consumptionBoost` and the prosperity multiplier layer on top exactly as before.
+All coefficients and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller coeff and smaller need). The government `consumptionBoost` layers on top of consumption; strike suppression scales production down when `unrest` exceeds the strike threshold.
 
 ### Market Seeding
 
@@ -140,11 +140,10 @@ A trade of `q` units moves stock from `S` to `S∓q`, and price moves the whole 
 Each good at each station is updated:
 
 1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
-2. **Self-limiting production** — the system's substrate-derived production rate adds stock, scaled by `sqrt((MAX − stock) / (MAX − MIN))`. Near the ceiling, production approaches zero (warehouses full).
-3. **Self-limiting consumption** — its population-scaled consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left).
-4. **Prosperity multiplier** — both production and consumption rates are scaled by the system's prosperity multiplier (0.3x crisis to 1.3x booming).
-5. **Noise** — random walk scaled by good volatility and government modifier (base amplitude ±3 units).
-6. **Clamp** — stock bounded to [5, 200].
+2. **Self-limiting production** — the system's substrate-derived production rate adds stock, scaled by `sqrt((MAX − stock) / (MAX − MIN))`. Near the ceiling, production approaches zero (warehouses full). Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces production output.
+3. **Self-limiting consumption** — its population-scaled consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left). Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
+4. **Noise** — random walk scaled by good volatility and government modifier (base amplitude ±3 units).
+5. **Clamp** — stock bounded to [5, 200].
 
 There is no mean-reversion step and no demand axis — both are gone from the single-stock model.
 
@@ -155,35 +154,30 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 | Bid-ask spread `s` | 0.05 base | Buy/sell gap; scaled by government; makes round-trips lose |
 | Noise amplitude | ±3 base | Micro-volatility, scaled by volatility × government |
 | Min/max stock | 5 / 200 | Stock bounds (ceiling price at MIN, floor price at MAX) |
-| Production rate | substrate-driven | `coeff × labour(pop) × resource`; scaled by self-limiting + prosperity |
-| Consumption rate | population-scaled | `perCapitaNeed × population`; scaled by self-limiting + prosperity |
+| Production rate | substrate-driven | `coeff × labour(pop) × resource`; scaled by self-limiting + strike suppression |
+| Consumption rate | population-scaled | `perCapitaNeed × population`; scaled by self-limiting only (never strike-suppressed) |
 | Price history | Rolling window | Snapshots recorded periodically (`lib/engine/snapshot.ts`) |
 
-### Prosperity System
+### Population, Unrest, and Strikes
 
-Each system has a `prosperity` value from -1.0 (crisis) to +1.0 (booming).
+Each system has a **`population`** (a Float magnitude) that is now dynamic — it grows, declines, and migrates. The population drives production labour (`labourFactor`) and consumption demand (`perCapitaNeed × population`). As population moves, the stored `demandRate` per market is rewritten each tick to reflect the new level.
 
-**How it moves:**
-- Player trade volume pushes prosperity upward (toward +1)
-- Without trade, prosperity decays toward 0 (stagnant) at 0.03/run
-- Only events can push prosperity below 0 (crisis states)
-- When the triggering event ends, prosperity recovers toward 0
+**Unrest (`unrest`, 0…1)** accumulates from unmet need. Each economy tick the processor records per-good satisfaction (`delivered / demanded`) for each system it processes. The population processor then computes a convex, demand-weighted dissatisfaction value `D` — where a deep food shortage dominates many shallow ones because food's demand weight is ~8× a luxury's — and integrates it:
 
-**What it does:** A single multiplier applied equally to both production AND consumption.
+```
+D       = Σ_g  demandShare_g · (1 − satisfaction_g)²
+unrest ← clamp(unrest + k·D − decay·unrest, 0, 1)
+```
 
-| Prosperity | Multiplier | Label |
-|---|---|---|
-| -1.0 | 0.3x | Crisis (event-driven only) |
-| -0.5 | 0.5x | Disrupted (event-driven only) |
-| 0.0 | 0.7x | Stagnant |
-| 0.5 | 1.0x | Active |
-| 1.0 | 1.3x | Booming |
+Chronic unmet demand climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; sustained shortage crosses the thresholds.
 
-Boom amplifies both sides equally — no corrective tug-of-war. A booming system has more goods flowing in and out, not a directional correction.
+**Strikes** are derived each tick from `unrest` (no separate stored flag): above the strike threshold, a smooth suppression multiplier scales down production output only. People still consume — consumption is never suppressed. The strike state feeds back into the next economy tick's production.
 
-**Timing**: With 24 regions and round-robin, each system is processed every ~24 ticks. At 0.03 decay/run, prosperity goes from 1.0 to ~0 in ~33 runs (~800 ticks).
+**Growth / decline** is logistic: population grows toward `popCap` when the system is well-fed and calm, and declines under starvation or high unrest. The existing SP1 seeding placed all systems below `popCap`, giving headroom.
 
-**UI surfaces:** Per-system prosperity appears as a label badge (e.g. "Booming") plus a muted "Production & Consumption ×N" effect descriptor on the system **Overview** and **Market** screens, and as a cold→warm per-system Voronoi **choropleth** map mode. Both surfaces read from one tick-scoped feed (`/api/game/systems/prosperity` via `useProsperity`) and share the same cold→warm colour ramp. The map keeps two disjoint colour axes: **green↔red** is reserved for price deal-quality (mode-aware buy/sell), **cold↔warm** for prosperity — so the prosperity choropleth and the price halo overlay can coexist without colour collision.
+**Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source.
+
+> **Prosperity is retired.** The former `prosperity` value (a trade-volume proxy for supply-response scaling, 0.3× crisis to 1.3× booming) is removed. SP1 already moved the smooth supply response onto `population` (`labourFactor`), so the proxy became redundant. Population is now the smooth health channel; `unrest` is the consequence channel.
 
 ### Event-Driven Anchor Shifts
 
@@ -208,27 +202,38 @@ See [events.md](./events.md) for the full modifier catalog and event definitions
 
 ## How It Composes Each Tick
 
-The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor settles **one region**'s markets per tick (round-robin), and **event** modifiers plus player trades layer on top in real time. The **trade-flow** processor is the exception — since SP2 Part 0 it is no longer region-scoped, instead sweeping a work-budget slice of the **intra-faction** edge graph each tick (region lines ignored, faction borders closed; see [trade-simulation.md](./trade-simulation.md)):
+The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor settles **one region**'s markets per tick (round-robin), and **event** modifiers plus player trades layer on top in real time. The **trade-flow** processor sweeps a work-budget slice of the **intra-faction** edge graph each tick (region lines ignored, faction borders closed; see [trade-simulation.md](./trade-simulation.md)). Two additional processors — **population** and **migration** — run after economy and complete the consequence loop:
 
 ```
 EVENTS       run first  - stock shocks (one-time jolts) + modifiers
    |                      (ongoing: scale production/consumption rates,
    |                      shift the pricing reference)
    v
-ECONOMY      run second - per market: produce -> consume -> prosperity
-   |                      scale -> noise -> clamp  (single stock value)
+ECONOMY      run second - per market: apply event modifiers -> produce
+   |                      (scaled by strike suppression if unrest high)
+   |                      -> consume -> noise -> clamp (single stock value)
+   |                      records per-system satisfaction (delivered/demanded)
+   |                      via ctx.results for the population processor
    v
 TRADE FLOW   run third  - goods flow along open intra-faction edges
    |                      (region lines ignored, borders closed),
    |                      distance-attenuated, by mid-price gradient;
    |                      a single stock delta moves cheap -> dear
    v
-PROSPERITY   trade volume (edge flow + players) raises it toward booming;
-             no trade decays it toward stagnant; events can force crisis
+POPULATION   run fourth - reads per-system satisfaction from ctx.results;
+   |                      integrates unrest (D formula); applies growth/decline;
+   |                      rewrites demandRate for new population level
+   v
+MIGRATION    run fifth  - relocates population (conserved) along the same
+                          intra-faction open-edge topology + work-budget slice;
+                          population flows down-unrest / up-headroom,
+                          distance-attenuated (gateways throttle both flows)
 
 PLAYER TRADES  anytime (not tick-locked) - buy lowers stock, sell raises
                it (one stock delta); same per-market effect as a flow
 ```
+
+The economy→population **satisfaction handoff** (`ctx.results`) is purely in-memory and transient — it is not persisted to the database and not broadcast to clients. It carries the per-system `delivered_g / demanded_g` measurements the economy tick records internally, which the population processor consumes in the same tick to update `unrest` and population.
 
 Viewed another way, the simulation stacks four layers from static to real-time:
 
@@ -239,11 +244,12 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                net balance -> seed stock + import dependence;
                                government -> volatility, spread, boosts
 2  Tick evolution (each tick)  self-limiting production/consumption,
-                               prosperity, noise, clamp, edge flow
+                               strike suppression (from unrest), noise,
+                               clamp, edge flow, population growth/decline,
+                               migration, demandRate rewrite
 3  Disruptions (events)        shocks + modifiers temporarily change how
                                layer 2 behaves
-4  Player agency (real-time)   trading on the edge-flow background;
-                               sustained trade boosts prosperity
+4  Player agency (real-time)   trading on the edge-flow background
 ```
 
 Edge-flow mechanics are detailed in [trade-simulation.md](./trade-simulation.md); this is just where it sits in the tick.

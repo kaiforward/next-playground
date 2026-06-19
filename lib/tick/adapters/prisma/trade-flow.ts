@@ -3,58 +3,15 @@ import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
   TradeFlowWorld,
 } from "@/lib/tick/world/trade-flow-world";
-import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
+import { getOpenEdges as getOpenEdgesShared } from "@/lib/services/topology";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-
-/**
- * Cached open-edge list: unique unordered edges whose endpoints share a faction
- * (null===null lets adjacent independents trade). Cross-faction edges excluded.
- * The connection graph + faction assignments are static after seed, so build
- * once per process. Each edge carries fuelCost for distance attenuation.
- * Sorted by "${a}|${b}" so the work-budget cursor is deterministic.
- *
- * Cleared by `invalidateAdjacencyCache()` (via the export below) so a reseed in
- * integration tests rebuilds this alongside the faction map it derives from.
- */
-let cachedOpenEdges: EdgeView[] | null = null;
-
-/**
- * Clear the process-level open-edge cache. Called from `invalidateAdjacencyCache`
- * so one reseed hook sweeps every seed-derived cache. Exported (not inlined into
- * the class) so it can run without a transaction client.
- */
-export function invalidateTradeFlowEdgeCache(): void {
-  cachedOpenEdges = null;
-}
-
-async function getOpenEdgesCached(): Promise<EdgeView[]> {
-  if (cachedOpenEdges) return cachedOpenEdges;
-
-  // Connections and faction assignments are static after seed, so read both off
-  // the tick transaction via the module-level prisma client — the one-time cold
-  // fill must not occupy a tick's transaction slot. Both are imported dynamically
-  // so the memory-adapter unit tests never transitively load lib/prisma.ts.
-  const [{ getSystemFactionMap }, { prisma }] = await Promise.all([
-    import("@/lib/services/adjacency"),
-    import("@/lib/prisma"),
-  ]);
-  const [sysFaction, conns] = await Promise.all([
-    getSystemFactionMap(),
-    prisma.systemConnection.findMany({
-      select: { fromSystemId: true, toSystemId: true, fuelCost: true },
-    }),
-  ]);
-
-  cachedOpenEdges = buildOpenEdges(conns, sysFaction);
-  return cachedOpenEdges;
-}
 
 export class PrismaTradeFlowWorld implements TradeFlowWorld {
   constructor(private tx: TxClient) {}
 
   getOpenEdges(): Promise<EdgeView[]> {
-    return getOpenEdgesCached();
+    return getOpenEdgesShared();
   }
 
   async getMarketSnapshotsForSystems(systemIds: string[]): Promise<MarketSnapshot[]> {

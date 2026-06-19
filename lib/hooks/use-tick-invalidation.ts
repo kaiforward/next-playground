@@ -25,12 +25,13 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemTradeFlowAll });
       }),
-      // Economy ticks → refresh market data and trade flow
-      // (both written by the economy processor on the same tick)
+      // Economy ticks → refresh market data, trade flow, and stability
+      // (market + unrest are all written by the economy processor on the same tick)
       subscribeToEvent("economyTick", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemTradeFlowAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.stability });
       }),
       // Event notifications → refresh events cache and dynamic data (event state changed)
       subscribeToEvent("eventNotifications", () => {

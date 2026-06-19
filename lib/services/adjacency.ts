@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { buildAdjacencyList } from "@/lib/engine/visibility";
-import { invalidateTradeFlowEdgeCache } from "@/lib/tick/adapters/prisma/trade-flow";
+import { invalidateOpenEdgeCache } from "@/lib/services/topology";
 
 /**
  * Cached adjacency list for the system connection graph.
@@ -25,9 +25,9 @@ export function invalidateAdjacencyCache(): void {
   cachedAdjacency = null;
   cachedSystemRegion = null;
   cachedSystemFaction = null;
-  // The trade-flow open-edge cache derives from the faction map above, so clear
+  // The open-edge topology cache derives from the faction map above, so clear
   // it here too — one reseed hook sweeps every seed-derived cache.
-  invalidateTradeFlowEdgeCache();
+  invalidateOpenEdgeCache();
 }
 
 /**

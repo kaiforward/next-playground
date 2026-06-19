@@ -23,6 +23,7 @@ import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
+import { useStability } from "@/lib/hooks/use-stability";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 import { useGoods } from "@/lib/hooks/use-goods";
@@ -61,6 +62,7 @@ export function StarMap({
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
+  const stabilityBySystem = useStability(mapMode === "stability");
 
   // ── Live tick + in-transit marker selection ───────────────────
   const { currentTick } = useTickContext();
@@ -324,6 +326,7 @@ export function StarMap({
         showEvents={overlays.events}
         selectedTransitId={selectedTransitId}
         onTransitClick={onTransitClick}
+        stabilityBySystem={stabilityBySystem}
       />
 
       {/* Dev-only zoom/LOD readout for tuning pixi/lod.ts thresholds. */}

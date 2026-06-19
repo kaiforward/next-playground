@@ -28,6 +28,7 @@ import type {
   SunClass,
   BodyArchetypeId,
   RichnessModifierId,
+  StabilityEntry,
 } from "./game";
 import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
@@ -58,6 +59,7 @@ export interface TradeFlowEdgeInfo {
   perGood: Record<string, number>;
 }
 export type TradeFlowResponse = ApiResponse<{ edges: TradeFlowEdgeInfo[] }>;
+export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
   systemId: string;

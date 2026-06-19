@@ -29,6 +29,8 @@ export const queryKeys = {
   // Visibility + dynamic data (separated concerns)
   visibility: ["visibility"] as const,
   dynamicVisible: ["dynamicVisible"] as const,
+  // All-systems stability (tick-scoped — badge + map choropleth)
+  stability: ["stability"] as const,
   // Trade flow overlay (tick-scoped, gated by overlay toggle)
   tradeFlow: ["tradeFlow"] as const,
   // Per-system trade flow detail (system overview panel)
