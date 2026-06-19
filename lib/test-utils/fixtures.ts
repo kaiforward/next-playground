@@ -2,7 +2,7 @@
  * Minimal test universe factory + entity builders.
  *
  * Seeds just enough data for integration tests: 2 regions, 3 systems,
- * all 12 goods with equilibrium markets, bidirectional connections.
+ * all goods with equilibrium markets, bidirectional connections.
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
@@ -224,7 +224,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     data: { name: `${prefix}-Nova Exchange`, systemId: techSystem.id },
   });
 
-  // Goods (all 12, using GOODS constant for canonical data)
+  // Goods (all goods, using GOODS constant for canonical data)
   const goodIds: Record<string, string> = {};
   for (const [key, def] of Object.entries(GOODS)) {
     const good = await prisma.good.create({
@@ -244,7 +244,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     goodIds[key] = good.id;
   }
 
-  // Markets — each station gets all 12 goods seeded from its substrate net balance.
+  // Markets — each station gets all goods seeded from its substrate net balance.
   const stationSystems: { stationId: string; aggregate: ResourceVector; population: number }[] = [
     { stationId: agriStation.id, ...agriSubstrate },
     { stationId: indStation.id, ...indSubstrate },

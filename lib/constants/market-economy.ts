@@ -21,7 +21,7 @@ export const DEFAULT_SPREAD = 0.05;
  * table — per-good market depth now emerges from per-good demand rates.
  *
  * Calibrated via `npm run simulate`: 40 maximises the minimum cross-system price
- * dispersion across all twelve goods, so staples (deep cover) and advanced goods
+ * dispersion across all goods, so staples (deep cover) and advanced goods
  * (thin cover) are both tradeable at once. Lower values pin advanced goods to the
  * price floor (cheap everywhere); higher values pin staples to the ceiling.
  */
