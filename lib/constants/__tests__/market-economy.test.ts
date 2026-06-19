@@ -7,6 +7,7 @@ import {
   getInitialStock,
   demandRateForGood,
   MIN_DEMAND,
+  demandFootprint,
 } from "../market-economy";
 import { GOVERNMENT_TYPES } from "../government";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
@@ -89,5 +90,21 @@ describe("getSpread", () => {
     expect(frontier).toBeCloseTo(0.06, 5);
     expect(auth).toBeCloseTo(0.0425, 5);
     expect(frontier).toBeGreaterThan(auth);
+  });
+});
+
+describe("demandFootprint", () => {
+  it("lists consumed goods descending by demand, scaled by population", () => {
+    const f = demandFootprint(10_000);
+    expect(f.length).toBeGreaterThan(0);
+    for (let i = 1; i < f.length; i++) {
+      expect(f[i - 1].demandRate).toBeGreaterThanOrEqual(f[i].demandRate);
+    }
+    expect(f[0].demandRate).toBeCloseTo(demandRateForGood(f[0].goodId, 10_000), 6);
+    // water/food carry the highest per-capita need (0.004), so they lead at scale.
+    expect(["water", "food"]).toContain(f[0].goodId);
+  });
+  it("floors every good at MIN_DEMAND for a zero population", () => {
+    expect(demandFootprint(0).every((e) => e.demandRate === MIN_DEMAND)).toBe(true);
   });
 });
