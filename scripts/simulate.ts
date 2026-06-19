@@ -22,6 +22,7 @@ import {
   buildExperimentResult,
 } from "../lib/engine/simulator/experiment";
 import { STRATEGY_NAMES } from "../lib/engine/simulator/strategies";
+import { summarizePopulation } from "../lib/engine/simulator/population-analysis";
 import type { SimConfig, BotConfig, SimResults } from "../lib/engine/simulator/types";
 
 // ── Argument parsing ────────────────────────────────────────────
@@ -73,7 +74,7 @@ function fmtNum(n: number): string {
 }
 
 function formatTable(results: SimResults): string {
-  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs } = results;
+  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, constants } = results;
 
   const lines: string[] = [];
 
@@ -193,6 +194,36 @@ function formatTable(results: SimResults): string {
         rpad(drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-", dWidths[2]),
       ];
       lines.push(row.join(" | "));
+    }
+  }
+
+  // Population and unrest summary
+  {
+    const pop = summarizePopulation(
+      finalWorld.systems,
+      initialPopulationTotal,
+      constants.population.strike.threshold,
+    );
+    lines.push("");
+    lines.push("Population & Unrest (end of simulation):");
+
+    const pHeaders = ["Metric", "Value"];
+    const pWidths = [24, 16];
+    lines.push([pad(pHeaders[0], pWidths[0]), rpad(pHeaders[1], pWidths[1])].join(" | "));
+    lines.push(pWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    const pRows: [string, string][] = [
+      ["Total start", fmtNum(pop.totalStart)],
+      ["Total end", fmtNum(pop.totalEnd)],
+      ["Growth %", pop.growthPct.toFixed(2) + "%"],
+      ["Mean unrest", pop.meanUnrest.toFixed(3)],
+      ["Max unrest", pop.maxUnrest.toFixed(3)],
+      ["Saturated (≥98% cap)", String(pop.saturatedCount)],
+      ["Emptied (≤1)", String(pop.emptiedCount)],
+      ["Striking (≥threshold)", String(pop.strikingCount)],
+    ];
+    for (const [label, value] of pRows) {
+      lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));
     }
   }
 

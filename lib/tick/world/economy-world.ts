@@ -12,6 +12,7 @@ import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
 import type { GovernmentType } from "@/lib/types/game";
 import type { EconomySimParams } from "@/lib/engine/tick";
+import type { StrikeParams } from "@/lib/engine/population";
 
 /**
  * Region row needed for round-robin selection. Government does not live on the
@@ -71,6 +72,9 @@ export interface EconomyWorld {
 
   /** Bulk-write market stock. */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
+
+  /** Current unrest (0…1) for the given systems — drives strike suppression. */
+  getUnrest(systemIds: string[]): Promise<Map<string, number>>;
 }
 
 /** Per-tick params passed alongside the world. Sim and live differ here. */
@@ -81,4 +85,6 @@ export interface EconomyProcessorParams {
   simParams: EconomySimParams;
   /** Caps applied when aggregating event modifiers per market. */
   modifierCaps: ModifierCaps;
+  /** Strike production-suppression regime derived from unrest. */
+  strikeParams: StrikeParams;
 }

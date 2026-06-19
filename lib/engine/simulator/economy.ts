@@ -21,12 +21,14 @@ import {
 import type { RNG } from "@/lib/engine/universe-gen";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
+import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
+import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import type { InjectionRequest } from "@/lib/tick/world/events-world";
-import type { TickContext } from "@/lib/tick/types";
+import type { EconomySignals, TickContext } from "@/lib/tick/types";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -231,7 +233,7 @@ async function processSimEconomy(
   world: SimWorld,
   rng: RNG,
   constants: SimConstants,
-): Promise<SimWorld> {
+): Promise<{ world: SimWorld; signals: EconomySignals | undefined }> {
   const economyWorld = new InMemoryEconomyWorld(
     {
       systems: world.systems,
@@ -247,17 +249,36 @@ async function processSimEconomy(
     results: new Map(),
   };
 
-  await runEconomyProcessor(economyWorld, tickCtx, {
+  const result = await runEconomyProcessor(economyWorld, tickCtx, {
     rng,
     simParams: buildSimParams(constants),
     modifierCaps: constants.events.modifierCaps,
+    strikeParams: constants.population.strike,
   });
 
   return {
-    ...world,
-    systems: economyWorld.systems,
-    markets: economyWorld.markets,
+    world: { ...world, systems: economyWorld.systems, markets: economyWorld.markets },
+    signals: result.economySignals,
   };
+}
+
+async function processSimPopulation(
+  world: SimWorld,
+  signals: EconomySignals | undefined,
+  constants: SimConstants,
+): Promise<SimWorld> {
+  if (!signals) return world;
+  const popWorld = new InMemoryPopulationWorld({ systems: world.systems, markets: world.markets });
+  const tickCtx: TickContext = {
+    tx: undefined as never,
+    tick: world.tick,
+    results: new Map([["economy", { economySignals: signals }]]),
+  };
+  await runPopulationProcessor(popWorld, tickCtx, {
+    unrest: constants.population.unrest,
+    population: constants.population.dynamics,
+  });
+  return { ...world, systems: popWorld.systems, markets: popWorld.markets };
 }
 
 // ── Trade flow (delegates to the unified processor) ─────────────
@@ -305,7 +326,7 @@ async function processSimTradeFlow(
 // ── Main entry point ────────────────────────────────────────────
 
 /**
- * Simulate one world tick: ship arrivals → events → economy → trade flow.
+ * Simulate one world tick: ship arrivals → events → economy → population → trade flow.
  * Returns a new SimWorld. Async because the unified processors are async
  * (the in-memory adapters resolve immediately, but `await` still requires
  * an async caller).
@@ -318,7 +339,8 @@ export async function simulateWorldTick(
   let w = { ...world, tick: world.tick + 1 };
   w = processSimShipArrivals(w, rng);
   w = await processSimEvents(w, rng, ctx);
-  w = await processSimEconomy(w, rng, ctx.constants);
+  const eco = await processSimEconomy(w, rng, ctx.constants);
+  w = await processSimPopulation(eco.world, eco.signals, ctx.constants);
   w = await processSimTradeFlow(w, ctx.constants);
   return w;
 }

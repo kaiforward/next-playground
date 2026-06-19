@@ -29,6 +29,8 @@ export interface SimSystem {
   aggregate: ResourceVector;
   /** Abstract population magnitude — drives labour + per-capita consumption. */
   population: number;
+  /** Maximum sustainable population (logistic growth cap). */
+  popCap: number;
   /** System traits from generation (used for production modifiers). */
   traits: { traitId: string; quality: number }[];
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
@@ -357,6 +359,10 @@ export interface SimResults {
   label?: string;
   /** Total wall-clock time in ms. */
   elapsedMs: number;
+  /** Final world state after all ticks (for post-run analysis). */
+  finalWorld: SimWorld;
+  /** Total population summed across all systems at tick 0 (before the loop). */
+  initialPopulationTotal: number;
 }
 
 export interface RegionOverviewEntry {

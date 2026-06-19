@@ -3,6 +3,7 @@ import {
   simulateEconomyTick,
   buildMarketTickEntry,
   processShipArrivals,
+  selfLimitingFactor,
   type MarketTickEntry,
   type EconomySimParams,
 } from "../tick";
@@ -141,6 +142,66 @@ describe("buildMarketTickEntry", () => {
       traits: [],
     });
     expect(e.consumptionRate).toBeUndefined();
+  });
+});
+
+// ── selfLimitingFactor ───────────────────────────────────────────
+
+describe("selfLimitingFactor", () => {
+  const MIN = 5;
+  const MAX = 105;
+
+  it("returns 0 when min === max (degenerate range)", () => {
+    expect(selfLimitingFactor(50, 50, 50, "produce")).toBe(0);
+    expect(selfLimitingFactor(50, 50, 50, "consume")).toBe(0);
+  });
+
+  it("consume: returns 0 at the floor (value === min)", () => {
+    expect(selfLimitingFactor(MIN, MIN, MAX, "consume")).toBe(0);
+  });
+
+  it("consume: returns 1 at the ceiling (value === max)", () => {
+    expect(selfLimitingFactor(MAX, MIN, MAX, "consume")).toBe(1);
+  });
+
+  it("produce: returns 0 at the ceiling (value === max)", () => {
+    expect(selfLimitingFactor(MAX, MIN, MAX, "produce")).toBe(0);
+  });
+
+  it("produce: returns 1 at the floor (value === min)", () => {
+    expect(selfLimitingFactor(MIN, MIN, MAX, "produce")).toBe(1);
+  });
+
+  it("produce and consume branches differ at mid-range value", () => {
+    const mid = (MIN + MAX) / 2;
+    const p = selfLimitingFactor(mid, MIN, MAX, "produce");
+    const c = selfLimitingFactor(mid, MIN, MAX, "consume");
+    // At the exact midpoint both branches collapse to the same sqrt(0.5).
+    expect(p).toBeCloseTo(Math.sqrt(0.5), 6);
+    expect(c).toBeCloseTo(Math.sqrt(0.5), 6);
+    // Off-midpoint they diverge: produce reads remaining headroom, consume reads fill.
+    const offMid = MIN + (MAX - MIN) * 0.3;
+    const pOff = selfLimitingFactor(offMid, MIN, MAX, "produce"); // headroom 0.7 → sqrt(0.7)
+    const cOff = selfLimitingFactor(offMid, MIN, MAX, "consume"); // fill 0.3 → sqrt(0.3)
+    expect(pOff).toBeCloseTo(Math.sqrt(0.7), 6);
+    expect(cOff).toBeCloseTo(Math.sqrt(0.3), 6);
+    expect(pOff).toBeGreaterThan(cOff);
+  });
+
+  it("clamps gracefully when value is below min (consume returns 0)", () => {
+    expect(selfLimitingFactor(MIN - 10, MIN, MAX, "consume")).toBe(0);
+  });
+
+  it("clamps gracefully when value is above max (produce returns 0)", () => {
+    expect(selfLimitingFactor(MAX + 10, MIN, MAX, "produce")).toBe(0);
+  });
+
+  it("clamps gracefully when value is below min (produce returns 1)", () => {
+    expect(selfLimitingFactor(MIN - 10, MIN, MAX, "produce")).toBe(1);
+  });
+
+  it("clamps gracefully when value is above max (consume returns 1)", () => {
+    expect(selfLimitingFactor(MAX + 10, MIN, MAX, "consume")).toBe(1);
   });
 });
 

@@ -5,6 +5,7 @@
 
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { physicalRates } from "@/lib/engine/physical-economy";
+import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import type { GovernmentDefinition } from "@/lib/constants/government";
 import type { ResourceVector } from "@/lib/types/game";
 
@@ -45,19 +46,13 @@ export const STOCK_MIN = ECONOMY_CONSTANTS.MIN_LEVEL;
 export const STOCK_MAX = ECONOMY_CONSTANTS.MAX_LEVEL;
 
 /**
- * The per-market demand rate — the days-of-supply denominator. Equals the
- * system's base physical consumption for the good (perCapitaNeed × population),
- * floored at MIN_DEMAND. Government consumptionBoost is deliberately excluded:
- * it moves price through stock, not through the reference. Stored on
- * StationMarket.demandRate and used to build the price curve.
+ * Days-of-supply demand denominator for one good: max(perCapitaNeed × population,
+ * MIN_DEMAND). Population-only (consumption ignores the resource vector), so it is
+ * the formula the population processor uses to rewrite demandRate as population moves.
  */
-export function marketDemandRate(
-  aggregate: ResourceVector,
-  population: number,
-  goodId: string,
-): number {
-  const { consumption } = physicalRates(goodId, aggregate, population);
-  return Math.max(consumption, MIN_DEMAND);
+export function demandRateForGood(goodId: string, population: number): number {
+  const need = GOOD_CONSUMPTION[goodId] ?? 0;
+  return Math.max(need * Math.max(0, population), MIN_DEMAND);
 }
 
 /**
@@ -73,7 +68,7 @@ export function getInitialStock(
   goodId: string,
 ): number {
   const { production, consumption } = physicalRates(goodId, aggregate, population);
-  // reference = TARGET_COVER × demandRate; demandRate is floored consumption (see marketDemandRate).
+  // reference = TARGET_COVER × demandRate; demandRate is floored consumption (see demandRateForGood).
   const reference = TARGET_COVER * Math.max(consumption, MIN_DEMAND);
   const total = production + consumption;
 

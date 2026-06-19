@@ -117,6 +117,17 @@ export class PrismaEconomyWorld implements EconomyWorld {
     return rows;
   }
 
+  async getUnrest(systemIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (systemIds.length === 0) return result;
+    const rows = await this.tx.starSystem.findMany({
+      where: { id: { in: systemIds } },
+      select: { id: true, unrest: true },
+    });
+    for (const r of rows) result.set(r.id, r.unrest);
+    return result;
+  }
+
   async applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {
     if (updates.length === 0) return;
 

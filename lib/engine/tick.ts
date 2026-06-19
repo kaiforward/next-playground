@@ -108,6 +108,8 @@ export interface TickEntryInput {
   govConsumptionBoost: number;
   /** System traits (already validated). */
   traits: GeneratedTrait[];
+  /** Production-only suppression multiplier (1 = none). Strike state from unrest. */
+  productionSuppress?: number;
 }
 
 /**
@@ -117,7 +119,9 @@ export interface TickEntryInput {
  */
 export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
   const productionRate =
-    input.baseProductionRate != null ? input.baseProductionRate : undefined;
+    input.baseProductionRate != null
+      ? input.baseProductionRate * (input.productionSuppress ?? 1)
+      : undefined;
 
   const consumptionRate =
     input.baseConsumptionRate != null

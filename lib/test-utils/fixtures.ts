@@ -6,7 +6,7 @@
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock, marketDemandRate } from "@/lib/constants/market-economy";
+import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
 import { makeResourceVector, aggregateColumns } from "@/lib/engine/resources";
 import type { Doctrine, GovernmentType, ResourceVector } from "@/lib/types/game";
 
@@ -258,7 +258,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
           stationId,
           goodId: goodIds[key],
           stock: getInitialStock(aggregate, population, key),
-          demandRate: marketDemandRate(aggregate, population, key),
+          demandRate: demandRateForGood(key, population),
         },
       });
     }

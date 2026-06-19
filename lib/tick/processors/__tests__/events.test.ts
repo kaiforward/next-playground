@@ -44,6 +44,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     governmentType: "frontier",
     aggregate: emptyResourceVector(),
     population: 0,
+    popCap: 1000,
     traits: [],
     bodyDanger: 0,
     unrest: 0,

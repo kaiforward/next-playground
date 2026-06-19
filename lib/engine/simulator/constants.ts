@@ -15,6 +15,7 @@ import { SHIP_TYPES } from "@/lib/constants/ships";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
+import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -68,6 +69,11 @@ export interface SimConstants {
     playerDisplacementFactor: number;
     playerVolumeTarget: number;
   };
+  population: {
+    unrest: { gain: number; decay: number };
+    dynamics: { growthRate: number; declineRate: number };
+    strike: { threshold: number; floorMultiplier: number };
+  };
   bots: {
     startingCredits: number;
     refuelThreshold: number;
@@ -87,6 +93,11 @@ export type SimConstantOverrides = {
   ships?: Record<string, Partial<SimConstants["ships"][string]>>;
   universe?: Partial<SimConstants["universe"]>;
   tradeFlow?: Partial<SimConstants["tradeFlow"]>;
+  population?: {
+    unrest?: Partial<SimConstants["population"]["unrest"]>;
+    dynamics?: Partial<SimConstants["population"]["dynamics"]>;
+    strike?: Partial<SimConstants["population"]["strike"]>;
+  };
   bots?: Partial<SimConstants["bots"]>;
 };
 
@@ -165,6 +176,11 @@ function buildDefaults(): SimConstants {
       playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
       playerVolumeTarget: TRADE_SIMULATION.PLAYER_VOLUME_TARGET,
     },
+    population: {
+      unrest: { ...UNREST_PARAMS },
+      dynamics: { ...POPULATION_PARAMS },
+      strike: { ...STRIKE_PARAMS },
+    },
     bots: {
       startingCredits: 500,
       refuelThreshold: 0.5,
@@ -190,6 +206,11 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
     ships: mergeRecord(base.ships, overrides.ships),
     universe: { ...base.universe, ...overrides.universe },
     tradeFlow: { ...base.tradeFlow, ...overrides.tradeFlow },
+    population: {
+      unrest: { ...base.population.unrest, ...overrides.population?.unrest },
+      dynamics: { ...base.population.dynamics, ...overrides.population?.dynamics },
+      strike: { ...base.population.strike, ...overrides.population?.strike },
+    },
     bots: { ...base.bots, ...overrides.bots },
   };
 }

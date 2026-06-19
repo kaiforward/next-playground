@@ -40,6 +40,8 @@ export interface MarketTickInput {
   modifiers: ModifierRow[];
   /** Modifier caps from constants. */
   modifierCaps: ModifierCaps;
+  /** Production-only suppression multiplier (1 = none). Strike state from unrest. */
+  productionSuppress?: number;
 }
 
 /**
@@ -65,6 +67,7 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     baseConsumptionRate: input.baseConsumptionRate,
     govConsumptionBoost: input.govDef?.consumptionBoosts[input.goodId] ?? 0,
     traits: input.traits,
+    productionSuppress: input.productionSuppress,
   });
 
   if (input.modifiers.length === 0) return { entry, anchorMult: 1 };

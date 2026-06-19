@@ -9,6 +9,7 @@ import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import type { EconomySimParams } from "@/lib/engine/tick";
 import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
 
 const { prisma } = useIntegrationDb();
 
@@ -42,6 +43,7 @@ describe("economyProcessor (integration)", () => {
           rng: mulberry32(seed),
           simParams,
           modifierCaps: MODIFIER_CAPS,
+          strikeParams: STRIKE_PARAMS,
         });
       },
       { timeout: 15_000 },

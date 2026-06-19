@@ -101,6 +101,13 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     return Promise.resolve(out);
   }
 
+  getUnrest(systemIds: string[]): Promise<Map<string, number>> {
+    const ids = new Set(systemIds);
+    const result = new Map<string, number>();
+    for (const s of this.systems) if (ids.has(s.id)) result.set(s.id, s.unrest);
+    return Promise.resolve(result);
+  }
+
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
     const byKey = new Map<string, MarketUpdate>();

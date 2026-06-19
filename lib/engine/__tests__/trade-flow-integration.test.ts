@@ -15,6 +15,7 @@ import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
 import { mulberry32 } from "@/lib/engine/universe-gen";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
 import type { TickContext } from "@/lib/tick/types";
 import type {
   SimConnection,
@@ -54,6 +55,7 @@ function buildFixture(): {
     governmentType: "federation",
     aggregate: makeResourceVector({ arable: 16 }),
     population: 100,
+    popCap: 1000,
     traits: [],
     bodyDanger: 0,
     unrest: 0,
@@ -69,6 +71,7 @@ function buildFixture(): {
     governmentType: "federation",
     aggregate: emptyResourceVector(),
     population: 1000,
+    popCap: 2000,
     traits: [],
     bodyDanger: 0,
     unrest: 0,
@@ -133,6 +136,7 @@ async function runScenario(
       maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
     },
     modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
+    strikeParams: STRIKE_PARAMS,
   };
 
   const flowParams = {
