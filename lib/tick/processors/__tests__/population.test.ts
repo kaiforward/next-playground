@@ -10,7 +10,7 @@ function sys(id: string, population: number, popCap: number, unrest = 0): SimSys
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation",
     aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
-    population, popCap, unrest, traits: [], bodyDanger: 0,
+    population, popCap, unrest, traits: [], bodyDanger: 0, buildings: {},
   };
 }
 function market(systemId: string, goodId: string): SimMarketEntry {

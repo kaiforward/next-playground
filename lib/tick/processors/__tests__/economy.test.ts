@@ -54,6 +54,7 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
     traits: [],
     bodyDanger: 0,
     unrest,
+    buildings: { food: 2 },
   };
 }
 
@@ -71,6 +72,7 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
     traits: [],
     bodyDanger: 0,
     unrest,
+    buildings: {},
   };
 }
 

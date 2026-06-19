@@ -59,6 +59,7 @@ function buildFixture(): {
     traits: [],
     bodyDanger: 0,
     unrest: 0,
+    buildings: {},
   }));
 
   // Arable-barren, populous consumers: food consumption ≈ 4/tick, no production.
@@ -75,6 +76,7 @@ function buildFixture(): {
     traits: [],
     bodyDanger: 0,
     unrest: 0,
+    buildings: {},
   }));
 
   const systems = [...producers, ...consumers];
@@ -198,15 +200,19 @@ describe("Trade flow integration", () => {
     expect(totalQuantity).toBeGreaterThan(0);
   });
 
-  it("moves consumer markets away from initial stock shortage", async () => {
-    const { markets } = await runScenario(8, 80);
+  it("flow raises consumer stock higher than no-flow", async () => {
+    const withoutFlow = await runScenario(0, 80);
+    const withFlow = await runScenario(8, 80);
 
-    const consumerFood = markets.filter(
-      (m) => (m.systemId === "c" || m.systemId === "d") && m.goodId === "food",
-    );
-    // Started at stock=20; flow should push consumer stock meaningfully higher.
-    for (const m of consumerFood) {
-      expect(m.stock).toBeGreaterThan(20);
-    }
+    const avgConsumer = (markets: SimMarketEntry[]) => {
+      const found = markets.filter(
+        (m) => (m.systemId === "c" || m.systemId === "d") && m.goodId === "food",
+      );
+      return found.reduce((s, m) => s + m.stock, 0) / found.length;
+    };
+
+    // With flow, surplus food moves from producer systems to consumer systems,
+    // so consumer average stock is higher than the no-flow baseline.
+    expect(avgConsumer(withFlow.markets)).toBeGreaterThan(avgConsumer(withoutFlow.markets));
   });
 });

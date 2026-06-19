@@ -48,6 +48,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     traits: [],
     bodyDanger: 0,
     unrest: 0,
+    buildings: {},
   };
 }
 
