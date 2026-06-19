@@ -4,10 +4,7 @@
  * See `docs/design/active/processor-architecture.md`.
  */
 
-import {
-  type EconomySimParams,
-  type ProsperityParams,
-} from "@/lib/engine/tick";
+import { type EconomySimParams } from "@/lib/engine/tick";
 import { scaleEventCaps } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -24,12 +21,16 @@ import {
 import type { RNG } from "@/lib/engine/universe-gen";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
+import { runPopulationProcessor } from "@/lib/tick/processors/population";
+import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
+import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
+import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import type { InjectionRequest } from "@/lib/tick/world/events-world";
-import type { TickContext } from "@/lib/tick/types";
+import type { EconomySignals, TickContext } from "@/lib/tick/types";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -234,7 +235,7 @@ async function processSimEconomy(
   world: SimWorld,
   rng: RNG,
   constants: SimConstants,
-): Promise<SimWorld> {
+): Promise<{ world: SimWorld; signals: EconomySignals | undefined }> {
   const economyWorld = new InMemoryEconomyWorld(
     {
       systems: world.systems,
@@ -244,26 +245,59 @@ async function processSimEconomy(
     world.regions,
   );
 
-  const prosperityParams: ProsperityParams = constants.prosperity;
-
   const tickCtx: TickContext = {
     tx: undefined as never,
     tick: world.tick,
     results: new Map(),
   };
 
-  await runEconomyProcessor(economyWorld, tickCtx, {
+  const result = await runEconomyProcessor(economyWorld, tickCtx, {
     rng,
     simParams: buildSimParams(constants),
-    prosperityParams,
     modifierCaps: constants.events.modifierCaps,
+    strikeParams: constants.population.strike,
   });
 
   return {
-    ...world,
-    systems: economyWorld.systems,
-    markets: economyWorld.markets,
+    world: { ...world, systems: economyWorld.systems, markets: economyWorld.markets },
+    signals: result.economySignals,
   };
+}
+
+async function processSimPopulation(
+  world: SimWorld,
+  signals: EconomySignals | undefined,
+  constants: SimConstants,
+): Promise<SimWorld> {
+  if (!signals) return world;
+  const popWorld = new InMemoryPopulationWorld({ systems: world.systems, markets: world.markets });
+  const tickCtx: TickContext = {
+    tx: undefined as never,
+    tick: world.tick,
+    results: new Map([["economy", { economySignals: signals }]]),
+  };
+  await runPopulationProcessor(popWorld, tickCtx, {
+    unrest: constants.population.unrest,
+    population: constants.population.dynamics,
+  });
+  return { ...world, systems: popWorld.systems, markets: popWorld.markets };
+}
+
+// ── Migration (delegates to the unified processor) ──────────────
+
+async function processSimMigration(world: SimWorld, constants: SimConstants): Promise<SimWorld> {
+  const migWorld = new InMemoryMigrationWorld({ systems: world.systems }, world.connections);
+  const tickCtx: TickContext = { tx: undefined as never, tick: world.tick, results: new Map() };
+  await runMigrationProcessor(migWorld, tickCtx, {
+    edgesPerTick: constants.migration.edgesPerTick,
+    flow: {
+      weights: constants.migration.weights,
+      maxOutflowFraction: constants.migration.maxOutflowFraction,
+      gradientThreshold: constants.migration.gradientThreshold,
+      distanceDecay: constants.migration.distanceDecay,
+    },
+  });
+  return { ...world, systems: migWorld.systems };
 }
 
 // ── Trade flow (delegates to the unified processor) ─────────────
@@ -278,7 +312,6 @@ async function processSimTradeFlow(
       markets: world.markets,
       flowEvents: world.flowEvents,
     },
-    world.regions,
     world.connections,
   );
 
@@ -289,13 +322,14 @@ async function processSimTradeFlow(
   };
 
   await runTradeFlowProcessor(flowWorld, tickCtx, {
-    processEveryNTicks: constants.tradeFlow.processEveryNTicks,
+    edgesPerTick: constants.tradeFlow.edgesPerTick,
     flowBudget: constants.tradeFlow.flowBudget,
     gradientThreshold: constants.tradeFlow.gradientThreshold,
     gradientSensitivity: constants.tradeFlow.gradientSensitivity,
     flowHistoryTicks: constants.tradeFlow.flowHistoryTicks,
     playerDisplacementFactor: constants.tradeFlow.playerDisplacementFactor,
-    prosperityTargetVolume: constants.prosperity.targetVolume,
+    distanceDecay: constants.tradeFlow.distanceDecay,
+    playerVolumeTarget: constants.tradeFlow.playerVolumeTarget,
     minLevel: constants.economy.minLevel,
     maxLevel: constants.economy.maxLevel,
   });
@@ -311,7 +345,7 @@ async function processSimTradeFlow(
 // ── Main entry point ────────────────────────────────────────────
 
 /**
- * Simulate one world tick: ship arrivals → events → economy → trade flow.
+ * Simulate one world tick: ship arrivals → events → economy → population → migration → trade flow.
  * Returns a new SimWorld. Async because the unified processors are async
  * (the in-memory adapters resolve immediately, but `await` still requires
  * an async caller).
@@ -324,7 +358,9 @@ export async function simulateWorldTick(
   let w = { ...world, tick: world.tick + 1 };
   w = processSimShipArrivals(w, rng);
   w = await processSimEvents(w, rng, ctx);
-  w = await processSimEconomy(w, rng, ctx.constants);
+  const eco = await processSimEconomy(w, rng, ctx.constants);
+  w = await processSimPopulation(eco.world, eco.signals, ctx.constants);
+  w = await processSimMigration(w, ctx.constants);
   w = await processSimTradeFlow(w, ctx.constants);
   return w;
 }

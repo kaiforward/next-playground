@@ -357,11 +357,6 @@ export interface MarketComparisonEntry {
   stock: number;
 }
 
-export interface ProsperityEntry {
-  systemId: string;
-  prosperity: number;
-}
-
 export interface TradeHistoryEntry {
   id: string;
   stationId: string;
@@ -371,6 +366,12 @@ export interface TradeHistoryEntry {
   quantity: number;
   type: TradeType;
   createdAt: string;
+}
+
+/** Per-system unrest reading for the stability choropleth overlay. */
+export interface StabilityEntry {
+  systemId: string;
+  unrest: number;
 }
 
 export interface UniverseData {

@@ -51,7 +51,7 @@ The old resource-flavoured traits (heavy-metal veins, helium-3 reserves, rare-ea
 ### 1.4 Aggregate & population
 
 - **Aggregate resource vector** = element-wise sum of the system's body vectors, denormalized onto `StarSystem` (`aggGas`, `aggOre`, …) for the economy hot path.
-- **Population** = `Σ(body pop-cap weight × size) × fill`, an abstract magnitude seeded **partial and varied by habitability** — developed core worlds seed near (but under) capacity; frontier rocks seed near-empty. Static in Part 1 (no growth/decline yet).
+- **Population** = `Σ(body pop-cap weight × size) × fill`, an abstract magnitude seeded **partial and varied by habitability** — developed core worlds seed near (but under) capacity; frontier rocks seed near-empty. Population is **dynamic** (Float): it grows, declines, and migrates each tick based on need-satisfaction and unrest (see [economy.md](./economy.md) — population dynamics and migration). Systems are seeded below `popCap`, giving growth headroom from the start.
 
 ---
 

@@ -105,16 +105,22 @@ export async function runSimulation(
   // Market snapshots (sampled periodically)
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
 
+  // Population snapshots (sampled at the same interval as market snapshots)
+  const populationSnapshots: Array<Map<string, number>> = [];
+
   // Event lifecycle tracking
   const activeEventTracker = new Map<string, { type: EventTypeId; systemId: string; severity: number; startTick: number; sourceEventId: string | null; startPrices: { goodId: string; price: number }[] }>();
   const completedEvents: EventLifecycle[] = [];
+
+  // Snapshot total population before the tick loop for trajectory analysis.
+  const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
 
   // Main loop
   for (let t = 0; t < config.tickCount; t++) {
     // 1. Save pre-tick markets (simulateWorldTick returns a new object)
     const preTickMarkets = world.markets;
 
-    // 2. Simulate world tick (ship arrivals → events → economy)
+    // 2. Simulate world tick (ship arrivals → events → economy → population → trade flow)
     world = await simulateWorldTick(world, rng, ctx);
 
     // 3. Execute bot ticks (deterministic order by ID)
@@ -130,6 +136,9 @@ export async function runSimulation(
     // 4. Sample market state at regular intervals
     if (world.tick % SNAPSHOT_INTERVAL === 0) {
       marketSnapshots.push({ tick: world.tick, markets: takeMarketSnapshot(world) });
+      const popSnap = new Map<string, number>();
+      for (const s of world.systems) popSnap.set(s.id, s.population);
+      populationSnapshots.push(popSnap);
     }
 
     // 5. Track event lifecycles (detect new + expired events)
@@ -177,5 +186,8 @@ export async function runSimulation(
     regionOverview,
     label,
     elapsedMs: performance.now() - start,
+    finalWorld: world,
+    initialPopulationTotal,
+    populationSnapshots,
   };
 }

@@ -4,21 +4,24 @@ import type { LODState } from "../lod";
 import { TERRITORY } from "../theme";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { computeTerritoryPolygons } from "../territory-utils";
-import { prosperityRampColorPixi } from "@/lib/utils/prosperity";
+import { stabilityRampColorPixi } from "@/lib/utils/stability";
 import type { AtlasSystem } from "@/lib/types/game";
 
 /**
- * Per-system prosperity choropleth. Geometry (one Voronoi cell per system) is
+ * Per-system stability choropleth. Geometry (one Voronoi cell per system) is
  * computed from atlas positions in sync() and cached; fills are redrawn from a
- * live prosperity map in setProsperity() — same geometry-vs-fill split as
+ * live unrest map in setStability() — same geometry-vs-fill split as
  * TerritoryLayer. Sits in the territory band; only one map MODE is visible at a
  * time, so it never stacks with the faction/region fills.
+ *
+ * Semantics: high unrest = hot (red), low unrest = cool (green). Inverted from
+ * the old prosperity ramp.
  */
-export class ProsperityTerritoryLayer {
+export class StabilityTerritoryLayer {
   readonly container = new Container();
   private graphics = new Graphics();
   private cachedCells: Map<string, [number, number][][][]> | null = null;
-  private prosperity = new Map<string, number>();
+  private unrestBySystem = new Map<string, number>();
 
   constructor() {
     this.container.addChild(this.graphics);
@@ -41,9 +44,9 @@ export class ProsperityTerritoryLayer {
     this.drawFills();
   }
 
-  /** Update per-system prosperity values and redraw fills (cheap — no recompute). */
-  setProsperity(prosperity: Map<string, number>) {
-    this.prosperity = prosperity;
+  /** Update per-system unrest values and redraw fills (cheap — no recompute). */
+  setStability(unrestBySystem: Map<string, number>) {
+    this.unrestBySystem = unrestBySystem;
     this.drawFills();
   }
 
@@ -51,9 +54,9 @@ export class ProsperityTerritoryLayer {
     if (!this.cachedCells) return;
     this.graphics.clear();
     for (const [systemId, multiPoly] of this.cachedCells) {
-      const value = this.prosperity.get(systemId);
+      const value = this.unrestBySystem.get(systemId);
       if (value === undefined) continue;
-      const color = prosperityRampColorPixi(value);
+      const color = stabilityRampColorPixi(value);
       for (const poly of multiPoly) {
         const exterior = poly[0];
         if (!exterior || exterior.length < 3) continue;

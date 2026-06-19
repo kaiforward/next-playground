@@ -2,15 +2,15 @@ import type {
   TickContext,
   TickProcessor,
   TickProcessorResult,
+  EconomySignals,
 } from "../types";
 import {
   simulateEconomyTick,
-  updateProsperity,
+  selfLimitingFactor,
   type EconomySimParams,
   type MarketTickEntry,
-  type ProsperityParams,
 } from "@/lib/engine/tick";
-import { ECONOMY_CONSTANTS, PROSPERITY_PARAMS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
@@ -20,16 +20,16 @@ import type {
   EconomyProcessorParams,
   EconomyWorld,
   MarketUpdate,
-  ProsperityUpdate,
 } from "@/lib/tick/world/economy-world";
+import { dissatisfaction, strikeMultiplier, type GoodSatisfaction } from "@/lib/engine/population";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
 
 /**
  * Pure processor body. Same logic runs against the Prisma adapter (live game)
  * or the in-memory adapter (simulator + unit tests). All knobs that differ
- * between live and sim (RNG, sim params, prosperity params) come in via
- * `params`.
+ * between live and sim (RNG, sim params) come in via `params`.
  *
  * Round-robin: one region per tick, picked from the adapter's region list.
  */
@@ -38,7 +38,7 @@ export async function runEconomyProcessor(
   ctx: TickContext,
   params: EconomyProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng, simParams, prosperityParams, modifierCaps } = params;
+  const { rng, simParams, modifierCaps, strikeParams } = params;
 
   const regions = await world.getRegions();
   if (regions.length === 0) {
@@ -81,43 +81,25 @@ export async function runEconomyProcessor(
     }
   }
 
-  // Prosperity: compute next value per system using current accum volume.
-  const prosperityViews = await world.getProsperity(systemIds);
-  const prosperityBySystem = new Map<string, number>();
-  const prosperityUpdates: ProsperityUpdate[] = [];
-
-  for (const view of prosperityViews) {
-    const newProsperity = updateProsperity(
-      view.prosperity,
-      view.tradeVolumeAccum,
-      prosperityParams,
-    );
-    prosperityBySystem.set(view.systemId, newProsperity);
-    prosperityUpdates.push({
-      systemId: view.systemId,
-      prosperity: newProsperity,
-      capturedVolume: view.tradeVolumeAccum,
-    });
-  }
+  // Read stored unrest from the previous tick to derive per-system strike multipliers.
+  const unrestBySystem = await world.getUnrest(systemIds);
 
   // Build tick entries via the shared market-tick builder. Government modifiers
   // are resolved per-market (border regions can contain systems owned by
-  // different factions) rather than once per region.
+  // different factions) rather than once per region. Strike suppression is
+  // production-only — consumption is unaffected by labor action.
   const resolved = markets.map((m) =>
-    resolveMarketTickEntry(
-      {
-        goodId: m.goodId,
-        stock: m.stock,
-        baseProductionRate: m.baseProductionRate,
-        baseConsumptionRate: m.baseConsumptionRate,
-        govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
-        traits: m.traits,
-        prosperity: prosperityBySystem.get(m.systemId) ?? 0,
-        modifiers: modifiersBySystem.get(m.systemId) ?? [],
-        modifierCaps,
-      },
-      prosperityParams,
-    ),
+    resolveMarketTickEntry({
+      goodId: m.goodId,
+      stock: m.stock,
+      baseProductionRate: m.baseProductionRate,
+      baseConsumptionRate: m.baseConsumptionRate,
+      govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
+      traits: m.traits,
+      productionSuppress: strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams),
+      modifiers: modifiersBySystem.get(m.systemId) ?? [],
+      modifierCaps,
+    }),
   );
 
   const tickEntries: MarketTickEntry[] = resolved.map((r) => r.entry);
@@ -132,7 +114,24 @@ export async function runEconomyProcessor(
   }));
 
   await world.applyMarketUpdates(marketUpdates);
-  await world.applyProsperityUpdates(prosperityUpdates);
+
+  // Measure per-system convex demand-weighted dissatisfaction D from post-tick stock.
+  // satisfaction_g = consume self-limiting factor = sqrt((stock−min)/range).
+  const goodsBySystem = new Map<string, GoodSatisfaction[]>();
+  markets.forEach((m, i) => {
+    const consumptionRate = tickEntries[i].consumptionRate;
+    if (consumptionRate == null || consumptionRate <= 0) return;
+    const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
+    const satisfaction = selfLimitingFactor(simulated[i].stock, simParams.minLevel, simParams.maxLevel, "consume");
+    const arr = goodsBySystem.get(m.systemId) ?? [];
+    arr.push({ satisfaction, demanded });
+    goodsBySystem.set(m.systemId, arr);
+  });
+  const dissatisfactionBySystem = new Map<string, number>();
+  for (const sysId of systemIds) {
+    dissatisfactionBySystem.set(sysId, dissatisfaction(goodsBySystem.get(sysId) ?? []));
+  }
+  const economySignals: EconomySignals = { dissatisfactionBySystem };
 
   const modCount = rawModifiers.length;
   if (DEBUG) {
@@ -152,12 +151,11 @@ export async function runEconomyProcessor(
         },
       ],
     },
+    economySignals,
   };
 }
 
 // ── Live-game wiring ──────────────────────────────────────────────
-
-const prosperityParams: ProsperityParams = PROSPERITY_PARAMS;
 
 const simParams: EconomySimParams = {
   noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
@@ -176,8 +174,8 @@ export const economyProcessor: TickProcessor = {
     return runEconomyProcessor(world, ctx, {
       rng: Math.random,
       simParams,
-      prosperityParams,
       modifierCaps: MODIFIER_CAPS,
+      strikeParams: STRIKE_PARAMS,
     });
   },
 };

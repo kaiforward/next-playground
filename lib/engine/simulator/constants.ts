@@ -3,17 +3,7 @@
  * resolveConstants() builds a complete snapshot from imported defaults + optional overrides.
  */
 
-import {
-  ECONOMY_CONSTANTS,
-  PROSPERITY_DECAY_RATE,
-  PROSPERITY_MAX_GAIN,
-  PROSPERITY_TARGET_VOLUME,
-  PROSPERITY_MIN,
-  PROSPERITY_MAX,
-  PROSPERITY_MULT_AT_MIN,
-  PROSPERITY_MULT_AT_ZERO,
-  PROSPERITY_MULT_AT_MAX,
-} from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
 import {
@@ -25,6 +15,7 @@ import { SHIP_TYPES } from "@/lib/constants/ships";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
+import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, MIGRATION_EDGES_PER_TICK } from "@/lib/constants/population";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -68,23 +59,27 @@ export interface SimConstants {
     gatewaysPerBorder: number;
     intraRegionExtraEdges: number;
   };
-  prosperity: {
-    decayRate: number;
-    maxGain: number;
-    targetVolume: number;
-    min: number;
-    max: number;
-    multAtMin: number;
-    multAtZero: number;
-    multAtMax: number;
-  };
   tradeFlow: {
-    processEveryNTicks: number;
+    edgesPerTick: number;
+    distanceDecay: number;
     flowBudget: number;
     gradientThreshold: number;
     gradientSensitivity: number;
     flowHistoryTicks: number;
     playerDisplacementFactor: number;
+    playerVolumeTarget: number;
+  };
+  population: {
+    unrest: { gain: number; decay: number };
+    dynamics: { growthRate: number; declineRate: number };
+    strike: { threshold: number; floorMultiplier: number };
+  };
+  migration: {
+    edgesPerTick: number;
+    weights: { contentment: number; headroom: number };
+    maxOutflowFraction: number;
+    gradientThreshold: number;
+    distanceDecay: number;
   };
   bots: {
     startingCredits: number;
@@ -104,8 +99,15 @@ export type SimConstantOverrides = {
   };
   ships?: Record<string, Partial<SimConstants["ships"][string]>>;
   universe?: Partial<SimConstants["universe"]>;
-  prosperity?: Partial<SimConstants["prosperity"]>;
   tradeFlow?: Partial<SimConstants["tradeFlow"]>;
+  population?: {
+    unrest?: Partial<SimConstants["population"]["unrest"]>;
+    dynamics?: Partial<SimConstants["population"]["dynamics"]>;
+    strike?: Partial<SimConstants["population"]["strike"]>;
+  };
+  migration?: Partial<Omit<SimConstants["migration"], "weights">> & {
+    weights?: Partial<SimConstants["migration"]["weights"]>;
+  };
   bots?: Partial<SimConstants["bots"]>;
 };
 
@@ -174,23 +176,27 @@ function buildDefaults(): SimConstants {
       gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
       intraRegionExtraEdges: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     },
-    prosperity: {
-      decayRate: PROSPERITY_DECAY_RATE,
-      maxGain: PROSPERITY_MAX_GAIN,
-      targetVolume: PROSPERITY_TARGET_VOLUME,
-      min: PROSPERITY_MIN,
-      max: PROSPERITY_MAX,
-      multAtMin: PROSPERITY_MULT_AT_MIN,
-      multAtZero: PROSPERITY_MULT_AT_ZERO,
-      multAtMax: PROSPERITY_MULT_AT_MAX,
-    },
     tradeFlow: {
-      processEveryNTicks: TRADE_SIMULATION.PROCESS_EVERY_N_TICKS,
+      edgesPerTick: TRADE_SIMULATION.EDGES_PER_TICK,
+      distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
       flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
       gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
       gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
       flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
       playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
+      playerVolumeTarget: TRADE_SIMULATION.PLAYER_VOLUME_TARGET,
+    },
+    population: {
+      unrest: { ...UNREST_PARAMS },
+      dynamics: { ...POPULATION_PARAMS },
+      strike: { ...STRIKE_PARAMS },
+    },
+    migration: {
+      edgesPerTick: MIGRATION_EDGES_PER_TICK,
+      weights: { ...MIGRATION_PARAMS.weights },
+      maxOutflowFraction: MIGRATION_PARAMS.maxOutflowFraction,
+      gradientThreshold: MIGRATION_PARAMS.gradientThreshold,
+      distanceDecay: MIGRATION_PARAMS.distanceDecay,
     },
     bots: {
       startingCredits: 500,
@@ -216,8 +222,19 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
     events: mergeEvents(base.events, overrides.events),
     ships: mergeRecord(base.ships, overrides.ships),
     universe: { ...base.universe, ...overrides.universe },
-    prosperity: { ...base.prosperity, ...overrides.prosperity },
     tradeFlow: { ...base.tradeFlow, ...overrides.tradeFlow },
+    population: {
+      unrest: { ...base.population.unrest, ...overrides.population?.unrest },
+      dynamics: { ...base.population.dynamics, ...overrides.population?.dynamics },
+      strike: { ...base.population.strike, ...overrides.population?.strike },
+    },
+    migration: {
+      edgesPerTick: overrides.migration?.edgesPerTick ?? base.migration.edgesPerTick,
+      weights: { ...base.migration.weights, ...overrides.migration?.weights },
+      maxOutflowFraction: overrides.migration?.maxOutflowFraction ?? base.migration.maxOutflowFraction,
+      gradientThreshold: overrides.migration?.gradientThreshold ?? base.migration.gradientThreshold,
+      distanceDecay: overrides.migration?.distanceDecay ?? base.migration.distanceDecay,
+    },
     bots: { ...base.bots, ...overrides.bots },
   };
 }

@@ -93,12 +93,24 @@ export interface TickContext {
   results: Map<string, TickProcessorResult>;
 }
 
+/**
+ * Transient economy-to-population signal threaded in-memory via `ctx.results`.
+ * Measures per-system demand-weighted satisfaction from post-tick stock.
+ * Not broadcast, not persisted.
+ */
+export interface EconomySignals {
+  /** Per-system convex demand-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
+  dissatisfactionBySystem: Map<string, number>;
+}
+
 /** Result returned by each processor. */
 export interface TickProcessorResult {
   /** Global events — broadcast to every connected client. */
   globalEvents?: Partial<GlobalEventMap>;
   /** Player-scoped events — only sent to the relevant player's SSE stream. */
   playerEvents?: Map<string, Partial<PlayerEventMap>>;
+  /** Transient cross-processor signals (economy → population). Not broadcast. */
+  economySignals?: EconomySignals;
 }
 
 /** A tick processor — one per game system. */

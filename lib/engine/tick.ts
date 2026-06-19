@@ -39,7 +39,7 @@ export interface EconomySimParams {
  * the opposite extreme; sqrt keeps rates active through mid-range and only drops
  * sharply near the extremes.
  */
-function selfLimitingFactor(
+export function selfLimitingFactor(
   value: number,
   min: number,
   max: number,
@@ -93,8 +93,7 @@ export function simulateEconomyTick(
 /**
  * Pre-resolved inputs for building a MarketTickEntry. Callers resolve
  * data-source-specific values (DB vs SimWorld) into this common shape; the
- * builder handles shared computation (trait bonus, gov consumption boost,
- * prosperity scaling).
+ * builder handles shared computation (trait bonus, gov consumption boost).
  */
 export interface TickEntryInput {
   goodId: string;
@@ -109,26 +108,22 @@ export interface TickEntryInput {
   govConsumptionBoost: number;
   /** System traits (already validated). */
   traits: GeneratedTrait[];
-  /** System prosperity value. */
-  prosperity: number;
+  /** Production-only suppression multiplier (1 = none). Strike state from unrest. */
+  productionSuppress?: number;
 }
 
 /**
  * Build a MarketTickEntry from pre-resolved inputs. Folds the government
- * consumption boost into the consumption rate and applies the prosperity
- * multiplier equally to both rates. Callers spread event
+ * consumption boost into the consumption rate. Callers spread event
  * productionMult/consumptionMult on top if present.
  */
-export function buildMarketTickEntry(
-  input: TickEntryInput,
-  prosperityParams: ProsperityParams,
-): MarketTickEntry {
-  const prosperityMult = getProsperityMultiplier(input.prosperity, prosperityParams);
+export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
+  const productionRate =
+    input.baseProductionRate != null
+      ? input.baseProductionRate * (input.productionSuppress ?? 1)
+      : undefined;
 
-  const productionBeforeProsperity =
-    input.baseProductionRate != null ? input.baseProductionRate : undefined;
-
-  const consumptionBeforeProsperity =
+  const consumptionRate =
     input.baseConsumptionRate != null
       ? input.baseConsumptionRate + input.govConsumptionBoost
       : undefined;
@@ -136,80 +131,10 @@ export function buildMarketTickEntry(
   return {
     goodId: input.goodId,
     stock: input.stock,
-    productionRate:
-      productionBeforeProsperity != null ? productionBeforeProsperity * prosperityMult : undefined,
-    consumptionRate:
-      consumptionBeforeProsperity != null ? consumptionBeforeProsperity * prosperityMult : undefined,
+    productionRate,
+    consumptionRate,
     volatility: input.volatility,
   };
-}
-
-// ── Prosperity system ───────────────────────────────────────────
-
-export interface ProsperityParams {
-  decayRate: number;
-  maxGain: number;
-  targetVolume: number;
-  min: number;
-  max: number;
-  multAtMin: number;
-  multAtZero: number;
-  multAtMax: number;
-}
-
-/**
- * Compute new prosperity value after one processor run.
- * Trade volume pushes toward +1, decay pulls toward 0.
- * Only events (not modeled here) can push below 0.
- */
-export function updateProsperity(
-  current: number,
-  tradeVolume: number,
-  params: ProsperityParams,
-): number {
-  // Gain from trade: proportional to volume, capped at maxGain
-  const volumeRatio = Math.min(tradeVolume / params.targetVolume, 1);
-  const gain = volumeRatio * params.maxGain;
-
-  // Decay toward 0 (at most decayRate per run, never overshooting past 0)
-  const absCurrent = Math.abs(current);
-  const decay = absCurrent > 0
-    ? Math.sign(current) * Math.min(params.decayRate, absCurrent)
-    : 0;
-
-  const next = current - decay + gain;
-  return clamp(next, params.min, params.max);
-}
-
-/**
- * Get the production/consumption multiplier from a prosperity value.
- * Both production and consumption get the SAME multiplier (no opposing tug-of-war).
- *
- * Piecewise linear:
- *   [-1, 0] → [multAtMin, multAtZero]
- *   [0, +1] → [multAtZero, multAtMax]
- */
-export function getProsperityMultiplier(prosperity: number, params: ProsperityParams): number {
-  if (prosperity <= 0) {
-    // Interpolate between multAtMin (-1) and multAtZero (0)
-    const t = (prosperity + 1); // 0 at -1, 1 at 0
-    return params.multAtMin + t * (params.multAtZero - params.multAtMin);
-  }
-  // Interpolate between multAtZero (0) and multAtMax (+1)
-  return params.multAtZero + prosperity * (params.multAtMax - params.multAtZero);
-}
-
-export type ProsperityLabel = "Crisis" | "Disrupted" | "Stagnant" | "Active" | "Booming";
-
-/**
- * Get the human-readable label for a prosperity value.
- */
-export function getProsperityLabel(prosperity: number): ProsperityLabel {
-  if (prosperity <= -0.5) return "Crisis";
-  if (prosperity <= -0.1) return "Disrupted";
-  if (prosperity <= 0.3) return "Stagnant";
-  if (prosperity <= 0.7) return "Active";
-  return "Booming";
 }
 
 // ── Ship arrival processing ─────────────────────────────────────

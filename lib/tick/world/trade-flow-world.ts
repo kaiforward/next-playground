@@ -2,27 +2,27 @@
  * TradeFlowWorld — data interface for the trade-flow processor.
  *
  * Adapters in `lib/tick/adapters/{prisma,memory}/trade-flow.ts` implement
- * this interface. Round-robin region selection and the gradient/budget math
- * live in the shared processor body (`runTradeFlowProcessor`).
+ * this interface. The flow topology is faction-bounded: an edge is "open"
+ * iff both endpoints share a faction (with `null===null` letting adjacent
+ * independent systems trade), regardless of region. Region lines no longer
+ * gate flow. Scheduling is a work-budget slice — the processor body advances
+ * a cursor over the stable open-edge order, processing `edgesPerTick` edges
+ * each tick, so per-tick DB work is bounded independently of faction size.
  *
- * See `docs/design/active/trade-simulation.md` for the broader pattern.
+ * See `docs/active/gameplay/trade-simulation.md` for the broader pattern.
  */
 
-/** Region row for round-robin selection. */
-export interface RegionView {
-  id: string;
-  name: string;
-}
-
 /**
- * One unique unordered edge within a region.
+ * One unique unordered open edge (both endpoints share a faction).
  *
  * Adapters dedupe the bidirectional SystemConnection rows by ordering the
  * endpoints (aSystemId < bSystemId) so the processor body sees each pair once.
+ * `fuelCost` is the distance source for attenuation.
  */
 export interface EdgeView {
   aSystemId: string;
   bSystemId: string;
+  fuelCost: number;
 }
 
 /**
@@ -51,12 +51,6 @@ export interface MarketUpdate {
   stock: number;
 }
 
-/** Increment to a system's tradeVolumeAccum (mirrors player-trade bookkeeping). */
-export interface VolumeIncrement {
-  systemId: string;
-  amount: number;
-}
-
 /** One flow event — appended to TradeFlow. */
 export interface FlowEventInsert {
   tick: number;
@@ -67,27 +61,17 @@ export interface FlowEventInsert {
 }
 
 export interface TradeFlowWorld {
-  /** Regions, ordered alphabetically by name (round-robin source). */
-  getRegions(): Promise<RegionView[]>;
+  /** All open (same-faction; null===null for adjacent independents) deduped edges, stably ordered. */
+  getOpenEdges(): Promise<EdgeView[]>;
 
-  /** Unique unordered intra-region edges in the given region. */
-  getEdgesForRegion(regionId: string): Promise<EdgeView[]>;
+  /** Markets at the given systems. */
+  getMarketSnapshotsForSystems(systemIds: string[]): Promise<MarketSnapshot[]>;
 
-  /** Markets at every system in the region. */
-  getMarketSnapshotsForRegion(regionId: string): Promise<MarketSnapshot[]>;
-
-  /**
-   * Approximate recent player trade volume in the region. Used to throttle
-   * flow when players are providing trade pressure themselves.
-   * Returns 0 when the data source is unavailable (sim baseline).
-   */
-  getRecentPlayerVolume(regionId: string): Promise<number>;
+  /** Recent player trade volume per system (0 when unavailable / sim baseline). */
+  getRecentPlayerVolumeBySystem(systemIds: string[]): Promise<Map<string, number>>;
 
   /** Bulk-write market stock (absolute, already-clamped values). */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
-
-  /** Bulk-increment tradeVolumeAccum on systems. */
-  applyVolumeIncrements(increments: VolumeIncrement[]): Promise<void>;
 
   /** Append flow events to TradeFlow. */
   appendFlowEvents(events: FlowEventInsert[]): Promise<void>;
@@ -98,8 +82,8 @@ export interface TradeFlowWorld {
 
 /** Per-tick params passed alongside the world. */
 export interface TradeFlowProcessorParams {
-  /** Process flow every N ticks (round-robin per region). */
-  processEveryNTicks: number;
+  /** Work-budget slice size: edges processed per tick (replaces processEveryNTicks + region round-robin). */
+  edgesPerTick: number;
   /** Max units of one good moved per edge per processor run. */
   flowBudget: number;
   /** Price gradient threshold below which no flow occurs (fraction of basePrice). */
@@ -108,12 +92,14 @@ export interface TradeFlowProcessorParams {
   gradientSensitivity: number;
   /** Retention window for flow events (in ticks). */
   flowHistoryTicks: number;
-  /** Player activity fully displaces edge flow at this multiple of targetVolume. */
+  /** Player activity fully displaces edge flow at this multiple of playerVolumeTarget. */
   playerDisplacementFactor: number;
-  /** Per-region target trade volume used to normalize player pressure. */
-  prosperityTargetVolume: number;
+  /** Per-system target trade volume used to normalize player pressure. */
+  playerVolumeTarget: number;
   /** Stock floor — flow can't draw a market below this. */
   minLevel: number;
   /** Stock ceiling — flow can't push a market above this. */
   maxLevel: number;
+  /** Distance attenuation: factor = 1/(1 + distanceDecay·fuelCost). 0 = no-op. */
+  distanceDecay: number;
 }

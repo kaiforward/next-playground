@@ -1,107 +1,56 @@
 import type {
-  EdgeView,
-  FlowEventInsert,
-  MarketSnapshot,
-  MarketUpdate,
-  RegionView,
+  EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
   TradeFlowWorld,
-  VolumeIncrement,
 } from "@/lib/tick/world/trade-flow-world";
+import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type {
-  SimConnection,
-  SimFlowEvent,
-  SimMarketEntry,
-  SimRegion,
-  SimSystem,
+  SimConnection, SimFlowEvent, SimMarketEntry, SimSystem,
 } from "@/lib/engine/simulator/types";
 
 /**
  * In-memory adapter for the trade-flow processor.
  *
- * Owns mutable slices of the simulator's world for the duration of one
- * `runTradeFlowProcessor` call. Markets, systems, and flow events are
- * mutated in place; the caller reads the final arrays via the public fields
- * once the processor returns.
- *
- * The synthetic `MarketSnapshot.id` (`"${systemId}|${goodId}"`) round-trips
- * into `MarketUpdate.id`, letting the adapter locate the underlying
- * SimMarketEntry by composite key on write.
+ * Owns mutable slices of the simulator's world for one runTradeFlowProcessor
+ * call. Open edges are the unique same-faction (null===null for independents)
+ * connections, sorted by key, each carrying fuelCost. The synthetic
+ * MarketSnapshot.id ("${systemId}|${goodId}") round-trips into MarketUpdate.id.
  */
 export class InMemoryTradeFlowWorld implements TradeFlowWorld {
   systems: SimSystem[];
   markets: SimMarketEntry[];
   flowEvents: SimFlowEvent[];
-  /**
-   * Cached systemId → regionId map. Built lazily on first read. Safe to
-   * memoize for the world's lifetime: `applyVolumeIncrements` rewrites the
-   * systems array but preserves every (id, regionId) pair.
-   */
-  private sysRegionCache: Map<string, string> | null = null;
+  private sysFactionCache: Map<string, string | null> | null = null;
+  private openEdgesCache: EdgeView[] | null = null;
 
   constructor(
-    initial: {
-      systems: SimSystem[];
-      markets: SimMarketEntry[];
-      flowEvents: SimFlowEvent[];
-    },
-    private readonly regions: SimRegion[],
+    initial: { systems: SimSystem[]; markets: SimMarketEntry[]; flowEvents: SimFlowEvent[] },
     private readonly connections: SimConnection[],
-    /**
-     * Optional player-pressure injection for tests — the simulator itself
-     * has no TradeHistory equivalent, so production sim runs see 0.
-     */
-    private readonly playerVolumeByRegion: ReadonlyMap<string, number> = new Map(),
+    /** Optional per-system player-volume injection for tests; sim baseline is empty. */
+    private readonly playerVolumeBySystem: ReadonlyMap<string, number> = new Map(),
   ) {
     this.systems = initial.systems.map((s) => ({ ...s }));
     this.markets = initial.markets.map((m) => ({ ...m }));
     this.flowEvents = [...initial.flowEvents];
   }
 
-  private getSysRegion(): Map<string, string> {
-    if (!this.sysRegionCache) {
-      this.sysRegionCache = new Map(
-        this.systems.map((s) => [s.id, s.regionId]),
-      );
+  private getSysFaction(): Map<string, string | null> {
+    if (!this.sysFactionCache) {
+      this.sysFactionCache = new Map(this.systems.map((s) => [s.id, s.factionId]));
     }
-    return this.sysRegionCache;
+    return this.sysFactionCache;
   }
 
-  getRegions(): Promise<RegionView[]> {
-    const sorted = [...this.regions].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-    return Promise.resolve(sorted.map((r) => ({ id: r.id, name: r.name })));
+  getOpenEdges(): Promise<EdgeView[]> {
+    if (this.openEdgesCache) return Promise.resolve(this.openEdgesCache);
+    this.openEdgesCache = buildOpenEdges(this.connections, this.getSysFaction());
+    return Promise.resolve(this.openEdgesCache);
   }
 
-  getEdgesForRegion(regionId: string): Promise<EdgeView[]> {
-    const sysRegion = this.getSysRegion();
-    const seen = new Set<string>();
-    const edges: EdgeView[] = [];
-    for (const c of this.connections) {
-      if (c.fromSystemId === c.toSystemId) continue;
-      if (
-        sysRegion.get(c.fromSystemId) !== regionId ||
-        sysRegion.get(c.toSystemId) !== regionId
-      ) {
-        continue;
-      }
-      const [a, b] =
-        c.fromSystemId < c.toSystemId
-          ? [c.fromSystemId, c.toSystemId]
-          : [c.toSystemId, c.fromSystemId];
-      const key = `${a}|${b}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({ aSystemId: a, bSystemId: b });
-    }
-    return Promise.resolve(edges);
-  }
-
-  getMarketSnapshotsForRegion(regionId: string): Promise<MarketSnapshot[]> {
-    const sysRegion = this.getSysRegion();
+  getMarketSnapshotsForSystems(systemIds: string[]): Promise<MarketSnapshot[]> {
+    const ids = new Set(systemIds);
     const snapshots: MarketSnapshot[] = [];
     for (const m of this.markets) {
-      if (sysRegion.get(m.systemId) !== regionId) continue;
+      if (!ids.has(m.systemId)) continue;
       snapshots.push({
         id: `${m.systemId}|${m.goodId}`,
         systemId: m.systemId,
@@ -117,35 +66,23 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
     return Promise.resolve(snapshots);
   }
 
-  getRecentPlayerVolume(regionId: string): Promise<number> {
-    return Promise.resolve(this.playerVolumeByRegion.get(regionId) ?? 0);
+  getRecentPlayerVolumeBySystem(systemIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    for (const id of systemIds) {
+      const v = this.playerVolumeBySystem.get(id);
+      if (v) result.set(id, v);
+    }
+    return Promise.resolve(result);
   }
 
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
     const byKey = new Map<string, MarketUpdate>();
     for (const u of updates) byKey.set(u.id, u);
-
     this.markets = this.markets.map((m) => {
       const u = byKey.get(`${m.systemId}|${m.goodId}`);
       if (!u) return m;
       return { ...m, stock: isFinite(u.stock) ? u.stock : 0 };
-    });
-    return Promise.resolve();
-  }
-
-  applyVolumeIncrements(increments: VolumeIncrement[]): Promise<void> {
-    if (increments.length === 0) return Promise.resolve();
-    const bySystem = new Map<string, number>();
-    for (const inc of increments) {
-      const amount = isFinite(inc.amount) ? Math.round(inc.amount) : 0;
-      bySystem.set(inc.systemId, (bySystem.get(inc.systemId) ?? 0) + amount);
-    }
-
-    this.systems = this.systems.map((s) => {
-      const delta = bySystem.get(s.id);
-      if (!delta) return s;
-      return { ...s, tradeVolumeAccum: s.tradeVolumeAccum + delta };
     });
     return Promise.resolve();
   }

@@ -21,20 +21,22 @@ export interface SimSystem {
   name: string;
   economyType: EconomyType;
   regionId: string;
+  /** Owning faction's stable id, or null for independent systems. Drives the faction-bounded flow topology. */
+  factionId: string | null;
   /** Owning faction's government — sourced per-system. */
   governmentType: GovernmentType;
   /** System aggregate resource vector — drives substrate production rates. */
   aggregate: ResourceVector;
   /** Abstract population magnitude — drives labour + per-capita consumption. */
   population: number;
+  /** Maximum sustainable population (logistic growth cap). */
+  popCap: number;
   /** System traits from generation (used for production modifiers). */
   traits: { traitId: string; quality: number }[];
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
   bodyDanger: number;
-  /** Prosperity value (-1 to +1). Trade-driven, amplifies production and consumption equally. */
-  prosperity: number;
-  /** Accumulated trade volume (quantity bought+sold) since last economy processor run. */
-  tradeVolumeAccum: number;
+  /** Unrest accumulator (0…1) — integral of demand-weighted dissatisfaction. */
+  unrest: number;
 }
 
 export interface SimConnection {
@@ -357,6 +359,12 @@ export interface SimResults {
   label?: string;
   /** Total wall-clock time in ms. */
   elapsedMs: number;
+  /** Final world state after all ticks (for post-run analysis). */
+  finalWorld: SimWorld;
+  /** Total population summed across all systems at tick 0 (before the loop). */
+  initialPopulationTotal: number;
+  /** Population snapshots sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
+  populationSnapshots: Array<Map<string, number>>;
 }
 
 export interface RegionOverviewEntry {

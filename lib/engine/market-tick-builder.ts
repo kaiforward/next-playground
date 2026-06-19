@@ -3,7 +3,7 @@
  *
  * Both the live economy processor and the simulator build MarketTickEntry
  * objects through the same pipeline: good constants → government volatility
- * scaling → trait bonus → prosperity → event production/consumption modifiers.
+ * scaling → trait bonus → event production/consumption modifiers.
  * (The legacy equilibrium-spread / self-sufficiency steps are gone — there is
  * no equilibrium target in the stock model.)
  */
@@ -11,7 +11,7 @@
 import { GOODS } from "@/lib/constants/goods";
 import { type GovernmentDefinition } from "@/lib/constants/government";
 import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
-import { buildMarketTickEntry, type MarketTickEntry, type ProsperityParams } from "@/lib/engine/tick";
+import { buildMarketTickEntry, type MarketTickEntry } from "@/lib/engine/tick";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 /** Result of resolving a market tick: the stock-sim entry plus the pricing anchor. */
 export interface ResolvedMarketTick {
@@ -36,12 +36,12 @@ export interface MarketTickInput {
   govDef?: GovernmentDefinition;
   /** System traits (already validated). */
   traits: GeneratedTrait[];
-  /** System prosperity value. */
-  prosperity: number;
   /** Active economy modifiers for this system (already filtered). */
   modifiers: ModifierRow[];
   /** Modifier caps from constants. */
   modifierCaps: ModifierCaps;
+  /** Production-only suppression multiplier (1 = none). Strike state from unrest. */
+  productionSuppress?: number;
 }
 
 /**
@@ -50,10 +50,7 @@ export interface MarketTickInput {
  * the stock-sim `entry` and the pricing `anchorMult` (derived from the same
  * modifier aggregation) so the caller never re-aggregates.
  */
-export function resolveMarketTickEntry(
-  input: MarketTickInput,
-  prosperityParams: ProsperityParams,
-): ResolvedMarketTick {
+export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTick {
   const goodDef = GOODS[input.goodId];
 
   // Government scales volatility (amplifies/dampens noise).
@@ -62,19 +59,16 @@ export function resolveMarketTickEntry(
     ? baseVolatility * input.govDef.volatilityModifier
     : baseVolatility;
 
-  const entry = buildMarketTickEntry(
-    {
-      goodId: input.goodId,
-      stock: input.stock,
-      volatility,
-      baseProductionRate: input.baseProductionRate,
-      baseConsumptionRate: input.baseConsumptionRate,
-      govConsumptionBoost: input.govDef?.consumptionBoosts[input.goodId] ?? 0,
-      traits: input.traits,
-      prosperity: input.prosperity,
-    },
-    prosperityParams,
-  );
+  const entry = buildMarketTickEntry({
+    goodId: input.goodId,
+    stock: input.stock,
+    volatility,
+    baseProductionRate: input.baseProductionRate,
+    baseConsumptionRate: input.baseConsumptionRate,
+    govConsumptionBoost: input.govDef?.consumptionBoosts[input.goodId] ?? 0,
+    traits: input.traits,
+    productionSuppress: input.productionSuppress,
+  });
 
   if (input.modifiers.length === 0) return { entry, anchorMult: 1 };
 

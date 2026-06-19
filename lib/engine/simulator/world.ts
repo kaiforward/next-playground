@@ -13,7 +13,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { toGovernmentType } from "@/lib/types/guards";
 import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock, marketDemandRate } from "@/lib/constants/market-economy";
+import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -73,13 +73,14 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       name: s.name,
       economyType: econ,
       regionId: `region-${s.regionIndex}`,
+      factionId: `faction-${universe.systemFactionAssignments[s.index]}`,
       governmentType: toGovernmentType(owningFaction.governmentType),
       aggregate: s.aggregate,
       population: s.population,
+      popCap: s.popCap,
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
       bodyDanger: s.bodyDanger,
-      prosperity: 0,
-      tradeVolumeAccum: 0,
+      unrest: 0,
     };
   });
 
@@ -107,7 +108,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         basePrice,
         stock: getInitialStock(sys.aggregate, sys.population, goodKey),
         anchorMult: 1,
-        demandRate: marketDemandRate(sys.aggregate, sys.population, goodKey),
+        demandRate: demandRateForGood(goodKey, sys.population),
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
       });

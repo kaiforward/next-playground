@@ -3,12 +3,9 @@ import {
   simulateEconomyTick,
   buildMarketTickEntry,
   processShipArrivals,
-  updateProsperity,
-  getProsperityMultiplier,
-  getProsperityLabel,
+  selfLimitingFactor,
   type MarketTickEntry,
   type EconomySimParams,
-  type ProsperityParams,
 } from "../tick";
 
 const PARAMS: EconomySimParams = {
@@ -81,153 +78,130 @@ describe("simulateEconomyTick — noise", () => {
 });
 
 describe("buildMarketTickEntry", () => {
-  const prosperityParams: ProsperityParams = {
-    decayRate: 0.03, maxGain: 0.1, targetVolume: 50,
-    min: -1, max: 1, multAtMin: 0.3, multAtZero: 0.7, multAtMax: 1.3,
-  };
-
-  it("scales production and consumption by the prosperity multiplier", () => {
-    const e = buildMarketTickEntry(
-      {
-        goodId: "food",
-        stock: 100,
-        volatility: 1,
-        baseProductionRate: 10,
-        baseConsumptionRate: undefined,
-        govConsumptionBoost: 0,
-        traits: [],
-        prosperity: 1, // multAtMax = 1.3
-      },
-      prosperityParams,
-    );
-    expect(e.productionRate).toBeCloseTo(13, 5); // 10 * 1.3
+  it("passes through the base production rate unmodified", () => {
+    const e = buildMarketTickEntry({
+      goodId: "food",
+      stock: 100,
+      volatility: 1,
+      baseProductionRate: 10,
+      baseConsumptionRate: undefined,
+      govConsumptionBoost: 0,
+      traits: [],
+    });
+    expect(e.productionRate).toBeCloseTo(10, 5);
     expect(e.stock).toBe(100);
   });
 
   it("ignores traits when computing production — they no longer grant a bonus", () => {
-    const e = buildMarketTickEntry(
-      {
-        goodId: "food",
-        stock: 100,
-        volatility: 1,
-        baseProductionRate: 10,
-        baseConsumptionRate: undefined,
-        govConsumptionBoost: 0,
-        traits: [{ traitId: "precursor_ruins", quality: 3 }],
-        prosperity: 1,
-      },
-      prosperityParams,
-    );
-    expect(e.productionRate).toBeCloseTo(13, 5);
+    const e = buildMarketTickEntry({
+      goodId: "food",
+      stock: 100,
+      volatility: 1,
+      baseProductionRate: 10,
+      baseConsumptionRate: undefined,
+      govConsumptionBoost: 0,
+      traits: [{ traitId: "precursor_ruins", quality: 3 }],
+    });
+    expect(e.productionRate).toBeCloseTo(10, 5);
   });
 
   it("folds the government consumption boost into a consumed good's rate", () => {
-    const e = buildMarketTickEntry(
-      {
-        goodId: "food",
-        stock: 100,
-        volatility: 1,
-        baseProductionRate: undefined,
-        baseConsumptionRate: 10,
-        govConsumptionBoost: 5,
-        traits: [],
-        prosperity: 0, // multAtZero = 0.7
-      },
-      prosperityParams,
-    );
-    expect(e.consumptionRate).toBeCloseTo((10 + 5) * 0.7, 5); // (base + boost) * mult
+    const e = buildMarketTickEntry({
+      goodId: "food",
+      stock: 100,
+      volatility: 1,
+      baseProductionRate: undefined,
+      baseConsumptionRate: 10,
+      govConsumptionBoost: 5,
+      traits: [],
+    });
+    expect(e.consumptionRate).toBeCloseTo(10 + 5, 5); // base + boost
   });
 
   it("ignores a government boost on a good the system does not consume", () => {
-    const e = buildMarketTickEntry(
-      {
-        goodId: "food",
-        stock: 100,
-        volatility: 1,
-        baseProductionRate: undefined,
-        baseConsumptionRate: undefined,
-        govConsumptionBoost: 5,
-        traits: [],
-        prosperity: 0,
-      },
-      prosperityParams,
-    );
+    const e = buildMarketTickEntry({
+      goodId: "food",
+      stock: 100,
+      volatility: 1,
+      baseProductionRate: undefined,
+      baseConsumptionRate: undefined,
+      govConsumptionBoost: 5,
+      traits: [],
+    });
     expect(e.consumptionRate).toBeUndefined(); // no base rate ⇒ boost cannot create consumption
   });
 
   it("leaves consumption undefined when there is no base rate and no boost", () => {
-    const e = buildMarketTickEntry(
-      {
-        goodId: "food",
-        stock: 100,
-        volatility: 1,
-        baseProductionRate: undefined,
-        baseConsumptionRate: undefined,
-        govConsumptionBoost: 0,
-        traits: [],
-        prosperity: 0,
-      },
-      prosperityParams,
-    );
+    const e = buildMarketTickEntry({
+      goodId: "food",
+      stock: 100,
+      volatility: 1,
+      baseProductionRate: undefined,
+      baseConsumptionRate: undefined,
+      govConsumptionBoost: 0,
+      traits: [],
+    });
     expect(e.consumptionRate).toBeUndefined();
   });
 });
 
-// ── Prosperity system ───────────────────────────────────────────
+// ── selfLimitingFactor ───────────────────────────────────────────
 
-describe("updateProsperity", () => {
-  const params: ProsperityParams = {
-    decayRate: 0.03, maxGain: 0.1, targetVolume: 50,
-    min: -1, max: 1, multAtMin: 0.3, multAtZero: 0.7, multAtMax: 1.3,
-  };
+describe("selfLimitingFactor", () => {
+  const MIN = 5;
+  const MAX = 105;
 
-  it("gains from trade volume, capped at maxGain", () => {
-    expect(updateProsperity(0, 50, params)).toBeCloseTo(0.1, 5); // full target → maxGain
-    expect(updateProsperity(0, 500, params)).toBeCloseTo(0.1, 5); // 10× target still caps
-    expect(updateProsperity(0, 25, params)).toBeCloseTo(0.05, 5); // half target → half gain
+  it("returns 0 when min === max (degenerate range)", () => {
+    expect(selfLimitingFactor(50, 50, 50, "produce")).toBe(0);
+    expect(selfLimitingFactor(50, 50, 50, "consume")).toBe(0);
   });
 
-  it("decays toward zero by at most decayRate, never overshooting", () => {
-    expect(updateProsperity(0.5, 0, params)).toBeCloseTo(0.47, 5); // 0.5 − 0.03
-    expect(updateProsperity(-0.5, 0, params)).toBeCloseTo(-0.47, 5); // pulls up toward 0
-    expect(updateProsperity(0.02, 0, params)).toBeCloseTo(0, 5); // decay clipped to |current|
+  it("consume: returns 0 at the floor (value === min)", () => {
+    expect(selfLimitingFactor(MIN, MIN, MAX, "consume")).toBe(0);
   });
 
-  it("clamps the result to [min, max]", () => {
-    expect(updateProsperity(0.98, 50, params)).toBe(1); // 0.98 − 0.03 + 0.1 = 1.05 → 1
-  });
-});
-
-describe("getProsperityMultiplier", () => {
-  const params: ProsperityParams = {
-    decayRate: 0.03, maxGain: 0.1, targetVolume: 50,
-    min: -1, max: 1, multAtMin: 0.3, multAtZero: 0.7, multAtMax: 1.3,
-  };
-
-  it("hits the anchor multipliers at -1, 0, +1", () => {
-    expect(getProsperityMultiplier(-1, params)).toBeCloseTo(0.3, 5);
-    expect(getProsperityMultiplier(0, params)).toBeCloseTo(0.7, 5);
-    expect(getProsperityMultiplier(1, params)).toBeCloseTo(1.3, 5);
+  it("consume: returns 1 at the ceiling (value === max)", () => {
+    expect(selfLimitingFactor(MAX, MIN, MAX, "consume")).toBe(1);
   });
 
-  it("interpolates linearly within each half", () => {
-    expect(getProsperityMultiplier(-0.5, params)).toBeCloseTo(0.5, 5); // midpoint of [0.3, 0.7]
-    expect(getProsperityMultiplier(0.5, params)).toBeCloseTo(1.0, 5); // midpoint of [0.7, 1.3]
+  it("produce: returns 0 at the ceiling (value === max)", () => {
+    expect(selfLimitingFactor(MAX, MIN, MAX, "produce")).toBe(0);
   });
-});
 
-describe("getProsperityLabel", () => {
-  it("maps prosperity values to bands at their boundaries", () => {
-    expect(getProsperityLabel(-0.6)).toBe("Crisis");
-    expect(getProsperityLabel(-0.5)).toBe("Crisis"); // inclusive upper edge
-    expect(getProsperityLabel(-0.3)).toBe("Disrupted");
-    expect(getProsperityLabel(-0.1)).toBe("Disrupted");
-    expect(getProsperityLabel(0)).toBe("Stagnant");
-    expect(getProsperityLabel(0.3)).toBe("Stagnant");
-    expect(getProsperityLabel(0.5)).toBe("Active");
-    expect(getProsperityLabel(0.7)).toBe("Active");
-    expect(getProsperityLabel(0.9)).toBe("Booming");
-    expect(getProsperityLabel(1)).toBe("Booming");
+  it("produce: returns 1 at the floor (value === min)", () => {
+    expect(selfLimitingFactor(MIN, MIN, MAX, "produce")).toBe(1);
+  });
+
+  it("produce and consume branches differ at mid-range value", () => {
+    const mid = (MIN + MAX) / 2;
+    const p = selfLimitingFactor(mid, MIN, MAX, "produce");
+    const c = selfLimitingFactor(mid, MIN, MAX, "consume");
+    // At the exact midpoint both branches collapse to the same sqrt(0.5).
+    expect(p).toBeCloseTo(Math.sqrt(0.5), 6);
+    expect(c).toBeCloseTo(Math.sqrt(0.5), 6);
+    // Off-midpoint they diverge: produce reads remaining headroom, consume reads fill.
+    const offMid = MIN + (MAX - MIN) * 0.3;
+    const pOff = selfLimitingFactor(offMid, MIN, MAX, "produce"); // headroom 0.7 → sqrt(0.7)
+    const cOff = selfLimitingFactor(offMid, MIN, MAX, "consume"); // fill 0.3 → sqrt(0.3)
+    expect(pOff).toBeCloseTo(Math.sqrt(0.7), 6);
+    expect(cOff).toBeCloseTo(Math.sqrt(0.3), 6);
+    expect(pOff).toBeGreaterThan(cOff);
+  });
+
+  it("clamps gracefully when value is below min (consume returns 0)", () => {
+    expect(selfLimitingFactor(MIN - 10, MIN, MAX, "consume")).toBe(0);
+  });
+
+  it("clamps gracefully when value is above max (produce returns 0)", () => {
+    expect(selfLimitingFactor(MAX + 10, MIN, MAX, "produce")).toBe(0);
+  });
+
+  it("clamps gracefully when value is below min (produce returns 1)", () => {
+    expect(selfLimitingFactor(MIN - 10, MIN, MAX, "produce")).toBe(1);
+  });
+
+  it("clamps gracefully when value is above max (consume returns 1)", () => {
+    expect(selfLimitingFactor(MAX + 10, MIN, MAX, "consume")).toBe(1);
   });
 });
 

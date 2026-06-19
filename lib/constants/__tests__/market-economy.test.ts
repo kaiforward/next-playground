@@ -5,8 +5,9 @@ import {
   TARGET_COVER,
   getSpread,
   getInitialStock,
-  marketDemandRate,
+  demandRateForGood,
   MIN_DEMAND,
+  demandFootprint,
 } from "../market-economy";
 import { GOVERNMENT_TYPES } from "../government";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
@@ -19,24 +20,24 @@ describe("stock bounds", () => {
   });
 });
 
-describe("marketDemandRate", () => {
+describe("demandRateForGood", () => {
   it("returns per-capita-need × population for a populated system", () => {
-    const rate = marketDemandRate(makeResourceVector({}), 1000, "water");
+    const rate = demandRateForGood("water", 1000);
     expect(rate).toBeCloseTo(GOOD_CONSUMPTION.water * 1000);
   });
 
   it("scales linearly with population", () => {
-    const low = marketDemandRate(makeResourceVector({}), 500, "food");
-    const high = marketDemandRate(makeResourceVector({}), 1000, "food");
+    const low = demandRateForGood("food", 500);
+    const high = demandRateForGood("food", 1000);
     expect(high).toBeCloseTo(low * 2);
   });
 
   it("floors at MIN_DEMAND for a zero-population system", () => {
-    expect(marketDemandRate(makeResourceVector({}), 0, "luxuries")).toBe(MIN_DEMAND);
+    expect(demandRateForGood("luxuries", 0)).toBe(MIN_DEMAND);
   });
 
   it("floors at MIN_DEMAND for an unknown good", () => {
-    expect(marketDemandRate(makeResourceVector({}), 1000, "not_a_good")).toBe(MIN_DEMAND);
+    expect(demandRateForGood("not_a_good", 1000)).toBe(MIN_DEMAND);
   });
 });
 
@@ -44,14 +45,14 @@ describe("getInitialStock", () => {
   it("seeds a net producer above its reference (deeper cover → cheap)", () => {
     // Water-rich, low-pop system: strong net water producer.
     const agg = makeResourceVector({ water: 12 });
-    const reference = TARGET_COVER * marketDemandRate(agg, 100, "water");
+    const reference = TARGET_COVER * demandRateForGood("water", 100);
     const seed = getInitialStock(agg, 100, "water");
     expect(seed).toBeGreaterThan(reference);
   });
 
   it("seeds a net consumer below its reference (shallower cover → dear)", () => {
     const agg = makeResourceVector({ water: 0 });
-    const reference = TARGET_COVER * marketDemandRate(agg, 2000, "water");
+    const reference = TARGET_COVER * demandRateForGood("water", 2000);
     const seed = getInitialStock(agg, 2000, "water");
     expect(seed).toBeLessThan(reference);
   });
@@ -89,5 +90,21 @@ describe("getSpread", () => {
     expect(frontier).toBeCloseTo(0.06, 5);
     expect(auth).toBeCloseTo(0.0425, 5);
     expect(frontier).toBeGreaterThan(auth);
+  });
+});
+
+describe("demandFootprint", () => {
+  it("lists consumed goods descending by demand, scaled by population", () => {
+    const f = demandFootprint(10_000);
+    expect(f.length).toBeGreaterThan(0);
+    for (let i = 1; i < f.length; i++) {
+      expect(f[i - 1].demandRate).toBeGreaterThanOrEqual(f[i].demandRate);
+    }
+    expect(f[0].demandRate).toBeCloseTo(demandRateForGood(f[0].goodId, 10_000), 6);
+    // water/food carry the highest per-capita need (0.004), so they lead at scale.
+    expect(["water", "food"]).toContain(f[0].goodId);
+  });
+  it("floors every good at MIN_DEMAND for a zero population", () => {
+    expect(demandFootprint(0).every((e) => e.demandRate === MIN_DEMAND)).toBe(true);
   });
 });

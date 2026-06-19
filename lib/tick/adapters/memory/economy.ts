@@ -2,8 +2,6 @@ import type {
   EconomyWorld,
   MarketUpdate,
   MarketView,
-  ProsperityUpdate,
-  ProsperityView,
   RegionView,
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
@@ -103,18 +101,11 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     return Promise.resolve(out);
   }
 
-  getProsperity(systemIds: string[]): Promise<ProsperityView[]> {
-    const sysSet = new Set(systemIds);
-    const out: ProsperityView[] = [];
-    for (const s of this.systems) {
-      if (!sysSet.has(s.id)) continue;
-      out.push({
-        systemId: s.id,
-        prosperity: s.prosperity,
-        tradeVolumeAccum: s.tradeVolumeAccum,
-      });
-    }
-    return Promise.resolve(out);
+  getUnrest(systemIds: string[]): Promise<Map<string, number>> {
+    const ids = new Set(systemIds);
+    const result = new Map<string, number>();
+    for (const s of this.systems) if (ids.has(s.id)) result.set(s.id, s.unrest);
+    return Promise.resolve(result);
   }
 
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {
@@ -129,24 +120,6 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         ...m,
         stock: isFinite(u.stock) ? u.stock : 0,
         anchorMult: isFinite(u.anchorMult) ? u.anchorMult : 1,
-      };
-    });
-    return Promise.resolve();
-  }
-
-  applyProsperityUpdates(updates: ProsperityUpdate[]): Promise<void> {
-    if (updates.length === 0) return Promise.resolve();
-    const bySystem = new Map(updates.map((u) => [u.systemId, u]));
-
-    this.systems = this.systems.map((s) => {
-      const u = bySystem.get(s.id);
-      if (!u) return s;
-      const nextProsperity = isFinite(u.prosperity) ? u.prosperity : 0;
-      const nextVolume = Math.max(0, s.tradeVolumeAccum - u.capturedVolume);
-      return {
-        ...s,
-        prosperity: nextProsperity,
-        tradeVolumeAccum: nextVolume,
       };
     });
     return Promise.resolve();

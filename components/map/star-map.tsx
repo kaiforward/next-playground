@@ -17,13 +17,13 @@ import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useMapMode } from "@/lib/hooks/use-map-mode";
-import { useProsperity } from "@/lib/hooks/use-prosperity";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
+import { useStability } from "@/lib/hooks/use-stability";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 import { useGoods } from "@/lib/hooks/use-goods";
@@ -60,9 +60,9 @@ export function StarMap({
 
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
-  const prosperityBySystem = useProsperity(mapMode === "prosperity");
   const { overlays, toggle } = useMapOverlays();
   const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
+  const stabilityBySystem = useStability(mapMode === "stability");
 
   // ── Live tick + in-transit marker selection ───────────────────
   const { currentTick } = useTickContext();
@@ -318,7 +318,6 @@ export function StarMap({
         onReady={handleReady}
         regionInfos={regionInfos}
         mapMode={mapMode}
-        prosperityBySystem={prosperityBySystem}
         onViewportChange={onViewportChange}
         connections={allConnections}
         currentTick={currentTick}
@@ -327,6 +326,7 @@ export function StarMap({
         showEvents={overlays.events}
         selectedTransitId={selectedTransitId}
         onTransitClick={onTransitClick}
+        stabilityBySystem={stabilityBySystem}
       />
 
       {/* Dev-only zoom/LOD readout for tuning pixi/lod.ts thresholds. */}

@@ -4,7 +4,7 @@ import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-color
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
-import { PROSPERITY_RAMP_STOPS } from "@/lib/utils/prosperity";
+import { STABILITY_RAMP_STOPS } from "@/lib/utils/stability";
 import { RadioGroup } from "@/components/form/radio-group";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import {
@@ -17,7 +17,7 @@ import {
 const MODE_LABELS: Record<MapMode, string> = {
   political: "Political",
   regions: "Regions",
-  prosperity: "Prosperity",
+  stability: "Stability",
   none: "None",
 };
 
@@ -48,9 +48,9 @@ const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
 const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({
   value: m,
   label: MODE_LABELS[m],
-  // Prosperity's tint→meaning mapping isn't self-evident, so carry a hover/focus
+  // Stability's tint→meaning mapping isn't self-evident, so carry a hover/focus
   // legend in a tooltip — matching the Overlays section, no permanent height.
-  tooltip: m === "prosperity" ? <ProsperityRampLegend /> : undefined,
+  tooltip: m === "stability" ? <StabilityRampLegend /> : undefined,
 }));
 
 interface MapOverlayControlsProps {
@@ -174,28 +174,28 @@ function PriceRampLegend() {
   );
 }
 
-const PROSPERITY_RAMP = [
-  PROSPERITY_RAMP_STOPS.Crisis,
-  PROSPERITY_RAMP_STOPS.Disrupted,
-  PROSPERITY_RAMP_STOPS.Stagnant,
-  PROSPERITY_RAMP_STOPS.Active,
-  PROSPERITY_RAMP_STOPS.Booming,
+const STABILITY_RAMP = [
+  STABILITY_RAMP_STOPS.Stable,
+  STABILITY_RAMP_STOPS.Calm,
+  STABILITY_RAMP_STOPS.Tense,
+  STABILITY_RAMP_STOPS.Unrest,
+  STABILITY_RAMP_STOPS.Strike,
 ].join(", ");
 
-function ProsperityRampLegend() {
+function StabilityRampLegend() {
   return (
     <div>
       <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-        Prosperity
+        Stability
       </h5>
       <div
         className="h-2 w-full"
-        style={{ background: `linear-gradient(to right, ${PROSPERITY_RAMP})` }}
+        style={{ background: `linear-gradient(to right, ${STABILITY_RAMP})` }}
         aria-hidden
       />
       <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
-        <span>Crisis</span>
-        <span>Booming</span>
+        <span>Stable</span>
+        <span>Strike</span>
       </div>
     </div>
   );

@@ -29,15 +29,18 @@ export const queryKeys = {
   // Visibility + dynamic data (separated concerns)
   visibility: ["visibility"] as const,
   dynamicVisible: ["dynamicVisible"] as const,
+  // All-systems stability (tick-scoped — badge + map choropleth)
+  stability: ["stability"] as const,
   // Trade flow overlay (tick-scoped, gated by overlay toggle)
   tradeFlow: ["tradeFlow"] as const,
-  // All-systems prosperity (tick-scoped — badge + map choropleth)
-  prosperity: ["prosperity"] as const,
   // Per-system trade flow detail (system overview panel)
   systemTradeFlowAll: ["systemTradeFlow"] as const,
   systemTradeFlow: (systemId: string) => ["systemTradeFlow", systemId] as const,
   // Per-system physical substrate (Astrography panel) — static, not tick-scoped.
   systemSubstrate: (systemId: string) => ["systemSubstrate", systemId] as const,
+  // Per-system dynamic population/unrest/demand — tick-invalidated.
+  systemPopulationAll: ["systemPopulation"] as const,
+  systemPopulation: (systemId: string) => ["systemPopulation", systemId] as const,
   // Cantina
   cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
   cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,

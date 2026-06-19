@@ -2,21 +2,21 @@
 
 import { use } from "react";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
+import { useSystemPopulation } from "@/lib/hooks/use-system-population";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
-import { StatList, StatRow } from "@/components/ui/stat-row";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { ResourceVectorBars } from "@/components/system/resource-vector-bars";
 import { SubstrateTradeBars } from "@/components/system/substrate-trade-bars";
 import { BodyCard } from "@/components/system/body-card";
+import { PopulationSummary } from "@/components/system/population-summary";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
-import { formatNumber } from "@/lib/utils/format";
 
 function AstrographyContent({ systemId }: { systemId: string }) {
   const substrate = useSystemSubstrate(systemId);
+  const populationState = useSystemPopulation(systemId);
 
   if (substrate.visibility === "unknown") {
     return (
@@ -24,8 +24,7 @@ function AstrographyContent({ systemId }: { systemId: string }) {
     );
   }
 
-  const { sunClass, population, popCap, aggregate, bodies, goods } = substrate;
-  const popCapInt = Math.round(popCap);
+  const { sunClass, aggregate, bodies, goods } = substrate;
 
   return (
     <div className="space-y-6">
@@ -38,26 +37,14 @@ function AstrographyContent({ systemId }: { systemId: string }) {
           </h3>
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="space-y-3">
-            <StatList>
-              <StatRow label="Population">
-                <span className="font-mono text-sm text-text-primary">
-                  {formatNumber(population)}
-                </span>
-              </StatRow>
-              <StatRow label="Capacity">
-                <span className="font-mono text-sm text-text-primary">
-                  {formatNumber(popCapInt)}
-                </span>
-              </StatRow>
-            </StatList>
-            <ProgressBar
-              label="Utilisation"
-              value={population}
-              max={Math.max(1, popCapInt)}
-              color="copper"
+          {populationState.visibility === "visible" ? (
+            <PopulationSummary
+              population={populationState.population}
+              popCap={populationState.popCap}
             />
-          </div>
+          ) : (
+            <EmptyState message="Scan this system with a ship in range to assess its population." />
+          )}
           <div>
             <SectionHeader as="h4" className="mb-1">
               Resource profile · system aggregate

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Delaunay } from "d3-delaunay";
 import { computeTerritoryPolygons } from "@/components/map/pixi/territory-utils";
 
-describe("per-system Voronoi grouping (prosperity choropleth geometry)", () => {
+describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
   it("produces one polygon group per system when keyed by id", () => {
     const pts: [number, number][] = [
       [100, 100], [900, 100], [500, 900], [500, 500],
