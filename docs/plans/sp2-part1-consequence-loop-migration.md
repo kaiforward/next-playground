@@ -79,7 +79,19 @@
 | `lib/services/stability.ts`, `app/api/game/systems/stability/route.ts`, `lib/hooks/use-stability.ts` | **NEW** stability read path | **Create** (mirror the deleted prosperity path, source = `unrest`) |
 | `components/map/pixi/layers/stability-territory-layer.ts`, `components/ui/stability-badge.tsx` | **NEW** stability UI | **Create** (mirror the deleted prosperity UI) |
 | `lib/types/map.ts`, `components/map/map-overlay-controls.tsx`, `components/map/star-map.tsx`, `components/map/pixi/pixi-map-canvas.tsx` | map | **Modify** — add `"stability"` mode |
-| docs: `economy.md`, `system-traits.md`, `trade-simulation.md`, `tick-engine.md`, `economy-simulation-living-world.md`, `SPEC.md` | docs | **Modify** — unrest/stability replaces prosperity; dynamic population; mark SP2 done |
+| docs: `economy.md`, `system-traits.md`, `trade-simulation.md`, `tick-engine.md`, `economy-simulation-living-world.md`, `SPEC.md` | docs | **Modify** — unrest/stability replaces prosperity; dynamic population; resolve §14 (SP2-complete marking deferred to PR 4) |
+| **PR 4 — population & stability readouts (system UI)** | | |
+| `lib/constants/market-economy.ts` | demand helper | **Modify** — add `demandFootprint(population)` (pure, beside `demandRateForGood`) |
+| `lib/types/api.ts` | API types | **Modify** — add `PopulationDemandEntry`, `SystemPopulationData`, `SystemPopulationResponse` |
+| `lib/services/system-population.ts` | **NEW** population read service | **Create** — visibility-gated single-system population/unrest/demand snapshot |
+| `app/api/game/systems/[systemId]/population/route.ts` | **NEW** population API | **Create** — mirrors the substrate route |
+| `lib/query/keys.ts` | query keys | **Modify** — add `systemPopulation(systemId)` |
+| `lib/hooks/use-system-population.ts` | **NEW** read hook | **Create** — tick-invalidated (NOT `staleTime: Infinity` like substrate) |
+| `lib/hooks/use-tick-invalidation.ts` | tick invalidation | **Modify** — invalidate `["systemPopulation"]` on `economyTick` |
+| `components/system/population-panel.tsx` | **NEW** tab content | **Create** — magnitude/headroom + stability (reuses PR 3 `StabilityBadge`) + demand footprint |
+| `app/(game)/@panel/system/[systemId]/population/page.tsx` | **NEW** tab page | **Create** — mirrors the astrography tab |
+| `app/(game)/@panel/system/[systemId]/layout.tsx` | tab nav | **Modify** — add the `Population` tab |
+| `app/(game)/@panel/system/[systemId]/page.tsx` | overview | **Modify** — add a Stability row to the System Summary |
 
 ### Shared contracts (every task below references these)
 
@@ -1839,13 +1851,13 @@ git commit -m "feat(map): stability overlay sourced from unrest (replaces the pr
 - `trade-simulation.md`: note migration rides the **same** open-edge topology + work-budget slice (one topology, two flows: goods + people); gateways throttle both.
 - `tick-engine.md`: add the `population` (`dependsOn economy`) and `migration` (`dependsOn population`) processors to the pipeline/ordering; note the economy→population in-memory `D` handoff.
 
-- [ ] **Step 2: Mark SP2 done**
+- [ ] **Step 2: Document the gameplay; defer the "complete" marking to PR 4**
 
-In `docs/planned/economy-simulation-living-world.md`: mark **Part 1 shipped** (date + calibrated constants), and the sub-project complete; resolve the §14 open questions inline (gateways: unified, deferred gateway-preference; migration: separate processor; handoff: in-memory `ctx.results`; strike: derived + smooth; no independents). In `docs/SPEC.md`: update the system-interaction map (population dynamics, unrest, strikes, migration; prosperity removed).
+In `docs/planned/economy-simulation-living-world.md`: resolve the §14 open questions inline (gateways: unified, deferred gateway-preference; migration: separate processor; handoff: in-memory `ctx.results`; strike: derived + smooth; no independents). In `docs/SPEC.md`: update the system-interaction map (population dynamics, unrest, strikes, migration; prosperity removed). **Do not** mark Part 1 fully shipped here — the population/stability UI lands in PR 4, so PR 4 marks the sub-project complete.
 
-- [ ] **Step 3: Delete this build plan**
+- [ ] **Step 3: Retire Part 0's stale plan (this plan survives until PR 4)**
 
-Per the `docs/plans/` convention (code-heavy build plans are deleted once the feature ships — the spec + code are the source of truth), delete `docs/plans/sp2-part1-consequence-loop-migration.md` **and** `docs/plans/sp2-part0-deregion-diffusion.md` (Part 0 shipped; its plan lingered).
+Per the `docs/plans/` convention (code-heavy build plans are deleted once the feature ships), delete `docs/plans/sp2-part0-deregion-diffusion.md` (Part 0 shipped; its plan lingered). Leave **this** plan (`sp2-part1-consequence-loop-migration.md`) in place — PR 4's tasks live in it; PR 4 (Part 1's final PR) deletes it.
 
 - [ ] **Step 4: Commit**
 
@@ -1860,7 +1872,523 @@ git commit -m "docs(economy): document dynamic population/unrest/migration; mark
 - Attractiveness = contentment + headroom, data-driven for future terms. ✓
 - `D` handoff, strike, growth/decline, migration all calibrated stable-but-growing (no collapse/saturation/ping-pong); SP1 targets hold. ✓ (Task 10)
 - Stability UI reads from `unrest`. ✓ (Task 11)
-- Docs updated; SP2 marked done; build plans deleted. ✓ (Task 12)
+- Migration/stability gameplay docs updated; Part 0's stale plan retired; the SP2-complete marking + this plan's deletion deferred to PR 4. ✓ (Task 12)
+
+---
+
+# PR 4 — Population & stability readouts (system UI)
+
+PR 2 made population/`unrest` dynamic and PR 3 surfaced `unrest` on the **map** (stability choropleth + `StabilityBadge`). But the *numbers* — population magnitude, how close a system is to `popCap`, its `unrest` level, and the demand its inhabitants generate — aren't visible on the **system screen**. This PR adds a dedicated **Population tab** (the social/economic counterpart to the physical Astrography tab) and a stability row on the **Overview**.
+
+**Key boundary (why a new read path, not an extension of `/substrate`):** the physical substrate (sun, bodies, resource aggregate) only changes on reseed, so `useSystemSubstrate` is `staleTime: Infinity` and is **not** tick-invalidated. Population and `unrest` change **every economy tick**, so they need a *separate* read path that **is** tick-invalidated. Folding per-tick fields into the static `/substrate` endpoint would either serve stale data or force `/substrate` to lose its `Infinity` cache. Static metadata and changing data get separate read paths, cached by change cadence.
+
+**Ordering:** lands **after** PR 3 — it reuses PR 3's `StabilityBadge` (and its `unrest → band` thresholds) so the tab/overview and the map choropleth agree. No schema change.
+
+**Scope (locked in brainstorming, 2026-06-19):** Population tab + Overview stability row. **Deferred** to a later pass: a population **trend/sparkline** (needs time-series storage we don't have) and surfacing population/stability on the **map quick-detail panel** (`components/map/system-detail-panel.tsx`).
+
+### Shared contracts (PR 4)
+
+```typescript
+// lib/types/api.ts
+/** One good's per-tick demand from this system's population (drives StationMarket.demandRate). */
+export interface PopulationDemandEntry { goodId: string; goodName: string; demandRate: number; }
+
+/** Dynamic population & social state for one system — discriminated on fog-of-war visibility. */
+export type SystemPopulationData =
+  | {
+      visibility: "visible";
+      population: number;     // Float magnitude
+      popCap: number;
+      unrest: number;         // 0…1
+      striking: boolean;      // unrest ≥ STRIKE_PARAMS.threshold (production suppressed)
+      demand: PopulationDemandEntry[];  // top consumed goods, descending by demandRate
+    }
+  | { visibility: "unknown" };
+export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
+
+// lib/constants/market-economy.ts
+export function demandFootprint(population: number): Array<{ goodId: string; demandRate: number }>;
+
+// lib/hooks/use-system-population.ts
+export function useSystemPopulation(systemId: string): SystemPopulationData;
+```
+
+Consumes from PR 3: `StabilityBadge` (`components/ui/stability-badge.tsx`) — a component taking `unrest: number` and rendering the band label (Stable → Tense → Unrest → Strike → Collapse). If PR 3's badge prop differs, adapt the two call sites (Task 16/17) — that is the only PR 3 coupling.
+
+## Task 13: `demandFootprint` pure helper
+
+**Files:**
+- Modify: `lib/constants/market-economy.ts`
+- Test: `lib/constants/__tests__/market-economy.test.ts` (exists)
+
+**Interfaces:**
+- Consumes: `demandRateForGood`, `MIN_DEMAND`, `GOOD_CONSUMPTION` (all already in `market-economy.ts` / imported there).
+- Produces: `demandFootprint(population)` — consumed by Task 14.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `lib/constants/__tests__/market-economy.test.ts` (import `demandFootprint` + `MIN_DEMAND` + `demandRateForGood` from `../market-economy`):
+
+```typescript
+describe("demandFootprint", () => {
+  it("lists consumed goods descending by demand, scaled by population", () => {
+    const f = demandFootprint(10_000);
+    expect(f.length).toBeGreaterThan(0);
+    for (let i = 1; i < f.length; i++) {
+      expect(f[i - 1].demandRate).toBeGreaterThanOrEqual(f[i].demandRate);
+    }
+    expect(f[0].demandRate).toBeCloseTo(demandRateForGood(f[0].goodId, 10_000), 6);
+    // water/food carry the highest per-capita need (0.004), so they lead at scale.
+    expect(["water", "food"]).toContain(f[0].goodId);
+  });
+  it("floors every good at MIN_DEMAND for a zero population", () => {
+    expect(demandFootprint(0).every((e) => e.demandRate === MIN_DEMAND)).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: Run, verify it fails**
+
+Run: `npx vitest run lib/constants/__tests__/market-economy.test.ts` → FAIL (`demandFootprint` not exported).
+
+- [ ] **Step 3: Implement**
+
+Add to `lib/constants/market-economy.ts` (next to `demandRateForGood`):
+
+```typescript
+/**
+ * Per-good demand a population of this size generates, descending by magnitude —
+ * the consumption footprint that drives each market's demandRate. Only goods with
+ * a positive per-capita need appear; each entry equals demandRateForGood (so it
+ * floors at MIN_DEMAND). Pure, population-only — matches demandRateForGood.
+ */
+export function demandFootprint(population: number): Array<{ goodId: string; demandRate: number }> {
+  return Object.keys(GOOD_CONSUMPTION)
+    .filter((goodId) => GOOD_CONSUMPTION[goodId] > 0)
+    .map((goodId) => ({ goodId, demandRate: demandRateForGood(goodId, population) }))
+    .sort((a, b) => b.demandRate - a.demandRate);
+}
+```
+
+- [ ] **Step 4: Run + types**
+
+Run: `npx vitest run lib/constants/__tests__/market-economy.test.ts` → PASS. `npx tsc --noEmit` → clean.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/constants/market-economy.ts lib/constants/__tests__/market-economy.test.ts
+git commit -m "feat(economy): demandFootprint — per-good population demand, descending"
+```
+
+## Task 14: Population read path (types + service + route + hook + tick invalidation)
+
+The single-system social snapshot. One cohesive deliverable: the service is the testable gate; the route/hook/key/invalidation are thin wiring verified by `tsc`.
+
+**Files:**
+- Modify: `lib/types/api.ts` (add the three types from Shared contracts)
+- Create: `lib/services/system-population.ts`
+- Create: `app/api/game/systems/[systemId]/population/route.ts`
+- Modify: `lib/query/keys.ts` (add `systemPopulation`)
+- Create: `lib/hooks/use-system-population.ts`
+- Modify: `lib/hooks/use-tick-invalidation.ts`
+- Test: `lib/services/__tests__/integration/system-population.integration.test.ts`
+
+**Interfaces:**
+- Consumes: `demandFootprint` (Task 13), `STRIKE_PARAMS` (`@/lib/constants/population`), `GOODS` (`@/lib/constants/goods`), `getPlayerVisibility` (`@/lib/services/visibility-cache`), `ServiceError` (`@/lib/services/errors`), `prisma` (`@/lib/prisma`).
+- Produces: `SystemPopulationData`, `getSystemPopulation`, `useSystemPopulation` — consumed by Tasks 15, 16.
+
+- [ ] **Step 1: Add the API types**
+
+In `lib/types/api.ts`, add the `PopulationDemandEntry`, `SystemPopulationData`, and `SystemPopulationResponse` declarations from the Shared contracts block above (place near `SystemSubstrateData`).
+
+- [ ] **Step 2: Write the failing service test**
+
+Create `lib/services/__tests__/integration/system-population.integration.test.ts`, mirroring the player+visibility setup of `lib/services/__tests__/integration/market.integration.test.ts` (same harness: seed a world, create a player, make the target system visible). Core assertions:
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { getSystemPopulation } from "@/lib/services/system-population";
+// + the shared integration harness imports/setup mirrored from market.integration.test.ts
+
+describe("getSystemPopulation (integration)", () => {
+  it("returns the population snapshot for a visible system", async () => {
+    // arrange: player with `system` visible (harness)
+    const data = await getSystemPopulation(playerId, system.id);
+    expect(data.visibility).toBe("visible");
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.population).toBeGreaterThanOrEqual(0);
+    expect(data.popCap).toBeGreaterThan(0);
+    expect(data.unrest).toBeGreaterThanOrEqual(0);
+    expect(data.unrest).toBeLessThanOrEqual(1);
+    expect(data.striking).toBe(data.unrest >= 0.5); // STRIKE_PARAMS.threshold
+    expect(data.demand.length).toBeGreaterThan(0);
+    expect(data.demand[0].demandRate).toBeGreaterThanOrEqual(data.demand[1].demandRate);
+    expect(typeof data.demand[0].goodName).toBe("string");
+  });
+  it("returns { visibility: 'unknown' } for an unsurveyed system", async () => {
+    const data = await getSystemPopulation(playerId, hiddenSystem.id);
+    expect(data).toEqual({ visibility: "unknown" });
+  });
+});
+```
+
+Run: `npx vitest run --project integration system-population` → FAIL (service not found).
+
+- [ ] **Step 3: Implement the service** (`lib/services/system-population.ts`)
+
+```typescript
+import { prisma } from "@/lib/prisma";
+import { ServiceError } from "@/lib/services/errors";
+import { getPlayerVisibility } from "@/lib/services/visibility-cache";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
+import { demandFootprint } from "@/lib/constants/market-economy";
+import { GOODS } from "@/lib/constants/goods";
+import type { SystemPopulationData } from "@/lib/types/api";
+
+/** How many goods to surface in the demand footprint (top by demand). */
+const DEMAND_FOOTPRINT_LIMIT = 6;
+
+/**
+ * Dynamic population & social state for one system — population, popCap, unrest,
+ * a strike flag, and the demand footprint. Visibility-gated (an unsurveyed system
+ * returns `{ visibility: "unknown" }` so a direct URL can't leak survey data),
+ * mirroring getSystemSubstrate. Unlike the substrate read, these fields change
+ * every economy tick, so the hook (Step 6) is tick-invalidated.
+ */
+export async function getSystemPopulation(
+  playerId: string,
+  systemId: string,
+): Promise<SystemPopulationData> {
+  const [{ visibleSet }, system] = await Promise.all([
+    getPlayerVisibility(playerId),
+    prisma.starSystem.findUnique({
+      where: { id: systemId },
+      select: { population: true, popCap: true, unrest: true },
+    }),
+  ]);
+
+  if (!system) throw new ServiceError("System not found.", 404);
+  if (!visibleSet.has(systemId)) return { visibility: "unknown" };
+
+  const demand = demandFootprint(system.population)
+    .slice(0, DEMAND_FOOTPRINT_LIMIT)
+    .map((e) => ({
+      goodId: e.goodId,
+      goodName: GOODS[e.goodId]?.name ?? e.goodId,
+      demandRate: e.demandRate,
+    }));
+
+  return {
+    visibility: "visible",
+    population: system.population,
+    popCap: system.popCap,
+    unrest: system.unrest,
+    striking: system.unrest >= STRIKE_PARAMS.threshold,
+    demand,
+  };
+}
+```
+
+- [ ] **Step 4: Run the service test**
+
+Run: `npx vitest run --project integration system-population` → PASS.
+
+- [ ] **Step 5: The route** (`app/api/game/systems/[systemId]/population/route.ts`)
+
+Mirror the substrate route exactly:
+
+```typescript
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { requirePlayer, isErrorResponse } from "@/lib/api/require-player";
+import { getSystemPopulation } from "@/lib/services/system-population";
+import { withServiceErrors } from "@/lib/api/with-service-errors";
+import type { SystemPopulationResponse } from "@/lib/types/api";
+
+export function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ systemId: string }> },
+) {
+  return withServiceErrors(
+    "GET /api/game/systems/[systemId]/population",
+    async () => {
+      const auth = await requirePlayer();
+      if (isErrorResponse(auth)) return auth;
+
+      const { systemId } = await params;
+      const data = await getSystemPopulation(auth.playerId, systemId);
+      return NextResponse.json<SystemPopulationResponse>(
+        { data },
+        { headers: { "Cache-Control": "private, no-cache" } },
+      );
+    },
+  );
+}
+```
+
+- [ ] **Step 6: Query key + hook + tick invalidation**
+
+In `lib/query/keys.ts`, add next to `systemSubstrate`:
+
+```typescript
+  systemPopulation: (systemId: string) => ["systemPopulation", systemId] as const,
+```
+
+Create `lib/hooks/use-system-population.ts`:
+
+```typescript
+"use client";
+
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/query/fetcher";
+import { queryKeys } from "@/lib/query/keys";
+import type { SystemPopulationData } from "@/lib/types/api";
+
+/**
+ * Dynamic population & social state (population, popCap, unrest, demand footprint)
+ * for one system. Changes every economy tick — so, unlike the static substrate
+ * read, it uses the default staleTime and is tick-invalidated (see
+ * useTickInvalidation). Visibility-gated server-side.
+ */
+export function useSystemPopulation(systemId: string): SystemPopulationData {
+  const { data } = useSuspenseQuery({
+    queryKey: queryKeys.systemPopulation(systemId),
+    queryFn: () =>
+      apiFetch<SystemPopulationData>(`/api/game/systems/${systemId}/population`),
+  });
+  return data;
+}
+```
+
+In `lib/hooks/use-tick-invalidation.ts`, inside the existing `economyTick` subscriber (population is written on the economy tick), add:
+
+```typescript
+        queryClient.invalidateQueries({ queryKey: ["systemPopulation"] });
+```
+
+(Prefix match invalidates every per-system entry; mirrors the `["priceHistory"]` invalidation already in this file. Background refetch — `useSuspenseQuery` keeps prior data, so no per-tick re-suspend/flicker.)
+
+- [ ] **Step 7: Types + commit**
+
+Run: `npx tsc --noEmit` → clean. `npx vitest run --project integration system-population` → PASS.
+
+```bash
+git add lib/types/api.ts lib/services/system-population.ts \
+  app/api/game/systems/[systemId]/population/route.ts lib/query/keys.ts \
+  lib/hooks/use-system-population.ts lib/hooks/use-tick-invalidation.ts \
+  lib/services/__tests__/integration/system-population.integration.test.ts
+git commit -m "feat(economy): system population read path (population/unrest/demand, tick-invalidated)"
+```
+
+## Task 15: Population tab (panel + page + tab nav)
+
+**Files:**
+- Create: `components/system/population-panel.tsx`
+- Create: `app/(game)/@panel/system/[systemId]/population/page.tsx`
+- Modify: `app/(game)/@panel/system/[systemId]/layout.tsx`
+
+**Interfaces:**
+- Consumes: `useSystemPopulation` (Task 14), `StabilityBadge` (PR 3), `Card`/`SectionHeader`/`StatList`/`StatRow`/`ProgressBar`/`EmptyState` (existing UI), `formatNumber` (`@/lib/utils/format`).
+
+- [ ] **Step 1: The panel component** (`components/system/population-panel.tsx`)
+
+Mirrors `AstrographyContent`'s structure (Card + StatList + ProgressBar + visibility-gated `EmptyState`):
+
+```typescript
+"use client";
+
+import { useSystemPopulation } from "@/lib/hooks/use-system-population";
+import { Card } from "@/components/ui/card";
+import { SectionHeader } from "@/components/ui/section-header";
+import { StatList, StatRow } from "@/components/ui/stat-row";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StabilityBadge } from "@/components/ui/stability-badge";
+import { formatNumber } from "@/lib/utils/format";
+
+export function PopulationPanel({ systemId }: { systemId: string }) {
+  const pop = useSystemPopulation(systemId);
+
+  if (pop.visibility === "unknown") {
+    return (
+      <EmptyState message="Scan this system with a ship in range to assess its population." />
+    );
+  }
+
+  const { population, popCap, unrest, striking, demand } = pop;
+  const popCapInt = Math.round(popCap);
+
+  return (
+    <div className="space-y-6">
+      <Card variant="bordered" padding="md">
+        <SectionHeader as="h4" className="mb-3">Population</SectionHeader>
+        <StatList>
+          <StatRow label="Inhabitants">
+            <span className="font-mono text-sm text-text-primary">{formatNumber(population)}</span>
+          </StatRow>
+          <StatRow label="Capacity">
+            <span className="font-mono text-sm text-text-primary">{formatNumber(popCapInt)}</span>
+          </StatRow>
+        </StatList>
+        <ProgressBar label="Utilisation" value={population} max={Math.max(1, popCapInt)} color="copper" />
+      </Card>
+
+      <Card variant="bordered" padding="md">
+        <div className="mb-3 flex items-center justify-between">
+          <SectionHeader as="h4">Stability</SectionHeader>
+          <StabilityBadge unrest={unrest} />
+        </div>
+        <ProgressBar label="Unrest" value={unrest} max={1} color="copper" />
+        {striking && (
+          <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>
+        )}
+      </Card>
+
+      <Card variant="bordered" padding="md">
+        <SectionHeader as="h4" className="mb-1">Demand footprint</SectionHeader>
+        <p className="mb-3 text-xs text-text-tertiary">
+          What these inhabitants consume each tick — this is what drives the system&apos;s market demand.
+        </p>
+        {demand.length === 0 ? (
+          <EmptyState message="No demand." />
+        ) : (
+          <ul className="space-y-1.5">
+            {demand.map((d) => (
+              <li key={d.goodId} className="flex items-center justify-between py-1.5 px-3 bg-surface">
+                <span className="text-sm text-text-primary">{d.goodName}</span>
+                <span className="text-sm font-mono text-text-secondary">{d.demandRate.toFixed(2)}/t</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+```
+
+> If PR 3's `StabilityBadge` takes a different prop than `unrest`, adjust the one line here (and Task 16). That is the only PR 3 coupling.
+
+- [ ] **Step 2: The tab page** (`app/(game)/@panel/system/[systemId]/population/page.tsx`)
+
+Mirrors `astrography/page.tsx`:
+
+```typescript
+"use client";
+
+import { use } from "react";
+import { PopulationPanel } from "@/components/system/population-panel";
+import { QueryBoundary } from "@/components/ui/query-boundary";
+
+export default function PopulationPage({
+  params,
+}: {
+  params: Promise<{ systemId: string }>;
+}) {
+  const { systemId } = use(params);
+  return (
+    <QueryBoundary>
+      <PopulationPanel systemId={systemId} />
+    </QueryBoundary>
+  );
+}
+```
+
+- [ ] **Step 3: Add the tab to the nav** (`app/(game)/@panel/system/[systemId]/layout.tsx`)
+
+In the `tabs` array, insert after the `Astrography` entry:
+
+```typescript
+    { label: "Population", href: `${basePath}/population`, active: pathname.startsWith(`${basePath}/population`), badge: 0 },
+```
+
+- [ ] **Step 4: Types + manual check + commit**
+
+Run: `npx tsc --noEmit` → clean. Then `npm run dev`, open a surveyed system, click the **Population** tab → magnitude/utilisation, stability badge + unrest bar (+ strike line when unrest ≥ 0.5), and the demand footprint render; an unsurveyed system shows the locked `EmptyState`. (No unit test — rendering needs no jsdom; the data is covered by Task 14.)
+
+```bash
+git add components/system/population-panel.tsx \
+  "app/(game)/@panel/system/[systemId]/population/page.tsx" \
+  "app/(game)/@panel/system/[systemId]/layout.tsx"
+git commit -m "feat(ui): system Population tab — magnitude, stability, demand footprint"
+```
+
+## Task 16: Overview stability row
+
+**Files:**
+- Modify: `app/(game)/@panel/system/[systemId]/page.tsx`
+
+**Interfaces:**
+- Consumes: `useSystemPopulation` (Task 14), `StabilityBadge` (PR 3).
+
+- [ ] **Step 1: Wire the hook + render a Stability row**
+
+In `SystemOverviewContent` (`app/(game)/@panel/system/[systemId]/page.tsx`), add the imports:
+
+```typescript
+import { useSystemPopulation } from "@/lib/hooks/use-system-population";
+import { StabilityBadge } from "@/components/ui/stability-badge";
+```
+
+Call the hook alongside the existing `useSystemSubstrate` call:
+
+```typescript
+  const populationState = useSystemPopulation(systemId);
+```
+
+In the System Summary `StatList`, add a `Stability` row immediately after the existing `Population` row (`<StatRow label="Population">…</StatRow>`):
+
+```typescript
+              <StatRow label="Stability">
+                {populationState.visibility === "visible" ? (
+                  <StabilityBadge unrest={populationState.unrest} />
+                ) : (
+                  <span className="text-sm text-text-tertiary">—</span>
+                )}
+              </StatRow>
+```
+
+(The hook suspends within the page's existing `QueryBoundary` on first load, same as `useSystemSubstrate`; tick invalidation triggers a background refetch, not a re-suspend, so the Overview does not flicker.)
+
+- [ ] **Step 2: Types + manual check + commit**
+
+Run: `npx tsc --noEmit` → clean. `npm run dev` → the Overview's System Summary shows a Stability badge under Population; it updates as ticks change `unrest`.
+
+```bash
+git add "app/(game)/@panel/system/[systemId]/page.tsx"
+git commit -m "feat(ui): show system stability on the Overview summary"
+```
+
+## Task 17: Docs + mark SP2 Part 1 complete + retire the plan
+
+**Files:** `docs/active/gameplay/economy.md`, `docs/planned/economy-simulation-living-world.md`, `docs/SPEC.md`, and the plan docs.
+
+- [ ] **Step 1: Document the readouts**
+
+- `economy.md`: add that the system screen surfaces dynamic population + stability — a **Population tab** (magnitude, `popCap` utilisation, unrest/stability, strike state, and the per-good demand footprint) and a stability row on the Overview. Note the read path is tick-invalidated (separate from the static Astrography/substrate read).
+- `docs/planned/economy-simulation-living-world.md`: add a one-line note that Part 1's UI scope includes the population/stability readouts (Population tab + Overview row), beyond §4's map "stability UI". Then **mark Part 1 shipped** (date + calibrated constants) and the sub-project complete — the marking PR 3 Task 12 deferred here.
+- `docs/SPEC.md`: note the Population tab / stability readout in the system-UI description.
+
+- [ ] **Step 2: Retire the build plan**
+
+Per the `docs/plans/` convention, delete `docs/plans/sp2-part1-consequence-loop-migration.md` (this plan — Part 1 has now fully shipped). (`sp2-part0-deregion-diffusion.md` was already removed in PR 3 Task 12.)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add -A
+git commit -m "docs(economy): document the population/stability readouts; mark SP2 Part 1 complete"
+```
+
+## Self-check (PR 4)
+
+- Static substrate vs per-tick population are **separate read paths** — `/population` is tick-invalidated, `/substrate` stays `staleTime: Infinity`. ✓ (Task 14)
+- `demandFootprint` is pure + unit-tested; the service is integration-tested (visibility gating + shape); no Prisma mocking. ✓ (Tasks 13–14)
+- Population tab reuses PR 3's `StabilityBadge` (shared thresholds); Overview shows the stability row. ✓ (Tasks 15–16)
+- No `as`/`unknown`; `SystemPopulationData` is a discriminated union; route uses `ApiResponse<T>` + `Cache-Control: private, no-cache`. ✓
+- Deferred items (trend/sparkline, map quick-detail panel) explicitly out of scope. ✓
+- SP2 Part 1 marked complete; this plan deleted. ✓ (Task 17)
 
 ---
 
@@ -1876,6 +2404,7 @@ git commit -m "docs(economy): document dynamic population/unrest/migration; mark
 - §10 stable-but-growing calibration → Task 6 + Task 10. ✓
 - §11 full reseed → PR 1 Step 9. ✓
 - §4 prosperity UI re-points to unrest-derived stability → PR 3 Task 11. ✓
+- **Beyond spec** — population/stability *readouts* on the system screen (Population tab + Overview stability row) → PR 4 (Tasks 13–17). A UI scope addition agreed 2026-06-19; the spec gets a one-line note in PR 4 Task 17. ✓
 - §14 open questions resolved: distance-attenuation reused; work-budget slice = `MIGRATION_EDGES_PER_TICK`; `k`/`decay`/strike threshold = `UNREST_PARAMS`/`STRIKE_PARAMS` (sim-tuned), strike derived (no stored flag); growth/migration coeffs sim-discovered; handoff = in-memory `ctx.results` (`EconomySignals`); migration = separate processor; no independents (flood-fill leaves none — `null===null` stays defensive); schema specifics in PR 1 Step 9 + PR 2. ✓
 
 **Placeholder scan:** No "TBD"/"add error handling"/"similar to". Calibration steps (PR 2 Task 6, PR 3 Task 10) are procedural by nature (run-observe-adjust) with exact commands + named levers. The two "mirror the deleted prosperity file" steps (PR 3 Task 11 Step 3) reference a concrete `git show` source + give the exact band ramp — a mechanical recreation, not a vague instruction.
