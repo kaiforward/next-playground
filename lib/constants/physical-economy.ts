@@ -28,6 +28,10 @@ export const GOOD_PRODUCTION: Record<string, GoodProductionDriver> = {
   food: { coeff: 1.5, resource: "arable" },
   ore: { coeff: 1.2, resource: "ore" },
   textiles: { coeff: 0.6, resource: "arable" },
+  gas: { coeff: 1.2, resource: "gas" },
+  minerals: { coeff: 1.0, resource: "minerals" },
+  biomass: { coeff: 1.2, resource: "biomass" },
+  radioactives: { coeff: 0.8, resource: "radioactive" },
   // Tier 1 — labour-only.
   fuel: { coeff: 5 },
   metals: { coeff: 5 },
@@ -47,6 +51,10 @@ export const GOOD_CONSUMPTION: Record<string, number> = {
   food: 0.004,
   ore: 0.002,
   textiles: 0.002,
+  gas: 0.003,
+  minerals: 0.002,
+  biomass: 0.002,
+  radioactives: 0.0008,
   // Tier 1.
   fuel: 0.0015,
   metals: 0.0015,

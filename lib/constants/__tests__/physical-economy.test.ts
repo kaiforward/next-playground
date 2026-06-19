@@ -47,14 +47,11 @@ describe("resource-driven vs labour-only split", () => {
     }
   });
 
-  it("never drives production from an economically-inert resource", () => {
-    const inert = new Set(["gas", "minerals", "biomass", "radioactive"]);
+  it("every resource driver references a real resource type", () => {
     for (const goodId of GOOD_NAMES) {
       const res = GOOD_PRODUCTION[goodId].resource;
-      if (res) expect(inert.has(res), `${goodId} → ${res}`).toBe(false);
+      if (res) expect(RESOURCE_TYPES, `${goodId} → ${res}`).toContain(res);
     }
-    // sanity: the inert set is a subset of the real resource types
-    for (const r of inert) expect(RESOURCE_TYPES).toContain(r);
   });
 });
 
