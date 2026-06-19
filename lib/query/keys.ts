@@ -38,6 +38,8 @@ export const queryKeys = {
   systemTradeFlow: (systemId: string) => ["systemTradeFlow", systemId] as const,
   // Per-system physical substrate (Astrography panel) — static, not tick-scoped.
   systemSubstrate: (systemId: string) => ["systemSubstrate", systemId] as const,
+  // Per-system dynamic population/unrest/demand — tick-invalidated.
+  systemPopulation: (systemId: string) => ["systemPopulation", systemId] as const,
   // Cantina
   cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
   cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,
