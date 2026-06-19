@@ -20,6 +20,9 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
 
   const { population, popCap, unrest, striking, demand } = pop;
   const popCapInt = Math.round(popCap);
+  // population and unrest are Floats; round the progress-bar readouts so the
+  // "value / max" labels stay legible (e.g. 0.09 / 1, not 0.0943265… / 1).
+  const round2 = (n: number) => Math.round(n * 100) / 100;
 
   return (
     <div className="space-y-6">
@@ -33,7 +36,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
             <span className="font-mono text-sm text-text-primary">{formatNumber(popCapInt)}</span>
           </StatRow>
         </StatList>
-        <ProgressBar label="Utilisation" value={population} max={Math.max(1, popCapInt)} color="copper" />
+        <ProgressBar label="Utilisation" value={round2(population)} max={Math.max(1, popCapInt)} color="copper" />
       </Card>
 
       <Card variant="bordered" padding="md">
@@ -41,7 +44,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
           <SectionHeader as="h4">Stability</SectionHeader>
           <StabilityBadge unrest={unrest} />
         </div>
-        <ProgressBar label="Unrest" value={unrest} max={1} color="copper" />
+        <ProgressBar label="Unrest" value={round2(unrest)} max={1} color="copper" />
         {striking && (
           <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>
         )}
