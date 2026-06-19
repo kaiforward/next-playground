@@ -41,6 +41,8 @@ interface ProgressBarProps extends ProgressBarVariants {
   max: number;
   className?: string;
   ariaLabel?: string;
+  /** Formats the "value / max" label endpoints. Default: identity (numbers as-is). */
+  formatValue?: (n: number) => string;
 }
 
 export function ProgressBar({
@@ -51,15 +53,18 @@ export function ProgressBar({
   size,
   className,
   ariaLabel,
+  formatValue = (n) => String(n),
 }: ProgressBarProps) {
   const percent = max > 0 ? (value / max) * 100 : 0;
   const styles = progressBarVariants({ size, color });
+  const valueLabel = formatValue(value);
+  const maxLabel = formatValue(max);
 
   return (
     <div className={className}>
       <div className={styles.labelRow()}>
         <span>{label}</span>
-        <span>{value} / {max}</span>
+        <span>{valueLabel} / {maxLabel}</span>
       </div>
       <div
         className={styles.track()}
@@ -67,7 +72,7 @@ export function ProgressBar({
         aria-valuenow={Math.round(percent)}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={ariaLabel ?? `${label}: ${value} / ${max}`}
+        aria-label={ariaLabel ?? `${label}: ${valueLabel} / ${maxLabel}`}
       >
         <div
           className={styles.fill()}
