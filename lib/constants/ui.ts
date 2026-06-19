@@ -213,6 +213,10 @@ export const GOOD_COLORS: Record<string, string> = {
   machinery: "#a8a29e",
   weapons: "#ef4444",
   luxuries: "#fbbf24",
+  weapons_systems: "#dc2626",
+  targeting_arrays: "#2dd4bf",
+  reactor_cores: "#facc15",
+  ship_frames: "#64748b",
 };
 
 /** Reverse map: display name → slug key (e.g. "Water" → "water"). */

@@ -258,6 +258,30 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 3.0,
   },
+  weapons_systems: {
+    name: "Weapons Systems",
+    description: "Ship-mounted weapon platforms — turrets, launchers, beam arrays.",
+    basePrice: 160, tier: 2, volume: 1, mass: 1.5,
+    volatility: 1.5, hazard: "high", priceFloor: 0.5, priceCeiling: 3.0,
+  },
+  targeting_arrays: {
+    name: "Targeting Arrays",
+    description: "Fire-control systems, long-range sensors, tactical computers.",
+    basePrice: 140, tier: 2, volume: 1, mass: 0.5,
+    volatility: 1.0, hazard: "none", priceFloor: 0.5, priceCeiling: 3.0,
+  },
+  reactor_cores: {
+    name: "Reactor Cores",
+    description: "Military-grade power plants — fusion reactors, antimatter containment.",
+    basePrice: 170, tier: 2, volume: 1, mass: 2.0,
+    volatility: 1.2, hazard: "high", priceFloor: 0.5, priceCeiling: 3.0,
+  },
+  ship_frames: {
+    name: "Ship Frames",
+    description: "Assembled structural hull sections — spaceframes, bulkheads.",
+    basePrice: 180, tier: 2, volume: 2, mass: 2.5,
+    volatility: 1.0, hazard: "none", priceFloor: 0.5, priceCeiling: 3.0,
+  },
 } as const;
 
 export const GOOD_NAMES = Object.keys(GOODS);

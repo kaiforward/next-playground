@@ -48,6 +48,10 @@ export const GOOD_PRODUCTION: Record<string, GoodProductionDriver> = {
   machinery: { coeff: 2.5 },
   weapons: { coeff: 2 },
   luxuries: { coeff: 1.5 },
+  weapons_systems: { coeff: 1.5 },
+  targeting_arrays: { coeff: 2 },
+  reactor_cores: { coeff: 1.5 },
+  ship_frames: { coeff: 1.2 },
 };
 
 /** Per-good per-capita consumption need. consRate = need × population. Higher tier → lower need. */
@@ -77,6 +81,10 @@ export const GOOD_CONSUMPTION: Record<string, number> = {
   machinery: 0.0008,
   weapons: 0.0005,
   luxuries: 0.0005,
+  weapons_systems: 0.0003,
+  targeting_arrays: 0.0004,
+  reactor_cores: 0.0003,
+  ship_frames: 0.0003,
 };
 
 /** Population at which labourFactor reaches 0.5 (soft-saturating curve). First-draft; simulator-calibrated. */
