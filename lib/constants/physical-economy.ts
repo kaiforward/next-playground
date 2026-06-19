@@ -37,21 +37,21 @@ export const GOOD_PRODUCTION: Record<string, GoodProductionDriver> = {
   metals: { coeff: 5 },
   chemicals: { coeff: 4 },
   medicine: { coeff: 3.5 },
-  alloys: { coeff: 4 },
-  polymers: { coeff: 4.5 },
-  components: { coeff: 4 },
+  alloys: { coeff: 2.5 },
+  polymers: { coeff: 3 },
+  components: { coeff: 2.5 },
   consumer_goods: { coeff: 4.5 },
   munitions: { coeff: 3.5 },
-  hull_plating: { coeff: 3.5 },
-  // Tier 2 — labour-only, smaller coeffs (luxuries rarest).
+  hull_plating: { coeff: 1.2 }, // intentionally below several tier-2 coeffs: a structural good population barely consumes, so only low output keeps it off the price floor
+  // Tier 2 — labour-only, smaller coeffs (military assets rarest).
   electronics: { coeff: 3 },
   machinery: { coeff: 2.5 },
-  weapons: { coeff: 2 },
+  weapons: { coeff: 1.6 },
   luxuries: { coeff: 1.5 },
-  weapons_systems: { coeff: 1.5 },
-  targeting_arrays: { coeff: 2 },
-  reactor_cores: { coeff: 1.5 },
-  ship_frames: { coeff: 1.2 },
+  weapons_systems: { coeff: 0.7 },
+  targeting_arrays: { coeff: 0.9 },
+  reactor_cores: { coeff: 0.7 },
+  ship_frames: { coeff: 0.6 },
 };
 
 /** Per-good per-capita consumption need. consRate = need × population. Higher tier → lower need. */
