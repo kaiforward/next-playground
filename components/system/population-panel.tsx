@@ -3,11 +3,10 @@
 import { useSystemPopulation } from "@/lib/hooks/use-system-population";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
-import { StatList, StatRow } from "@/components/ui/stat-row";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
-import { formatNumber } from "@/lib/utils/format";
+import { PopulationSummary } from "@/components/system/population-summary";
 
 export function PopulationPanel({ systemId }: { systemId: string }) {
   const pop = useSystemPopulation(systemId);
@@ -19,24 +18,11 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
   }
 
   const { population, popCap, unrest, striking, demand } = pop;
-  const popCapInt = Math.round(popCap);
-  // population and unrest are Floats; round the progress-bar readouts so the
-  // "value / max" labels stay legible (e.g. 0.09 / 1, not 0.0943265… / 1).
-  const round2 = (n: number) => Math.round(n * 100) / 100;
 
   return (
     <div className="space-y-6">
       <Card variant="bordered" padding="md">
-        <SectionHeader as="h4" className="mb-3">Population</SectionHeader>
-        <StatList>
-          <StatRow label="Inhabitants">
-            <span className="font-mono text-sm text-text-primary">{formatNumber(population)}</span>
-          </StatRow>
-          <StatRow label="Capacity">
-            <span className="font-mono text-sm text-text-primary">{formatNumber(popCapInt)}</span>
-          </StatRow>
-        </StatList>
-        <ProgressBar label="Utilisation" value={round2(population)} max={Math.max(1, popCapInt)} color="copper" />
+        <PopulationSummary population={population} popCap={popCap} />
       </Card>
 
       <Card variant="bordered" padding="md">
@@ -44,7 +30,13 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
           <SectionHeader as="h4">Stability</SectionHeader>
           <StabilityBadge unrest={unrest} />
         </div>
-        <ProgressBar label="Unrest" value={round2(unrest)} max={1} color="copper" />
+        <ProgressBar
+          label="Unrest"
+          value={unrest}
+          max={1}
+          color="copper"
+          formatValue={(n) => n.toFixed(2)}
+        />
         {striking && (
           <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>
         )}
