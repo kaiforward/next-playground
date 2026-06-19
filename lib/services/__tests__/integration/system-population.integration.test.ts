@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
 
 const { prisma } = useIntegrationDb();
 vi.mock("@/lib/prisma", () => ({ prisma }));
@@ -16,7 +17,6 @@ describe("getSystemPopulation (integration)", () => {
   let hiddenSystem: { id: string };
 
   beforeEach(async () => {
-    invalidateVisibilityCache !== undefined && true; // ensure import loaded
     universe = await seedTestUniverse(prisma);
     player = await createTestPlayer(prisma, { credits: 1000 });
     invalidateVisibilityCache(player.playerId);
@@ -59,7 +59,7 @@ describe("getSystemPopulation (integration)", () => {
     expect(data.popCap).toBeGreaterThan(0);
     expect(data.unrest).toBeGreaterThanOrEqual(0);
     expect(data.unrest).toBeLessThanOrEqual(1);
-    expect(data.striking).toBe(data.unrest >= 0.65); // STRIKE_PARAMS.threshold
+    expect(data.striking).toBe(data.unrest >= STRIKE_PARAMS.threshold);
     expect(data.demand.length).toBeGreaterThan(0);
     expect(data.demand[0].demandRate).toBeGreaterThanOrEqual(data.demand[1].demandRate);
     expect(typeof data.demand[0].goodName).toBe("string");

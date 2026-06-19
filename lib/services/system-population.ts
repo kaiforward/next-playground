@@ -14,7 +14,7 @@ const DEMAND_FOOTPRINT_LIMIT = 6;
  * a strike flag, and the demand footprint. Visibility-gated (an unsurveyed system
  * returns `{ visibility: "unknown" }` so a direct URL can't leak survey data),
  * mirroring getSystemSubstrate. Unlike the substrate read, these fields change
- * every economy tick, so the hook (Step 6) is tick-invalidated.
+ * every economy tick, so the hook (`useSystemPopulation`) is tick-invalidated.
  */
 export async function getSystemPopulation(
   playerId: string,
