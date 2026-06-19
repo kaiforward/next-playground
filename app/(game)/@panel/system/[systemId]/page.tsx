@@ -23,6 +23,8 @@ import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
 import { formatCredits, formatNumber } from "@/lib/utils/format";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
+import { useSystemPopulation } from "@/lib/hooks/use-system-population";
+import { StabilityBadge } from "@/components/ui/stability-badge";
 import { GOODS } from "@/lib/constants/goods";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { getGoodColor } from "@/lib/constants/ui";
@@ -79,6 +81,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { data: universeData } = useUniverse();
   const allMissions = useSystemAllMissions(systemId);
   const substrate = useSystemSubstrate(systemId);
+  const populationState = useSystemPopulation(systemId);
 
   // Owning faction (the source of government). Falls back to the region's
   // dominant faction when a system has no factionId yet.
@@ -213,6 +216,13 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
               </StatRow>
               <StatRow label="Population">
                 <span className="text-sm font-mono text-text-primary">{populationLabel}</span>
+              </StatRow>
+              <StatRow label="Stability">
+                {populationState.visibility === "visible" ? (
+                  <StabilityBadge unrest={populationState.unrest} />
+                ) : (
+                  <span className="text-sm text-text-tertiary">—</span>
+                )}
               </StatRow>
               <StatRow label="Traits">
                 <span className="text-sm text-text-primary">{traits.length}</span>
