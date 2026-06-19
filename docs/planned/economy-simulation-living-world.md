@@ -74,6 +74,8 @@ A system's population is described by three tiers over two anchors. This taxonom
 
 **Prosperity is retired.** The `prosperity`/`tradeVolumeAccum` columns, the `PROSPERITY_PARAMS` constants, `updateProsperity`/`getProsperityMultiplier`, the prosperity multiplier in the economy tick, `lib/services/prosperity.ts`, `lib/utils/prosperity.ts`, and the prosperity map-choropleth layer + badges are removed or re-pointed. Population (live, via `labourFactor` + per-capita consumption) is the sole smooth health channel; the choropleth/badge UI re-points to an **unrest-derived stability** readout (same rendering pipeline, new source).
 
+Part 1's UI scope extends beyond this map stability readout to the **system screen**: a **Population tab** (population magnitude, `popCap` utilisation, unrest/stability, strike state, and the per-good demand footprint) and a **stability row** on the system Overview — served by a tick-invalidated read path, separate from the static substrate read.
+
 ---
 
 ## 5. Part 0 — De-region the diffusion engine
