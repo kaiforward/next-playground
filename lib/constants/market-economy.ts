@@ -56,6 +56,19 @@ export function demandRateForGood(goodId: string, population: number): number {
 }
 
 /**
+ * Per-good demand a population of this size generates, descending by magnitude —
+ * the consumption footprint that drives each market's demandRate. Only goods with
+ * a positive per-capita need appear; each entry equals demandRateForGood (so it
+ * floors at MIN_DEMAND). Pure, population-only — matches demandRateForGood.
+ */
+export function demandFootprint(population: number): Array<{ goodId: string; demandRate: number }> {
+  return Object.keys(GOOD_CONSUMPTION)
+    .filter((goodId) => GOOD_CONSUMPTION[goodId] > 0)
+    .map((goodId) => ({ goodId, demandRate: demandRateForGood(goodId, population) }))
+    .sort((a, b) => b.demandRate - a.demandRate);
+}
+
+/**
  * Initial stock for a market at seed/reset time, derived from the system's net
  * balance for the good around its per-system days-of-supply reference
  * (TARGET_COVER × demandRate). A net producer seeds with deeper cover (reads
