@@ -17,11 +17,12 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TradeActivityPanel } from "@/components/system/trade-activity-panel";
-import { AstrographyTeaser } from "@/components/system/astrography-teaser";
+import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { getPriceTrendPct } from "@/lib/utils/market";
 import { enrichTraits } from "@/lib/utils/traits";
-import { formatCredits, formatNumber } from "@/lib/utils/format";
+import { formatCredits, formatHeadcount } from "@/lib/utils/format";
+import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { useSystemPopulation } from "@/lib/hooks/use-system-population";
 import { StabilityBadge } from "@/components/ui/stability-badge";
@@ -165,9 +166,12 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   );
   const totalDanger = traitDanger + govDef.dangerBaseline;
 
-  // Population — the real abstract magnitude from the substrate.
+  // Population — realistic headcount from the LIVE tick-invalidated read (the
+  // static substrate value is staleTime:Infinity and would show a frozen number).
   const populationLabel =
-    substrate.visibility === "visible" ? formatNumber(substrate.population) : "—";
+    populationState.visibility === "visible"
+      ? formatHeadcount(populationState.population)
+      : "—";
 
   // Mission counts
   const tradeAvailable = allMissions.tradeMissions.available.length;
@@ -213,6 +217,25 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
               </StatRow>
               <StatRow label="Government">
                 <span className="text-sm text-white capitalize">{govDef.name}</span>
+              </StatRow>
+              <StatRow label="Sun">
+                {substrate.visibility === "visible" ? (
+                  <span className="inline-flex items-center gap-2">
+                    <StarGlyph sunClass={substrate.sunClass} size="sm" />
+                    <span className="text-sm text-text-primary">
+                      {SUN_CLASSES[substrate.sunClass].name}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-sm text-text-tertiary">—</span>
+                )}
+              </StatRow>
+              <StatRow label="Bodies">
+                {substrate.visibility === "visible" ? (
+                  <span className="text-sm text-text-primary">{substrate.bodies.length}</span>
+                ) : (
+                  <span className="text-sm text-text-tertiary">—</span>
+                )}
               </StatRow>
               <StatRow label="Population">
                 <span className="text-sm font-mono text-text-primary">{populationLabel}</span>
@@ -264,14 +287,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </div>
         </CardContent>
       </Card>
-
-      {/* Astrography teaser — own boundary so its substrate fetch never blocks
-          the overview, and pre-warms the Astrography tab's cache. */}
-      <div className="mb-6">
-        <QueryBoundary>
-          <AstrographyTeaser systemId={systemId} />
-        </QueryBoundary>
-      </div>
 
       {/* Market row — snapshot + pie chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
