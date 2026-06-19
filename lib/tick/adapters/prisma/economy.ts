@@ -56,7 +56,7 @@ export class PrismaEconomyWorld implements EconomyWorld {
       },
     });
 
-    // One aggregate vector per system (a system's 12 markets share it).
+    // One aggregate vector per system (all the system's markets share it).
     const aggBySystem = new Map<string, ResourceVector>();
 
     return rows.map((m) => {

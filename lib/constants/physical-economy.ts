@@ -28,16 +28,30 @@ export const GOOD_PRODUCTION: Record<string, GoodProductionDriver> = {
   food: { coeff: 1.5, resource: "arable" },
   ore: { coeff: 1.2, resource: "ore" },
   textiles: { coeff: 0.6, resource: "arable" },
+  gas: { coeff: 1.2, resource: "gas" },
+  minerals: { coeff: 1.0, resource: "minerals" },
+  biomass: { coeff: 1.2, resource: "biomass" },
+  radioactives: { coeff: 0.8, resource: "radioactive" },
   // Tier 1 — labour-only.
   fuel: { coeff: 5 },
   metals: { coeff: 5 },
   chemicals: { coeff: 4 },
   medicine: { coeff: 3.5 },
-  // Tier 2 — labour-only, smaller coeffs (luxuries rarest).
+  alloys: { coeff: 2.5 },
+  polymers: { coeff: 3 },
+  components: { coeff: 2.5 },
+  consumer_goods: { coeff: 4.5 },
+  munitions: { coeff: 3.5 },
+  hull_plating: { coeff: 1.2 }, // intentionally below several tier-2 coeffs: a structural good population barely consumes, so only low output keeps it off the price floor
+  // Tier 2 — labour-only, smaller coeffs (military assets rarest).
   electronics: { coeff: 3 },
   machinery: { coeff: 2.5 },
-  weapons: { coeff: 2 },
+  weapons: { coeff: 1.6 },
   luxuries: { coeff: 1.5 },
+  weapons_systems: { coeff: 0.7 },
+  targeting_arrays: { coeff: 0.9 },
+  reactor_cores: { coeff: 0.7 },
+  ship_frames: { coeff: 0.6 },
 };
 
 /** Per-good per-capita consumption need. consRate = need × population. Higher tier → lower need. */
@@ -47,16 +61,30 @@ export const GOOD_CONSUMPTION: Record<string, number> = {
   food: 0.004,
   ore: 0.002,
   textiles: 0.002,
+  gas: 0.003,
+  minerals: 0.002,
+  biomass: 0.002,
+  radioactives: 0.0008,
   // Tier 1.
   fuel: 0.0015,
   metals: 0.0015,
   chemicals: 0.0015,
   medicine: 0.001,
+  alloys: 0.001,
+  polymers: 0.0012,
+  components: 0.001,
+  consumer_goods: 0.0015,
+  munitions: 0.0005,
+  hull_plating: 0.0005,
   // Tier 2.
   electronics: 0.001,
   machinery: 0.0008,
   weapons: 0.0005,
   luxuries: 0.0005,
+  weapons_systems: 0.0003,
+  targeting_arrays: 0.0004,
+  reactor_cores: 0.0003,
+  ship_frames: 0.0003,
 };
 
 /** Population at which labourFactor reaches 0.5 (soft-saturating curve). First-draft; simulator-calibrated. */

@@ -68,6 +68,54 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
+  gas: {
+    name: "Gas",
+    description: "Hydrogen, helium-3, and atmospheric gases — raw energy feedstock.",
+    basePrice: 30,
+    tier: 0,
+    volume: 2,
+    mass: 1.0,
+    volatility: 0.7,
+    hazard: "none",
+    priceFloor: 0.5,
+    priceCeiling: 2.0,
+  },
+  minerals: {
+    name: "Minerals",
+    description: "Rare earths, crystalline materials, and precision-grade ores.",
+    basePrice: 40,
+    tier: 0,
+    volume: 1,
+    mass: 2.0,
+    volatility: 0.8,
+    hazard: "none",
+    priceFloor: 0.5,
+    priceCeiling: 2.0,
+  },
+  biomass: {
+    name: "Biomass",
+    description: "Organic compounds and biological feedstock for synthesis.",
+    basePrice: 32,
+    tier: 0,
+    volume: 2,
+    mass: 1.5,
+    volatility: 0.6,
+    hazard: "none",
+    priceFloor: 0.5,
+    priceCeiling: 2.0,
+  },
+  radioactives: {
+    name: "Radioactives",
+    description: "Fissile materials and isotopes — high value, high hazard.",
+    basePrice: 50,
+    tier: 0,
+    volume: 1,
+    mass: 2.0,
+    volatility: 1.2,
+    hazard: "high",
+    priceFloor: 0.5,
+    priceCeiling: 2.0,
+  },
 
   // ── Tier 1 — Processed ────────────────────────────────────────
   // Medium-depth markets, moderate per-unit margin.
@@ -121,6 +169,42 @@ export const GOODS: Record<string, GoodDefinition> = {
     priceFloor: 0.5,
     priceCeiling: 2.5,
   },
+  alloys: {
+    name: "Alloys",
+    description: "High-strength composite metals — titanium alloys, durasteel.",
+    basePrice: 60, tier: 1, volume: 1, mass: 2.0,
+    volatility: 0.8, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+  },
+  polymers: {
+    name: "Polymers",
+    description: "Plastics, synthetics, and carbon fibre from petrochemicals and bioprocessing.",
+    basePrice: 48, tier: 1, volume: 1, mass: 1.0,
+    volatility: 0.7, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+  },
+  components: {
+    name: "Components",
+    description: "Precision parts — circuit boards, actuators, micro-assemblies. The universal intermediate.",
+    basePrice: 70, tier: 1, volume: 1, mass: 1.0,
+    volatility: 0.9, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+  },
+  consumer_goods: {
+    name: "Consumer Goods",
+    description: "Everyday manufactured products — clothing, tools, devices.",
+    basePrice: 55, tier: 1, volume: 1, mass: 1.0,
+    volatility: 0.6, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+  },
+  munitions: {
+    name: "Munitions",
+    description: "Ammunition, explosives, and propellant charges.",
+    basePrice: 75, tier: 1, volume: 1, mass: 1.5,
+    volatility: 1.3, hazard: "low", priceFloor: 0.5, priceCeiling: 2.5,
+  },
+  hull_plating: {
+    name: "Hull Plating",
+    description: "Armour plates and structural panels — military-grade structural material.",
+    basePrice: 70, tier: 1, volume: 2, mass: 2.5,
+    volatility: 0.9, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+  },
 
   // ── Tier 2 — Advanced ─────────────────────────────────────────
   // Thin, scarce markets, high per-unit price swing.
@@ -173,6 +257,30 @@ export const GOODS: Record<string, GoodDefinition> = {
     hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 3.0,
+  },
+  weapons_systems: {
+    name: "Weapons Systems",
+    description: "Ship-mounted weapon platforms — turrets, launchers, beam arrays.",
+    basePrice: 160, tier: 2, volume: 1, mass: 1.5,
+    volatility: 1.5, hazard: "high", priceFloor: 0.5, priceCeiling: 3.0,
+  },
+  targeting_arrays: {
+    name: "Targeting Arrays",
+    description: "Fire-control systems, long-range sensors, tactical computers.",
+    basePrice: 140, tier: 2, volume: 1, mass: 0.5,
+    volatility: 1.0, hazard: "none", priceFloor: 0.5, priceCeiling: 3.0,
+  },
+  reactor_cores: {
+    name: "Reactor Cores",
+    description: "Military-grade power plants — fusion reactors, antimatter containment.",
+    basePrice: 170, tier: 2, volume: 1, mass: 2.0,
+    volatility: 1.2, hazard: "high", priceFloor: 0.5, priceCeiling: 3.0,
+  },
+  ship_frames: {
+    name: "Ship Frames",
+    description: "Assembled structural hull sections — spaceframes, bulkheads.",
+    basePrice: 180, tier: 2, volume: 2, mass: 2.5,
+    volatility: 1.0, hazard: "none", priceFloor: 0.5, priceCeiling: 3.0,
   },
 } as const;
 

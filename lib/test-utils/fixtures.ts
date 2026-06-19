@@ -2,7 +2,7 @@
  * Minimal test universe factory + entity builders.
  *
  * Seeds just enough data for integration tests: 2 regions, 3 systems,
- * all 12 goods with equilibrium markets, bidirectional connections.
+ * all goods with equilibrium markets, bidirectional connections.
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
@@ -224,45 +224,47 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     data: { name: `${prefix}-Nova Exchange`, systemId: techSystem.id },
   });
 
-  // Goods (all 12, using GOODS constant for canonical data)
+  // Goods (all goods, using GOODS constant for canonical data). Batched into one
+  // createManyAndReturn; returned ids map back to each good's slug by name.
+  const slugByGoodName = new Map(Object.entries(GOODS).map(([key, def]) => [def.name, key]));
+  const createdGoods = await prisma.good.createManyAndReturn({
+    data: Object.values(GOODS).map((def) => ({
+      name: def.name,
+      description: def.description,
+      basePrice: def.basePrice,
+      tier: def.tier,
+      volume: def.volume,
+      mass: def.mass,
+      volatility: def.volatility,
+      hazard: def.hazard,
+      priceFloor: def.priceFloor,
+      priceCeiling: def.priceCeiling,
+    })),
+    select: { id: true, name: true },
+  });
   const goodIds: Record<string, string> = {};
-  for (const [key, def] of Object.entries(GOODS)) {
-    const good = await prisma.good.create({
-      data: {
-        name: def.name,
-        description: def.description,
-        basePrice: def.basePrice,
-        tier: def.tier,
-        volume: def.volume,
-        mass: def.mass,
-        volatility: def.volatility,
-        hazard: def.hazard,
-        priceFloor: def.priceFloor,
-        priceCeiling: def.priceCeiling,
-      },
-    });
-    goodIds[key] = good.id;
+  for (const g of createdGoods) {
+    const key = slugByGoodName.get(g.name);
+    if (key) goodIds[key] = g.id;
   }
 
-  // Markets — each station gets all 12 goods seeded from its substrate net balance.
+  // Markets — each station gets all goods seeded from its substrate net balance.
+  // Batched into one createMany across every (station, good) pair.
   const stationSystems: { stationId: string; aggregate: ResourceVector; population: number }[] = [
     { stationId: agriStation.id, ...agriSubstrate },
     { stationId: indStation.id, ...indSubstrate },
     { stationId: techStation.id, ...techSubstrate },
   ];
 
-  for (const { stationId, aggregate, population } of stationSystems) {
-    for (const key of Object.keys(GOODS)) {
-      await prisma.stationMarket.create({
-        data: {
-          stationId,
-          goodId: goodIds[key],
-          stock: getInitialStock(aggregate, population, key),
-          demandRate: demandRateForGood(key, population),
-        },
-      });
-    }
-  }
+  const marketData = stationSystems.flatMap(({ stationId, aggregate, population }) =>
+    Object.keys(GOODS).map((key) => ({
+      stationId,
+      goodId: goodIds[key],
+      stock: getInitialStock(aggregate, population, key),
+      demandRate: demandRateForGood(key, population),
+    })),
+  );
+  await prisma.stationMarket.createMany({ data: marketData });
 
   return {
     worldId: world.id,

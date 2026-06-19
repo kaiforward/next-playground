@@ -109,24 +109,34 @@ async function main() {
   await prisma.region.deleteMany();
   await prisma.gameWorld.deleteMany();
 
-  // ── Seed goods ──
+  // ── Seed goods (batched) ──
+  // Names are unique, so map returned ids back to each good's slug by name —
+  // same join the systems/stations/factions seeds use below.
+  const slugByGoodName = new Map(Object.entries(GOODS).map(([key, def]) => [def.name, key]));
+  const createdGoods = await createManyAndReturnChunked(
+    Object.values(GOODS),
+    (batch) =>
+      prisma.good.createManyAndReturn({
+        data: batch.map((def) => ({
+          name: def.name,
+          description: def.description,
+          basePrice: def.basePrice,
+          tier: def.tier,
+          volume: def.volume,
+          mass: def.mass,
+          volatility: def.volatility,
+          hazard: def.hazard,
+          priceFloor: def.priceFloor,
+          priceCeiling: def.priceCeiling,
+        })),
+        select: { id: true, name: true },
+      }),
+  );
   const goodRecords: Record<string, { id: string }> = {};
-  for (const [key, def] of Object.entries(GOODS)) {
-    const good = await prisma.good.create({
-      data: {
-        name: def.name,
-        description: def.description,
-        basePrice: def.basePrice,
-        tier: def.tier,
-        volume: def.volume,
-        mass: def.mass,
-        volatility: def.volatility,
-        hazard: def.hazard,
-        priceFloor: def.priceFloor,
-        priceCeiling: def.priceCeiling,
-      },
-    });
-    goodRecords[key] = good;
+  for (const g of createdGoods) {
+    const key = slugByGoodName.get(g.name);
+    if (!key) throw new Error(`Good "${g.name}" missing from GOODS during seed`);
+    goodRecords[key] = { id: g.id };
   }
   console.log(`  Created ${Object.keys(goodRecords).length} goods`);
 
