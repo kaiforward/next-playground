@@ -177,6 +177,11 @@ Chronic unmet demand climbs unrest; relief decays it. This is an integral over t
 
 **Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source.
 
+The system screen surfaces dynamic population and stability through two views, both tick-invalidated (separate from the static Astrography/substrate read, which is `staleTime: Infinity`):
+
+- **Population tab** — shows the current population magnitude, `popCap` utilisation, unrest/stability (via the stability badge), current strike state, and a per-good demand footprint (how each good's consumption demand distributes across the population).
+- **Overview stability row** — a quick stability badge on the system Overview, so the current unrest level is visible without switching tabs.
+
 > **Prosperity is retired.** The former `prosperity` value (a trade-volume proxy for supply-response scaling, 0.3× crisis to 1.3× booming) is removed. SP1 already moved the smooth supply response onto `population` (`labourFactor`), so the proxy became redundant. Population is now the smooth health channel; `unrest` is the consequence channel.
 
 ### Event-Driven Anchor Shifts

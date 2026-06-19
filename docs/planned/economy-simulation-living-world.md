@@ -1,6 +1,6 @@
 # Economy Simulation — Sub-Project 2: The Living World (Population Dynamics & Consequences)
 
-Status: **Design locked** 2026-06-18; **Part 0 shipped** 2026-06-18 (de-region diffusion — faction-bounded topology + work-budget slicing; calibrated `DISTANCE_DECAY = 0.1`, `EDGES_PER_TICK = 256`). **Part 1 in progress** — PR1–PR3 landed 2026-06-19 (consequence loop, migration, stability map overlay); PR4 (population/stability system-UI readouts) pending. This is the sub-project spec for **Sub-Project 2** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13 item 2, "Demand & consequence loop"). It assumes the shipped SP1 model — physical substrate, population-scaled consumption, days-of-supply pricing — and does not re-argue it. The code-heavy build plan hangs off this spec in `docs/plans/` and is deleted when SP2 ships.
+Status: **Design locked** 2026-06-18; **Part 0 shipped** 2026-06-18 (de-region diffusion — faction-bounded topology + work-budget slicing; calibrated `DISTANCE_DECAY = 0.1`, `EDGES_PER_TICK = 256`). **Part 1 shipped** 2026-06-19 (consequence loop, migration, stability map overlay, population/stability system-UI readouts — Population tab + Overview stability row); calibrated constants: `UNREST_PARAMS { gain: 0.06, decay: 0.06 }`, `STRIKE_PARAMS { threshold: 0.65, floorMultiplier: 0.25 }`, `POPULATION_PARAMS { growthRate: 0.015, declineRate: 0.03 }`, `MIGRATION_PARAMS { maxOutflowFraction: 0.05, gradientThreshold: 0.02, distanceDecay: 0.1 }`. **Sub-Project 2 complete.** This is the sub-project spec for **Sub-Project 2** of the [Economy Simulation Vision](./economy-simulation-vision.md) (vision §13 item 2, "Demand & consequence loop"). It assumes the shipped SP1 model — physical substrate, population-scaled consumption, days-of-supply pricing — and does not re-argue it. The build plan has been deleted.
 
 Read the [vision](./economy-simulation-vision.md) (§4 population keystone, §5 tick loop, §7 consequences, §10 rethinks) and [SP1 substrate spec](./economy-simulation-substrate.md) first.
 
@@ -198,11 +198,11 @@ This is a **one-tick feedback loop, not a cycle**: unrest written this tick supp
 
 ## 13. Success criteria ("done")
 
-1. **Part 0:** goods diffuse over the intra-faction graph (region lines ignored, faction borders closed), distance-attenuated, sharded by work-budget; the economy recalibrates to the same coarse targets; no Postgres-timeout regression at 10K scale.
-2. **Part 1:** `population` is Float and moves; `unrest` accumulates from convex demand-weighted dissatisfaction; chronic shortage triggers strikes (production suppressed) and decline; migration relocates population along the unified topology, producing visible boom/bust geography.
-3. Prosperity is fully retired; the stability UI reads from unrest; `demandRate` tracks population each tick.
-4. `npm run simulate` validates stable-but-growing (no collapse, no saturation, no ping-pong; existing targets hold).
-5. All unit/integration tests pass; no `as`/`unknown` violations; conventions held.
+1. **Part 0 ✓:** goods diffuse over the intra-faction graph (region lines ignored, faction borders closed), distance-attenuated, sharded by work-budget; the economy recalibrates to the same coarse targets; no Postgres-timeout regression at 10K scale.
+2. **Part 1 ✓:** `population` is Float and moves; `unrest` accumulates from convex demand-weighted dissatisfaction; chronic shortage triggers strikes (production suppressed) and decline; migration relocates population along the unified topology, producing visible boom/bust geography.
+3. **✓** Prosperity is fully retired; the stability UI reads from unrest; `demandRate` tracks population each tick.
+4. **✓** `npm run simulate` validates stable-but-growing (no collapse, no saturation, no ping-pong; existing targets hold).
+5. **✓** All unit/integration tests pass; no `as`/`unknown` violations; conventions held.
 
 ---
 
@@ -224,5 +224,5 @@ This is a **one-tick feedback loop, not a cycle**: unrest written this tick supp
 
 - **[economy-simulation-vision.md](./economy-simulation-vision.md)** — the north star; SP2 implements its §13 item 2 (demand & consequence loop) and resolves its §14 open items on migration mechanics and unrest thresholds. Rebellion and relation-weighted borders move to SP5; prosperity's fold (§10) lands here.
 - **[economy-simulation-substrate.md](./economy-simulation-substrate.md)** — SP1; SP2 builds on its static population, days-of-supply pricing, and the anticipated per-tick `demandRate` rewrite (§8.2.2).
-- **[economy.md](../active/gameplay/economy.md)** / **[system-traits.md](../active/gameplay/system-traits.md)** (active) — updated through SP2 Part 1 PR3 (unrest/stability replaces prosperity; population is dynamic; diffusion topology section rewritten); the population/stability system-UI readouts follow in PR4.
+- **[economy.md](../active/gameplay/economy.md)** / **[system-traits.md](../active/gameplay/system-traits.md)** (active) — updated through SP2 Part 1 (unrest/stability replaces prosperity; population is dynamic; diffusion topology section rewritten; population/stability system-UI readouts documented).
 - **[faction-system.md](../active/gameplay/faction-system.md)** (active) — gains the SP5 hooks SP2 defers to it (rebellion, relation-weighted borders).
