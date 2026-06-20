@@ -171,6 +171,7 @@ async function main() {
           sunClass: sys.sunClass,
           population: sys.population,
           popCap: sys.popCap,
+          buildSpace: sys.buildSpace,
           ...aggregateColumns(sys.aggregate),
           bodyDanger: sys.bodyDanger,
         })),
@@ -229,6 +230,20 @@ async function main() {
     prisma.systemBody.createMany({ data: batch }),
   );
 
+  // ── Seed buildings (batched) — one row per (system, buildingType) with count > 0 ──
+  const buildingData = universe.systems.flatMap((sys) =>
+    Object.entries(sys.buildings)
+      .filter(([, count]) => count > 0)
+      .map(([buildingType, count]) => ({
+        systemId: systemIds[sys.index],
+        buildingType,
+        count,
+      })),
+  );
+  await createManyChunked(buildingData, (batch) =>
+    prisma.systemBuilding.createMany({ data: batch }),
+  );
+
   // ── Seed feature traits (batched) ──
   const traitData = universe.systems.flatMap((sys) =>
     sys.traits.map((t) => ({
@@ -244,7 +259,7 @@ async function main() {
   const totalBodies = bodyData.length;
   const totalTraits = traitData.length;
   console.log(
-    `  Created ${universe.systems.length} star systems with stations, markets, ${totalBodies} bodies, and ${totalTraits} feature traits`,
+    `  Created ${universe.systems.length} star systems with stations, markets, ${totalBodies} bodies, ${totalTraits} feature traits, and ${buildingData.length} building rows`,
   );
 
   // ── Compute and store dominant economy per region ──

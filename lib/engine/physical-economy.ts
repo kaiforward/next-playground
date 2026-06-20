@@ -30,6 +30,12 @@ export function labourFactor(population: number): number {
   return population / (population + LABOUR_HALF_POP);
 }
 
+/** Population-scaled consumption rate for a good: perCapitaNeed × population. */
+export function consumptionRate(goodId: string, population: number): number {
+  const need = GOOD_CONSUMPTION[goodId] ?? 0;
+  return need * Math.max(0, population);
+}
+
 /**
  * Physical production + consumption rates for a good at a system.
  *   production  = coeff × labour × (resource-driven ? aggregate[resource] : 1)
@@ -48,8 +54,7 @@ export function physicalRates(
     ? driver.coeff * labour * (driver.resource ? aggregate[driver.resource] : 1)
     : 0;
 
-  const need = GOOD_CONSUMPTION[goodId] ?? 0;
-  const consumption = need * Math.max(0, population);
+  const consumption = consumptionRate(goodId, population);
 
   return { production, consumption };
 }

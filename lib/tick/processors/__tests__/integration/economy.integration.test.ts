@@ -155,6 +155,45 @@ describe("economyProcessor (integration)", () => {
     expect(payload.marketCount).toBeGreaterThan(0);
   });
 
+  it("raises stock for a good the system has buildings for, but not for one it lacks", async () => {
+    // The agricultural system has food/textiles/water extractors but no
+    // consumer_goods plant — consumer_goods needs a polymers input this system
+    // can't produce locally. consumer_goods is a labour-only (tier-1) good: the
+    // old labour-driven model would have produced it from population alone, so a
+    // capacity-driven adapter MUST leave it unproduced here. Its low volatility
+    // keeps it near the floor over the run.
+    //
+    // Both start at the floor. Food's building-production (~8/tick) pushes it
+    // well above consumer_goods, which has no building and only drifts on
+    // consumption plus small noise.
+    const foodGoodId = universe.goodIds["food"];
+    const labourOnlyGoodId = universe.goodIds["consumer_goods"];
+    const station = universe.stations.agricultural;
+
+    await prisma.stationMarket.updateMany({
+      where: { stationId: station, goodId: { in: [foodGoodId, labourOnlyGoodId] } },
+      data: { stock: ECONOMY_CONSTANTS.MIN_LEVEL },
+    });
+
+    const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
+    const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
+
+    for (let t = 0; t < 15; t++) {
+      await runProcessor(tickForRegion(t, fedIdx, regions.length));
+    }
+
+    const food = await prisma.stationMarket.findFirstOrThrow({
+      where: { stationId: station, goodId: foodGoodId },
+    });
+    const labourOnly = await prisma.stationMarket.findFirstOrThrow({
+      where: { stationId: station, goodId: labourOnlyGoodId },
+    });
+    // Food has a building → produced; climbs well above its floor start.
+    expect(food.stock).toBeGreaterThan(ECONOMY_CONSTANTS.MIN_LEVEL + 20);
+    // consumer_goods has no building → not produced; stays far below food.
+    expect(food.stock).toBeGreaterThan(labourOnly.stock + 20);
+  });
+
   it("writes anchorMult from an active anchor_shift modifier", async () => {
     // goodIds["food"] is the DB CUID used for StationMarket lookups.
     // EventModifier.goodId stores the canonical good KEY ("food"), not the DB id.

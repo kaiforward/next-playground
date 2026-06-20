@@ -37,6 +37,8 @@ export interface SimSystem {
   bodyDanger: number;
   /** Unrest accumulator (0…1) — integral of demand-weighted dissatisfaction. */
   unrest: number;
+  /** Seeded industrial base — buildingType → count. Static at runtime. */
+  buildings: Record<string, number>;
 }
 
 export interface SimConnection {

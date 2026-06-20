@@ -8,7 +8,7 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 ## Goods
 
-12 goods organized in 3 tiers. Tiers create a natural progression: cheap, deep-market goods for early game; expensive, thin-market goods for late game.
+26 goods organized in 3 tiers. Tiers create a natural progression: cheap, deep-market goods for early game; expensive, thin-market goods for late game.
 
 ### Tier 0 — Raw Materials
 
@@ -65,29 +65,34 @@ Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in 
 
 ## Production & Consumption
 
-Production and consumption are **physical** — they derive from each system's substrate (its aggregate resource vector + population), not from an economy-type rate table. One pure function, `physicalRates(goodId, aggregate, population)` (`lib/engine/physical-economy.ts`), is the single source of the formula, shared by the live tick, the simulator, and the substrate read service. Economy type no longer drives the tick; it is a derived display label (see [system-traits.md](./system-traits.md)).
+Production and consumption are **physical** — they derive from each system's seeded industrial base and population, not from an economy-type rate table. Economy type is a derived display label (see [system-traits.md](./system-traits.md)).
 
-**Production** — one driver per good, `{ coeff, resource? }` in `lib/constants/physical-economy.ts`:
-```
-prodRate = coeff × labourFactor(population) × (resource-driven ? aggregate[resource] : 1)
-```
-- **Tier 0** goods are *resource-driven*: `water ← water`, `food ← arable`, `ore ← ore`, `textiles ← arable` (arable splits between food and textiles via differing coeffs). They scale with both a body-resource deposit *and* labour, so a water-rich, populated world is a strong net water exporter.
-- **Tier 1–2** goods are *labour-only*: `coeff × labourFactor(population)`, no resource gate. Higher tiers carry smaller coeffs (luxuries rarest). The four resources with no tier-0 good (gas, minerals, biomass, radioactive) stay economically inert until the facilities sub-project gives them inputs.
-- `labourFactor(population) = population / (population + LABOUR_HALF_POP)` — a soft-saturating scalar in [0, 1), a fixed per-system value while population is static.
+**Production** — capacity-driven, computed per good `g` from the system's `SystemBuilding` rows (see [system-traits.md](./system-traits.md) §1.5):
 
-**Consumption** — universal and population-scaled:
+```
+production_g = Σ(buildings whose output good is g)  count × outputPerUnit × labourFulfillment
+labourFulfillment = min(1, population / Σ(count × labourPerUnit))
+```
+
+`labourFulfillment` is one uniform system-wide ratio — population is the labour pool, and if labour demand exceeds population the whole industrial base operates below capacity. Key constraints by building tier:
+
+- **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, food, …). Their building count is capped at world-gen by the system's body resource deposits and build space, so resource-rich bodies drive extractor capacity.
+- **Tier-1+ manufacturers** — build-space and labour bound only. Each building type carries a `inputs` recipe, but **input gating is not yet applied** — a manufacturer produces its output at full `labourFulfillment` regardless of whether its input goods are in surplus. `[PENDING: supply-chain]`
+- **Housing** — a non-production building type: it does not appear in production sums. Instead, `popCap = bodyBaseline + Σ(housing count × popProvided)`.
+
+**Consumption** — universal and population-scaled, unchanged:
 ```
 consRate = perCapitaNeed(good) × population
 ```
 Every system consumes every good; higher tier → lower per-capita need. A system runs a positive **net balance** for a good when its production exceeds its consumption — that surplus is what flows out along trade routes.
 
-**Emergent geography:** raw goods flow resource-rich frontier → core; manufactured goods flow populous core → frontier. The geography is deliberately **coarse** at this stage: tier-1+ production is labour-only with no competition for build space, so a populous world net-produces nearly every manufactured good. Genuine specialisation (housing vs. industry competing for finite body space) arrives with the facilities sub-project; until then the economy-type label is loose flavour, not a promise about net trade.
+**Emergent geography:** raw goods flow from deposit-rich frontier worlds toward populous cores; manufactured goods follow wherever build space and labour concentrate. Economy-type labels now reflect the build-space allocation at world-gen — a system seeded with more extractor capacity reads as `extraction`, one with heavier manufacturing allocation reads as `industrial` — rather than a coarse labour-only heuristic.
 
-All coefficients and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller coeff and smaller need). The government `consumptionBoost` layers on top of consumption; strike suppression scales production down when `unrest` exceeds the strike threshold.
+All `outputPerUnit` constants and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller output and smaller need). The government `consumptionBoost` layers on top of consumption; strike suppression scales production down when `unrest` exceeds the strike threshold.
 
 ### Market Seeding
 
-At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's days-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the [5, 200] stock band. The old per-economy-type self-sufficiency table is gone; import dependence now falls directly out of the substrate.
+At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's days-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. Net balance is computed from the capacity-driven production rates above (using a `labourFactor` heuristic to approximate `labourFulfillment` at seed time) and population-scaled consumption. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the [5, 200] stock band. Import dependence falls directly out of the substrate and the seeded industrial base.
 
 ---
 
@@ -154,13 +159,13 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 | Bid-ask spread `s` | 0.05 base | Buy/sell gap; scaled by government; makes round-trips lose |
 | Noise amplitude | ±3 base | Micro-volatility, scaled by volatility × government |
 | Min/max stock | 5 / 200 | Stock bounds (ceiling price at MIN, floor price at MAX) |
-| Production rate | substrate-driven | `coeff × labour(pop) × resource`; scaled by self-limiting + strike suppression |
+| Production rate | capacity-driven | `Σ count × outputPerUnit × labourFulfillment`; scaled by self-limiting + strike suppression |
 | Consumption rate | population-scaled | `perCapitaNeed × population`; scaled by self-limiting only (never strike-suppressed) |
 | Price history | Rolling window | Snapshots recorded periodically (`lib/engine/snapshot.ts`) |
 
 ### Population, Unrest, and Strikes
 
-Each system has a **`population`** (a Float magnitude) that is now dynamic — it grows, declines, and migrates. The population drives production labour (`labourFactor`) and consumption demand (`perCapitaNeed × population`). As population moves, the stored `demandRate` per market is rewritten each tick to reflect the new level.
+Each system has a **`population`** (a Float magnitude) that is now dynamic — it grows, declines, and migrates. Population drives the system-wide `labourFulfillment` ratio (labour pool for the seeded industrial base) and consumption demand (`perCapitaNeed × population`). As population moves, the stored `demandRate` per market is rewritten each tick to reflect the new level.
 
 **Unrest (`unrest`, 0…1)** accumulates from unmet need. Each economy tick the processor records per-good satisfaction (`delivered / demanded`) for each system it processes. The population processor then computes a convex, demand-weighted dissatisfaction value `D` — where a deep food shortage dominates many shallow ones because food's demand weight is ~8× a luxury's — and integrates it:
 
@@ -243,8 +248,10 @@ The economy→population **satisfaction handoff** (`ctx.results`) is purely in-m
 Viewed another way, the simulation stacks four layers from static to real-time:
 
 ```
-1  Base identity (static)      bodies (resources + population) -> per-good
-                               produce/consume rates (physicalRates);
+1  Base identity (static)      bodies (resources + population) + seeded
+                               industrial base (SystemBuilding counts, buildSpace)
+                               -> per-good production rates (capacity-driven);
+                               population-scaled consumption rates;
                                demand rate -> days-of-supply pricing reference;
                                net balance -> seed stock + import dependence;
                                government -> volatility, spread, boosts

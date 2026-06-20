@@ -81,6 +81,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
       bodyDanger: s.bodyDanger,
       unrest: 0,
+      buildings: s.buildings,
     };
   });
 

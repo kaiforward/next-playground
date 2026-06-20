@@ -37,6 +37,10 @@ export interface GeneratedSystem {
   bodyDanger: number;
   /** Narrative features (the pruned trait subset). */
   traits: GeneratedTrait[];
+  /** Total build-space budget. */
+  buildSpace: number;
+  /** Seeded industrial base — buildingType → count. */
+  buildings: Record<string, number>;
   x: number;
   y: number;
   regionIndex: number;
@@ -384,6 +388,8 @@ export function generateSystems(
       population: substrate.population,
       bodyDanger: substrate.bodyDanger,
       traits: substrate.features,
+      buildSpace: substrate.buildSpace,
+      buildings: substrate.buildings,
       x: points[i].x,
       y: points[i].y,
       regionIndex,

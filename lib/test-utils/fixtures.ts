@@ -9,6 +9,8 @@ import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
 import { makeResourceVector, aggregateColumns } from "@/lib/engine/resources";
 import type { Doctrine, GovernmentType, ResourceVector } from "@/lib/types/game";
+import { allocateIndustry } from "@/lib/engine/industry-seed";
+import { mulberry32 } from "@/lib/engine/universe-gen";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -138,6 +140,23 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
 
   // Systems first (faction homeworld FK requires them to exist), then factions,
   // then bind systems to their owning faction.
+  //
+  // Each system gets a deterministic industrial allocation so integration tests
+  // have building rows available. Fixed seeds (101/102/103) and a coarse
+  // buildSpace keep the allocations stable across test runs.
+  const agriAllocation = allocateIndustry(
+    { aggregate: agriSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: agriSubstrate.population, fill: 0.8 },
+    mulberry32(101),
+  );
+  const indAllocation = allocateIndustry(
+    { aggregate: indSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: indSubstrate.population, fill: 0.8 },
+    mulberry32(102),
+  );
+  const techAllocation = allocateIndustry(
+    { aggregate: techSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: techSubstrate.population, fill: 0.8 },
+    mulberry32(103),
+  );
+
   const agriSystem = await prisma.starSystem.create({
     data: {
       name: `${prefix}-Harvest Prime`,
@@ -146,6 +165,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: fedRegion.id,
       population: agriSubstrate.population,
+      buildSpace: agriAllocation.buildSpace,
       ...aggregateColumns(agriSubstrate.aggregate),
     },
   });
@@ -158,6 +178,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: corpRegion.id,
       population: indSubstrate.population,
+      buildSpace: indAllocation.buildSpace,
       ...aggregateColumns(indSubstrate.aggregate),
     },
   });
@@ -170,9 +191,23 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: corpRegion.id,
       population: techSubstrate.population,
+      buildSpace: techAllocation.buildSpace,
       ...aggregateColumns(techSubstrate.aggregate),
     },
   });
+
+  // Batch-create building rows for all three systems — one row per
+  // (system, buildingType) with count > 0.
+  const fixtureBuildingData = [
+    { systemId: agriSystem.id, buildings: agriAllocation.buildings },
+    { systemId: indSystem.id, buildings: indAllocation.buildings },
+    { systemId: techSystem.id, buildings: techAllocation.buildings },
+  ].flatMap(({ systemId, buildings }) =>
+    Object.entries(buildings)
+      .filter(([, count]) => count > 0)
+      .map(([buildingType, count]) => ({ systemId, buildingType, count })),
+  );
+  await prisma.systemBuilding.createMany({ data: fixtureBuildingData });
 
   // Two factions, one per region — Federation owns agri, Corporate owns ind+tech.
   const fedFaction = await createTestFaction(prisma, {
