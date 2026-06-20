@@ -51,13 +51,28 @@ export const DEFAULT_LABOUR_PER_UNIT = 25;
 export const HOUSING_POP_PROVIDED = 20;
 
 /**
- * Per-good per-building output at full labour. First-draft = the
- * physical-economy production coefficient, so a fully built-out, deposit-rich
- * world roughly reproduces the substrate layer's output. Independent of that
- * table going forward — simulator-calibrated; only relative shape matters.
+ * Per-good per-building output at full labour. Base = the physical-economy
+ * production coefficient, so a fully built-out, deposit-rich world roughly
+ * reproduces the substrate layer's output. Independent of that table going
+ * forward — simulator-calibrated; only relative shape matters.
+ *
+ * The high-consumption tier-0 staples carry an output override: their extractor
+ * count is deposit-capped while their per-capita need is the largest in the
+ * roster (consumption = need × population), so base coeffs leave them draining.
+ * The override lifts per-extractor yield to track staple demand without
+ * disturbing the balanced higher tiers. Gas runs highest because its deposit is
+ * the rarest, so the fewest systems can host an extractor.
  */
+const OUTPUT_OVERRIDES: Record<string, number> = {
+  food: 7.0,
+  water: 6.0,
+  gas: 12.0,
+  textiles: 1.4,
+  minerals: 2.2,
+};
+
 export const OUTPUT_PER_UNIT: Record<string, number> = Object.fromEntries(
-  GOOD_NAMES.map((g) => [g, GOOD_PRODUCTION[g]?.coeff ?? 1]),
+  GOOD_NAMES.map((g) => [g, OUTPUT_OVERRIDES[g] ?? GOOD_PRODUCTION[g]?.coeff ?? 1]),
 );
 
 function buildProductionTypes(): Record<string, BuildingTypeDef> {
