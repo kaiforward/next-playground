@@ -20,6 +20,7 @@ import {
   habitabilityFactor,
   sizeFactor,
 } from "@/lib/constants/industry";
+import { GOOD_RECIPE_CONSUMERS } from "@/lib/constants/recipes";
 
 /** Build-space a single body contributes: BASE_SPACE × size × habitability. */
 export function bodyBuildSpace(size: number, habitable: boolean): number {
@@ -95,4 +96,23 @@ export function capacityGoodRates(
     production: buildingProduction(buildings, goodId, fulfillment),
     consumption: (GOOD_CONSUMPTION[goodId] ?? 0) * pop,
   }));
+}
+
+/**
+ * Production-input demand on `goodId` from the local industrial base: the total
+ * desired (uncapped) draw of `goodId` across every building type that consumes
+ * it. Capacity-based — the stable pricing-reference term folded into demandRate.
+ * `fulfillment` is the system-wide labour ratio
+ * (`labourFulfillment(population, labourDemand(buildings))`).
+ */
+export function inputDemandForGood(
+  buildings: Record<string, number>,
+  goodId: string,
+  fulfillment: number,
+): number {
+  let demand = 0;
+  for (const consumer of GOOD_RECIPE_CONSUMERS[goodId] ?? []) {
+    demand += buildingProduction(buildings, consumer.goodId, fulfillment) * consumer.perOutput;
+  }
+  return demand;
 }

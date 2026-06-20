@@ -7,6 +7,7 @@ import {
   housingPopCap,
   buildingProduction,
   capacityGoodRates,
+  inputDemandForGood,
 } from "@/lib/engine/industry";
 import {
   BASE_SPACE,
@@ -15,6 +16,7 @@ import {
   OUTPUT_PER_UNIT,
   HOUSING_TYPE,
 } from "@/lib/constants/industry";
+import { GOOD_RECIPES } from "@/lib/constants/recipes";
 
 describe("bodyBuildSpace", () => {
   it("scales with size and habitability", () => {
@@ -81,5 +83,32 @@ describe("capacityGoodRates", () => {
     expect(ore.consumption).toBeGreaterThan(0); // everyone consumes ore a little
     expect(food.production).toBe(0); // no food buildings
     expect(food.consumption).toBeGreaterThan(0);
+  });
+});
+
+describe("inputDemandForGood", () => {
+  it("computes ore demand from a smelter (metals) building", () => {
+    // metals recipe = { ore: 1 }. One metals building, fully staffed.
+    const buildings = { metals: 4 };
+    const pop = labourDemand(buildings); // exactly staffs them ⇒ fulfillment 1
+    const f = labourFulfillment(pop, labourDemand(buildings));
+    const metalsCapacity = 4 * OUTPUT_PER_UNIT["metals"] * f;
+    const expectedOreDemand = metalsCapacity * GOOD_RECIPES["metals"]["ore"];
+    expect(inputDemandForGood(buildings, "ore", f)).toBeCloseTo(expectedOreDemand, 6);
+  });
+
+  it("returns 0 for a good nothing consumes as an input", () => {
+    expect(inputDemandForGood({ metals: 4 }, "luxuries", 1)).toBe(0);
+  });
+
+  it("sums across multiple consumers of the same input", () => {
+    // minerals feeds chemicals, alloys, components.
+    const buildings = { chemicals: 2, alloys: 2, components: 2 };
+    const f = 1;
+    const direct =
+      inputDemandForGood({ chemicals: 2 }, "minerals", f) +
+      inputDemandForGood({ alloys: 2 }, "minerals", f) +
+      inputDemandForGood({ components: 2 }, "minerals", f);
+    expect(inputDemandForGood(buildings, "minerals", f)).toBeCloseTo(direct, 6);
   });
 });
