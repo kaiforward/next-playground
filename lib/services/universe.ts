@@ -3,7 +3,7 @@ import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, BodyView } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
-import { substrateGoodRates } from "@/lib/engine/physical-economy";
+import { capacityGoodRates } from "@/lib/engine/industry";
 import { toSunClass, toBodyArchetypeId, toRichnessModifierId } from "@/lib/types/guards";
 import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
@@ -234,6 +234,7 @@ export async function getSystemSubstrate(
             richnessModifiers: true,
           },
         },
+        buildings: { select: { buildingType: true, count: true } },
       },
     }),
   ]);
@@ -284,6 +285,9 @@ export async function getSystemSubstrate(
     };
   });
 
+  const buildings: Record<string, number> = {};
+  for (const b of system.buildings) buildings[b.buildingType] = b.count;
+
   return {
     visibility: "visible",
     sunClass: toSunClass(system.sunClass),
@@ -291,6 +295,6 @@ export async function getSystemSubstrate(
     popCap: system.popCap,
     aggregate,
     bodies,
-    goods: substrateGoodRates(aggregate, system.population),
+    goods: capacityGoodRates(buildings, system.population),
   };
 }
