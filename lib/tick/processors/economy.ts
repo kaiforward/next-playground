@@ -5,11 +5,11 @@ import type {
   EconomySignals,
 } from "../types";
 import {
-  simulateEconomyTick,
   selfLimitingFactor,
   type EconomySimParams,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
+import { simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
@@ -103,7 +103,8 @@ export async function runEconomyProcessor(
   );
 
   const tickEntries: MarketTickEntry[] = resolved.map((r) => r.entry);
-  const simulated = simulateEconomyTick(tickEntries, simParams, rng);
+  const entrySystemIds = markets.map((m) => m.systemId);
+  const simulated = simulateCoupledEconomyTick(tickEntries, entrySystemIds, simParams, rng);
 
   // anchorMult comes straight off the resolved tick — the builder already
   // aggregated the system's modifiers, so there's no second aggregation pass.
