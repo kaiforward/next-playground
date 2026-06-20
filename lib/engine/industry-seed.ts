@@ -20,7 +20,7 @@ import {
   HOUSING_TYPE,
   PRODUCTION_BUILDING_TYPES,
   effectiveSpaceCost,
-  HOUSING_POP_PROVIDED,
+  POP_CENTRE_DENSITY,
 } from "@/lib/constants/industry";
 import { labourDemand, housingPopCap, buildSpaceUsed } from "@/lib/engine/industry";
 
@@ -102,7 +102,7 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
   const demand = labourDemand(buildings);
   const labourCovered = Math.min(bodyBaselinePopCap, demand);
   const labourShortfall = Math.max(0, demand - labourCovered);
-  const housingWanted = labourShortfall / HOUSING_POP_PROVIDED;
+  const housingWanted = labourShortfall / POP_CENTRE_DENSITY;
   const housingCost = effectiveSpaceCost(HOUSING_TYPE);
   const housingAffordable = (buildSpace - buildSpaceUsed(buildings)) / housingCost;
   const housingCount = Math.max(0, Math.min(housingWanted, housingAffordable));

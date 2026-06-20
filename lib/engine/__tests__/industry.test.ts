@@ -13,7 +13,7 @@ import {
 import {
   BASE_SPACE,
   DEFAULT_LABOUR_PER_UNIT,
-  HOUSING_POP_PROVIDED,
+  POP_CENTRE_DENSITY,
   OUTPUT_PER_UNIT,
   HOUSING_TYPE,
 } from "@/lib/constants/industry";
@@ -59,8 +59,9 @@ describe("buildSpaceUsed", () => {
 });
 
 describe("housingPopCap", () => {
-  it("returns housing.count × popProvided", () => {
-    expect(housingPopCap({ [HOUSING_TYPE]: 5, ore: 3 })).toBeCloseTo(5 * HOUSING_POP_PROVIDED, 6);
+  it("returns housing.count × POP_CENTRE_DENSITY; zero pop-centres → floor is 0", () => {
+    expect(housingPopCap({ [HOUSING_TYPE]: 5, ore: 3 })).toBeCloseTo(5 * POP_CENTRE_DENSITY, 6);
+    expect(housingPopCap({ [HOUSING_TYPE]: 3 })).toBeCloseTo(3 * POP_CENTRE_DENSITY, 6);
     expect(housingPopCap({ ore: 3 })).toBe(0);
   });
 });

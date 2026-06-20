@@ -80,6 +80,9 @@ export type ResourceType =
   | "water"
   | "radioactive";
 
+/** Deposit yield multiplier quality bands. */
+export type QualityBandId = "poor" | "average" | "good" | "rich";
+
 /** A magnitude per resource type. Used for body resource bases and system aggregates. */
 export type ResourceVector = Record<ResourceType, number>;
 

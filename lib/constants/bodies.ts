@@ -18,6 +18,10 @@ export interface BodyArchetype {
   popCapWeight: number;
   /** Body-type danger contribution — summed into each system's body danger baseline. */
   dangerBaseline: number;
+  /** Relative weight of fungible/buildable general space on this body type (higher = more land to develop). */
+  generalWeight: number;
+  /** Fraction of general space that is habitable (supports population centres). Range [0, 1]. */
+  habitableFraction: number;
 }
 
 export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
@@ -25,46 +29,55 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "garden_world", name: "Garden World", habitable: true,
     resourceBase: makeResourceVector({ minerals: 1, ore: 1, biomass: 2, arable: 3, water: 2 }),
     popCapWeight: 12, dangerBaseline: 0,
+    generalWeight: 9, habitableFraction: 0.7,
   },
   ocean_world: {
     id: "ocean_world", name: "Ocean World", habitable: true,
     resourceBase: makeResourceVector({ biomass: 2, arable: 1, water: 3 }),
     popCapWeight: 12, dangerBaseline: 0,
+    generalWeight: 6, habitableFraction: 0.45,
   },
   jungle_world: {
     id: "jungle_world", name: "Jungle World", habitable: true,
     resourceBase: makeResourceVector({ ore: 1, biomass: 3, arable: 2, water: 2 }),
     popCapWeight: 7, dangerBaseline: 0,
+    generalWeight: 7, habitableFraction: 0.5,
   },
   arid_world: {
     id: "arid_world", name: "Arid World", habitable: true,
     resourceBase: makeResourceVector({ minerals: 2, ore: 2, arable: 1, radioactive: 1 }),
     popCapWeight: 3, dangerBaseline: 0,
+    generalWeight: 5, habitableFraction: 0.25,
   },
   volcanic_world: {
     id: "volcanic_world", name: "Volcanic World", habitable: false,
     resourceBase: makeResourceVector({ gas: 1, minerals: 2, ore: 3, radioactive: 2 }),
     popCapWeight: 1, dangerBaseline: 0.05,
+    generalWeight: 2, habitableFraction: 0.03,
   },
   frozen_world: {
     id: "frozen_world", name: "Frozen World", habitable: false,
     resourceBase: makeResourceVector({ gas: 1, ore: 1, water: 3 }),
     popCapWeight: 1, dangerBaseline: 0,
+    generalWeight: 3, habitableFraction: 0.05,
   },
   barren_rock: {
     id: "barren_rock", name: "Barren Rock", habitable: false,
     resourceBase: makeResourceVector({ minerals: 2, ore: 2, radioactive: 1 }),
     popCapWeight: 1, dangerBaseline: 0,
+    generalWeight: 3, habitableFraction: 0.05,
   },
   gas_giant: {
     id: "gas_giant", name: "Gas Giant", habitable: false,
     resourceBase: makeResourceVector({ gas: 3, water: 1 }),
     popCapWeight: 1, dangerBaseline: 0,
+    generalWeight: 1, habitableFraction: 0.02,
   },
   asteroid_belt: {
     id: "asteroid_belt", name: "Asteroid Belt", habitable: false,
     resourceBase: makeResourceVector({ minerals: 3, ore: 3, radioactive: 1 }),
     popCapWeight: 1, dangerBaseline: 0,
+    generalWeight: 2, habitableFraction: 0.02,
   },
 };
 

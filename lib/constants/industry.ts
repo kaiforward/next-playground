@@ -47,8 +47,8 @@ export const HABITABILITY_FACTOR = { habitable: 1.0, uninhabitable: 0.15 } as co
 export const DEFAULT_SPACE_COST = 1.0;
 /** Default population to fully staff one production building. */
 export const DEFAULT_LABOUR_PER_UNIT = 25;
-/** popCap one housing building provides. Below labourPerUnit by design — housing alone can't staff the industry it enables, forcing a mixed build-out. */
-export const HOUSING_POP_PROVIDED = 20;
+/** popCap one population-centre building provides. Below labourPerUnit by design — pop-centres alone can't staff the industry they enable, forcing a mixed build-out. */
+export const POP_CENTRE_DENSITY = 20;
 
 /**
  * Per-good per-building output at full labour. Base = the physical-economy
@@ -100,7 +100,7 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
 
 export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
   ...buildProductionTypes(),
-  [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: HOUSING_POP_PROVIDED },
+  [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: POP_CENTRE_DENSITY },
 };
 
 /** The 26 production building type ids (good ids), in canonical good order. */
