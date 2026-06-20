@@ -25,6 +25,11 @@ describe("inputGate", () => {
     const stock = (g: string) => (g === "gas" ? 200 : 6); // minerals drawable 1 ⇒ ratio 0.2
     expect(inputGate("chemicals", 10, stock, 5)).toBeCloseTo(0.2, 6);
   });
+
+  it("is 0 when the input sits exactly at the floor (nothing drawable)", () => {
+    // stock === minLevel ⇒ drawable 0 ⇒ gate 0; production fully starved.
+    expect(inputGate("metals", 10, () => 5, 5)).toBe(0);
+  });
 });
 
 describe("simulateSystemEconomyTick", () => {
@@ -68,6 +73,26 @@ describe("simulateSystemEconomyTick", () => {
       noRng,
     );
     expect(out.map((e) => e.goodId)).toEqual(["metals", "ore"]);
+  });
+
+  it("keeps a shared scarce input above the floor across two same-tick consumers", () => {
+    // chemicals { gas, minerals } and components { minerals, metals } both draw
+    // minerals in one tick. Minerals starts just above the floor, so the second
+    // consumer sees stock already drawn down by the first — the Math.max guard
+    // must still keep it at/above the floor.
+    const out = simulateSystemEconomyTick(
+      [
+        entry("minerals", 6, 0),
+        entry("gas", 200, 0),
+        entry("metals", 200, 0),
+        entry("chemicals", 50, 10),
+        entry("components", 50, 10),
+      ],
+      PARAMS,
+      noRng,
+    );
+    const minerals = out.find((e) => e.goodId === "minerals")!;
+    expect(minerals.stock).toBeGreaterThanOrEqual(5);
   });
 
   it("cascade: cutting ore supply throttles metals output", () => {

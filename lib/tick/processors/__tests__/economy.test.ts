@@ -309,7 +309,11 @@ describe("economy processor: supply-chain input-gating", () => {
     const metalsA = worldA.markets.find((m) => m.goodId === "metals")!.stock;
     const metalsB = worldB.markets.find((m) => m.goodId === "metals")!.stock;
 
-    // Ore-rich A: gate ≈ 1 → metals rises. Ore-starved B: gate = 0 → metals stagnant.
+    // Ore-rich A: gate ≈ 1 → metals production raises stock above its start.
+    // Ore-starved B: gate = 0 → no metals output, so stock cannot rise (noise is
+    // off; it only holds flat or drains via consumption).
+    expect(metalsA).toBeGreaterThan(MID_METALS);
+    expect(metalsB).toBeLessThanOrEqual(MID_METALS);
     expect(metalsA).toBeGreaterThan(metalsB);
   });
 });

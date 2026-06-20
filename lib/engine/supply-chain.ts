@@ -18,6 +18,9 @@ import {
 } from "@/lib/engine/tick";
 import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 
+/** Good → processing rank, derived once from the static recipe-topological order. */
+const PRODUCTION_ORDER_INDEX = new Map(PRODUCTION_GOOD_ORDER.map((g, i) => [g, i]));
+
 /**
  * Input-availability throttle in [0, 1] for one producing good. Returns 1 for
  * tier-0 / no-recipe goods and for zero production. Computed against drawable
@@ -62,11 +65,10 @@ export function simulateSystemEconomyTick(
   }
   const stockOf = (g: string): number => stock.get(g) ?? minLevel;
 
-  const orderIndex = new Map(PRODUCTION_GOOD_ORDER.map((g, i) => [g, i]));
   const processOrder = [...entries].sort(
     (a, b) =>
-      (orderIndex.get(a.goodId) ?? Number.MAX_SAFE_INTEGER) -
-      (orderIndex.get(b.goodId) ?? Number.MAX_SAFE_INTEGER),
+      (PRODUCTION_ORDER_INDEX.get(a.goodId) ?? Number.MAX_SAFE_INTEGER) -
+      (PRODUCTION_ORDER_INDEX.get(b.goodId) ?? Number.MAX_SAFE_INTEGER),
   );
 
   for (const entry of processOrder) {
