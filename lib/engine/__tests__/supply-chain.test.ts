@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inputGate, simulateSystemEconomyTick } from "@/lib/engine/supply-chain";
+import { inputGate, simulateSystemEconomyTick, simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { MarketTickEntry, EconomySimParams } from "@/lib/engine/tick";
 
 const PARAMS: EconomySimParams = { noiseAmplitude: 0, minLevel: 5, maxLevel: 200 };
@@ -76,5 +76,23 @@ describe("simulateSystemEconomyTick", () => {
     const richMetals = rich.find((e) => e.goodId === "metals")!.stock;
     const starvedMetals = starved.find((e) => e.goodId === "metals")!.stock;
     expect(starvedMetals).toBeLessThan(richMetals);
+  });
+});
+
+describe("simulateCoupledEconomyTick", () => {
+  it("isolates systems — system A's ore does not feed system B's metals", () => {
+    // A: ore-rich + metals. B: ore-starved + metals. Same flat array.
+    const entries: MarketTickEntry[] = [
+      { goodId: "ore", stock: 150, productionRate: 0 },   // A
+      { goodId: "metals", stock: 50, productionRate: 20 }, // A
+      { goodId: "ore", stock: 6, productionRate: 0 },      // B
+      { goodId: "metals", stock: 50, productionRate: 20 }, // B
+    ];
+    const systemIds = ["A", "A", "B", "B"];
+    const out = simulateCoupledEconomyTick(entries, systemIds, PARAMS, () => 0.5);
+    expect(out.map((e) => e.goodId)).toEqual(["ore", "metals", "ore", "metals"]);
+    const aMetals = out[1].stock;
+    const bMetals = out[3].stock;
+    expect(bMetals).toBeLessThan(aMetals); // B starved ⇒ less metals
   });
 });

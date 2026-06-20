@@ -57,10 +57,8 @@ export function simulateSystemEconomyTick(
 
   // Live mutable stock per good for this system.
   const stock = new Map<string, number>();
-  const byGood = new Map<string, MarketTickEntry>();
   for (const e of entries) {
     stock.set(e.goodId, e.stock);
-    byGood.set(e.goodId, e);
   }
   const stockOf = (g: string): number => stock.get(g) ?? minLevel;
 
@@ -105,4 +103,35 @@ export function simulateSystemEconomyTick(
   }
 
   return entries.map((e) => ({ ...e, stock: stockOf(e.goodId) }));
+}
+
+/**
+ * Group a region's flat entries by system, run the coupled per-system tick on
+ * each, and return results in the original flat order. `systemIds[i]` owns
+ * `entries[i]`. Cross-system coupling is impossible — each system has its own
+ * live stock map.
+ */
+export function simulateCoupledEconomyTick(
+  entries: MarketTickEntry[],
+  systemIds: string[],
+  params: EconomySimParams,
+  rng: () => number = Math.random,
+): MarketTickEntry[] {
+  const groups = new Map<string, number[]>();
+  systemIds.forEach((sysId, i) => {
+    (groups.get(sysId) ?? groups.set(sysId, []).get(sysId)!).push(i);
+  });
+
+  const result = new Array<MarketTickEntry>(entries.length);
+  for (const indices of groups.values()) {
+    const simulated = simulateSystemEconomyTick(
+      indices.map((i) => entries[i]),
+      params,
+      rng,
+    );
+    indices.forEach((i, j) => {
+      result[i] = simulated[j];
+    });
+  }
+  return result;
 }
