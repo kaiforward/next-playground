@@ -100,8 +100,13 @@ rolls first dominates. We avoid it by treating generation as a **single partitio
    weight massively *before* normalising.
 
 The entire tunable surface is **the archetype weight vectors + the quality-band odds + the volatility
-odds** — all constants the simulator can sweep. Named flavour deposits ("Helium-3 deposit: gas ×1.4")
-are just a labelled quality roll on a resource.
+odds** — all constants the simulator can sweep. The v1 richness modifiers (the 13 `heavy_metals` /
+`helium-3` / `glacial_aquifer`-style multipliers) are **retired and fully folded into the band
+system**: a deposit's display name is **generated from its band + resource** (e.g. "rich ore deposit",
+"marginal water-ice seam") rather than drawn from a curated proper-noun catalog. Generic descriptors
+read as *less* repetitive than a small set of recurring named deposits, and they scale to every
+band × resource pair for free. Rare volatility extremes may carry a generic special label ("radioactive
+hot zone").
 
 ### Quality bands (example values — calibration knobs)
 
@@ -130,9 +135,13 @@ Consequences (intended):
 - **Labour fulfilment becomes a live constraint** — a high-industry, low-population system is genuinely
   under-staffed, instead of pop always dwarfing labour demand.
 
-⚠️ **Highest-risk knob.** Population is the demand engine of the whole economy; sourcing capacity from
-built centres (vs a body baseline) is the change most likely to need re-calibration. Consider a small
-baseline floor if full-fold proves too swingy.
+⚠️ **Highest-risk knob — full-fold is locked.** Population is the demand engine of the whole economy;
+sourcing capacity entirely from built centres (no body baseline) is the change most likely to need
+re-calibration. The intent is deliberate: **people must occupy real land**, competing with industry for
+the habitable fraction of general space. A `POP_BASELINE_FLOOR` constant ships **wired but set to 0** —
+a one-number escape hatch. If full-fold proves too swingy, the **first** lever is tuning the
+population-centre building itself (density, space cost, tiers), *not* re-introducing a baseline; the
+floor is the last resort.
 
 ---
 
@@ -162,6 +171,28 @@ baseline floor if full-fold proves too swingy.
 - Seed **fill fractions** (how far below available the seeded build-out sits) per use.
 
 ---
+
+## Build kickoff — locked decisions (2026-06-20)
+
+Confirmed at the start of the build, layered on the model above:
+
+1. **This doc is the spec.** Substrate-v2 reuses this planned doc as its source of truth (no duplicate
+   spec); it graduates to `docs/active/` when the milestone ships. The code-heavy build plan lives
+   transiently in `docs/plans/`.
+2. **Per-system aggregation.** Deposit slots + quality bands are generated **per body**, then
+   **collapsed to per-system aggregates** denormalised onto `StarSystem` — an extractor-slot **cap**
+   and an **effective-yield multiplier** per resource — exactly mirroring how the v1 resource vector is
+   denormalised today. `SystemBuilding` stays system-level; per-body slots/quality are generation-time
+   concepts that never reach the hot path individually. Goods that share a resource (food/textiles ←
+   arable) share its slot cap and quality. The seed fills best-quality slots first, so a system's
+   effective yield = Σ(filled slots × their band).
+3. **Richness modifiers retired.** Folded entirely into quality bands with generated generic names (see
+   *Deposit generation* above).
+4. **Population full-fold.** No body baseline; `POP_BASELINE_FLOOR = 0` escape hatch (see *Population &
+   labour* above).
+5. **Panel redesign ships last.** The Industry/substrate panel redesign (plus any other UI polish) is
+   the **final phase** of the milestone, built on the finished model so it visualises the real
+   substrate. The current panel stays functional throughout the substrate changes.
 
 ## Sequencing
 
