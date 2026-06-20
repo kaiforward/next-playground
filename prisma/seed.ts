@@ -109,24 +109,34 @@ async function main() {
   await prisma.region.deleteMany();
   await prisma.gameWorld.deleteMany();
 
-  // ── Seed goods ──
+  // ── Seed goods (batched) ──
+  // Names are unique, so map returned ids back to each good's slug by name —
+  // same join the systems/stations/factions seeds use below.
+  const slugByGoodName = new Map(Object.entries(GOODS).map(([key, def]) => [def.name, key]));
+  const createdGoods = await createManyAndReturnChunked(
+    Object.values(GOODS),
+    (batch) =>
+      prisma.good.createManyAndReturn({
+        data: batch.map((def) => ({
+          name: def.name,
+          description: def.description,
+          basePrice: def.basePrice,
+          tier: def.tier,
+          volume: def.volume,
+          mass: def.mass,
+          volatility: def.volatility,
+          hazard: def.hazard,
+          priceFloor: def.priceFloor,
+          priceCeiling: def.priceCeiling,
+        })),
+        select: { id: true, name: true },
+      }),
+  );
   const goodRecords: Record<string, { id: string }> = {};
-  for (const [key, def] of Object.entries(GOODS)) {
-    const good = await prisma.good.create({
-      data: {
-        name: def.name,
-        description: def.description,
-        basePrice: def.basePrice,
-        tier: def.tier,
-        volume: def.volume,
-        mass: def.mass,
-        volatility: def.volatility,
-        hazard: def.hazard,
-        priceFloor: def.priceFloor,
-        priceCeiling: def.priceCeiling,
-      },
-    });
-    goodRecords[key] = good;
+  for (const g of createdGoods) {
+    const key = slugByGoodName.get(g.name);
+    if (!key) throw new Error(`Good "${g.name}" missing from GOODS during seed`);
+    goodRecords[key] = { id: g.id };
   }
   console.log(`  Created ${Object.keys(goodRecords).length} goods`);
 
@@ -161,6 +171,7 @@ async function main() {
           sunClass: sys.sunClass,
           population: sys.population,
           popCap: sys.popCap,
+          buildSpace: sys.buildSpace,
           ...aggregateColumns(sys.aggregate),
           bodyDanger: sys.bodyDanger,
         })),
@@ -219,6 +230,20 @@ async function main() {
     prisma.systemBody.createMany({ data: batch }),
   );
 
+  // ── Seed buildings (batched) — one row per (system, buildingType) with count > 0 ──
+  const buildingData = universe.systems.flatMap((sys) =>
+    Object.entries(sys.buildings)
+      .filter(([, count]) => count > 0)
+      .map(([buildingType, count]) => ({
+        systemId: systemIds[sys.index],
+        buildingType,
+        count,
+      })),
+  );
+  await createManyChunked(buildingData, (batch) =>
+    prisma.systemBuilding.createMany({ data: batch }),
+  );
+
   // ── Seed feature traits (batched) ──
   const traitData = universe.systems.flatMap((sys) =>
     sys.traits.map((t) => ({
@@ -234,7 +259,7 @@ async function main() {
   const totalBodies = bodyData.length;
   const totalTraits = traitData.length;
   console.log(
-    `  Created ${universe.systems.length} star systems with stations, markets, ${totalBodies} bodies, and ${totalTraits} feature traits`,
+    `  Created ${universe.systems.length} star systems with stations, markets, ${totalBodies} bodies, ${totalTraits} feature traits, and ${buildingData.length} building rows`,
   );
 
   // ── Compute and store dominant economy per region ──

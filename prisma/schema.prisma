@@ -216,6 +216,7 @@ model StarSystem {
   aggWater         Float   @default(0)
   aggRadioactive   Float   @default(0)
   bodyDanger       Float   @default(0)  // Σ body-archetype danger baselines
+  buildSpace       Float   @default(0)  // total build-space budget, Σ body BASE_SPACE × size × habitability
 
   region            Region             @relation(fields: [regionId], references: [id])
   faction           Faction?           @relation("FactionTerritory", fields: [factionId], references: [id])
@@ -223,6 +224,7 @@ model StarSystem {
   station           Station?
   traits            SystemTrait[]
   bodies            SystemBody[]
+  buildings         SystemBuilding[]
   ships             Ship[]             @relation("ShipCurrentSystem")
   incomingShips     Ship[]             @relation("ShipDestination")
   convoys           Convoy[]           @relation("ConvoyCurrentSystem")
@@ -263,6 +265,18 @@ model SystemBody {
 
   system StarSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
 
+  @@index([systemId])
+}
+
+model SystemBuilding {
+  id           String @id @default(cuid())
+  systemId     String
+  buildingType String // production type id (== output good id) | "housing"
+  count        Float  @default(0)
+
+  system StarSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
+
+  @@unique([systemId, buildingType])
   @@index([systemId])
 }
 

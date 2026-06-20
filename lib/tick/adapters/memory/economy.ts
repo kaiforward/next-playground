@@ -5,7 +5,8 @@ import type {
   RegionView,
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
-import { physicalRates } from "@/lib/engine/physical-economy";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import { labourDemand, labourFulfillment, buildingProduction } from "@/lib/engine/industry";
 import { toTraitId, toQualityTier } from "@/lib/types/guards";
 import type {
   SimMarketEntry,
@@ -57,11 +58,18 @@ export class InMemoryEconomyWorld implements EconomyWorld {
 
   getMarketsForRegion(regionId: string): Promise<MarketView[]> {
     const sysById = new Map(this.systems.map((s) => [s.id, s]));
+    const fulfillmentBySystem = new Map<string, number>();
     const views: MarketView[] = [];
     for (const m of this.markets) {
       const sys = sysById.get(m.systemId);
       if (!sys || sys.regionId !== regionId) continue;
-      const { production, consumption } = physicalRates(m.goodId, sys.aggregate, sys.population);
+      let fulfillment = fulfillmentBySystem.get(sys.id);
+      if (fulfillment === undefined) {
+        fulfillment = labourFulfillment(sys.population, labourDemand(sys.buildings));
+        fulfillmentBySystem.set(sys.id, fulfillment);
+      }
+      const production = buildingProduction(sys.buildings, m.goodId, fulfillment);
+      const consumption = consumptionRate(m.goodId, sys.population);
       views.push({
         id: `${m.systemId}|${m.goodId}`,
         systemId: m.systemId,

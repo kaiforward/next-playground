@@ -6,11 +6,13 @@ import {
   getSpread,
   getInitialStock,
   demandRateForGood,
+  totalDemandRateForGood,
   MIN_DEMAND,
   demandFootprint,
 } from "../market-economy";
 import { GOVERNMENT_TYPES } from "../government";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { inputDemandForGood } from "@/lib/engine/industry";
 import { makeResourceVector } from "@/lib/engine/resources";
 
 describe("stock bounds", () => {
@@ -38,6 +40,26 @@ describe("demandRateForGood", () => {
 
   it("floors at MIN_DEMAND for an unknown good", () => {
     expect(demandRateForGood("not_a_good", 1000)).toBe(MIN_DEMAND);
+  });
+});
+
+describe("totalDemandRateForGood", () => {
+  it("equals civilian demand when no buildings consume the good", () => {
+    expect(totalDemandRateForGood("ore", 1000, {}, 1)).toBeCloseTo(demandRateForGood("ore", 1000), 6);
+  });
+
+  it("adds the production-input draw on top of civilian demand", () => {
+    // 10 metals buildings draw ore (recipe { ore: 1 }) → a non-zero industrial term.
+    const buildings = { metals: 10 };
+    const industrial = inputDemandForGood(buildings, "ore", 1);
+    expect(industrial).toBeGreaterThan(0);
+    const total = totalDemandRateForGood("ore", 1000, buildings, 1);
+    expect(total).toBeCloseTo(demandRateForGood("ore", 1000) + industrial, 6);
+    expect(total).toBeGreaterThan(demandRateForGood("ore", 1000));
+  });
+
+  it("floors at MIN_DEMAND when both civilian and industrial demand are zero", () => {
+    expect(totalDemandRateForGood("not_a_good", 0, {}, 1)).toBe(MIN_DEMAND);
   });
 });
 

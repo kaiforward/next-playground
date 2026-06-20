@@ -3,7 +3,8 @@ import type {
   PopulationStateView, PopulationUpdate, PopulationWorld,
 } from "@/lib/tick/world/population-world";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
-import { demandRateForGood } from "@/lib/constants/market-economy";
+import { totalDemandRateForGood } from "@/lib/constants/market-economy";
+import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
 
 /**
  * Live-game adapter for the population processor. Bulk writes via unnest() — no
@@ -38,17 +39,44 @@ export class PrismaPopulationWorld implements PopulationWorld {
   async rewriteDemandRates(pops: Array<{ systemId: string; population: number }>): Promise<void> {
     if (pops.length === 0) return;
     const popBySystem = new Map(pops.map((p) => [p.systemId, p.population]));
-    const markets = await this.tx.stationMarket.findMany({
-      where: { station: { systemId: { in: [...popBySystem.keys()] } } },
-      select: { id: true, good: { select: { name: true } }, station: { select: { systemId: true } } },
-    });
+    const systemIds = [...popBySystem.keys()];
+
+    // Load markets and building counts in parallel — both scoped to the same system set.
+    const [markets, buildingRows] = await Promise.all([
+      this.tx.stationMarket.findMany({
+        where: { station: { systemId: { in: systemIds } } },
+        select: { id: true, good: { select: { name: true } }, station: { select: { systemId: true } } },
+      }),
+      this.tx.systemBuilding.findMany({
+        where: { systemId: { in: systemIds } },
+        select: { systemId: true, buildingType: true, count: true },
+      }),
+    ]);
+
+    // Build per-system building maps.
+    const buildingsBySystem = new Map<string, Record<string, number>>();
+    for (const b of buildingRows) {
+      const existing = buildingsBySystem.get(b.systemId) ?? {};
+      existing[b.buildingType] = b.count;
+      buildingsBySystem.set(b.systemId, existing);
+    }
+
+    // Cache fulfillment per system to avoid recomputing for every market.
+    const fulfillmentBySystem = new Map<string, number>();
+
     const ids: string[] = [];
     const rates: number[] = [];
     for (const m of markets) {
       const population = popBySystem.get(m.station.systemId);
       if (population == null) continue;
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-      const rate = demandRateForGood(goodKey, population);
+      const buildings = buildingsBySystem.get(m.station.systemId) ?? {};
+      let fulfillment = fulfillmentBySystem.get(m.station.systemId);
+      if (fulfillment == null) {
+        fulfillment = labourFulfillment(population, labourDemand(buildings));
+        fulfillmentBySystem.set(m.station.systemId, fulfillment);
+      }
+      const rate = totalDemandRateForGood(goodKey, population, buildings, fulfillment);
       ids.push(m.id);
       rates.push(isFinite(rate) ? rate : 1);
     }

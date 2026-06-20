@@ -54,6 +54,7 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
     traits: [],
     bodyDanger: 0,
     unrest,
+    buildings: { food: 2 },
   };
 }
 
@@ -71,6 +72,7 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
     traits: [],
     bodyDanger: 0,
     unrest,
+    buildings: {},
   };
 }
 
@@ -235,5 +237,83 @@ describe("economy processor: dissatisfaction signal", () => {
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
     const d = result.economySignals!.dissatisfactionBySystem.get("sys-p") ?? 1;
     expect(d).toBeLessThan(0.05);
+  });
+});
+
+// ── Supply-chain input-gating (cascade) ──────────────────────────
+
+describe("economy processor: supply-chain input-gating", () => {
+  /**
+   * Two smelter systems in the same region — identical except for ore stock.
+   * Metals production requires ore (recipe: { ore: 1 }). System A has abundant
+   * ore; system B has ore pinned at the floor (zero drawable). After one tick,
+   * system A's metals stock must exceed system B's because the input gate is
+   * wide open for A but zero for B.
+   *
+   * Each system has 2 metals buildings and 50 population (= labour demand at
+   * 25/building), so labourFulfillment = 1 and production is purely
+   * input-gated. No ore-producing buildings are included — ore stock is set
+   * directly and does not grow.
+   */
+  it("throttles metals production when local ore is scarce", async () => {
+    const MID_METALS = (MIN + MAX) / 2;
+
+    function makeSmeltingSystem(id: string): SimSystem {
+      return {
+        id,
+        name: id,
+        economyType: "industrial",
+        regionId: "r1",
+        factionId: "f1",
+        governmentType: "federation",
+        aggregate: emptyResourceVector(),
+        population: 50, // 2 buildings × 25 labourPerUnit = exactly 50 → fulfillment = 1
+        popCap: 200,
+        traits: [],
+        bodyDanger: 0,
+        unrest: 0,
+        buildings: { metals: 2 }, // smelter only — no ore extractor
+      };
+    }
+
+    const sysA = makeSmeltingSystem("sys-a");
+    const sysB = makeSmeltingSystem("sys-b");
+
+    const worldA = new InMemoryEconomyWorld(
+      {
+        systems: [sysA],
+        markets: [
+          makeMarket("sys-a", "ore", 150), // ore abundant: gate ≈ 1
+          makeMarket("sys-a", "metals", MID_METALS),
+        ],
+        modifiers: [],
+      },
+      [REGION],
+    );
+
+    const worldB = new InMemoryEconomyWorld(
+      {
+        systems: [sysB],
+        markets: [
+          makeMarket("sys-b", "ore", MIN), // ore at floor: drawable = 0, gate = 0
+          makeMarket("sys-b", "metals", MID_METALS),
+        ],
+        modifiers: [],
+      },
+      [REGION],
+    );
+
+    await runEconomyProcessor(worldA, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(worldB, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+
+    const metalsA = worldA.markets.find((m) => m.goodId === "metals")!.stock;
+    const metalsB = worldB.markets.find((m) => m.goodId === "metals")!.stock;
+
+    // Ore-rich A: gate ≈ 1 → metals production raises stock above its start.
+    // Ore-starved B: gate = 0 → no metals output, so stock cannot rise (noise is
+    // off; it only holds flat or drains via consumption).
+    expect(metalsA).toBeGreaterThan(MID_METALS);
+    expect(metalsB).toBeLessThanOrEqual(MID_METALS);
+    expect(metalsA).toBeGreaterThan(metalsB);
   });
 });

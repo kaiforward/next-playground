@@ -2,13 +2,15 @@
  * Minimal test universe factory + entity builders.
  *
  * Seeds just enough data for integration tests: 2 regions, 3 systems,
- * all 12 goods with equilibrium markets, bidirectional connections.
+ * all goods with equilibrium markets, bidirectional connections.
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
 import { makeResourceVector, aggregateColumns } from "@/lib/engine/resources";
 import type { Doctrine, GovernmentType, ResourceVector } from "@/lib/types/game";
+import { allocateIndustry } from "@/lib/engine/industry-seed";
+import { mulberry32 } from "@/lib/engine/universe-gen";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -138,6 +140,23 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
 
   // Systems first (faction homeworld FK requires them to exist), then factions,
   // then bind systems to their owning faction.
+  //
+  // Each system gets a deterministic industrial allocation so integration tests
+  // have building rows available. Fixed seeds (101/102/103) and a coarse
+  // buildSpace keep the allocations stable across test runs.
+  const agriAllocation = allocateIndustry(
+    { aggregate: agriSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: agriSubstrate.population, fill: 0.8 },
+    mulberry32(101),
+  );
+  const indAllocation = allocateIndustry(
+    { aggregate: indSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: indSubstrate.population, fill: 0.8 },
+    mulberry32(102),
+  );
+  const techAllocation = allocateIndustry(
+    { aggregate: techSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: techSubstrate.population, fill: 0.8 },
+    mulberry32(103),
+  );
+
   const agriSystem = await prisma.starSystem.create({
     data: {
       name: `${prefix}-Harvest Prime`,
@@ -146,6 +165,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: fedRegion.id,
       population: agriSubstrate.population,
+      buildSpace: agriAllocation.buildSpace,
       ...aggregateColumns(agriSubstrate.aggregate),
     },
   });
@@ -158,6 +178,7 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: corpRegion.id,
       population: indSubstrate.population,
+      buildSpace: indAllocation.buildSpace,
       ...aggregateColumns(indSubstrate.aggregate),
     },
   });
@@ -170,9 +191,23 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: corpRegion.id,
       population: techSubstrate.population,
+      buildSpace: techAllocation.buildSpace,
       ...aggregateColumns(techSubstrate.aggregate),
     },
   });
+
+  // Batch-create building rows for all three systems — one row per
+  // (system, buildingType) with count > 0.
+  const fixtureBuildingData = [
+    { systemId: agriSystem.id, buildings: agriAllocation.buildings },
+    { systemId: indSystem.id, buildings: indAllocation.buildings },
+    { systemId: techSystem.id, buildings: techAllocation.buildings },
+  ].flatMap(({ systemId, buildings }) =>
+    Object.entries(buildings)
+      .filter(([, count]) => count > 0)
+      .map(([buildingType, count]) => ({ systemId, buildingType, count })),
+  );
+  await prisma.systemBuilding.createMany({ data: fixtureBuildingData });
 
   // Two factions, one per region — Federation owns agri, Corporate owns ind+tech.
   const fedFaction = await createTestFaction(prisma, {
@@ -224,45 +259,47 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     data: { name: `${prefix}-Nova Exchange`, systemId: techSystem.id },
   });
 
-  // Goods (all 12, using GOODS constant for canonical data)
+  // Goods (all goods, using GOODS constant for canonical data). Batched into one
+  // createManyAndReturn; returned ids map back to each good's slug by name.
+  const slugByGoodName = new Map(Object.entries(GOODS).map(([key, def]) => [def.name, key]));
+  const createdGoods = await prisma.good.createManyAndReturn({
+    data: Object.values(GOODS).map((def) => ({
+      name: def.name,
+      description: def.description,
+      basePrice: def.basePrice,
+      tier: def.tier,
+      volume: def.volume,
+      mass: def.mass,
+      volatility: def.volatility,
+      hazard: def.hazard,
+      priceFloor: def.priceFloor,
+      priceCeiling: def.priceCeiling,
+    })),
+    select: { id: true, name: true },
+  });
   const goodIds: Record<string, string> = {};
-  for (const [key, def] of Object.entries(GOODS)) {
-    const good = await prisma.good.create({
-      data: {
-        name: def.name,
-        description: def.description,
-        basePrice: def.basePrice,
-        tier: def.tier,
-        volume: def.volume,
-        mass: def.mass,
-        volatility: def.volatility,
-        hazard: def.hazard,
-        priceFloor: def.priceFloor,
-        priceCeiling: def.priceCeiling,
-      },
-    });
-    goodIds[key] = good.id;
+  for (const g of createdGoods) {
+    const key = slugByGoodName.get(g.name);
+    if (key) goodIds[key] = g.id;
   }
 
-  // Markets — each station gets all 12 goods seeded from its substrate net balance.
+  // Markets — each station gets all goods seeded from its substrate net balance.
+  // Batched into one createMany across every (station, good) pair.
   const stationSystems: { stationId: string; aggregate: ResourceVector; population: number }[] = [
     { stationId: agriStation.id, ...agriSubstrate },
     { stationId: indStation.id, ...indSubstrate },
     { stationId: techStation.id, ...techSubstrate },
   ];
 
-  for (const { stationId, aggregate, population } of stationSystems) {
-    for (const key of Object.keys(GOODS)) {
-      await prisma.stationMarket.create({
-        data: {
-          stationId,
-          goodId: goodIds[key],
-          stock: getInitialStock(aggregate, population, key),
-          demandRate: demandRateForGood(key, population),
-        },
-      });
-    }
-  }
+  const marketData = stationSystems.flatMap(({ stationId, aggregate, population }) =>
+    Object.keys(GOODS).map((key) => ({
+      stationId,
+      goodId: goodIds[key],
+      stock: getInitialStock(aggregate, population, key),
+      demandRate: demandRateForGood(key, population),
+    })),
+  );
+  await prisma.stationMarket.createMany({ data: marketData });
 
   return {
     worldId: world.id,

@@ -22,7 +22,7 @@ Every trade moves the single stock value: buying lowers stock (price rises), sel
 
 ### Market Data
 Players can view at each system:
-- Current price and in-stock level for all 12 goods (with buy/sell quotes)
+- Current price and in-stock level for all 26 goods (with buy/sell quotes)
 - Recent trade history (last 50 trades — good, price, quantity, buy/sell, player)
 - Price history charts from periodic snapshots (up to 1000 ticks of trend data)
 

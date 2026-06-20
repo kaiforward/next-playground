@@ -7,9 +7,8 @@ import type {
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
-import { physicalRates } from "@/lib/engine/physical-economy";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
-import type { ResourceVector } from "@/lib/types/game";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import { labourDemand, labourFulfillment, buildingProduction } from "@/lib/engine/industry";
 import {
   toGovernmentType,
   toTraitId,
@@ -20,9 +19,9 @@ import {
  * Live-game adapter for the economy processor.
  *
  * Resolves each market's base production/consumption rates from the owning
- * system's physical substrate (aggregate resource vector + population) at read
- * time so the processor body never reaches into constants. Bulk writes via
- * `unnest()` SQL — same pattern as the events adapter.
+ * system's industrial base (SystemBuilding rows + population) at read time so
+ * the processor body never reaches into constants. Bulk writes via `unnest()`
+ * SQL — same pattern as the events adapter.
  */
 export class PrismaEconomyWorld implements EconomyWorld {
   constructor(private tx: TxClient) {}
@@ -39,43 +38,53 @@ export class PrismaEconomyWorld implements EconomyWorld {
   }
 
   async getMarketsForRegion(regionId: string): Promise<MarketView[]> {
-    const rows = await this.tx.stationMarket.findMany({
-      where: { station: { system: { regionId } } },
-      include: {
-        good: true,
-        station: {
-          include: {
-            system: {
-              include: {
-                traits: true,
-                faction: { select: { governmentType: true } },
+    const [rows, buildingRows] = await Promise.all([
+      this.tx.stationMarket.findMany({
+        where: { station: { system: { regionId } } },
+        include: {
+          good: true,
+          station: {
+            include: {
+              system: {
+                include: {
+                  traits: true,
+                  faction: { select: { governmentType: true } },
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+      this.tx.systemBuilding.findMany({
+        where: { system: { regionId } },
+        select: { systemId: true, buildingType: true, count: true },
+      }),
+    ]);
 
-    // One aggregate vector per system (a system's 12 markets share it).
-    const aggBySystem = new Map<string, ResourceVector>();
+    // Build a per-system map of building counts from the region's building rows.
+    const buildingsBySystem = new Map<string, Record<string, number>>();
+    for (const b of buildingRows) {
+      const map = buildingsBySystem.get(b.systemId) ?? {};
+      map[b.buildingType] = b.count;
+      buildingsBySystem.set(b.systemId, map);
+    }
+    // Cache labour fulfillment per system — shared across all goods in the system.
+    const fulfillmentBySystem = new Map<string, number>();
 
     return rows.map((m) => {
       const sys = m.station.system;
-      let aggregate = aggBySystem.get(sys.id);
-      if (!aggregate) {
-        aggregate = resourceVectorFromColumns(
-          {
-            aggGas: sys.aggGas, aggMinerals: sys.aggMinerals, aggOre: sys.aggOre,
-            aggBiomass: sys.aggBiomass, aggArable: sys.aggArable,
-            aggWater: sys.aggWater, aggRadioactive: sys.aggRadioactive,
-          },
-          "agg",
-        );
-        aggBySystem.set(sys.id, aggregate);
+
+      const buildings = buildingsBySystem.get(sys.id) ?? {};
+      let fulfillment = fulfillmentBySystem.get(sys.id);
+      if (fulfillment === undefined) {
+        fulfillment = labourFulfillment(sys.population, labourDemand(buildings));
+        fulfillmentBySystem.set(sys.id, fulfillment);
       }
 
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-      const { production, consumption } = physicalRates(goodKey, aggregate, sys.population);
+      const production = buildingProduction(buildings, goodKey, fulfillment);
+      const consumption = consumptionRate(goodKey, sys.population);
+
       // Every seeded system has a non-null factionId. The `?? "frontier"`
       // fallback covers the only legitimate gap: a system the adapter sees
       // mid-write before its factionId is set. Frontier is the safe default

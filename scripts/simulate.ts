@@ -170,14 +170,15 @@ function formatTable(results: SimResults): string {
     lines.push("");
     lines.push("Market Health (end of simulation):");
 
-    const dHeaders = ["Good", "Price StdDev", "Stock Drift"];
-    const dWidths = [12, 13, 13];
+    const dHeaders = ["Good", "Price StdDev", "Stock Drift", "Floor %", "Ceil %"];
+    const dWidths = [12, 13, 13, 8, 8];
 
     lines.push(dHeaders.map((h, i) => pad(h, dWidths[i])).join(" | "));
     lines.push(dWidths.map((w) => "-".repeat(w)).join("-+-"));
 
     const dispMap = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d]));
     const driftMap = new Map(marketHealth.stockDrift.map((d) => [d.goodId, d]));
+    const pinMap = new Map(marketHealth.stockPins.map((p) => [p.goodId, p]));
     const allGoods = [...new Set([
       ...marketHealth.priceDispersion.map((d) => d.goodId),
       ...marketHealth.stockDrift.map((d) => d.goodId),
@@ -188,10 +189,13 @@ function formatTable(results: SimResults): string {
     for (const goodId of allGoods) {
       const disp = dispMap.get(goodId);
       const drift = driftMap.get(goodId);
+      const pin = pinMap.get(goodId);
       const row = [
         pad(goodId, dWidths[0]),
         rpad(disp ? disp.avgStdDev.toFixed(1) : "-", dWidths[1]),
         rpad(drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-", dWidths[2]),
+        rpad(pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-", dWidths[3]),
+        rpad(pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-", dWidths[4]),
       ];
       lines.push(row.join(" | "));
     }

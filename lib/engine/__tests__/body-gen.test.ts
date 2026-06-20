@@ -4,6 +4,7 @@ import { generateSubstrate } from "../body-gen";
 import { SUN_CLASSES, RICHNESS_MODIFIERS, BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 import { RESOURCE_TYPES } from "../resources";
+import { bodyBuildSpace, housingPopCap, buildSpaceUsed } from "@/lib/engine/industry";
 
 function sample(n: number) {
   const rng = mulberry32(42);
@@ -88,5 +89,28 @@ describe("generateSubstrate", () => {
     const a = generateSubstrate(mulberry32(7));
     const b = generateSubstrate(mulberry32(7));
     expect(a).toEqual(b);
+  });
+});
+
+describe("generateSubstrate — industrial base", () => {
+  it("emits a buildSpace equal to the sum of body contributions", () => {
+    const sub = generateSubstrate(mulberry32(7));
+    const expected = sub.bodies.reduce((s, b) => s + bodyBuildSpace(b.size, b.habitable), 0);
+    expect(sub.buildSpace).toBeCloseTo(expected, 6);
+  });
+
+  it("emits a buildings map within the build-space budget", () => {
+    const sub = generateSubstrate(mulberry32(8));
+    expect(buildSpaceUsed(sub.buildings)).toBeLessThanOrEqual(sub.buildSpace + 1e-6);
+  });
+
+  it("folds housing into popCap (popCap ≥ body baseline)", () => {
+    const sub = generateSubstrate(mulberry32(9));
+    expect(sub.popCap).toBeGreaterThanOrEqual(housingPopCap(sub.buildings) - 1e-6);
+  });
+
+  it("seeds population at or below popCap", () => {
+    const sub = generateSubstrate(mulberry32(10));
+    expect(sub.population).toBeLessThanOrEqual(sub.popCap + 1e-6);
   });
 });

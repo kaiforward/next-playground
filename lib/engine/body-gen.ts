@@ -15,6 +15,8 @@ import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import type { GeneratedTrait } from "./trait-gen";
 import type { RNG } from "./universe-gen";
 import { weightedPick, randInt } from "./universe-gen";
+import { bodyBuildSpace } from "@/lib/engine/industry";
+import { allocateIndustry } from "@/lib/engine/industry-seed";
 
 export interface GeneratedBody {
   bodyType: BodyArchetypeId;
@@ -34,6 +36,10 @@ export interface GeneratedSubstrate {
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
   bodyDanger: number;
   features: GeneratedTrait[];
+  /** Total build-space budget — Σ body BASE_SPACE × size × habitability. */
+  buildSpace: number;
+  /** Seeded industrial base — buildingType → count. */
+  buildings: Record<string, number>;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -150,9 +156,12 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     0,
   );
 
+  // ── Build-space + population ──
   const rawCap = bodies.reduce((sum, b) => sum + b.popCapWeight * b.size, 0);
-  const popCap = rawCap * SUBSTRATE_GEN.POP_SCALE;
-  const popNorm = clamp(popCap / SUBSTRATE_GEN.POP_REF, 0, 1);
+  const bodyBaselinePopCap = rawCap * SUBSTRATE_GEN.POP_SCALE;
+  const buildSpace = bodies.reduce((sum, b) => sum + bodyBuildSpace(b.size, b.habitable), 0);
+
+  const popNorm = clamp(bodyBaselinePopCap / SUBSTRATE_GEN.POP_REF, 0, 1);
   const fill = clamp(
     SUBSTRATE_GEN.POP_FILL_BASE
       + SUBSTRATE_GEN.POP_FILL_SLOPE * popNorm
@@ -160,9 +169,25 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     SUBSTRATE_GEN.POP_FILL_MIN,
     SUBSTRATE_GEN.POP_FILL_MAX,
   );
+
+  const allocation = allocateIndustry(
+    { aggregate, buildSpace, bodyBaselinePopCap, fill },
+    rng,
+  );
+  const popCap = allocation.popCap;
   const population = Math.round(popCap * fill);
 
   const features = rollFeatures(rng);
 
-  return { sunClass, bodies, aggregate, popCap, population, bodyDanger, features };
+  return {
+    sunClass,
+    bodies,
+    aggregate,
+    popCap,
+    population,
+    bodyDanger,
+    features,
+    buildSpace,
+    buildings: allocation.buildings,
+  };
 }

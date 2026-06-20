@@ -194,18 +194,11 @@ Implemented and exceeded. `UNIVERSE_SCALE` env var supports `"default"` (600 sys
 
 ---
 
-### 6. Goods Expansion: 12 → 26, Production System
+### 6. Goods Expansion: 12 → 26 + Supply-Chain Production — **Shipped**
 
-**Active** (economy.md): 12 goods across 3 tiers. NPC production/consumption rates defined per economy type. Supply/demand range 5–200.
+The 26-good roster and a physical, input-gated production chain **shipped** via the Economy Simulation track (SP1 substrate → SP2 living world → SP3 production + industrial base + supply-chain cascade). The model that landed is **not** the pre-pivot one this item originally tracked (per-economy-type rate tables, supply/demand scaled to thousands, bundled player facilities): production is capacity-driven from a seeded industrial base (`SystemBuilding` + `StarSystem.buildSpace`), input-gated by recipes, over a single-stock `[5, 200]` market — see [economy.md](./active/gameplay/economy.md). The pre-pivot [production-roster.md](./planned/production-roster.md) / [production.md](./planned/production.md) goods catalog carried forward; their bundled-facility and economy-type framing is superseded.
 
-**Planned** (production-roster.md, production.md): 26 market goods across 3 tiers + non-market tier 3 military assets. 14 new goods with production chains, NPC rates, and player production facilities. Supply/demand range increases to thousands. (Population — once a planned addition here — is now a substrate-derived system stat, shipped in Economy Simulation SP1 Part 1.)
-
-**Key deltas**:
-- Economy type rate tables expand from 12 to 26 goods. Every good needs at least an incidental rate at every economy type — no exclusion matrix, availability is rate-driven.
-- Supply/demand range increases significantly (5–200 → thousands) to provide granularity for player production as a bounded fraction of total activity.
-- Population is a new system-level stat derived from the physical substrate (habitable bodies' capacity) at world generation — shipped in SP1 Part 1. Affects market absorption capacity, consumption scaling, and several other systems.
-- New tick processors: player facility operating costs, construction/upgrade timers, production cycle (recipe execution, input sourcing, output routing, market impact). See [Production §7](./planned/production.md) and [Player Facilities §7](./planned/player-facilities.md).
-- Government restrictions on military-tagged goods (from navigation-changes.md §4) become the only hard market exclusion.
+**Still deferred** (to the faction-agency / player-facilities layer): runtime construction (nothing decides what to build at runtime — the industrial base is seeded-static), player-owned production facilities (operating costs, construction/upgrade timers, output routing), and the strategic war-demand channel for the military-tagged goods. Government restrictions on military-tagged goods (navigation-changes.md §4) remain the only planned hard market exclusion.
 
 ---
 

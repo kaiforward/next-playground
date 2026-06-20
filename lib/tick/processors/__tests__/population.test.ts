@@ -3,14 +3,16 @@ import { runPopulationProcessor } from "../population";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
+import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
+import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
 
 const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02 } };
 
-function sys(id: string, population: number, popCap: number, unrest = 0): SimSystem {
+function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation",
     aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
-    population, popCap, unrest, traits: [], bodyDanger: 0,
+    population, popCap, unrest, traits: [], bodyDanger: 0, buildings,
   };
 }
 function market(systemId: string, goodId: string): SimMarketEntry {
@@ -42,6 +44,33 @@ describe("population processor", () => {
     // demandRate = max(perCapitaNeed_food · pop, MIN_DEMAND) = max(0.004 · 499, 0.05)
     expect(m.demandRate).toBeCloseTo(Math.max(0.004 * 499, 0.05), 5);
   });
+  it("includes production-input demand in the rewritten demandRate", async () => {
+    // A smelter (metals building) draws ore as a recipe input. The ore market's
+    // demandRate must be larger than the civilian-only floor once the input term is folded in.
+    const population = 500;
+    const buildings = { metals: 3, housing: 1 };
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("s", population, 1000, 0, buildings)],
+      markets: [
+        market("s", "food"),
+        market("s", "ore"),
+      ],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["s", 0]])), PARAMS);
+
+    const oreMarket = world.markets.find((m) => m.systemId === "s" && m.goodId === "ore")!;
+    const afterPop = world.systems.find((s) => s.id === "s")!.population;
+    const fulfillment = labourFulfillment(afterPop, labourDemand(buildings));
+
+    // Ore has no per-capita need, so civilian-only gives MIN_DEMAND.
+    const civilianOnly = demandRateForGood("ore", afterPop);
+    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, fulfillment);
+
+    // The smelter's ore draw must push the rate above the civilian-only floor.
+    expect(withIndustrial).toBeGreaterThan(civilianOnly);
+    expect(oreMarket.demandRate).toBeCloseTo(withIndustrial, 6);
+  });
+
   it("no-ops when the economy left no signals", async () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000)], markets: [] });
     const before = world.systems[0].population;

@@ -6,6 +6,7 @@
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { physicalRates } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { inputDemandForGood } from "@/lib/engine/industry";
 import type { GovernmentDefinition } from "@/lib/constants/government";
 import type { ResourceVector } from "@/lib/types/game";
 
@@ -20,10 +21,12 @@ export const DEFAULT_SPREAD = 0.05;
  * its basePrice. The single global reference that replaces the per-good anchor
  * table — per-good market depth now emerges from per-good demand rates.
  *
- * Calibrated via `npm run simulate`: 40 maximises the minimum cross-system price
- * dispersion across all twelve goods, so staples (deep cover) and advanced goods
- * (thin cover) are both tradeable at once. Lower values pin advanced goods to the
- * price floor (cheap everywhere); higher values pin staples to the ceiling.
+ * The single global cover lever for the 26-good roster: at 40, every good keeps
+ * non-trivial cross-system price dispersion, so staples (deep cover) and advanced
+ * goods (thin cover) are both tradeable at once. Lower values pin advanced goods
+ * to the price floor (cheap everywhere); higher values pin staples to the ceiling.
+ * Per-good imbalances are tuned via each good's production coeff / per-capita need
+ * (see physical-economy.ts); this stays the whole-roster knob.
  */
 export const TARGET_COVER = 40;
 
@@ -53,6 +56,24 @@ export const STOCK_MAX = ECONOMY_CONSTANTS.MAX_LEVEL;
 export function demandRateForGood(goodId: string, population: number): number {
   const need = GOOD_CONSUMPTION[goodId] ?? 0;
   return Math.max(need * Math.max(0, population), MIN_DEMAND);
+}
+
+/**
+ * Total days-of-supply demand denominator: civilian (population) + industrial
+ * (production-input draw). The industrial term is capacity-based and stable —
+ * it depends on the industrial base and labour ratio, not on this tick's stock.
+ * `fulfillment` is the system-wide labour ratio
+ * (`labourFulfillment(population, labourDemand(buildings))`).
+ */
+export function totalDemandRateForGood(
+  goodId: string,
+  population: number,
+  buildings: Record<string, number>,
+  fulfillment: number,
+): number {
+  const civilian = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
+  const industrial = inputDemandForGood(buildings, goodId, fulfillment);
+  return Math.max(civilian + industrial, MIN_DEMAND);
 }
 
 /**

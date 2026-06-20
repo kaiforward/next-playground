@@ -3,6 +3,7 @@ import { createSimWorld } from "../simulator/world";
 import { simulateWorldTick } from "../simulator/economy";
 import { DEFAULT_SIM_CONSTANTS } from "../simulator/constants";
 import { mulberry32 } from "../universe-gen";
+import { GOOD_NAMES } from "@/lib/constants/goods";
 import type { SimConfig, SimRunContext } from "../simulator/types";
 
 /** Build a default SimRunContext for tests. */
@@ -32,7 +33,7 @@ describe("Simulator", () => {
       expect(world.regions.length).toBeGreaterThan(0);
       expect(world.systems.length).toBeGreaterThan(0);
       expect(world.connections.length).toBeGreaterThan(0);
-      expect(world.markets.length).toBe(world.systems.length * 12); // 12 goods per system
+      expect(world.markets.length).toBe(world.systems.length * GOOD_NAMES.length); // one market per good per system
       expect(world.players).toHaveLength(1);
       expect(world.ships).toHaveLength(1);
       expect(world.tick).toBe(0);

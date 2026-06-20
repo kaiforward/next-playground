@@ -1,6 +1,6 @@
 # System Substrate & Traits
 
-Status: **Active** — physical substrate + narrative features shipped (Economy Simulation SP1 Part 1); the economy now derives production and consumption from the substrate directly (SP1 Part 2).
+Status: **Active** — physical substrate + narrative features shipped (Economy Simulation SP1 Part 1); the economy derives production and consumption from the substrate (SP1 Part 2); SP3 Part 2 added the seeded industrial base (`SystemBuilding` + `buildSpace`) that now drives capacity-driven production.
 
 What makes each system unique now has two layers:
 
@@ -53,6 +53,18 @@ The old resource-flavoured traits (heavy-metal veins, helium-3 reserves, rare-ea
 - **Aggregate resource vector** = element-wise sum of the system's body vectors, denormalized onto `StarSystem` (`aggGas`, `aggOre`, …) for the economy hot path.
 - **Population** = `Σ(body pop-cap weight × size) × fill`, an abstract magnitude seeded **partial and varied by habitability** — developed core worlds seed near (but under) capacity; frontier rocks seed near-empty. Population is **dynamic** (Float): it grows, declines, and migrates each tick based on need-satisfaction and unrest (see [economy.md](./economy.md) — population dynamics and migration). Systems are seeded below `popCap`, giving growth headroom from the start.
 
+### 1.5 Build space & industrial base
+
+At world creation each body contributes `BASE_SPACE × size × habitability` build-space units; these are summed into **`StarSystem.buildSpace`** — a denormalized Float column (analogous to `aggOre`, `aggWater`, etc.) so the tick never joins the bodies table. The seeding allocator then distributes this space into an **industrial base**: an abstract per-`(system, buildingType)` **count** stored in `SystemBuilding` rows, seeded-static (never changed at runtime by the current tick processors).
+
+Building types correspond one-to-one with output goods (the building `iron_ore` produces `iron_ore`), plus one singleton `housing` type. Each type carries `outputPerUnit`, `labourPerUnit`, `spaceCost`, and `inputs` (recipe). Key allocator rules:
+
+- **Tier-0 extractors** — count is bounded by the system's resource deposit ∩ remaining build space.
+- **Tier-1+ manufacturers** — bounded by remaining build space only (recipe `inputs` are carried but **not yet enforced at runtime**).
+- **Housing** — fills remaining space after productive buildings; contributes to `popCap = bodyBaseline + Σ(housing count × popProvided)` rather than to goods production.
+
+`SystemBuilding` rows are the source of the capacity-driven production formula (see [economy.md](./economy.md) §Production & Consumption); `buildSpace` is their physical budget.
+
 ---
 
 ## 2. Economy type (derived from the substrate)
@@ -66,7 +78,9 @@ Economy type is **not assigned** — it is a derived label. `deriveEconomyTypeLa
 - high population + balanced mix → `core` / `industrial`
 - refinery/tech fall out of the remaining mixes
 
-> **Display-only label**: nothing in the economy tick reads economy type. Production derives from body resources + labour (population) and consumption from population directly (SP1 Part 2, see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`. See the [substrate spec](../../planned/economy-simulation-substrate.md) §7–§8.1.
+The label now reflects the system's **build-space allocation** from world-gen: a system whose build space was seeded with heavy extractor capacity reads as `extraction`; one with more manufacturing capacity reads as `industrial`. The mapping still runs through `deriveEconomyTypeLabel` against the substrate, but the industrial base encoded in `SystemBuilding` rows is the real differentiator in practice.
+
+> **Display-only label**: nothing in the economy tick reads economy type. Production derives from the `SystemBuilding` counts and `labourFulfillment` (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`. See the [substrate spec](../../planned/economy-simulation-substrate.md) §7–§8.1.
 
 ---
 
