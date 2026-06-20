@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
-import type { SystemDetailData, SystemSubstrateData, BodyView } from "@/lib/types/api";
+import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
-import { capacityGoodRates } from "@/lib/engine/industry";
+import { capacityGoodRates, buildIndustryReadout } from "@/lib/engine/industry";
 import { toSunClass, toBodyArchetypeId, toRichnessModifierId } from "@/lib/types/guards";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier, isShipTypeId } from "@/lib/types/guards";
@@ -296,5 +297,61 @@ export async function getSystemSubstrate(
     aggregate,
     bodies,
     goods: capacityGoodRates(buildings, system.population),
+  };
+}
+
+/**
+ * Industrial base and supply-chain state for one system.
+ * Visibility-gated: an unsurveyed system returns `{ visibility: "unknown" }`.
+ * Throws ServiceError(404) if the system does not exist.
+ * Stock is read from the system's station market to compute per-good input gates.
+ */
+export async function getSystemIndustry(
+  playerId: string,
+  systemId: string,
+): Promise<SystemIndustryData> {
+  const [{ visibleSet }, system] = await Promise.all([
+    getPlayerVisibility(playerId),
+    prisma.starSystem.findUnique({
+      where: { id: systemId },
+      select: {
+        population: true,
+        bodies: { select: { size: true, habitable: true } },
+        buildings: { select: { buildingType: true, count: true } },
+        station: {
+          select: {
+            markets: { select: { goodId: true, stock: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  if (!system) {
+    throw new ServiceError("System not found.", 404);
+  }
+  if (!visibleSet.has(systemId)) {
+    return { visibility: "unknown" };
+  }
+
+  const buildings: Record<string, number> = {};
+  for (const b of system.buildings) buildings[b.buildingType] = b.count;
+
+  const marketStock: Record<string, number> = {};
+  if (system.station) {
+    for (const row of system.station.markets) {
+      marketStock[row.goodId] = row.stock;
+    }
+  }
+
+  return {
+    visibility: "visible",
+    ...buildIndustryReadout(
+      buildings,
+      system.bodies,
+      system.population,
+      marketStock,
+      ECONOMY_CONSTANTS.MIN_LEVEL,
+    ),
   };
 }

@@ -7,10 +7,16 @@
  */
 
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import type { SimWorld, MarketSnapshot, MarketHealthSummary } from "./types";
 
 /** Default: sample every 50 ticks. */
 export const SNAPSHOT_INTERVAL = 50;
+
+// A market within one noise step of a hard clamp is effectively pinned there:
+// the tick re-clamps it every turn and noise only jitters it inside the band.
+const FLOOR_BAND = ECONOMY_CONSTANTS.MIN_LEVEL + ECONOMY_CONSTANTS.NOISE_AMPLITUDE;
+const CEILING_BAND = ECONOMY_CONSTANTS.MAX_LEVEL - ECONOMY_CONSTANTS.NOISE_AMPLITUDE;
 
 /** Take a snapshot of all market prices at the current tick. */
 export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
@@ -27,6 +33,7 @@ export function computeMarketHealth(world: SimWorld): MarketHealthSummary {
   return {
     priceDispersion: computePriceDispersion(world),
     stockDrift: computeStockDrift(world),
+    stockPins: computeStockPins(world),
   };
 }
 
@@ -101,4 +108,44 @@ function computeStockDrift(
 
   // Sort by absolute magnitude of stock drift (most drifted first).
   return result.sort((a, b) => Math.abs(b.avgStockDrift) - Math.abs(a.avgStockDrift));
+}
+
+// ── Stock pins ──────────────────────────────────────────────────
+
+/**
+ * For each good, the fraction of its markets pinned at the stock floor or
+ * ceiling. A good floor-pinned galaxy-wide is starved — its own production, or
+ * for a recipe good its local inputs, cannot meet demand; ceiling-pinned means
+ * it floods. Distinct from stock drift, which can read deeply negative purely
+ * because a high demand rate lifts the reference: a pin is the literal clamp,
+ * the unambiguous supply pathology. Sorted by total pinned fraction descending.
+ */
+function computeStockPins(
+  world: SimWorld,
+): { goodId: string; floorFrac: number; ceilingFrac: number }[] {
+  const byGood = new Map<string, { floor: number; ceiling: number; total: number }>();
+
+  for (const m of world.markets) {
+    let agg = byGood.get(m.goodId);
+    if (!agg) {
+      agg = { floor: 0, ceiling: 0, total: 0 };
+      byGood.set(m.goodId, agg);
+    }
+    agg.total += 1;
+    if (m.stock <= FLOOR_BAND) agg.floor += 1;
+    else if (m.stock >= CEILING_BAND) agg.ceiling += 1;
+  }
+
+  const result: { goodId: string; floorFrac: number; ceilingFrac: number }[] = [];
+  for (const [goodId, agg] of byGood) {
+    result.push({
+      goodId,
+      floorFrac: agg.floor / agg.total,
+      ceilingFrac: agg.ceiling / agg.total,
+    });
+  }
+
+  return result.sort(
+    (a, b) => b.floorFrac + b.ceilingFrac - (a.floorFrac + a.ceilingFrac),
+  );
 }

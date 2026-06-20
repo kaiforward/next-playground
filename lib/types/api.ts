@@ -168,6 +168,15 @@ export type SystemSubstrateData =
 export type SystemSubstrateResponse = ApiResponse<SystemSubstrateData>;
 export type { SubstrateGoodRate };
 
+// ── System industry (industrial base + supply-chain) ─────────────────────────
+import type { SystemIndustryReadout } from "@/lib/engine/industry";
+export type { SystemIndustryReadout };
+/** Industrial base and supply-chain state for one system — discriminated on visibility. */
+export type SystemIndustryData =
+  | ({ visibility: "visible" } & SystemIndustryReadout)
+  | { visibility: "unknown" };
+export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
+
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
 export type GoodsResponse = ApiResponse<{ goods: GoodInfo[] }>;

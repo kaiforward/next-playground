@@ -33,6 +33,7 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.systemTradeFlowAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.stability });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemPopulationAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.systemIndustryAll });
       }),
       // Event notifications → refresh events cache and dynamic data (event state changed)
       subscribeToEvent("eventNotifications", () => {

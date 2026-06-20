@@ -11,7 +11,7 @@
  */
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
-import { GOOD_NAMES } from "@/lib/constants/goods";
+import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BASE_SPACE,
   BUILDING_TYPES,
@@ -20,6 +20,8 @@ import {
   habitabilityFactor,
   sizeFactor,
 } from "@/lib/constants/industry";
+import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
+import { inputGate } from "@/lib/engine/supply-chain";
 
 /** Build-space a single body contributes: BASE_SPACE × size × habitability. */
 export function bodyBuildSpace(size: number, habitable: boolean): number {
@@ -95,4 +97,108 @@ export function capacityGoodRates(
     production: buildingProduction(buildings, goodId, fulfillment),
     consumption: (GOOD_CONSUMPTION[goodId] ?? 0) * pop,
   }));
+}
+
+/**
+ * Production-input demand on `goodId` from the local industrial base: the total
+ * desired (uncapped) draw of `goodId` across every building type that consumes
+ * it. Capacity-based — the stable pricing-reference term folded into demandRate.
+ * `fulfillment` is the system-wide labour ratio
+ * (`labourFulfillment(population, labourDemand(buildings))`).
+ */
+export function inputDemandForGood(
+  buildings: Record<string, number>,
+  goodId: string,
+  fulfillment: number,
+): number {
+  let demand = 0;
+  for (const consumer of GOOD_RECIPE_CONSUMERS[goodId] ?? []) {
+    demand += buildingProduction(buildings, consumer.goodId, fulfillment) * consumer.perOutput;
+  }
+  return demand;
+}
+
+/** Snapshot of one system's industrial base and supply-chain state. */
+export interface SystemIndustryReadout {
+  buildSpace: { used: number; total: number };
+  /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
+  labourFulfillment: number;
+  /** One entry per building type with count > 0, sorted by tier ascending then buildingType. */
+  buildings: Array<{ buildingType: string; outputGood?: string; tier: number; count: number }>;
+  /** Produced goods that have a recipe. Sorted by inputGate ascending (most-throttled first). */
+  supplyChain: Array<{ goodId: string; inputGate: number; throttledBy: string[] }>;
+}
+
+/**
+ * Builds an industry readout for one system from its current industrial base and
+ * market stock. Pure — no DB dependency. Reuses the existing helpers for all
+ * derived quantities.
+ *
+ * - buildSpace: total capacity from bodies; used from building counts.
+ * - labourFulfillment: population vs total labour demand.
+ * - buildings: one entry per building type with count > 0 (housing gets tier -1).
+ * - supplyChain: tier-1+ produced goods whose recipe inputs may be short.
+ *   inputGate < 1 means the good is throttled by at least one short input.
+ *   throttledBy lists the inputs where drawable stock < desired draw.
+ */
+export function buildIndustryReadout(
+  buildings: Record<string, number>,
+  bodies: Array<{ size: number; habitable: boolean }>,
+  population: number,
+  marketStock: Record<string, number>,
+  minLevel: number,
+): SystemIndustryReadout {
+  const totalSpace = bodies.reduce((s, b) => s + bodyBuildSpace(b.size, b.habitable), 0);
+  const usedSpace = buildSpaceUsed(buildings);
+  const demand = labourDemand(buildings);
+  const fulfillment = labourFulfillment(population, demand);
+
+  // Buildings array — one entry per type with count > 0.
+  const buildingEntries: SystemIndustryReadout["buildings"] = [];
+  for (const [buildingType, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    if (buildingType === HOUSING_TYPE) {
+      buildingEntries.push({ buildingType, tier: -1, count });
+    } else {
+      const def = BUILDING_TYPES[buildingType];
+      const outputGood = def?.outputGood;
+      const tier: number = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
+      buildingEntries.push({ buildingType, outputGood, tier, count });
+    }
+  }
+  buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
+
+  // Supply chain — only produced goods with a recipe (tier-1+).
+  const stockOf = (g: string): number => marketStock[g] ?? minLevel;
+  const supplyChainEntries: SystemIndustryReadout["supplyChain"] = [];
+
+  for (const [buildingType, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    const def = BUILDING_TYPES[buildingType];
+    const goodId = def?.outputGood;
+    if (!goodId) continue;
+    const recipe = GOOD_RECIPES[goodId];
+    if (!recipe) continue; // tier-0 — always gated at 1, no signal
+
+    const effectiveProduction = buildingProduction(buildings, goodId, fulfillment);
+    const gate = inputGate(goodId, effectiveProduction, stockOf, minLevel);
+
+    const throttledBy: string[] = [];
+    for (const [input, perOutput] of Object.entries(recipe)) {
+      const desired = effectiveProduction * perOutput;
+      if (desired <= 0) continue;
+      const drawable = Math.max(0, stockOf(input) - minLevel);
+      if (drawable < desired) throttledBy.push(input);
+    }
+
+    supplyChainEntries.push({ goodId, inputGate: gate, throttledBy });
+  }
+  supplyChainEntries.sort((a, b) => a.inputGate - b.inputGate);
+
+  return {
+    buildSpace: { used: usedSpace, total: totalSpace },
+    labourFulfillment: fulfillment,
+    buildings: buildingEntries,
+    supplyChain: supplyChainEntries,
+  };
 }

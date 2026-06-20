@@ -41,6 +41,9 @@ export const queryKeys = {
   // Per-system dynamic population/unrest/demand — tick-invalidated.
   systemPopulationAll: ["systemPopulation"] as const,
   systemPopulation: (systemId: string) => ["systemPopulation", systemId] as const,
+  // Per-system industrial base + supply-chain state — tick-invalidated.
+  systemIndustryAll: ["systemIndustry"] as const,
+  systemIndustry: (systemId: string) => ["systemIndustry", systemId] as const,
   // Cantina
   cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
   cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,
