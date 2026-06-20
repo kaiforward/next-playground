@@ -1,3 +1,5 @@
+import { GOOD_NAMES } from "@/lib/constants/goods";
+
 /**
  * Supply-chain recipes: produced good -> { input good: units consumed per unit
  * output }. Tier-0 goods are resource-extracted and have NO recipe (absent
@@ -31,3 +33,43 @@ export const GOOD_RECIPES: Record<string, Record<string, number>> = {
   reactor_cores: { radioactives: 0.4, alloys: 0.3, components: 0.3 },
   ship_frames: { hull_plating: 0.4, alloys: 0.3, components: 0.3 },
 };
+
+/**
+ * Goods in recipe-topological order: every good appears after all of its
+ * recipe inputs, so a freshly-produced input feeds its consumer the same tick.
+ * Subsumes the coarse T0→T1→T2 ordering and handles intra-tier edges
+ * (metals→alloys→hull_plating). Kahn's algorithm over GOOD_RECIPES (validated
+ * acyclic by this file's tests). Stable on GOOD_NAMES order for determinism.
+ */
+export const PRODUCTION_GOOD_ORDER: string[] = (() => {
+  const indeg = new Map<string, number>(GOOD_NAMES.map((g) => [g, 0]));
+  for (const good of GOOD_NAMES) {
+    indeg.set(good, Object.keys(GOOD_RECIPES[good] ?? {}).length);
+  }
+  const order: string[] = [];
+  const ready = GOOD_NAMES.filter((g) => (indeg.get(g) ?? 0) === 0);
+  while (ready.length > 0) {
+    const g = ready.shift()!;
+    order.push(g);
+    for (const consumer of GOOD_NAMES) {
+      if (GOOD_RECIPES[consumer]?.[g] === undefined) continue;
+      const d = (indeg.get(consumer) ?? 0) - 1;
+      indeg.set(consumer, d);
+      if (d === 0) ready.push(consumer);
+    }
+  }
+  return order;
+})();
+
+/** Reverse recipe index: input good → goods that consume it (and units per their output). */
+export const GOOD_RECIPE_CONSUMERS: Readonly<
+  Record<string, Array<{ goodId: string; perOutput: number }>>
+> = (() => {
+  const out: Record<string, Array<{ goodId: string; perOutput: number }>> = {};
+  for (const [good, recipe] of Object.entries(GOOD_RECIPES)) {
+    for (const [input, perOutput] of Object.entries(recipe)) {
+      (out[input] ??= []).push({ goodId: good, perOutput });
+    }
+  }
+  return out;
+})();

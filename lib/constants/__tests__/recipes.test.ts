@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GOOD_RECIPES } from "@/lib/constants/recipes";
+import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER, GOOD_RECIPE_CONSUMERS } from "@/lib/constants/recipes";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 
 describe("GOOD_RECIPES integrity", () => {
@@ -51,5 +51,34 @@ describe("GOOD_RECIPES integrity", () => {
     };
     for (const good of Object.keys(GOOD_RECIPES)) visit(good);
     expect(cyclic, `cycle detected through: ${cyclic.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("PRODUCTION_GOOD_ORDER", () => {
+  it("includes every good exactly once", () => {
+    expect([...PRODUCTION_GOOD_ORDER].sort()).toEqual([...GOOD_NAMES].sort());
+  });
+
+  it("places every good after all of its recipe inputs", () => {
+    const pos = new Map(PRODUCTION_GOOD_ORDER.map((g, i) => [g, i]));
+    for (const [good, recipe] of Object.entries(GOOD_RECIPES)) {
+      for (const input of Object.keys(recipe)) {
+        expect(pos.get(input)!).toBeLessThan(pos.get(good)!);
+      }
+    }
+  });
+
+  it("orders the metals→alloys→hull_plating intra-tier chain correctly", () => {
+    const pos = new Map(PRODUCTION_GOOD_ORDER.map((g, i) => [g, i]));
+    expect(pos.get("metals")!).toBeLessThan(pos.get("alloys")!);
+    expect(pos.get("alloys")!).toBeLessThan(pos.get("hull_plating")!);
+  });
+});
+
+describe("GOOD_RECIPE_CONSUMERS", () => {
+  it("lists metals as consumed by alloys at its recipe quantity", () => {
+    const consumers = GOOD_RECIPE_CONSUMERS["metals"] ?? [];
+    const alloys = consumers.find((c) => c.goodId === "alloys");
+    expect(alloys?.perOutput).toBe(GOOD_RECIPES["alloys"]["metals"]);
   });
 });
