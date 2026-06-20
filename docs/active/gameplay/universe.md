@@ -36,7 +36,7 @@ Each system has:
 - **Bodies**: a sun + 1–N bodies, each with a resource vector (the economic substrate)
 - **Features**: 0–2 narrative traits with quality tiers
 - **Coordinates**: Fixed position via Poisson-disc sampling, assigned to nearest region
-- **Station**: Exactly one station with a market carrying all 12 goods
+- **Station**: Exactly one station with a market carrying all 26 goods
 - **Gateway flag**: 1-2 systems per region pair serve as inter-region connection points
 
 ### Connections
