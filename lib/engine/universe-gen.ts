@@ -41,6 +41,14 @@ export interface GeneratedSystem {
   buildSpace: number;
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
+  /** Total finite surface space across all bodies. */
+  availableSpace: number;
+  /** Sum of per-body general-purpose space. */
+  generalSpace: number;
+  /** Sum of per-body habitable space. */
+  habitableSpace: number;
+  /** Σ body deposit slots — total extractor capacity per resource across the system. */
+  slotCap: ResourceVector;
   x: number;
   y: number;
   regionIndex: number;
@@ -390,6 +398,10 @@ export function generateSystems(
       traits: substrate.features,
       buildSpace: substrate.buildSpace,
       buildings: substrate.buildings,
+      availableSpace: substrate.availableSpace,
+      generalSpace: substrate.generalSpace,
+      habitableSpace: substrate.habitableSpace,
+      slotCap: substrate.slotCap,
       x: points[i].x,
       y: points[i].y,
       regionIndex,

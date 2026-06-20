@@ -8,7 +8,7 @@ import type {
   BodyArchetypeId, ResourceVector, RichnessModifierId, SunClass,
 } from "@/lib/types/game";
 import { BODY_ARCHETYPES, SUN_CLASSES, RICHNESS_MODIFIERS, type SunClassDef } from "@/lib/constants/bodies";
-import { makeResourceVector, sumResourceVectors, RESOURCE_TYPES } from "./resources";
+import { makeResourceVector, emptyResourceVector, sumResourceVectors, RESOURCE_TYPES } from "./resources";
 import { ALL_TRAIT_IDS, QUALITY_TIERS } from "@/lib/constants/traits";
 import { toQualityTier } from "@/lib/types/guards";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -17,6 +17,7 @@ import type { RNG } from "./universe-gen";
 import { weightedPick, randInt } from "./universe-gen";
 import { bodyBuildSpace } from "@/lib/engine/industry";
 import { allocateIndustry } from "@/lib/engine/industry-seed";
+import { partitionBody, rollQualityBand } from "./substrate-space";
 
 export interface GeneratedBody {
   bodyType: BodyArchetypeId;
@@ -25,6 +26,14 @@ export interface GeneratedBody {
   resourceBase: ResourceVector;
   popCapWeight: number;
   richnessModifiers: RichnessModifierId[];
+  /** Available extractor slots per resource — derived from surface partition. */
+  slots: ResourceVector;
+  /** Quality-band multiplier per resource (0 for absent resources). */
+  quality: ResourceVector;
+  /** General-purpose surface space (non-deposit fraction). */
+  generalSpace: number;
+  /** Habitable fraction of general space. */
+  habitableSpace: number;
 }
 
 export interface GeneratedSubstrate {
@@ -40,6 +49,14 @@ export interface GeneratedSubstrate {
   buildSpace: number;
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
+  /** Total finite surface space across all bodies (SPACE_PER_SIZE × Σ size). */
+  availableSpace: number;
+  /** Sum of per-body general-purpose space. */
+  generalSpace: number;
+  /** Sum of per-body habitable space. */
+  habitableSpace: number;
+  /** Σ body deposit slots — total extractor capacity per resource across the system. */
+  slotCap: ResourceVector;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -112,6 +129,13 @@ function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
     }
   }
 
+  // ── New P2 fields: surface partition + per-resource quality bands ──
+  const part = partitionBody(arch, size, rng);
+  const quality = emptyResourceVector();
+  for (const r of RESOURCE_TYPES) {
+    if (arch.resourceBase[r] > 0) quality[r] = rollQualityBand(rng).multiplier;
+  }
+
   return {
     bodyType: archId,
     habitable: arch.habitable,
@@ -119,6 +143,10 @@ function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
     resourceBase,
     popCapWeight: arch.popCapWeight,
     richnessModifiers,
+    slots: part.slots,
+    quality,
+    generalSpace: part.generalSpace,
+    habitableSpace: part.habitableSpace,
   };
 }
 
@@ -179,6 +207,12 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
 
   const features = rollFeatures(rng);
 
+  // ── New P2 per-system aggregates ──
+  const availableSpace = SUBSTRATE_GEN.SPACE_PER_SIZE * bodies.reduce((s, b) => s + b.size, 0);
+  const generalSpace = bodies.reduce((s, b) => s + b.generalSpace, 0);
+  const habitableSpace = bodies.reduce((s, b) => s + b.habitableSpace, 0);
+  const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
+
   return {
     sunClass,
     bodies,
@@ -189,5 +223,9 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     features,
     buildSpace,
     buildings: allocation.buildings,
+    availableSpace,
+    generalSpace,
+    habitableSpace,
+    slotCap,
   };
 }

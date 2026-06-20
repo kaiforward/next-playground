@@ -46,6 +46,39 @@ export function bodyResourceColumns(v: ResourceVector): {
   };
 }
 
+/** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
+export function slotColumns(v: ResourceVector): {
+  slotGas: number; slotMinerals: number; slotOre: number; slotBiomass: number;
+  slotArable: number; slotWater: number; slotRadioactive: number;
+} {
+  return {
+    slotGas: v.gas, slotMinerals: v.minerals, slotOre: v.ore, slotBiomass: v.biomass,
+    slotArable: v.arable, slotWater: v.water, slotRadioactive: v.radioactive,
+  };
+}
+
+/** Spread a vector onto the SystemBody quality-band columns (qual*). */
+export function qualColumns(v: ResourceVector): {
+  qualGas: number; qualMinerals: number; qualOre: number; qualBiomass: number;
+  qualArable: number; qualWater: number; qualRadioactive: number;
+} {
+  return {
+    qualGas: v.gas, qualMinerals: v.minerals, qualOre: v.ore, qualBiomass: v.biomass,
+    qualArable: v.arable, qualWater: v.water, qualRadioactive: v.radioactive,
+  };
+}
+
+/** Spread a vector onto the SystemBody per-resource yield-multiplier columns (yield*). */
+export function yieldColumns(v: ResourceVector): {
+  yieldGas: number; yieldMinerals: number; yieldOre: number; yieldBiomass: number;
+  yieldArable: number; yieldWater: number; yieldRadioactive: number;
+} {
+  return {
+    yieldGas: v.gas, yieldMinerals: v.minerals, yieldOre: v.ore, yieldBiomass: v.biomass,
+    yieldArable: v.arable, yieldWater: v.water, yieldRadioactive: v.radioactive,
+  };
+}
+
 /** Element-wise sum of resource vectors (the system aggregate from its bodies). */
 export function sumResourceVectors(vectors: ResourceVector[]): ResourceVector {
   const acc = emptyResourceVector();
@@ -72,18 +105,28 @@ export interface ResourceBars {
 const TRACE_FRACTION = 0.05;
 
 /**
- * Inverse of aggregateColumns / bodyResourceColumns: read a flat column bag
- * back into a ResourceVector. prefix "agg" reads aggGas…aggRadioactive;
- * prefix "res" reads resGas…resRadioactive. Missing columns default to 0.
+ * Inverse of the column-spreader functions: read a flat column bag back into a
+ * ResourceVector.
+ *
+ * Supported prefixes:
+ *   "agg"   — reads aggGas…aggRadioactive (StarSystem aggregate columns)
+ *   "res"   — reads resGas…resRadioactive (SystemBody resource columns)
+ *   "slot"  — reads slotGas…slotRadioactive (deposit-slot counts)
+ *   "qual"  — reads qualGas…qualRadioactive (quality-band values)
+ *   "yield" — reads yieldGas…yieldRadioactive (yield multipliers)
+ *
+ * Missing columns default to 0 for all prefixes EXCEPT "yield", where the
+ * schema default is @default(1) and an absent multiplier means a neutral ×1.
  */
 export function resourceVectorFromColumns(
   source: Record<string, number>,
-  prefix: "agg" | "res",
+  prefix: "agg" | "res" | "slot" | "qual" | "yield",
 ): ResourceVector {
+  const fallback = prefix === "yield" ? 1 : 0;
   const v = emptyResourceVector();
   for (const type of RESOURCE_TYPES) {
     const key = `${prefix}${type.charAt(0).toUpperCase()}${type.slice(1)}`;
-    v[type] = source[key] ?? 0;
+    v[type] = source[key] ?? fallback;
   }
   return v;
 }

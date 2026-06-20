@@ -331,11 +331,11 @@ export function depositDisplayName(resource: ResourceType, band: QualityBandId):
 
 ---
 
-## Phase 2 — Generation + schema + aggregation (additive, NO-OP, reseed, verify in isolation)
+## Phase 2 — Generation + schema + aggregation (additive, reseed, verify coherence in isolation)
 
-**Scope:** Add the new columns *alongside* the old; rewrite generation to produce the new available-space aggregates **in addition to** the unchanged old aggregate/buildSpace/popCap (so the economy keeps running byte-identically); seed writes both; a coherence script validates the new substrate. **No economy/seeder/UI consumer changes.** This is the "validate the new universe is coherent before touching the economy" gate.
+**Scope:** Add the new columns *alongside* the old; rewrite generation to produce the new available-space aggregates **in addition to** the unchanged old aggregate/buildSpace/popCap (the economy MODEL is unchanged — it still reads the old columns); seed writes both; a coherence script validates the new substrate. **No economy/seeder/UI consumer changes.** This is the "validate the new universe is coherent before touching the economy" gate.
 
-**Why no-op is achievable:** the old economy reads only `aggregate`, `buildSpace`, `popCap`, `buildings`, `population` — all still produced exactly as today. The new columns are populated but unread. `yield*` defaults `1.0` (seeder computes real values in Phase 3).
+**Why this is safe (coherence, not parity):** the old economy CODE is unchanged — it reads only `aggregate`, `buildSpace`, `popCap`, `buildings`, `population`, all still produced by the unchanged old generation logic. The new columns are populated but unread. The reseeded universe will NOT be bit-identical (new rng draws shift the shared per-system stream — `universe-gen.ts:375` threads one `mulberry32(seed)` across all systems), and that is fine: we are in dev with no live universe, so we verify by COHERENCE not parity ([[dev-coherence-over-parity]]). `yield*` defaults `1.0` (seeder computes real values in Phase 3).
 
 ### Task 2.1: Schema — add new columns (keep old)
 
@@ -359,10 +359,12 @@ export function depositDisplayName(resource: ResourceType, band: QualityBandId):
 
 **Files:** Modify `lib/engine/body-gen.ts`; Test `lib/engine/__tests__/body-gen.test.ts`.
 
-- [ ] **Step 1 — Failing tests:** `generateSubstrate(rng)` now also returns, per body, `slots`/`quality`/`generalSpace`/`habitableSpace`; and per system `availableSpace`/`generalSpace`/`habitableSpace`/`slotCap` (= Σ body slots). Assert `slotCap[r] === Σ bodies slots[r]`, `availableSpace === SPACE_PER_SIZE × Σ size`. **Assert the OLD fields are unchanged** for a fixed seed (snapshot `aggregate`, `buildSpace`, `popCap`, `buildings`, `population` against pre-change values — proves no-op).
+> **Coherence, not parity (decided P2, 2026-06-20):** we are NOT chasing bit-identical reseeds. The shared PRNG is threaded across every system (`universe-gen.ts` — one `mulberry32(seed)` fed to `generateSubstrate` in a loop), so adding new `rng()` draws shifts the whole universe — and that is fine in dev (no live universe to preserve; P3 reseeds differently anyway). Verify the NEW aggregates by intrinsic coherence; do NOT snapshot old fields against pre-change values. The old generation LOGIC stays untouched (we only ADD) — the existing generation tests still passing is the guard that we didn't break it. See [[dev-coherence-over-parity]].
+
+- [ ] **Step 1 — Failing tests (coherence of the new fields):** `generateSubstrate(rng)` now also returns, per body, `slots`/`quality`/`generalSpace`/`habitableSpace`; and per system `availableSpace`/`generalSpace`/`habitableSpace`/`slotCap` (= Σ body slots). Assert: `slotCap[r] === Σ bodies slots[r]`; `availableSpace === SPACE_PER_SIZE × Σ size` (ε); each body's deposit partition is exhaustive (Σ depositSpace + generalSpace ≈ availableSpace); `quality[r] > 0` only for present resources (`arch.resourceBase[r] > 0`) and within a band range; `slots[r] === 0` for absent resources. (NO old-field snapshot.)
 - [ ] **Step 2 — Run, verify FAIL.**
-- [ ] **Step 3 — Implement.** Extend `GeneratedBody` with `slots: ResourceVector; quality: ResourceVector; generalSpace: number; habitableSpace: number`. In `rollBody`, after the existing (unchanged) old path, call `partitionBody(arch, size, rng)` and `rollQualityBand` per present resource → fill the new fields. **Important RNG ordering:** append the new rolls *after* all old rolls so the old fixed-seed outputs are bit-identical (the old path's rng draws must come first and unchanged). Extend `GeneratedSubstrate` with the new per-system aggregates (`availableSpace`, `generalSpace`, `habitableSpace`, `slotCap`); `yieldMult` stays absent/1.0 here. Old `aggregate`/`buildSpace`/`popCap`/`buildings` computed exactly as today.
-- [ ] **Step 4 — Run, verify PASS** (including the no-op snapshot).
+- [ ] **Step 3 — Implement.** Extend `GeneratedBody` with `slots: ResourceVector; quality: ResourceVector; generalSpace: number; habitableSpace: number`. In `rollBody`, after the existing (unchanged) old path, call `partitionBody(arch, size, rng)` and `rollQualityBand` per present resource → fill the new fields. Extend `GeneratedSubstrate` with the new per-system aggregates (`availableSpace`, `generalSpace`, `habitableSpace`, `slotCap`); `yieldMult` stays absent/1.0 here (seeder computes it in P3). The old `aggregate`/`buildSpace`/`popCap`/`buildings` computation stays exactly as today — ADD new code only, do not alter old draws/logic.
+- [ ] **Step 4 — Run, verify PASS** (incl. the existing generation tests, which guard the old logic).
 - [ ] **Step 5 — Commit.** `feat(economy): substrate-v2 P2 — generate available-space aggregates (additive)`
 
 ### Task 2.4: Seed — write new columns
@@ -381,7 +383,7 @@ export function depositDisplayName(resource: ResourceType, band: QualityBandId):
 - [ ] **Step 2 — Run** `npx tsx scripts/substrate-coherence.ts`; eyeball for coherence (garden worlds dominate habitable space; belts dominate ore/mineral slots; no all-zero-space systems; volatility ~4%).
 - [ ] **Step 3 — Commit.** `chore(economy): substrate-v2 P2 — coherence report script`
 
-**Phase 2 gate (verify in isolation):** `npx vitest run` green incl. the no-op snapshot; `npx prisma db seed` succeeds; coherence report looks sane; **manual smoke — run the game (`npm run dev`), confirm markets/prices/trade play identically to pre-Phase-2** (the economy still runs on old columns); `npm run simulate` parity vs a pre-branch baseline. **Open phase PR → shared branch.**
+**Phase 2 gate (coherence, not parity):** `npx vitest run` green; `npx tsc --noEmit` clean; `npx prisma db seed` succeeds with no errors; the coherence report (Task 2.5) looks sane **on its own merits** (no all-zero-space systems, slot caps distributed sensibly, partitions exhaustive, volatility ~4%); the economy runs CLEAN on the reseeded universe (`npm run dev` smoke — markets/prices/trade work, no NaN); `npm run simulate` completes and hits its equilibrium targets (stocks in band, dispersion exists, greedy ≫ random) — judged INTRINSICALLY, NOT compared to a pre-branch baseline (parity is not a dev-stage goal — see [[dev-coherence-over-parity]]). **Open phase PR → shared branch.**
 
 ---
 

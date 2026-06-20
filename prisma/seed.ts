@@ -10,7 +10,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { deriveDominantEconomy } from "@/lib/engine/faction-gen";
-import { aggregateColumns, bodyResourceColumns } from "@/lib/engine/resources";
+import { aggregateColumns, bodyResourceColumns, slotColumns, qualColumns } from "@/lib/engine/resources";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL environment variable is required");
@@ -174,6 +174,11 @@ async function main() {
           buildSpace: sys.buildSpace,
           ...aggregateColumns(sys.aggregate),
           bodyDanger: sys.bodyDanger,
+          availableSpace: sys.availableSpace,
+          generalSpace: sys.generalSpace,
+          habitableSpace: sys.habitableSpace,
+          ...slotColumns(sys.slotCap),
+          // yield* omitted → DB @default(1); real yields computed in P3
         })),
         select: { id: true, name: true },
       }),
@@ -224,6 +229,10 @@ async function main() {
       ...bodyResourceColumns(b.resourceBase),
       popCapWeight: b.popCapWeight,
       richnessModifiers: b.richnessModifiers,
+      generalSpace: b.generalSpace,
+      habitableSpace: b.habitableSpace,
+      ...slotColumns(b.slots),
+      ...qualColumns(b.quality),
     })),
   );
   await createManyChunked(bodyData, (batch) =>
