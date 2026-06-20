@@ -136,8 +136,9 @@ Resource → tier-0 good map (from `GOOD_PRODUCTION`): `water←water, food←ar
 | `lib/engine/physical-economy.ts` | 3 | Delete the aggregate path (`physicalRates`, `substrateGoodRates`) if unused; keep `GOOD_PRODUCTION` coeffs |
 | `lib/tick/adapters/prisma/economy.ts` + `world/` | 3 | Load `yield*` columns; pass to production |
 | `lib/engine/simulator/world.ts` | 3 | `SimSystem` carries slot caps + yields + spaces; sim tick applies yield term |
-| `lib/services/universe.ts` | 5 | Substrate + industry read services on new model |
-| `components/system/*` | 5 | Panel redesign |
+| `lib/tick/processors/economy.ts` + `lib/engine/simulator/*` + `docs/active/engineering/tick-engine.md` | 5 | Cadence audit: measure round-robin vs flow/migration; maybe catch-up scaling |
+| `lib/services/universe.ts` | 6 | Substrate + industry read services on new model; expose region/cadence for countdown |
+| `components/system/*` | 6 | Panel redesign + cadence display |
 | `scripts/substrate-coherence.ts` | 2 | Coherence report for the verification gate |
 
 ---
@@ -457,23 +458,46 @@ export function depositDisplayName(resource: ResourceType, band: QualityBandId):
 
 **Phase 4 gate:** simulator hits the coarse target; docs reflect reality. **Open phase PR → shared branch.**
 
-## Phase 5 — Industry/substrate panel redesign + UI polish
+## Phase 5 — Tick-cadence audit (design + targeted fix)
 
-**Scope:** Surface the finished model. Read services + panel show available-vs-built headroom, deposit slots + quality bands (using `bandForMultiplier`/`depositDisplayName`), the habitable/general space partition, and population-as-land. The current panel keeps working until replaced.
+**Scope:** Resolve the economy-cadence semantics the substrate work surfaced, BEFORE the panel visualises rates. The economy processor is **round-robin — one region per tick** (`regionIndex = tick % regionCount`; regionCount = **24** default / **60** at 10K, `lib/constants/universe-gen.ts`), with **no catch-up**: a system's market updates once every `regionCount` ticks and applies exactly *one* tick's worth (`lib/tick/processors/economy.ts:52`). The simulator replicates this (`lib/engine/simulator/economy.ts:254`), so calibration is consistent — the stated rates are *per economy cycle*, not per wall-clock tick. This phase decides what (if anything) to change in the tick model; the panel (Phase 6) then reflects the decision. **Sits after calibration so the substrate is calibrated once against the chosen cadence; sits before the panel so the panel shows the final model.**
 
-- [ ] **5.1** Extend the substrate read service (`lib/services/universe.ts` `getSystemSubstrate`) to return per-body slots + quality bands + spaces and per-system slot caps + yields + available/general/habitable space + built-vs-available headroom. Type the response in `lib/types/`; validate union fields with guards. (Tasks expand to bite-sized at execution.)
-- [ ] **5.2** Update the industry read service (`getSystemIndustry`) for the available-space headroom (built ≤ available per use).
-- [ ] **5.3** Redesign the Astrography substrate tab + Industry panel (`components/system/*`): a space-partition bar (deposits / habitable / general-built / headroom), deposit rows with band-coloured quality, population-centre land use, supply-chain throttle (unchanged). Foundry theme; `font-mono` numerics; existing `components/ui` primitives; `QueryBoundary`.
-- [ ] **5.4** Any other UI polish surfaced during the milestone.
-- [ ] **5.5** Commit per component. Phase PR → shared branch.
+**Start with a brainstorm.** This is a design fork, not a mechanical task — when you reach this phase, invoke `superpowers:brainstorming` to settle the questions below before touching code.
 
-**Phase 5 gate:** panel renders the real substrate; visibility-gating preserved (unsurveyed → `{ visibility: "unknown" }`); static vs tick-dynamic split preserved (substrate `staleTime: Infinity`, industry tick-invalidated).
+### The questions to settle
+1. **Bursty vs catch-up.** Keep one-tick-per-cycle (bursty: a system's stock jumps every `regionCount` ticks) and fix it purely in display (relabel + countdown), OR apply **catch-up scaling** (a region applies `×regionCount` worth when it runs) so production reads continuous and "per tick" is literal. Catch-up changes the tick → forces a re-calibration (Phase 4 redo).
+2. **Cross-cadence coherence.** The economy advances per-region every `regionCount` ticks, but **trade-flow and migration sweep a work-budget slice *every* tick** over the open-edge graph — systems that feed each other run on different clocks. Measure whether the production-vs-flow balance is stable, and whether it drifts between scales (production slows as `1/regionCount` 24→60; flow slows as `1/(edges÷workBudget)` — different functions of scale).
+3. **Population-signal cadence.** The population processor runs every tick but only receives fresh `dissatisfactionBySystem` for the **one** region the economy processed this tick (`economy.ts` → `economySignals`) — confirm that is intended and not starving the other regions of fresh signal.
+
+### Tasks
+- [ ] **5.1 — Brainstorm + decide.** `superpowers:brainstorming` over questions 1–3; record the decision in `docs/active/engineering/tick-engine.md` (or a short cadence design note). Output: a locked decision on catch-up vs display-only, cross-scale handling, and the population-signal behaviour.
+- [ ] **5.2 — Instrument + measure.** Extend the simulator report (`lib/engine/simulator/`) to surface per-system economy-update interval, the production-vs-flow throughput ratio, and a 24-region vs 60-region comparison run. Confirm or refute the cross-scale-drift hypothesis with numbers *before* committing to a fix.
+- [ ] **5.3 — Implement the decided change (if any).** If catch-up: scale the per-region application by `regionCount` inside `runEconomyProcessor` (live + sim share the body) — guard `NaN`/`Infinity`, keep production/consumption symmetric, re-check the trade-flow/migration balance. If display-only: no tick change here (handled in Phase 6).
+- [ ] **5.4 — Re-calibrate if the tick changed.** If 5.3 altered the tick, redo the Phase-4 simulator pass against the new cadence (stocks `[5,200]`, dispersion, greedy ≫ random) + reseed. If display-only, skip.
+- [ ] **5.5 — Commit + phase PR.** `feat(economy): substrate-v2 P5 — tick-cadence <decision>`.
+
+**Phase 5 gate:** the cadence model is decided + documented; simulator (and any re-calibration) green; the per-system cycle behaviour the panel will show is final.
+
+---
+
+## Phase 6 — Industry/substrate panel redesign + UI polish + cadence display
+
+**Scope:** Surface the finished model. Read services + panel show available-vs-built headroom, deposit slots + quality bands (using `bandForMultiplier`/`depositDisplayName`), the habitable/general space partition, and population-as-land — plus the **honest cadence display** decided in Phase 5. The current panel keeps working until replaced.
+
+- [ ] **6.1** Extend the substrate read service (`lib/services/universe.ts` `getSystemSubstrate`) to return per-body slots + quality bands + spaces and per-system slot caps + yields + available/general/habitable space + built-vs-available headroom. Type the response in `lib/types/`; validate union fields with guards. (Tasks expand to bite-sized at execution.)
+- [ ] **6.2** Update the industry read service (`getSystemIndustry`) for the available-space headroom (built ≤ available per use).
+- [ ] **6.3** Redesign the Astrography substrate tab + Industry panel (`components/system/*`): a space-partition bar (deposits / habitable / general-built / headroom), deposit rows with band-coloured quality, population-centre land use, supply-chain throttle (unchanged). Foundry theme; `font-mono` numerics; existing `components/ui` primitives; `QueryBoundary`.
+- [ ] **6.4 — Cadence display (from Phase 5).** If display-only: relabel production/consumption as **per economy cycle** (not per tick) and add a per-system **"next economy update in N ticks"** countdown (derive from `tick % regionCount` + the system's region index; expose via the industry read service or a small tick-aware hook — countdown is tick-derived, not a new fetch). If Phase 5 chose catch-up: present continuous per-tick rates instead. Foundry theme; `font-mono` numerics.
+- [ ] **6.5** Any other UI polish surfaced during the milestone.
+- [ ] **6.6** Commit per component. Phase PR → shared branch.
+
+**Phase 6 gate:** panel renders the real substrate + honest cadence; visibility-gating preserved (unsurveyed → `{ visibility: "unknown" }`); static vs tick-dynamic split preserved (substrate `staleTime: Infinity`, industry tick-invalidated; the countdown is tick-derived, not a new query).
 
 ---
 
 ## Final integration
 
-After Phase 5: open the **single final PR** `feat/economy-substrate-v2` → `main` (squash if phase-commit subjects carry `Pn` noise, else ff for clean atomic history — per the clean-history convention). Verify `main` reseeds + plays. Delete the shared + phase branches and this build plan.
+After Phase 6: open the **single final PR** `feat/economy-substrate-v2` → `main` (squash if phase-commit subjects carry `Pn` noise, else ff for clean atomic history — per the clean-history convention). Verify `main` reseeds + plays. Delete the shared + phase branches and this build plan.
 
 ---
 
@@ -490,8 +514,10 @@ After Phase 5: open the **single final PR** `feat/economy-substrate-v2` → `mai
 | Per-system aggregation (slot cap + effective-yield mult) | 2.3, 3.2 |
 | Tier-0 production × yield (one tick term) | 3.1, 3.4 |
 | Population full-fold (no baseline; floor=0) | 1.5, 3.1, 3.2 |
-| Built ≤ available headroom | 3.2, 5.1 |
+| Built ≤ available headroom | 3.2, 6.1 |
 | Reseed (×2) | 2.4, 3.5 |
 | Calibration to coarse target | 4.1–4.3 |
-| Panel visualises final model | 5.1–5.4 |
+| Tick-cadence audit (bursty/catch-up, cross-cadence, pop-signal) | 5.1–5.4 |
+| Honest cadence display (relabel + countdown) | 6.4 |
+| Panel visualises final model | 6.1–6.3 |
 | Docs planned→active + SPEC | 4.4 |
