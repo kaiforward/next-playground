@@ -2,9 +2,11 @@ import type { TxClient } from "@/lib/tick/types";
 import type {
   PopulationStateView, PopulationUpdate, PopulationWorld,
 } from "@/lib/tick/world/population-world";
+import type { ResourceVector } from "@/lib/types/game";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
+import { resourceVectorFromColumns, unitResourceVector } from "@/lib/engine/resources";
 
 /**
  * Live-game adapter for the population processor. Bulk writes via unnest() — no
@@ -41,8 +43,10 @@ export class PrismaPopulationWorld implements PopulationWorld {
     const popBySystem = new Map(pops.map((p) => [p.systemId, p.population]));
     const systemIds = [...popBySystem.keys()];
 
-    // Load markets and building counts in parallel — both scoped to the same system set.
-    const [markets, buildingRows] = await Promise.all([
+    // Load markets, building counts, and per-system yield* columns in parallel —
+    // all scoped to the same system set (each a single batched query, no per-row
+    // reads). Yields drive the tier-0 industrial-input term of demandRate.
+    const [markets, buildingRows, yieldRows] = await Promise.all([
       this.tx.stationMarket.findMany({
         where: { station: { systemId: { in: systemIds } } },
         select: { id: true, good: { select: { name: true } }, station: { select: { systemId: true } } },
@@ -50,6 +54,14 @@ export class PrismaPopulationWorld implements PopulationWorld {
       this.tx.systemBuilding.findMany({
         where: { systemId: { in: systemIds } },
         select: { systemId: true, buildingType: true, count: true },
+      }),
+      this.tx.starSystem.findMany({
+        where: { id: { in: systemIds } },
+        select: {
+          id: true,
+          yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
+          yieldArable: true, yieldWater: true, yieldRadioactive: true,
+        },
       }),
     ]);
 
@@ -59,6 +71,22 @@ export class PrismaPopulationWorld implements PopulationWorld {
       const existing = buildingsBySystem.get(b.systemId) ?? {};
       existing[b.buildingType] = b.count;
       buildingsBySystem.set(b.systemId, existing);
+    }
+
+    // Build per-system yield vectors from the loaded yield* columns.
+    const yieldsBySystem = new Map<string, ResourceVector>();
+    for (const r of yieldRows) {
+      yieldsBySystem.set(
+        r.id,
+        resourceVectorFromColumns(
+          {
+            yieldGas: r.yieldGas, yieldMinerals: r.yieldMinerals, yieldOre: r.yieldOre,
+            yieldBiomass: r.yieldBiomass, yieldArable: r.yieldArable,
+            yieldWater: r.yieldWater, yieldRadioactive: r.yieldRadioactive,
+          },
+          "yield",
+        ),
+      );
     }
 
     // Cache fulfillment per system to avoid recomputing for every market.
@@ -71,12 +99,13 @@ export class PrismaPopulationWorld implements PopulationWorld {
       if (population == null) continue;
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
       const buildings = buildingsBySystem.get(m.station.systemId) ?? {};
+      const yields = yieldsBySystem.get(m.station.systemId) ?? unitResourceVector();
       let fulfillment = fulfillmentBySystem.get(m.station.systemId);
       if (fulfillment == null) {
         fulfillment = labourFulfillment(population, labourDemand(buildings));
         fulfillmentBySystem.set(m.station.systemId, fulfillment);
       }
-      const rate = totalDemandRateForGood(goodKey, population, buildings, fulfillment);
+      const rate = totalDemandRateForGood(goodKey, population, buildings, fulfillment, yields);
       ids.push(m.id);
       rates.push(isFinite(rate) ? rate : 1);
     }

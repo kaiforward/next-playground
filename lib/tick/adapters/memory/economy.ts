@@ -68,7 +68,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         fulfillment = labourFulfillment(sys.population, labourDemand(sys.buildings));
         fulfillmentBySystem.set(sys.id, fulfillment);
       }
-      const production = buildingProduction(sys.buildings, m.goodId, fulfillment);
+      const production = buildingProduction(sys.buildings, m.goodId, fulfillment, sys.yields);
       const consumption = consumptionRate(m.goodId, sys.population);
       views.push({
         id: `${m.systemId}|${m.goodId}`,

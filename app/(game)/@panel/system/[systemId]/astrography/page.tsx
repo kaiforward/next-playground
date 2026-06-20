@@ -8,7 +8,6 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { StarGlyph } from "@/components/system/star-glyph";
-import { ResourceVectorBars } from "@/components/system/resource-vector-bars";
 import { SubstrateTradeBars } from "@/components/system/substrate-trade-bars";
 import { BodyCard } from "@/components/system/body-card";
 import { PopulationSummary } from "@/components/system/population-summary";
@@ -24,7 +23,7 @@ function AstrographyContent({ systemId }: { systemId: string }) {
     );
   }
 
-  const { sunClass, aggregate, bodies, goods } = substrate;
+  const { sunClass, bodies, goods } = substrate;
 
   return (
     <div className="space-y-6">
@@ -36,23 +35,14 @@ function AstrographyContent({ systemId }: { systemId: string }) {
             {SUN_CLASSES[sunClass].name}
           </h3>
         </div>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {populationState.visibility === "visible" ? (
-            <PopulationSummary
-              population={populationState.population}
-              popCap={populationState.popCap}
-            />
-          ) : (
-            <EmptyState message="Scan this system with a ship in range to assess its population." />
-          )}
-          <div>
-            <SectionHeader as="h4" className="mb-1">
-              Resource profile · system aggregate
-            </SectionHeader>
-            <p className="mb-2 text-xs text-text-tertiary">Development potential</p>
-            <ResourceVectorBars vector={aggregate} />
-          </div>
-        </div>
+        {populationState.visibility === "visible" ? (
+          <PopulationSummary
+            population={populationState.population}
+            popCap={populationState.popCap}
+          />
+        ) : (
+          <EmptyState message="Scan this system with a ship in range to assess its population." />
+        )}
       </Card>
 
       {/* Trade profile — per-good production vs consumption from the substrate */}

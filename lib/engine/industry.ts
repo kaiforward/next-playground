@@ -2,30 +2,33 @@
  * Pure capacity-driven production math — zero DB dependency.
  *
  * Production derives from the built industrial base:
- *   production_g = Σ_{t: outputGood_t = g} count_t × outputPerUnit_t × labourFulfillment
+ *   production_g = Σ_{t: outputGood_t = g} count_t × outputPerUnit_t × labourFulfillment × yieldMult
+ * where yieldMult = yields[resource] for tier-0 goods, 1 for tier-1+.
  * Labour is a single system-wide ratio (uniform proportional allocation):
  *   labourFulfillment = min(1, population / Σ count_t × labourPerUnit_t)
  * Input-gating (the recipe `inputs`) is not applied here — that is the
  * supply-chain cascade. The same functions feed the live tick, the simulator,
  * and the substrate read service.
  */
+import type { ResourceVector } from "@/lib/types/game";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
-import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
-  BASE_SPACE,
   BUILDING_TYPES,
   HOUSING_TYPE,
   effectiveSpaceCost,
-  habitabilityFactor,
-  sizeFactor,
 } from "@/lib/constants/industry";
+import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
 import { inputGate } from "@/lib/engine/supply-chain";
 
-/** Build-space a single body contributes: BASE_SPACE × size × habitability. */
-export function bodyBuildSpace(size: number, habitable: boolean): number {
-  return BASE_SPACE * sizeFactor(size) * habitabilityFactor(habitable);
+/**
+ * Available space a single body contributes: SPACE_PER_SIZE × size.
+ * Size-only — habitability is the habitable fraction of space, not a total multiplier.
+ */
+export function bodyAvailableSpace(size: number): number {
+  return SUBSTRATE_GEN.SPACE_PER_SIZE * Math.max(0, size);
 }
 
 /** Σ count × labourPerUnit across production types. Housing demands no labour. */
@@ -65,11 +68,13 @@ export function housingPopCap(buildings: Record<string, number>): number {
 /**
  * Capacity-driven production rate for one good. Sums every production type
  * whose outputGood matches (1:1 today, many-to-one ready).
+ * Tier-0 goods are multiplied by `yields[resource]`; tier-1+ goods use ×1.
  */
 export function buildingProduction(
   buildings: Record<string, number>,
   goodId: string,
   fulfillment: number,
+  yields: ResourceVector,
 ): number {
   let rate = 0;
   for (const [type, count] of Object.entries(buildings)) {
@@ -78,23 +83,30 @@ export function buildingProduction(
     if (def?.outputGood !== goodId) continue;
     rate += count * (def.outputPerUnit ?? 0) * fulfillment;
   }
-  return rate;
+  // Tier-0 yield term: multiply by the per-resource yield multiplier.
+  // `resource !== undefined` already implies tier-0 (only tier-0 goods set GOOD_PRODUCTION[g].resource);
+  // the `GOOD_TIER_BY_KEY[goodId] === 0` check is a safety belt against future schema drift.
+  const resource = GOOD_PRODUCTION[goodId]?.resource;
+  const yieldMult = (resource !== undefined && GOOD_TIER_BY_KEY[goodId] === 0) ? yields[resource] : 1;
+  return rate * yieldMult;
 }
 
 /**
  * Per-good production + consumption for one system from its industrial base.
- * The read-service shape (mirrors `substrateGoodRates`), now capacity-driven on
+ * The read-service shape (one `SubstrateGoodRate` per good), capacity-driven on
  * the production axis; consumption stays perCapitaNeed × population.
+ * Tier-0 production is multiplied by `yields[resource]`.
  */
 export function capacityGoodRates(
   buildings: Record<string, number>,
   population: number,
+  yields: ResourceVector,
 ): SubstrateGoodRate[] {
   const fulfillment = labourFulfillment(population, labourDemand(buildings));
   const pop = Math.max(0, population);
   return GOOD_NAMES.map((goodId) => ({
     goodId,
-    production: buildingProduction(buildings, goodId, fulfillment),
+    production: buildingProduction(buildings, goodId, fulfillment, yields),
     consumption: (GOOD_CONSUMPTION[goodId] ?? 0) * pop,
   }));
 }
@@ -110,10 +122,11 @@ export function inputDemandForGood(
   buildings: Record<string, number>,
   goodId: string,
   fulfillment: number,
+  yields: ResourceVector,
 ): number {
   let demand = 0;
   for (const consumer of GOOD_RECIPE_CONSUMERS[goodId] ?? []) {
-    demand += buildingProduction(buildings, consumer.goodId, fulfillment) * consumer.perOutput;
+    demand += buildingProduction(buildings, consumer.goodId, fulfillment, yields) * consumer.perOutput;
   }
   return demand;
 }
@@ -134,7 +147,7 @@ export interface SystemIndustryReadout {
  * market stock. Pure — no DB dependency. Reuses the existing helpers for all
  * derived quantities.
  *
- * - buildSpace: total capacity from bodies; used from building counts.
+ * - buildSpace: total capacity from bodies (size-only via bodyAvailableSpace); used from building counts.
  * - labourFulfillment: population vs total labour demand.
  * - buildings: one entry per building type with count > 0 (housing gets tier -1).
  * - supplyChain: tier-1+ produced goods whose recipe inputs may be short.
@@ -143,12 +156,13 @@ export interface SystemIndustryReadout {
  */
 export function buildIndustryReadout(
   buildings: Record<string, number>,
-  bodies: Array<{ size: number; habitable: boolean }>,
+  bodies: Array<{ size: number }>,
   population: number,
   marketStock: Record<string, number>,
   minLevel: number,
+  yields: ResourceVector,
 ): SystemIndustryReadout {
-  const totalSpace = bodies.reduce((s, b) => s + bodyBuildSpace(b.size, b.habitable), 0);
+  const totalSpace = bodies.reduce((s, b) => s + bodyAvailableSpace(b.size), 0);
   const usedSpace = buildSpaceUsed(buildings);
   const demand = labourDemand(buildings);
   const fulfillment = labourFulfillment(population, demand);
@@ -180,7 +194,7 @@ export function buildIndustryReadout(
     const recipe = GOOD_RECIPES[goodId];
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
-    const effectiveProduction = buildingProduction(buildings, goodId, fulfillment);
+    const effectiveProduction = buildingProduction(buildings, goodId, fulfillment, yields);
     const gate = inputGate(goodId, effectiveProduction, stockOf, minLevel);
 
     const throttledBy: string[] = [];

@@ -4,9 +4,13 @@
  */
 
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
-import { physicalRates } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
-import { inputDemandForGood } from "@/lib/engine/industry";
+import {
+  buildingProduction,
+  inputDemandForGood,
+  labourDemand,
+  labourFulfillment,
+} from "@/lib/engine/industry";
 import type { GovernmentDefinition } from "@/lib/constants/government";
 import type { ResourceVector } from "@/lib/types/game";
 
@@ -64,15 +68,18 @@ export function demandRateForGood(goodId: string, population: number): number {
  * it depends on the industrial base and labour ratio, not on this tick's stock.
  * `fulfillment` is the system-wide labour ratio
  * (`labourFulfillment(population, labourDemand(buildings))`).
+ * `yields` is the system's per-resource yield multiplier vector (pass unitResourceVector()
+ * when real yields are not yet available).
  */
 export function totalDemandRateForGood(
   goodId: string,
   population: number,
   buildings: Record<string, number>,
   fulfillment: number,
+  yields: ResourceVector,
 ): number {
   const civilian = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
-  const industrial = inputDemandForGood(buildings, goodId, fulfillment);
+  const industrial = inputDemandForGood(buildings, goodId, fulfillment, yields);
   return Math.max(civilian + industrial, MIN_DEMAND);
 }
 
@@ -92,16 +99,25 @@ export function demandFootprint(population: number): Array<{ goodId: string; dem
 /**
  * Initial stock for a market at seed/reset time, derived from the system's net
  * balance for the good around its per-system days-of-supply reference
- * (TARGET_COVER × demandRate). A net producer seeds with deeper cover (reads
- * cheap), a net consumer with shallower cover (reads dear); a balanced or inert
- * market seeds at the reference (reads at base price). Clamped to the stock band.
+ * (TARGET_COVER × demandRate). The net balance comes from the seeded industrial
+ * base: production is the good's capacity-driven output (built extractors ×
+ * per-resource yield × labour), consumption stays perCapitaNeed × population.
+ * A net producer seeds with deeper cover (reads cheap), a net consumer with
+ * shallower cover (reads dear); a balanced or inert market seeds at the
+ * reference (reads at base price). Clamped to the stock band.
+ *
+ * Uses the same building-block formula `capacityGoodRates` does, but for a
+ * single good (avoids an O(goods²) seed when called per good).
  */
 export function getInitialStock(
-  aggregate: ResourceVector,
+  buildings: Record<string, number>,
+  yields: ResourceVector,
   population: number,
   goodId: string,
 ): number {
-  const { production, consumption } = physicalRates(goodId, aggregate, population);
+  const fulfillment = labourFulfillment(population, labourDemand(buildings));
+  const production = buildingProduction(buildings, goodId, fulfillment, yields);
+  const consumption = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
   // reference = TARGET_COVER × demandRate; demandRate is floored consumption (see demandRateForGood).
   const reference = TARGET_COVER * Math.max(consumption, MIN_DEMAND);
   const total = production + consumption;

@@ -19,8 +19,8 @@ export type EconomyType =
 // ── System trait types ────────────────────────────────────────────
 
 // The narrative feature traits a system can have. A system's physical makeup
-// lives elsewhere: world/body type as bodies (BodyArchetypeId) and abundant
-// resources as richness modifiers (RichnessModifierId).
+// lives elsewhere: world/body type as bodies (BodyArchetypeId), and per-body
+// deposit slots + quality bands drive the available-space substrate.
 export type TraitId =
   // Planetary (2)
   | "tidally_locked_world"
@@ -100,22 +100,6 @@ export type BodyArchetypeId =
   | "barren_rock"
   | "gas_giant"
   | "asteroid_belt";
-
-/** Richness-modifier ids — rare multipliers on a single resource (the old "resource traits"). */
-export type RichnessModifierId =
-  | "hydrocarbon_deposits"
-  | "fertile_soil"
-  | "coral_reefs"
-  | "tectonic_concentration"
-  | "mineral_moons"
-  | "ice_rings"
-  | "rare_earth"
-  | "heavy_metals"
-  | "organic_compounds"
-  | "helium3"
-  | "radioactive_lode"
-  | "superdense"
-  | "glacial_aquifer";
 
 export type GovernmentType =
   | "federation"

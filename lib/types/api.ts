@@ -23,11 +23,8 @@ import type {
   TraitCategory,
   QualityTier,
   PlayerNotificationInfo,
-  ResourceType,
-  ResourceVector,
   SunClass,
   BodyArchetypeId,
-  RichnessModifierId,
   StabilityEntry,
 } from "./game";
 import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
@@ -136,21 +133,12 @@ export type SystemPopulationData =
 export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
 
 // ── System substrate ─────────────────────────────────────────────
-export interface RichnessModifierView {
-  id: RichnessModifierId;
-  name: string;
-  resource: ResourceType;
-  multiplier: number;
-}
 export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
   habitable: boolean;
   size: number;
-  popCapWeight: number;
-  resources: ResourceVector;
-  richness: RichnessModifierView[];
 }
 /** Physical substrate for one system — discriminated on fog-of-war visibility. */
 export type SystemSubstrateData =
@@ -159,7 +147,6 @@ export type SystemSubstrateData =
       sunClass: SunClass;
       population: number;
       popCap: number;
-      aggregate: ResourceVector;
       bodies: BodyView[];
       /** Per-good production/consumption computed from this system's substrate. */
       goods: SubstrateGoodRate[];

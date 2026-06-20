@@ -3,6 +3,7 @@ import { runMigrationProcessor } from "../migration";
 import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = {
   edgesPerTick: 100,
@@ -12,8 +13,8 @@ const PARAMS = {
 function sys(id: string, factionId: string | null, population: number, popCap: number, unrest: number): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId, governmentType: "federation",
-    aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     population, popCap, unrest, traits: [], bodyDanger: 0, buildings: {},
+    yields: unitResourceVector(),
   };
 }
 const conn = (a: string, b: string, fuelCost = 10): SimConnection => ({ fromSystemId: a, toSystemId: b, fuelCost });

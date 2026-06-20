@@ -14,6 +14,11 @@ export function emptyResourceVector(): ResourceVector {
   return { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 };
 }
 
+/** A fresh vector with every resource at one (multiplicative identity; use as a yields placeholder). */
+export function unitResourceVector(): ResourceVector {
+  return { gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1 };
+}
+
 /** Build a full vector from a partial, filling unspecified types with zero. */
 export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVector {
   const v = emptyResourceVector();
@@ -22,28 +27,6 @@ export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVe
     if (supplied !== undefined) v[type] = supplied;
   }
   return v;
-}
-
-/** Spread a vector onto the StarSystem aggregate columns (agg*). */
-export function aggregateColumns(v: ResourceVector): {
-  aggGas: number; aggMinerals: number; aggOre: number; aggBiomass: number;
-  aggArable: number; aggWater: number; aggRadioactive: number;
-} {
-  return {
-    aggGas: v.gas, aggMinerals: v.minerals, aggOre: v.ore, aggBiomass: v.biomass,
-    aggArable: v.arable, aggWater: v.water, aggRadioactive: v.radioactive,
-  };
-}
-
-/** Spread a vector onto the SystemBody resource columns (res*). */
-export function bodyResourceColumns(v: ResourceVector): {
-  resGas: number; resMinerals: number; resOre: number; resBiomass: number;
-  resArable: number; resWater: number; resRadioactive: number;
-} {
-  return {
-    resGas: v.gas, resMinerals: v.minerals, resOre: v.ore, resBiomass: v.biomass,
-    resArable: v.arable, resWater: v.water, resRadioactive: v.radioactive,
-  };
 }
 
 /** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
@@ -109,8 +92,6 @@ const TRACE_FRACTION = 0.05;
  * ResourceVector.
  *
  * Supported prefixes:
- *   "agg"   — reads aggGas…aggRadioactive (StarSystem aggregate columns)
- *   "res"   — reads resGas…resRadioactive (SystemBody resource columns)
  *   "slot"  — reads slotGas…slotRadioactive (deposit-slot counts)
  *   "qual"  — reads qualGas…qualRadioactive (quality-band values)
  *   "yield" — reads yieldGas…yieldRadioactive (yield multipliers)
@@ -120,7 +101,7 @@ const TRACE_FRACTION = 0.05;
  */
 export function resourceVectorFromColumns(
   source: Record<string, number>,
-  prefix: "agg" | "res" | "slot" | "qual" | "yield",
+  prefix: "slot" | "qual" | "yield",
 ): ResourceVector {
   const fallback = prefix === "yield" ? 1 : 0;
   const v = emptyResourceVector();

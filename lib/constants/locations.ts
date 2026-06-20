@@ -38,7 +38,7 @@ export interface LocationDefinition {
 // ── Derived location (returned by deriveSystemLocations) ────────
 
 export interface DerivedLocation extends LocationDefinition {
-  /** Quality tier of the matched feature. Null for station + body/richness-derived sites. */
+  /** Quality tier of the matched feature. Null for station + body-derived sites. */
   quality: QualityTier | null;
   /** Display label for the quality tier. Null when quality is null. */
   qualityLabel: string | null;
@@ -173,8 +173,7 @@ export const LOCATIONS: Record<LocationTypeId, LocationDefinition> = {
 // ── Site derivation maps ────────────────────────────────────────
 //
 // Exploration sites derive from the physical substrate: each body archetype
-// opens one site, any richness modifier opens an extraction site, and narrative
-// feature traits open their thematic site.
+// opens one site, and narrative feature traits open their thematic site.
 
 /** Each of the 9 body archetypes surfaces one exploration site. */
 const BODY_ARCHETYPE_TO_LOCATION: Record<BodyArchetypeId, LocationTypeId> = {
@@ -188,9 +187,6 @@ const BODY_ARCHETYPE_TO_LOCATION: Record<BodyArchetypeId, LocationTypeId> = {
   gas_giant: "gas_harvesting_platform",
   asteroid_belt: "asteroid_field",
 };
-
-/** Any richness modifier on a body opens an extraction site. */
-const RICHNESS_LOCATION: LocationTypeId = "mining_outpost";
 
 /** Each narrative feature trait maps to its thematic exploration site. */
 const FEATURE_TO_LOCATION: Partial<Record<TraitId, LocationTypeId>> = {
@@ -242,7 +238,7 @@ const STATION_LOCATIONS: LocationDefinition[] = Object.values(LOCATIONS).filter(
   (l) => l.category === "station",
 );
 
-/** A site with no quality tier — bodies and richness modifiers carry no tier. */
+/** A site with no quality tier — body-derived sites carry no tier. */
 function bodyDerived(locId: LocationTypeId): DerivedLocation {
   return {
     ...LOCATIONS[locId],
@@ -259,10 +255,9 @@ function bodyDerived(locId: LocationTypeId): DerivedLocation {
  * Derive available locations for a system from its bodies + feature traits.
  *
  * Returns station locations (always present) + system locations from the
- * substrate: body archetypes, richness modifiers, and feature traits.
- * Deduplicates by location id — a quality-bearing feature outranks a
- * body/richness-derived site of the same type, the highest-quality feature
- * wins among features, and ties keep the first seen.
+ * substrate: body archetypes and feature traits. Deduplicates by location id —
+ * a quality-bearing feature outranks a body-derived site of the same type, the
+ * highest-quality feature wins among features, and ties keep the first seen.
  */
 export function deriveSystemLocations(
   bodies: BodyView[],
@@ -285,12 +280,9 @@ export function deriveSystemLocations(
     }
   };
 
-  // Bodies → archetype site + (when enriched) an extraction site. No quality tier.
+  // Bodies → archetype site. No quality tier.
   for (const body of bodies) {
     consider(bodyDerived(BODY_ARCHETYPE_TO_LOCATION[body.bodyType]));
-    if (body.richness.length > 0) {
-      consider(bodyDerived(RICHNESS_LOCATION));
-    }
   }
 
   // Features → thematic site, carrying the feature's quality + description.

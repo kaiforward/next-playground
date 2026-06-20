@@ -39,10 +39,6 @@ export interface BuildingTypeDef {
 }
 
 // ── Build-space knobs (first-draft; simulator-calibrated) ──
-/** Build-space granted by a habitable body of size 1. */
-export const BASE_SPACE = 40;
-/** Habitable worlds host industry; belts / gas giants barely. */
-export const HABITABILITY_FACTOR = { habitable: 1.0, uninhabitable: 0.15 } as const;
 /** Default build-space footprint of one building. */
 export const DEFAULT_SPACE_COST = 1.0;
 /** Default population to fully staff one production building. */
@@ -108,10 +104,6 @@ export const PRODUCTION_BUILDING_TYPES: string[] = [...GOOD_NAMES];
 
 export function sizeFactor(size: number): number {
   return Math.max(0, size);
-}
-
-export function habitabilityFactor(habitable: boolean): number {
-  return habitable ? HABITABILITY_FACTOR.habitable : HABITABILITY_FACTOR.uninhabitable;
 }
 
 /**

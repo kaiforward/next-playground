@@ -9,6 +9,7 @@ import type {
   SimMarketEntry,
   SimSystem,
 } from "@/lib/engine/simulator/types";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 const PARAMS: TradeFlowProcessorParams = {
   edgesPerTick: 100,
@@ -27,8 +28,8 @@ function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId, factionId,
     governmentType: "federation",
-    aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     population: 1000, popCap: 2000, traits: [], bodyDanger: 0, unrest: 0, buildings: {},
+    yields: unitResourceVector(),
   };
 }
 

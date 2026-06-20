@@ -5,14 +5,15 @@ import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02 } };
 
 function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation",
-    aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     population, popCap, unrest, traits: [], bodyDanger: 0, buildings,
+    yields: unitResourceVector(),
   };
 }
 function market(systemId: string, goodId: string): SimMarketEntry {
@@ -64,7 +65,7 @@ describe("population processor", () => {
 
     // Ore has no per-capita need, so civilian-only gives MIN_DEMAND.
     const civilianOnly = demandRateForGood("ore", afterPop);
-    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, fulfillment);
+    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, fulfillment, unitResourceVector());
 
     // The smelter's ore draw must push the rate above the civilian-only floor.
     expect(withIndustrial).toBeGreaterThan(civilianOnly);

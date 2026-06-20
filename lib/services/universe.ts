@@ -2,11 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { unitResourceVector } from "@/lib/engine/resources";
 import { capacityGoodRates, buildIndustryReadout } from "@/lib/engine/industry";
-import { toSunClass, toBodyArchetypeId, toRichnessModifierId } from "@/lib/types/guards";
+import { toSunClass, toBodyArchetypeId } from "@/lib/types/guards";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
-import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier, isShipTypeId } from "@/lib/types/guards";
 import { TRAITS } from "@/lib/constants/traits";
@@ -210,7 +210,7 @@ export async function getSystemDetail(
  * Physical substrate for one system — reads the substrate columns.
  * Visibility-gated: an unsurveyed (invisible) system
  * returns `{ visibility: "unknown" }` so a direct URL can't leak survey data.
- * Resolves catalog display data (archetype + richness names) server-side,
+ * Resolves catalog display data (archetype names) server-side,
  * mirroring how getSystemDetail resolves trait names.
  */
 export async function getSystemSubstrate(
@@ -225,14 +225,9 @@ export async function getSystemSubstrate(
         sunClass: true,
         population: true,
         popCap: true,
-        aggGas: true, aggMinerals: true, aggOre: true, aggBiomass: true,
-        aggArable: true, aggWater: true, aggRadioactive: true,
         bodies: {
           select: {
-            id: true, bodyType: true, habitable: true, size: true, popCapWeight: true,
-            resGas: true, resMinerals: true, resOre: true, resBiomass: true,
-            resArable: true, resWater: true, resRadioactive: true,
-            richnessModifiers: true,
+            id: true, bodyType: true, habitable: true, size: true,
           },
         },
         buildings: { select: { buildingType: true, count: true } },
@@ -247,15 +242,6 @@ export async function getSystemSubstrate(
     return { visibility: "unknown" };
   }
 
-  const aggregate = resourceVectorFromColumns(
-    {
-      aggGas: system.aggGas, aggMinerals: system.aggMinerals, aggOre: system.aggOre,
-      aggBiomass: system.aggBiomass, aggArable: system.aggArable,
-      aggWater: system.aggWater, aggRadioactive: system.aggRadioactive,
-    },
-    "agg",
-  );
-
   const bodies: BodyView[] = system.bodies.map((b) => {
     const bodyType = toBodyArchetypeId(b.bodyType);
     return {
@@ -264,25 +250,6 @@ export async function getSystemSubstrate(
       archetypeName: BODY_ARCHETYPES[bodyType].name,
       habitable: b.habitable,
       size: b.size,
-      popCapWeight: b.popCapWeight,
-      resources: resourceVectorFromColumns(
-        {
-          resGas: b.resGas, resMinerals: b.resMinerals, resOre: b.resOre,
-          resBiomass: b.resBiomass, resArable: b.resArable,
-          resWater: b.resWater, resRadioactive: b.resRadioactive,
-        },
-        "res",
-      ),
-      richness: b.richnessModifiers.map((id) => {
-        const richnessId = toRichnessModifierId(id);
-        const def = RICHNESS_MODIFIERS[richnessId];
-        return {
-          id: richnessId,
-          name: def.name,
-          resource: def.resource,
-          multiplier: def.multiplier,
-        };
-      }),
     };
   });
 
@@ -294,9 +261,8 @@ export async function getSystemSubstrate(
     sunClass: toSunClass(system.sunClass),
     population: system.population,
     popCap: system.popCap,
-    aggregate,
     bodies,
-    goods: capacityGoodRates(buildings, system.population),
+    goods: capacityGoodRates(buildings, system.population, unitResourceVector()),
   };
 }
 
@@ -352,6 +318,7 @@ export async function getSystemIndustry(
       system.population,
       marketStock,
       ECONOMY_CONSTANTS.MIN_LEVEL,
+      unitResourceVector(),
     ),
   };
 }

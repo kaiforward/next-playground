@@ -25,8 +25,6 @@ export interface SimSystem {
   factionId: string | null;
   /** Owning faction's government — sourced per-system. */
   governmentType: GovernmentType;
-  /** System aggregate resource vector — drives substrate production rates. */
-  aggregate: ResourceVector;
   /** Abstract population magnitude — drives labour + per-capita consumption. */
   population: number;
   /** Maximum sustainable population (logistic growth cap). */
@@ -39,6 +37,8 @@ export interface SimSystem {
   unrest: number;
   /** Seeded industrial base — buildingType → count. Static at runtime. */
   buildings: Record<string, number>;
+  /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
+  yields: ResourceVector;
 }
 
 export interface SimConnection {

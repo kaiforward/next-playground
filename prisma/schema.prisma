@@ -206,17 +206,9 @@ model StarSystem {
   // ── Physical substrate ──
   sunClass         String  @default("yellow")  // SunClass; real value written at seed time
   population       Float   @default(0)          // abstract magnitude
-  popCap           Float   @default(0)          // Σ(body popCapWeight × size)
+  popCap           Float   @default(0)          // maximum sustainable population
   unrest           Float   @default(0)          // 0…1 — integral of demand-weighted dissatisfaction
-  aggGas           Float   @default(0)
-  aggMinerals      Float   @default(0)
-  aggOre           Float   @default(0)
-  aggBiomass       Float   @default(0)
-  aggArable        Float   @default(0)
-  aggWater         Float   @default(0)
-  aggRadioactive   Float   @default(0)
   bodyDanger       Float   @default(0)  // Σ body-archetype danger baselines
-  buildSpace       Float   @default(0)  // total build-space budget, Σ body BASE_SPACE × size × habitability
   availableSpace   Float @default(0)   // SPACE_PER_SIZE × Σ size
   generalSpace     Float @default(0)   // fungible (non-deposit) space
   habitableSpace   Float @default(0)   // habitable fraction of general — caps population centres
@@ -269,16 +261,6 @@ model SystemBody {
   bodyType          String  // BodyArchetypeId
   habitable         Boolean @default(false)
   size              Float   @default(1)
-  // Resource base — scalar columns (one ResourceVector). Caps on tier-0 yield.
-  resGas            Float   @default(0)
-  resMinerals       Float   @default(0)
-  resOre            Float   @default(0)
-  resBiomass        Float   @default(0)
-  resArable         Float   @default(0)
-  resWater          Float   @default(0)
-  resRadioactive    Float   @default(0)
-  popCapWeight      Float   @default(0)
-  richnessModifiers String[] @default([])  // RichnessModifierId[]
   generalSpace     Float @default(0)   // this body's general space
   habitableSpace   Float @default(0)   // this body's habitable space
   slotGas          Float @default(0)   // per-body slot counts (one per resource)

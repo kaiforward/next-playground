@@ -24,7 +24,6 @@ import type {
   EntityRef,
   SunClass,
   BodyArchetypeId,
-  RichnessModifierId,
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
 import { MODULES, type ModuleId } from "@/lib/constants/modules";
@@ -33,7 +32,7 @@ import type { EnemyTier } from "@/lib/constants/combat";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import type { UniverseScale } from "@/lib/constants/universe-gen";
 import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
-import { SUN_CLASSES, BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
+import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -346,7 +345,6 @@ const CANTINA_NPC_TYPES: ReadonlySet<string> = new Set<CantinaNpcType>([
 
 const SUN_CLASS_IDS: ReadonlySet<string> = new Set(Object.keys(SUN_CLASSES));
 const BODY_ARCHETYPE_IDS: ReadonlySet<string> = new Set(Object.keys(BODY_ARCHETYPES));
-const RICHNESS_MODIFIER_IDS: ReadonlySet<string> = new Set(Object.keys(RICHNESS_MODIFIERS));
 
 export function isCantinaNpcType(value: string): value is CantinaNpcType {
   return CANTINA_NPC_TYPES.has(value);
@@ -372,15 +370,6 @@ export function toBodyArchetypeId(value: string): BodyArchetypeId {
   return value as BodyArchetypeId;
 }
 
-export function isRichnessModifierId(value: string): value is RichnessModifierId {
-  return RICHNESS_MODIFIER_IDS.has(value);
-}
-export function toRichnessModifierId(value: string): RichnessModifierId {
-  if (!RICHNESS_MODIFIER_IDS.has(value)) {
-    throw new Error(`Invalid richness modifier id: "${value}"`);
-  }
-  return value as RichnessModifierId;
-}
 
 export function toUniverseScale(value: string): UniverseScale {
   if (!UNIVERSE_SCALES.has(value)) {

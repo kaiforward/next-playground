@@ -75,13 +75,13 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       regionId: `region-${s.regionIndex}`,
       factionId: `faction-${universe.systemFactionAssignments[s.index]}`,
       governmentType: toGovernmentType(owningFaction.governmentType),
-      aggregate: s.aggregate,
       population: s.population,
       popCap: s.popCap,
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
       bodyDanger: s.bodyDanger,
       unrest: 0,
       buildings: s.buildings,
+      yields: s.yieldMult,
     };
   });
 
@@ -107,7 +107,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         systemId: sys.id,
         goodId: goodKey,
         basePrice,
-        stock: getInitialStock(sys.aggregate, sys.population, goodKey),
+        stock: getInitialStock(sys.buildings, sys.yields, sys.population, goodKey),
         anchorMult: 1,
         demandRate: demandRateForGood(goodKey, sys.population),
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,

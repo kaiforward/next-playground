@@ -7,7 +7,7 @@
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
-import { makeResourceVector, aggregateColumns } from "@/lib/engine/resources";
+import { makeResourceVector, emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { Doctrine, GovernmentType, ResourceVector } from "@/lib/types/game";
 import { allocateIndustry } from "@/lib/engine/industry-seed";
 import { mulberry32 } from "@/lib/engine/universe-gen";
@@ -134,28 +134,38 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
   // Representative substrates so the physical economy yields distinguishable
   // producer/consumer geography: arable/water mid-pop breadbasket, ore/mineral
   // populous forge, low-resource populous tech hub.
-  const agriSubstrate = { aggregate: makeResourceVector({ arable: 10, water: 6, biomass: 4 }), population: 400 };
-  const indSubstrate = { aggregate: makeResourceVector({ ore: 8, minerals: 8, gas: 3 }), population: 1500 };
-  const techSubstrate = { aggregate: makeResourceVector({ water: 4, biomass: 1 }), population: 1500 };
+  const agriSubstrate = { slots: makeResourceVector({ arable: 10, water: 6, biomass: 4 }), population: 400 };
+  const indSubstrate = { slots: makeResourceVector({ ore: 8, minerals: 8, gas: 3 }), population: 1500 };
+  const techSubstrate = { slots: makeResourceVector({ water: 4, biomass: 1 }), population: 1500 };
 
   // Systems first (faction homeworld FK requires them to exist), then factions,
   // then bind systems to their owning faction.
   //
   // Each system gets a deterministic industrial allocation so integration tests
-  // have building rows available. Fixed seeds (101/102/103) and a coarse
-  // buildSpace keep the allocations stable across test runs.
-  const agriAllocation = allocateIndustry(
-    { aggregate: agriSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: agriSubstrate.population, fill: 0.8 },
-    mulberry32(101),
-  );
-  const indAllocation = allocateIndustry(
-    { aggregate: indSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: indSubstrate.population, fill: 0.8 },
-    mulberry32(102),
-  );
-  const techAllocation = allocateIndustry(
-    { aggregate: techSubstrate.aggregate, buildSpace: 120, bodyBaselinePopCap: techSubstrate.population, fill: 0.8 },
-    mulberry32(103),
-  );
+  // have building rows available. The available-space seeder takes per-body
+  // deposit slots + quality; model each substrate as a single body whose deposit
+  // slots equal its slot vector (uniform quality 1.0), with a coarse general /
+  // habitable budget. Fixed seeds (101/102/103) keep allocations stable.
+  const COARSE_GENERAL_SPACE = 120;
+  const allocateFromSlots = (slots: ResourceVector, seed: number) => {
+    const quality = emptyResourceVector();
+    for (const r of RESOURCE_TYPES) {
+      if (slots[r] > 0) quality[r] = 1.0;
+    }
+    return allocateIndustry(
+      {
+        bodies: [{ slots, quality }],
+        slotCap: slots,
+        generalSpace: COARSE_GENERAL_SPACE,
+        habitableSpace: COARSE_GENERAL_SPACE * 0.6,
+        fill: 0.8,
+      },
+      mulberry32(seed),
+    );
+  };
+  const agriAllocation = allocateFromSlots(agriSubstrate.slots, 101);
+  const indAllocation = allocateFromSlots(indSubstrate.slots, 102);
+  const techAllocation = allocateFromSlots(techSubstrate.slots, 103);
 
   const agriSystem = await prisma.starSystem.create({
     data: {
@@ -165,8 +175,6 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: fedRegion.id,
       population: agriSubstrate.population,
-      buildSpace: agriAllocation.buildSpace,
-      ...aggregateColumns(agriSubstrate.aggregate),
     },
   });
 
@@ -178,8 +186,6 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: corpRegion.id,
       population: indSubstrate.population,
-      buildSpace: indAllocation.buildSpace,
-      ...aggregateColumns(indSubstrate.aggregate),
     },
   });
 
@@ -191,8 +197,6 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       y: 10,
       regionId: corpRegion.id,
       population: techSubstrate.population,
-      buildSpace: techAllocation.buildSpace,
-      ...aggregateColumns(techSubstrate.aggregate),
     },
   });
 
@@ -283,19 +287,26 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     if (key) goodIds[key] = g.id;
   }
 
-  // Markets — each station gets all goods seeded from its substrate net balance.
-  // Batched into one createMany across every (station, good) pair.
-  const stationSystems: { stationId: string; aggregate: ResourceVector; population: number }[] = [
-    { stationId: agriStation.id, ...agriSubstrate },
-    { stationId: indStation.id, ...indSubstrate },
-    { stationId: techStation.id, ...techSubstrate },
+  // Markets — each station gets all goods seeded from its capacity-driven net
+  // balance (seeded buildings × per-resource yield). The fixtures model deposits
+  // at uniform quality 1.0, so yields are the neutral unit vector. Batched into
+  // one createMany across every (station, good) pair.
+  const stationSystems: {
+    stationId: string;
+    buildings: Record<string, number>;
+    yieldMult: ResourceVector;
+    population: number;
+  }[] = [
+    { stationId: agriStation.id, buildings: agriAllocation.buildings, yieldMult: unitResourceVector(), population: agriSubstrate.population },
+    { stationId: indStation.id, buildings: indAllocation.buildings, yieldMult: unitResourceVector(), population: indSubstrate.population },
+    { stationId: techStation.id, buildings: techAllocation.buildings, yieldMult: unitResourceVector(), population: techSubstrate.population },
   ];
 
-  const marketData = stationSystems.flatMap(({ stationId, aggregate, population }) =>
+  const marketData = stationSystems.flatMap(({ stationId, buildings, yieldMult, population }) =>
     Object.keys(GOODS).map((key) => ({
       stationId,
       goodId: goodIds[key],
-      stock: getInitialStock(aggregate, population, key),
+      stock: getInitialStock(buildings, yieldMult, population, key),
       demandRate: demandRateForGood(key, population),
     })),
   );

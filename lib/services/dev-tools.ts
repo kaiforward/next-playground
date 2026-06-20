@@ -285,6 +285,20 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
       Object.entries(GOODS).map(([key, def]) => [def.name, key]),
     );
 
+    // Bulk-load the industrial base once and group by system. Seed stock is now
+    // capacity-driven (built extractors × per-resource yield), so each market's
+    // net balance needs its system's buildings — a per-row query would blow the
+    // tx timeout at scale.
+    const buildingRows = await tx.systemBuilding.findMany({
+      select: { systemId: true, buildingType: true, count: true },
+    });
+    const buildingsBySystem = new Map<string, Record<string, number>>();
+    for (const row of buildingRows) {
+      const bag = buildingsBySystem.get(row.systemId) ?? {};
+      bag[row.buildingType] = row.count;
+      buildingsBySystem.set(row.systemId, bag);
+    }
+
     // Collect (id, stock) pairs and bulk-write with a single unnest() UPDATE.
     // A per-row update loop blows the 30s tx timeout at 10K scale (~60–120K
     // rows). Mirrors PrismaEconomyWorld.applyMarketUpdates.
@@ -292,17 +306,18 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
     const stocks: number[] = [];
     for (const m of markets) {
       const sys = m.station.system;
-      const aggregate = resourceVectorFromColumns(
+      const buildings = buildingsBySystem.get(sys.id) ?? {};
+      const yields = resourceVectorFromColumns(
         {
-          aggGas: sys.aggGas, aggMinerals: sys.aggMinerals, aggOre: sys.aggOre,
-          aggBiomass: sys.aggBiomass, aggArable: sys.aggArable,
-          aggWater: sys.aggWater, aggRadioactive: sys.aggRadioactive,
+          yieldGas: sys.yieldGas, yieldMinerals: sys.yieldMinerals, yieldOre: sys.yieldOre,
+          yieldBiomass: sys.yieldBiomass, yieldArable: sys.yieldArable,
+          yieldWater: sys.yieldWater, yieldRadioactive: sys.yieldRadioactive,
         },
-        "agg",
+        "yield",
       );
       const goodKey = goodKeyByName.get(m.good.name) ?? m.good.name;
       ids.push(m.id);
-      stocks.push(getInitialStock(aggregate, sys.population, goodKey));
+      stocks.push(getInitialStock(buildings, yields, sys.population, goodKey));
     }
 
     if (ids.length > 0) {

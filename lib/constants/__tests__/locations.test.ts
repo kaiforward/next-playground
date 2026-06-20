@@ -2,22 +2,17 @@ import { describe, it, expect } from "vitest";
 import { deriveSystemLocations, LOCATIONS } from "../locations";
 import { enrichTraits } from "@/lib/utils/traits";
 import { TRAITS, ALL_TRAIT_IDS } from "@/lib/constants/traits";
-import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
-import { makeResourceVector } from "@/lib/engine/resources";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import type {
   SystemTraitInfo,
   TraitId,
   QualityTier,
   BodyArchetypeId,
-  RichnessModifierId,
 } from "@/lib/types/game";
 import type { BodyView } from "@/lib/types/api";
 
-/** Build a BodyView from an archetype + optional richness modifiers. */
-function makeBody(
-  bodyType: BodyArchetypeId,
-  richness: RichnessModifierId[] = [],
-): BodyView {
+/** Build a BodyView from an archetype. */
+function makeBody(bodyType: BodyArchetypeId): BodyView {
   const arch = BODY_ARCHETYPES[bodyType];
   return {
     id: `body-${bodyType}`,
@@ -25,14 +20,6 @@ function makeBody(
     archetypeName: arch.name,
     habitable: arch.habitable,
     size: 1,
-    popCapWeight: arch.popCapWeight,
-    resources: makeResourceVector({}),
-    richness: richness.map((id) => ({
-      id,
-      name: RICHNESS_MODIFIERS[id].name,
-      resource: RICHNESS_MODIFIERS[id].resource,
-      multiplier: RICHNESS_MODIFIERS[id].multiplier,
-    })),
   };
 }
 
@@ -100,16 +87,6 @@ describe("deriveSystemLocations", () => {
     expect(result.some((l) => l.id === "gas_harvesting_platform")).toBe(true);
   });
 
-  it("a body richness modifier yields a mining outpost alongside the archetype site", () => {
-    const result = deriveSystemLocations(
-      [makeBody("asteroid_belt", ["heavy_metals"])],
-      [],
-    );
-    const ids = result.map((l) => l.id);
-    expect(ids).toContain("mining_outpost");
-    expect(ids).toContain("asteroid_field");
-  });
-
   it("a feature yields its mapped site carrying the feature's quality", () => {
     const result = deriveSystemLocations([], makeFeatures([["precursor_ruins", 3]]));
     const ruins = result.find((l) => l.id === "ruins_expedition");
@@ -161,8 +138,8 @@ describe("deriveSystemLocations", () => {
 
   it("produces multiple distinct sites from a mixed substrate", () => {
     const result = deriveSystemLocations(
-      [makeBody("gas_giant"), makeBody("asteroid_belt", ["rare_earth"])],
-      makeFeatures([["smuggler_haven", 1]]),
+      [makeBody("gas_giant"), makeBody("asteroid_belt")],
+      makeFeatures([["smuggler_haven", 1], ["geothermal_vents", 2]]),
     );
     const ids = result.filter((l) => l.category === "system").map((l) => l.id);
 
@@ -189,16 +166,6 @@ describe("LOCATIONS catalog coverage", () => {
         `archetype "${arch.id}" produced no system location`,
       ).toBeGreaterThan(0);
       for (const l of systemLocs) expect(LOCATIONS[l.id]).toBeDefined();
-    }
-  });
-
-  it("every richness modifier yields a mining outpost", () => {
-    for (const mod of Object.values(RICHNESS_MODIFIERS)) {
-      const result = deriveSystemLocations([makeBody("asteroid_belt", [mod.id])], []);
-      expect(
-        result.some((l) => l.id === "mining_outpost"),
-        `richness "${mod.id}" did not yield a mining outpost`,
-      ).toBe(true);
     }
   });
 

@@ -30,15 +30,12 @@ export interface GeneratedSystem {
   /** Physical substrate — sun class gates body composition. */
   sunClass: SunClass;
   bodies: GeneratedBody[];
-  aggregate: ResourceVector;
   popCap: number;
   population: number;
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
   bodyDanger: number;
   /** Narrative features (the pruned trait subset). */
   traits: GeneratedTrait[];
-  /** Total build-space budget. */
-  buildSpace: number;
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
   /** Total finite surface space across all bodies. */
@@ -49,6 +46,8 @@ export interface GeneratedSystem {
   habitableSpace: number;
   /** Σ body deposit slots — total extractor capacity per resource across the system. */
   slotCap: ResourceVector;
+  /** Per-resource yield multiplier — deposit quality weighting the slot capacity. */
+  yieldMult: ResourceVector;
   x: number;
   y: number;
   regionIndex: number;
@@ -381,7 +380,7 @@ export function generateSystems(
   const systems: GeneratedSystem[] = [];
   for (let i = 0; i < points.length; i++) {
     const substrate = generateSubstrate(rng);
-    const economyType = deriveEconomyTypeLabel(substrate.aggregate, substrate.population);
+    const economyType = deriveEconomyTypeLabel(substrate.slotCap, substrate.yieldMult, substrate.population);
     const regionIndex = regionAssignments[i];
     const localIndex = regionLocalCount[regionIndex]++;
 
@@ -391,17 +390,16 @@ export function generateSystems(
       economyType,
       sunClass: substrate.sunClass,
       bodies: substrate.bodies,
-      aggregate: substrate.aggregate,
       popCap: substrate.popCap,
       population: substrate.population,
       bodyDanger: substrate.bodyDanger,
       traits: substrate.features,
-      buildSpace: substrate.buildSpace,
       buildings: substrate.buildings,
       availableSpace: substrate.availableSpace,
       generalSpace: substrate.generalSpace,
       habitableSpace: substrate.habitableSpace,
       slotCap: substrate.slotCap,
+      yieldMult: substrate.yieldMult,
       x: points[i].x,
       y: points[i].y,
       regionIndex,

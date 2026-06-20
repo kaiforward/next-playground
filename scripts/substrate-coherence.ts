@@ -1,7 +1,7 @@
 /**
  * One-off verification: report the generated galaxy's economy-type
- * distribution, galaxy-wide aggregate resource totals, and the weakest region's
- * arable (food) share. Run: npx tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts
+ * distribution, galaxy-wide deposit slot-cap totals, and the weakest region's
+ * arable (food) slot share. Run: npx tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts
  */
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { UNIVERSE_GEN, REGION_NAMES } from "@/lib/constants/universe-gen";
@@ -41,9 +41,9 @@ for (const [k, v] of [...econ].sort((a, b) => b[1] - a[1])) {
   console.log(`  ${k.padEnd(12)} ${v} (${((v / u.systems.length) * 100).toFixed(1)}%)`);
 }
 
-const galaxy = sumResourceVectors(u.systems.map((s) => s.aggregate));
+const galaxy = sumResourceVectors(u.systems.map((s) => s.slotCap));
 const totalAll = RESOURCE_TYPES.reduce((sum, t) => sum + galaxy[t], 0);
-console.log("\nGalaxy resource mix:");
+console.log("\nGalaxy slot-cap mix:");
 for (const t of RESOURCE_TYPES) {
   console.log(`  ${t.padEnd(12)} ${galaxy[t].toFixed(0)} (${((galaxy[t] / totalAll) * 100).toFixed(1)}%)`);
 }
@@ -51,14 +51,14 @@ for (const t of RESOURCE_TYPES) {
 let worst = { region: -1, arableShare: Infinity };
 for (let ri = 0; ri < u.regions.length; ri++) {
   const agg = sumResourceVectors(
-    u.systems.filter((s) => s.regionIndex === ri).map((s) => s.aggregate),
+    u.systems.filter((s) => s.regionIndex === ri).map((s) => s.slotCap),
   );
   const tot = RESOURCE_TYPES.reduce((sum, t) => sum + agg[t], 0);
   const share = tot > 0 ? agg.arable / tot : 0;
   if (share < worst.arableShare) worst = { region: ri, arableShare: share };
 }
 console.log(
-  `\nWeakest-arable region: #${worst.region} at ${(worst.arableShare * 100).toFixed(1)}% arable share`,
+  `\nWeakest-arable region: #${worst.region} at ${(worst.arableShare * 100).toFixed(1)}% arable slot share`,
 );
 
 const pop = u.systems.map((s) => s.population).sort((a, b) => a - b);

@@ -6,7 +6,7 @@ import { queryKeys } from "@/lib/query/keys";
 import type { SystemSubstrateData } from "@/lib/types/api";
 
 /**
- * Physical substrate (sun class, population, aggregate resources, bodies) for
+ * Physical substrate (sun class, population, bodies) for
  * one system. Static — only changes on reseed — so staleTime is Infinity and
  * it is not tick-invalidated. Visibility-gated server-side: unsurveyed systems
  * return `{ visibility: "unknown" }` so the panel renders a locked state.

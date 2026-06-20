@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  bodyBuildSpace,
+  bodyAvailableSpace,
   labourDemand,
   labourFulfillment,
   buildSpaceUsed,
@@ -11,20 +11,24 @@ import {
   buildIndustryReadout,
 } from "@/lib/engine/industry";
 import {
-  BASE_SPACE,
   DEFAULT_LABOUR_PER_UNIT,
   POP_CENTRE_DENSITY,
   OUTPUT_PER_UNIT,
   HOUSING_TYPE,
 } from "@/lib/constants/industry";
+import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { unitResourceVector, makeResourceVector } from "@/lib/engine/resources";
 
-describe("bodyBuildSpace", () => {
-  it("scales with size and habitability", () => {
-    expect(bodyBuildSpace(1, true)).toBeCloseTo(BASE_SPACE, 6);
-    expect(bodyBuildSpace(2, true)).toBeCloseTo(BASE_SPACE * 2, 6);
-    expect(bodyBuildSpace(1, false)).toBeLessThan(bodyBuildSpace(1, true));
+describe("bodyAvailableSpace", () => {
+  it("returns SPACE_PER_SIZE × size with no habitability factor", () => {
+    expect(bodyAvailableSpace(1)).toBeCloseTo(SUBSTRATE_GEN.SPACE_PER_SIZE, 6);
+    expect(bodyAvailableSpace(2)).toBeCloseTo(SUBSTRATE_GEN.SPACE_PER_SIZE * 2, 6);
+    expect(bodyAvailableSpace(0)).toBe(0);
+  });
+  it("clamps negative sizes to 0", () => {
+    expect(bodyAvailableSpace(-1)).toBe(0);
   });
 });
 
@@ -67,25 +71,48 @@ describe("housingPopCap", () => {
 });
 
 describe("buildingProduction", () => {
-  it("is count × outputPerUnit × fulfillment for the matching production type", () => {
+  it("is count × outputPerUnit × fulfillment for the matching production type (unit yields)", () => {
     const buildings = { ore: 5 };
-    expect(buildingProduction(buildings, "ore", 1)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"], 6);
-    expect(buildingProduction(buildings, "ore", 0.5)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"] * 0.5, 6);
+    const yields = unitResourceVector();
+    expect(buildingProduction(buildings, "ore", 1, yields)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"], 6);
+    expect(buildingProduction(buildings, "ore", 0.5, yields)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"] * 0.5, 6);
   });
   it("is 0 for a good with no buildings", () => {
-    expect(buildingProduction({ ore: 5 }, "metals", 1)).toBe(0);
+    expect(buildingProduction({ ore: 5 }, "metals", 1, unitResourceVector())).toBe(0);
+  });
+  it("multiplies tier-0 output by yields[resource] for ore (resource=ore)", () => {
+    const buildings = { ore: 4 };
+    const yields = makeResourceVector({ ore: 2.0 });
+    // ore is tier-0; its resource is "ore"
+    const base = buildingProduction(buildings, "ore", 1, unitResourceVector());
+    const boosted = buildingProduction(buildings, "ore", 1, yields);
+    expect(boosted).toBeCloseTo(base * 2.0, 6);
+  });
+  it("tier-1 good (metals) is NOT affected by yields regardless of ore yield", () => {
+    const buildings = { metals: 3 };
+    const yields = makeResourceVector({ ore: 5.0 });
+    const base = buildingProduction(buildings, "metals", 1, unitResourceVector());
+    const withYield = buildingProduction(buildings, "metals", 1, yields);
+    expect(withYield).toBeCloseTo(base, 6);
   });
 });
 
 describe("capacityGoodRates", () => {
   it("returns one entry per good with capacity production and population consumption", () => {
-    const rates = capacityGoodRates({ ore: 4 }, 1000);
+    const rates = capacityGoodRates({ ore: 4 }, 1000, unitResourceVector());
     const ore = rates.find((r) => r.goodId === "ore")!;
     const food = rates.find((r) => r.goodId === "food")!;
     expect(ore.production).toBeGreaterThan(0);
     expect(ore.consumption).toBeGreaterThan(0); // everyone consumes ore a little
     expect(food.production).toBe(0); // no food buildings
     expect(food.consumption).toBeGreaterThan(0);
+  });
+  it("applies the tier-0 yield multiplier to ore production", () => {
+    const base = capacityGoodRates({ ore: 4 }, 1000, unitResourceVector());
+    const boosted = capacityGoodRates({ ore: 4 }, 1000, makeResourceVector({ ore: 3.0 }));
+    const oreBase = base.find((r) => r.goodId === "ore")!.production;
+    const oreBoosted = boosted.find((r) => r.goodId === "ore")!.production;
+    expect(oreBoosted).toBeCloseTo(oreBase * 3.0, 6);
   });
 });
 
@@ -95,30 +122,32 @@ describe("inputDemandForGood", () => {
     const buildings = { metals: 4 };
     const pop = labourDemand(buildings); // exactly staffs them ⇒ fulfillment 1
     const f = labourFulfillment(pop, labourDemand(buildings));
+    const yields = unitResourceVector();
     const metalsCapacity = 4 * OUTPUT_PER_UNIT["metals"] * f;
     const expectedOreDemand = metalsCapacity * GOOD_RECIPES["metals"]["ore"];
-    expect(inputDemandForGood(buildings, "ore", f)).toBeCloseTo(expectedOreDemand, 6);
+    expect(inputDemandForGood(buildings, "ore", f, yields)).toBeCloseTo(expectedOreDemand, 6);
   });
 
   it("returns 0 for a good nothing consumes as an input", () => {
-    expect(inputDemandForGood({ metals: 4 }, "luxuries", 1)).toBe(0);
+    expect(inputDemandForGood({ metals: 4 }, "luxuries", 1, unitResourceVector())).toBe(0);
   });
 
   it("sums across multiple consumers of the same input", () => {
     // minerals feeds chemicals, alloys, components.
     const buildings = { chemicals: 2, alloys: 2, components: 2 };
     const f = 1;
+    const yields = unitResourceVector();
     const direct =
-      inputDemandForGood({ chemicals: 2 }, "minerals", f) +
-      inputDemandForGood({ alloys: 2 }, "minerals", f) +
-      inputDemandForGood({ components: 2 }, "minerals", f);
-    expect(inputDemandForGood(buildings, "minerals", f)).toBeCloseTo(direct, 6);
+      inputDemandForGood({ chemicals: 2 }, "minerals", f, yields) +
+      inputDemandForGood({ alloys: 2 }, "minerals", f, yields) +
+      inputDemandForGood({ components: 2 }, "minerals", f, yields);
+    expect(inputDemandForGood(buildings, "minerals", f, yields)).toBeCloseTo(direct, 6);
   });
 });
 
 describe("buildIndustryReadout", () => {
   const MIN = ECONOMY_CONSTANTS.MIN_LEVEL;
-  // One habitable size-1 body + one uninhabitable size-2 body.
+  // One size-1 body + one size-2 body (habitable field present but ignored by space calc).
   const bodies = [
     { size: 1, habitable: true },
     { size: 2, habitable: false },
@@ -128,23 +157,23 @@ describe("buildIndustryReadout", () => {
   // Population exactly staffs the metals buildings.
   const pop = labourDemand(buildings);
 
-  it("buildSpace.total and buildSpace.used match the helper formulas", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN);
-    const expectedTotal = bodies.reduce((s, b) => s + bodyBuildSpace(b.size, b.habitable), 0);
+  it("buildSpace.total uses bodyAvailableSpace (size only, no habitability factor)", () => {
+    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
+    const expectedTotal = bodies.reduce((s, b) => s + bodyAvailableSpace(b.size), 0);
     const expectedUsed = buildSpaceUsed(buildings);
     expect(readout.buildSpace.total).toBeCloseTo(expectedTotal, 6);
     expect(readout.buildSpace.used).toBeCloseTo(expectedUsed, 6);
   });
 
   it("labourFulfillment matches the helper formula", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN);
+    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
     const demand = labourDemand(buildings);
     const expected = labourFulfillment(pop, demand);
     expect(readout.labourFulfillment).toBeCloseTo(expected, 6);
   });
 
   it("housing appears with tier -1 and no outputGood", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN);
+    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing).toBeDefined();
     expect(housing.tier).toBe(-1);
@@ -153,7 +182,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("production buildings have outputGood and correct tier", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN);
+    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals).toBeDefined();
     expect(metals.outputGood).toBe("metals");
@@ -164,7 +193,7 @@ describe("buildIndustryReadout", () => {
   it("supplyChain entry is throttled (inputGate < 1) when ore stock is at floor", () => {
     // ore stock = MIN (nothing drawable above floor)
     const marketStock = { ore: MIN };
-    const readout = buildIndustryReadout(buildings, bodies, pop, marketStock, MIN);
+    const readout = buildIndustryReadout(buildings, bodies, pop, marketStock, MIN, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeLessThan(1);
@@ -173,10 +202,10 @@ describe("buildIndustryReadout", () => {
 
   it("supplyChain entry is unthrottled (inputGate === 1) when ore stock is ample", () => {
     // ore stock far above what 3 metals buildings can draw in one tick
-    const fullyStaffedProduction = buildingProduction(buildings, "metals", 1);
+    const fullyStaffedProduction = buildingProduction(buildings, "metals", 1, unitResourceVector());
     const oreNeeded = fullyStaffedProduction * GOOD_RECIPES["metals"]["ore"];
     const marketStock = { ore: MIN + oreNeeded * 10 };
-    const readout = buildIndustryReadout(buildings, bodies, pop, marketStock, MIN);
+    const readout = buildIndustryReadout(buildings, bodies, pop, marketStock, MIN, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeCloseTo(1, 6);
@@ -184,13 +213,13 @@ describe("buildIndustryReadout", () => {
   });
 
   it("tier-0 goods (no recipe) are absent from supplyChain", () => {
-    const readout = buildIndustryReadout({ ore: 5 }, bodies, 1000, {}, MIN);
+    const readout = buildIndustryReadout({ ore: 5 }, bodies, 1000, {}, MIN, unitResourceVector());
     expect(readout.supplyChain.find((e) => e.goodId === "ore")).toBeUndefined();
   });
 
   it("supplyChain is sorted by inputGate ascending (most-throttled first)", () => {
     // Two producers: metals (ore recipe, stock at floor) and fuel (gas recipe, ample gas).
-    const gasFuelProduction = buildingProduction({ fuel: 2 }, "fuel", 1);
+    const gasFuelProduction = buildingProduction({ fuel: 2 }, "fuel", 1, unitResourceVector());
     const gasNeeded = gasFuelProduction * GOOD_RECIPES["fuel"]["gas"];
     const stock = { ore: MIN, gas: MIN + gasNeeded * 10 };
     const readout = buildIndustryReadout(
@@ -199,6 +228,7 @@ describe("buildIndustryReadout", () => {
       pop + 2 * DEFAULT_LABOUR_PER_UNIT,
       stock,
       MIN,
+      unitResourceVector(),
     );
     const gates = readout.supplyChain.map((e) => e.inputGate);
     for (let i = 1; i < gates.length; i++) {

@@ -1,14 +1,28 @@
 import { describe, it, expect } from "vitest";
 import {
-  emptyResourceVector, makeResourceVector, aggregateColumns, bodyResourceColumns,
+  emptyResourceVector, makeResourceVector,
   sumResourceVectors, resourceVectorFromColumns, prepareResourceBars,
-  slotColumns, qualColumns, yieldColumns,
+  slotColumns, qualColumns, yieldColumns, unitResourceVector,
 } from "../resources";
 import type { ResourceType } from "@/lib/types/game";
 
 const ALL: ResourceType[] = [
   "gas", "minerals", "ore", "biomass", "arable", "water", "radioactive",
 ];
+
+describe("unitResourceVector", () => {
+  it("returns all seven resource types at 1", () => {
+    const v = unitResourceVector();
+    expect(Object.keys(v).sort()).toEqual([...ALL].sort());
+    for (const t of ALL) expect(v[t]).toBe(1);
+  });
+
+  it("returns a fresh object each call (no shared mutation)", () => {
+    const a = unitResourceVector();
+    a.gas = 5;
+    expect(unitResourceVector().gas).toBe(1);
+  });
+});
 
 describe("emptyResourceVector", () => {
   it("returns all seven types at zero", () => {
@@ -35,26 +49,6 @@ describe("makeResourceVector", () => {
   });
 });
 
-describe("aggregateColumns", () => {
-  it("maps a vector to the StarSystem agg* columns", () => {
-    const cols = aggregateColumns(makeResourceVector({ gas: 1, ore: 2, water: 3 }));
-    expect(cols).toEqual({
-      aggGas: 1, aggMinerals: 0, aggOre: 2, aggBiomass: 0,
-      aggArable: 0, aggWater: 3, aggRadioactive: 0,
-    });
-  });
-});
-
-describe("bodyResourceColumns", () => {
-  it("maps a vector to the SystemBody res* columns", () => {
-    const cols = bodyResourceColumns(makeResourceVector({ minerals: 4, radioactive: 1 }));
-    expect(cols).toEqual({
-      resGas: 0, resMinerals: 4, resOre: 0, resBiomass: 0,
-      resArable: 0, resWater: 0, resRadioactive: 1,
-    });
-  });
-});
-
 describe("sumResourceVectors", () => {
   it("sums element-wise across vectors", () => {
     const sum = sumResourceVectors([
@@ -74,18 +68,8 @@ describe("sumResourceVectors", () => {
 });
 
 describe("resourceVectorFromColumns", () => {
-  it("round-trips with aggregateColumns (agg prefix)", () => {
-    const v = makeResourceVector({ gas: 1, ore: 2, water: 3, radioactive: 4 });
-    expect(resourceVectorFromColumns(aggregateColumns(v), "agg")).toEqual(v);
-  });
-
-  it("round-trips with bodyResourceColumns (res prefix)", () => {
-    const v = makeResourceVector({ minerals: 5, biomass: 2, arable: 1 });
-    expect(resourceVectorFromColumns(bodyResourceColumns(v), "res")).toEqual(v);
-  });
-
   it("defaults missing columns to zero", () => {
-    expect(resourceVectorFromColumns({ aggGas: 7 }, "agg")).toEqual(
+    expect(resourceVectorFromColumns({ slotGas: 7 }, "slot")).toEqual(
       makeResourceVector({ gas: 7 }),
     );
   });

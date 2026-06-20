@@ -4,9 +4,7 @@ import {
   BUILDING_TYPES,
   PRODUCTION_BUILDING_TYPES,
   HOUSING_TYPE,
-  BASE_SPACE,
   sizeFactor,
-  habitabilityFactor,
   effectiveSpaceCost,
 } from "@/lib/constants/industry";
 
@@ -56,9 +54,8 @@ describe("BUILDING_TYPES catalog", () => {
   });
 
   it("exposes build-space factor helpers", () => {
-    expect(BASE_SPACE).toBeGreaterThan(0);
-    expect(sizeFactor(1)).toBeGreaterThan(0);
-    expect(habitabilityFactor(true)).toBeGreaterThan(habitabilityFactor(false));
+    expect(sizeFactor(2)).toBe(2 * sizeFactor(1));
+    expect(sizeFactor(-1)).toBe(0);
     expect(effectiveSpaceCost("ore")).toBe(BUILDING_TYPES["ore"].spaceCost);
     expect(effectiveSpaceCost(HOUSING_TYPE)).toBe(BUILDING_TYPES[HOUSING_TYPE].spaceCost);
   });

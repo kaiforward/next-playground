@@ -13,7 +13,7 @@ import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
 import { mulberry32 } from "@/lib/engine/universe-gen";
-import { makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector } from "@/lib/engine/resources";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimRegion, SimSystem } from "@/lib/engine/simulator/types";
 
@@ -48,13 +48,13 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
     regionId: "r1",
     factionId: "f1",
     governmentType: "federation",
-    aggregate: makeResourceVector({ arable: 16 }),
     population: 50,
     popCap: 1000,
     traits: [],
     bodyDanger: 0,
     unrest,
     buildings: { food: 2 },
+    yields: unitResourceVector(),
   };
 }
 
@@ -66,13 +66,13 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
     regionId: "r1",
     factionId: "f1",
     governmentType: "federation",
-    aggregate: emptyResourceVector(),
     population: 1000,
     popCap: 2000,
     traits: [],
     bodyDanger: 0,
     unrest,
     buildings: {},
+    yields: unitResourceVector(),
   };
 }
 
@@ -266,13 +266,13 @@ describe("economy processor: supply-chain input-gating", () => {
         regionId: "r1",
         factionId: "f1",
         governmentType: "federation",
-        aggregate: emptyResourceVector(),
         population: 50, // 2 buildings × 25 labourPerUnit = exactly 50 → fulfillment = 1
         popCap: 200,
         traits: [],
         bodyDanger: 0,
         unrest: 0,
         buildings: { metals: 2 }, // smelter only — no ore extractor
+        yields: unitResourceVector(),
       };
     }
 

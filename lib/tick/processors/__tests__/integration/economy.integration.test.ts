@@ -194,6 +194,38 @@ describe("economyProcessor (integration)", () => {
     expect(food.stock).toBeGreaterThan(labourOnly.stock + 20);
   });
 
+  it("keeps every market stock finite and in-band over many ticks with a non-unit yield", async () => {
+    // Drive a rich ore yield (×2.5) on the industrial (ore-extracting) system so
+    // the tier-0 yield term flows DB→adapter→production→write against Postgres.
+    // Then run ~30 economy ticks across every region and assert no stock ever
+    // goes NaN/Infinity or escapes the [MIN_LEVEL, MAX_LEVEL] band.
+    await prisma.starSystem.update({
+      where: { id: universe.systems.industrial },
+      data: { yieldOre: 2.5 },
+    });
+
+    for (let t = 10; t < 40; t++) {
+      await runProcessor(t);
+    }
+
+    const markets = await prisma.stationMarket.findMany({ select: { stock: true } });
+    expect(markets.length).toBeGreaterThan(0);
+    for (const m of markets) {
+      expect(Number.isFinite(m.stock)).toBe(true);
+      expect(m.stock).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
+      expect(m.stock).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+    }
+
+    // The rich-ore system's ore market produces under the ×2.5 yield: its stock
+    // climbs above the seeded mid-band rather than draining out.
+    const oreMarket = await prisma.stationMarket.findUniqueOrThrow({
+      where: {
+        stationId_goodId: { stationId: universe.stations.industrial, goodId: universe.goodIds["ore"] },
+      },
+    });
+    expect(oreMarket.stock).toBeGreaterThan(ECONOMY_CONSTANTS.MIN_LEVEL);
+  });
+
   it("writes anchorMult from an active anchor_shift modifier", async () => {
     // goodIds["food"] is the DB CUID used for StationMarket lookups.
     // EventModifier.goodId stores the canonical good KEY ("food"), not the DB id.

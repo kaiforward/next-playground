@@ -24,7 +24,7 @@ import type {
   SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
-import { makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -45,7 +45,8 @@ function buildFixture(): {
     name: "Test Region",
   };
 
-  // Arable-rich, low-pop producers: food production ≈ 4/tick, tiny consumption.
+  // Low-pop "producers": empty buildings produce nothing (capacity-driven), so the
+  // producer role comes from the initial stock gradient below + tiny low-pop consumption.
   const producers = ["a", "b"].map<SimSystem>((id) => ({
     id,
     name: id.toUpperCase(),
@@ -53,13 +54,13 @@ function buildFixture(): {
     regionId: "r1",
     factionId: "faction-0",
     governmentType: "federation",
-    aggregate: makeResourceVector({ arable: 16 }),
     population: 100,
     popCap: 1000,
     traits: [],
     bodyDanger: 0,
     unrest: 0,
     buildings: {},
+    yields: unitResourceVector(),
   }));
 
   // Arable-barren, populous consumers: food consumption ≈ 4/tick, no production.
@@ -70,13 +71,13 @@ function buildFixture(): {
     regionId: "r1",
     factionId: "faction-0",
     governmentType: "federation",
-    aggregate: emptyResourceVector(),
     population: 1000,
     popCap: 2000,
     traits: [],
     bodyDanger: 0,
     unrest: 0,
     buildings: {},
+    yields: unitResourceVector(),
   }));
 
   const systems = [...producers, ...consumers];

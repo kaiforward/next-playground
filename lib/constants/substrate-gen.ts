@@ -8,14 +8,6 @@ export const SUBSTRATE_GEN = {
   /** Body size multiplier band, uniform. */
   SIZE_MIN: 0.5,
   SIZE_MAX: 1.5,
-  /** Per-resource magnitude jitter: base × (1 ± RESOURCE_JITTER). */
-  RESOURCE_JITTER: 0.25,
-  /** Probability a body rolls one richness modifier. */
-  RICHNESS_CHANCE: 0.18,
-  /** Abstract population scale: popCap = Σ(body popCapWeight × size) × POP_SCALE. */
-  POP_SCALE: 100,
-  /** Reference popCap treated as "fully developed" for the seed-fill curve. */
-  POP_REF: 2000,
   /** Seed-fill curve: fill = BASE + SLOPE·popNorm + (rng−0.5)·JITTER, clamped [MIN, MAX]. */
   POP_FILL_BASE: 0.1,
   POP_FILL_SLOPE: 0.6,
@@ -40,6 +32,8 @@ export const SUBSTRATE_GEN = {
   VOLATILITY_SPIKE: 6,
   /** Population baseline floor per body. */
   POP_BASELINE_FLOOR: 0,
+  /** Reference habitable space treated as "fully developable" for the seed-fill curve. P4-tuned; not load-bearing for invariants. */
+  HABITABLE_REF: 25,
 } as const;
 
 export interface QualityBand {
