@@ -263,6 +263,8 @@ export interface MarketHealthSummary {
   priceDispersion: { goodId: string; avgStdDev: number }[];
   /** Per-good average distance of stock from its targetStock at simulation end. */
   stockDrift: { goodId: string; avgStockDrift: number }[];
+  /** Per-good fraction of markets clamped at the stock floor / ceiling (supply pathology surface). */
+  stockPins: { goodId: string; floorFrac: number; ceilingFrac: number }[];
 }
 
 // ── Event impact ────────────────────────────────────────────────

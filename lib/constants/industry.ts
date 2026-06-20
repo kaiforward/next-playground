@@ -56,19 +56,25 @@ export const HOUSING_POP_PROVIDED = 20;
  * reproduces the substrate layer's output. Independent of that table going
  * forward — simulator-calibrated; only relative shape matters.
  *
- * The high-consumption tier-0 staples carry an output override: their extractor
- * count is deposit-capped while their per-capita need is the largest in the
- * roster (consumption = need × population), so base coeffs leave them draining.
- * The override lifts per-extractor yield to track staple demand without
- * disturbing the balanced higher tiers. Gas runs highest because its deposit is
- * the rarest, so the fewest systems can host an extractor.
+ * Tier-0 extractors carry output overrides where demand outruns the base
+ * coefficient. Two pressures stack: a high per-capita need (consumption =
+ * need × population) for the staples food/water/gas, and recipe draw — a tier-0
+ * good consumed as a production input (ore→metals; minerals and biomass into
+ * the tier-1 chain) has its civilian demand compounded by every downstream
+ * producer that draws it. Extractor count is deposit-capped, so the override
+ * lifts per-extractor yield to track total demand without disturbing the
+ * balanced higher tiers. Gas runs highest: its deposit is the rarest (the
+ * fewest systems can host an extractor) and it feeds fuel, chemicals, and
+ * polymers on top of civilian use.
  */
 const OUTPUT_OVERRIDES: Record<string, number> = {
   food: 7.0,
   water: 6.0,
   gas: 12.0,
   textiles: 1.4,
-  minerals: 2.2,
+  minerals: 5.0,
+  ore: 5.0,
+  biomass: 3.0,
 };
 
 export const OUTPUT_PER_UNIT: Record<string, number> = Object.fromEntries(

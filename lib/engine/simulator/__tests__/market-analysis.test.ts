@@ -86,6 +86,40 @@ describe("computeMarketHealth — stock drift", () => {
   });
 });
 
+describe("computeMarketHealth — stock pins", () => {
+  it("reports the per-good fraction of markets clamped at the floor or ceiling", () => {
+    // ore: both markets sit within a noise step of MIN_LEVEL (5) → fully floor-pinned.
+    // luxuries: one at the ceiling (200), one mid-band → half ceiling-pinned, none at floor.
+    const { stockPins } = computeMarketHealth(
+      world([
+        market("sys-1", "ore", 5),
+        market("sys-2", "ore", 6),
+        market("sys-1", "luxuries", 200),
+        market("sys-2", "luxuries", 100),
+      ]),
+    );
+
+    const ore = stockPins.find((p) => p.goodId === "ore");
+    expect(ore?.floorFrac).toBe(1);
+    expect(ore?.ceilingFrac).toBe(0);
+
+    const lux = stockPins.find((p) => p.goodId === "luxuries");
+    expect(lux?.floorFrac).toBe(0);
+    expect(lux?.ceilingFrac).toBe(0.5);
+  });
+
+  it("sorts goods by total pinned fraction so the worst pathologies surface first", () => {
+    const { stockPins } = computeMarketHealth(
+      world([
+        market("sys-1", "ore", 5), // ore fully floor-pinned
+        market("sys-1", "metals", 5), // metals half-pinned
+        market("sys-2", "metals", 100),
+      ]),
+    );
+    expect(stockPins[0].goodId).toBe("ore");
+  });
+});
+
 describe("computeMarketHealth — price dispersion", () => {
   it("reports zero dispersion for a single-system good and positive for a split one", () => {
     const { priceDispersion } = computeMarketHealth(
