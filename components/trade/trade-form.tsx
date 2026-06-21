@@ -9,7 +9,6 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/form/number-input";
 import { formatCredits } from "@/lib/utils/format";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { TabList, Tab } from "@/components/ui/tabs";
 import {
   createTradeSchema,
@@ -41,7 +40,10 @@ export function TradeForm({
   // Active per-unit price: buy uses buyPrice, sell uses sellPrice (the spread).
   const unitPrice = tradeType === "buy" ? good.buyPrice : good.sellPrice;
   const cargoSpaceAvailable = cargoMax - cargoUsed;
-  const maxBuyable = Math.max(0, Math.floor(good.stock) - ECONOMY_CONSTANTS.MIN_LEVEL);
+  // k=1 (DEFAULT_ELASTICITY) approximation of minStock = targetStock / priceCeiling^(1/k);
+  // client lacks the inputs for marketBand (MarketEntry doesn't carry demandRate/storageCapacity).
+  const minStock = good.targetStock / good.priceCeiling;
+  const maxBuyable = Math.max(0, Math.floor(good.stock) - minStock);
 
   const maxBuyByCredits = Math.floor(playerCredits / Math.max(1, good.buyPrice));
   const maxBuy = Math.min(maxBuyByCredits, cargoSpaceAvailable, maxBuyable);

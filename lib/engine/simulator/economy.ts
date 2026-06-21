@@ -43,9 +43,7 @@ const EVENT_DEFINITIONS = SCALED.definitions;
 
 function buildSimParams(constants: SimConstants): EconomySimParams {
   return {
-    noiseAmplitude: constants.economy.noiseAmplitude,
-    minLevel: constants.economy.minLevel,
-    maxLevel: constants.economy.maxLevel,
+    noiseFraction: constants.economy.noiseFraction,
   };
 }
 
@@ -193,10 +191,6 @@ async function processSimEvents(
     world.systems,
     world.connections,
     EVENT_DEFINITIONS,
-    {
-      minLevel: ctx.constants.economy.minLevel,
-      maxLevel: ctx.constants.economy.maxLevel,
-    },
   );
 
   const tickCtx: TickContext = {
@@ -330,8 +324,6 @@ async function processSimTradeFlow(
     playerDisplacementFactor: constants.tradeFlow.playerDisplacementFactor,
     distanceDecay: constants.tradeFlow.distanceDecay,
     playerVolumeTarget: constants.tradeFlow.playerVolumeTarget,
-    minLevel: constants.economy.minLevel,
-    maxLevel: constants.economy.maxLevel,
   });
 
   return {

@@ -5,7 +5,6 @@ import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyVie
 import { unitResourceVector } from "@/lib/engine/resources";
 import { capacityGoodRates, buildIndustryReadout } from "@/lib/engine/industry";
 import { toSunClass, toBodyArchetypeId } from "@/lib/types/guards";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier, isShipTypeId } from "@/lib/types/guards";
@@ -317,7 +316,7 @@ export async function getSystemIndustry(
       system.bodies,
       system.population,
       marketStock,
-      ECONOMY_CONSTANTS.MIN_LEVEL,
+      5, // display approx: per-market floor varies by good; 5 is a typical floor for this informational readout
       unitResourceVector(),
     ),
   };

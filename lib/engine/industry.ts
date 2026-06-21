@@ -18,6 +18,10 @@ import {
   BUILDING_TYPES,
   HOUSING_TYPE,
   effectiveSpaceCost,
+  EXTRACTOR_STORAGE_PER_UNIT,
+  PRODUCTION_STORAGE_PER_UNIT,
+  POP_CENTRE_STORAGE,
+  POP_CENTRE_STORAGE_DEFAULT,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -195,7 +199,7 @@ export function buildIndustryReadout(
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
     const effectiveProduction = buildingProduction(buildings, goodId, fulfillment, yields);
-    const gate = inputGate(goodId, effectiveProduction, stockOf, minLevel);
+    const gate = inputGate(goodId, effectiveProduction, stockOf, () => minLevel);
 
     const throttledBy: string[] = [];
     for (const [input, perOutput] of Object.entries(recipe)) {
@@ -215,4 +219,27 @@ export function buildIndustryReadout(
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
   };
+}
+
+/**
+ * Storage capacity the system's built buildings provide for one good — the
+ * infrastructure term of maxStock. Extractors/factories store what they handle;
+ * population centres hold nominal retail stock (generous on consumer goods).
+ * See docs/planned/economy-relative-stock-band.md.
+ */
+export function facilityStorageForGood(buildings: Record<string, number>, goodId: string): number {
+  let storage = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    if (type === HOUSING_TYPE) {
+      const per = POP_CENTRE_STORAGE[goodId] ?? ((GOOD_CONSUMPTION[goodId] ?? 0) > 0 ? POP_CENTRE_STORAGE_DEFAULT : 0);
+      storage += count * per;
+      continue;
+    }
+    const def = BUILDING_TYPES[type];
+    if (def?.outputGood === goodId) {
+      storage += count * (def.resource ? EXTRACTOR_STORAGE_PER_UNIT : PRODUCTION_STORAGE_PER_UNIT);
+    }
+  }
+  return storage;
 }

@@ -13,7 +13,7 @@ import type {
 } from "@/lib/engine/simulator/types";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SystemShock } from "@/lib/tick/world/events-world";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { unitResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
@@ -66,6 +66,7 @@ function makeMarket(
     demandRate: 1,
     priceFloor: 0.2,
     priceCeiling: 5.0,
+    storageCapacity: 0,
   };
 }
 
@@ -86,7 +87,6 @@ function makeWorld(opts: {
     opts.systems,
     opts.connections ?? [],
     EVENT_DEFINITIONS,
-    { minLevel: ECONOMY_CONSTANTS.MIN_LEVEL, maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL },
   );
 }
 
@@ -195,10 +195,11 @@ describe("runEventsProcessor", () => {
     // Whether shocks fired depends on the canonical event def's shock list.
     // What we're asserting here is that the processor completes without
     // crashing on percentage-mode shocks (the old sim used to silently
-    // mis-apply them). Market values must be within MIN/MAX clamps.
+    // mis-apply them). Market values must be within their per-market band.
     for (const m of world.markets) {
-      expect(m.stock).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
-      expect(m.stock).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+      const band = marketBandForRow(m, m);
+      expect(m.stock).toBeGreaterThanOrEqual(band.minStock);
+      expect(m.stock).toBeLessThanOrEqual(band.maxStock);
     }
   });
 
@@ -362,7 +363,9 @@ describe("InMemoryEventsWorld.applyShocks", () => {
     await world.applyShocks([
       shock({ parameter: "supply", mode: "absolute", value: 10_000 }),
     ]);
-    expect(world.markets[0].stock).toBe(ECONOMY_CONSTANTS.MAX_LEVEL);
+    // makeMarket fixture: demandRate=1, priceFloor=0.2, storageCapacity=0
+    // → maxStock = TARGET_COVER/priceFloor + 0 = 40/0.2 = 200
+    expect(world.markets[0].stock).toBe(200);
   });
 
   it("skips non-finite shock values and missing markets", async () => {

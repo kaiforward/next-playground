@@ -99,6 +99,52 @@ export function quoteTrade(
   return { avgMidUnit, avgUnitPrice, totalPrice };
 }
 
+export interface MarketBandInput {
+  demandRate: number;
+  storageCapacity: number;
+  priceFloor: number;    // good.priceFloor (min price multiple)
+  priceCeiling: number;  // good.priceCeiling (max price multiple)
+  k?: number;
+  anchorMult?: number;
+}
+export interface MarketBand { targetStock: number; minStock: number; maxStock: number; }
+
+/**
+ * Per-market stock band. Demand sets the price anchor (`targetStock`) and the
+ * scarcity reserve (`minStock`); built infrastructure (`storageCapacity`) sets
+ * the depth (`maxStock`). `maxStock > minStock` holds structurally because
+ * priceFloor < priceCeiling. Callers pass an already-floored demandRate
+ * (StationMarket.demandRate is floored at seed). See
+ * docs/active/gameplay/economy.md (pricing band).
+ */
+export function marketBand(input: MarketBandInput): MarketBand {
+  const k = input.k ?? DEFAULT_ELASTICITY;
+  const anchorMult = input.anchorMult ?? 1;
+  const targetStock = TARGET_COVER * Math.max(0, input.demandRate) * anchorMult;
+  const minStock = targetStock / input.priceCeiling ** (1 / k);
+  const maxStock = targetStock / input.priceFloor ** (1 / k) + Math.max(0, input.storageCapacity);
+  return { targetStock, minStock, maxStock };
+}
+
+/**
+ * Convenience adapter: derive the per-market band from a row that carries
+ * `demandRate`, `storageCapacity`, and `anchorMult` alongside a good's
+ * `priceFloor`/`priceCeiling`. Use this everywhere a full market row is
+ * available so the band object literal is never repeated.
+ */
+export function marketBandForRow(
+  row: { demandRate: number; storageCapacity: number; anchorMult?: number },
+  good: { priceFloor: number; priceCeiling: number },
+): MarketBand {
+  return marketBand({
+    demandRate: row.demandRate,
+    storageCapacity: row.storageCapacity,
+    priceFloor: good.priceFloor,
+    priceCeiling: good.priceCeiling,
+    anchorMult: row.anchorMult ?? 1,
+  });
+}
+
 /**
  * Build a MarketCurve for a good from its DB/definition fields. The reference
  * stock (where mid === basePrice) is the per-system days-of-supply anchor:

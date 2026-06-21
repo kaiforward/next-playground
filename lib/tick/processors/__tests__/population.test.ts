@@ -17,7 +17,7 @@ function sys(id: string, population: number, popCap: number, unrest = 0, buildin
   };
 }
 function market(systemId: string, goodId: string): SimMarketEntry {
-  return { systemId, goodId, basePrice: 100, stock: 100, anchorMult: 1, demandRate: 1, priceFloor: 10, priceCeiling: 500 };
+  return { systemId, goodId, basePrice: 100, stock: 100, anchorMult: 1, demandRate: 1, priceFloor: 10, priceCeiling: 500, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>): TickContext {
   return { tx: undefined as never, tick: 0, results: new Map([["economy", { economySignals: { dissatisfactionBySystem: d } }]]) };

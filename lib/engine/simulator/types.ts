@@ -58,6 +58,8 @@ export interface SimMarketEntry {
   demandRate: number;
   priceFloor: number;
   priceCeiling: number;
+  /** Built infrastructure storage capacity for this good — the infrastructure term of maxStock. */
+  storageCapacity: number;
 }
 
 export interface SimEvent {

@@ -1,7 +1,6 @@
 import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { spotPrice, curveForGood, marketBandForRow } from "@/lib/engine/market-pricing";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { PrismaTradeFlowWorld } from "@/lib/tick/adapters/prisma/trade-flow";
 import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
@@ -117,16 +116,18 @@ export async function runTradeFlowProcessor(
     // Distance attenuation (1 when distanceDecay = 0).
     const distanceFactor = 1 / (1 + params.distanceDecay * edge.fuelCost);
 
-    const stockHeadroom = Math.max(0, mFrom.stock - params.minLevel);
-    const stockCapacity = Math.max(0, params.maxLevel - mTo.stock);
+    const bandFrom = marketBandForRow(mFrom, mFrom);
+    const bandTo = marketBandForRow(mTo, mTo);
+    const stockHeadroom = Math.max(0, mFrom.stock - bandFrom.minStock);
+    const stockCapacity = Math.max(0, bandTo.maxStock - mTo.stock);
     const gradientFraction = Math.min(1, Math.abs(bestGradient) * params.gradientSensitivity);
     const rawQty =
       Math.min(edgeBudget, stockHeadroom, stockCapacity) * gradientFraction * distanceFactor;
     const quantity = Math.floor(rawQty);
     if (quantity <= 0) continue;
 
-    const newFromStock = clamp(mFrom.stock - quantity, params.minLevel, params.maxLevel);
-    const newToStock = clamp(mTo.stock + quantity, params.minLevel, params.maxLevel);
+    const newFromStock = clamp(mFrom.stock - quantity, bandFrom.minStock, bandFrom.maxStock);
+    const newToStock = clamp(mTo.stock + quantity, bandTo.minStock, bandTo.maxStock);
     mFrom.stock = newFromStock;
     mTo.stock = newToStock;
     updatesByMarketId.set(mFrom.id, { id: mFrom.id, stock: newFromStock });
@@ -166,8 +167,6 @@ export const tradeFlowProcessor: TickProcessor = {
       flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
       playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
       playerVolumeTarget: TRADE_SIMULATION.PLAYER_VOLUME_TARGET,
-      minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
-      maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
       distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
     });
   },

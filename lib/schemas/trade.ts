@@ -8,7 +8,7 @@ export interface TradeSchemaContext {
   unitPrice: number;
   playerCredits: number;
   cargoSpaceAvailable: number;
-  /** Max units buyable from current stock (floor(stock - STOCK_MIN)). */
+  /** Max units buyable from current stock (floor(stock - band.minStock)) — uses the per-market band reserve. */
   maxBuyable: number;
   currentCargoQuantity: number;
 }

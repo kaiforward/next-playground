@@ -2,8 +2,7 @@
  * Shared helpers for bot strategies.
  */
 
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { STOCK_MIN } from "@/lib/constants/market-economy";
+import { spotPrice, curveForGood, marketBand } from "@/lib/engine/market-pricing";
 import { findReachableSystems, type ReachableSystem } from "@/lib/engine/pathfinding";
 import { findReachableSystemsCached } from "../pathfinding-cache";
 import type { SimAdjacencyList } from "../pathfinding-cache";
@@ -66,7 +65,8 @@ export function estimateBuyPrice(
     (m) => m.systemId === systemId && m.goodId === goodId,
   );
   if (!market) return Infinity;
-  if (market.stock - STOCK_MIN < quantity) return Infinity;
+  const band = marketBand({ demandRate: market.demandRate, storageCapacity: market.storageCapacity, priceFloor: market.priceFloor, priceCeiling: market.priceCeiling, anchorMult: market.anchorMult });
+  if (market.stock - band.minStock < quantity) return Infinity;
   return getPrice(market) * quantity;
 }
 
@@ -97,7 +97,8 @@ export function findOpportunities(
 
   for (const [targetId, target] of reachable) {
     for (const buyMarket of currentMarkets) {
-      if (buyMarket.stock - STOCK_MIN <= 0) continue;
+      const buyBand = marketBand({ demandRate: buyMarket.demandRate, storageCapacity: buyMarket.storageCapacity, priceFloor: buyMarket.priceFloor, priceCeiling: buyMarket.priceCeiling, anchorMult: buyMarket.anchorMult });
+      if (buyMarket.stock - buyBand.minStock <= 0) continue;
 
       const buyPrice = getPrice(buyMarket);
       const sellMarket = world.markets.find(
@@ -109,7 +110,7 @@ export function findOpportunities(
       if (sellPrice <= buyPrice) continue;
 
       const maxByCredits = Math.floor(maxCredits / buyPrice);
-      const maxBySupply = Math.floor(buyMarket.stock - STOCK_MIN);
+      const maxBySupply = Math.floor(buyMarket.stock - buyBand.minStock);
       const quantity = Math.min(maxByCredits, maxBySupply, availableCargo);
       if (quantity <= 0) continue;
 

@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  STOCK_MIN,
-  STOCK_MAX,
   TARGET_COVER,
   getSpread,
   getInitialStock,
@@ -12,15 +10,10 @@ import {
 } from "../market-economy";
 import { GOVERNMENT_TYPES } from "../government";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
-import { inputDemandForGood } from "@/lib/engine/industry";
+import { inputDemandForGood, facilityStorageForGood } from "@/lib/engine/industry";
 import { unitResourceVector } from "@/lib/engine/resources";
-
-describe("stock bounds", () => {
-  it("reuses the legacy supply band", () => {
-    expect(STOCK_MIN).toBe(5);
-    expect(STOCK_MAX).toBe(200);
-  });
-});
+import { marketBand } from "@/lib/engine/market-pricing";
+import { GOODS } from "@/lib/constants/goods";
 
 describe("demandRateForGood", () => {
   it("returns per-capita-need × population for a populated system", () => {
@@ -100,17 +93,44 @@ describe("getInitialStock", () => {
     expect(rich).toBeGreaterThanOrEqual(lean);
   });
 
-  it("clamps seeds to the stock band", () => {
-    const seed = getInitialStock({}, unitResourceVector(), 100000, "water");
-    expect(seed).toBeGreaterThanOrEqual(STOCK_MIN);
-    expect(seed).toBeLessThanOrEqual(STOCK_MAX);
+  it("clamps seeds to the per-market band (not the global STOCK_MIN/MAX)", () => {
+    // A pure consumer at large population: seed is within the per-market band,
+    // which is much wider than the old global [STOCK_MIN, STOCK_MAX].
+    const pop = 100000, good = "water";
+    const g = GOODS[good];
+    const band = marketBand({
+      demandRate: demandRateForGood(good, pop),
+      storageCapacity: facilityStorageForGood({}, good),
+      priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
+    });
+    const seed = getInitialStock({}, unitResourceVector(), pop, good);
+    expect(seed).toBeGreaterThanOrEqual(Math.floor(band.minStock));
+    expect(seed).toBeLessThanOrEqual(Math.ceil(band.maxStock));
   });
 
-  it("seeds an unknown (inert) good at the stock floor", () => {
-    // No production or consumption → the total===0 producerShare fallback (0.5),
-    // and demandRate floors at MIN_DEMAND, so the reference (TARGET_COVER × 0.05)
-    // sits below STOCK_MIN and the seed clamps up to the floor.
-    expect(getInitialStock({}, unitResourceVector(), 1000, "not_a_good")).toBe(STOCK_MIN);
+  it("seeds an unknown (inert) good within its per-market band", () => {
+    // No production or consumption → total===0, producerShare fallback = 0.5,
+    // demandRate = MIN_DEMAND=0.05. Fallback band: priceFloor=0.5, priceCeiling=2.0,
+    // storageCapacity=0 → targetStock=2, minStock=1, maxStock=4.
+    // coverMult = 0.5+0.5*(1.5-0.5)=1.0 → seed = round(max(1,min(4,2*1))) = 2.
+    const seed = getInitialStock({}, unitResourceVector(), 1000, "not_a_good");
+    expect(seed).toBeGreaterThanOrEqual(1);
+    expect(seed).toBeLessThanOrEqual(4);
+  });
+
+  it("seeds within the per-market band; producer deeper than consumer", () => {
+    const pop = 800, good = "ore", producer = { ore: 6 }, consumer = {};
+    const g = GOODS[good];
+    const band = marketBand({
+      demandRate: demandRateForGood(good, pop),
+      storageCapacity: facilityStorageForGood(producer, good),
+      priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
+    });
+    const seedProducer = getInitialStock(producer, unitResourceVector(), pop, good);
+    const seedConsumer = getInitialStock(consumer, unitResourceVector(), pop, good);
+    expect(seedProducer).toBeGreaterThanOrEqual(Math.floor(band.minStock));
+    expect(seedProducer).toBeLessThanOrEqual(Math.ceil(band.maxStock));
+    expect(seedProducer).toBeGreaterThan(seedConsumer); // producer is deeper-stocked (cheaper)
   });
 });
 

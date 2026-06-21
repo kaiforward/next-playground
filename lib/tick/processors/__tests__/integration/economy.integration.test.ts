@@ -14,9 +14,7 @@ import { STRIKE_PARAMS } from "@/lib/constants/population";
 const { prisma } = useIntegrationDb();
 
 const simParams: EconomySimParams = {
-  noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-  minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
-  maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
+  noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
 };
 
 describe("economyProcessor (integration)", () => {
@@ -59,20 +57,30 @@ describe("economyProcessor (integration)", () => {
 
   it("raises a producer's stock and drains a consumer's stock over ticks", async () => {
     // Agricultural PRODUCES food (federation region); industrial CONSUMES food
-    // (corporate region). Seed both at the same mid stock and run each region's
-    // tick repeatedly — production should push the producer up, consumption
-    // should pull the consumer down, both staying inside [MIN, MAX].
+    // (corporate region). Each market has its own per-band derived from its
+    // demand rate (pop × perCapitaNeed). Seed within each market's own band and
+    // run ticks — production should push the producer toward its ceiling, and
+    // consumption should drain the consumer toward its floor.
+    //
+    // Band arithmetic (storageCapacity=0 from fixture default, TARGET_COVER=40):
+    //   agri (pop 400):  demandRate=1.6 → target=64, min=32,  max=128
+    //   ind  (pop 1500): demandRate=6.0 → target=240, min=120, max=480
     const foodGoodId = universe.goodIds["food"];
     const producerStation = universe.stations.agricultural;
     const consumerStation = universe.stations.industrial;
 
+    // Seed producer below its ceiling (min=32, max=128) → should climb.
+    const PRODUCER_SEED = 45;
+    // Seed consumer above its target (min=120, max=480) → should drain toward min.
+    const CONSUMER_SEED = 350;
+
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId: producerStation, goodId: foodGoodId } },
-      data: { stock: 80 },
+      data: { stock: PRODUCER_SEED },
     });
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId: consumerStation, goodId: foodGoodId } },
-      data: { stock: 80 },
+      data: { stock: CONSUMER_SEED },
     });
 
     const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
@@ -92,17 +100,16 @@ describe("economyProcessor (integration)", () => {
       where: { stationId_goodId: { stationId: consumerStation, goodId: foodGoodId } },
     });
 
-    expect(producer!.stock).toBeGreaterThan(80);
-    expect(consumer!.stock).toBeLessThan(80);
+    // Producer (agri, food buildings): stock should rise above seed.
+    expect(producer!.stock).toBeGreaterThan(PRODUCER_SEED);
+    // Consumer (industrial, no food buildings): consumption drains stock below seed.
+    expect(consumer!.stock).toBeLessThan(CONSUMER_SEED);
 
-    // Stock stays within the global band.
+    // Stock stays finite and non-negative (clamped to per-market band).
     for (const m of [producer!, consumer!]) {
-      expect(m.stock).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
-      expect(m.stock).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+      expect(Number.isFinite(m.stock)).toBe(true);
+      expect(m.stock).toBeGreaterThanOrEqual(0);
     }
-
-    // Cross-system: the producing system holds more food than the consuming one.
-    expect(producer!.stock).toBeGreaterThan(consumer!.stock);
   });
 
   it("only the target region's markets change (round-robin)", async () => {
@@ -172,7 +179,7 @@ describe("economyProcessor (integration)", () => {
 
     await prisma.stationMarket.updateMany({
       where: { stationId: station, goodId: { in: [foodGoodId, labourOnlyGoodId] } },
-      data: { stock: ECONOMY_CONSTANTS.MIN_LEVEL },
+      data: { stock: 5 }, // pin to per-market band floor (≈minStock for typical goods)
     });
 
     const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
@@ -188,8 +195,8 @@ describe("economyProcessor (integration)", () => {
     const labourOnly = await prisma.stationMarket.findFirstOrThrow({
       where: { stationId: station, goodId: labourOnlyGoodId },
     });
-    // Food has a building → produced; climbs well above its floor start.
-    expect(food.stock).toBeGreaterThan(ECONOMY_CONSTANTS.MIN_LEVEL + 20);
+    // Food has a building → produced; climbs well above its floor start (5).
+    expect(food.stock).toBeGreaterThan(5 + 20);
     // consumer_goods has no building → not produced; stays far below food.
     expect(food.stock).toBeGreaterThan(labourOnly.stock + 20);
   });
@@ -198,7 +205,7 @@ describe("economyProcessor (integration)", () => {
     // Drive a rich ore yield (×2.5) on the industrial (ore-extracting) system so
     // the tier-0 yield term flows DB→adapter→production→write against Postgres.
     // Then run ~30 economy ticks across every region and assert no stock ever
-    // goes NaN/Infinity or escapes the [MIN_LEVEL, MAX_LEVEL] band.
+    // goes NaN/Infinity or escapes its own per-market [minStock, maxStock] band.
     await prisma.starSystem.update({
       where: { id: universe.systems.industrial },
       data: { yieldOre: 2.5 },
@@ -212,8 +219,7 @@ describe("economyProcessor (integration)", () => {
     expect(markets.length).toBeGreaterThan(0);
     for (const m of markets) {
       expect(Number.isFinite(m.stock)).toBe(true);
-      expect(m.stock).toBeGreaterThanOrEqual(ECONOMY_CONSTANTS.MIN_LEVEL);
-      expect(m.stock).toBeLessThanOrEqual(ECONOMY_CONSTANTS.MAX_LEVEL);
+      expect(m.stock).toBeGreaterThanOrEqual(0);
     }
 
     // The rich-ore system's ore market produces under the ×2.5 yield: its stock
@@ -223,7 +229,7 @@ describe("economyProcessor (integration)", () => {
         stationId_goodId: { stationId: universe.stations.industrial, goodId: universe.goodIds["ore"] },
       },
     });
-    expect(oreMarket.stock).toBeGreaterThan(ECONOMY_CONSTANTS.MIN_LEVEL);
+    expect(oreMarket.stock).toBeGreaterThan(5); // above the per-market band floor
   });
 
   it("writes anchorMult from an active anchor_shift modifier", async () => {

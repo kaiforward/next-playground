@@ -21,9 +21,7 @@ import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, MIGR
 
 export interface SimConstants {
   economy: {
-    noiseAmplitude: number;
-    minLevel: number;
-    maxLevel: number;
+    noiseFraction: number;
   };
   /** Read-only snapshot of pricing clamps (not overridable in v1). */
   pricing: {
@@ -145,9 +143,7 @@ function buildDefaults(): SimConstants {
 
   return {
     economy: {
-      noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-      minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
-      maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
+      noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
     },
     pricing: {
       minMultiplier: 0.5,

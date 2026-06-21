@@ -18,7 +18,7 @@ function sys(overrides: Partial<SimSystem>): SimSystem {
 const region: SimRegion = { id: "r1", name: "R1" };
 const market = (goodId: string): SimMarketEntry => ({
   systemId: "s1", goodId, basePrice: 35, stock: 100, anchorMult: 1,
-  demandRate: 1, priceFloor: 0.5, priceCeiling: 2,
+  demandRate: 1, priceFloor: 0.5, priceCeiling: 2, storageCapacity: 0,
 });
 
 describe("InMemoryEconomyWorld — capacity-driven production", () => {

@@ -41,6 +41,10 @@ export interface MarketView {
   baseProductionRate?: number;
   /** Base consumption rate for this good, if any. */
   baseConsumptionRate?: number;
+  /** Stored local demand rate (perCapitaNeed × population, floored at seed). */
+  demandRate: number;
+  /** Built infrastructure storage capacity from the station market row. */
+  storageCapacity: number;
   /** System traits (already validated). */
   traits: GeneratedTrait[];
 }
@@ -81,7 +85,7 @@ export interface EconomyWorld {
 export interface EconomyProcessorParams {
   /** RNG for market noise. Live: Math.random. Sim: seeded. */
   rng: () => number;
-  /** Economy simulation params (reversion, noise, clamps, equilibrium). */
+  /** Economy simulation params (noise fraction for relative-band noise). */
   simParams: EconomySimParams;
   /** Caps applied when aggregating event modifiers per market. */
   modifierCaps: ModifierCaps;

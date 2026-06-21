@@ -28,9 +28,7 @@ const BotConfigSchema = z.object({
 
 const ConstantOverridesSchema = z.object({
   economy: z.object({
-    noiseAmplitude: z.number().optional(),
-    minLevel: z.number().optional(),
-    maxLevel: z.number().optional(),
+    noiseFraction: z.number().min(0).optional(),
   }).optional(),
   goods: z.record(z.string(), z.object({ basePrice: z.number() })).optional(),
   fuel: z.object({

@@ -12,6 +12,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { type GovernmentDefinition } from "@/lib/constants/government";
 import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry } from "@/lib/engine/tick";
+import { marketBand } from "@/lib/engine/market-pricing";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 /** Result of resolving a market tick: the stock-sim entry plus the pricing anchor. */
 export interface ResolvedMarketTick {
@@ -28,6 +29,10 @@ export interface ResolvedMarketTick {
 export interface MarketTickInput {
   goodId: string;
   stock: number;
+  /** Stored local demand rate (perCapitaNeed × population, floored at seed). */
+  demandRate: number;
+  /** Built infrastructure storage capacity from StationMarket.storageCapacity. */
+  storageCapacity: number;
   /** Base production rate for this good (undefined = not a producer). */
   baseProductionRate?: number;
   /** Base consumption rate for this good (undefined = not a consumer). */
@@ -59,9 +64,40 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     ? baseVolatility * input.govDef.volatilityModifier
     : baseVolatility;
 
+  // Aggregate modifiers first so anchorMult is available before band computation.
+  // The band must track event anchor shifts: a bumper-harvest doubling the anchor
+  // should also widen the stock band so the ceiling doesn't clip the raised target.
+  let anchorMult = 1;
+  let productionMult: number | undefined;
+  let consumptionMult: number | undefined;
+
+  if (input.modifiers.length > 0) {
+    // Only production/consumption rate multipliers affect the stock tick.
+    // supply_target/demand_target modifiers have been converted to anchor_shift,
+    // which affects PRICING via the stored anchorMult (returned here for the
+    // caller to persist), not the stock delta. Events also shape the economy
+    // via stock shocks (applied separately).
+    const agg = aggregateModifiers(input.modifiers, input.goodId, input.modifierCaps);
+    anchorMult = agg.anchorMult;
+    productionMult = agg.productionMult;
+    consumptionMult = agg.consumptionMult;
+  }
+
+  // Per-market band: anchor shifts fold into targetStock so the band tracks
+  // events. Fallback price multiples when goodDef is undefined keep the band finite.
+  const band = marketBand({
+    demandRate: input.demandRate,
+    storageCapacity: input.storageCapacity,
+    priceFloor: goodDef?.priceFloor ?? 0.5,
+    priceCeiling: goodDef?.priceCeiling ?? 2.0,
+    anchorMult,
+  });
+
   const entry = buildMarketTickEntry({
     goodId: input.goodId,
     stock: input.stock,
+    minStock: band.minStock,
+    maxStock: band.maxStock,
     volatility,
     baseProductionRate: input.baseProductionRate,
     baseConsumptionRate: input.baseConsumptionRate,
@@ -70,20 +106,16 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     productionSuppress: input.productionSuppress,
   });
 
-  if (input.modifiers.length === 0) return { entry, anchorMult: 1 };
+  if (productionMult === undefined && consumptionMult === undefined) {
+    return { entry, anchorMult };
+  }
 
-  // Only production/consumption rate multipliers affect the stock tick.
-  // supply_target/demand_target modifiers have been converted to anchor_shift,
-  // which affects PRICING via the stored anchorMult (returned here for the
-  // caller to persist), not the stock delta. Events also shape the economy
-  // via stock shocks (applied separately).
-  const agg = aggregateModifiers(input.modifiers, input.goodId, input.modifierCaps);
   return {
     entry: {
       ...entry,
-      productionMult: agg.productionMult,
-      consumptionMult: agg.consumptionMult,
+      ...(productionMult !== undefined ? { productionMult } : {}),
+      ...(consumptionMult !== undefined ? { consumptionMult } : {}),
     },
-    anchorMult: agg.anchorMult,
+    anchorMult,
   };
 }

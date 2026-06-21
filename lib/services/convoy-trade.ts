@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
+import { quoteTrade, curveForGood, marketBandForRow } from "@/lib/engine/market-pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
-import { getSpread, STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
+import { getSpread } from "@/lib/constants/market-economy";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { toGovernmentType } from "@/lib/types/guards";
 import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
@@ -159,6 +159,8 @@ export async function executeConvoyTrade(
     0,
   );
 
+  const band = marketBandForRow(marketEntry, marketEntry.good);
+
   // Validate using the same pure trade engine
   const result = validateFleetTrade({
     type,
@@ -168,8 +170,8 @@ export async function executeConvoyTrade(
     currentCargoUsed: combinedCargoUsed,
     cargoMax: combinedCargoMax,
     currentStock: marketEntry.stock,
-    stockMin: STOCK_MIN,
-    stockMax: STOCK_MAX,
+    stockMin: band.minStock,
+    stockMax: band.maxStock,
     currentGoodQuantityInCargo: combinedGoodQuantity,
     shipStatus: "docked",
   });
@@ -286,8 +288,8 @@ export async function executeConvoyTrade(
         where: { id: marketEntry.id },
       });
       const nextStock = Math.max(
-        STOCK_MIN,
-        Math.min(STOCK_MAX, (freshMarket?.stock ?? 0) + delta.stockDelta),
+        band.minStock,
+        Math.min(band.maxStock, (freshMarket?.stock ?? 0) + delta.stockDelta),
       );
       const market = await tx.stationMarket.update({
         where: { id: marketEntry.id },

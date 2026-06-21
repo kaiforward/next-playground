@@ -28,7 +28,7 @@ describe("ExperimentConfig", () => {
           { strategy: "random", count: 1 },
         ],
         overrides: {
-          economy: { noiseAmplitude: 0.1 },
+          economy: { noiseFraction: 0.1 },
           goods: { food: { basePrice: 30 } },
           fuel: { refuelCostPerUnit: 3 },
         },
@@ -101,7 +101,7 @@ describe("ExperimentConfig", () => {
         ticks: 200,
         bots: [{ strategy: "greedy", count: 2 }],
         overrides: {
-          economy: { noiseAmplitude: 0.1 },
+          economy: { noiseFraction: 0.1 },
         },
         events: {
           disableRandom: true,
@@ -121,7 +121,7 @@ describe("ExperimentConfig", () => {
       expect(config.eventInjections).toHaveLength(1);
       expect(config.eventInjections![0].eventType).toBe("inner_system_conflict");
       expect(config.eventInjections![0].severity).toBe(2.0);
-      expect(overrides.economy?.noiseAmplitude).toBe(0.1);
+      expect(overrides.economy?.noiseFraction).toBe(0.1);
     });
 
     it("returns empty overrides when none specified", () => {

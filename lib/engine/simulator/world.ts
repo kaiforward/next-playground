@@ -14,6 +14,7 @@ import {
 import { toGovernmentType } from "@/lib/types/guards";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
+import { facilityStorageForGood } from "@/lib/engine/industry";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -112,6 +113,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         demandRate: demandRateForGood(goodKey, sys.population),
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
+        storageCapacity: facilityStorageForGood(sys.buildings, goodKey),
       });
     }
   }

@@ -10,7 +10,7 @@ import type {
   SystemWithName,
 } from "@/lib/tick/world/events-world";
 import type { ModifierRow } from "@/lib/engine/events";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { toEventTypeId } from "@/lib/types/guards";
 
 /** Live-game adapter. Bulk-writes via unnest() and createMany live here. */
@@ -171,28 +171,41 @@ export class PrismaEventsWorld implements EventsWorld {
   async applyShocks(shocks: SystemShock[]): Promise<number> {
     if (shocks.length === 0) return 0;
 
-    const { MIN_LEVEL, MAX_LEVEL } = ECONOMY_CONSTANTS;
-
     // Unique system IDs targeted by shocks.
     const systemIds = [...new Set(shocks.map((s) => s.systemId))];
 
-    // Single query: fetch all markets at affected systems.
+    // Single query: fetch all markets at affected systems, including band fields.
     const allMarkets = await this.tx.stationMarket.findMany({
       where: { station: { systemId: { in: systemIds } } },
       select: {
         id: true,
         stock: true,
         goodId: true,
+        demandRate: true,
+        storageCapacity: true,
+        anchorMult: true,
         station: { select: { systemId: true } },
+        good: { select: { priceFloor: true, priceCeiling: true } },
       },
     });
     if (allMarkets.length === 0) return 0;
 
-    const marketByKey = new Map<string, { id: string; stock: number }>();
+    const marketByKey = new Map<string, {
+      id: string;
+      stock: number;
+      demandRate: number;
+      storageCapacity: number;
+      anchorMult: number;
+      good: { priceFloor: number; priceCeiling: number };
+    }>();
     for (const m of allMarkets) {
       marketByKey.set(`${m.station.systemId}|${m.goodId}`, {
         id: m.id,
         stock: m.stock,
+        demandRate: m.demandRate,
+        storageCapacity: m.storageCapacity,
+        anchorMult: m.anchorMult,
+        good: m.good,
       });
     }
 
@@ -219,8 +232,9 @@ export class PrismaEventsWorld implements EventsWorld {
     for (const market of marketByKey.values()) {
       if (!touchedIds.has(market.id)) continue;
       ids.push(market.id);
-      const s = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, market.stock));
-      stocks.push(isFinite(s) ? s : 0);
+      const band = marketBandForRow(market, market.good);
+      const clamped = Math.max(band.minStock, Math.min(band.maxStock, market.stock));
+      stocks.push(isFinite(clamped) ? clamped : 0);
     }
 
     await this.tx.$executeRaw`

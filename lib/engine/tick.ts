@@ -3,7 +3,7 @@
  *
  * Each market holds one `stock` value. Producers add stock (self-limiting near
  * the ceiling), consumers drain it (self-limiting near the floor), then noise is
- * applied and the value is clamped to [minLevel, maxLevel]. There is no
+ * applied and the value is clamped to each market's own [minStock, maxStock] band. There is no
  * mean-reversion and no `demand` axis — equilibrium emerges spatially via the
  * trade-flow processor. See docs/active/gameplay/economy.md (Per-Tick Simulation).
  *
@@ -16,6 +16,10 @@ import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 export interface MarketTickEntry {
   goodId: string;
   stock: number;
+  /** Stock floor for this market entry — scarcity reserve and buy-price floor. */
+  minStock: number;
+  /** Stock ceiling for this market entry — demand headroom and sell-price floor. */
+  maxStock: number;
   /** Per-good base production rate (undefined/0 = not a producer of this good). */
   productionRate?: number;
   /** Per-good base consumption rate (undefined/0 = not a consumer of this good). */
@@ -29,9 +33,8 @@ export interface MarketTickEntry {
 }
 
 export interface EconomySimParams {
-  noiseAmplitude: number;
-  minLevel: number;
-  maxLevel: number;
+  /** Noise as a fraction of the per-entry band width (maxStock - minStock). */
+  noiseFraction: number;
 }
 
 /**
@@ -58,7 +61,7 @@ export function selfLimitingFactor(
  * Simulate one economy tick across all market entries.
  *
  * For each entry: applies production when `productionRate > 0`, consumption
- * when `consumptionRate > 0`, then noise, then clamp to [minLevel, maxLevel].
+ * when `consumptionRate > 0`, then noise, then clamp to each entry's own [minStock, maxStock] band.
  * Accepts an optional RNG for deterministic testing. Returns a new array.
  */
 export function simulateEconomyTick(
@@ -66,23 +69,24 @@ export function simulateEconomyTick(
   params: EconomySimParams,
   rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { noiseAmplitude, minLevel, maxLevel } = params;
+  const { noiseFraction } = params;
 
   return markets.map((entry) => {
     let stock = entry.stock;
+    const { minStock, maxStock } = entry;
 
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
-      stock += effectiveProduction * selfLimitingFactor(stock, minLevel, maxLevel, "produce");
+      stock += effectiveProduction * selfLimitingFactor(stock, minStock, maxStock, "produce");
     }
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
     if (effectiveConsumption > 0) {
-      stock -= effectiveConsumption * selfLimitingFactor(stock, minLevel, maxLevel, "consume");
+      stock -= effectiveConsumption * selfLimitingFactor(stock, minStock, maxStock, "consume");
     }
 
-    const noise = (rng() * 2 - 1) * noiseAmplitude * (entry.volatility ?? 1);
-    stock = clamp(stock + noise, minLevel, maxLevel);
+    const noise = (rng() * 2 - 1) * noiseFraction * (maxStock - minStock) * (entry.volatility ?? 1);
+    stock = clamp(stock + noise, minStock, maxStock);
 
     return { ...entry, stock };
   });
@@ -98,6 +102,10 @@ export function simulateEconomyTick(
 export interface TickEntryInput {
   goodId: string;
   stock: number;
+  /** Stock floor for this market entry — resolved upstream from the pricing-band. */
+  minStock: number;
+  /** Stock ceiling for this market entry — resolved upstream from the pricing-band. */
+  maxStock: number;
   /** Volatility after government scaling. */
   volatility: number;
   /** Base production rate from the substrate driver (undefined = not a producer). */
@@ -131,6 +139,8 @@ export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
   return {
     goodId: input.goodId,
     stock: input.stock,
+    minStock: input.minStock,
+    maxStock: input.maxStock,
     productionRate,
     consumptionRate,
     volatility: input.volatility,

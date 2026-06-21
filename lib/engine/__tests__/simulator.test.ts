@@ -3,6 +3,7 @@ import { createSimWorld } from "../simulator/world";
 import { simulateWorldTick } from "../simulator/economy";
 import { DEFAULT_SIM_CONSTANTS } from "../simulator/constants";
 import { mulberry32 } from "../universe-gen";
+import { marketBand } from "@/lib/engine/market-pricing";
 import { GOOD_NAMES } from "@/lib/constants/goods";
 import type { SimConfig, SimRunContext } from "../simulator/types";
 
@@ -64,10 +65,20 @@ describe("Simulator", () => {
       };
       const world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
 
-      // Markets should initialize with a positive stock within the global band.
+      // Markets should initialize with stock clamped to each market's per-band
+      // range (demand-priced + infrastructure-stocked). Math.round in getInitialStock
+      // can shift by ±0.5, so assert against floor/ceil to avoid rounding flakes.
       for (const market of world.markets) {
-        expect(market.stock).toBeGreaterThan(0);
-        expect(market.stock).toBeLessThanOrEqual(DEFAULT_SIM_CONSTANTS.economy.maxLevel);
+        const band = marketBand({
+          demandRate: market.demandRate,
+          storageCapacity: market.storageCapacity,
+          priceFloor: market.priceFloor,
+          priceCeiling: market.priceCeiling,
+        });
+        expect(market.stock).toBeGreaterThanOrEqual(Math.floor(band.minStock));
+        expect(market.stock).toBeLessThanOrEqual(Math.ceil(band.maxStock));
+        // storageCapacity must be non-negative (computed by facilityStorageForGood)
+        expect(market.storageCapacity).toBeGreaterThanOrEqual(0);
       }
     });
   });

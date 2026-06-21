@@ -102,6 +102,17 @@ export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
 /** The 26 production building type ids (good ids), in canonical good order. */
 export const PRODUCTION_BUILDING_TYPES: string[] = [...GOOD_NAMES];
 
+/** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). First-draft; subject to calibration. */
+export const EXTRACTOR_STORAGE_PER_UNIT = 40;
+/** Storage one tier-1+ factory adds for its output good (output buffer). */
+export const PRODUCTION_STORAGE_PER_UNIT = 15;
+/** Nominal storage a population centre adds per good it consumes (retail/utility/government holdings). */
+export const POP_CENTRE_STORAGE_DEFAULT = 2;
+/** Pop-centre storage overrides for consumer-facing goods — people keep more of what they buy. */
+export const POP_CENTRE_STORAGE: Record<string, number> = {
+  consumer_goods: 12, food: 8, water: 8, medicine: 6, luxuries: 6, textiles: 5,
+};
+
 export function sizeFactor(size: number): number {
   return Math.max(0, size);
 }

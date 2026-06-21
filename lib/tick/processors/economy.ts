@@ -92,6 +92,8 @@ export async function runEconomyProcessor(
     resolveMarketTickEntry({
       goodId: m.goodId,
       stock: m.stock,
+      demandRate: m.demandRate,
+      storageCapacity: m.storageCapacity,
       baseProductionRate: m.baseProductionRate,
       baseConsumptionRate: m.baseConsumptionRate,
       govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
@@ -123,7 +125,7 @@ export async function runEconomyProcessor(
     const consumptionRate = tickEntries[i].consumptionRate;
     if (consumptionRate == null || consumptionRate <= 0) return;
     const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
-    const satisfaction = selfLimitingFactor(simulated[i].stock, simParams.minLevel, simParams.maxLevel, "consume");
+    const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock, "consume");
     const arr = goodsBySystem.get(m.systemId) ?? [];
     arr.push({ satisfaction, demanded });
     goodsBySystem.set(m.systemId, arr);
@@ -159,9 +161,7 @@ export async function runEconomyProcessor(
 // ── Live-game wiring ──────────────────────────────────────────────
 
 const simParams: EconomySimParams = {
-  noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-  minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
-  maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
+  noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
 };
 
 export const economyProcessor: TickProcessor = {

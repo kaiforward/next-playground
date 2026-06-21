@@ -9,16 +9,20 @@ import {
   capacityGoodRates,
   inputDemandForGood,
   buildIndustryReadout,
+  facilityStorageForGood,
 } from "@/lib/engine/industry";
 import {
   DEFAULT_LABOUR_PER_UNIT,
   POP_CENTRE_DENSITY,
   OUTPUT_PER_UNIT,
   HOUSING_TYPE,
+  EXTRACTOR_STORAGE_PER_UNIT,
+  PRODUCTION_STORAGE_PER_UNIT,
+  POP_CENTRE_STORAGE,
+  POP_CENTRE_STORAGE_DEFAULT,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { unitResourceVector, makeResourceVector } from "@/lib/engine/resources";
 
 describe("bodyAvailableSpace", () => {
@@ -146,7 +150,7 @@ describe("inputDemandForGood", () => {
 });
 
 describe("buildIndustryReadout", () => {
-  const MIN = ECONOMY_CONSTANTS.MIN_LEVEL;
+  const MIN = 5;
   // One size-1 body + one size-2 body (habitable field present but ignored by space calc).
   const bodies = [
     { size: 1, habitable: true },
@@ -234,5 +238,26 @@ describe("buildIndustryReadout", () => {
     for (let i = 1; i < gates.length; i++) {
       expect(gates[i]).toBeGreaterThanOrEqual(gates[i - 1]);
     }
+  });
+});
+
+describe("facilityStorageForGood", () => {
+  it("extractor stores its own resource good; factory stores its output", () => {
+    expect(facilityStorageForGood({ ore: 3 }, "ore")).toBe(3 * EXTRACTOR_STORAGE_PER_UNIT);
+    expect(facilityStorageForGood({ metals: 2 }, "metals")).toBe(2 * PRODUCTION_STORAGE_PER_UNIT);
+    expect(facilityStorageForGood({ ore: 3 }, "metals")).toBe(0); // ore extractor doesn't store metals
+  });
+  it("population centres hold nominal-broad storage, generous on consumer goods", () => {
+    expect(facilityStorageForGood({ [HOUSING_TYPE]: 5 }, "consumer_goods")).toBe(5 * POP_CENTRE_STORAGE.consumer_goods);
+    expect(facilityStorageForGood({ [HOUSING_TYPE]: 5 }, "ore")).toBe(5 * POP_CENTRE_STORAGE_DEFAULT); // consumed staple, default
+  });
+  it("a population centre stores nothing for a good no one consumes", () => {
+    // Every real good has a GOOD_CONSUMPTION entry, so this guards the defensive
+    // zero-branch: an unknown / non-consumed good gets no pop-centre storage.
+    expect(facilityStorageForGood({ [HOUSING_TYPE]: 5 }, "unobtainium")).toBe(0);
+  });
+  it("sums across a mixed build-out", () => {
+    expect(facilityStorageForGood({ ore: 2, [HOUSING_TYPE]: 4 }, "ore"))
+      .toBe(2 * EXTRACTOR_STORAGE_PER_UNIT + 4 * POP_CENTRE_STORAGE_DEFAULT);
   });
 });

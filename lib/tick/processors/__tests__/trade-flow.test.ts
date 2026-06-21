@@ -19,8 +19,6 @@ const PARAMS: TradeFlowProcessorParams = {
   flowHistoryTicks: 200,
   playerDisplacementFactor: 2.0,
   playerVolumeTarget: 50,
-  minLevel: 5,
-  maxLevel: 200,
   distanceDecay: 0,
 };
 
@@ -36,7 +34,7 @@ function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
 function market(systemId: string, goodId: string, stock: number): SimMarketEntry {
   return {
     systemId, goodId, basePrice: 100, stock,
-    anchorMult: 1, demandRate: 40, priceFloor: 10, priceCeiling: 500,
+    anchorMult: 1, demandRate: 40, priceFloor: 10, priceCeiling: 500, storageCapacity: 0,
   };
 }
 

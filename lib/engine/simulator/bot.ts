@@ -3,8 +3,7 @@
  * Handles: refuel → sell cargo → evaluate strategy → buy + navigate.
  */
 
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
+import { spotPrice, curveForGood, marketBand } from "@/lib/engine/market-pricing";
 
 import { findShortestPathCached } from "./pathfinding-cache";
 import type { TradeStrategy } from "./strategies/types";
@@ -65,10 +64,11 @@ export function executeBotTick(
     const revenue = price * cargo.quantity;
     player = { ...player, credits: player.credits + revenue };
 
-    // Selling adds stock at the destination.
+    // Selling adds stock at the destination, clamped to this market's per-band ceiling.
+    const sellBand = marketBand({ demandRate: market.demandRate, storageCapacity: market.storageCapacity, priceFloor: market.priceFloor, priceCeiling: market.priceCeiling, anchorMult: market.anchorMult });
     markets = markets.map((m) =>
       m === market
-        ? { ...m, stock: Math.min(STOCK_MAX, m.stock + cargo.quantity) }
+        ? { ...m, stock: Math.min(sellBand.maxStock, m.stock + cargo.quantity) }
         : m,
     );
 
@@ -108,7 +108,8 @@ export function executeBotTick(
       const price = spotPrice(curveForGood(buyMarket.basePrice, buyMarket.priceFloor, buyMarket.priceCeiling, buyMarket.demandRate, buyMarket.anchorMult), buyMarket.stock);
       const totalCost = price * decision.buyQuantity;
 
-      if (totalCost <= player.credits && buyMarket.stock - STOCK_MIN >= decision.buyQuantity) {
+      const buyBand = marketBand({ demandRate: buyMarket.demandRate, storageCapacity: buyMarket.storageCapacity, priceFloor: buyMarket.priceFloor, priceCeiling: buyMarket.priceCeiling, anchorMult: buyMarket.anchorMult });
+      if (totalCost <= player.credits && buyMarket.stock - buyBand.minStock >= decision.buyQuantity) {
         player = { ...player, credits: player.credits - totalCost };
         ship = {
           ...ship,
@@ -118,10 +119,10 @@ export function executeBotTick(
           ],
         };
 
-        // Buying removes stock at the source.
+        // Buying removes stock at the source, floored to this market's per-band reserve.
         markets = markets.map((m) =>
           m === buyMarket
-            ? { ...m, stock: Math.max(STOCK_MIN, m.stock - decision.buyQuantity) }
+            ? { ...m, stock: Math.max(buyBand.minStock, m.stock - decision.buyQuantity) }
             : m,
         );
 

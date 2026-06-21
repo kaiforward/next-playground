@@ -79,6 +79,8 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         governmentType: sys.governmentType,
         baseProductionRate: production > 0 ? production : undefined,
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
+        demandRate: m.demandRate,
+        storageCapacity: m.storageCapacity,
         traits: sys.traits.map((t) => ({
           traitId: toTraitId(t.traitId),
           quality: toQualityTier(t.quality),

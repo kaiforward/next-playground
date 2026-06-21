@@ -364,6 +364,8 @@ model StationMarket {
   anchorMult Float    @default(1)
   /** Per-capita-need × population (floored) — the days-of-supply denominator. Static while population is static; seed-written. */
   demandRate Float    @default(1)
+  /** Infrastructure storage capacity for this good from the system's built buildings. Used as the maxStock depth term in the per-market band. Seed-written from facilityStorageForGood. */
+  storageCapacity Float @default(0)
   updatedAt  DateTime @updatedAt
 
   station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)

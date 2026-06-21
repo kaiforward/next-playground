@@ -5,7 +5,7 @@
 import type { RNG } from "@/lib/engine/universe-gen";
 import type { TradeStrategy, TradeDecision } from "./types";
 import { getReachable, getMarkets, getCargoUsed, getPrice } from "./helpers";
-import { STOCK_MIN } from "@/lib/constants/market-economy";
+import { marketBand } from "@/lib/engine/market-pricing";
 import type { SimAdjacencyList } from "../pathfinding-cache";
 import type { SimPlayer, SimShip, SimWorld } from "../types";
 
@@ -26,8 +26,9 @@ export function createRandomStrategy(rng: RNG): TradeStrategy {
       if (availableCargo <= 0) return null;
 
       const affordable = currentMarkets.filter((m) => {
+        const band = marketBand({ demandRate: m.demandRate, storageCapacity: m.storageCapacity, priceFloor: m.priceFloor, priceCeiling: m.priceCeiling, anchorMult: m.anchorMult });
         const price = getPrice(m);
-        return m.stock - STOCK_MIN > 0 && price <= player.credits && price > 0;
+        return m.stock - band.minStock > 0 && price <= player.credits && price > 0;
       });
 
       if (affordable.length === 0) return null;
@@ -35,7 +36,8 @@ export function createRandomStrategy(rng: RNG): TradeStrategy {
       const market = affordable[Math.floor(rng() * affordable.length)];
       const price = getPrice(market);
       const maxByCredits = Math.floor(player.credits / price);
-      const quantity = Math.min(maxByCredits, Math.floor(market.stock - STOCK_MIN), availableCargo);
+      const mBand = marketBand({ demandRate: market.demandRate, storageCapacity: market.storageCapacity, priceFloor: market.priceFloor, priceCeiling: market.priceCeiling, anchorMult: market.anchorMult });
+      const quantity = Math.min(maxByCredits, Math.floor(market.stock - mBand.minStock), availableCargo);
 
       if (quantity <= 0) return null;
 

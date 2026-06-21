@@ -43,6 +43,7 @@ export interface MarketSnapshot {
   demandRate: number;
   priceFloor: number;
   priceCeiling: number;
+  storageCapacity: number;
 }
 
 /** Absolute stock write (already clamped). */
@@ -96,10 +97,6 @@ export interface TradeFlowProcessorParams {
   playerDisplacementFactor: number;
   /** Per-system target trade volume used to normalize player pressure. */
   playerVolumeTarget: number;
-  /** Stock floor — flow can't draw a market below this. */
-  minLevel: number;
-  /** Stock ceiling — flow can't push a market above this. */
-  maxLevel: number;
   /** Distance attenuation: factor = 1/(1 + distanceDecay·fuelCost). 0 = no-op. */
   distanceDecay: number;
 }
