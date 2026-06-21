@@ -89,8 +89,11 @@ async function main() {
 
   console.log("\n=== 3. HEALTHY (contrast) ===");
   healthy.slice(0, 3).forEach((s) => console.log(fmt(s)));
-
-  await prisma.$disconnect();
 }
 
-main();
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

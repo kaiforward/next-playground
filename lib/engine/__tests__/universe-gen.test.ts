@@ -300,7 +300,7 @@ describe("generateSystems", () => {
       // strong, DESIGNED plurality (~65-72%) — the classifier reads slotCap ×
       // yieldMult (raw deposit potential) and most systems are barren. This guard
       // only catches one type reaching near-total takeover, not the intended
-      // extraction-dominance. See the barren-but-alive substrate-v2 P5 decision.
+      // extraction-dominance.
       expect(count / systems.length).toBeLessThanOrEqual(0.80);
     }
   });

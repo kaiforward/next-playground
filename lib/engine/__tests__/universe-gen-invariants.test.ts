@@ -148,10 +148,10 @@ describe("Economy type distribution across seeds", () => {
       for (const econ of ALL_ECONOMY_TYPES) {
         const share = counts[econ] / total;
         // ≤ 0.80: a realistic galaxy is mostly mining worlds, so 'extraction' is a
-        // strong, DESIGNED plurality (~65-72%) under the barren-but-alive substrate-v2
-        // P5 model — the classifier reads slotCap × yieldMult (raw deposit potential)
-        // and most systems are barren. This guard only catches one type reaching
-        // near-total takeover, not the intended extraction-dominance.
+        // strong, DESIGNED plurality (~65-72%) — the classifier reads slotCap ×
+        // yieldMult (raw deposit potential) and most systems are barren. This guard
+        // only catches one type reaching near-total takeover, not the intended
+        // extraction-dominance.
         expect(
           share,
           `${econ} at ${(share * 100).toFixed(1)}% — runs away with the galaxy`,
