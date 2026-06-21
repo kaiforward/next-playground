@@ -149,20 +149,29 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
 
   // ── Development fill — driven by habitable land (full-fold retires bodyBaselinePopCap) ──
   const popNorm = clamp(habitableSpace / SUBSTRATE_GEN.HABITABLE_REF, 0, 1);
-  const fill = clamp(
+  const rawFill = clamp(
     SUBSTRATE_GEN.POP_FILL_BASE
       + SUBSTRATE_GEN.POP_FILL_SLOPE * popNorm
       + (rng() - 0.5) * SUBSTRATE_GEN.POP_FILL_JITTER,
     SUBSTRATE_GEN.POP_FILL_MIN,
     SUBSTRATE_GEN.POP_FILL_MAX,
   );
+  // No habitable land → no workforce to staff or house. The system stays an
+  // undeveloped deposit field: substrate (slots/quality) is generated but NOTHING
+  // is built and nobody lives there. Factions develop it later (SP5) by paying for
+  // orbital/artificial habitation alongside the extractors. (rawFill still consumes
+  // its rng draw so other systems' streams don't shift.)
+  const fill = habitableSpace > 0 ? rawFill : 0;
 
   const allocation = allocateIndustry(
     { bodies, slotCap, generalSpace, habitableSpace, fill },
     rng,
   );
   const popCap = allocation.popCap;
-  const population = Math.round(popCap * fill);
+  // Population is a continuous magnitude (like building counts) — a tiny outpost is
+  // pop 0.3, not rounded down to a false 0. Only a truly uninhabitable system
+  // (popCap 0) is genuinely empty.
+  const population = popCap * fill;
 
   const features = rollFeatures(rng);
 

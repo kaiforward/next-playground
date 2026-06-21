@@ -19,10 +19,15 @@ export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0
 
 /**
  * Logistic growth/decline rates (per population-processor run). Growth asymptotes
- * toward popCap when satisfied and calm; decline scales with unrest. Calibrated
- * against the simulator.
+ * toward popCap when satisfied and calm; decline scales with unrest. Symmetric
+ * rates: in the barren-but-alive galaxy most systems carry a chronic low-grade
+ * higher-tier deficit (mining worlds can't source consumer_goods/luxuries/medicine
+ * locally and the static economy can't build its way out) — an asymmetric decline
+ * turned that unavoidable D≈0.4 into a steady galaxy-wide drain. Equal rates let
+ * such systems hold steady while genuinely high-unrest ones still decline.
+ * Calibrated against the simulator.
  */
-export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineRate: 0.03 };
+export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineRate: 0.015 };
 
 /**
  * Migration over the de-regioned intra-faction topology (same open edges + work-

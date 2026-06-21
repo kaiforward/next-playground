@@ -64,13 +64,13 @@ export const POP_CENTRE_DENSITY = 20;
  * polymers on top of civilian use.
  */
 const OUTPUT_OVERRIDES: Record<string, number> = {
-  food: 7.0,
-  water: 6.0,
-  gas: 12.0,
+  food: 3.5,
+  water: 2.0,
+  gas: 8.0,
   textiles: 1.4,
-  minerals: 5.0,
-  ore: 5.0,
-  biomass: 3.0,
+  minerals: 4.0,
+  ore: 4.0,
+  biomass: 2.2,
 };
 
 export const OUTPUT_PER_UNIT: Record<string, number> = Object.fromEntries(

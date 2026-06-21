@@ -42,8 +42,8 @@ describe("population processor", () => {
     expect(a.unrest).toBeCloseTo(0.1, 6);
     expect(a.population).toBeCloseTo(499, 6);
     const m = world.markets.find((mm) => mm.systemId === "a")!;
-    // demandRate = max(perCapitaNeed_food · pop, MIN_DEMAND) = max(0.004 · 499, 0.05)
-    expect(m.demandRate).toBeCloseTo(Math.max(0.004 * 499, 0.05), 5);
+    // demandRate = civilian-only floor for food at pop 499 (no production-input draw here).
+    expect(m.demandRate).toBeCloseTo(demandRateForGood("food", 499), 5);
   });
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's

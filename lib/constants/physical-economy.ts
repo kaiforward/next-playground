@@ -56,11 +56,11 @@ export const GOOD_PRODUCTION: Record<string, GoodProductionDriver> = {
 /** Per-good per-capita consumption need. consRate = need × population. Higher tier → lower need. */
 export const GOOD_CONSUMPTION: Record<string, number> = {
   // Tier 0.
-  water: 0.004,
-  food: 0.004,
+  water: 0.007,
+  food: 0.006,
   ore: 0.002,
   textiles: 0.002,
-  gas: 0.003,
+  gas: 0.004,
   minerals: 0.002,
   biomass: 0.002,
   radioactives: 0.0008,

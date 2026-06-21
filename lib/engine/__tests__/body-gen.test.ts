@@ -54,6 +54,19 @@ describe("generateSubstrate", () => {
     }
   });
 
+  it("systems with no habitable land seed zero population and build nothing", () => {
+    // The fill gate: habitableSpace === 0 → fill 0 → population 0 and an empty
+    // build-out (an undeveloped deposit field). Only all-gas-giant systems (the
+    // sole habitableFraction-0 archetype) reach it; they occur naturally in the
+    // barren galaxy, so a large deterministic sample reliably contains some.
+    const undeveloped = sample(1000).filter((s) => s.habitableSpace === 0);
+    expect(undeveloped.length).toBeGreaterThan(0);
+    for (const s of undeveloped) {
+      expect(s.population).toBe(0);
+      expect(Object.values(s.buildings).some((count) => count > 0)).toBe(false);
+    }
+  });
+
   it("rolls 0–2 features, all narrative survivors, no duplicates", () => {
     for (const s of sample(200)) {
       expect(s.features.length).toBeGreaterThanOrEqual(0);
@@ -130,11 +143,17 @@ describe("generateSubstrate — available-space seeder + yield (P3)", () => {
     }
   });
 
-  it("population = round(popCap × fill) lies within [0, popCap]", () => {
-    for (const s of sampleP3(200)) {
+  it("population = popCap × fill lies within [0, popCap], continuous (not rounded)", () => {
+    const systems = sampleP3(200);
+    for (const s of systems) {
       expect(s.population).toBeGreaterThanOrEqual(0);
       expect(s.population).toBeLessThanOrEqual(s.popCap + 1e-6);
     }
+    // population is a continuous magnitude (no Math.round) — inhabited systems
+    // carry a fractional headcount.
+    expect(
+      systems.some((s) => s.population > 0 && s.population !== Math.round(s.population)),
+    ).toBe(true);
   });
 
   it("seeded build-out respects the surface caps (slots, habitable, general)", () => {

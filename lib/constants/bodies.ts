@@ -45,31 +45,31 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     id: "arid_world", name: "Arid World", habitable: true,
     resourceBase: makeResourceVector({ minerals: 2, ore: 2, arable: 1, radioactive: 1 }),
     dangerBaseline: 0,
-    generalWeight: 5, habitableFraction: 0.25,
+    generalWeight: 5, habitableFraction: 0.22,
   },
   volcanic_world: {
     id: "volcanic_world", name: "Volcanic World", habitable: false,
     resourceBase: makeResourceVector({ gas: 1, minerals: 2, ore: 3, radioactive: 2 }),
     dangerBaseline: 0.05,
-    generalWeight: 2, habitableFraction: 0.03,
+    generalWeight: 2, habitableFraction: 0.02,
   },
   frozen_world: {
     id: "frozen_world", name: "Frozen World", habitable: false,
     resourceBase: makeResourceVector({ gas: 1, ore: 1, water: 3 }),
     dangerBaseline: 0,
-    generalWeight: 3, habitableFraction: 0.05,
+    generalWeight: 3, habitableFraction: 0.03,
   },
   barren_rock: {
     id: "barren_rock", name: "Barren Rock", habitable: false,
     resourceBase: makeResourceVector({ minerals: 2, ore: 2, radioactive: 1 }),
     dangerBaseline: 0,
-    generalWeight: 3, habitableFraction: 0.05,
+    generalWeight: 3, habitableFraction: 0.03,
   },
   gas_giant: {
     id: "gas_giant", name: "Gas Giant", habitable: false,
     resourceBase: makeResourceVector({ gas: 3, water: 1 }),
     dangerBaseline: 0,
-    generalWeight: 1, habitableFraction: 0.02,
+    generalWeight: 1, habitableFraction: 0,
   },
   asteroid_belt: {
     id: "asteroid_belt", name: "Asteroid Belt", habitable: false,
@@ -94,8 +94,8 @@ export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
   yellow: {
     id: "yellow", name: "Yellow (Sol-like)", weight: 45, bodyCount: { min: 2, max: 5 },
     archetypeWeights: {
-      garden_world: 6, ocean_world: 4, jungle_world: 4, arid_world: 2,
-      volcanic_world: 1, frozen_world: 1, barren_rock: 1, gas_giant: 1, asteroid_belt: 1,
+      garden_world: 3, ocean_world: 3, jungle_world: 3, arid_world: 2,
+      volcanic_world: 2, frozen_world: 2, barren_rock: 4, gas_giant: 3, asteroid_belt: 3,
     },
   },
   blue_white: {
@@ -107,8 +107,8 @@ export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
   orange_dwarf: {
     id: "orange_dwarf", name: "Orange dwarf (cool)", weight: 30, bodyCount: { min: 2, max: 4 },
     archetypeWeights: {
-      garden_world: 2, ocean_world: 4, jungle_world: 2, arid_world: 2,
-      frozen_world: 3, barren_rock: 1, gas_giant: 2, asteroid_belt: 1,
+      garden_world: 1, ocean_world: 3, jungle_world: 2, arid_world: 2,
+      frozen_world: 3, barren_rock: 2, gas_giant: 3, asteroid_belt: 2,
     },
   },
   red_dwarf: {
