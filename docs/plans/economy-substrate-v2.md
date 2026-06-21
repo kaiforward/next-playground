@@ -146,7 +146,7 @@ Resource → tier-0 good map (from `GOOD_PRODUCTION`): `water←water, food←ar
 | `lib/engine/market-tick-builder.ts` + `lib/tick/adapters/prisma/economy.ts` + `world/economy-world.ts` | 4 | Resolve per-market band; select/map `storageCapacity` |
 | `lib/engine/simulator/world.ts` + `bot.ts` + `strategies/helpers.ts` + `market-analysis.ts` + `simulator/constants.ts` | 4 | `SimSystem` carries `demandRate`/`storageCapacity`; per-market band in bot/analysis (also P3 above) |
 | `lib/services/{trade,convoy-trade,missions,market-entry,universe}.ts` + `lib/tick/{processors/trade-flow,adapters/prisma/events,adapters/memory/events}.ts` | 4 | Per-market band at every `STOCK_MIN/MAX` consumer |
-| `lib/tick/processors/economy.ts` + `lib/engine/simulator/*` + `docs/active/engineering/tick-engine.md` | 6 | Cadence audit: measure round-robin vs flow/migration; maybe catch-up scaling |
+| `lib/tick/shard.ts` *(new)* + `lib/constants/tick-cadence.ts` *(new)* + economy/trade-flow/migration/missions/price-snapshots processors + their world interfaces & adapters + `lib/engine/simulator/*` + `docs/active/engineering/tick-engine.md` | 6 | Scale-correct sharding: fixed-interval shard decoupled from regions, catch-up, fold snapshots + mission-gen, 3 knobs (design: `economy-substrate-v2-p6-cadence-design.md`) |
 | `lib/services/universe.ts` | 7 | Substrate + industry read services on new model; expose region/cadence for countdown |
 | `components/system/*` | 7 | Panel redesign + cadence display + #5a/#7 display fixes |
 | `scripts/substrate-coherence.ts` | 2 | Coherence report for the verification gate |
@@ -725,25 +725,199 @@ it("seeds within the per-market band; producer deeper than consumer", () => {
 
 **Phase 5 gate:** simulator hits the coarse target (markets span their bands, dispersion exists, greedy ≫ random); habitable-planet density + economy-label mix are realistic (#1/#2/#6 resolved); docs reflect reality. **Open phase PR → shared branch.**
 
-## Phase 6 — Tick-cadence audit (design + targeted fix)
+## Phase 6 — Tick-cadence rework: scale-correct sharding (design-decided)
 
-**Scope:** Resolve the economy-cadence semantics the substrate work surfaced, BEFORE the panel visualises rates. The economy processor is **round-robin — one region per tick** (`regionIndex = tick % regionCount`; regionCount = **24** default / **60** at 10K, `lib/constants/universe-gen.ts`), with **no catch-up**: a system's market updates once every `regionCount` ticks and applies exactly *one* tick's worth (`lib/tick/processors/economy.ts:52`). The simulator replicates this (`lib/engine/simulator/economy.ts:254`), so calibration is consistent — the stated rates are *per economy cycle*, not per wall-clock tick. This phase decides what (if anything) to change in the tick model; the panel (Phase 7) then reflects the decision. **Sits after calibration so the substrate is calibrated once against the chosen cadence; sits before the panel so the panel shows the final model.**
+**Scope:** Decouple tick sharding from the region/territory concept and pin a **fixed update interval**, so the whole economy refreshes on the same clock at any universe scale — instead of `regionCount` (24 default / 60 at 10k) silently doubling as the economy's speed. Bring the four performance-sharded processors (economy, trade-flow, migration, op-missions) onto one shard, fold the all-at-once offenders (`price-snapshots`, mission generation) onto it, and make **tick-rate / interval / per-tick-work** three independent knobs. Population already follows the economy's processed set, so it needs no change.
 
-**Start with a brainstorm.** This is a design fork, not a mechanical task — when you reach this phase, invoke `superpowers:brainstorming` to settle the questions below before touching code.
+**This phase is design-decided — do NOT re-brainstorm.** Full rationale + measured evidence is in **`economy-substrate-v2-p6-cadence-design.md`** (read it first). Headline: benched against the real 10k DB, processing everything every tick ("Option F") is ~16s/tick (3× over the 5000ms budget — rejected); the fixed-interval shard ("Option C") is ~1.4s/tick. The bench also exposed `price-snapshots` rescanning all 205k markets every 20 ticks (multi-second at 10k) — folded here.
 
-### The questions to settle
-1. **Bursty vs catch-up.** Keep one-tick-per-cycle (bursty: a system's stock jumps every `regionCount` ticks) and fix it purely in display (relabel + countdown), OR apply **catch-up scaling** (a region applies `×regionCount` worth when it runs) so production reads continuous and "per tick" is literal. Catch-up changes the tick → forces a re-calibration (Phase 5 redo).
-2. **Cross-cadence coherence.** The economy advances per-region every `regionCount` ticks, but **trade-flow and migration sweep a work-budget slice *every* tick** over the open-edge graph — systems that feed each other run on different clocks. Measure whether the production-vs-flow balance is stable, and whether it drifts between scales (production slows as `1/regionCount` 24→60; flow slows as `1/(edges÷workBudget)` — different functions of scale).
-3. **Population-signal cadence.** The population processor runs every tick but only receives fresh `dissatisfactionBySystem` for the **one** region the economy processed this tick (`economy.ts` → `economySignals`) — confirm that is intended and not starving the other regions of fresh signal.
+**Verification is coarse-health ONLY**, at interval 24 and 60: no NaN/runaway/pinning, greedy ≫ random, dispersion exists, markets liquid. **No precision re-calibration** ([[feedback-coarse-health-calibration]]). At `interval = REFERENCE_INTERVAL = 24`, `catchUpFactor = 1`, so the economy is behavior-identical at default scale (nothing to re-tune); 10k simply starts behaving like the calibrated reference. Trade-flow/migration magnitudes *do* shift (their sweep moves to a fixed 24 ticks from a scale-dependent budget sweep) — accepted under coarse-health, coarse-tune `FLOW_BUDGET`/`MIGRATION` weights only if unhealthy.
 
-### Tasks
-- [ ] **6.1 — Brainstorm + decide.** `superpowers:brainstorming` over questions 1–3; record the decision in `docs/active/engineering/tick-engine.md` (or a short cadence design note). Output: a locked decision on catch-up vs display-only, cross-scale handling, and the population-signal behaviour.
-- [ ] **6.2 — Instrument + measure.** Extend the simulator report (`lib/engine/simulator/`) to surface per-system economy-update interval, the production-vs-flow throughput ratio, and a 24-region vs 60-region comparison run. Confirm or refute the cross-scale-drift hypothesis with numbers *before* committing to a fix.
-- [ ] **6.3 — Implement the decided change (if any).** If catch-up: scale the per-region application by `regionCount` inside `runEconomyProcessor` (live + sim share the body) — guard `NaN`/`Infinity`, keep production/consumption symmetric, re-check the trade-flow/migration balance. If display-only: no tick change here (handled in Phase 7).
-- [ ] **6.4 — Re-calibrate if the tick changed.** If 6.3 altered the tick, redo the Phase-5 simulator pass against the new cadence (markets span their per-market bands, dispersion, greedy ≫ random) + reseed. If display-only, skip.
-- [ ] **6.5 — Commit + phase PR.** `feat(economy): substrate-v2 P6 — tick-cadence <decision>`.
+**Build on phase branch `feat/substrate-v2-p6` off shared.** Commit after each task.
 
-**Phase 6 gate:** the cadence model is decided + documented; simulator (and any re-calibration) green; the per-system cycle behaviour the panel will show is final.
+**Interfaces produced (later tasks consume — exact signatures):**
+- `shardRange(total: number, tick: number, interval: number): { start: number; end: number }` and `catchUpFactor(interval: number): number` — `lib/tick/shard.ts`
+- `REFERENCE_INTERVAL`, `ECONOMY_UPDATE_INTERVAL`, `MISSION_GEN_INTERVAL` (numbers) — `lib/constants/tick-cadence.ts`
+- `EconomyWorld` gains `getSystemIds(): Promise<string[]>` (stable-sorted) + `getMarketsForSystems(systemIds: string[]): Promise<MarketView[]>`; `getModifiers(systemIds: string[])` drops its `regionId` param; `getRegions`/`getMarketsForRegion` removed
+- `EconomyTickPayload` changes `{ regionId, regionName, marketCount }` → `{ systemCount: number; shardIndex: number; shardCount: number }`
+
+### Task 6.1: Shard module + cadence constants (pure, unwired)
+
+**Files:**
+- Create: `lib/constants/tick-cadence.ts`
+- Create: `lib/tick/shard.ts`
+- Test: `lib/tick/__tests__/shard.test.ts`
+
+**Interfaces produced:** `shardRange`, `catchUpFactor` (signatures above); `REFERENCE_INTERVAL = 24`, `ECONOMY_UPDATE_INTERVAL = 24`, `MISSION_GEN_INTERVAL = 120`.
+
+- [ ] **Step 1 — Write failing test** (`shard.test.ts`):
+```ts
+import { shardRange, catchUpFactor } from "@/lib/tick/shard";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
+
+it("covers every index exactly once across one interval, no overlap", () => {
+  const total = 100, interval = 24;
+  const seen = new Set<number>();
+  for (let t = 0; t < interval; t++) {
+    const { start, end } = shardRange(total, t, interval);
+    for (let i = start; i < end; i++) { expect(seen.has(i)).toBe(false); seen.add(i); }
+  }
+  expect(seen.size).toBe(total); // full, disjoint coverage
+});
+it("splits as evenly as possible (windows differ by ≤1)", () => {
+  const sizes = Array.from({ length: 24 }, (_, t) => { const w = shardRange(100, t, 24); return w.end - w.start; });
+  expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+});
+it("is periodic in tick and handles negative/large ticks", () => {
+  expect(shardRange(100, 24, 24)).toEqual(shardRange(100, 0, 24));
+  expect(shardRange(100, 25, 24)).toEqual(shardRange(100, 1, 24));
+});
+it("degenerates safely: total 0, interval ≤ 1 → whole list", () => {
+  expect(shardRange(0, 5, 24)).toEqual({ start: 0, end: 0 });
+  expect(shardRange(50, 5, 1)).toEqual({ start: 0, end: 50 });
+});
+it("catchUpFactor is 1 at the reference interval, linear otherwise", () => {
+  expect(catchUpFactor(REFERENCE_INTERVAL)).toBe(1);
+  expect(catchUpFactor(REFERENCE_INTERVAL * 2)).toBe(2);
+  expect(catchUpFactor(REFERENCE_INTERVAL / 2)).toBe(0.5);
+});
+```
+- [ ] **Step 2 — Run, verify FAIL** (`npx vitest run lib/tick/__tests__/shard.test.ts`).
+- [ ] **Step 3 — Implement** `lib/constants/tick-cadence.ts`:
+```ts
+/** Calibration-reference interval — the cadence the economy was tuned at (default-scale region count). `catchUpFactor` is 1 here, so the reference config is behavior-identical and needs no re-tune. */
+export const REFERENCE_INTERVAL = 24;
+/** Ticks for the economy cluster (economy / trade-flow / migration / price-snapshots) to refresh every system once. Fixed gameplay constant → scale-invariant cadence. */
+export const ECONOMY_UPDATE_INTERVAL = 24;
+/** Ticks for mission *generation* to sweep every system once. Long: missions persist until claimed/expired, so generate no faster than players consume them. First-draft playtest knob. */
+export const MISSION_GEN_INTERVAL = 120;
+```
+Then `lib/tick/shard.ts`:
+```ts
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
+
+export interface ShardWindow { start: number; end: number; }
+
+/**
+ * Half-open window [start, end) of a stably-sorted item list to process on
+ * `tick`, given `interval` ticks to cover the whole list once. Group
+ * `tick % interval` of an even split — across any `interval` consecutive ticks
+ * every index is covered exactly once. Decouples performance sharding from any
+ * gameplay/topology concept (see economy-substrate-v2-p6-cadence-design.md).
+ */
+export function shardRange(total: number, tick: number, interval: number): ShardWindow {
+  if (total <= 0) return { start: 0, end: 0 };
+  const iv = Math.max(1, Math.floor(interval));
+  const g = ((tick % iv) + iv) % iv; // non-negative group index
+  return { start: Math.floor((g * total) / iv), end: Math.floor(((g + 1) * total) / iv) };
+}
+
+/**
+ * Rate multiplier so a sharded processor applies "elapsed-ticks worth" per run:
+ * interval / REFERENCE_INTERVAL. At the reference interval it is 1 (calibrated
+ * magnitudes unchanged); tuning the interval changes only granularity, not the
+ * wall-clock rate. Keep production and consumption scaled symmetrically.
+ */
+export function catchUpFactor(interval: number): number {
+  return interval / REFERENCE_INTERVAL;
+}
+```
+- [ ] **Step 4 — Run, verify PASS.** Confirm the test LOADS with `DATABASE_URL` unset (`shard.ts`/`tick-cadence.ts` import no prisma).
+- [ ] **Step 5 — Commit.** `feat(economy): substrate-v2 P6 — shard module + cadence constants`
+
+### Task 6.2: Economy onto the system shard + catch-up (connected refactor)
+
+**Files:**
+- Modify: `lib/tick/world/economy-world.ts` (interface), `lib/tick/adapters/prisma/economy.ts`, `lib/tick/adapters/memory/economy.ts`
+- Modify: `lib/tick/processors/economy.ts` (`runEconomyProcessor` body + live wiring)
+- Modify: `lib/tick/types.ts` (`EconomyTickPayload`), any `economyTick` SSE consumers (grep `economyTick`), `scripts/bench-tick.ts` (reads `economyTick[0]`)
+- Modify: `lib/engine/simulator/economy.ts` (sim wiring already calls `runEconomyProcessor`)
+- Test: `lib/tick/processors/__tests__/economy.test.ts`, `lib/tick/adapters/prisma/__tests__/integration/*economy*`
+
+**Interfaces consumed:** `shardRange`, `catchUpFactor`, `ECONOMY_UPDATE_INTERVAL` (6.1).
+**Interfaces produced:** `EconomyWorld.getSystemIds()` / `getMarketsForSystems(ids)`; `getModifiers(systemIds)` (no `regionId`); `EconomyTickPayload = { systemCount; shardIndex; shardCount }`.
+
+> **Connected refactor (expect mid-task red, green at task end — like P3/P4).** Replace region round-robin with a system-slice shard. The slice spans regions, so `getModifiers` must resolve region-targeted modifiers for *every region the slice's systems belong to* (join via the systems' regions), not one region.
+
+- [ ] **Step 1 — Failing test** (`economy.test.ts`, in-memory adapter): seed an in-memory world with `N` systems and `interval = 4`; over 4 consecutive ticks assert (a) the union of processed `systemId`s equals all systems, each once (drive via `shardRange`); (b) production for a tier-0 good is multiplied by `catchUpFactor(interval)` vs `catchUpFactor = 1` (symmetric: consumption scaled too, so the equilibrium stock is unchanged, only the per-update step size differs). Assert `EconomyTickPayload.systemCount` equals the slice size.
+- [ ] **Step 2 — Run, verify FAIL.**
+- [ ] **Step 3 — Implement:**
+  - `economy-world.ts`: remove `RegionView`, `getRegions`, `getMarketsForRegion`; add `getSystemIds(): Promise<string[]>` (stable sort by id) and `getMarketsForSystems(systemIds: string[]): Promise<MarketView[]>`; change `getModifiers(systemIds: string[])`.
+  - Prisma adapter: `getSystemIds` = `starSystem.findMany({ select:{id:true}, orderBy:{id:"asc"} })`; `getMarketsForSystems` = the current region query with `where: station.system.id in systemIds` (keep the existing `select`/key-mapping); `getModifiers(systemIds)` selects system-targeted modifiers for `systemIds` **and** region-targeted modifiers for the distinct regions those systems belong to (one extra `IN` query — no N+1).
+  - Memory adapter: mirror with array filters.
+  - `runEconomyProcessor`: `const ids = await world.getSystemIds(); const { start, end } = shardRange(ids.length, ctx.tick, params.interval); const slice = ids.slice(start, end);` then `getMarketsForSystems(slice)`; apply `catchUpFactor(params.interval)` to production **and** consumption symmetrically (scale `baseProductionRate`/`baseConsumptionRate` when building tick entries, leaving band-relative noise untouched). Replace the `economyTick` payload with `{ systemCount: slice.length, shardIndex: ctx.tick % params.interval, shardCount: params.interval }`. Add `interval: number` to `EconomyProcessorParams`; live wiring passes `ECONOMY_UPDATE_INTERVAL`, sim passes the same (from `SimConstants`).
+  - `types.ts`: update `EconomyTickPayload`; fix the SSE consumer(s) + `bench-tick.ts`.
+- [ ] **Step 4 — Run, verify PASS** (unit) + the economy integration smoke (Postgres).
+- [ ] **Step 5 — Commit.** `feat(economy): substrate-v2 P6 — economy on the system shard + catch-up`
+
+### Task 6.3: Trade-flow + migration onto the fixed interval
+
+**Files:**
+- Modify: `lib/tick/processors/trade-flow.ts`, `lib/tick/processors/migration.ts` (bodies)
+- Modify: `lib/tick/world/trade-flow-world.ts` / `migration-world.ts` params if needed; live wiring + `lib/engine/simulator/economy.ts` sim wiring; `lib/engine/simulator/constants.ts`
+- Test: `lib/tick/processors/__tests__/trade-flow.test.ts`, `migration` tests
+
+**Interfaces consumed:** `shardRange`, `catchUpFactor`, `ECONOMY_UPDATE_INTERVAL`.
+
+> Both already compute a **stateless, tick-derived** slice (`trade-flow.ts:42` `start = (tick * edgesPerTick) % total`) — no persisted cursor. Replace the fixed `edgesPerTick` budget with a fixed *interval* so the full sweep is always `interval` ticks at any scale (syncs flow with economy — closes the cross-cadence question). Preserve the `ceil(sweep) < flowHistoryTicks` guard (now sweep = `interval` = 24 ≪ 200 ✓).
+
+- [ ] **Step 1 — Failing test** (`trade-flow.test.ts`): with `interval = 4` and `total` edges, over 4 ticks the union of processed edges = all edges, each once (via `shardRange`). Assert per-edge flow amount is multiplied by `catchUpFactor(interval)`.
+- [ ] **Step 2 — Run, verify FAIL.**
+- [ ] **Step 3 — Implement:** replace `const start = (ctx.tick * params.edgesPerTick) % total; count = min(edgesPerTick,total)` with `const { start, end } = shardRange(total, ctx.tick, params.interval); const slice = edges.slice(start, end);`. Multiply the per-edge moved amount by `catchUpFactor(params.interval)` (guard `NaN`/`Infinity`). Swap `edgesPerTick` param → `interval` in `TradeFlowProcessorParams`/`MigrationProcessorParams`; live + sim pass `ECONOMY_UPDATE_INTERVAL`. Mirror in `migration.ts`. Keep the `flowHistoryTicks` invariant warning (compare `interval`).
+- [ ] **Step 4 — Run, verify PASS** (unit + trade-flow integration smoke).
+- [ ] **Step 5 — Commit.** `feat(economy): substrate-v2 P6 — trade-flow + migration on the fixed interval`
+
+### Task 6.4: Fold price-snapshots onto the economy shard
+
+**Files:**
+- Modify: `lib/tick/processors/price-snapshots.ts`, `lib/tick/world/snapshots-world.ts`, `lib/tick/adapters/prisma/snapshots.ts`, `lib/tick/adapters/memory/snapshots.ts`
+- Modify: registry frequency (→ 1); `lib/constants/snapshot.ts` if `SNAPSHOT_INTERVAL` becomes unused for cadence
+- Test: `lib/tick/processors/__tests__/price-snapshots.test.ts`
+
+**Interfaces consumed:** the economy processor's processed system set, read from `ctx.results.get("economy")?.economySignals?.dissatisfactionBySystem` keys (already the slice).
+
+> Kills the 205k-market full scan. Snapshot **only the systems economy just processed this tick**, every tick (frequency 1 → only ~`total/interval` systems per tick). Per-system snapshot cadence becomes every `interval` ticks (24) instead of 20 — negligible for a 50-deep rolling history.
+
+- [ ] **Step 1 — Failing test:** given an economy `economySignals` with system set `S` in `ctx.results`, the snapshot processor writes histories for exactly `S` (not all systems), reading markets only for `S`.
+- [ ] **Step 2 — Run, verify FAIL.**
+- [ ] **Step 3 — Implement:** add `getMarketsForSystems(systemIds)` + `getPriceHistoriesForSystems(systemIds)` to `SnapshotsWorld` (replace the all-rows `getMarkets`/`getPriceHistories`); body reads the processed set from `ctx.results` (`return {}` if absent), builds entries for that set, writes via the existing `unnest` UPDATE. Registry: `frequency: 1`, `dependsOn: ["economy"]`.
+- [ ] **Step 4 — Run, verify PASS** + integration smoke (no NaN, histories grow).
+- [ ] **Step 5 — Commit.** `feat(economy): substrate-v2 P6 — fold price-snapshots onto the shard`
+
+### Task 6.5: Mission generation onto the long interval
+
+**Files:**
+- Modify: `lib/tick/processors/missions.ts` (op-missions), `lib/tick/processors/trade-missions.ts`; their worlds/adapters as needed
+- Test: `missions`/`trade-missions` tests
+
+**Interfaces consumed:** `shardRange`, `MISSION_GEN_INTERVAL`.
+
+> **Generation** moves to a long-interval system shard; **expiry/completion housekeeping stays responsive** so players never wait on their own actions. **Before changing op-missions, confirm where mission completion is credited** — if it's in this processor's per-tick housekeeping, keep that path every-tick; only the *generation* block (`missions.ts:104` region round-robin) moves to `shardRange(systems, tick, MISSION_GEN_INTERVAL)`. For `trade-missions` (currently `frequency: 5`, global pass): set `frequency: 1`, keep expiry every tick, shard *generation* over `MISSION_GEN_INTERVAL`. **Watch-item:** trade-missions picks extremes from a global pass — per-shard generation only sees one slice; verify mission availability still reads acceptably (or aggregate extremes across a cycle).
+
+- [ ] **Step 1 — Failing test:** over `MISSION_GEN_INTERVAL` ticks the generation pass covers every system once (via `shardRange`); expiry/completion housekeeping runs every tick regardless of the shard.
+- [ ] **Step 2 — Run, verify FAIL.**
+- [ ] **Step 3 — Implement:** op-missions — replace `tick % regions.length` region pick (`missions.ts:116`) with a `shardRange` system slice at `MISSION_GEN_INTERVAL`; leave steps 1–3 (expiry/completion) every-tick. trade-missions — `frequency: 1`; gate generation on the `shardRange` slice; keep expiry every tick.
+- [ ] **Step 4 — Run, verify PASS.**
+- [ ] **Step 5 — Commit.** `feat(economy): substrate-v2 P6 — mission generation on the long interval`
+
+### Task 6.6: Registry cleanup + tick-engine doc
+
+**Files:**
+- Modify: `lib/tick/registry.ts` (frequencies if any remain), `docs/active/engineering/tick-engine.md`
+- Grep + remove now-dead constants: `git grep "EDGES_PER_TICK\|MIGRATION_EDGES_PER_TICK\|SNAPSHOT_INTERVAL"` — retire what the shard replaced (keep `FLOW_HISTORY_TICKS`, `MAX_SNAPSHOTS`); `REGION_COUNT` stays (territory).
+
+- [ ] **Step 1 — Implement:** confirm registry frequencies (economy/trade-flow/migration/op-missions/price-snapshots all `frequency: 1`, shard inside; trade-missions `1`). Update `tick-engine.md`: rewrite the "Region Round-Robin" section as **"Shard schedule"** (fixed interval, decoupled from regions, three knobs, catch-up); update the processor table cadence column; fold in the resolved Q1–Q3 from the design note. Remove dead constants + fix references.
+- [ ] **Step 2 — Verify:** `npx tsc --noEmit` clean; `npx vitest run` green; `git grep` for the retired constants is empty in live code.
+- [ ] **Step 3 — Commit.** `refactor(economy): substrate-v2 P6 — retire budget constants + cadence doc`
+
+### Task 6.7: Re-bench + coarse-health gate (phase gate)
+
+- [ ] **Step 1 — Re-bench at 10k:** `npx prisma db push && npx prisma db seed` (reseed; the bench advanced the dev DB), then `npx tsx --env-file=.env scripts/bench-tick.ts 150`. Confirm total tick (incl. folded snapshots) sits comfortably under 5000ms across ticks (snapshot stall gone; economy ≈ the ~411ms / total ≈ ~1.4s estimate).
+- [ ] **Step 2 — Coarse-health sim** at `interval = 24` (`npm run simulate`, seed 42): no NaN/runaway/pinning, greedy ≫ random, dispersion exists, markets liquid. Then a `interval = 60` config run — confirm coarse health holds at both (scale-invariance check). **Do NOT re-tune to old magnitudes.** If trade-flow magnitude shift reads unhealthy, coarse-tune `FLOW_BUDGET` only.
+- [ ] **Step 3 — Smoke (user):** dev server at 10k — economy advances on the shard; no 20s snapshot stall in the tick log; missions appear at the slower cadence; ship arrivals / mission completion / battles still resolve promptly. [[feedback-smoke-before-review]].
+- [ ] **Step 4 — Whole-branch review** (local `/uber-review` vs shared per [[feedback-uber-review-local-shared-base]]) → squash `feat/substrate-v2-p6` into shared.
+
+**Phase 6 gate:** `npx tsc --noEmit` clean; `npx vitest run` green (unit + integration vs Postgres); re-bench under budget with the snapshot stall gone; coarse-health holds at interval 24 **and** 60; three knobs (tick-rate / interval / per-tick-work) independently configurable; cadence documented in `tick-engine.md`. **Open phase PR → shared branch.** Then the booked **follow-up**: trace + fix the `pg` concurrent-query warning (design note).
 
 ---
 
