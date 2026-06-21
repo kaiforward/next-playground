@@ -86,15 +86,16 @@ Production and consumption are **physical** — they derive from each system's s
 **Production** — capacity-driven and **input-gated**, computed per good `g` from the system's `SystemBuilding` rows (see [system-traits.md](./system-traits.md) §1.5):
 
 ```
-production_g = Σ(buildings whose output good is g)  count × outputPerUnit × labourFulfillment × inputGate_g
+production_g = Σ(buildings whose output good is g)  count × outputPerUnit × labourFulfillment × inputGate_g × yield_g
 labourFulfillment = min(1, population / Σ(count × labourPerUnit))
+yield_g           = system yieldMult[resource(g)]  for tier-0 extractables, else 1
 ```
 
 `labourFulfillment` is one uniform system-wide ratio — population is the labour pool, and if labour demand exceeds population the whole industrial base operates below capacity. `inputGate_g` is the recipe-input availability throttle (always 1 for tier-0; see [Supply Chain & Input-Gating](#supply-chain--input-gating)). Key constraints by building tier:
 
-- **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, gas, …), each extracted from a body resource deposit with no recipe (`inputGate = 1`). Their building count is capped at world-gen by the system's body resource deposits and build space, so resource-rich bodies drive extractor capacity.
-- **Tier-1+ manufacturers** — build-space and labour bound, **and input-gated**: each building type carries an `inputs` recipe and draws those inputs from local market stock each tick. A manufacturer short of any input throttles its output proportionally (`inputGate_g < 1`), so shortages cascade down the chain. See [Supply Chain & Input-Gating](#supply-chain--input-gating).
-- **Housing** — a non-production building type: it does not appear in production sums. Instead, `popCap = bodyBaseline + Σ(housing count × popProvided)`.
+- **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, gas, …), each extracted from a body resource deposit with no recipe (`inputGate = 1`). Their building count is capped at world-gen by the system's **deposit slots** (a per-resource extractor ceiling), and their output is scaled by the resource's **yield multiplier** (`yieldMult`, the mean quality of the filled slots) — so both how *much* (slots) and how *rich* (quality) a body's deposits are drive extraction. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
+- **Tier-1+ manufacturers** — bounded by **general space** and labour, **and input-gated**: each building type carries an `inputs` recipe and draws those inputs from local market stock each tick. A manufacturer short of any input throttles its output proportionally (`inputGate_g < 1`), so shortages cascade down the chain. See [Supply Chain & Input-Gating](#supply-chain--input-gating).
+- **Population centres** (the `housing` building type) — a non-production type: they do not appear in production sums. Instead `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, sourced **entirely from built centres** on a body's habitable land — there is no body baseline (the v1 `bodyBaselinePopCap` is retired). Centres are sized at seed to staff the system's labour demand. See [system-traits.md](./system-traits.md) §1.4.
 
 **Consumption** — two channels drain each good's stock:
 
@@ -118,13 +119,13 @@ The cascade runs **per system, each tick**, with goods processed in **recipe-top
 3. **Output added** to local stock = `effectiveProduction_g × inputGate_g × ceiling`, where `ceiling` is the existing self-limiting `sqrt` factor (warehouses-full damping).
 4. **Inputs drawn** from local stock in proportion to *actual* output (`inputs_g[i] × actualOutput`) — you only consume what you actually convert.
 
-**Drawable-above-floor rule.** "Drawable" stock is `max(0, stock − MIN_STOCK)` — only stock above the price floor (5) can be drawn down by a recipe. Because the gate is computed against drawable stock and inputs drain in proportion to it, every input stays at or above the floor *by construction* — no re-clamp is needed, and a consumer can never mine its input below the floor and pin that input's own price to the ceiling.
+**Drawable-above-floor rule.** "Drawable" stock is `max(0, stock − minStock)` — only stock above the market's own scarcity reserve (`minStock`, the per-market price-floor level; see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) can be drawn down by a recipe. Because the gate is computed against drawable stock and inputs drain in proportion to it, every input stays at or above its reserve *by construction* — no re-clamp is needed, and a consumer can never mine its input below the reserve and pin that input's own price to the ceiling.
 
 Inputs come from *local* stock, which trade flow refills from cheaper neighbours (unchanged). So a refinery world with no Ore deposits still runs its Smelters as long as Ore flows in — and **cutting that lane starts the downstream cascade**, grounded in the existing trade-flow lever. The marquee emergent behaviours — need-cascade, lane-cut cascade, over-industrialise-a-garden-world-and-it-can-no-longer-feed-itself — all fall out of this loop composed with the population/unrest dynamics, with the industrial base **static** (seeded at world-gen; runtime construction is a later agency layer). The cascade engine is pure (`lib/engine/supply-chain.ts`, shared by the live tick and the simulator).
 
 ### Market Seeding
 
-At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's days-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. Net balance is computed from the capacity-driven production rates above (using a `labourFactor` heuristic to approximate `labourFulfillment` at seed time) and population-scaled consumption. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the [5, 200] stock band. Import dependence falls directly out of the substrate and the seeded industrial base.
+At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's days-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. Net balance is computed from the capacity-driven production rates above and population-scaled consumption. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the market's own **per-market band** (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) — so a heavy producer with deep storage seeds genuinely deep and cheap. Import dependence falls directly out of the substrate and the seeded industrial base.
 
 ---
 
@@ -168,6 +169,23 @@ sellUnit  = mid × (1 − s)        (what the player receives)
 - `s` — bid-ask half-spread. Default **0.05**, scaled by government (see above).
 - `floor` / `ceiling` — per-good price multipliers on base price.
 
+### Market Pricing Band (per-market stock range)
+
+The `[minStock, maxStock]` band each market's `stock` lives in is **per-market**, derived from the same `StationMarket` row the price curve reads — replacing the legacy global `[5, 200]`. It splits two jobs an absolute band conflated and gives each its natural driver: **demand prices the market; built infrastructure sets its depth.**
+
+```
+demandRate  = max( perCapitaNeed × population + production-input draw , MIN_DEMAND )
+targetStock = TARGET_COVER × demandRate × anchorMult        // the anchor — ≡ the pricing reference above
+minStock    = targetStock / priceCeiling ^ (1/k)            // scarcity reserve: buying stops, price ceilings out
+maxStock    = targetStock / priceFloor ^ (1/k)              // demand headroom — guarantees the full price range
+            + Σ_buildings ( count × storagePerUnit[building → good] )   // infrastructure depth & liquidity
+```
+
+- **Demand-derived floor & anchor.** `minStock` is a *reserve*, not zero — a player buys everything above it (`stock − minStock`); as stock falls toward it, price climbs to the ceiling and the market holds its last reserve. Both `minStock` and `targetStock` scale with population, so the price point and the scarcity threshold track local demand.
+- **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`facilityStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `StationMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
+
+This restores the cover model's intended invariant — **same days-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 days of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term. The bid-ask spread and buy/sell symmetry that block the resell exploit depend on the *curve*, not the band, and are unchanged.
+
 ### Slippage (intra-trade pricing)
 A trade of `q` units moves stock from `S` to `S∓q`, and price moves the whole way. The trade is priced at the **average of the curve over the stock range it moves**, not a flat pre-trade snapshot — each unit is priced at the midpoint of the stock step it causes (`tradeAvgMidPrice` in `lib/engine/market-pricing.ts`).
 
@@ -179,8 +197,8 @@ The economy processor groups the region's markets **by system** and runs the cou
 1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
 2. **Input-gated, self-limiting production** — the building-capacity production rate is throttled by `inputGate` (recipe-input availability; 1 for tier-0), then by the self-limiting `sqrt((MAX − stock) / (MAX − MIN))` ceiling. Near the ceiling, production approaches zero (warehouses full). Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces output. The recipe inputs are then drawn from local stock in proportion to actual output (drawable-above-floor; see [Supply Chain & Input-Gating](#supply-chain--input-gating)).
 3. **Self-limiting consumption** — its population-scaled civilian consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left). Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
-4. **Noise** — random walk scaled by good volatility and government modifier (base amplitude ±3 units).
-5. **Clamp** — stock bounded to [5, 200].
+4. **Noise** — random walk scaled by good volatility and government modifier, sized as a **fraction of the market's own band width** (`NOISE_FRACTION × (maxStock − minStock)`), so the jitter is proportional everywhere — negligible drift on a deep market, the same relative wobble on a thin one (the old absolute `±3` was negligible on a wide band and overwhelming on a small one).
+5. **Clamp** — stock bounded to the market's per-market `[minStock, maxStock]` band.
 
 There is no mean-reversion step and no demand axis — both are gone from the single-stock model.
 
@@ -189,8 +207,8 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 |---|---|---|
 | Elasticity `k` | 1 | Curve steepness (price reaction to stock gap) |
 | Bid-ask spread `s` | 0.05 base | Buy/sell gap; scaled by government; makes round-trips lose |
-| Noise amplitude | ±3 base | Micro-volatility, scaled by volatility × government |
-| Min/max stock | 5 / 200 | Stock bounds (ceiling price at MIN, floor price at MAX) |
+| Noise fraction | `NOISE_FRACTION` (≈0.02) of band width | Micro-volatility, relative to each market's band, scaled by volatility × government |
+| Stock band | per-market `[minStock, maxStock]` | Demand-derived floor reserve + infrastructure-derived ceiling (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) |
 | Production rate | capacity-driven, input-gated | `Σ count × outputPerUnit × labourFulfillment × inputGate`; scaled by self-limiting + strike suppression |
 | Consumption rate | civilian + production-input | civilian `perCapitaNeed × population` (self-limiting, never strike-suppressed) + tier-1+ recipe-input draw from local stock |
 | Price history | Rolling window | Snapshots recorded periodically (`lib/engine/snapshot.ts`) |
@@ -210,7 +228,7 @@ Chronic unmet demand climbs unrest; relief decays it. This is an integral over t
 
 **Strikes** are derived each tick from `unrest` (no separate stored flag): above the strike threshold, a smooth suppression multiplier scales down production output only. People still consume — consumption is never suppressed. The strike state feeds back into the next economy tick's production.
 
-**Growth / decline** is logistic: population grows toward `popCap` when the system is well-fed and calm, and declines under starvation or high unrest. The existing SP1 seeding placed all systems below `popCap`, giving headroom.
+**Growth / decline** is logistic with **symmetric** growth/decline rates: population grows toward `popCap` when the system is well-fed and calm, and declines under high unrest. Seeding places systems below `popCap` (population is a **continuous magnitude** — a tiny outpost seeds at e.g. `pop 0.3`, never rounded to a false 0), so the live tick ramps each up toward its labour-staffing cap and then holds. Today growth is gated mainly by housing-headroom × satisfaction; making it track economic *viability* (can the world feed/employ its people) is the booked **SP4 phase** "Population ← economic viability" (see [available-space model](./economy-substrate-v2-available-space.md) and [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13).
 
 **Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source.
 
@@ -219,7 +237,7 @@ The system screen surfaces dynamic population and stability through two views, b
 - **Population tab** — shows the current population magnitude, `popCap` utilisation, unrest/stability (via the stability badge), current strike state, and a per-good demand footprint (how each good's consumption demand distributes across the population).
 - **Overview stability row** — a quick stability badge on the system Overview, so the current unrest level is visible without switching tabs.
 
-> **Prosperity is retired.** The former `prosperity` value (a trade-volume proxy for supply-response scaling, 0.3× crisis to 1.3× booming) is removed. SP1 already moved the smooth supply response onto `population` (`labourFactor`), so the proxy became redundant. Population is now the smooth health channel; `unrest` is the consequence channel.
+> **Prosperity is retired.** The former `prosperity` value (a trade-volume proxy for supply-response scaling, 0.3× crisis to 1.3× booming) is removed. SP1 already moved the smooth supply response onto `population` (via `labourFulfillment`), so the proxy became redundant. Population is now the smooth health channel; `unrest` is the consequence channel.
 
 ### Event-Driven Anchor Shifts
 
@@ -282,13 +300,15 @@ The economy→population **satisfaction handoff** (`ctx.results`) is purely in-m
 Viewed another way, the simulation stacks four layers from static to real-time:
 
 ```
-1  Base identity (static)      bodies (resources + population) + seeded
-                               industrial base (SystemBuilding counts, buildSpace,
+1  Base identity (static)      bodies (deposit slots × quality + general/
+                               habitable space) + seeded industrial base
+                               (SystemBuilding counts on available space,
                                recipes) -> per-good production rates
-                               (capacity-driven, input-gated); civilian +
-                               production-input consumption rates;
+                               (capacity-driven, input-gated, tier-0 × yield);
+                               civilian + production-input consumption rates;
                                demand rate -> days-of-supply pricing reference;
-                               net balance -> seed stock + import dependence;
+                               net balance + facility storage -> per-market band
+                               -> seed stock + import dependence;
                                government -> volatility, spread, boosts
 2  Tick evolution (each tick)  input-gated self-limiting production (the
                                supply-chain cascade) + civilian consumption,
