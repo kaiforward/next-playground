@@ -17,7 +17,7 @@ export const SUBSTRATE_GEN = {
   /** Narrative feature count per system, uniform inclusive. */
   FEATURE_COUNT: { min: 0, max: 2 },
   /** Economy-type classifier thresholds (see lib/engine/economy-type.ts). */
-  ECON_POP_HIGH: 1000,        // population reference for "high population"
+  ECON_POP_HIGH: 700,         // population reference for "high population"
   ECON_POP_HIGH_FRAC: 0.6,    // popNorm ≥ this → developed economy
   ECON_RAW_DOMINANT: 0.5,     // raw share ≥ this → extraction / industrial
   ECON_FOOD_DOMINANT: 0.35,   // food share ≥ this → agricultural

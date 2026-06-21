@@ -296,11 +296,12 @@ describe("generateSystems", () => {
       expect(econCounts.get(econ) ?? 0, econ).toBeGreaterThan(0);
     }
     for (const [, count] of econCounts) {
-      // ≤ 0.54: snug bound — the classifier now reads slotCap × yieldMult (raw
-      // deposit potential), which makes 'extraction' the dominant plurality
-      // (observed 0.522 at seed 42, a known P4 watch-item). Threshold = observed
-      // + small margin, so drift past this trips before calibration.
-      expect(count / systems.length).toBeLessThanOrEqual(0.54);
+      // ≤ 0.80: a realistic galaxy is mostly mining worlds, so 'extraction' is a
+      // strong, DESIGNED plurality (~65-72%) — the classifier reads slotCap ×
+      // yieldMult (raw deposit potential) and most systems are barren. This guard
+      // only catches one type reaching near-total takeover, not the intended
+      // extraction-dominance. See the barren-but-alive substrate-v2 P5 decision.
+      expect(count / systems.length).toBeLessThanOrEqual(0.80);
     }
   });
 
