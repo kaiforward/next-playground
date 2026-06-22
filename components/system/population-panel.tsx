@@ -50,7 +50,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
         {demand.length === 0 ? (
           <EmptyState message="No demand." />
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-1.5 max-h-72 overflow-y-auto">
             {demand.map((d) => (
               <li key={d.goodId} className="flex items-center justify-between py-1.5 px-3 bg-surface">
                 <span className="text-sm text-text-primary">{d.goodName}</span>
