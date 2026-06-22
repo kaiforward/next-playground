@@ -4,6 +4,7 @@ import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { GOODS } from "@/lib/constants/goods";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { QUALITY_BAND_DOT, QUALITY_BAND_TEXT } from "@/lib/constants/ui";
+import { formatBuildingCount } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -104,7 +105,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                 <StatList>
                   {entries.map((b) => (
                     <StatRow key={b.buildingType} label={label(b.buildingType)}>
-                      <span className="font-mono text-sm text-text-primary">{b.count.toFixed(0)}</span>
+                      <span className="font-mono text-sm text-text-primary">{formatBuildingCount(b.count)}</span>
                     </StatRow>
                   ))}
                 </StatList>
@@ -130,7 +131,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                   </span>
                   <span className="flex items-center gap-3">
                     <span className="font-mono text-sm text-text-secondary">
-                      {d.worked.toFixed(0)} / {d.slotCap.toFixed(0)}
+                      {formatBuildingCount(d.worked)} / {formatBuildingCount(d.slotCap)}
                     </span>
                     <span className={`font-mono text-xs ${QUALITY_BAND_TEXT[d.band]}`}>
                       ×{d.yieldMult.toFixed(2)}

@@ -25,6 +25,19 @@ export function formatNumber(value: number): string {
   return Math.round(value).toLocaleString();
 }
 
+/**
+ * Format a continuous building/industrial-capacity magnitude. Building counts are
+ * Floats (a partial settlement is a real, sub-1 magnitude), so a present building
+ * must never collapse to "0": large counts read as whole numbers, small ones keep
+ * a decimal, and anything positive-but-tiny shows "<0.1" rather than rounding away.
+ */
+export function formatBuildingCount(count: number): string {
+  if (count <= 0) return "0";
+  if (count >= 10) return String(Math.round(count));
+  if (count >= 0.1) return count.toFixed(1);
+  return "<0.1";
+}
+
 /** People represented by one abstract population unit. */
 export const PEOPLE_PER_UNIT = 1_000_000;
 

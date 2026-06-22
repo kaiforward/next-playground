@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatNumber, formatHeadcount, formatHeadcountShort } from "../format";
+import { formatNumber, formatHeadcount, formatHeadcountShort, formatBuildingCount } from "../format";
 
 describe("formatNumber", () => {
   it("rounds to the nearest integer", () => {
@@ -40,5 +40,22 @@ describe("formatHeadcountShort", () => {
   });
   it("renders zero", () => {
     expect(formatHeadcountShort(0)).toBe("0");
+  });
+});
+
+describe("formatBuildingCount", () => {
+  it("never collapses a present (sub-1) building to '0' — the housing-reads-0 bug", () => {
+    expect(formatBuildingCount(0.4478)).toBe("0.4");
+    expect(formatBuildingCount(0.96)).toBe("1.0");
+  });
+  it("keeps a decimal for small magnitudes, whole numbers for large", () => {
+    expect(formatBuildingCount(2.33)).toBe("2.3");
+    expect(formatBuildingCount(23.6)).toBe("24");
+  });
+  it("shows '<0.1' for a positive-but-tiny magnitude rather than rounding away", () => {
+    expect(formatBuildingCount(0.04)).toBe("<0.1");
+  });
+  it("renders a true zero (absent building) as '0'", () => {
+    expect(formatBuildingCount(0)).toBe("0");
   });
 });
