@@ -7,8 +7,9 @@ import { TickControlSection } from "./tick-control-section";
 import { EventSpawnerSection } from "./event-spawner-section";
 import { EconomyOverviewSection } from "./economy-overview-section";
 import { CheatsSection } from "./cheats-section";
+import { MapDebugSection } from "./map-debug-section";
 
-const TABS = ["Tick", "Events", "Economy", "Cheats"] as const;
+const TABS = ["Tick", "Events", "Economy", "Cheats", "Map"] as const;
 type Tab = (typeof TABS)[number];
 
 export function DevToolsPanel() {
@@ -58,6 +59,7 @@ export function DevToolsPanel() {
             {tab === "Events" && <EventSpawnerSection />}
             {tab === "Economy" && <EconomyOverviewSection />}
             {tab === "Cheats" && <CheatsSection />}
+            {tab === "Map" && <MapDebugSection />}
           </div>
         </div>
       )}

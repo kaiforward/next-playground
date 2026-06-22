@@ -6,6 +6,7 @@ import { TopBar } from "@/components/top-bar";
 import { TickProvider, useTickContext } from "@/lib/hooks/use-tick-context";
 import { useTickInvalidation } from "@/lib/hooks/use-tick-invalidation";
 import { DevToolsPanel } from "@/components/dev-tools/dev-tools-panel";
+import { DevOverlayProvider } from "@/components/dev-tools/dev-overlay-context";
 import { useSidebar, type UseSidebarReturn } from "@/lib/hooks/use-sidebar";
 
 /* ------------------------------------------------------------------ */
@@ -34,9 +35,11 @@ interface GameShellProps {
 export function GameShell({ userEmail, defaultSidebarCollapsed, panel, children }: GameShellProps) {
   return (
     <TickProvider>
-      <GameShellInner userEmail={userEmail} defaultSidebarCollapsed={defaultSidebarCollapsed} panel={panel}>
-        {children}
-      </GameShellInner>
+      <DevOverlayProvider>
+        <GameShellInner userEmail={userEmail} defaultSidebarCollapsed={defaultSidebarCollapsed} panel={panel}>
+          {children}
+        </GameShellInner>
+      </DevOverlayProvider>
     </TickProvider>
   );
 }
