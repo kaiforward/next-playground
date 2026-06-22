@@ -1,98 +1,57 @@
-# Project code standards (forbidden patterns)
+# Code-review projection of CLAUDE.md
 
-Patterns explicitly forbidden by `CLAUDE.md`. The Conventions agent uses this as its checklist; other agents may reference it too. When flagging a violation, use the suggested category slug for dedup consistency.
+**`CLAUDE.md` is the canonical source** of every project rule and its rationale — its **`## Conventions`** and **`## Gotchas / Known Pitfalls`** sections. The `/uber-review` orchestrator injects those two sections verbatim into the reviewer agents, so the rules live in exactly one place. **This file does NOT restate them.** It is the *review projection*: the dedup `category` slug for each flaggable rule, plus review-only flagging nuance (false-positive traps) that doesn't belong in CLAUDE.md.
 
-## Type safety
+When you flag a violation, use the matching slug below so dedup is deterministic. To find a rule's meaning, read the injected CLAUDE.md sections — not this file.
 
-- **No `as` casts** — category: `as-cast`
-  - Only `as const` and casts inside runtime guards in `lib/types/guards.ts` are permitted.
-  - Any other `as Foo` is a violation.
+## Category slugs
 
-- **No non-null assertion `!`** — category: `non-null-assertion`
-  - This rule covers the **TypeScript postfix `!` operator only** — `foo!`, `foo!.bar`, `arr[i]!`, `getThing()!`. It strips `null | undefined` from the type without a runtime check.
-  - This rule does NOT cover any of the following — these are normal operators and **never** a violation:
-    - `!foo` (logical-not, prefix)
-    - `!==` / `!=` (inequality comparisons; e.g. `bestId !== null` is a guard, NOT an assertion)
-    - `!!foo` (boolean coercion)
-    - `if (!foo)`, `while (!done)`, etc.
-  - Before flagging: confirm the offending character is a **postfix `!`** directly attached to an expression (`identifier!`, `expr.prop!`, `expr[i]!`, `(expr)!`). If the `!` is in a prefix or comparison position, it is not a non-null assertion — do not flag.
-  - Exception: postfix `!` is acceptable only in narrow contexts where a runtime check immediately precedes (rare and worth scrutiny).
+### Conventions (CLAUDE.md `## Conventions`, plus the UI / Quality-checklist rules)
 
-- **No `unknown` in the codebase** — category: `unknown-in-types`
-  - `Record<string, unknown>`, `unknown`, and untyped maps/arrays are banned in components, hooks, services, processors, engine, constants.
-  - Only exception: `JSON.parse` result at a system boundary (API route, sessionStorage) — must be narrowed via `typeof`/`in` immediately, never stored as `unknown`.
+| Slug | Flags (read CLAUDE.md for the rule) |
+|------|-------------------------------------|
+| `as-cast` | `x as Foo` outside `as const` / a `lib/types/guards.ts` guard |
+| `non-null-assertion` | postfix `!` (`foo!`, `arr[i]!`, `getThing()!`) — see nuance below |
+| `unknown-in-types` | `unknown` / `Record<string, unknown>` / untyped maps in app code |
+| `generic-widened` | a generic `T` intersected with `Record<string, unknown>` or accessed by string key |
+| `boundary-validation-leak` | re-validating downstream a type already validated in the service layer |
+| `loose-mutation-result` | a mutation result that isn't a discriminated union (`{ ok: true; data }` / `{ ok: false; error }`) |
+| `api-response-shape` | an API response that isn't `ApiResponse<T>` (`{ data?, error? }`) |
+| `raw-form-element` | raw `<input>` / `<select>` instead of the `components/form/` controls |
+| `unnecessary-use-client` | `"use client"` on a component with no hooks / state / handlers |
+| `non-suspense-data-fetch` | client data fetch not via `useSuspenseQuery` + `QueryBoundary` |
+| `comment-references-plan` | a comment naming a plan / phase / PR / migration instead of describing the code |
 
-- **Generics must stay generic** — category: `generic-widened`
-  - `DataTable<T>` and similar must work with `T` directly.
-  - Never intersect `T` with `Record<string, unknown>` or widen to weaken type safety.
-  - Use typed accessor functions (`render(row: T)`, `getValue(row: T)`) over string-key property access.
+### Gotchas (CLAUDE.md `## Gotchas / Known Pitfalls`)
 
-## API & data flow
+| Slug | Flags (read CLAUDE.md for the rule) |
+|------|-------------------------------------|
+| `missing-driver-adapter` | `new PrismaClient()` with no `@prisma/adapter-pg` |
+| `missing-tx-timeout` | `$transaction()` without `{ timeout: 30_000 }` |
+| `n+1-writes-in-tx` | per-row `create` / `update` / `findMany` inside `$transaction` (batch via `createMany` / `unnest()`) |
+| `tx-error-swallowed` | catching a query error inside `$transaction` and continuing on the same `tx` (PG aborts it) |
+| `nan-to-raw-sql` | `NaN` / `Infinity` reaching raw SQL unguarded |
+| `int-overflow-sentinel` | `MAX_SAFE_INTEGER` / `Infinity` into a Prisma `Int` (`int4`); use a `2_000_000_000` sentinel |
+| `static-prisma-in-unit-graph` | static `@/lib/prisma` import (direct or transitive) in a unit-tested module — use a dynamic import |
+| `record-includes` | `.includes()` on a `Record` (e.g. `ECONOMY_PRODUCTION[type]`) — use the `in` operator / an accessor |
+| `toctou-outside-tx` | computing a write from a pre-`$transaction` snapshot instead of re-reading inside |
+| `cache-public-on-auth-route` | `Cache-Control: public` on a `requirePlayer()`-gated route (use `private`) |
+| `immutable-on-api` | `Cache-Control: immutable` on an API response |
+| `sort-mutates-state` | `.sort()` on a React state array during render (use `[...arr].sort()` / `.toSorted()`) |
+| `unawaited-async-callback` | a child not awaiting an async callback prop (type it `() => Promise<void>`) |
+| `sse-without-seed` | an SSE-driven hook with no REST seed of initial state |
+| `debounce-in-render-loop` | debounce (not throttle) on a Pixi-ticker → `setState` loop |
 
-- **Validate at boundaries only** — category: `boundary-validation-leak`
-  - Prisma returns strings for union fields; validate once in the service layer using `lib/types/guards.ts`.
-  - Components, hooks, processors never re-validate types that were already validated upstream.
+## Flagging nuance (review-only — not in CLAUDE.md)
 
-- **Mutation services return discriminated unions** — category: `loose-mutation-result`
-  - Pattern: `{ ok: true; data } | { ok: false; error }`.
-  - Never `{ ok: boolean; data?; error? }`.
+Distinguish carefully before flagging; these are the recurring false-positive traps:
 
-- **API responses use `ApiResponse<T>`** — category: `api-response-shape`
-  - Shape: `{ data?: T, error?: string }`.
-
-## UI
-
-- **Use existing form components, never raw `<input>` / `<select>`** — category: `raw-form-element`
-  - `TextInput`, `NumberInput`, `RangeInput`, `SelectInput` from `components/form/`.
-
-- **`"use client"` only when needed** — category: `unnecessary-use-client`
-  - Components without hooks, state, or event handlers don't need it.
-
-- **No `.sort()` on state arrays during render** — category: `sort-mutates-state`
-  - Use `[...arr].sort()` or `.toSorted()`.
-
-- **Data fetching uses `useSuspenseQuery` + `QueryBoundary`** — category: `non-suspense-data-fetch`
-  - Deviations are architect-level.
-
-## Server / DB
-
-- **TOCTOU in mutating routes** — category: `toctou-outside-tx`
-  - Re-read state inside `prisma.$transaction` before writing.
-  - Never compute new values from a pre-transaction snapshot.
-  - Use `{ increment }` for atomic numeric updates.
-
-- **Prisma 7 driver adapter required** — category: `missing-driver-adapter`
-  - `new PrismaClient()` without an adapter throws.
-
-- **PostgreSQL transaction timeout** — category: `missing-tx-timeout`
-  - Default 5000ms; set `{ timeout: 30_000 }` on `$transaction()`.
-
-- **Auth-gated routes use `Cache-Control: private`** — category: `cache-public-on-auth-route`
-  - Never `public` on routes behind `requirePlayer()`.
-
-- **Never `Cache-Control: immutable` on APIs** — category: `immutable-on-api`
-  - For static assets only.
-
-## Async correctness
-
-- **Await async callbacks** — category: `unawaited-async-callback`
-  - If a parent passes an async callback, the child must `await` it.
-  - Prop types should be `() => Promise<void>` not `() => void` when the callback is async.
-
-- **SSE hooks seed initial state via REST** — category: `sse-without-seed`
-  - Otherwise components see stale defaults until first SSE event.
-
-- **Throttle (not debounce) for high-frequency render loops** — category: `debounce-in-render-loop`
-  - Pixi ticker etc.
-
-## Comments
-
-- **Comments describe code, not plans** — category: `comment-references-plan`
-  - A comment must explain the code as it is: what it does, why, invariants, and gotchas — anchored to real symbols, files, and behavior.
-  - Never reference an implementation plan, build phase, PR number, sub-project, or migration stage (e.g. "PR3b Phase 4", "the substrate rebuild", "retired in Phase 1", "until SP1 ships"). These rot the moment the plan moves and mean nothing to a future reader of the code.
-  - Don't cite plan or design docs from code comments. (The spec's own `[PENDING: <system>]` markers live in `docs/`, not in code.)
-  - A temporary shim/workaround SHOULD be labelled temporary and state — in code terms — the condition that lets it go away (e.g. "drop once `X` is non-null everywhere"), but not by naming a plan, phase, or PR.
+- **`non-null-assertion`** — only the **postfix `!`** operator (`foo!`, `foo!.bar`, `arr[i]!`, `getThing()!`). NEVER flag `!foo` (logical-not), `!==` / `!=` (inequality, incl. `x !== null`), or `!!foo` (boolean coercion). **And do NOT flag `find(...)!` in test files** — it is an accepted project idiom (CLAUDE.md Conventions). Confirm the `!` is postfix at the character level before flagging.
+- **`as-cast`** — the `as` type-assertion keyword (`x as Foo`), not the word "as" in identifiers / comments / strings; `as const` is permitted.
+- **`unknown-in-types`** — the literal `unknown` in a type position, not the English word in prose.
+- **`sort-mutates-state`** — only a `.sort()` on a React **state** value during render, not every `.sort()`.
+- Non-executable text (markdown, prompts, YAML) is never a violation by content match — see the severity rubric's scope guard.
 
 ## Maintenance note
 
-This list grows. When a new project convention is discovered, add it here in the next PR alongside the fix. Categories are slugs for deterministic dedup — keep them lowercase-kebab-case and short.
+`CLAUDE.md` is canonical. When a convention or gotcha is added there, add its `category` slug here in the same change (plus any review-only false-positive nuance). Slugs are lowercase-kebab-case, short, and stable — renaming one fragments dedup history. Do **not** copy rule text or rationale into this file; that's CLAUDE.md's job. This file only carries the slug and review-only nuance.
