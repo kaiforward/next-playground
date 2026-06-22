@@ -265,7 +265,7 @@ export function facilityStorageForGood(buildings: Record<string, number>, goodId
   return storage;
 }
 
-// ── Substrate display summaries (P7 read service) ────────────────────────────
+// ── Substrate display summaries (system-panel view helpers) ──────────────────
 // The space partition the seeder built against (industry-seed.ts): tier-0
 // extractors sit on dedicated deposit slots; tier-1+ factories and population
 // centres share fungible general space; pop-centres are additionally bounded by

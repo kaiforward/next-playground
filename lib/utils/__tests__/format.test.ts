@@ -52,6 +52,10 @@ describe("formatMagnitude", () => {
     expect(formatMagnitude(2.33)).toBe("2.3");
     expect(formatMagnitude(23.6)).toBe("24");
   });
+  it("treats 10 as the >=10 whole-number boundary (inclusive)", () => {
+    expect(formatMagnitude(10)).toBe("10"); // exact fence-post: >=10 → whole number
+    expect(formatMagnitude(9.4)).toBe("9.4"); // just below: stays in the toFixed(1) branch
+  });
   it("shows '<0.1' for a positive-but-tiny magnitude rather than rounding away", () => {
     expect(formatMagnitude(0.04)).toBe("<0.1");
   });
