@@ -4,7 +4,7 @@ import {
   curveForGood,
   type MarketCurve,
 } from "@/lib/engine/market-pricing";
-import { getSpread, STOCK_MIN } from "@/lib/constants/market-economy";
+import { getSpread } from "@/lib/constants/market-economy";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import type { GovernmentDefinition } from "@/lib/constants/government";
 import type { MarketEntry } from "@/lib/types/game";
@@ -67,4 +67,3 @@ export function buildMarketEntry(
   };
 }
 
-export { STOCK_MIN };

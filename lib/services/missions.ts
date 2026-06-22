@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
-import { STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
+import { spotPrice, curveForGood, marketBandForRow } from "@/lib/engine/market-pricing";
 import { validateAccept, validateDelivery } from "@/lib/engine/missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { getGameWorld } from "@/lib/services/world";
@@ -364,9 +363,10 @@ export async function deliverMission(
     }
 
     // Mission delivery is a sell — it adds goods to the destination's stock.
+    const missionBand = marketBandForRow(freshMarket, freshMarket.good);
     const nextStock = Math.max(
-      STOCK_MIN,
-      Math.min(STOCK_MAX, freshMarket.stock + freshMission.quantity),
+      missionBand.minStock,
+      Math.min(missionBand.maxStock, freshMarket.stock + freshMission.quantity),
     );
     await tx.stationMarket.update({
       where: { id: freshMarket.id },

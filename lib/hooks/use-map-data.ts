@@ -37,6 +37,9 @@ export interface SystemNodeData {
   y: number;
   name: string;
   economyType: EconomyType;
+  /** Whether the system has a built economy (popCap > 0). Undeveloped systems render
+   *  as a hollow marker — labelled potential, not a live economy. */
+  developed: boolean;
   regionId: string;
   /** Total docked ships incl. convoy members — used for fleet-presence checks. */
   shipCount: number;
@@ -330,6 +333,7 @@ export function useMapData({
         y: system.y,
         name: system.name,
         economyType: system.economyType,
+        developed: system.developed ?? true,
         regionId: system.regionId,
         shipCount: shipsAtSystem.get(system.id) ?? 0,
         dockedShipCount: dockedSoloShips.get(system.id) ?? 0,

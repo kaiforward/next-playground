@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-utils/fixtures";
+import { marketBand } from "@/lib/engine/market-pricing";
+import { demandRateForGood } from "@/lib/constants/market-economy";
+import { GOODS } from "@/lib/constants/goods";
 import type { TestUniverse } from "@/lib/test-utils/fixtures";
 
 const { prisma } = useIntegrationDb();
@@ -72,11 +75,30 @@ describe("executeTrade (integration) — floored stock in buy-cap error", () => 
     const stationId = universe.stations.agricultural;
     const goodId = universe.goodIds["food"];
 
-    // stock=51.8, STOCK_MIN=5 → buyable = floor(51.8 - 5) = floor(46.8) = 46.
-    // The error must show the integer (46), never the raw float (46.8).
+    // Agricultural system: population=400, storageCapacity=0 (DB default).
+    // Per-market band for food (priceFloor=0.5, priceCeiling=2.0):
+    //   demandRate = GOOD_CONSUMPTION.food(0.004) × 400 = 1.6
+    //   targetStock = TARGET_COVER(40) × 1.6 = 64
+    //   minStock    = 64 / 2.0 = 32   ← per-market scarcity reserve
+    //   maxStock    = 64 / 0.5 + 0  = 128
+    // With stock overridden to 51.8:
+    //   buyable = floor(51.8 - 32) = floor(19.8) = 19  (floored integer)
+    // The error must show the integer (19), never the raw float (19.8).
+    const AGRI_POPULATION = 400;
+    const foodDemandRate = demandRateForGood("food", AGRI_POPULATION);
+    const foodGood = GOODS["food"];
+    const band = marketBand({
+      demandRate: foodDemandRate,
+      storageCapacity: 0,
+      priceFloor: foodGood.priceFloor,
+      priceCeiling: foodGood.priceCeiling,
+    });
+    const testStock = 51.8;
+    const expectedBuyable = Math.floor(testStock - band.minStock);
+
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId, goodId } },
-      data: { stock: 51.8 },
+      data: { stock: testStock },
     });
 
     const player = await createTestPlayer(prisma, { credits: 1_000_000 });
@@ -90,13 +112,13 @@ describe("executeTrade (integration) — floored stock in buy-cap error", () => 
     const result = await executeTrade(player.playerId, shipId, {
       stationId,
       goodId,
-      quantity: 47,
+      quantity: expectedBuyable + 1,
       type: "buy",
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) return; // narrow to the error branch for TypeScript
-    expect(result.error).toMatch(/available 46\b/);
-    expect(result.error).not.toContain("46.8");
+    expect(result.error).toMatch(new RegExp(`available ${expectedBuyable}\\b`));
+    expect(result.error).not.toContain(`${testStock - band.minStock}`);
   });
 });

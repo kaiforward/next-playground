@@ -1,13 +1,12 @@
 /**
- * Physical-driver economy tables — production and consumption derive from a
- * system's substrate (resource aggregate + population), not an economy-type
- * rate table.
+ * Physical-driver economy tables — the per-good production coefficients and
+ * per-capita consumption needs that anchor the capacity-driven model.
  *
- * Production rate per good:
- *   coeff × labourFactor(population) × (resource ? aggregate[resource] : 1)
- * Tier-0 goods are resource-driven (scale with a deposit magnitude); tier-1/2
- * goods are labour-only (space/labour-bound, no deposit gate). Consumption is
- * universal and population-scaled: perCapitaNeed × population.
+ * `coeff` seeds each good's per-building output (see `OUTPUT_PER_UNIT` in
+ * industry.ts); `resource` marks the tier-0 deposit a good extracts (which
+ * deposit caps its extractor count and whose yield multiplier weights its
+ * output). Tier-1/2 goods are labour-only (space/labour-bound, no deposit gate).
+ * Consumption is universal and population-scaled: perCapitaNeed × population.
  *
  * All magnitudes are first-draft and calibrated via the simulator; only their
  * relative shape matters here (higher tier → smaller coeff and smaller need).
@@ -15,9 +14,9 @@
 import type { ResourceType } from "@/lib/types/game";
 
 export interface GoodProductionDriver {
-  /** Production coefficient — multiplied by labour (and the resource magnitude when resource-driven). */
+  /** Production coefficient — seeds the per-building output for this good. */
   coeff: number;
-  /** Tier-0 resource whose aggregate magnitude gates production. Omitted for labour-only goods. */
+  /** Tier-0 deposit resource this good extracts (caps extractor count, weights output). Omitted for labour-only goods. */
   resource?: ResourceType;
 }
 
@@ -57,11 +56,11 @@ export const GOOD_PRODUCTION: Record<string, GoodProductionDriver> = {
 /** Per-good per-capita consumption need. consRate = need × population. Higher tier → lower need. */
 export const GOOD_CONSUMPTION: Record<string, number> = {
   // Tier 0.
-  water: 0.004,
-  food: 0.004,
+  water: 0.007,
+  food: 0.006,
   ore: 0.002,
   textiles: 0.002,
-  gas: 0.003,
+  gas: 0.004,
   minerals: 0.002,
   biomass: 0.002,
   radioactives: 0.0008,
@@ -87,5 +86,5 @@ export const GOOD_CONSUMPTION: Record<string, number> = {
   ship_frames: 0.0003,
 };
 
-/** Population at which labourFactor reaches 0.5 (soft-saturating curve). First-draft; simulator-calibrated. */
+/** Legacy soft-saturating labour half-population. Retained for back-compat; the capacity model uses explicit labour fulfilment. First-draft; simulator-calibrated. */
 export const LABOUR_HALF_POP = 500;

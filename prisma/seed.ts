@@ -3,6 +3,7 @@ import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
+import { facilityStorageForGood } from "@/lib/engine/industry";
 import {
   UNIVERSE_GEN,
   REGION_NAMES,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/constants/universe-gen";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { deriveDominantEconomy } from "@/lib/engine/faction-gen";
-import { aggregateColumns, bodyResourceColumns } from "@/lib/engine/resources";
+import { slotColumns, qualColumns, yieldColumns } from "@/lib/engine/resources";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL environment variable is required");
@@ -171,9 +172,12 @@ async function main() {
           sunClass: sys.sunClass,
           population: sys.population,
           popCap: sys.popCap,
-          buildSpace: sys.buildSpace,
-          ...aggregateColumns(sys.aggregate),
           bodyDanger: sys.bodyDanger,
+          availableSpace: sys.availableSpace,
+          generalSpace: sys.generalSpace,
+          habitableSpace: sys.habitableSpace,
+          ...slotColumns(sys.slotCap),
+          ...yieldColumns(sys.yieldMult),
         })),
         select: { id: true, name: true },
       }),
@@ -203,12 +207,21 @@ async function main() {
   const marketData = universe.systems.flatMap((sys) => {
     const stationId = stationIdBySystemId.get(systemIds[sys.index]);
     if (!stationId) throw new Error(`Station missing for system "${sys.name}"`);
-    return Object.entries(goodRecords).map(([goodKey, goodRec]) => ({
-      stationId,
-      goodId: goodRec.id,
-      stock: getInitialStock(sys.aggregate, sys.population, goodKey),
-      demandRate: demandRateForGood(goodKey, sys.population),
-    }));
+    return Object.entries(goodRecords).map(([goodKey, goodRec]) => {
+      const storageCapacity = facilityStorageForGood(sys.buildings, goodKey);
+      // Guard: PostgreSQL rejects NaN/Infinity — clamp defensively for both
+      // storageCapacity and stock (getInitialStock runs band math; belt-and-braces).
+      const safeStorage = Number.isFinite(storageCapacity) ? storageCapacity : 0;
+      const stock = getInitialStock(sys.buildings, sys.yieldMult, sys.population, goodKey);
+      const safeStock = Number.isFinite(stock) ? stock : 0;
+      return {
+        stationId,
+        goodId: goodRec.id,
+        stock: safeStock,
+        demandRate: demandRateForGood(goodKey, sys.population),
+        storageCapacity: safeStorage,
+      };
+    });
   });
   await createManyChunked(marketData, (batch) =>
     prisma.stationMarket.createMany({ data: batch }),
@@ -221,9 +234,10 @@ async function main() {
       bodyType: b.bodyType,
       habitable: b.habitable,
       size: b.size,
-      ...bodyResourceColumns(b.resourceBase),
-      popCapWeight: b.popCapWeight,
-      richnessModifiers: b.richnessModifiers,
+      generalSpace: b.generalSpace,
+      habitableSpace: b.habitableSpace,
+      ...slotColumns(b.slots),
+      ...qualColumns(b.quality),
     })),
   );
   await createManyChunked(bodyData, (batch) =>

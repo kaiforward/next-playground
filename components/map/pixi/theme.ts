@@ -143,6 +143,9 @@ export const GLYPH = {
   haloRadius:        20,   // soft-body lens (was the 40px glow — pulled in)
   haloAlpha:         0.16, // economy default
   haloPriceAlpha:    0.5,  // when the halo carries the price ramp
+  haloUndevelopedAlpha: 0.06, // dimmed glow for undeveloped systems (no live economy)
+  undevelopedRingWidth: 2.5,  // hollow-core stroke for undeveloped systems
+  undevelopedFillAlpha: 0.15, // faint core fill so the hollow marker doesn't read as a hole
   fleetRingRadius:   28,   // sky-blue ring when the player has fleet docked here
   fleetRingWidth:    3,
   navRingRadius:     34,   // outermost, dashed

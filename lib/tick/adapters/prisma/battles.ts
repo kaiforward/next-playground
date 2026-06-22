@@ -17,6 +17,10 @@ export class PrismaBattlesWorld implements BattlesWorld {
     currentTick: number,
   ): Promise<ActiveBattleView[]> {
     const rows = await this.tx.battle.findMany({
+      // Single LATERAL JOIN for the three relations — see ship-arrivals: the
+      // default "query" strategy fans them out as concurrent queries on the
+      // transaction connection, which pg deprecates (removed in pg@9).
+      relationLoadStrategy: "join",
       where: { status: "active", nextRoundTick: { lte: currentTick } },
       include: {
         ship: {

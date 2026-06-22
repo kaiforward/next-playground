@@ -1,15 +1,15 @@
 # System Substrate & Traits
 
-Status: **Active** — physical substrate + narrative features shipped (Economy Simulation SP1 Part 1); the economy derives production and consumption from the substrate (SP1 Part 2); SP3 Part 2 added the seeded industrial base (`SystemBuilding` + `buildSpace`) that now drives capacity-driven production.
+Status: **Active** — physical substrate + narrative features shipped. The substrate uses the **available-space model** (Economy Substrate v2): each body has a finite *available space* partitioned into per-resource **deposit slots** (each carrying a **quality band**) and **general space** (a **habitable fraction** of which caps population). A seeded industrial base (`SystemBuilding` counts) is built onto that space and drives capacity-driven, input-gated production. Full substrate detail: [the available-space model](./economy-substrate-v2-available-space.md).
 
 What makes each system unique now has two layers:
 
 1. **Physical substrate** — a system's sun, its bodies, and the resources those bodies hold. This is the economic foundation: it drives economy type, population, and production/consumption directly.
 2. **Narrative features** — flavourful, named properties (precursor ruins, pirate strongholds, anomalies, derelict fleets). Features gate missions and exploration sites and adjust danger, but carry **no economic role**.
 
-**Design principle**: geology is the substrate; civilisation interprets it. Two systems with the same economy-type label can feel completely different because their bodies, richness, and features differ.
+**Design principle**: geology is the substrate; civilisation interprets it. Two systems with the same economy-type label can feel completely different because their bodies, deposit quality, and features differ.
 
-**Implementation**: substrate generation in `lib/engine/body-gen.ts` + `lib/engine/universe-gen.ts`; sun/archetype/richness constants in `lib/constants/bodies.ts`; the feature catalog in `lib/constants/traits.ts`; danger in `lib/engine/danger.ts`; exploration sites in `lib/constants/locations.ts`. Full design and the SP1 forward plan (Parts 2–3): [economy-simulation-substrate.md](../../planned/economy-simulation-substrate.md).
+**Implementation**: pure space partition + quality roll in `lib/engine/substrate-space.ts`; substrate generation in `lib/engine/body-gen.ts` + `lib/engine/universe-gen.ts`; seeded build-out in `lib/engine/industry-seed.ts`; sun/archetype/space/quality constants in `lib/constants/bodies.ts` + `lib/constants/substrate-gen.ts`; the feature catalog in `lib/constants/traits.ts`; danger in `lib/engine/danger.ts`; exploration sites in `lib/constants/locations.ts`. Full substrate detail: [the available-space model](./economy-substrate-v2-available-space.md).
 
 ---
 
@@ -30,57 +30,62 @@ Each system rolls one **sun**, weighted. Its class gates which body archetypes c
 
 ### 1.2 Bodies (archetypes)
 
-A system has one sun + 1–N bodies. Each body carries an **archetype**, a **size**, a **base resource vector** over the seven resource types `{ gas, minerals, ore, biomass, arable, water, radioactive }`, and a **population-capacity weight**. Magnitude per type = `archetypeProfile × size × variance (× richness)` — a cap on how much of the corresponding good the body can yield.
+A system has one sun + 1–N bodies. Each body carries an **archetype**, a **size**, a **weight vector** over the seven resource types `{ gas, minerals, ore, biomass, arable, water, radioactive }` **plus a `general` weight**, and a **habitable fraction**. Size alone sets the body's total available space (`SPACE_PER_SIZE × size`); the weight vector then partitions that space — in a single normalised pass, no ordering bias — into per-resource **deposit slots** and fungible **general space**. The **habitable fraction** is how much of the general space can host population (the housing-per-space efficiency knob). So an archetype no longer yields an absolute resource magnitude; it shapes *how a body's finite space divides* among mining, habitation, and production.
 
-| Archetype | Habitable | Resource lean | Pop cap | Notes |
+| Archetype | Habitable | Resource lean | Habitability (`habitableFraction`) | Notes |
 |---|:--:|---|:--:|---|
-| Garden world | ✓ | arable, water, biomass | High | The breadbasket |
-| Ocean world | ✓ | water, biomass | High | Aquaculture + modest arable |
-| Jungle world | ✓ | biomass, arable | Med | Biomass-dominant |
-| Arid world | ✓ | minerals, ore | Low | Barely habitable |
-| Volcanic world | ✗ | ore, radioactive | V.low | Ore-rich; **adds danger** (0.05 baseline) |
-| Frozen world | ✗ | water, gas | V.low | Ice + some gas |
-| Barren rock | ✗ | minerals, ore | V.low | Generic mineral/ore |
-| Gas giant | ✗ | gas | V.low | Fuel feedstock |
-| Asteroid belt | ✗ | minerals, ore | V.low | Mining backbone |
+| Garden world | ✓ | arable, water, biomass | High (0.7) | The breadbasket |
+| Ocean world | ✓ | water, biomass | Good (0.45) | Aquaculture + modest arable |
+| Jungle world | ✓ | biomass, arable | Good (0.5) | Biomass-dominant |
+| Arid world | ✓ | minerals, ore | Low (0.22) | Barely habitable |
+| Volcanic world | ✗ | ore, radioactive | Minimal (0.02) | Ore-rich; **adds danger** (0.05 baseline) |
+| Frozen world | ✗ | water, gas | Minimal (0.03) | Ice + some gas |
+| Barren rock | ✗ | minerals, ore | Minimal (0.03) | Generic mineral/ore |
+| Gas giant | ✗ | gas | **None (0)** | Fuel feedstock; no surface → **truly dead** |
+| Asteroid belt | ✗ | minerals, ore | Minimal (0.02) | Mining backbone |
 
-### 1.3 Richness modifiers
+Each deposit slot independently rolls a **quality band** (poor / average / good / rich) that multiplies its yield, so a small body of *rich* ore slots can out-produce a big body of *average* ones. A rare **volatility** roll spikes one resource's weight before normalising (the occasional 90%-radioactive moon). Tunable surface: the archetype weight vectors + quality-band odds + volatility odds, all in `lib/constants/bodies.ts` / `substrate-gen.ts` and simulator-swept.
 
-The old resource-flavoured traits (heavy-metal veins, helium-3 reserves, rare-earth deposits, glacial aquifer…) are now **richness modifiers**: rare rolls onto a body that multiply one resource magnitude (e.g. heavy metals → ore ×1.6). 13 of them in `RICHNESS_MODIFIERS`. They surface narratively in the body's description and open a mining-outpost exploration site (§4).
+### 1.3 Deposit quality (richness retired)
 
-### 1.4 Aggregate & population
+The v1 richness modifiers (heavy-metal veins, helium-3 reserves, glacial aquifer…) are **retired**. Richness now lives in the per-slot **quality band** (§1.2): each deposit rolls poor / average / good / rich, and a deposit's display name is **generated from its band × resource** ("rich ore body", "marginal water-ice reserve") rather than drawn from a curated proper-noun catalog. Generic descriptors scale to every band × resource pair and read less repetitively than a small recurring set; rare volatility extremes may carry a generic special label.
 
-- **Aggregate resource vector** = element-wise sum of the system's body vectors, denormalized onto `StarSystem` (`aggGas`, `aggOre`, …) for the economy hot path.
-- **Population** = `Σ(body pop-cap weight × size) × fill`, an abstract magnitude seeded **partial and varied by habitability** — developed core worlds seed near (but under) capacity; frontier rocks seed near-empty. Population is **dynamic** (Float): it grows, declines, and migrates each tick based on need-satisfaction and unrest (see [economy.md](./economy.md) — population dynamics and migration). Systems are seeded below `popCap`, giving growth headroom from the start.
+### 1.4 Per-system aggregates & population
 
-### 1.5 Build space & industrial base
+Per-body slots, qualities, and spaces are **collapsed to per-system aggregates** denormalised onto `StarSystem`, so the per-tick economy never joins the bodies table:
 
-At world creation each body contributes `BASE_SPACE × size × habitability` build-space units; these are summed into **`StarSystem.buildSpace`** — a denormalized Float column (analogous to `aggOre`, `aggWater`, etc.) so the tick never joins the bodies table. The seeding allocator then distributes this space into an **industrial base**: an abstract per-`(system, buildingType)` **count** stored in `SystemBuilding` rows, seeded-static (never changed at runtime by the current tick processors).
+- **Deposit-slot caps** (`slotGas`, `slotOre`, …) — the per-resource extractor-count ceiling = Σ of the bodies' slots for that resource.
+- **Yield multipliers** (`yieldGas`, `yieldOre`, …) — the effective quality of a resource = mean quality of the system's *filled* slots (best-quality-first), `1.0` when none are filled. Goods sharing a resource (food/textiles ← arable) share its slot cap and yield.
+- **Spaces** — `availableSpace` (`SPACE_PER_SIZE × Σ size`), `generalSpace`, and `habitableSpace` (Σ of each body's `habitableFraction × general space`).
 
-Building types correspond one-to-one with output goods (the building `iron_ore` produces `iron_ore`), plus one singleton `housing` type. Each type carries `outputPerUnit`, `labourPerUnit`, `spaceCost`, and `inputs` (recipe). Key allocator rules:
+**Population** is **dynamic** (a Float magnitude — continuous, never rounded, so a tiny outpost is `pop 0.3` not a false 0). It is sourced **entirely from built population centres** on habitable land — `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, with no body baseline (the v1 `bodyBaselinePopCap` is retired; a `POP_BASELINE_FLOOR` escape hatch ships wired but `0`). It grows, declines, and migrates each tick based on need-satisfaction and unrest (see [economy.md](./economy.md)). Seeding places systems below `popCap`, giving growth headroom from the start.
 
-- **Tier-0 extractors** — count is bounded by the system's resource deposit ∩ remaining build space.
-- **Tier-1+ manufacturers** — bounded by remaining build space only (recipe `inputs` are carried but **not yet enforced at runtime**).
-- **Housing** — fills remaining space after productive buildings; contributes to `popCap = bodyBaseline + Σ(housing count × popProvided)` rather than to goods production.
+### 1.5 Build-out & industrial base
 
-`SystemBuilding` rows are the source of the capacity-driven production formula (see [economy.md](./economy.md) §Production & Consumption); `buildSpace` is their physical budget.
+The seeding allocator builds an **industrial base** onto a system's available space — abstract per-`(system, buildingType)` **counts** in `SystemBuilding` rows, seeded-static (never changed at runtime by the current tick processors; runtime construction is the SP5 agency layer). Building types correspond one-to-one with output goods, plus one singleton `housing` (population-centre) type. Each carries `outputPerUnit`, `labourPerUnit`, `spaceCost`, and `inputs` (recipe). Allocator rules:
+
+- **Tier-0 extractors** — sit on **dedicated deposit slots**; count is bounded by the resource's `slotCap`, and runtime output is multiplied by its `yieldMult`.
+- **Tier-1+ manufacturers** — sit on fungible **general space**, bounded by it; input-gated at runtime (each draws its recipe inputs from local stock and throttles on the scarcest — the SP3 cascade; see [economy.md](./economy.md) §Supply Chain & Input-Gating).
+- **Population centres** — sit on **habitable space**, sized to staff the system's labour demand. Industry is **gated on habitability**: a system with no habitable land builds **nothing** — it stays a pristine undeveloped deposit field for SP5 to colonise — so only habitable systems develop.
+
+**Built ≤ available** everywhere — seeding fills well below the slot/space ceilings, leaving visible headroom for SP5 faction build-out. `SystemBuilding` rows are the source of the capacity-driven production formula (see [economy.md](./economy.md) §Production & Consumption).
 
 ---
 
 ## 2. Economy type (derived from the substrate)
 
-Economy type is **not assigned** — it is a derived label. `deriveEconomyTypeLabel(aggregate, population)` maps a system's dominant resources plus its population to one of six types:
+Economy type is **not assigned** — it is a derived label. `deriveEconomyTypeLabel(slotCap, yieldMult, population)` reads a system's **effective deposit potential** (`slotCap × yieldMult` per resource) plus its population and maps it to one of six types:
 
 `agricultural · extraction · refinery · industrial · tech · core`
 
-- arable/biomass-dominant → `agricultural`
-- ore/minerals/gas/radioactive-dominant → `extraction`
+- arable/biomass-dominant deposits → `agricultural`
+- ore/minerals/gas/radioactive-dominant deposits → `extraction`
 - high population + balanced mix → `core` / `industrial`
 - refinery/tech fall out of the remaining mixes
 
-The label now reflects the system's **build-space allocation** from world-gen: a system whose build space was seeded with heavy extractor capacity reads as `extraction`; one with more manufacturing capacity reads as `industrial`. The mapping still runs through `deriveEconomyTypeLabel` against the substrate, but the industrial base encoded in `SystemBuilding` rows is the real differentiator in practice.
+Because raw building blocks are needed in huge volume and most bodies carry *some* extractable deposit, the galaxy is **extraction-dominant by design** — a large majority of systems read `extraction`. This is the intended barren-but-alive shape, not a generation flaw; finer labelling ("ore extraction" vs "gas extraction") is a presentation concern (P7), not a distribution to fake.
 
-> **Display-only label**: nothing in the economy tick reads economy type. Production derives from the `SystemBuilding` counts and `labourFulfillment` (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`. See the [substrate spec](../../planned/economy-simulation-substrate.md) §7–§8.1.
+> **Display-only label**: nothing in the economy tick reads economy type. Production derives from the `SystemBuilding` counts, `labourFulfillment`, and per-resource `yieldMult` (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
 
 ---
 
@@ -114,7 +119,7 @@ Some features raise system danger via `dangerModifier`: dark_nebula (+0.06), sub
 
 ### Exploration sites
 
-The explore screen derives sites from the substrate (`deriveSystemLocations`, `lib/constants/locations.ts`): each body archetype opens a site (planet surface / gas platform / asteroid field), any richness modifier opens a mining outpost, and each feature opens its thematic site (research station, ruins expedition, salvage yard, anomaly site, smuggler's den, …).
+The explore screen derives sites from the substrate (`deriveSystemLocations`, `lib/constants/locations.ts`): each body archetype opens a site (planet surface / gas platform / asteroid field), resource-bearing features (geothermal vents, crystalline formations) open a mining outpost, and each feature opens its thematic site (research station, ruins expedition, salvage yard, anomaly site, smuggler's den, …).
 
 ### Operational missions
 
@@ -132,7 +137,7 @@ Rare features (exotic matter, precursor ruins, subspace rift) and high-yield bod
 
 ## Related Design Docs
 
-- **[Economy Simulation — Substrate (SP1 spec)](../../planned/economy-simulation-substrate.md)** — full design, decisions, and the Part 2–3 forward plan
+- **[The Available-Space Substrate Model](./economy-substrate-v2-available-space.md)** — full substrate detail: space partition, deposit slots × quality, population full-fold, per-system aggregates
 - **[Universe](./universe.md)** — region/system structure, map rendering, generation pipeline
 - **[Economy](./economy.md)** — how the substrate drives production, consumption, and market pricing
 - **[Events](./events.md)** — feature-driven event spawning and effects

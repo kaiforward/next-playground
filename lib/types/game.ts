@@ -19,8 +19,8 @@ export type EconomyType =
 // ── System trait types ────────────────────────────────────────────
 
 // The narrative feature traits a system can have. A system's physical makeup
-// lives elsewhere: world/body type as bodies (BodyArchetypeId) and abundant
-// resources as richness modifiers (RichnessModifierId).
+// lives elsewhere: world/body type as bodies (BodyArchetypeId), and per-body
+// deposit slots + quality bands drive the available-space substrate.
 export type TraitId =
   // Planetary (2)
   | "tidally_locked_world"
@@ -80,6 +80,9 @@ export type ResourceType =
   | "water"
   | "radioactive";
 
+/** Deposit yield multiplier quality bands. */
+export type QualityBandId = "poor" | "average" | "good" | "rich";
+
 /** A magnitude per resource type. Used for body resource bases and system aggregates. */
 export type ResourceVector = Record<ResourceType, number>;
 
@@ -97,22 +100,6 @@ export type BodyArchetypeId =
   | "barren_rock"
   | "gas_giant"
   | "asteroid_belt";
-
-/** Richness-modifier ids — rare multipliers on a single resource (the old "resource traits"). */
-export type RichnessModifierId =
-  | "hydrocarbon_deposits"
-  | "fertile_soil"
-  | "coral_reefs"
-  | "tectonic_concentration"
-  | "mineral_moons"
-  | "ice_rings"
-  | "rare_earth"
-  | "heavy_metals"
-  | "organic_compounds"
-  | "helium3"
-  | "radioactive_lode"
-  | "superdense"
-  | "glacial_aquifer";
 
 export type GovernmentType =
   | "federation"
@@ -290,6 +277,10 @@ export interface StarSystemInfo {
   /** Owning faction (null only in the transient seed state before factions are assigned). */
   factionId: string | null;
   isGateway: boolean;
+  /** Whether the system carries any population capacity (popCap > 0). Undeveloped
+   *  systems (~2%) have a substrate economy-type label but no built economy. Loaded
+   *  by the atlas/map path; absent on lighter paths that don't query popCap. */
+  developed?: boolean;
   traits?: SystemTraitInfo[];
 }
 
@@ -392,6 +383,10 @@ export interface AtlasSystem {
   factionId: string | null;
   economyType: EconomyType;
   isGateway: boolean;
+  /** Whether the system has any population capacity (popCap > 0). Undeveloped systems
+   *  carry a substrate-derived economy-type label but no built economy — the map draws
+   *  them as a hollow marker. */
+  developed: boolean;
 }
 
 /** Lightweight faction row included alongside atlas data for political-map rendering. */

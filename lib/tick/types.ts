@@ -35,9 +35,12 @@ export interface GameNotificationPayload {
 }
 
 export interface EconomyTickPayload {
-  regionId: string;
-  regionName: string;
-  marketCount: number;
+  /** Number of systems processed in this tick's shard. */
+  systemCount: number;
+  /** This tick's shard group index (`tick % shardCount`). */
+  shardIndex: number;
+  /** Total shards in one full economy refresh cycle (= the update interval). */
+  shardCount: number;
 }
 
 export interface EventNotificationPayload {

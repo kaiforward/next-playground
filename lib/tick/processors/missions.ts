@@ -16,6 +16,8 @@ import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import { computeSystemDanger } from "@/lib/engine/danger";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { OP_MISSION_CAP_PER_SYSTEM } from "@/lib/constants/missions";
+import { shardRange } from "@/lib/tick/shard";
+import { MISSION_GEN_INTERVAL } from "@/lib/constants/tick-cadence";
 import { PrismaOpMissionsWorld } from "@/lib/tick/adapters/prisma/op-missions";
 import type {
   MissionCreate,
@@ -24,19 +26,20 @@ import type {
 
 export interface OpMissionsProcessorParams {
   rng: () => number;
+  interval: number;
 }
 
 /**
  * Pure processor body. Depends only on `OpMissionsWorld` + an injected RNG.
- * Owns: expiry, timed completion, failure, region round-robin candidate
- * generation. No live sim counterpart yet.
+ * Owns: expiry, timed completion, failure, mission-generation shard
+ * candidate generation. No live sim counterpart yet.
  */
 export async function runOpMissionsProcessor(
   world: OpMissionsWorld,
   ctx: TickContext,
   params: OpMissionsProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng } = params;
+  const { rng, interval } = params;
 
   // 1. Expire unclaimed missions ──────────────────────────────────
   const expiredCount = await world.expireUnclaimedMissions(ctx.tick);
@@ -101,9 +104,11 @@ export async function runOpMissionsProcessor(
     }
   }
 
-  // 4. Region round-robin candidate generation ────────────────────
-  const regions = await world.getRegions();
-  if (regions.length === 0) {
+  // 4. System-shard candidate generation ────────────────────────────
+  const allSystemIds = await world.getSystemIds();
+  const { start, end } = shardRange(allSystemIds.length, ctx.tick, interval);
+  const sliceIds = allSystemIds.slice(start, end);
+  if (sliceIds.length === 0) {
     await world.persistNotifications(playerEvents, ctx.tick);
     return {
       globalEvents: {
@@ -113,10 +118,7 @@ export async function runOpMissionsProcessor(
     };
   }
 
-  const regionIndex = ctx.tick % regions.length;
-  const targetRegion = regions[regionIndex];
-
-  const systems = await world.getSystemsInRegion(targetRegion.id);
+  const systems = await world.getSystemsByIds(sliceIds);
   const systemIds = systems.map((s) => s.id);
 
   const navModifiers = await world.getNavModifiersForSystems(systemIds);
@@ -199,8 +201,9 @@ export async function runOpMissionsProcessor(
     created = toCreate.length;
   }
 
+  const shardIndex = ((ctx.tick % interval) + interval) % interval;
   console.log(
-    `[missions] Region ${regionIndex + 1}/${regions.length} "${targetRegion.name}" — expired ${expiredCount}, completed ${completable.length}, generated ${created} mission(s)`,
+    `[missions] Shard ${shardIndex + 1}/${interval} (${systems.length} systems) — expired ${expiredCount}, completed ${completable.length}, generated ${created}`,
   );
 
   await world.persistNotifications(playerEvents, ctx.tick);
@@ -217,12 +220,15 @@ export async function runOpMissionsProcessor(
 
 export const missionsProcessor: TickProcessor = {
   name: "missions",
-  // Runs every tick; round-robin region selection happens inside the body.
+  // Runs every tick; system shard selection happens inside the body.
   frequency: 1,
   dependsOn: ["events", "economy"],
 
   async process(ctx): Promise<TickProcessorResult> {
     const world = new PrismaOpMissionsWorld(ctx.tx);
-    return runOpMissionsProcessor(world, ctx, { rng: Math.random });
+    return runOpMissionsProcessor(world, ctx, {
+      rng: Math.random,
+      interval: MISSION_GEN_INTERVAL,
+    });
   },
 };

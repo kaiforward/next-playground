@@ -1,8 +1,12 @@
 # Economy Substrate v2 — The Available-Space Model
 
-> **Status: Planned (post-SP3).** Revises the substrate layer from
-> [economy-simulation-substrate.md](economy-simulation-substrate.md). Sits *under* the shipped SP3
-> input-gating cascade (that stays as-is). Requires a reseed + a calibration pass. Not yet built.
+> **Status: Active** — shipped in the Economy Substrate v2 milestone, replacing v1's resource-magnitude
+> vector with finite per-body space. Sits *under* the SP3 input-gating cascade (unchanged). This is the
+> detailed substrate reference; [system-traits.md](./system-traits.md) is the system-level overview and
+> [economy.md](./economy.md) covers how the substrate drives production, consumption, and pricing.
+> Implementation: `lib/engine/substrate-space.ts` (pure partition/quality), `lib/engine/body-gen.ts`
+> (generation), `lib/engine/industry-seed.ts` (build-out), constants in `lib/constants/substrate-gen.ts`
+> + `lib/constants/bodies.ts`.
 
 ---
 
@@ -81,6 +85,23 @@ extractor slots**. Extractors can only occupy their own resource's slots.
 So population is capped by habitable land; production can spread across all general land; they fight
 over the habitable part.
 
+### Habitability is the housing-per-space efficiency knob — a barren-but-alive galaxy
+
+`habitableFraction` (per archetype, `lib/constants/bodies.ts`) is how efficiently a body's general space
+converts to housing. It spans the full range: a garden world (`0.7`) packs people densely; rocky barrens
+(asteroid/volcanic `0.02`, barren-rock/frozen `0.03`) support only a thin artificial habitation; a **gas
+giant is `0` — no surface, truly dead**. Pure-gas systems are the galaxy's rare genuinely-dead worlds.
+
+Industry is **gated on habitability**: a system with no habitable space at all builds **nothing** — its
+substrate (deposit slots + quality) is still generated, but it stays a pristine **undeveloped deposit
+field** with no buildings and no population (a faction colonises it later, SP5, by paying for orbital
+habitation *and* the extractors together). The rest of the barren galaxy is *alive but small*: a rocky
+outpost gets a handful of extractors staffed by a tiny population. Population is a **continuous magnitude**
+— a tiny outpost is `pop 0.3`, never rounded down to a false zero — so these outposts run small, honest
+markets rather than reading as empty. The result: most systems are extraction-dominant (raw building
+blocks are needed in huge volume — this dominance is intended, not a generation flaw), ~2% are truly
+undeveloped/dead, and a long tail of tiny outposts sits between.
+
 ---
 
 ## Deposit generation — partition, not sequential rolls
@@ -100,8 +121,13 @@ rolls first dominates. We avoid it by treating generation as a **single partitio
    weight massively *before* normalising.
 
 The entire tunable surface is **the archetype weight vectors + the quality-band odds + the volatility
-odds** — all constants the simulator can sweep. Named flavour deposits ("Helium-3 deposit: gas ×1.4")
-are just a labelled quality roll on a resource.
+odds** — all constants the simulator can sweep. The v1 richness modifiers (the 13 `heavy_metals` /
+`helium-3` / `glacial_aquifer`-style multipliers) are **retired and fully folded into the band
+system**: a deposit's display name is **generated from its band + resource** (e.g. "rich ore deposit",
+"marginal water-ice seam") rather than drawn from a curated proper-noun catalog. Generic descriptors
+read as *less* repetitive than a small set of recurring named deposits, and they scale to every
+band × resource pair for free. Rare volatility extremes may carry a generic special label ("radioactive
+hot zone").
 
 ### Quality bands (example values — calibration knobs)
 
@@ -125,14 +151,25 @@ population centres × their density`. Population centres are **data-driven build
 other, so denser / advanced housing (and later, happiness / amenity buildings) are simply new catalog
 entries that consume general space and carry their own effects — no structural change needed.
 
-Consequences (intended):
-- Housing becomes a **real land competitor** everywhere, not a vestigial top-up.
-- **Labour fulfilment becomes a live constraint** — a high-industry, low-population system is genuinely
-  under-staffed, instead of pop always dwarfing labour demand.
+Population centres are sized at seed to **staff the system's industry** — `wantedPopCentres =
+labourDemand(buildings) / POP_CENTRE_DENSITY` (`lib/engine/industry-seed.ts`), bounded by the habitable
+space available. So `popCap ≈ the workforce the built extractors and factories demand`, and a barren world
+whose habitable space runs out *before* it can house enough workers stays permanently under-staffed (its
+mines run below capacity — the barren constraint biting, by design).
 
-⚠️ **Highest-risk knob.** Population is the demand engine of the whole economy; sourcing capacity from
-built centres (vs a body baseline) is the change most likely to need re-calibration. Consider a small
-baseline floor if full-fold proves too swingy.
+Consequences (intended, and observed in calibration):
+- Housing is a **real land competitor** everywhere, not a vestigial top-up.
+- **Labour fulfilment is a live constraint** — a high-industry, low-habitability system is genuinely
+  under-staffed, instead of population always dwarfing labour demand.
+
+**Full-fold held in calibration.** Sourcing capacity entirely from built centres (no body baseline) was
+the highest-risk knob, but it calibrated without needing the escape hatch: `POP_BASELINE_FLOOR` ships
+**wired but `0`** and stayed there. Population seeds below `popCap` and the live tick grows it toward the
+cap (filling housing built for the full workforce), then plateaus — so pre-SP5 the only population
+dynamics are this one-time ramp plus unrest-driven decline and migration. Making population growth/decline
+track *economic viability* (can the world feed/employ its people) rather than housing-headroom is booked
+as an explicit **SP4 phase** ("Population ← economic viability", see
+[economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13).
 
 ---
 
@@ -163,8 +200,16 @@ baseline floor if full-fold proves too swingy.
 
 ---
 
-## Sequencing
+## Per-system aggregation
 
-SP3 (input-gating cascade) closes first as its own clean PR. Then substrate-v2 lands as its own
-milestone: body-generation + seeder rework → reseed → calibration pass → the Industry-panel redesign
-on top of the new model (the panel should visualise the *final* substrate, so it follows, not leads).
+Deposit slots + quality bands are generated **per body**, then **collapsed to per-system aggregates**
+denormalised onto `StarSystem` — an extractor-slot **cap** (`slot*` columns) and an **effective-yield
+multiplier** (`yield*` columns) per resource — so the per-tick economy never joins the bodies table.
+`SystemBuilding` stays system-level; per-body slots/quality are generation-time concepts that never reach
+the hot path individually. Goods that share a resource (food/textiles ← arable) share its slot cap and
+quality. The seeder fills **best-quality slots first**, so a system's effective yield = mean quality of
+its *filled* slots (`1.0` when none are filled). The live tick adds exactly one new production term: a
+tier-0 good's output × its resource's `yieldMult`.
+
+The Industry/substrate **panel redesign** that visualises this model is the milestone's final UI phase
+(P7) — built last so it renders the finished substrate.

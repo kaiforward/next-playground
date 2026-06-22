@@ -288,12 +288,12 @@ No inline per-line comments — too noisy, too slow.
 │   ├── performance.md
 │   └── validator.md           # shared validator prompt (parameterized by severity tier)
 └── rules/
-    ├── code-standards.md       # forbidden-patterns checklist for conventions agent
+    ├── code-standards.md       # dedup-slug catalog + flagging nuance (review projection of CLAUDE.md)
     └── severity-rubric.md      # shared severity scale (other agents reference this)
 ```
 
 **Why ship the skill in-repo (committed):**
-- Standards evolve with the codebase. When a new convention is discovered (e.g., `Cache-Control: immutable` on APIs is bad), it lands in `code-standards.md` alongside the fix.
+- Standards evolve with the codebase. When a new convention or gotcha is discovered (e.g., `Cache-Control: immutable` on APIs is bad), it lands in `CLAUDE.md` (the canonical source the orchestrator injects), and its dedup slug lands in `code-standards.md` — both alongside the fix.
 - Other contributors get the skill automatically when they pull.
 - The skill's prompts reference concrete patterns from this codebase; they belong with the codebase.
 

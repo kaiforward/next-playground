@@ -7,18 +7,6 @@
 
 export const TRADE_SIMULATION = {
   /**
-   * Work-budget slice: edges processed per tick. The processor advances a cursor
-   * over the stable open-edge order, so a full sweep takes ceil(totalOpenEdges /
-   * EDGES_PER_TICK) ticks. Bounds per-tick DB work independently of faction size.
-   *
-   * MUST satisfy ceil(totalOpenEdges / EDGES_PER_TICK) < FLOW_HISTORY_TICKS,
-   * else flow events prune before the sweep returns (overlay gaps); the 10K-scale
-   * universe (largest open-edge count) is the binding case. Measured sweeps at
-   * 256: default scale (~825 open edges) = 4 ticks; 10K scale (~11.7K open edges)
-   * = 46 ticks — both well under FLOW_HISTORY_TICKS (200).
-   */
-  EDGES_PER_TICK: 256,
-  /**
    * Distance attenuation coefficient. Per-edge flow is scaled by
    * 1/(1 + DISTANCE_DECAY · fuelCost), so costlier jumps move less. 0 = no
    * attenuation. Calibrated to 0.1: the median local hop (fuelCost ~8.6) still

@@ -5,18 +5,19 @@ import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02 } };
 
 function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation",
-    aggregate: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     population, popCap, unrest, traits: [], bodyDanger: 0, buildings,
+    yields: unitResourceVector(),
   };
 }
 function market(systemId: string, goodId: string): SimMarketEntry {
-  return { systemId, goodId, basePrice: 100, stock: 100, anchorMult: 1, demandRate: 1, priceFloor: 10, priceCeiling: 500 };
+  return { systemId, goodId, basePrice: 100, stock: 100, anchorMult: 1, demandRate: 1, priceFloor: 10, priceCeiling: 500, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>): TickContext {
   return { tx: undefined as never, tick: 0, results: new Map([["economy", { economySignals: { dissatisfactionBySystem: d } }]]) };
@@ -41,8 +42,8 @@ describe("population processor", () => {
     expect(a.unrest).toBeCloseTo(0.1, 6);
     expect(a.population).toBeCloseTo(499, 6);
     const m = world.markets.find((mm) => mm.systemId === "a")!;
-    // demandRate = max(perCapitaNeed_food · pop, MIN_DEMAND) = max(0.004 · 499, 0.05)
-    expect(m.demandRate).toBeCloseTo(Math.max(0.004 * 499, 0.05), 5);
+    // demandRate = civilian-only floor for food at pop 499 (no production-input draw here).
+    expect(m.demandRate).toBeCloseTo(demandRateForGood("food", 499), 5);
   });
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's
@@ -64,7 +65,7 @@ describe("population processor", () => {
 
     // Ore has no per-capita need, so civilian-only gives MIN_DEMAND.
     const civilianOnly = demandRateForGood("ore", afterPop);
-    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, fulfillment);
+    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, fulfillment, unitResourceVector());
 
     // The smelter's ore draw must push the rate above the civilian-only floor.
     expect(withIndustrial).toBeGreaterThan(civilianOnly);

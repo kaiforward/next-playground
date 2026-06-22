@@ -5,7 +5,6 @@ import type {
   FailedMissionView,
   MissionCreate,
   OpMissionsWorld,
-  RegionView,
   SystemTraitView,
 } from "@/lib/tick/world/op-missions-world";
 import type { ModifierRow } from "@/lib/engine/events";
@@ -126,20 +125,18 @@ export class PrismaOpMissionsWorld implements OpMissionsWorld {
     });
   }
 
-  async getRegions(): Promise<RegionView[]> {
-    const rows = await this.tx.region.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
+  async getSystemIds(): Promise<string[]> {
+    const rows = await this.tx.starSystem.findMany({
+      select: { id: true },
+      orderBy: { id: "asc" },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-    }));
+    return rows.map((r) => r.id);
   }
 
-  async getSystemsInRegion(regionId: string): Promise<SystemTraitView[]> {
+  async getSystemsByIds(systemIds: string[]): Promise<SystemTraitView[]> {
+    if (systemIds.length === 0) return [];
     const rows = await this.tx.starSystem.findMany({
-      where: { regionId },
+      where: { id: { in: systemIds } },
       select: {
         id: true,
         name: true,

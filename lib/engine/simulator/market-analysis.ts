@@ -6,17 +6,28 @@
  * world state.
  */
 
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { spotPrice, curveForGood, marketBand } from "@/lib/engine/market-pricing";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
-import type { SimWorld, MarketSnapshot, MarketHealthSummary } from "./types";
+import type { SimWorld, MarketSnapshot, MarketHealthSummary, SimMarketEntry } from "./types";
 
 /** Default: sample every 50 ticks. */
 export const SNAPSHOT_INTERVAL = 50;
 
-// A market within one noise step of a hard clamp is effectively pinned there:
-// the tick re-clamps it every turn and noise only jitters it inside the band.
-const FLOOR_BAND = ECONOMY_CONSTANTS.MIN_LEVEL + ECONOMY_CONSTANTS.NOISE_AMPLITUDE;
-const CEILING_BAND = ECONOMY_CONSTANTS.MAX_LEVEL - ECONOMY_CONSTANTS.NOISE_AMPLITUDE;
+/**
+ * True when a market's stock is within one relative noise step of the given
+ * band boundary. The noise step is `NOISE_FRACTION × (maxStock - minStock)` —
+ * the same amplitude the tick engine uses. A market in this zone gets
+ * re-clamped every turn and noise only jitters it inside the buffer.
+ */
+function nearBandFloor(m: SimMarketEntry, band: { minStock: number; maxStock: number }): boolean {
+  const noiseStep = ECONOMY_CONSTANTS.NOISE_FRACTION * (band.maxStock - band.minStock);
+  return m.stock <= band.minStock + noiseStep;
+}
+
+function nearBandCeiling(m: SimMarketEntry, band: { minStock: number; maxStock: number }): boolean {
+  const noiseStep = ECONOMY_CONSTANTS.NOISE_FRACTION * (band.maxStock - band.minStock);
+  return m.stock >= band.maxStock - noiseStep;
+}
 
 /** Take a snapshot of all market prices at the current tick. */
 export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
@@ -132,8 +143,9 @@ function computeStockPins(
       byGood.set(m.goodId, agg);
     }
     agg.total += 1;
-    if (m.stock <= FLOOR_BAND) agg.floor += 1;
-    else if (m.stock >= CEILING_BAND) agg.ceiling += 1;
+    const band = marketBand({ demandRate: m.demandRate, storageCapacity: m.storageCapacity, priceFloor: m.priceFloor, priceCeiling: m.priceCeiling, anchorMult: m.anchorMult });
+    if (nearBandFloor(m, band)) agg.floor += 1;
+    else if (nearBandCeiling(m, band)) agg.ceiling += 1;
   }
 
   const result: { goodId: string; floorFrac: number; ceilingFrac: number }[] = [];

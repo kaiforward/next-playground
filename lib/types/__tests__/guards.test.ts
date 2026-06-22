@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   isSunClass, toSunClass,
   isBodyArchetypeId, toBodyArchetypeId,
-  isRichnessModifierId, toRichnessModifierId,
 } from "../guards";
 
 describe("isSunClass / toSunClass", () => {
@@ -26,16 +25,5 @@ describe("isBodyArchetypeId / toBodyArchetypeId", () => {
   it("rejects unknown values", () => {
     expect(isBodyArchetypeId("moon")).toBe(false);
     expect(() => toBodyArchetypeId("moon")).toThrow();
-  });
-});
-
-describe("isRichnessModifierId / toRichnessModifierId", () => {
-  it("accepts catalog richness ids", () => {
-    expect(isRichnessModifierId("fertile_soil")).toBe(true);
-    expect(toRichnessModifierId("helium3")).toBe("helium3");
-  });
-  it("rejects unknown values", () => {
-    expect(isRichnessModifierId("magic_dust")).toBe(false);
-    expect(() => toRichnessModifierId("magic_dust")).toThrow();
   });
 });

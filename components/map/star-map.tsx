@@ -110,6 +110,7 @@ export function StarMap({
         factionId: as.factionId,
         economyType: as.economyType,
         isGateway: as.isGateway,
+        developed: as.developed,
         name: tileData?.name ?? "",
         description: "",
       };

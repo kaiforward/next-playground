@@ -209,7 +209,7 @@ Apply effort dial for model selection per reviewer (see "Effort dial" section ab
 - `model`: per effort dial
 - `prompt`: contents of `prompts/<reviewer>.md` + relevant rule injection (see below) + the chunk's diff
 
-**Rule injection**: for Conventions, inject the full contents of `rules/code-standards.md`. For all reviewers, inject `rules/severity-rubric.md`. Concatenate at the end of the agent's prompt under a clear separator.
+**Rule injection**: `CLAUDE.md` is the single source of the project's rules, and the orchestrator already holds it in context. Build a **project-rules block** once per run: the verbatim `## Conventions` and `## Gotchas / Known Pitfalls` sections of the repo-root `CLAUDE.md` (re-read them at dispatch time so they're never stale). Inject that block **plus `rules/severity-rubric.md`** into *every* reviewer. Additionally, inject `rules/code-standards.md` — the dedup-slug catalog + review-only flagging nuance — into the **Conventions** reviewer. Concatenate at the end of each agent's prompt under clear separators (e.g. `## Project rules (from CLAUDE.md)`, `## Severity rubric`, `## Category slugs`). Reviewers no longer carry their own copy of the rules — they read them from the injected CLAUDE.md sections.
 
 Collect each reviewer's JSON output. Parse each (same fenced-block regex + retry-once policy as architect). Findings from all reviewers go into the pool alongside architect's.
 
@@ -287,7 +287,7 @@ Validator dispatch (one Agent call per finding):
 - `description`: "Validate finding"
 - `subagent_type`: `general-purpose`
 - `model`: per the tier above
-- `prompt`: contents of `prompts/validator.md` + the finding (JSON) + ~20 lines of code from the cited file (read via `Read` tool around the cited line) + any relevant rule context (e.g., if `category` matches an entry in `rules/code-standards.md`, include that section)
+- `prompt`: contents of `prompts/validator.md` + the finding (JSON) + ~20 lines of code from the cited file (read via `Read` tool around the cited line) + any relevant rule context: the matching rule from `CLAUDE.md`'s `## Conventions` / `## Gotchas / Known Pitfalls` (canonical), plus that slug's row and any flagging nuance from `rules/code-standards.md`
 
 Parallel dispatch is fine — send all validator calls in one Agent batch.
 

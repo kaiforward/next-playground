@@ -14,6 +14,7 @@ import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import type { TickContext } from "@/lib/tick/types";
@@ -24,7 +25,7 @@ import type {
   SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
-import { makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -45,7 +46,9 @@ function buildFixture(): {
     name: "Test Region",
   };
 
-  // Arable-rich, low-pop producers: food production ≈ 4/tick, tiny consumption.
+  // Low-pop "producers": 3 food extractors at pop=100 run at full labour
+  // (labourDemand = 3×25 = 75 ≤ 100), producing ~21 units/tick. This keeps
+  // producer stock high so the flow signal remains active for the full run.
   const producers = ["a", "b"].map<SimSystem>((id) => ({
     id,
     name: id.toUpperCase(),
@@ -53,16 +56,16 @@ function buildFixture(): {
     regionId: "r1",
     factionId: "faction-0",
     governmentType: "federation",
-    aggregate: makeResourceVector({ arable: 16 }),
     population: 100,
     popCap: 1000,
     traits: [],
     bodyDanger: 0,
     unrest: 0,
-    buildings: {},
+    buildings: { food: 3 },
+    yields: unitResourceVector(),
   }));
 
-  // Arable-barren, populous consumers: food consumption ≈ 4/tick, no production.
+  // High-pop consumers: food consumption ≈ 4/tick (0.004 × 1000), no production buildings.
   const consumers = ["c", "d"].map<SimSystem>((id) => ({
     id,
     name: id.toUpperCase(),
@@ -70,13 +73,13 @@ function buildFixture(): {
     regionId: "r1",
     factionId: "faction-0",
     governmentType: "federation",
-    aggregate: emptyResourceVector(),
     population: 1000,
     popCap: 2000,
     traits: [],
     bodyDanger: 0,
     unrest: 0,
     buildings: {},
+    yields: unitResourceVector(),
   }));
 
   const systems = [...producers, ...consumers];
@@ -93,20 +96,28 @@ function buildFixture(): {
     { fromSystemId: y, toSystemId: x, fuelCost: 10 },
   ]);
 
-  // Start producers food-rich, consumers food-poor → strong gradient.
+  // Start producers food-rich (stock near maxStock → cheap), consumers food-poor
+  // (stock near minStock → dear) to create a strong flow gradient.
+  // priceFloor/priceCeiling match GOODS["food"] (0.5 / 2.0) so the economy
+  // processor (which uses GOODS constants) and the trade-flow processor
+  // (which uses the stored values) work off the same per-market band:
+  //   targetStock = TARGET_COVER × demandRate = 40×1 = 40
+  //   minStock    = targetStock / priceCeiling = 20
+  //   maxStock    = targetStock / priceFloor   = 80
   const markets: SimMarketEntry[] = [];
   for (const sys of systems) {
     const isProducer = sys.id === "a" || sys.id === "b";
     markets.push({
       systemId: sys.id,
       goodId: "food",
-      basePrice: 50,
-      // Producers food-rich (high stock → cheap), consumers food-poor (low → dear).
-      stock: isProducer ? 120 : 20,
+      basePrice: 30,
+      // Producers near maxStock (cheap); consumers 25% above minStock (dear).
+      stock: isProducer ? 75 : 25,
       anchorMult: 1,
       demandRate: 1,
-      priceFloor: 0.2,
-      priceCeiling: 5.0,
+      priceFloor: 0.5,
+      priceCeiling: 2.0,
+      storageCapacity: 0,
     });
   }
 
@@ -121,7 +132,7 @@ async function runScenario(
   markets: SimMarketEntry[];
   flowEvents: SimFlowEvent[];
 }> {
-  const { region, systems, connections, markets } = buildFixture();
+  const { systems, connections, markets } = buildFixture();
   const rng = mulberry32(1234);
 
   // Per-iteration state — every tick we rebuild the in-memory adapters from
@@ -132,19 +143,21 @@ async function runScenario(
 
   const econParams = {
     rng,
+    interval: REFERENCE_INTERVAL, // shipping cadence (catch-up = 1); economy + flow share one clock
     simParams: {
-      noiseAmplitude: DEFAULT_SIM_CONSTANTS.economy.noiseAmplitude,
-      minLevel: DEFAULT_SIM_CONSTANTS.economy.minLevel,
-      maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
+      // Deterministic (no noise) so the flow signal is unambiguous. Noise
+      // with noiseFraction=0.02 on this fixture's band width produces
+      // ~3.8 units/tick stochastic variation that swamps the flow signal
+      // after 80 ticks even with the same seed.
+      noiseFraction: 0,
     },
     modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
     strikeParams: STRIKE_PARAMS,
   };
 
   const flowParams = {
-    // Process every edge each tick so the small fixture sees enough activity
-    // within the tick budget to exercise the convergence path.
-    edgesPerTick: 100,
+    // Fixed-interval edge shard sharing the economy's clock (catch-up = 1).
+    interval: REFERENCE_INTERVAL,
     flowBudget,
     gradientThreshold: 0.05,
     gradientSensitivity: 1.0,
@@ -152,14 +165,11 @@ async function runScenario(
     playerDisplacementFactor: 2.0,
     distanceDecay: 0,
     playerVolumeTarget: DEFAULT_SIM_CONSTANTS.tradeFlow.playerVolumeTarget,
-    minLevel: DEFAULT_SIM_CONSTANTS.economy.minLevel,
-    maxLevel: DEFAULT_SIM_CONSTANTS.economy.maxLevel,
   };
 
   for (let t = 1; t <= tickCount; t++) {
     const economyWorld = new InMemoryEconomyWorld(
       { systems: curSystems, markets: curMarkets, modifiers: [] },
-      [region],
     );
     await runEconomyProcessor(economyWorld, makeCtx(t), econParams);
     curSystems = economyWorld.systems;

@@ -60,8 +60,10 @@ describe("getSystemPopulation (integration)", () => {
     expect(data.unrest).toBeGreaterThanOrEqual(0);
     expect(data.unrest).toBeLessThanOrEqual(1);
     expect(data.striking).toBe(data.unrest >= STRIKE_PARAMS.threshold);
-    expect(data.demand.length).toBeGreaterThan(0);
-    expect(data.demand.length).toBeLessThanOrEqual(6);
+    // Full consumption footprint (the top-6 cap was removed) — mid-pack goods
+    // like consumer_goods are no longer dropped.
+    expect(data.demand.length).toBeGreaterThan(6);
+    expect(data.demand.some((d) => d.goodId === "consumer_goods")).toBe(true);
     expect(data.demand[0].demandRate).toBeGreaterThanOrEqual(data.demand[1].demandRate);
     // goodName resolves the real display name via the GOODS lookup, not the raw-id
     // fallback (`?? e.goodId`). At population 400 water/food (highest per-capita) lead.

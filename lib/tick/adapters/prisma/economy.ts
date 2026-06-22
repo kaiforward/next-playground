@@ -3,12 +3,13 @@ import type {
   EconomyWorld,
   MarketUpdate,
   MarketView,
-  RegionView,
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { labourDemand, labourFulfillment, buildingProduction } from "@/lib/engine/industry";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import type { ResourceVector } from "@/lib/types/game";
 import {
   toGovernmentType,
   toTraitId,
@@ -26,21 +27,19 @@ import {
 export class PrismaEconomyWorld implements EconomyWorld {
   constructor(private tx: TxClient) {}
 
-  async getRegions(): Promise<RegionView[]> {
-    const rows = await this.tx.region.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
+  async getSystemIds(): Promise<string[]> {
+    const rows = await this.tx.starSystem.findMany({
+      select: { id: true },
+      orderBy: { id: "asc" },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-    }));
+    return rows.map((r) => r.id);
   }
 
-  async getMarketsForRegion(regionId: string): Promise<MarketView[]> {
+  async getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
+    if (systemIds.length === 0) return [];
     const [rows, buildingRows] = await Promise.all([
       this.tx.stationMarket.findMany({
-        where: { station: { system: { regionId } } },
+        where: { station: { system: { id: { in: systemIds } } } },
         include: {
           good: true,
           station: {
@@ -56,7 +55,7 @@ export class PrismaEconomyWorld implements EconomyWorld {
         },
       }),
       this.tx.systemBuilding.findMany({
-        where: { system: { regionId } },
+        where: { systemId: { in: systemIds } },
         select: { systemId: true, buildingType: true, count: true },
       }),
     ]);
@@ -68,8 +67,11 @@ export class PrismaEconomyWorld implements EconomyWorld {
       map[b.buildingType] = b.count;
       buildingsBySystem.set(b.systemId, map);
     }
-    // Cache labour fulfillment per system — shared across all goods in the system.
+    // Cache labour fulfillment + per-resource yields per system — shared across
+    // all goods in the system. Yields come from the already-loaded yield*
+    // columns on the included system row (no extra query).
     const fulfillmentBySystem = new Map<string, number>();
+    const yieldsBySystem = new Map<string, ResourceVector>();
 
     return rows.map((m) => {
       const sys = m.station.system;
@@ -80,9 +82,21 @@ export class PrismaEconomyWorld implements EconomyWorld {
         fulfillment = labourFulfillment(sys.population, labourDemand(buildings));
         fulfillmentBySystem.set(sys.id, fulfillment);
       }
+      let yields = yieldsBySystem.get(sys.id);
+      if (yields === undefined) {
+        yields = resourceVectorFromColumns(
+          {
+            yieldGas: sys.yieldGas, yieldMinerals: sys.yieldMinerals, yieldOre: sys.yieldOre,
+            yieldBiomass: sys.yieldBiomass, yieldArable: sys.yieldArable,
+            yieldWater: sys.yieldWater, yieldRadioactive: sys.yieldRadioactive,
+          },
+          "yield",
+        );
+        yieldsBySystem.set(sys.id, yields);
+      }
 
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-      const production = buildingProduction(buildings, goodKey, fulfillment);
+      const production = buildingProduction(buildings, goodKey, fulfillment, yields);
       const consumption = consumptionRate(goodKey, sys.population);
 
       // Every seeded system has a non-null factionId. The `?? "frontier"`
@@ -95,12 +109,15 @@ export class PrismaEconomyWorld implements EconomyWorld {
       return {
         id: m.id,
         systemId: sys.id,
+        regionId: sys.regionId,
         goodId: goodKey,
         basePrice: m.good.basePrice,
         stock: m.stock,
         governmentType,
         baseProductionRate: production > 0 ? production : undefined,
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
+        demandRate: m.demandRate,
+        storageCapacity: m.storageCapacity,
         traits: sys.traits.map((t) => ({
           traitId: toTraitId(t.traitId),
           quality: toQualityTier(t.quality),
@@ -109,17 +126,21 @@ export class PrismaEconomyWorld implements EconomyWorld {
     });
   }
 
-  async getModifiers(
-    systemIds: string[],
-    regionId: string,
-  ): Promise<ModifierRow[]> {
+  async getModifiers(systemIds: string[]): Promise<ModifierRow[]> {
     if (systemIds.length === 0) return [];
+    // The shard slice spans regions; resolve the distinct regions its systems
+    // belong to so region-targeted modifiers are matched (one extra IN query).
+    const regionRows = await this.tx.starSystem.findMany({
+      where: { id: { in: systemIds } },
+      select: { regionId: true },
+    });
+    const regionIds = [...new Set(regionRows.map((r) => r.regionId))];
     const rows = await this.tx.eventModifier.findMany({
       where: {
         domain: "economy",
         OR: [
           { targetType: "system", targetId: { in: systemIds } },
-          { targetType: "region", targetId: regionId },
+          { targetType: "region", targetId: { in: regionIds } },
         ],
       },
     });

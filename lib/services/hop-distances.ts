@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 
@@ -12,6 +11,9 @@ export async function loadHopDistances(): Promise<
   Map<string, Map<string, number>>
 > {
   if (!cached) {
+    // Deferred import: prisma reads DATABASE_URL at load, so import it lazily (only
+    // on the cache-miss DB read) to keep this module loadable without a DB connection.
+    const { prisma } = await import("@/lib/prisma");
     const connections = await prisma.systemConnection.findMany({
       select: { fromSystemId: true, toSystemId: true, fuelCost: true },
     });

@@ -14,6 +14,11 @@ export function emptyResourceVector(): ResourceVector {
   return { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 };
 }
 
+/** A fresh vector with every resource at one (multiplicative identity; use as a yields placeholder). */
+export function unitResourceVector(): ResourceVector {
+  return { gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1 };
+}
+
 /** Build a full vector from a partial, filling unspecified types with zero. */
 export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVector {
   const v = emptyResourceVector();
@@ -24,25 +29,36 @@ export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVe
   return v;
 }
 
-/** Spread a vector onto the StarSystem aggregate columns (agg*). */
-export function aggregateColumns(v: ResourceVector): {
-  aggGas: number; aggMinerals: number; aggOre: number; aggBiomass: number;
-  aggArable: number; aggWater: number; aggRadioactive: number;
+/** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
+export function slotColumns(v: ResourceVector): {
+  slotGas: number; slotMinerals: number; slotOre: number; slotBiomass: number;
+  slotArable: number; slotWater: number; slotRadioactive: number;
 } {
   return {
-    aggGas: v.gas, aggMinerals: v.minerals, aggOre: v.ore, aggBiomass: v.biomass,
-    aggArable: v.arable, aggWater: v.water, aggRadioactive: v.radioactive,
+    slotGas: v.gas, slotMinerals: v.minerals, slotOre: v.ore, slotBiomass: v.biomass,
+    slotArable: v.arable, slotWater: v.water, slotRadioactive: v.radioactive,
   };
 }
 
-/** Spread a vector onto the SystemBody resource columns (res*). */
-export function bodyResourceColumns(v: ResourceVector): {
-  resGas: number; resMinerals: number; resOre: number; resBiomass: number;
-  resArable: number; resWater: number; resRadioactive: number;
+/** Spread a vector onto the SystemBody quality-band columns (qual*). */
+export function qualColumns(v: ResourceVector): {
+  qualGas: number; qualMinerals: number; qualOre: number; qualBiomass: number;
+  qualArable: number; qualWater: number; qualRadioactive: number;
 } {
   return {
-    resGas: v.gas, resMinerals: v.minerals, resOre: v.ore, resBiomass: v.biomass,
-    resArable: v.arable, resWater: v.water, resRadioactive: v.radioactive,
+    qualGas: v.gas, qualMinerals: v.minerals, qualOre: v.ore, qualBiomass: v.biomass,
+    qualArable: v.arable, qualWater: v.water, qualRadioactive: v.radioactive,
+  };
+}
+
+/** Spread a vector onto the SystemBody per-resource yield-multiplier columns (yield*). */
+export function yieldColumns(v: ResourceVector): {
+  yieldGas: number; yieldMinerals: number; yieldOre: number; yieldBiomass: number;
+  yieldArable: number; yieldWater: number; yieldRadioactive: number;
+} {
+  return {
+    yieldGas: v.gas, yieldMinerals: v.minerals, yieldOre: v.ore, yieldBiomass: v.biomass,
+    yieldArable: v.arable, yieldWater: v.water, yieldRadioactive: v.radioactive,
   };
 }
 
@@ -72,18 +88,26 @@ export interface ResourceBars {
 const TRACE_FRACTION = 0.05;
 
 /**
- * Inverse of aggregateColumns / bodyResourceColumns: read a flat column bag
- * back into a ResourceVector. prefix "agg" reads aggGas…aggRadioactive;
- * prefix "res" reads resGas…resRadioactive. Missing columns default to 0.
+ * Inverse of the column-spreader functions: read a flat column bag back into a
+ * ResourceVector.
+ *
+ * Supported prefixes:
+ *   "slot"  — reads slotGas…slotRadioactive (deposit-slot counts)
+ *   "qual"  — reads qualGas…qualRadioactive (quality-band values)
+ *   "yield" — reads yieldGas…yieldRadioactive (yield multipliers)
+ *
+ * Missing columns default to 0 for all prefixes EXCEPT "yield", where the
+ * schema default is @default(1) and an absent multiplier means a neutral ×1.
  */
 export function resourceVectorFromColumns(
   source: Record<string, number>,
-  prefix: "agg" | "res",
+  prefix: "slot" | "qual" | "yield",
 ): ResourceVector {
+  const fallback = prefix === "yield" ? 1 : 0;
   const v = emptyResourceVector();
   for (const type of RESOURCE_TYPES) {
     const key = `${prefix}${type.charAt(0).toUpperCase()}${type.slice(1)}`;
-    v[type] = source[key] ?? 0;
+    v[type] = source[key] ?? fallback;
   }
   return v;
 }

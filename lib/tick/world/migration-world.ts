@@ -15,7 +15,7 @@ export interface MigrationWorld {
 }
 
 export interface MigrationProcessorParams {
-  /** Work-budget slice size: edges processed per tick (bounds per-tick DB work). */
-  edgesPerTick: number;
+  /** Ticks for the edge shard to sweep every open edge once (fixed gameplay cadence). */
+  interval: number;
   flow: MigrationFlowParams;
 }

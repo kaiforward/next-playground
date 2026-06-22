@@ -1,9 +1,5 @@
-/** Economy simulation constants — used by seed (initial stock) and the economy tick (noise + bounds). */
+/** Economy simulation constants — used by the economy tick. */
 export const ECONOMY_CONSTANTS = {
-  /** Random noise amplitude (+/- units per tick). */
-  NOISE_AMPLITUDE: 3,
-  /** Stock floor. */
-  MIN_LEVEL: 5,
-  /** Stock ceiling. */
-  MAX_LEVEL: 200,
+  /** Noise as a fraction of the per-entry band width (used by the relative-noise tick). */
+  NOISE_FRACTION: 0.02,
 } as const;

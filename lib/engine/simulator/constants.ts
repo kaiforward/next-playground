@@ -4,6 +4,7 @@
  */
 
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { GOODS } from "@/lib/constants/goods";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
 import {
@@ -15,15 +16,15 @@ import { SHIP_TYPES } from "@/lib/constants/ships";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
-import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, MIGRATION_EDGES_PER_TICK } from "@/lib/constants/population";
+import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS } from "@/lib/constants/population";
 
 // ── Types ────────────────────────────────────────────────────────
 
 export interface SimConstants {
   economy: {
-    noiseAmplitude: number;
-    minLevel: number;
-    maxLevel: number;
+    noiseFraction: number;
+    /** Ticks for the system shard to refresh every system once. */
+    interval: number;
   };
   /** Read-only snapshot of pricing clamps (not overridable in v1). */
   pricing: {
@@ -60,7 +61,6 @@ export interface SimConstants {
     intraRegionExtraEdges: number;
   };
   tradeFlow: {
-    edgesPerTick: number;
     distanceDecay: number;
     flowBudget: number;
     gradientThreshold: number;
@@ -75,7 +75,6 @@ export interface SimConstants {
     strike: { threshold: number; floorMultiplier: number };
   };
   migration: {
-    edgesPerTick: number;
     weights: { contentment: number; headroom: number };
     maxOutflowFraction: number;
     gradientThreshold: number;
@@ -145,9 +144,8 @@ function buildDefaults(): SimConstants {
 
   return {
     economy: {
-      noiseAmplitude: ECONOMY_CONSTANTS.NOISE_AMPLITUDE,
-      minLevel: ECONOMY_CONSTANTS.MIN_LEVEL,
-      maxLevel: ECONOMY_CONSTANTS.MAX_LEVEL,
+      noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
+      interval: ECONOMY_UPDATE_INTERVAL,
     },
     pricing: {
       minMultiplier: 0.5,
@@ -177,7 +175,6 @@ function buildDefaults(): SimConstants {
       intraRegionExtraEdges: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
     },
     tradeFlow: {
-      edgesPerTick: TRADE_SIMULATION.EDGES_PER_TICK,
       distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
       flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
       gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
@@ -192,7 +189,6 @@ function buildDefaults(): SimConstants {
       strike: { ...STRIKE_PARAMS },
     },
     migration: {
-      edgesPerTick: MIGRATION_EDGES_PER_TICK,
       weights: { ...MIGRATION_PARAMS.weights },
       maxOutflowFraction: MIGRATION_PARAMS.maxOutflowFraction,
       gradientThreshold: MIGRATION_PARAMS.gradientThreshold,
@@ -229,7 +225,6 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
       strike: { ...base.population.strike, ...overrides.population?.strike },
     },
     migration: {
-      edgesPerTick: overrides.migration?.edgesPerTick ?? base.migration.edgesPerTick,
       weights: { ...base.migration.weights, ...overrides.migration?.weights },
       maxOutflowFraction: overrides.migration?.maxOutflowFraction ?? base.migration.maxOutflowFraction,
       gradientThreshold: overrides.migration?.gradientThreshold ?? base.migration.gradientThreshold,

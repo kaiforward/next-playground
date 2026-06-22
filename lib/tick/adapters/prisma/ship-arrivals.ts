@@ -16,6 +16,10 @@ export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
 
   async getArrivingShips(currentTick: number): Promise<ArrivingShipView[]> {
     const rows = await this.tx.ship.findMany({
+      // Load the four relations via a single LATERAL JOIN. The default "query"
+      // strategy issues each relation as a separate query concurrently on the
+      // transaction connection, which pg deprecates (removed in pg@9).
+      relationLoadStrategy: "join",
       where: { status: "in_transit", arrivalTick: { lte: currentTick } },
       select: {
         id: true,

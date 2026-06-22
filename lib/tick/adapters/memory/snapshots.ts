@@ -25,13 +25,18 @@ export class InMemorySnapshotsWorld implements SnapshotsWorld {
     this.histories = new Map(systemIds.map((id) => [id, []]));
   }
 
-  getMarkets(): Promise<MarketView[]> {
-    return Promise.resolve(this.markets.map((m) => ({ ...m })));
+  getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
+    const ids = new Set(systemIds);
+    return Promise.resolve(
+      this.markets.filter((m) => ids.has(m.systemId)).map((m) => ({ ...m })),
+    );
   }
 
-  getPriceHistories(): Promise<PriceHistoryView[]> {
+  getPriceHistoriesForSystems(systemIds: string[]): Promise<PriceHistoryView[]> {
+    const ids = new Set(systemIds);
     const views: PriceHistoryView[] = [];
     for (const [systemId, entries] of this.histories) {
+      if (!ids.has(systemId)) continue;
       views.push({ systemId, entries: entries.map((e) => ({ ...e })) });
     }
     return Promise.resolve(views);

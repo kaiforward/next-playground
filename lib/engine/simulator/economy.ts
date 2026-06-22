@@ -43,9 +43,7 @@ const EVENT_DEFINITIONS = SCALED.definitions;
 
 function buildSimParams(constants: SimConstants): EconomySimParams {
   return {
-    noiseAmplitude: constants.economy.noiseAmplitude,
-    minLevel: constants.economy.minLevel,
-    maxLevel: constants.economy.maxLevel,
+    noiseFraction: constants.economy.noiseFraction,
   };
 }
 
@@ -193,10 +191,6 @@ async function processSimEvents(
     world.systems,
     world.connections,
     EVENT_DEFINITIONS,
-    {
-      minLevel: ctx.constants.economy.minLevel,
-      maxLevel: ctx.constants.economy.maxLevel,
-    },
   );
 
   const tickCtx: TickContext = {
@@ -236,14 +230,11 @@ async function processSimEconomy(
   rng: RNG,
   constants: SimConstants,
 ): Promise<{ world: SimWorld; signals: EconomySignals | undefined }> {
-  const economyWorld = new InMemoryEconomyWorld(
-    {
-      systems: world.systems,
-      markets: world.markets,
-      modifiers: world.modifiers,
-    },
-    world.regions,
-  );
+  const economyWorld = new InMemoryEconomyWorld({
+    systems: world.systems,
+    markets: world.markets,
+    modifiers: world.modifiers,
+  });
 
   const tickCtx: TickContext = {
     tx: undefined as never,
@@ -253,6 +244,7 @@ async function processSimEconomy(
 
   const result = await runEconomyProcessor(economyWorld, tickCtx, {
     rng,
+    interval: constants.economy.interval,
     simParams: buildSimParams(constants),
     modifierCaps: constants.events.modifierCaps,
     strikeParams: constants.population.strike,
@@ -289,7 +281,8 @@ async function processSimMigration(world: SimWorld, constants: SimConstants): Pr
   const migWorld = new InMemoryMigrationWorld({ systems: world.systems }, world.connections);
   const tickCtx: TickContext = { tx: undefined as never, tick: world.tick, results: new Map() };
   await runMigrationProcessor(migWorld, tickCtx, {
-    edgesPerTick: constants.migration.edgesPerTick,
+    // Flow + migration share the economy's clock (one coupled-economy cadence).
+    interval: constants.economy.interval,
     flow: {
       weights: constants.migration.weights,
       maxOutflowFraction: constants.migration.maxOutflowFraction,
@@ -322,7 +315,8 @@ async function processSimTradeFlow(
   };
 
   await runTradeFlowProcessor(flowWorld, tickCtx, {
-    edgesPerTick: constants.tradeFlow.edgesPerTick,
+    // Flow + migration share the economy's clock (one coupled-economy cadence).
+    interval: constants.economy.interval,
     flowBudget: constants.tradeFlow.flowBudget,
     gradientThreshold: constants.tradeFlow.gradientThreshold,
     gradientSensitivity: constants.tradeFlow.gradientSensitivity,
@@ -330,8 +324,6 @@ async function processSimTradeFlow(
     playerDisplacementFactor: constants.tradeFlow.playerDisplacementFactor,
     distanceDecay: constants.tradeFlow.distanceDecay,
     playerVolumeTarget: constants.tradeFlow.playerVolumeTarget,
-    minLevel: constants.economy.minLevel,
-    maxLevel: constants.economy.maxLevel,
   });
 
   return {

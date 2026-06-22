@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../app/generated/prisma"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -206,17 +207,26 @@ model StarSystem {
   // ── Physical substrate ──
   sunClass         String  @default("yellow")  // SunClass; real value written at seed time
   population       Float   @default(0)          // abstract magnitude
-  popCap           Float   @default(0)          // Σ(body popCapWeight × size)
+  popCap           Float   @default(0)          // maximum sustainable population
   unrest           Float   @default(0)          // 0…1 — integral of demand-weighted dissatisfaction
-  aggGas           Float   @default(0)
-  aggMinerals      Float   @default(0)
-  aggOre           Float   @default(0)
-  aggBiomass       Float   @default(0)
-  aggArable        Float   @default(0)
-  aggWater         Float   @default(0)
-  aggRadioactive   Float   @default(0)
   bodyDanger       Float   @default(0)  // Σ body-archetype danger baselines
-  buildSpace       Float   @default(0)  // total build-space budget, Σ body BASE_SPACE × size × habitability
+  availableSpace   Float @default(0)   // SPACE_PER_SIZE × Σ size
+  generalSpace     Float @default(0)   // fungible (non-deposit) space
+  habitableSpace   Float @default(0)   // habitable fraction of general — caps population centres
+  slotGas          Float @default(0)   // extractor-slot caps (one per resource)
+  slotMinerals     Float @default(0)
+  slotOre          Float @default(0)
+  slotBiomass      Float @default(0)
+  slotArable       Float @default(0)
+  slotWater        Float @default(0)
+  slotRadioactive  Float @default(0)
+  yieldGas         Float @default(1)   // effective quality multipliers (one per resource)
+  yieldMinerals    Float @default(1)
+  yieldOre         Float @default(1)
+  yieldBiomass     Float @default(1)
+  yieldArable      Float @default(1)
+  yieldWater       Float @default(1)
+  yieldRadioactive Float @default(1)
 
   region            Region             @relation(fields: [regionId], references: [id])
   faction           Faction?           @relation("FactionTerritory", fields: [factionId], references: [id])
@@ -252,16 +262,22 @@ model SystemBody {
   bodyType          String  // BodyArchetypeId
   habitable         Boolean @default(false)
   size              Float   @default(1)
-  // Resource base — scalar columns (one ResourceVector). Caps on tier-0 yield.
-  resGas            Float   @default(0)
-  resMinerals       Float   @default(0)
-  resOre            Float   @default(0)
-  resBiomass        Float   @default(0)
-  resArable         Float   @default(0)
-  resWater          Float   @default(0)
-  resRadioactive    Float   @default(0)
-  popCapWeight      Float   @default(0)
-  richnessModifiers String[] @default([])  // RichnessModifierId[]
+  generalSpace     Float @default(0)   // this body's general space
+  habitableSpace   Float @default(0)   // this body's habitable space
+  slotGas          Float @default(0)   // per-body slot counts (one per resource)
+  slotMinerals     Float @default(0)
+  slotOre          Float @default(0)
+  slotBiomass      Float @default(0)
+  slotArable       Float @default(0)
+  slotWater        Float @default(0)
+  slotRadioactive  Float @default(0)
+  qualGas          Float @default(0)   // per-body quality multipliers (0 = no deposit)
+  qualMinerals     Float @default(0)
+  qualOre          Float @default(0)
+  qualBiomass      Float @default(0)
+  qualArable       Float @default(0)
+  qualWater        Float @default(0)
+  qualRadioactive  Float @default(0)
 
   system StarSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
 
@@ -349,6 +365,8 @@ model StationMarket {
   anchorMult Float    @default(1)
   /** Per-capita-need × population (floored) — the days-of-supply denominator. Static while population is static; seed-written. */
   demandRate Float    @default(1)
+  /** Infrastructure storage capacity for this good from the system's built buildings. Used as the maxStock depth term in the per-market band. Seed-written from facilityStorageForGood. */
+  storageCapacity Float @default(0)
   updatedAt  DateTime @updatedAt
 
   station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)

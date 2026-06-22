@@ -2,45 +2,58 @@ import { describe, it, expect } from "vitest";
 import { inputGate, simulateSystemEconomyTick, simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { MarketTickEntry, EconomySimParams } from "@/lib/engine/tick";
 
-const PARAMS: EconomySimParams = { noiseAmplitude: 0, minLevel: 5, maxLevel: 200 };
-const noRng = () => 0.5; // noise = 0 when amplitude 0
+const PARAMS: EconomySimParams = { noiseFraction: 0 };
+const noRng = () => 0.5; // noise = 0 when noiseFraction = 0
+
+// Convenience: build a full MarketTickEntry with per-entry band defaults.
+function entry(
+  goodId: string,
+  stock: number,
+  prod?: number,
+  cons?: number,
+  minStock = 5,
+  maxStock = 200,
+): MarketTickEntry {
+  return { goodId, stock, minStock, maxStock, productionRate: prod, consumptionRate: cons };
+}
 
 describe("inputGate", () => {
   it("is 1 for a tier-0 good (no recipe)", () => {
-    expect(inputGate("ore", 10, () => 100, 5)).toBe(1);
+    expect(inputGate("ore", 10, () => 100, () => 5)).toBe(1);
   });
 
   it("is 1 when the input is abundant", () => {
     // metals recipe { ore: 1 }; effectiveProduction 10 wants 10 ore; 200 ore available.
-    expect(inputGate("metals", 10, () => 200, 5)).toBe(1);
+    expect(inputGate("metals", 10, () => 200, () => 5)).toBe(1);
   });
 
   it("throttles proportionally when the input is scarce (above-floor drawable)", () => {
-    // want 10 ore; stock 8 ⇒ drawable 3 ⇒ gate 0.3
-    expect(inputGate("metals", 10, () => 8, 5)).toBeCloseTo(0.3, 6);
+    // want 10 ore; stock 8 ⇒ drawable 3 (8 - floor 5) ⇒ gate 0.3
+    expect(inputGate("metals", 10, () => 8, () => 5)).toBeCloseTo(0.3, 6);
   });
 
   it("binds on the scarcest of multiple inputs", () => {
     // chemicals { gas: 0.5, minerals: 0.5 }; eff 10 ⇒ wants 5 gas, 5 minerals.
     const stock = (g: string) => (g === "gas" ? 200 : 6); // minerals drawable 1 ⇒ ratio 0.2
-    expect(inputGate("chemicals", 10, stock, 5)).toBeCloseTo(0.2, 6);
+    expect(inputGate("chemicals", 10, stock, () => 5)).toBeCloseTo(0.2, 6);
   });
 
   it("is 0 when the input sits exactly at the floor (nothing drawable)", () => {
     // stock === minLevel ⇒ drawable 0 ⇒ gate 0; production fully starved.
-    expect(inputGate("metals", 10, () => 5, 5)).toBe(0);
+    expect(inputGate("metals", 10, () => 5, () => 5)).toBe(0);
+  });
+
+  it("respects a per-input floor higher than 5 when minStockOf returns it", () => {
+    // ore has floor 20; stock 25 ⇒ drawable 5; want 10 ⇒ gate 0.5
+    expect(inputGate("metals", 10, () => 25, () => 20)).toBeCloseTo(0.5, 6);
   });
 });
 
 describe("simulateSystemEconomyTick", () => {
-  function entry(goodId: string, stock: number, prod?: number, cons?: number): MarketTickEntry {
-    return { goodId, stock, productionRate: prod, consumptionRate: cons };
-  }
-
   it("never breaches the floor when draining a scarce input", () => {
     // ore near floor, a metals producer wanting more than is drawable.
     const out = simulateSystemEconomyTick(
-      [entry("ore", 6, undefined, undefined), entry("metals", 50, 20, undefined)],
+      [entry("ore", 6), entry("metals", 50, 20)],
       PARAMS,
       noRng,
     );
@@ -52,7 +65,7 @@ describe("simulateSystemEconomyTick", () => {
     // ore starts AT floor (5, nothing drawable yet) but produces this tick;
     // metals should still get some ore because ore is processed first (topo order).
     const out = simulateSystemEconomyTick(
-      [entry("metals", 50, 10, undefined), entry("ore", 5, 30, undefined)],
+      [entry("metals", 50, 10), entry("ore", 5, 30)],
       PARAMS,
       noRng,
     );
@@ -102,16 +115,76 @@ describe("simulateSystemEconomyTick", () => {
     const starvedMetals = starved.find((e) => e.goodId === "metals")!.stock;
     expect(starvedMetals).toBeLessThan(richMetals);
   });
+
+  // ── Per-entry band tests ─────────────────────────────────────────
+
+  it("clamps to the PER-ENTRY band, not a global band", () => {
+    // ore has a tight band [10, 50]; a large noise fraction must not push it past 50.
+    const oreEntry: MarketTickEntry = {
+      goodId: "ore",
+      stock: 50,
+      minStock: 10,
+      maxStock: 50,
+      productionRate: 0,
+      consumptionRate: 0,
+    };
+    const out = simulateSystemEconomyTick(
+      [oreEntry],
+      { noiseFraction: 0.5 },
+      () => 1, // always +max noise
+    );
+    expect(out[0].stock).toBeLessThanOrEqual(50);
+    expect(out[0].stock).toBeGreaterThanOrEqual(10);
+  });
+
+  it("input draw respects the INPUT good's own per-entry floor (different minStocks)", () => {
+    // ore has minStock=20, metals has minStock=5.
+    // ore stock is 25 (only 5 drawable). metals wants 10 ore per unit output.
+    // effectiveProduction=10 ⇒ desired draw 10 ⇒ gate=5/10=0.5.
+    // ore must not drop below 20.
+    const oreEntry: MarketTickEntry = {
+      goodId: "ore",
+      stock: 25,
+      minStock: 20,
+      maxStock: 200,
+      productionRate: 0,
+    };
+    const metalsEntry: MarketTickEntry = {
+      goodId: "metals",
+      stock: 50,
+      minStock: 5,
+      maxStock: 200,
+      productionRate: 10,
+    };
+    const out = simulateSystemEconomyTick([oreEntry, metalsEntry], PARAMS, noRng);
+    const oreOut = out.find((e) => e.goodId === "ore")!;
+    expect(oreOut.stock).toBeGreaterThanOrEqual(20); // never breaches ore's own floor
+  });
+
+  it("noise scales to per-entry band width, not a global amplitude", () => {
+    // narrow band [40, 60] → band-width 20; noiseFraction 0.5 → max noise 10.
+    // Starting at 50, rng()=1 → noise = +10 → clamps to 60.
+    const narrowEntry: MarketTickEntry = {
+      goodId: "water",
+      stock: 50,
+      minStock: 40,
+      maxStock: 60,
+      productionRate: 0,
+      consumptionRate: 0,
+    };
+    const out = simulateSystemEconomyTick([narrowEntry], { noiseFraction: 0.5 }, () => 1)[0];
+    expect(out.stock).toBeCloseTo(60, 5); // 50 + 10 noise, clamped at 60
+  });
 });
 
 describe("simulateCoupledEconomyTick", () => {
   it("isolates systems — system A's ore does not feed system B's metals", () => {
     // A: ore-rich + metals. B: ore-starved + metals. Same flat array.
     const entries: MarketTickEntry[] = [
-      { goodId: "ore", stock: 150, productionRate: 0 },   // A
-      { goodId: "metals", stock: 50, productionRate: 20 }, // A
-      { goodId: "ore", stock: 6, productionRate: 0 },      // B
-      { goodId: "metals", stock: 50, productionRate: 20 }, // B
+      { goodId: "ore", stock: 150, minStock: 5, maxStock: 200, productionRate: 0 },   // A
+      { goodId: "metals", stock: 50, minStock: 5, maxStock: 200, productionRate: 20 }, // A
+      { goodId: "ore", stock: 6, minStock: 5, maxStock: 200, productionRate: 0 },      // B
+      { goodId: "metals", stock: 50, minStock: 5, maxStock: 200, productionRate: 20 }, // B
     ];
     const systemIds = ["A", "A", "B", "B"];
     const out = simulateCoupledEconomyTick(entries, systemIds, PARAMS, () => 0.5);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatNumber, formatHeadcount, formatHeadcountShort } from "../format";
+import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude } from "../format";
 
 describe("formatNumber", () => {
   it("rounds to the nearest integer", () => {
@@ -40,5 +40,26 @@ describe("formatHeadcountShort", () => {
   });
   it("renders zero", () => {
     expect(formatHeadcountShort(0)).toBe("0");
+  });
+});
+
+describe("formatMagnitude", () => {
+  it("never collapses a present (sub-1) magnitude to '0' — the housing/habitable-reads-0 bug", () => {
+    expect(formatMagnitude(0.4478)).toBe("0.4");
+    expect(formatMagnitude(0.96)).toBe("1.0");
+  });
+  it("keeps a decimal for small magnitudes, whole numbers for large", () => {
+    expect(formatMagnitude(2.33)).toBe("2.3");
+    expect(formatMagnitude(23.6)).toBe("24");
+  });
+  it("treats 10 as the >=10 whole-number boundary (inclusive)", () => {
+    expect(formatMagnitude(10)).toBe("10"); // exact fence-post: >=10 → whole number
+    expect(formatMagnitude(9.4)).toBe("9.4"); // just below: stays in the toFixed(1) branch
+  });
+  it("shows '<0.1' for a positive-but-tiny magnitude rather than rounding away", () => {
+    expect(formatMagnitude(0.04)).toBe("<0.1");
+  });
+  it("renders a true zero (absent) as '0'", () => {
+    expect(formatMagnitude(0)).toBe("0");
   });
 });

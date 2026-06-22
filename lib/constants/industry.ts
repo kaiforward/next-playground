@@ -39,16 +39,12 @@ export interface BuildingTypeDef {
 }
 
 // ── Build-space knobs (first-draft; simulator-calibrated) ──
-/** Build-space granted by a habitable body of size 1. */
-export const BASE_SPACE = 40;
-/** Habitable worlds host industry; belts / gas giants barely. */
-export const HABITABILITY_FACTOR = { habitable: 1.0, uninhabitable: 0.15 } as const;
 /** Default build-space footprint of one building. */
 export const DEFAULT_SPACE_COST = 1.0;
 /** Default population to fully staff one production building. */
 export const DEFAULT_LABOUR_PER_UNIT = 25;
-/** popCap one housing building provides. Below labourPerUnit by design — housing alone can't staff the industry it enables, forcing a mixed build-out. */
-export const HOUSING_POP_PROVIDED = 20;
+/** popCap one population-centre building provides. Below labourPerUnit by design — pop-centres alone can't staff the industry they enable, forcing a mixed build-out. */
+export const POP_CENTRE_DENSITY = 20;
 
 /**
  * Per-good per-building output at full labour. Base = the physical-economy
@@ -68,13 +64,13 @@ export const HOUSING_POP_PROVIDED = 20;
  * polymers on top of civilian use.
  */
 const OUTPUT_OVERRIDES: Record<string, number> = {
-  food: 7.0,
-  water: 6.0,
-  gas: 12.0,
+  food: 3.5,
+  water: 2.0,
+  gas: 8.0,
   textiles: 1.4,
-  minerals: 5.0,
-  ore: 5.0,
-  biomass: 3.0,
+  minerals: 4.0,
+  ore: 4.0,
+  biomass: 2.2,
 };
 
 export const OUTPUT_PER_UNIT: Record<string, number> = Object.fromEntries(
@@ -100,18 +96,25 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
 
 export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
   ...buildProductionTypes(),
-  [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: HOUSING_POP_PROVIDED },
+  [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: POP_CENTRE_DENSITY },
 };
 
 /** The 26 production building type ids (good ids), in canonical good order. */
 export const PRODUCTION_BUILDING_TYPES: string[] = [...GOOD_NAMES];
 
+/** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). First-draft; subject to calibration. */
+export const EXTRACTOR_STORAGE_PER_UNIT = 40;
+/** Storage one tier-1+ factory adds for its output good (output buffer). */
+export const PRODUCTION_STORAGE_PER_UNIT = 15;
+/** Nominal storage a population centre adds per good it consumes (retail/utility/government holdings). */
+export const POP_CENTRE_STORAGE_DEFAULT = 2;
+/** Pop-centre storage overrides for consumer-facing goods — people keep more of what they buy. */
+export const POP_CENTRE_STORAGE: Record<string, number> = {
+  consumer_goods: 12, food: 8, water: 8, medicine: 6, luxuries: 6, textiles: 5,
+};
+
 export function sizeFactor(size: number): number {
   return Math.max(0, size);
-}
-
-export function habitabilityFactor(habitable: boolean): number {
-  return habitable ? HABITABILITY_FACTOR.habitable : HABITABILITY_FACTOR.uninhabitable;
 }
 
 /**

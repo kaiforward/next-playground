@@ -30,6 +30,7 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
       demandRate: m.demandRate,
       priceFloor: m.good.priceFloor,
       priceCeiling: m.good.priceCeiling,
+      storageCapacity: m.storageCapacity,
     }));
   }
 

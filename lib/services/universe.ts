@@ -3,10 +3,19 @@ import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
-import { capacityGoodRates, buildIndustryReadout } from "@/lib/engine/industry";
-import { toSunClass, toBodyArchetypeId, toRichnessModifierId } from "@/lib/types/guards";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
-import { BODY_ARCHETYPES, RICHNESS_MODIFIERS } from "@/lib/constants/bodies";
+import {
+  capacityGoodRates,
+  buildIndustryReadout,
+  extractorsByResource,
+  summariseSpace,
+  summariseDeposits,
+} from "@/lib/engine/industry";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { shardGroupForIndex } from "@/lib/tick/shard";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import { toSunClass, toBodyArchetypeId } from "@/lib/types/guards";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
 import { toEconomyType, toGovernmentType, toTraitId, toQualityTier, isShipTypeId } from "@/lib/types/guards";
 import { TRAITS } from "@/lib/constants/traits";
@@ -210,7 +219,7 @@ export async function getSystemDetail(
  * Physical substrate for one system — reads the substrate columns.
  * Visibility-gated: an unsurveyed (invisible) system
  * returns `{ visibility: "unknown" }` so a direct URL can't leak survey data.
- * Resolves catalog display data (archetype + richness names) server-side,
+ * Resolves catalog display data (archetype names) server-side,
  * mirroring how getSystemDetail resolves trait names.
  */
 export async function getSystemSubstrate(
@@ -221,21 +230,20 @@ export async function getSystemSubstrate(
     getPlayerVisibility(playerId),
     prisma.starSystem.findUnique({
       where: { id: systemId },
+      relationLoadStrategy: "join",
       select: {
         sunClass: true,
-        population: true,
-        popCap: true,
-        aggGas: true, aggMinerals: true, aggOre: true, aggBiomass: true,
-        aggArable: true, aggWater: true, aggRadioactive: true,
+        availableSpace: true,
+        habitableSpace: true,
         bodies: {
           select: {
-            id: true, bodyType: true, habitable: true, size: true, popCapWeight: true,
-            resGas: true, resMinerals: true, resOre: true, resBiomass: true,
-            resArable: true, resWater: true, resRadioactive: true,
-            richnessModifiers: true,
+            id: true, bodyType: true, habitable: true, size: true,
+            slotGas: true, slotMinerals: true, slotOre: true, slotBiomass: true,
+            slotArable: true, slotWater: true, slotRadioactive: true,
+            qualGas: true, qualMinerals: true, qualOre: true, qualBiomass: true,
+            qualArable: true, qualWater: true, qualRadioactive: true,
           },
         },
-        buildings: { select: { buildingType: true, count: true } },
       },
     }),
   ]);
@@ -247,15 +255,6 @@ export async function getSystemSubstrate(
     return { visibility: "unknown" };
   }
 
-  const aggregate = resourceVectorFromColumns(
-    {
-      aggGas: system.aggGas, aggMinerals: system.aggMinerals, aggOre: system.aggOre,
-      aggBiomass: system.aggBiomass, aggArable: system.aggArable,
-      aggWater: system.aggWater, aggRadioactive: system.aggRadioactive,
-    },
-    "agg",
-  );
-
   const bodies: BodyView[] = system.bodies.map((b) => {
     const bodyType = toBodyArchetypeId(b.bodyType);
     return {
@@ -264,39 +263,31 @@ export async function getSystemSubstrate(
       archetypeName: BODY_ARCHETYPES[bodyType].name,
       habitable: b.habitable,
       size: b.size,
-      popCapWeight: b.popCapWeight,
-      resources: resourceVectorFromColumns(
+      slots: resourceVectorFromColumns(
         {
-          resGas: b.resGas, resMinerals: b.resMinerals, resOre: b.resOre,
-          resBiomass: b.resBiomass, resArable: b.resArable,
-          resWater: b.resWater, resRadioactive: b.resRadioactive,
+          slotGas: b.slotGas, slotMinerals: b.slotMinerals, slotOre: b.slotOre,
+          slotBiomass: b.slotBiomass, slotArable: b.slotArable,
+          slotWater: b.slotWater, slotRadioactive: b.slotRadioactive,
         },
-        "res",
+        "slot",
       ),
-      richness: b.richnessModifiers.map((id) => {
-        const richnessId = toRichnessModifierId(id);
-        const def = RICHNESS_MODIFIERS[richnessId];
-        return {
-          id: richnessId,
-          name: def.name,
-          resource: def.resource,
-          multiplier: def.multiplier,
-        };
-      }),
+      quality: resourceVectorFromColumns(
+        {
+          qualGas: b.qualGas, qualMinerals: b.qualMinerals, qualOre: b.qualOre,
+          qualBiomass: b.qualBiomass, qualArable: b.qualArable,
+          qualWater: b.qualWater, qualRadioactive: b.qualRadioactive,
+        },
+        "qual",
+      ),
     };
   });
-
-  const buildings: Record<string, number> = {};
-  for (const b of system.buildings) buildings[b.buildingType] = b.count;
 
   return {
     visibility: "visible",
     sunClass: toSunClass(system.sunClass),
-    population: system.population,
-    popCap: system.popCap,
-    aggregate,
+    availableSpace: system.availableSpace,
+    habitableSpace: system.habitableSpace,
     bodies,
-    goods: capacityGoodRates(buildings, system.population),
   };
 }
 
@@ -314,13 +305,27 @@ export async function getSystemIndustry(
     getPlayerVisibility(playerId),
     prisma.starSystem.findUnique({
       where: { id: systemId },
+      relationLoadStrategy: "join",
       select: {
         population: true,
-        bodies: { select: { size: true, habitable: true } },
+        availableSpace: true,
+        generalSpace: true,
+        habitableSpace: true,
+        slotGas: true, slotMinerals: true, slotOre: true, slotBiomass: true,
+        slotArable: true, slotWater: true, slotRadioactive: true,
+        yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
+        yieldArable: true, yieldWater: true, yieldRadioactive: true,
         buildings: { select: { buildingType: true, count: true } },
         station: {
           select: {
-            markets: { select: { goodId: true, stock: true } },
+            markets: {
+              select: {
+                stock: true,
+                demandRate: true,
+                storageCapacity: true,
+                good: { select: { name: true, priceFloor: true, priceCeiling: true } },
+              },
+            },
           },
         },
       },
@@ -334,24 +339,63 @@ export async function getSystemIndustry(
     return { visibility: "unknown" };
   }
 
+  // Which economy shard this system lands in — static (its id-rank in the same
+  // id-asc order the economy processor shards over, see lib/tick/adapters/prisma/
+  // economy.ts getSystemIds). The client pairs this with the live tick to count
+  // down to the next economy update; the value itself never changes.
+  const [systemCount, systemRank] = await Promise.all([
+    prisma.starSystem.count(),
+    prisma.starSystem.count({ where: { id: { lt: systemId } } }),
+  ]);
+  const economyShardGroup = shardGroupForIndex(systemRank, systemCount, ECONOMY_UPDATE_INTERVAL);
+
   const buildings: Record<string, number> = {};
   for (const b of system.buildings) buildings[b.buildingType] = b.count;
 
+  // marketStock + per-good reserve floor keyed by good KEY (the supply-chain
+  // readout indexes by key, not DB id — mirror the tick adapter's mapping).
   const marketStock: Record<string, number> = {};
+  const minStockByGood: Record<string, number> = {};
   if (system.station) {
     for (const row of system.station.markets) {
-      marketStock[row.goodId] = row.stock;
+      const goodKey = GOOD_NAME_TO_KEY.get(row.good.name) ?? row.good.name;
+      marketStock[goodKey] = row.stock;
+      minStockByGood[goodKey] = marketBandForRow(row, row.good).minStock;
     }
   }
 
+  const slotCap = resourceVectorFromColumns(
+    {
+      slotGas: system.slotGas, slotMinerals: system.slotMinerals, slotOre: system.slotOre,
+      slotBiomass: system.slotBiomass, slotArable: system.slotArable,
+      slotWater: system.slotWater, slotRadioactive: system.slotRadioactive,
+    },
+    "slot",
+  );
+  const yields = resourceVectorFromColumns(
+    {
+      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
+      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
+      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
+    },
+    "yield",
+  );
+  const worked = extractorsByResource(buildings);
+
   return {
     visibility: "visible",
+    economyShardGroup,
+    // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
+    // but feed the deposit-fill rows and the production/consumption profile below.
     ...buildIndustryReadout(
       buildings,
-      system.bodies,
       system.population,
       marketStock,
-      ECONOMY_CONSTANTS.MIN_LEVEL,
+      (goodKey) => minStockByGood[goodKey] ?? 0,
+      yields,
     ),
+    space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
+    deposits: summariseDeposits(slotCap, worked, yields),
+    goods: capacityGoodRates(buildings, system.population, yields),
   };
 }

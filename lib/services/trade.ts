@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
-import { quoteTrade, curveForGood } from "@/lib/engine/market-pricing";
+import { quoteTrade, curveForGood, marketBandForRow } from "@/lib/engine/market-pricing";
 import { validateFleetTrade } from "@/lib/engine/trade";
-import { getSpread, STOCK_MIN, STOCK_MAX } from "@/lib/constants/market-economy";
+import { getSpread } from "@/lib/constants/market-economy";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { toShipStatus, toGovernmentType } from "@/lib/types/guards";
 import { getReputationTier } from "@/lib/constants/reputation";
@@ -123,6 +123,8 @@ export async function executeTrade(
   }
   const unitPrice = Math.round(totalPrice / quantity); // for trade history
 
+  const band = marketBandForRow(marketEntry, marketEntry.good);
+
   const currentCargoUsed = ship.cargo.reduce((sum, c) => sum + c.quantity, 0);
   const existingCargo = ship.cargo.find((c) => c.goodId === goodId);
   const currentGoodQuantityInCargo = existingCargo?.quantity ?? 0;
@@ -135,8 +137,8 @@ export async function executeTrade(
     currentCargoUsed,
     cargoMax: ship.cargoMax,
     currentStock: marketEntry.stock,
-    stockMin: STOCK_MIN,
-    stockMax: STOCK_MAX,
+    stockMin: band.minStock,
+    stockMax: band.maxStock,
     currentGoodQuantityInCargo,
     shipStatus: toShipStatus(ship.status),
   });
@@ -226,8 +228,8 @@ export async function executeTrade(
         where: { id: marketEntry.id },
       });
       const nextStock = Math.max(
-        STOCK_MIN,
-        Math.min(STOCK_MAX, (freshMarket?.stock ?? 0) + delta.stockDelta),
+        band.minStock,
+        Math.min(band.maxStock, (freshMarket?.stock ?? 0) + delta.stockDelta),
       );
       const market = await tx.stationMarket.update({
         where: { id: marketEntry.id },

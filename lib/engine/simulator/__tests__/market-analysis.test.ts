@@ -11,7 +11,7 @@ function market(
   goodId: string,
   stock: number,
 ): SimMarketEntry {
-  return { systemId, goodId, basePrice: 100, stock, anchorMult: 1, demandRate: 1, priceFloor: 0.2, priceCeiling: 5.0 };
+  return { systemId, goodId, basePrice: 100, stock, anchorMult: 1, demandRate: 1, priceFloor: 0.2, priceCeiling: 5.0, storageCapacity: 0 };
 }
 
 /** Minimal SimWorld — the analysis functions only read `markets`. */
@@ -88,8 +88,8 @@ describe("computeMarketHealth — stock drift", () => {
 
 describe("computeMarketHealth — stock pins", () => {
   it("reports the per-good fraction of markets clamped at the floor or ceiling", () => {
-    // ore: both markets sit within a noise step of MIN_LEVEL (5) → fully floor-pinned.
-    // luxuries: one at the ceiling (200), one mid-band → half ceiling-pinned, none at floor.
+    // ore: both markets sit at/below minStock (TARGET_COVER/priceCeiling = 8) → fully floor-pinned.
+    // luxuries: one at maxStock (TARGET_COVER/priceFloor = 200), one mid-band → half ceiling-pinned, none at floor.
     const { stockPins } = computeMarketHealth(
       world([
         market("sys-1", "ore", 5),

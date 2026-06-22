@@ -9,15 +9,15 @@ import {
 } from "../tick";
 
 const PARAMS: EconomySimParams = {
-  noiseAmplitude: 0, // deterministic: no noise unless a test opts in
-  minLevel: 5,
-  maxLevel: 200,
+  noiseFraction: 0, // deterministic: no noise unless a test opts in
 };
 
 function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
   return {
     goodId: "food",
     stock: 100,
+    minStock: 5,
+    maxStock: 200,
     ...over,
   };
 }
@@ -59,11 +59,11 @@ describe("simulateEconomyTick — consumption", () => {
 });
 
 describe("simulateEconomyTick — noise", () => {
-  it("perturbs stock within the band when amplitude > 0", () => {
+  it("perturbs stock within the band when noiseFraction > 0", () => {
     const out = simulateEconomyTick(
       [entry({ stock: 100, volatility: 1 })],
-      { ...PARAMS, noiseAmplitude: 3 },
-      () => 1, // rng=1 -> +full amplitude
+      { noiseFraction: 0.1 }, // 10% of band width (195) = 19.5 per tick
+      () => 1, // rng=1 -> +full noise
     );
     expect(out[0].stock).toBeGreaterThan(100);
     expect(out[0].stock).toBeLessThanOrEqual(200);
@@ -78,10 +78,13 @@ describe("simulateEconomyTick — noise", () => {
 });
 
 describe("buildMarketTickEntry", () => {
+  const BASE_BAND = { minStock: 5, maxStock: 200 };
+
   it("passes through the base production rate unmodified", () => {
     const e = buildMarketTickEntry({
       goodId: "food",
       stock: 100,
+      ...BASE_BAND,
       volatility: 1,
       baseProductionRate: 10,
       baseConsumptionRate: undefined,
@@ -90,12 +93,15 @@ describe("buildMarketTickEntry", () => {
     });
     expect(e.productionRate).toBeCloseTo(10, 5);
     expect(e.stock).toBe(100);
+    expect(e.minStock).toBe(5);
+    expect(e.maxStock).toBe(200);
   });
 
   it("ignores traits when computing production — they no longer grant a bonus", () => {
     const e = buildMarketTickEntry({
       goodId: "food",
       stock: 100,
+      ...BASE_BAND,
       volatility: 1,
       baseProductionRate: 10,
       baseConsumptionRate: undefined,
@@ -109,6 +115,7 @@ describe("buildMarketTickEntry", () => {
     const e = buildMarketTickEntry({
       goodId: "food",
       stock: 100,
+      ...BASE_BAND,
       volatility: 1,
       baseProductionRate: undefined,
       baseConsumptionRate: 10,
@@ -122,6 +129,7 @@ describe("buildMarketTickEntry", () => {
     const e = buildMarketTickEntry({
       goodId: "food",
       stock: 100,
+      ...BASE_BAND,
       volatility: 1,
       baseProductionRate: undefined,
       baseConsumptionRate: undefined,
@@ -135,6 +143,7 @@ describe("buildMarketTickEntry", () => {
     const e = buildMarketTickEntry({
       goodId: "food",
       stock: 100,
+      ...BASE_BAND,
       volatility: 1,
       baseProductionRate: undefined,
       baseConsumptionRate: undefined,
@@ -202,6 +211,34 @@ describe("selfLimitingFactor", () => {
 
   it("clamps gracefully when value is above max (consume returns 1)", () => {
     expect(selfLimitingFactor(MAX + 10, MIN, MAX, "consume")).toBe(1);
+  });
+});
+
+// ── Per-entry band: relative noise + per-entry self-limiting ────
+
+describe("simulateEconomyTick — per-entry band", () => {
+  it("clamps to the per-entry band and scales noise to band width", () => {
+    const e = { goodId: "ore", stock: 50, minStock: 10, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const high = simulateEconomyTick([e], { noiseFraction: 0.02 }, () => 1)[0]; // +max noise
+    expect(high.stock).toBeLessThanOrEqual(90);
+    expect(high.stock).toBeCloseTo(51.6, 5); // band-width-scaled: (1*2-1)*0.02*80 = +1.6, not ±3
+  });
+
+  it("self-limiting uses the entry's own min/max", () => {
+    expect(selfLimitingFactor(10, 10, 90, "consume")).toBe(0); // at floor → no consumption
+    expect(selfLimitingFactor(90, 10, 90, "produce")).toBe(0); // at ceiling → no production
+  });
+
+  it("clamps stock to per-entry minStock when noise would push it below", () => {
+    const e = { goodId: "ore", stock: 10, minStock: 10, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const low = simulateEconomyTick([e], { noiseFraction: 0.02 }, () => 0)[0]; // -max noise
+    expect(low.stock).toBeGreaterThanOrEqual(10);
+  });
+
+  it("clamps stock to per-entry maxStock when noise would push it above", () => {
+    const e = { goodId: "ore", stock: 90, minStock: 10, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const high = simulateEconomyTick([e], { noiseFraction: 0.02 }, () => 1)[0]; // +max noise
+    expect(high.stock).toBeLessThanOrEqual(90);
   });
 });
 

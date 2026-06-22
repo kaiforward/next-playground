@@ -9,6 +9,7 @@ import type {
   SystemWithName,
 } from "@/lib/tick/world/events-world";
 import { buildModifiersForPhase, type ModifierRow } from "@/lib/engine/events";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
 import type { EventDefinition, EventTypeId } from "@/lib/constants/events";
 import type {
   SimConnection,
@@ -43,7 +44,6 @@ export class InMemoryEventsWorld implements EventsWorld {
     private readonly systems: SimSystem[],
     private readonly connections: SimConnection[],
     private readonly definitions: Record<EventTypeId, EventDefinition>,
-    private readonly clamp: { minLevel: number; maxLevel: number },
   ) {
     this.events = [...initial.events];
     this.modifiers = [...initial.modifiers];
@@ -169,7 +169,6 @@ export class InMemoryEventsWorld implements EventsWorld {
   applyShocks(shocks: SystemShock[]): Promise<number> {
     if (shocks.length === 0) return Promise.resolve(0);
 
-    const { minLevel, maxLevel } = this.clamp;
     const marketByKey = new Map<string, SimMarketEntry>();
     for (const m of this.markets) {
       marketByKey.set(`${m.systemId}|${m.goodId}`, m);
@@ -194,7 +193,8 @@ export class InMemoryEventsWorld implements EventsWorld {
       touched.add(market);
     }
     for (const market of touched) {
-      market.stock = Math.max(minLevel, Math.min(maxLevel, market.stock));
+      const band = marketBandForRow(market, market);
+      market.stock = Math.max(band.minStock, Math.min(band.maxStock, market.stock));
     }
     return Promise.resolve(touched.size);
   }

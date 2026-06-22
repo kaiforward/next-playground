@@ -173,8 +173,31 @@ describe("quoteTrade", () => {
   });
 });
 
-import { curveForGood } from "../market-pricing";
+import { curveForGood, marketBand } from "../market-pricing";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
+
+describe("marketBand", () => {
+  it("demand sets anchor + reserve; storage inflates only the ceiling", () => {
+    const b = marketBand({ demandRate: 4, storageCapacity: 0, priceFloor: 0.5, priceCeiling: 2.0 });
+    expect(b.targetStock).toBeCloseTo(TARGET_COVER * 4);          // 160
+    expect(b.minStock).toBeCloseTo(b.targetStock / 2.0);          // 80
+    expect(b.maxStock).toBeCloseTo(b.targetStock / 0.5);          // 320
+    const withStore = marketBand({ demandRate: 4, storageCapacity: 500, priceFloor: 0.5, priceCeiling: 2.0 });
+    expect(withStore.maxStock).toBeCloseTo(b.maxStock + 500);     // storage adds to ceiling only
+    expect(withStore.minStock).toBeCloseTo(b.minStock);           // ...not the reserve
+  });
+  it("maxStock > minStock structurally, even with zero storage and tiny demand", () => {
+    const b = marketBand({ demandRate: 0.05, storageCapacity: 0, priceFloor: 0.5, priceCeiling: 2.0 });
+    expect(b.maxStock).toBeGreaterThan(b.minStock);
+  });
+  it("anchorMult (active anchor_shift) scales anchor + reserve; storage term stays flat", () => {
+    const base = marketBand({ demandRate: 4, storageCapacity: 100, priceFloor: 0.5, priceCeiling: 2.0 });
+    const shifted = marketBand({ demandRate: 4, storageCapacity: 100, priceFloor: 0.5, priceCeiling: 2.0, anchorMult: 2 });
+    expect(shifted.targetStock).toBeCloseTo(base.targetStock * 2);          // anchor doubles with the shift
+    expect(shifted.minStock).toBeCloseTo(base.minStock * 2);               // reserve scales with the anchor
+    expect(shifted.maxStock).toBeCloseTo(shifted.targetStock / 0.5 + 100); // demand headroom scales; +storage is flat
+  });
+});
 
 describe("curveForGood", () => {
   it("anchors the curve at TARGET_COVER × demandRate (per-system reference)", () => {

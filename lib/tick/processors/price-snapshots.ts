@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
-import { SNAPSHOT_INTERVAL, MAX_SNAPSHOTS } from "@/lib/constants/snapshot";
+import { MAX_SNAPSHOTS } from "@/lib/constants/snapshot";
 import { buildPriceEntry, appendSnapshot } from "@/lib/engine/snapshot";
 import { PrismaSnapshotsWorld } from "@/lib/tick/adapters/prisma/snapshots";
 import type {
@@ -8,16 +8,21 @@ import type {
 } from "@/lib/tick/world/snapshots-world";
 
 /**
- * Pure processor body. Depends only on `SnapshotsWorld`, so it runs unchanged
- * against the Prisma adapter (live game) or the in-memory adapter (unit
- * tests, future sim hooks).
+ * Pure processor body. Snapshots the economy's processed shard this tick —
+ * reads markets and histories only for the systems the economy just updated.
+ * Depends only on `SnapshotsWorld`, so it runs unchanged against the Prisma
+ * adapter (live game) or the in-memory adapter (unit tests).
  */
 export async function runPriceSnapshotsProcessor(
   world: SnapshotsWorld,
   ctx: TickContext,
 ): Promise<TickProcessorResult> {
-  const markets = await world.getMarkets();
-  const histories = await world.getPriceHistories();
+  const signals = ctx.results.get("economy")?.economySignals;
+  if (!signals || signals.dissatisfactionBySystem.size === 0) return {};
+  const systemIds = [...signals.dissatisfactionBySystem.keys()];
+
+  const markets = await world.getMarketsForSystems(systemIds);
+  const histories = await world.getPriceHistoriesForSystems(systemIds);
 
   const newEntries = buildPriceEntry(markets, ctx.tick);
 
@@ -46,7 +51,7 @@ export async function runPriceSnapshotsProcessor(
 
 export const priceSnapshotsProcessor: TickProcessor = {
   name: "price-snapshots",
-  frequency: SNAPSHOT_INTERVAL,
+  frequency: 1,
   dependsOn: ["economy"],
 
   async process(ctx): Promise<TickProcessorResult> {

@@ -1,45 +1,57 @@
 /**
  * Substrate generation — pure, zero DB dependency,
  * deterministic given a seeded RNG. Rolls a system's sun class, body set,
- * per-body resource vectors + richness modifiers, aggregate vector, population,
- * and narrative features. Replaces the old trait-rolling path.
+ * per-body surface partition (deposit slots + quality bands), population, and
+ * narrative features. Replaces the old trait-rolling path.
  */
 import type {
-  BodyArchetypeId, ResourceVector, RichnessModifierId, SunClass,
+  BodyArchetypeId, ResourceVector, SunClass,
 } from "@/lib/types/game";
-import { BODY_ARCHETYPES, SUN_CLASSES, RICHNESS_MODIFIERS, type SunClassDef } from "@/lib/constants/bodies";
-import { makeResourceVector, sumResourceVectors, RESOURCE_TYPES } from "./resources";
+import { BODY_ARCHETYPES, SUN_CLASSES, type SunClassDef } from "@/lib/constants/bodies";
+import { emptyResourceVector, sumResourceVectors, RESOURCE_TYPES } from "./resources";
 import { ALL_TRAIT_IDS, QUALITY_TIERS } from "@/lib/constants/traits";
 import { toQualityTier } from "@/lib/types/guards";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import type { GeneratedTrait } from "./trait-gen";
 import type { RNG } from "./universe-gen";
 import { weightedPick, randInt } from "./universe-gen";
-import { bodyBuildSpace } from "@/lib/engine/industry";
 import { allocateIndustry } from "@/lib/engine/industry-seed";
+import { partitionBody, rollQualityBand } from "./substrate-space";
 
 export interface GeneratedBody {
   bodyType: BodyArchetypeId;
   habitable: boolean;
   size: number;
-  resourceBase: ResourceVector;
-  popCapWeight: number;
-  richnessModifiers: RichnessModifierId[];
+  /** Available extractor slots per resource — derived from surface partition. */
+  slots: ResourceVector;
+  /** Quality-band multiplier per resource (0 for absent resources). */
+  quality: ResourceVector;
+  /** General-purpose surface space (non-deposit fraction). */
+  generalSpace: number;
+  /** Habitable fraction of general space. */
+  habitableSpace: number;
 }
 
 export interface GeneratedSubstrate {
   sunClass: SunClass;
   bodies: GeneratedBody[];
-  aggregate: ResourceVector;
   popCap: number;
   population: number;
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
   bodyDanger: number;
   features: GeneratedTrait[];
-  /** Total build-space budget — Σ body BASE_SPACE × size × habitability. */
-  buildSpace: number;
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
+  /** Total finite surface space across all bodies (SPACE_PER_SIZE × Σ size). */
+  availableSpace: number;
+  /** Sum of per-body general-purpose space. */
+  generalSpace: number;
+  /** Sum of per-body habitable space. */
+  habitableSpace: number;
+  /** Σ body deposit slots — total extractor capacity per resource across the system. */
+  slotCap: ResourceVector;
+  /** Effective per-resource yield multiplier — mean quality of the filled deposit slots (1.0 where none filled). */
+  yieldMult: ResourceVector;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -74,51 +86,25 @@ function rollArchetype(rng: RNG, sun: SunClassDef): BodyArchetypeId {
   return candidates[candidates.length - 1].id;
 }
 
-/** Pick a richness modifier whose target resource is present on this body, or null. */
-function rollRichness(rng: RNG, resourceBase: ResourceVector): RichnessModifierId | null {
-  const candidates = Object.values(RICHNESS_MODIFIERS).filter(
-    (m) => resourceBase[m.resource] > 0,
-  );
-  if (candidates.length === 0) return null;
-  const total = candidates.reduce((sum, m) => sum + m.rarity, 0);
-  let roll = rng() * total;
-  for (const m of candidates) {
-    roll -= m.rarity;
-    if (roll <= 0) return m.id;
-  }
-  return candidates[candidates.length - 1].id;
-}
-
 function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
   const arch = BODY_ARCHETYPES[archId];
   const size = SUBSTRATE_GEN.SIZE_MIN + rng() * (SUBSTRATE_GEN.SIZE_MAX - SUBSTRATE_GEN.SIZE_MIN);
 
-  const base: Partial<ResourceVector> = {};
-  for (const type of RESOURCE_TYPES) {
-    const b = arch.resourceBase[type];
-    if (b > 0) {
-      const jitter = 1 + (rng() - 0.5) * 2 * SUBSTRATE_GEN.RESOURCE_JITTER;
-      base[type] = b * size * jitter;
-    }
-  }
-  const resourceBase = makeResourceVector(base);
-
-  const richnessModifiers: RichnessModifierId[] = [];
-  if (rng() < SUBSTRATE_GEN.RICHNESS_CHANCE) {
-    const modId = rollRichness(rng, resourceBase);
-    if (modId) {
-      resourceBase[RICHNESS_MODIFIERS[modId].resource] *= RICHNESS_MODIFIERS[modId].multiplier;
-      richnessModifiers.push(modId);
-    }
+  // Surface partition into deposit slots + per-resource quality bands.
+  const part = partitionBody(arch, size, rng);
+  const quality = emptyResourceVector();
+  for (const r of RESOURCE_TYPES) {
+    if (arch.resourceBase[r] > 0) quality[r] = rollQualityBand(rng).multiplier;
   }
 
   return {
     bodyType: archId,
     habitable: arch.habitable,
     size,
-    resourceBase,
-    popCapWeight: arch.popCapWeight,
-    richnessModifiers,
+    slots: part.slots,
+    quality,
+    generalSpace: part.generalSpace,
+    habitableSpace: part.habitableSpace,
   };
 }
 
@@ -150,44 +136,57 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     bodies.push(rollBody(rng, rollArchetype(rng, sun)));
   }
 
-  const aggregate = sumResourceVectors(bodies.map((b) => b.resourceBase));
   const bodyDanger = bodies.reduce(
     (sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline,
     0,
   );
 
-  // ── Build-space + population ──
-  const rawCap = bodies.reduce((sum, b) => sum + b.popCapWeight * b.size, 0);
-  const bodyBaselinePopCap = rawCap * SUBSTRATE_GEN.POP_SCALE;
-  const buildSpace = bodies.reduce((sum, b) => sum + bodyBuildSpace(b.size, b.habitable), 0);
+  // ── Per-system available-space aggregates ──
+  const availableSpace = SUBSTRATE_GEN.SPACE_PER_SIZE * bodies.reduce((s, b) => s + b.size, 0);
+  const generalSpace = bodies.reduce((s, b) => s + b.generalSpace, 0);
+  const habitableSpace = bodies.reduce((s, b) => s + b.habitableSpace, 0);
+  const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
 
-  const popNorm = clamp(bodyBaselinePopCap / SUBSTRATE_GEN.POP_REF, 0, 1);
-  const fill = clamp(
+  // ── Development fill — driven by habitable land (full-fold retires bodyBaselinePopCap) ──
+  const popNorm = clamp(habitableSpace / SUBSTRATE_GEN.HABITABLE_REF, 0, 1);
+  const rawFill = clamp(
     SUBSTRATE_GEN.POP_FILL_BASE
       + SUBSTRATE_GEN.POP_FILL_SLOPE * popNorm
       + (rng() - 0.5) * SUBSTRATE_GEN.POP_FILL_JITTER,
     SUBSTRATE_GEN.POP_FILL_MIN,
     SUBSTRATE_GEN.POP_FILL_MAX,
   );
+  // No habitable land → no workforce to staff or house. The system stays an
+  // undeveloped deposit field: substrate (slots/quality) is generated but NOTHING
+  // is built and nobody lives there. Factions develop it later (SP5) by paying for
+  // orbital/artificial habitation alongside the extractors. (rawFill still consumes
+  // its rng draw so other systems' streams don't shift.)
+  const fill = habitableSpace > 0 ? rawFill : 0;
 
   const allocation = allocateIndustry(
-    { aggregate, buildSpace, bodyBaselinePopCap, fill },
+    { bodies, slotCap, generalSpace, habitableSpace, fill },
     rng,
   );
   const popCap = allocation.popCap;
-  const population = Math.round(popCap * fill);
+  // Population is a continuous magnitude (like building counts) — a tiny outpost is
+  // pop 0.3, not rounded down to a false 0. Only a truly uninhabitable system
+  // (popCap 0) is genuinely empty.
+  const population = popCap * fill;
 
   const features = rollFeatures(rng);
 
   return {
     sunClass,
     bodies,
-    aggregate,
     popCap,
     population,
     bodyDanger,
     features,
-    buildSpace,
     buildings: allocation.buildings,
+    availableSpace,
+    generalSpace,
+    habitableSpace,
+    slotCap,
+    yieldMult: allocation.yieldMult,
   };
 }

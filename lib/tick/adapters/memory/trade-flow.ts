@@ -61,6 +61,7 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
         demandRate: m.demandRate,
         priceFloor: m.priceFloor,
         priceCeiling: m.priceCeiling,
+        storageCapacity: m.storageCapacity,
       });
     }
     return Promise.resolve(snapshots);
