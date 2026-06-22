@@ -29,14 +29,14 @@ export function SubstrateTradeBars({ goods }: { goods: SubstrateGoodRate[] }) {
           <span>&#9664; Consumes</span>
           <span>Produces &#9654;</span>
         </div>
-        <span className="w-16 shrink-0 text-right">Net/t</span>
+        <span className="w-16 shrink-0 text-right">Net/cyc</span>
       </div>
 
       {bars.map((b) => (
         <div
           key={b.goodId}
           className="flex items-center gap-2"
-          title={`Produces ${b.production.toFixed(1)}/t · Consumes ${b.consumption.toFixed(1)}/t`}
+          title={`Produces ${b.production.toFixed(1)}/cyc · Consumes ${b.consumption.toFixed(1)}/cyc`}
         >
           <span className="w-24 shrink-0 truncate text-xs text-text-secondary">{b.name}</span>
           <div className="flex flex-1 items-center">

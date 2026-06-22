@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatList, StatRow } from "@/components/ui/stat-row";
 import { SubstrateTradeBars } from "@/components/system/substrate-trade-bars";
+import { EconomyCycleCaption } from "@/components/system/economy-cycle-caption";
 
 /** Human-readable label for a building type or good id. */
 function label(id: string): string {
@@ -40,7 +41,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     );
   }
 
-  const { space, deposits, goods, labourFulfillment, buildings, supplyChain } = data;
+  const { space, deposits, goods, labourFulfillment, buildings, supplyChain, economyShardGroup } = data;
   // An undeveloped system has no built base and no production/consumption flow;
   // hide the flow profile (it would be 26 zero rows) and frame the roster honestly.
   const hasFlow = goods.some((g) => g.production > 0 || g.consumption > 0);
@@ -187,10 +188,11 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
       {hasFlow && (
         <Card variant="bordered" padding="md">
           <SectionHeader as="h4" className="mb-1">Production &amp; consumption</SectionHeader>
-          <p className="mb-3 text-xs text-text-tertiary">
+          <p className="mb-1 text-xs text-text-tertiary">
             What this system&apos;s industry produces against what its population consumes — the net is
             what it can export or must import.
           </p>
+          <EconomyCycleCaption shardGroup={economyShardGroup} />
           <SubstrateTradeBars goods={goods} />
         </Card>
       )}

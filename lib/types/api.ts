@@ -178,6 +178,9 @@ export type { SystemIndustryReadout, SubstrateSpace, SystemDepositSummary, Subst
 export type SystemIndustryData =
   | ({
       visibility: "visible";
+      /** Economy shard this system lands in (0…ECONOMY_UPDATE_INTERVAL−1) — static.
+       *  Paired with the live tick to count down to the next economy update. */
+      economyShardGroup: number;
       /** Available-space partition + built-out land per partition (headroom). */
       space: SubstrateSpace;
       /** Per-resource deposit-fill rows: slot cap, worked slots, effective yield + band. */

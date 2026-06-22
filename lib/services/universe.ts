@@ -11,6 +11,8 @@ import {
   summariseDeposits,
 } from "@/lib/engine/industry";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { shardGroupForIndex } from "@/lib/tick/shard";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { toSunClass, toBodyArchetypeId } from "@/lib/types/guards";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
@@ -337,6 +339,16 @@ export async function getSystemIndustry(
     return { visibility: "unknown" };
   }
 
+  // Which economy shard this system lands in — static (its id-rank in the same
+  // id-asc order the economy processor shards over, see lib/tick/adapters/prisma/
+  // economy.ts getSystemIds). The client pairs this with the live tick to count
+  // down to the next economy update; the value itself never changes.
+  const [systemCount, systemRank] = await Promise.all([
+    prisma.starSystem.count(),
+    prisma.starSystem.count({ where: { id: { lt: systemId } } }),
+  ]);
+  const economyShardGroup = shardGroupForIndex(systemRank, systemCount, ECONOMY_UPDATE_INTERVAL);
+
   const buildings: Record<string, number> = {};
   for (const b of system.buildings) buildings[b.buildingType] = b.count;
 
@@ -372,6 +384,7 @@ export async function getSystemIndustry(
 
   return {
     visibility: "visible",
+    economyShardGroup,
     // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
     // but feed the deposit-fill rows and the production/consumption profile below.
     ...buildIndustryReadout(
