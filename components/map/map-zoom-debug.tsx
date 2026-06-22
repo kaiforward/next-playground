@@ -8,8 +8,8 @@ import { computeLOD, type LODState } from "./pixi/lod";
  * Purpose-built for tuning the thresholds and ramps in `pixi/lod.ts`: read a
  * value here, then adjust the matching `LAYER_FADE` entry / smoothStep band.
  *
- * Rendered only in development (gated at the StarMap call site). Temporary
- * tuning scaffolding — safe to delete once the zoom bands are dialled in.
+ * Toggled via Dev Tools → Map (off by default). Temporary tuning scaffolding —
+ * safe to delete once the zoom bands are dialled in.
  */
 
 interface DebugRow {

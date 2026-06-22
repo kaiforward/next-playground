@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
+import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
@@ -55,6 +56,7 @@ export function StarMap({
 }: StarMapProps) {
   // ── Progressive data loading ────────────────────────────────────
   const { systems: tileSystems, onViewportChange, active, zoom } = useStaticTiles();
+  const { showMapDebug } = useDevOverlay();
   const { visibleSystemIds } = useVisibility();
   const { dynamicSystems } = useDynamicData(active);
 
@@ -330,8 +332,8 @@ export function StarMap({
         stabilityBySystem={stabilityBySystem}
       />
 
-      {/* Dev-only zoom/LOD readout for tuning pixi/lod.ts thresholds. */}
-      {process.env.NODE_ENV === "development" && <MapZoomDebug zoom={zoom} />}
+      {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}
+      {showMapDebug && <MapZoomDebug zoom={zoom} />}
 
       {/* Price heatmap data fetcher — only mounts when overlay+good are active. */}
       {heatmapActive && priceGoodId && (
