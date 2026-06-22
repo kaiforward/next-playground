@@ -6,9 +6,6 @@ import { demandFootprint } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
 import type { SystemPopulationData } from "@/lib/types/api";
 
-/** How many goods to surface in the demand footprint (top by demand). */
-const DEMAND_FOOTPRINT_LIMIT = 6;
-
 /**
  * Dynamic population & social state for one system — population, popCap, unrest,
  * a strike flag, and the demand footprint. Visibility-gated (an unsurveyed system
@@ -31,13 +28,12 @@ export async function getSystemPopulation(
   if (!system) throw new ServiceError("System not found.", 404);
   if (!visibleSet.has(systemId)) return { visibility: "unknown" };
 
-  const demand = demandFootprint(system.population)
-    .slice(0, DEMAND_FOOTPRINT_LIMIT)
-    .map((e) => ({
-      goodId: e.goodId,
-      goodName: GOODS[e.goodId]?.name ?? e.goodId,
-      demandRate: e.demandRate,
-    }));
+  // Full consumption footprint (already filtered to consumed goods, demand-sorted).
+  const demand = demandFootprint(system.population).map((e) => ({
+    goodId: e.goodId,
+    goodName: GOODS[e.goodId]?.name ?? e.goodId,
+    demandRate: e.demandRate,
+  }));
 
   return {
     visibility: "visible",

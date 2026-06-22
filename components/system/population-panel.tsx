@@ -31,8 +31,8 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
           <StabilityBadge unrest={unrest} />
         </div>
         <ProgressBar
-          label="Unrest"
-          value={unrest}
+          label="Stability"
+          value={1 - unrest}
           max={1}
           color="copper"
           formatValue={(n) => n.toFixed(2)}

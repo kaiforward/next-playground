@@ -10,6 +10,8 @@ import {
   summariseSpace,
   summariseDeposits,
 } from "@/lib/engine/industry";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { toSunClass, toBodyArchetypeId } from "@/lib/types/guards";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
@@ -314,7 +316,14 @@ export async function getSystemIndustry(
         buildings: { select: { buildingType: true, count: true } },
         station: {
           select: {
-            markets: { select: { goodId: true, stock: true } },
+            markets: {
+              select: {
+                stock: true,
+                demandRate: true,
+                storageCapacity: true,
+                good: { select: { name: true, priceFloor: true, priceCeiling: true } },
+              },
+            },
           },
         },
       },
@@ -331,10 +340,15 @@ export async function getSystemIndustry(
   const buildings: Record<string, number> = {};
   for (const b of system.buildings) buildings[b.buildingType] = b.count;
 
+  // marketStock + per-good reserve floor keyed by good KEY (the supply-chain
+  // readout indexes by key, not DB id — mirror the tick adapter's mapping).
   const marketStock: Record<string, number> = {};
+  const minStockByGood: Record<string, number> = {};
   if (system.station) {
     for (const row of system.station.markets) {
-      marketStock[row.goodId] = row.stock;
+      const goodKey = GOOD_NAME_TO_KEY.get(row.good.name) ?? row.good.name;
+      marketStock[goodKey] = row.stock;
+      minStockByGood[goodKey] = marketBandForRow(row, row.good).minStock;
     }
   }
 
@@ -364,7 +378,7 @@ export async function getSystemIndustry(
       buildings,
       system.population,
       marketStock,
-      5, // display approx: per-market floor varies by good; 5 is a typical floor for this informational readout
+      (goodKey) => minStockByGood[goodKey] ?? 0,
       yields,
     ),
     space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),

@@ -175,6 +175,11 @@ export interface SystemIndustryReadout {
  *   inputGate < 1 means the good is throttled by at least one short input.
  *   throttledBy lists the inputs where drawable stock < desired draw.
  *
+ * `marketStock` and `minStockOf` are keyed by good KEY (not the DB good id);
+ * the caller maps the market rows through GOOD_NAME_TO_KEY. `minStockOf` returns
+ * each good's per-market reserve floor — only stock above it is drawable, so the
+ * throttle reflects the real per-market band (not a flat global floor).
+ *
  * `yields` threads through to `buildingProduction` but is inert for this readout:
  * supplyChain covers only tier-1+ goods, whose production is yield-independent.
  */
@@ -182,7 +187,7 @@ export function buildIndustryReadout(
   buildings: Record<string, number>,
   population: number,
   marketStock: Record<string, number>,
-  minLevel: number,
+  minStockOf: (goodId: string) => number,
   yields: ResourceVector,
 ): SystemIndustryReadout {
   const demand = labourDemand(buildings);
@@ -204,7 +209,7 @@ export function buildIndustryReadout(
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
 
   // Supply chain — only produced goods with a recipe (tier-1+).
-  const stockOf = (g: string): number => marketStock[g] ?? minLevel;
+  const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
   const supplyChainEntries: SystemIndustryReadout["supplyChain"] = [];
 
   for (const [buildingType, count] of Object.entries(buildings)) {
@@ -216,13 +221,13 @@ export function buildIndustryReadout(
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
     const effectiveProduction = buildingProduction(buildings, goodId, fulfillment, yields);
-    const gate = inputGate(goodId, effectiveProduction, stockOf, () => minLevel);
+    const gate = inputGate(goodId, effectiveProduction, stockOf, minStockOf);
 
     const throttledBy: string[] = [];
     for (const [input, perOutput] of Object.entries(recipe)) {
       const desired = effectiveProduction * perOutput;
       if (desired <= 0) continue;
-      const drawable = Math.max(0, stockOf(input) - minLevel);
+      const drawable = Math.max(0, stockOf(input) - minStockOf(input));
       if (drawable < desired) throttledBy.push(input);
     }
 

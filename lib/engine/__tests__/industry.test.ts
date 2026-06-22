@@ -173,14 +173,14 @@ describe("buildIndustryReadout", () => {
   const pop = labourDemand(buildings);
 
   it("labourFulfillment matches the helper formula", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const demand = labourDemand(buildings);
     const expected = labourFulfillment(pop, demand);
     expect(readout.labourFulfillment).toBeCloseTo(expected, 6);
   });
 
   it("housing appears with tier -1 and no outputGood", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing).toBeDefined();
     expect(housing.tier).toBe(-1);
@@ -189,7 +189,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("production buildings have outputGood and correct tier", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals).toBeDefined();
     expect(metals.outputGood).toBe("metals");
@@ -200,7 +200,7 @@ describe("buildIndustryReadout", () => {
   it("supplyChain entry is throttled (inputGate < 1) when ore stock is at floor", () => {
     // ore stock = MIN (nothing drawable above floor)
     const marketStock = { ore: MIN };
-    const readout = buildIndustryReadout(buildings, pop, marketStock, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, marketStock, () => MIN, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeLessThan(1);
@@ -212,7 +212,7 @@ describe("buildIndustryReadout", () => {
     const fullyStaffedProduction = buildingProduction(buildings, "metals", 1, unitResourceVector());
     const oreNeeded = fullyStaffedProduction * GOOD_RECIPES["metals"]["ore"];
     const marketStock = { ore: MIN + oreNeeded * 10 };
-    const readout = buildIndustryReadout(buildings, pop, marketStock, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, marketStock, () => MIN, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeCloseTo(1, 6);
@@ -220,7 +220,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("tier-0 goods (no recipe) are absent from supplyChain", () => {
-    const readout = buildIndustryReadout({ ore: 5 }, 1000, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout({ ore: 5 }, 1000, {}, () => MIN, unitResourceVector());
     expect(readout.supplyChain.find((e) => e.goodId === "ore")).toBeUndefined();
   });
 
@@ -233,7 +233,7 @@ describe("buildIndustryReadout", () => {
       { metals: 3, fuel: 2, [HOUSING_TYPE]: 1 },
       pop + 2 * DEFAULT_LABOUR_PER_UNIT,
       stock,
-      MIN,
+      () => MIN,
       unitResourceVector(),
     );
     const gates = readout.supplyChain.map((e) => e.inputGate);

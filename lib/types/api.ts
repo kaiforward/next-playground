@@ -127,7 +127,7 @@ export type SystemPopulationData =
       unrest: number;
       /** True when unrest ≥ STRIKE_PARAMS.threshold. */
       striking: boolean;
-      /** Top-N goods by demand rate, descending. */
+      /** Full consumption footprint — goods the population consumes, demand-sorted descending. */
       demand: PopulationDemandEntry[];
     }
   | { visibility: "unknown" };
