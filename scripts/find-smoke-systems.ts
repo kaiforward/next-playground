@@ -77,7 +77,7 @@ async function main() {
   // generation bugs (population a body can't house). The third is a display-only
   // artifact: housing is a continuous Float, so a sub-0.5 pop-centre is a real but
   // small settlement that a naive toFixed(0) would render as "0" (use
-  // formatBuildingCount). popCap === housing × POP_CENTRE_DENSITY by construction.
+  // formatMagnitude). popCap === housing × POP_CENTRE_DENSITY by construction.
   const populated = systems.filter((s) => s.population > 0);
   const consistency = {
     "REAL: pop > popCap": populated.filter((s) => s.population > s.popCap + 1e-6).length,

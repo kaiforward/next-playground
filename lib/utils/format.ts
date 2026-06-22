@@ -26,15 +26,16 @@ export function formatNumber(value: number): string {
 }
 
 /**
- * Format a continuous building/industrial-capacity magnitude. Building counts are
- * Floats (a partial settlement is a real, sub-1 magnitude), so a present building
- * must never collapse to "0": large counts read as whole numbers, small ones keep
- * a decimal, and anything positive-but-tiny shows "<0.1" rather than rounding away.
+ * Format a continuous substrate magnitude — building counts, space-partition
+ * units, worked slots. These are Floats (a partial settlement / sliver of land is
+ * a real, sub-1 magnitude), so a present value must never collapse to "0": large
+ * magnitudes read as whole numbers, small ones keep a decimal, and anything
+ * positive-but-tiny shows "<0.1" rather than rounding away.
  */
-export function formatBuildingCount(count: number): string {
-  if (count <= 0) return "0";
-  if (count >= 10) return String(Math.round(count));
-  if (count >= 0.1) return count.toFixed(1);
+export function formatMagnitude(value: number): string {
+  if (value <= 0) return "0";
+  if (value >= 10) return String(Math.round(value));
+  if (value >= 0.1) return value.toFixed(1);
   return "<0.1";
 }
 

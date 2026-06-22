@@ -4,7 +4,7 @@ import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { GOODS } from "@/lib/constants/goods";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { QUALITY_BAND_DOT, QUALITY_BAND_TEXT } from "@/lib/constants/ui";
-import { formatBuildingCount } from "@/lib/utils/format";
+import { formatMagnitude } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -71,21 +71,21 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             value={space.depositWorked}
             max={space.deposit}
             color="amber"
-            formatValue={(n) => n.toFixed(0)}
+            formatValue={formatMagnitude}
           />
           <ProgressBar
             label="Habitable land"
             value={space.habitableUsed}
             max={space.habitable}
             color="green"
-            formatValue={(n) => n.toFixed(0)}
+            formatValue={formatMagnitude}
           />
           <ProgressBar
             label="General space"
             value={space.generalUsed}
             max={space.general}
             color="copper"
-            formatValue={(n) => n.toFixed(0)}
+            formatValue={formatMagnitude}
           />
         </div>
       </Card>
@@ -105,7 +105,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                 <StatList>
                   {entries.map((b) => (
                     <StatRow key={b.buildingType} label={label(b.buildingType)}>
-                      <span className="font-mono text-sm text-text-primary">{formatBuildingCount(b.count)}</span>
+                      <span className="font-mono text-sm text-text-primary">{formatMagnitude(b.count)}</span>
                     </StatRow>
                   ))}
                 </StatList>
@@ -131,7 +131,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                   </span>
                   <span className="flex items-center gap-3">
                     <span className="font-mono text-sm text-text-secondary">
-                      {formatBuildingCount(d.worked)} / {formatBuildingCount(d.slotCap)}
+                      {formatMagnitude(d.worked)} / {formatMagnitude(d.slotCap)}
                     </span>
                     <span className={`font-mono text-xs ${QUALITY_BAND_TEXT[d.band]}`}>
                       ×{d.yieldMult.toFixed(2)}
