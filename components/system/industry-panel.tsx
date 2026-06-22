@@ -41,6 +41,9 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   }
 
   const { space, deposits, goods, labourFulfillment, buildings, supplyChain } = data;
+  // An undeveloped system has no built base and no production/consumption flow;
+  // hide the flow profile (it would be 26 zero rows) and frame the roster honestly.
+  const hasFlow = goods.some((g) => g.production > 0 || g.consumption > 0);
 
   // Group buildings by tier in ascending order (array is already sorted tier asc).
   const tierGroups: Array<{ tier: number; entries: typeof buildings }> = [];
@@ -94,7 +97,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
       <Card variant="bordered" padding="md">
         <SectionHeader as="h4" className="mb-3">Industrial base</SectionHeader>
         {buildings.length === 0 ? (
-          <EmptyState message="No industry built here yet." />
+          <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />
         ) : (
           <div className="space-y-4">
             {tierGroups.map(({ tier, entries }) => (
@@ -179,15 +182,18 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         )}
       </Card>
 
-      {/* Production & consumption — what the built base makes against what the population needs */}
-      <Card variant="bordered" padding="md">
-        <SectionHeader as="h4" className="mb-1">Production &amp; consumption</SectionHeader>
-        <p className="mb-3 text-xs text-text-tertiary">
-          What this system&apos;s industry produces against what its population consumes — the net is
-          what it can export or must import.
-        </p>
-        <SubstrateTradeBars goods={goods} />
-      </Card>
+      {/* Production & consumption — what the built base makes against what the population needs.
+          Hidden for undeveloped systems (no flow → would be all-zero rows). */}
+      {hasFlow && (
+        <Card variant="bordered" padding="md">
+          <SectionHeader as="h4" className="mb-1">Production &amp; consumption</SectionHeader>
+          <p className="mb-3 text-xs text-text-tertiary">
+            What this system&apos;s industry produces against what its population consumes — the net is
+            what it can export or must import.
+          </p>
+          <SubstrateTradeBars goods={goods} />
+        </Card>
+      )}
     </div>
   );
 }

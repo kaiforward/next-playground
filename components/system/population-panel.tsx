@@ -19,6 +19,14 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
 
   const { population, popCap, unrest, striking, demand } = pop;
 
+  // Uninhabited: no housing capacity → no population, no demand. The deposits are
+  // still charted on the Astrography tab (the colonisation hook).
+  if (popCap <= 0) {
+    return (
+      <EmptyState message="Uninhabited — no population is established here. This system's deposits are charted on the Astrography tab." />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Card variant="bordered" padding="md">
