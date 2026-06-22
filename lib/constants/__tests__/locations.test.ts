@@ -3,6 +3,7 @@ import { deriveSystemLocations, LOCATIONS } from "../locations";
 import { enrichTraits } from "@/lib/utils/traits";
 import { TRAITS, ALL_TRAIT_IDS } from "@/lib/constants/traits";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { emptyResourceVector } from "@/lib/engine/resources";
 import type {
   SystemTraitInfo,
   TraitId,
@@ -11,7 +12,7 @@ import type {
 } from "@/lib/types/game";
 import type { BodyView } from "@/lib/types/api";
 
-/** Build a BodyView from an archetype. */
+/** Build a BodyView from an archetype. Substrate fields are inert for location derivation. */
 function makeBody(bodyType: BodyArchetypeId): BodyView {
   const arch = BODY_ARCHETYPES[bodyType];
   return {
@@ -20,6 +21,10 @@ function makeBody(bodyType: BodyArchetypeId): BodyView {
     archetypeName: arch.name,
     habitable: arch.habitable,
     size: 1,
+    generalSpace: 0,
+    habitableSpace: 0,
+    slots: emptyResourceVector(),
+    quality: emptyResourceVector(),
   };
 }
 

@@ -2,8 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { unitResourceVector } from "@/lib/engine/resources";
-import { capacityGoodRates, buildIndustryReadout } from "@/lib/engine/industry";
+import { unitResourceVector, resourceVectorFromColumns } from "@/lib/engine/resources";
+import {
+  capacityGoodRates,
+  buildIndustryReadout,
+  extractorsByResource,
+  summariseSpace,
+  summariseDeposits,
+} from "@/lib/engine/industry";
 import { toSunClass, toBodyArchetypeId } from "@/lib/types/guards";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { getPlayerVisibility } from "./visibility-cache";
@@ -220,13 +226,26 @@ export async function getSystemSubstrate(
     getPlayerVisibility(playerId),
     prisma.starSystem.findUnique({
       where: { id: systemId },
+      relationLoadStrategy: "join",
       select: {
         sunClass: true,
         population: true,
         popCap: true,
+        availableSpace: true,
+        generalSpace: true,
+        habitableSpace: true,
+        slotGas: true, slotMinerals: true, slotOre: true, slotBiomass: true,
+        slotArable: true, slotWater: true, slotRadioactive: true,
+        yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
+        yieldArable: true, yieldWater: true, yieldRadioactive: true,
         bodies: {
           select: {
             id: true, bodyType: true, habitable: true, size: true,
+            generalSpace: true, habitableSpace: true,
+            slotGas: true, slotMinerals: true, slotOre: true, slotBiomass: true,
+            slotArable: true, slotWater: true, slotRadioactive: true,
+            qualGas: true, qualMinerals: true, qualOre: true, qualBiomass: true,
+            qualArable: true, qualWater: true, qualRadioactive: true,
           },
         },
         buildings: { select: { buildingType: true, count: true } },
@@ -249,11 +268,47 @@ export async function getSystemSubstrate(
       archetypeName: BODY_ARCHETYPES[bodyType].name,
       habitable: b.habitable,
       size: b.size,
+      generalSpace: b.generalSpace,
+      habitableSpace: b.habitableSpace,
+      slots: resourceVectorFromColumns(
+        {
+          slotGas: b.slotGas, slotMinerals: b.slotMinerals, slotOre: b.slotOre,
+          slotBiomass: b.slotBiomass, slotArable: b.slotArable,
+          slotWater: b.slotWater, slotRadioactive: b.slotRadioactive,
+        },
+        "slot",
+      ),
+      quality: resourceVectorFromColumns(
+        {
+          qualGas: b.qualGas, qualMinerals: b.qualMinerals, qualOre: b.qualOre,
+          qualBiomass: b.qualBiomass, qualArable: b.qualArable,
+          qualWater: b.qualWater, qualRadioactive: b.qualRadioactive,
+        },
+        "qual",
+      ),
     };
   });
 
   const buildings: Record<string, number> = {};
   for (const b of system.buildings) buildings[b.buildingType] = b.count;
+
+  const slotCap = resourceVectorFromColumns(
+    {
+      slotGas: system.slotGas, slotMinerals: system.slotMinerals, slotOre: system.slotOre,
+      slotBiomass: system.slotBiomass, slotArable: system.slotArable,
+      slotWater: system.slotWater, slotRadioactive: system.slotRadioactive,
+    },
+    "slot",
+  );
+  const yields = resourceVectorFromColumns(
+    {
+      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
+      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
+      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
+    },
+    "yield",
+  );
+  const worked = extractorsByResource(buildings);
 
   return {
     visibility: "visible",
@@ -261,7 +316,9 @@ export async function getSystemSubstrate(
     population: system.population,
     popCap: system.popCap,
     bodies,
-    goods: capacityGoodRates(buildings, system.population, unitResourceVector()),
+    goods: capacityGoodRates(buildings, system.population, yields),
+    space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
+    deposits: summariseDeposits(bodies, slotCap, worked, yields),
   };
 }
 

@@ -10,9 +10,13 @@ import {
   inputDemandForGood,
   buildIndustryReadout,
   facilityStorageForGood,
+  extractorsByResource,
+  summariseDeposits,
+  summariseSpace,
 } from "@/lib/engine/industry";
 import {
   DEFAULT_LABOUR_PER_UNIT,
+  DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
   OUTPUT_PER_UNIT,
   HOUSING_TYPE,
@@ -23,7 +27,7 @@ import {
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
-import { unitResourceVector, makeResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 describe("bodyAvailableSpace", () => {
   it("returns SPACE_PER_SIZE × size with no habitability factor", () => {
@@ -259,5 +263,65 @@ describe("facilityStorageForGood", () => {
   it("sums across a mixed build-out", () => {
     expect(facilityStorageForGood({ ore: 2, [HOUSING_TYPE]: 4 }, "ore"))
       .toBe(2 * EXTRACTOR_STORAGE_PER_UNIT + 4 * POP_CENTRE_STORAGE_DEFAULT);
+  });
+});
+
+describe("extractorsByResource", () => {
+  it("sums tier-0 extractor counts by their deposit resource; ignores factories and housing", () => {
+    // ore → ore; food + textiles both → arable (shared deposit); metals is tier-1; housing has no resource.
+    const v = extractorsByResource({ ore: 3, food: 1, textiles: 2, metals: 5, [HOUSING_TYPE]: 9 });
+    expect(v.ore).toBe(3);
+    expect(v.arable).toBe(3);
+    expect(v.gas).toBe(0);
+  });
+  it("ignores non-positive counts", () => {
+    expect(extractorsByResource({ ore: -2, gas: 4 }).ore).toBe(0);
+    expect(extractorsByResource({ ore: -2, gas: 4 }).gas).toBe(4);
+  });
+});
+
+describe("summariseSpace", () => {
+  it("partitions available into deposit/general/habitable and tracks built land per partition", () => {
+    // available 100, general 40 → deposit 60; habitable 10.
+    // ore×4 extractors sit on deposit land; metals×2 factories + housing×5 sit on general; housing also on habitable.
+    const space = summariseSpace(100, 40, 10, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
+    expect(space.available).toBe(100);
+    expect(space.general).toBe(40);
+    expect(space.habitable).toBe(10);
+    expect(space.deposit).toBe(60);
+    expect(space.depositWorked).toBeCloseTo(4 * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT, 6);
+    expect(space.generalUsed).toBeCloseTo((2 + 5) * DEFAULT_SPACE_COST, 6);
+    expect(space.habitableUsed).toBeCloseTo(5 * DEFAULT_SPACE_COST, 6);
+  });
+  it("clamps deposit to zero when general exceeds available (degenerate input)", () => {
+    expect(summariseSpace(10, 40, 5, {}).deposit).toBe(0);
+  });
+});
+
+describe("summariseDeposits", () => {
+  it("summarises present deposits: slot cap, worked slots, intrinsic grade band, effective yield", () => {
+    const bodies = [
+      { slots: makeResourceVector({ ore: 8 }), quality: makeResourceVector({ ore: 1.6 }) },
+      { slots: makeResourceVector({ ore: 4, gas: 2 }), quality: makeResourceVector({ ore: 0.5, gas: 2.0 }) },
+    ];
+    const slotCap = makeResourceVector({ ore: 12, gas: 2 });
+    const worked = makeResourceVector({ ore: 5, gas: 0 });
+    const yields = makeResourceVector({ ore: 1.55, gas: 1 });
+    const deposits = summariseDeposits(bodies, slotCap, worked, yields);
+    // Only ore + gas have slots; sorted by slotCap descending → ore first.
+    expect(deposits.map((d) => d.resource)).toEqual(["ore", "gas"]);
+    const ore = deposits[0];
+    expect(ore.slotCap).toBe(12);
+    expect(ore.worked).toBe(5);
+    expect(ore.yieldMult).toBeCloseTo(1.55, 6);
+    // Intrinsic = slot-weighted mean across bodies = (8·1.6 + 4·0.5) / 12 ≈ 1.233 → "average".
+    expect(ore.quality).toBeCloseTo((8 * 1.6 + 4 * 0.5) / 12, 6);
+    expect(ore.band).toBe("average");
+    // Gas: single body, intrinsic 2.0 → "rich"; zero worked.
+    expect(deposits[1].band).toBe("rich");
+    expect(deposits[1].worked).toBe(0);
+  });
+  it("excludes resources with no deposit slots", () => {
+    expect(summariseDeposits([], emptyResourceVector(), emptyResourceVector(), unitResourceVector())).toEqual([]);
   });
 });

@@ -10,7 +10,7 @@
  * supply-chain cascade. The same functions feed the live tick, the simulator,
  * and the substrate read service.
  */
-import type { ResourceVector } from "@/lib/types/game";
+import type { QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -26,6 +26,8 @@ import {
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
 import { inputGate } from "@/lib/engine/supply-chain";
+import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
+import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
 /**
  * Available space a single body contributes: SPACE_PER_SIZE × size.
@@ -242,4 +244,138 @@ export function facilityStorageForGood(buildings: Record<string, number>, goodId
     }
   }
   return storage;
+}
+
+// ── Substrate display summaries (P7 read service) ────────────────────────────
+// The space partition the seeder built against (industry-seed.ts): tier-0
+// extractors sit on dedicated deposit slots; tier-1+ factories and population
+// centres share fungible general space; pop-centres are additionally bounded by
+// the habitable subset. These pure helpers turn the denormalised substrate
+// columns + built base into the shapes the system panels render.
+
+/**
+ * Tier-0 extractor count per resource from the built base — the worked deposit
+ * slots. Goods sharing a resource (food + textiles → arable) sum onto that
+ * resource. Factories and population centres carry no `resource` and are skipped.
+ */
+export function extractorsByResource(buildings: Record<string, number>): ResourceVector {
+  const v = emptyResourceVector();
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    const resource = BUILDING_TYPES[type]?.resource;
+    if (resource) v[resource] += count;
+  }
+  return v;
+}
+
+/** Slot-weighted mean intrinsic quality of all deposits for `resource` across bodies. 1.0 when no slots exist. */
+function intrinsicQuality(
+  bodies: Array<{ slots: ResourceVector; quality: ResourceVector }>,
+  resource: ResourceType,
+): number {
+  let weighted = 0;
+  let slots = 0;
+  for (const b of bodies) {
+    const s = b.slots[resource];
+    if (s > 0) {
+      weighted += s * b.quality[resource];
+      slots += s;
+    }
+  }
+  return slots > 0 ? weighted / slots : 1;
+}
+
+/** Per-resource deposit summary for one system — what is in the ground and how much of it is worked. */
+export interface SystemDepositSummary {
+  resource: ResourceType;
+  /** Total extractor slots across all bodies (slotCap). */
+  slotCap: number;
+  /** Slots worked by seeded extractors. */
+  worked: number;
+  /** Slot-weighted intrinsic grade of the deposit (independent of development). */
+  quality: number;
+  /** Quality band of the intrinsic grade — drives the row's colour/label. */
+  band: QualityBandId;
+  /** Effective yield multiplier the worked slots deliver (drives production). 1.0 when none worked. */
+  yieldMult: number;
+}
+
+/**
+ * One summary row per resource that has any deposit slots, richest cap first.
+ * Intrinsic `quality`/`band` describe the deposit itself (shown even when
+ * undeveloped); `yieldMult` is the effective multiplier of the worked subset.
+ */
+export function summariseDeposits(
+  bodies: Array<{ slots: ResourceVector; quality: ResourceVector }>,
+  slotCap: ResourceVector,
+  worked: ResourceVector,
+  yields: ResourceVector,
+): SystemDepositSummary[] {
+  return RESOURCE_TYPES.filter((r) => slotCap[r] > 0)
+    .map((r) => {
+      const quality = intrinsicQuality(bodies, r);
+      return {
+        resource: r,
+        slotCap: slotCap[r],
+        worked: worked[r],
+        quality,
+        band: bandForMultiplier(quality),
+        yieldMult: yields[r],
+      };
+    })
+    .sort((a, b) => b.slotCap - a.slotCap);
+}
+
+/** A system's finite surface partition and how much of each part is built out. */
+export interface SubstrateSpace {
+  /** Total available space (SPACE_PER_SIZE × Σ size). */
+  available: number;
+  /** Dedicated extractor land (available − general). */
+  deposit: number;
+  /** Fungible factory + population-centre land. */
+  general: number;
+  /** Habitable subset of general space — caps population centres. */
+  habitable: number;
+  /** Deposit land worked by extractors. */
+  depositWorked: number;
+  /** General land consumed by factories + population centres. */
+  generalUsed: number;
+  /** General land consumed by population centres alone (a subset of generalUsed, drawn from habitable). */
+  habitableUsed: number;
+}
+
+/**
+ * Partition a system's available space into deposit / general / habitable and
+ * tally the built land in each. Extractors are billed to deposit land (one slot
+ * footprint each); factories and population centres to general; population
+ * centres additionally to habitable.
+ */
+export function summariseSpace(
+  available: number,
+  general: number,
+  habitable: number,
+  buildings: Record<string, number>,
+): SubstrateSpace {
+  let generalUsed = 0;
+  let habitableUsed = 0;
+  let depositWorked = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    if (BUILDING_TYPES[type]?.resource) {
+      depositWorked += count * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
+      continue;
+    }
+    const cost = count * effectiveSpaceCost(type);
+    generalUsed += cost;
+    if (type === HOUSING_TYPE) habitableUsed += cost;
+  }
+  return {
+    available,
+    deposit: Math.max(0, available - general),
+    general,
+    habitable,
+    depositWorked,
+    generalUsed,
+    habitableUsed,
+  };
 }

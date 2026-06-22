@@ -26,6 +26,7 @@ import type {
   SunClass,
   BodyArchetypeId,
   StabilityEntry,
+  ResourceVector,
 } from "./game";
 import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
@@ -133,12 +134,22 @@ export type SystemPopulationData =
 export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
 
 // ── System substrate ─────────────────────────────────────────────
+import type { SubstrateSpace, SystemDepositSummary } from "@/lib/engine/industry";
+export type { SubstrateSpace, SystemDepositSummary };
 export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
   habitable: boolean;
   size: number;
+  /** This body's fungible general space (factories + population centres). */
+  generalSpace: number;
+  /** This body's habitable subset of general space. */
+  habitableSpace: number;
+  /** Per-resource deposit slots on this body (0 = no deposit). */
+  slots: ResourceVector;
+  /** Per-resource intrinsic quality multiplier on this body (0 = no deposit). */
+  quality: ResourceVector;
 }
 /** Physical substrate for one system — discriminated on fog-of-war visibility. */
 export type SystemSubstrateData =
@@ -148,8 +159,12 @@ export type SystemSubstrateData =
       population: number;
       popCap: number;
       bodies: BodyView[];
-      /** Per-good production/consumption computed from this system's substrate. */
+      /** Per-good production/consumption computed from this system's substrate (real yields). */
       goods: SubstrateGoodRate[];
+      /** Available-space partition + built-out land per partition (headroom). */
+      space: SubstrateSpace;
+      /** Per-resource deposit rows: slot cap, worked slots, intrinsic grade, effective yield. */
+      deposits: SystemDepositSummary[];
     }
   | { visibility: "unknown" };
 export type SystemSubstrateResponse = ApiResponse<SystemSubstrateData>;
