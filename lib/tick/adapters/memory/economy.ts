@@ -2,7 +2,6 @@ import type {
   EconomyWorld,
   MarketUpdate,
   MarketView,
-  RegionView,
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
 import { consumptionRate } from "@/lib/engine/physical-economy";
@@ -10,7 +9,6 @@ import { labourDemand, labourFulfillment, buildingProduction } from "@/lib/engin
 import { toTraitId, toQualityTier } from "@/lib/types/guards";
 import type {
   SimMarketEntry,
-  SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
 
@@ -31,38 +29,31 @@ export class InMemoryEconomyWorld implements EconomyWorld {
   markets: SimMarketEntry[];
   modifiers: ModifierRow[];
 
-  constructor(
-    initial: {
-      systems: SimSystem[];
-      markets: SimMarketEntry[];
-      modifiers: ModifierRow[];
-    },
-    private readonly regions: SimRegion[],
-  ) {
+  constructor(initial: {
+    systems: SimSystem[];
+    markets: SimMarketEntry[];
+    modifiers: ModifierRow[];
+  }) {
     this.systems = initial.systems.map((s) => ({ ...s }));
     this.markets = initial.markets.map((m) => ({ ...m }));
     this.modifiers = initial.modifiers;
   }
 
-  getRegions(): Promise<RegionView[]> {
-    const sorted = [...this.regions].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
+  getSystemIds(): Promise<string[]> {
     return Promise.resolve(
-      sorted.map((r) => ({
-        id: r.id,
-        name: r.name,
-      })),
+      this.systems.map((s) => s.id).sort((a, b) => a.localeCompare(b)),
     );
   }
 
-  getMarketsForRegion(regionId: string): Promise<MarketView[]> {
+  getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
     const sysById = new Map(this.systems.map((s) => [s.id, s]));
+    const wanted = new Set(systemIds);
     const fulfillmentBySystem = new Map<string, number>();
     const views: MarketView[] = [];
     for (const m of this.markets) {
+      if (!wanted.has(m.systemId)) continue;
       const sys = sysById.get(m.systemId);
-      if (!sys || sys.regionId !== regionId) continue;
+      if (!sys) continue;
       let fulfillment = fulfillmentBySystem.get(sys.id);
       if (fulfillment === undefined) {
         fulfillment = labourFulfillment(sys.population, labourDemand(sys.buildings));
@@ -73,6 +64,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
       views.push({
         id: `${m.systemId}|${m.goodId}`,
         systemId: m.systemId,
+        regionId: sys.regionId,
         goodId: m.goodId,
         basePrice: m.basePrice,
         stock: m.stock,
@@ -90,15 +82,16 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     return Promise.resolve(views);
   }
 
-  getModifiers(
-    systemIds: string[],
-    regionId: string,
-  ): Promise<ModifierRow[]> {
+  getModifiers(systemIds: string[]): Promise<ModifierRow[]> {
     const sysSet = new Set(systemIds);
+    // Region-targeted mods apply to the distinct regions the slice's systems
+    // belong to — derive that set from the systems themselves.
+    const regionIds = new Set<string>();
+    for (const s of this.systems) if (sysSet.has(s.id)) regionIds.add(s.regionId);
     const out: ModifierRow[] = [];
     for (const mod of this.modifiers) {
       if (mod.domain !== "economy") continue;
-      if (mod.targetType === "region" && mod.targetId === regionId) {
+      if (mod.targetType === "region" && mod.targetId && regionIds.has(mod.targetId)) {
         out.push(mod);
       } else if (
         mod.targetType === "system" &&

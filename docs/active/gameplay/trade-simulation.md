@@ -18,7 +18,7 @@ Trade is simulated as **goods flowing along graph edges** driven by local price 
 
 Flow runs over the **intra-faction jump-lane graph**. An edge is *open* — eligible to carry goods — only when its two endpoints belong to the same faction; cross-faction edges are **closed**, so goods never diffuse across a sovereign border ("factions don't trade at all" until SP5 opens relation-weighted borders). Two adjacent **independent** systems (no faction on either side) are open to each other under the same rule, forming a permeable pool — but under current world-gen the faction flood-fill claims every system, so this independent-trade path is a **latent capability with no live data**, not an active gameplay route today. It activates when SP5 introduces faction agency and unclaimed space.
 
-Crucially, **region lines are no longer a flow boundary.** A faction's territory is grown by flood-filling the jump-lane graph outward from its homeworld, so it routinely spans several regions — and goods cross a region border freely whenever both sides share a faction. Regions remain a load-shard, aggregation, and gateway-rendering unit; the only hard wall is the sovereign (faction) border. This deliberately separates the *gameplay* boundary (who may trade) from the *performance* concern (how work is sharded) — the two the old region round-robin had fused.
+Crucially, **region lines are no longer a flow boundary.** A faction's territory is grown by flood-filling the jump-lane graph outward from its homeworld, so it routinely spans several regions — and goods cross a region border freely whenever both sides share a faction. Regions remain a territory, aggregation, and gateway-rendering concept; the only hard wall is the sovereign (faction) border. This deliberately separates the *gameplay* boundary (who may trade) from the *performance* concern (how work is sharded).
 
 The open-edge list is built once and cached for the process: each connection is deduped to a single unordered edge, tagged with its fuel cost, and sorted by a stable key so the work cursor is deterministic across runs. It changes only on reseed (cleared via `invalidateAdjacencyCache`).
 
@@ -36,19 +36,19 @@ When a gradient clears the threshold, the simulator decides how many units to mo
 
 The chosen quantity then flows from the cheap side to the expensive side. Both markets see the exact delta a player trade would produce: a single stock value leaves the source and arrives at the destination. Mid-run state is mutated in place so later edges in the same slice see the new prices and adapt — chains emerge when one move opens up a new gradient for a neighboring edge.
 
-### Scheduling — Work-Budget Slice
+### Scheduling — Fixed-Interval Edge Shard
 
-The processor runs every tick and processes a fixed **work budget** of `EDGES_PER_TICK` open edges, advancing a cursor over the stable open-edge order and wrapping around. A full universe sweep therefore takes `ceil(totalOpenEdges / EDGES_PER_TICK)` ticks.
+The processor runs every tick and processes `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` open edges over the stable open-edge order — a fixed-interval edge shard. A full universe sweep therefore takes `ECONOMY_UPDATE_INTERVAL` (24) ticks **at any scale**.
 
-This decouples per-tick work from territory size: a sprawling empire and a city-state cost the same per tick, differing only in how many ticks their edges take to sweep. That is the whole point of de-regioning — the old scheduler walked one *region* per tick, fusing two unrelated concerns (how much work to do, a performance knob; and where flow may cross, a gameplay boundary). The faction topology now owns the boundary, and the edge slice owns the work budget, each tunable on its own.
+This decouples per-tick work from territory size: a sprawling empire and a city-state cost the same per tick, differing only in how many ticks their edges take to sweep. The faction topology owns the gameplay boundary (who may trade); the shard owns the work budget — each tunable independently. The shard runs on the same interval as the economy processor, so production and flow advance on one unified clock. See `docs/active/engineering/tick-engine.md` for the full cadence model.
 
-There is one hard invariant: the sweep must finish before flow events get pruned. If an edge's events were aged out before the cursor returned to it, the player-facing overlay would show permanent gaps. So `ceil(totalOpenEdges / EDGES_PER_TICK)` must stay below `FLOW_HISTORY_TICKS`, and the processor logs a warning if it doesn't. With the calibrated `EDGES_PER_TICK = 256`, the sweep is **4 ticks at default scale** (~825 open edges) and **46 ticks at 10K scale** (~11.7K open edges) — both well inside the 200-tick window.
+There is one hard invariant: the sweep must finish before flow events get pruned. If an edge's events were aged out before the cursor returned to it, the player-facing overlay would show permanent gaps. So the sweep length (`ECONOMY_UPDATE_INTERVAL`, 24) must stay below `FLOW_HISTORY_TICKS` — at 24 ≪ 200 this holds with room to spare at any scale.
 
 By design, the trade-flow processor declares a dependency on the economy processor: within a single tick, prices settle from production and consumption *before* the trade simulator reads them. This avoids flow firing against stale gradients.
 
 ### One Topology, Two Flows: Goods and People
 
-The same intra-faction open-edge topology and work-budget slice that carry goods also carry **population migration** (see [economy.md](./economy.md) — population dynamics and migration). Migration is a separate processor (`dependsOn: population`), but it reuses the same `SystemConnection` adjacency cache, the same distance-attenuation formula (`1 / (1 + DISTANCE_DECAY · fuelCost)`), and the same per-tick edge-cursor sharding.
+The same intra-faction open-edge topology and fixed-interval edge shard that carry goods also carry **population migration** (see [economy.md](./economy.md) — population dynamics and migration). Migration is a separate processor (`dependsOn: population`), but it reuses the same `SystemConnection` adjacency cache, the same distance-attenuation formula (`1 / (1 + DISTANCE_DECAY · fuelCost)`), and the same fixed-interval edge shard.
 
 The shared topology means goods and people always move on the **same map**: a system bleeding population to a booming neighbour can still receive food shipments from it along the same jump lanes. Gateways (high fuel-cost connections between faction territory clumps) throttle both flows equally under the attenuation formula — a deliberate design choice that gives gateways strategic significance without building special-case gateway logic into either flow.
 
@@ -69,7 +69,7 @@ A "trade route" in the player's mind is a connected chain of edges all moving th
 
 When players are actively trading near an edge, that edge scales its own flow back so it isn't competing with them. The processor sums recent player trade volume at the edge's **two endpoint systems** — using a wall-clock sliding window so bursts of player activity take effect immediately regardless of tick cadence — and uses it to compute a displacement value between 0 and 1 that linearly throttles that edge's budget. Full displacement means the edge's budget rounds to zero and it is skipped (pruning still runs); zero displacement leaves the budget unaffected.
 
-The intent is conservation of attention: where players are quiet, the simulator provides the trade pressure; where they are busy, the players are. Displacement is now computed independently for every edge from its own endpoints — replacing the old per-region throttle, which moved in lockstep with the region round-robin.
+The intent is conservation of attention: where players are quiet, the simulator provides the trade pressure; where they are busy, the players are. Displacement is computed independently for every edge from its own endpoints.
 
 ---
 
@@ -89,7 +89,6 @@ Defined in `lib/constants/trade-simulation.ts`. These are the dials the simulato
 
 | Constant | Purpose |
 |---|---|
-| `EDGES_PER_TICK` | Work-budget slice size — open edges the cursor processes per tick. Bounds per-tick work independently of faction size; must satisfy `ceil(totalOpenEdges / EDGES_PER_TICK) < FLOW_HISTORY_TICKS`. Calibrated to **256** (4-tick sweep at default scale, 46 at 10K). |
 | `DISTANCE_DECAY` | Strength of distance attenuation in `1 / (1 + DISTANCE_DECAY · fuelCost)`. Higher means long jumps move less and dispersion concentrates on long-haul goods. Calibrated to **0.1**; `0` disables it. |
 | `FLOW_BUDGET` | Cap on how many units one edge can move in a single run. |
 | `GRADIENT_THRESHOLD` | Minimum normalized price gap, as a fraction of base price, before an edge fires at all. |

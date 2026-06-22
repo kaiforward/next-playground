@@ -324,8 +324,8 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
       // anchorMult resets to 1 alongside stock: all events (and their
       // anchor_shift modifiers) were just deleted, so the neutral anchor is the
       // correct clean-slate value. Without this, a stale non-1 anchorMult would
-      // skew read-path prices until the round-robin economy processor next
-      // reaches each market's region.
+      // skew read-path prices until the economy shard processor next
+      // processes each market's system.
       await tx.$executeRaw`
         UPDATE "StationMarket" AS sm
         SET "stock" = batch."stock", "anchorMult" = 1

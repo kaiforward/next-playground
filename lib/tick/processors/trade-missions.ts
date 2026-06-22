@@ -13,6 +13,8 @@ import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 import { EVENT_MISSION_GOODS } from "@/lib/constants/events";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { loadHopDistances } from "@/lib/services/hop-distances";
+import { shardRange } from "@/lib/tick/shard";
+import { MISSION_GEN_INTERVAL } from "@/lib/constants/tick-cadence";
 import { PrismaTradeMissionsWorld } from "@/lib/tick/adapters/prisma/trade-missions";
 import type {
   MissionCreate,
@@ -21,6 +23,7 @@ import type {
 
 export interface TradeMissionsProcessorParams {
   rng: () => number;
+  interval: number;
 }
 
 /**
@@ -33,7 +36,7 @@ export async function runTradeMissionsProcessor(
   ctx: TickContext,
   params: TradeMissionsProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng } = params;
+  const { rng, interval } = params;
 
   // 1. Expire missions ────────────────────────────────────────────
   const expiredUnclaimedCount = await world.expireUnclaimedMissions(ctx.tick);
@@ -56,9 +59,13 @@ export async function runTradeMissionsProcessor(
 
   // 2. Candidate selection (engine) ───────────────────────────────
   const hopDistances = await loadHopDistances();
-  const marketSnapshots = await world.getMarketPrices();
-  const activeEvents = await world.getActiveEvents();
 
+  // Economy/price generation — sharded over the long interval so every system
+  // is scanned once per `interval` ticks without a single global sweep.
+  const allSystemIds = await world.getSystemIds();
+  const { start, end } = shardRange(allSystemIds.length, ctx.tick, interval);
+  const sliceIds = allSystemIds.slice(start, end);
+  const marketSnapshots = await world.getMarketPricesForSystems(sliceIds);
   const economyCandidates = selectEconomyCandidates(
     marketSnapshots,
     hopDistances,
@@ -66,6 +73,11 @@ export async function runTradeMissionsProcessor(
     ctx.tick,
     rng,
   );
+
+  // Event generation — responsive (every tick, all active events). Events are
+  // mostly shorter than the 120-tick cycle; event-themed missions must appear
+  // during their event regardless of which economy slice is active.
+  const activeEvents = await world.getActiveEvents();
   const eventCandidates = selectEventCandidates(
     activeEvents,
     EVENT_MISSION_GOODS,
@@ -76,10 +88,11 @@ export async function runTradeMissionsProcessor(
 
   const allCandidates = [...economyCandidates, ...eventCandidates];
 
+  const shardIndex = ((ctx.tick % interval) + interval) % interval;
   if (allCandidates.length === 0) {
     if (expiredUnclaimedCount > 0 || expiredAccepted.length > 0) {
       console.log(
-        `[trade-missions] Expired ${expiredUnclaimedCount} unclaimed + ${expiredAccepted.length} accepted mission(s), generated 0`,
+        `[trade-missions] Shard ${shardIndex + 1}/${interval} — expired ${expiredUnclaimedCount} unclaimed + ${expiredAccepted.length} accepted, generated 0`,
       );
     }
     await world.persistNotifications(playerEvents, ctx.tick);
@@ -124,7 +137,7 @@ export async function runTradeMissionsProcessor(
   await world.createMissions(toCreate);
 
   console.log(
-    `[trade-missions] Expired ${expiredUnclaimedCount} unclaimed + ${expiredAccepted.length} accepted, generated ${toCreate.length} mission(s)` +
+    `[trade-missions] Shard ${shardIndex + 1}/${interval} — expired ${expiredUnclaimedCount} unclaimed + ${expiredAccepted.length} accepted, generated ${toCreate.length}` +
       ` (${economyCandidates.length} economy, ${eventCandidates.length} event candidates)`,
   );
 
@@ -144,11 +157,15 @@ export async function runTradeMissionsProcessor(
 
 export const tradeMissionsProcessor: TickProcessor = {
   name: "trade-missions",
-  frequency: 5,
+  // Runs every tick; economy shard and responsive event path handled inside body.
+  frequency: 1,
   dependsOn: ["events", "economy"],
 
   async process(ctx): Promise<TickProcessorResult> {
     const world = new PrismaTradeMissionsWorld(ctx.tx);
-    return runTradeMissionsProcessor(world, ctx, { rng: Math.random });
+    return runTradeMissionsProcessor(world, ctx, {
+      rng: Math.random,
+      interval: MISSION_GEN_INTERVAL,
+    });
   },
 };

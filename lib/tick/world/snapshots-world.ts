@@ -14,7 +14,7 @@
  *
  * # Interface shape principles
  *
- *   - Domain-shaped, not data-shaped: `getMarkets()`, not `query(sql)`.
+ *   - Domain-shaped, not data-shaped: `getMarketsForSystems(ids)`, not `query(sql)`.
  *   - Per-processor, not shared: no god-interface across systems.
  *   - Reads return plain views (`MarketView`), not Prisma models. Decouples the
  *     processor from schema changes.
@@ -46,11 +46,11 @@ export interface PriceHistoryView {
 }
 
 export interface SnapshotsWorld {
-  /** All market rows across all stations. Used to compute the current snapshot. */
-  getMarkets(): Promise<MarketView[]>;
+  /** Market rows for the given systems. Used to compute the current snapshot. */
+  getMarketsForSystems(systemIds: string[]): Promise<MarketView[]>;
 
-  /** One row per system that has a PriceHistory record. */
-  getPriceHistories(): Promise<PriceHistoryView[]>;
+  /** One row per system (from the given set) that has a PriceHistory record. */
+  getPriceHistoriesForSystems(systemIds: string[]): Promise<PriceHistoryView[]>;
 
   /**
    * Replace the entries array for each provided system. Rows for systems

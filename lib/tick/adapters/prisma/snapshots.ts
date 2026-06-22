@@ -19,8 +19,10 @@ export class PrismaSnapshotsWorld implements SnapshotsWorld {
 
   constructor(private tx: TxClient) {}
 
-  async getMarkets(): Promise<MarketView[]> {
+  async getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
+    if (systemIds.length === 0) return [];
     const rows = await this.tx.stationMarket.findMany({
+      where: { station: { system: { id: { in: systemIds } } } },
       select: {
         stock: true,
         anchorMult: true,
@@ -45,8 +47,10 @@ export class PrismaSnapshotsWorld implements SnapshotsWorld {
     }));
   }
 
-  async getPriceHistories(): Promise<PriceHistoryView[]> {
+  async getPriceHistoriesForSystems(systemIds: string[]): Promise<PriceHistoryView[]> {
+    if (systemIds.length === 0) return [];
     const rows = await this.tx.priceHistory.findMany({
+      where: { systemId: { in: systemIds } },
       select: { id: true, systemId: true, entries: true },
     });
 

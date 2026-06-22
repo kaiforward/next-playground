@@ -1,10 +1,11 @@
 /**
  * Economy processor unit tests (memory-adapter, DB-free).
  *
- * Covers two behaviors:
+ * Covers:
  *   1. Strike suppression: high unrest reduces post-tick stock for producers.
  *   2. Dissatisfaction signal: the returned `economySignals.dissatisfactionBySystem`
  *      reflects demand satisfaction from post-tick stock.
+ *   3. Fixed-interval system shard: coverage, payload, and catch-up scaling.
  */
 
 import { describe, it, expect } from "vitest";
@@ -15,8 +16,9 @@ import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
+import { shardRange } from "@/lib/tick/shard";
 import type { TickContext } from "@/lib/tick/types";
-import type { SimMarketEntry, SimRegion, SimSystem } from "@/lib/engine/simulator/types";
+import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 
 // Per-market band derived from the makeMarket fixture params:
 //   demandRate=1, priceFloor=0.2, priceCeiling=5.0, storageCapacity=120
@@ -25,15 +27,18 @@ import type { SimMarketEntry, SimRegion, SimSystem } from "@/lib/engine/simulato
 //   → maxStock    = 40 / 0.2 + 120 = 200 + 120 = 320  (infrastructure ceiling)
 const FIXTURE_BAND = marketBand({ demandRate: 1, storageCapacity: 120, priceFloor: 0.2, priceCeiling: 5.0 });
 
+// interval=1 → the whole system list is processed every tick (single shard).
+// catchUpFactor(1) = 1/REFERENCE_INTERVAL scales the per-update step uniformly;
+// every assertion in the strike/dissatisfaction suites is RELATIVE (one stock vs
+// another under identical scaling), so the magnitude factor is immaterial here.
 const ECON_PARAMS = {
+  interval: 1,
   simParams: {
     noiseFraction: 0, // deterministic — no noise
   },
   modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
   strikeParams: STRIKE_PARAMS,
 };
-
-const REGION: SimRegion = { id: "r1", name: "Test Region" };
 
 function makeCtx(tick = 0): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -111,7 +116,6 @@ describe("economy processor: strike suppression", () => {
     const calmSystem = makeProducerSystem("sys-calm", 0);
     const calmWorld = new InMemoryEconomyWorld(
       { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, midStock)], modifiers: [] },
-      [REGION],
     );
     await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const calmStock = calmWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -120,7 +124,6 @@ describe("economy processor: strike suppression", () => {
     const strikeSystem = makeProducerSystem("sys-strike", 0.9);
     const strikeWorld = new InMemoryEconomyWorld(
       { systems: [strikeSystem], markets: [makeMarket("sys-strike", goodId, midStock)], modifiers: [] },
-      [REGION],
     );
     await runEconomyProcessor(strikeWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const strikeStock = strikeWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -138,7 +141,6 @@ describe("economy processor: strike suppression", () => {
     const calmSystem = makeProducerSystem("sys-calm", 0);
     const calmWorld = new InMemoryEconomyWorld(
       { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, midStock)], modifiers: [] },
-      [REGION],
     );
     await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const calmStock = calmWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -147,7 +149,6 @@ describe("economy processor: strike suppression", () => {
     const belowSystem = makeProducerSystem("sys-below", STRIKE_PARAMS.threshold - 0.01);
     const belowWorld = new InMemoryEconomyWorld(
       { systems: [belowSystem], markets: [makeMarket("sys-below", goodId, midStock)], modifiers: [] },
-      [REGION],
     );
     await runEconomyProcessor(belowWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const belowStock = belowWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -166,7 +167,6 @@ describe("economy processor: strike suppression", () => {
     const calmConsumer = makeConsumerSystem("c-calm", 0);
     const calmConsWorld = new InMemoryEconomyWorld(
       { systems: [calmConsumer], markets: [makeMarket("c-calm", goodId, highStock)], modifiers: [] },
-      [REGION],
     );
     await runEconomyProcessor(calmConsWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const calmConsStock = calmConsWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -174,7 +174,6 @@ describe("economy processor: strike suppression", () => {
     const strikeConsumer = makeConsumerSystem("c-strike", 0.9);
     const strikeConsWorld = new InMemoryEconomyWorld(
       { systems: [strikeConsumer], markets: [makeMarket("c-strike", goodId, highStock)], modifiers: [] },
-      [REGION],
     );
     await runEconomyProcessor(strikeConsWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const strikeConsStock = strikeConsWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -192,7 +191,6 @@ describe("economy processor: dissatisfaction signal", () => {
     const midStock = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-c", "food", midStock)], modifiers: [] },
-      [REGION],
     );
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
     expect(result.economySignals).toBeDefined();
@@ -205,7 +203,6 @@ describe("economy processor: dissatisfaction signal", () => {
     // the low-satisfaction zone. minStock+1=9 is well inside the scarcity region.
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-starved", "food", FIXTURE_BAND.minStock + 1)], modifiers: [] },
-      [REGION],
     );
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
     const d = result.economySignals!.dissatisfactionBySystem.get("sys-starved") ?? 0;
@@ -217,7 +214,6 @@ describe("economy processor: dissatisfaction signal", () => {
     // Pin stock near the per-market ceiling (maxStock=320) so satisfaction is very high.
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-fed", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
-      [REGION],
     );
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
     const d = result.economySignals!.dissatisfactionBySystem.get("sys-fed") ?? 1;
@@ -229,7 +225,6 @@ describe("economy processor: dissatisfaction signal", () => {
     // Starved: just above minStock(8) → scarcity zone → high D.
     const starvedWorld = new InMemoryEconomyWorld(
       { systems: [starved], markets: [makeMarket("sys-s", "food", FIXTURE_BAND.minStock + 1)], modifiers: [] },
-      [REGION],
     );
     const starvedResult = await runEconomyProcessor(starvedWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
     const dStarved = starvedResult.economySignals!.dissatisfactionBySystem.get("sys-s") ?? 0;
@@ -238,7 +233,6 @@ describe("economy processor: dissatisfaction signal", () => {
     // Fed: near maxStock(320) → abundance zone → low D.
     const fedWorld = new InMemoryEconomyWorld(
       { systems: [fed], markets: [makeMarket("sys-f", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
-      [REGION],
     );
     const fedResult = await runEconomyProcessor(fedWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
     const dFed = fedResult.economySignals!.dissatisfactionBySystem.get("sys-f") ?? 0;
@@ -253,7 +247,6 @@ describe("economy processor: dissatisfaction signal", () => {
     const producer = makeProducerSystem("sys-p", 0);
     const world = new InMemoryEconomyWorld(
       { systems: [producer], markets: [makeMarket("sys-p", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
-      [REGION],
     );
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
     const d = result.economySignals!.dissatisfactionBySystem.get("sys-p") ?? 1;
@@ -261,11 +254,72 @@ describe("economy processor: dissatisfaction signal", () => {
   });
 });
 
+// ── Fixed-interval system shard ───────────────────────────────────
+
+describe("economy processor: fixed-interval system shard", () => {
+  it("covers every system exactly once over `interval` ticks; payload reports the slice", async () => {
+    const interval = 4;
+    const systems = Array.from({ length: 10 }, (_, i) => makeProducerSystem(`sys-${i}`, 0));
+    const sortedIds = systems.map((s) => s.id).sort((a, b) => a.localeCompare(b));
+    const markets = systems.map((s) => makeMarket(s.id, "food", 100));
+
+    const seen = new Map<string, number>();
+    let totalReported = 0;
+    for (let t = 0; t < interval; t++) {
+      const world = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
+      const result = await runEconomyProcessor(world, makeCtx(t), { ...ECON_PARAMS, interval, rng: mulberry32(1) });
+
+      // The dissatisfaction signal is keyed by exactly the processed shard.
+      const processed = [...result.economySignals!.dissatisfactionBySystem.keys()];
+      const { start, end } = shardRange(sortedIds.length, t, interval);
+      expect(processed.sort((a, b) => a.localeCompare(b))).toEqual(sortedIds.slice(start, end));
+
+      const payload = result.globalEvents!.economyTick![0];
+      expect(payload.shardCount).toBe(interval);
+      expect(payload.shardIndex).toBe(t % interval);
+      expect(payload.systemCount).toBe(processed.length);
+      totalReported += payload.systemCount;
+      for (const id of processed) seen.set(id, (seen.get(id) ?? 0) + 1);
+    }
+
+    // Full, disjoint coverage of the whole list across one interval.
+    expect(seen.size).toBe(systems.length);
+    expect([...seen.values()].every((c) => c === 1)).toBe(true);
+    expect(totalReported).toBe(systems.length);
+  });
+
+  it("scales the per-update step by catchUpFactor(interval) (symmetric, equilibrium-invariant)", async () => {
+    const goodId = "food";
+    // A pure consumer (no production) so only the consumption term moves stock —
+    // its self-limiting factor is evaluated at the identical start stock in both
+    // runs, isolating the catch-up factor as the only difference.
+    const start = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
+
+    // interval=1 → catchUpFactor 1/24; the single system is processed at tick 0.
+    const w1 = new InMemoryEconomyWorld(
+      { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
+    );
+    await runEconomyProcessor(w1, makeCtx(0), { ...ECON_PARAMS, interval: 1, rng: mulberry32(7) });
+    const drain1 = start - w1.markets.find((m) => m.goodId === goodId)!.stock;
+
+    // interval=2 → catchUpFactor 2/24; the single system is processed at tick 1.
+    const w2 = new InMemoryEconomyWorld(
+      { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
+    );
+    await runEconomyProcessor(w2, makeCtx(1), { ...ECON_PARAMS, interval: 2, rng: mulberry32(7) });
+    const drain2 = start - w2.markets.find((m) => m.goodId === goodId)!.stock;
+
+    // Doubling the interval doubles the per-update step (catchUpFactor(2)/catchUpFactor(1) = 2).
+    expect(drain1).toBeGreaterThan(0);
+    expect(drain2).toBeCloseTo(2 * drain1, 6);
+  });
+});
+
 // ── Supply-chain input-gating (cascade) ──────────────────────────
 
 describe("economy processor: supply-chain input-gating", () => {
   /**
-   * Two smelter systems in the same region — identical except for ore stock.
+   * Two smelter systems in their own worlds — identical except for ore stock.
    * Metals production requires ore (recipe: { ore: 1 }). System A has abundant
    * ore; system B has ore pinned at the floor (zero drawable). After one tick,
    * system A's metals stock must exceed system B's because the input gate is
@@ -301,29 +355,23 @@ describe("economy processor: supply-chain input-gating", () => {
     const sysA = makeSmeltingSystem("sys-a");
     const sysB = makeSmeltingSystem("sys-b");
 
-    const worldA = new InMemoryEconomyWorld(
-      {
-        systems: [sysA],
-        markets: [
-          makeMarket("sys-a", "ore", FIXTURE_BAND.targetStock * 4), // ore abundant (4× targetStock): gate ≈ 1
-          makeMarket("sys-a", "metals", MID_METALS),
-        ],
-        modifiers: [],
-      },
-      [REGION],
-    );
+    const worldA = new InMemoryEconomyWorld({
+      systems: [sysA],
+      markets: [
+        makeMarket("sys-a", "ore", FIXTURE_BAND.targetStock * 4), // ore abundant (4× targetStock): gate ≈ 1
+        makeMarket("sys-a", "metals", MID_METALS),
+      ],
+      modifiers: [],
+    });
 
-    const worldB = new InMemoryEconomyWorld(
-      {
-        systems: [sysB],
-        markets: [
-          makeMarket("sys-b", "ore", Math.floor(FIXTURE_BAND.minStock)), // ore at floor (drawable=0): gate = 0
-          makeMarket("sys-b", "metals", MID_METALS),
-        ],
-        modifiers: [],
-      },
-      [REGION],
-    );
+    const worldB = new InMemoryEconomyWorld({
+      systems: [sysB],
+      markets: [
+        makeMarket("sys-b", "ore", Math.floor(FIXTURE_BAND.minStock)), // ore at floor (drawable=0): gate = 0
+        makeMarket("sys-b", "metals", MID_METALS),
+      ],
+      modifiers: [],
+    });
 
     await runEconomyProcessor(worldA, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     await runEconomyProcessor(worldB, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { buildingProduction, labourFulfillment, labourDemand } from "@/lib/engine/industry";
 import { makeResourceVector, unitResourceVector } from "@/lib/engine/resources";
-import type { SimSystem, SimMarketEntry, SimRegion } from "@/lib/engine/simulator/types";
+import type { SimSystem, SimMarketEntry } from "@/lib/engine/simulator/types";
 
 function sys(overrides: Partial<SimSystem>): SimSystem {
   return {
@@ -15,7 +15,6 @@ function sys(overrides: Partial<SimSystem>): SimSystem {
   };
 }
 
-const region: SimRegion = { id: "r1", name: "R1" };
 const market = (goodId: string): SimMarketEntry => ({
   systemId: "s1", goodId, basePrice: 35, stock: 100, anchorMult: 1,
   demandRate: 1, priceFloor: 0.5, priceCeiling: 2, storageCapacity: 0,
@@ -25,9 +24,8 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
   it("derives baseProductionRate from buildings × outputPerUnit × labourFulfillment", async () => {
     const world = new InMemoryEconomyWorld(
       { systems: [sys({})], markets: [market("ore")], modifiers: [] },
-      [region],
     );
-    const views = await world.getMarketsForRegion("r1");
+    const views = await world.getMarketsForSystems(["s1"]);
     const ore = views.find((v) => v.goodId === "ore")!;
     const fulfillment = labourFulfillment(1000, labourDemand({ ore: 5 }));
     expect(ore.baseProductionRate).toBeCloseTo(buildingProduction({ ore: 5 }, "ore", fulfillment, unitResourceVector()), 6);
@@ -36,21 +34,33 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
   it("produces nothing for a good with no buildings", async () => {
     const world = new InMemoryEconomyWorld(
       { systems: [sys({ buildings: {} })], markets: [market("ore")], modifiers: [] },
-      [region],
     );
-    const views = await world.getMarketsForRegion("r1");
+    const views = await world.getMarketsForSystems(["s1"]);
     expect(views[0].baseProductionRate).toBeUndefined();
+  });
+
+  it("returns only markets for the requested systems", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [sys({ id: "s1" }), sys({ id: "s2" })],
+      markets: [
+        { ...market("ore"), systemId: "s1" },
+        { ...market("ore"), systemId: "s2" },
+      ],
+      modifiers: [],
+    });
+    const views = await world.getMarketsForSystems(["s1"]);
+    expect(views.map((v) => v.systemId)).toEqual(["s1"]);
   });
 
   it("throttles output when population cannot staff the buildings", async () => {
     const staffed = new InMemoryEconomyWorld(
-      { systems: [sys({ population: 100000 })], markets: [market("ore")], modifiers: [] }, [region],
+      { systems: [sys({ population: 100000 })], markets: [market("ore")], modifiers: [] },
     );
     const starved = new InMemoryEconomyWorld(
-      { systems: [sys({ population: 1 })], markets: [market("ore")], modifiers: [] }, [region],
+      { systems: [sys({ population: 1 })], markets: [market("ore")], modifiers: [] },
     );
-    const a = (await staffed.getMarketsForRegion("r1"))[0].baseProductionRate ?? 0;
-    const b = (await starved.getMarketsForRegion("r1"))[0].baseProductionRate ?? 0;
+    const a = (await staffed.getMarketsForSystems(["s1"]))[0].baseProductionRate ?? 0;
+    const b = (await starved.getMarketsForSystems(["s1"]))[0].baseProductionRate ?? 0;
     expect(a).toBeGreaterThan(b);
   });
 
@@ -58,14 +68,12 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
     // Two otherwise-identical systems; only the ore yield differs (k=3 vs unit).
     const unitYield = new InMemoryEconomyWorld(
       { systems: [sys({ yields: unitResourceVector() })], markets: [market("ore")], modifiers: [] },
-      [region],
     );
     const richYield = new InMemoryEconomyWorld(
       { systems: [sys({ yields: makeResourceVector({ ore: 3 }) })], markets: [market("ore")], modifiers: [] },
-      [region],
     );
-    const baseline = (await unitYield.getMarketsForRegion("r1"))[0].baseProductionRate ?? 0;
-    const rich = (await richYield.getMarketsForRegion("r1"))[0].baseProductionRate ?? 0;
+    const baseline = (await unitYield.getMarketsForSystems(["s1"]))[0].baseProductionRate ?? 0;
+    const rich = (await richYield.getMarketsForSystems(["s1"]))[0].baseProductionRate ?? 0;
     expect(baseline).toBeGreaterThan(0);
     expect(rich).toBeCloseTo(baseline * 3, 6);
   });
@@ -76,14 +84,12 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       sys({ economyType: "industrial", buildings: { metals: 5 }, yields });
     const unitYield = new InMemoryEconomyWorld(
       { systems: [metalsSys(unitResourceVector())], markets: [market("metals")], modifiers: [] },
-      [region],
     );
     const richYield = new InMemoryEconomyWorld(
       { systems: [metalsSys(makeResourceVector({ ore: 3 }))], markets: [market("metals")], modifiers: [] },
-      [region],
     );
-    const baseline = (await unitYield.getMarketsForRegion("r1"))[0].baseProductionRate ?? 0;
-    const rich = (await richYield.getMarketsForRegion("r1"))[0].baseProductionRate ?? 0;
+    const baseline = (await unitYield.getMarketsForSystems(["s1"]))[0].baseProductionRate ?? 0;
+    const rich = (await richYield.getMarketsForSystems(["s1"]))[0].baseProductionRate ?? 0;
     expect(baseline).toBeGreaterThan(0);
     expect(rich).toBeCloseTo(baseline, 6);
   });

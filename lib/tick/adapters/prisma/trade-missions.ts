@@ -51,8 +51,18 @@ export class PrismaTradeMissionsWorld implements TradeMissionsWorld {
     await this.tx.tradeMission.deleteMany({ where: { id: { in: ids } } });
   }
 
-  async getMarketPrices(): Promise<MarketPriceView[]> {
+  async getSystemIds(): Promise<string[]> {
+    const rows = await this.tx.starSystem.findMany({
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    return rows.map((r) => r.id);
+  }
+
+  async getMarketPricesForSystems(systemIds: string[]): Promise<MarketPriceView[]> {
+    if (systemIds.length === 0) return [];
     const rows = await this.tx.stationMarket.findMany({
+      where: { station: { systemId: { in: systemIds } } },
       include: {
         good: true,
         station: { select: { systemId: true } },

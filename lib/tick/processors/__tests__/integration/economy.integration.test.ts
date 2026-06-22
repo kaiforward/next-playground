@@ -5,6 +5,8 @@ import type { TestUniverse } from "@/lib/test-utils/fixtures";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { shardRange } from "@/lib/tick/shard";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import type { EconomySimParams } from "@/lib/engine/tick";
@@ -25,12 +27,14 @@ describe("economyProcessor (integration)", () => {
   });
 
   /**
-   * Run the processor body directly with a seeded RNG. Per-tick noise (±3) is
-   * small but can mask a single tick's production/consumption, so behavioral
-   * tests run many ticks and assert direction-of-travel, not exact values.
+   * Run the processor body directly with a seeded RNG at a given shard interval.
+   * Per-tick noise is small but can mask a single tick's production/consumption,
+   * so behavioral tests run a system on many of its shard ticks (catch-up = 1 at
+   * `ECONOMY_UPDATE_INTERVAL`) and assert direction-of-travel.
    */
   async function runProcessor(
     tick: number,
+    interval: number,
     seed = 42,
   ): Promise<TickProcessorResult> {
     return prisma.$transaction(
@@ -39,6 +43,7 @@ describe("economyProcessor (integration)", () => {
         const world = new PrismaEconomyWorld(tx);
         return runEconomyProcessor(world, ctx, {
           rng: mulberry32(seed),
+          interval,
           simParams,
           modifierCaps: MODIFIER_CAPS,
           strikeParams: STRIKE_PARAMS,
@@ -48,19 +53,26 @@ describe("economyProcessor (integration)", () => {
     );
   }
 
-  /** First tick >= `from` whose round-robin index lands on `regionIndex`. */
-  function tickForRegion(from: number, regionIndex: number, regionCount: number): number {
-    let t = from;
-    while (t % regionCount !== regionIndex) t++;
-    return t;
+  /** Sorted system ids — the shard schedule's stable item list. */
+  async function sortedSystemIds(): Promise<string[]> {
+    const rows = await prisma.starSystem.findMany({ select: { id: true }, orderBy: { id: "asc" } });
+    return rows.map((r) => r.id);
+  }
+
+  /** The shard-group offset (`tick % interval`) whose window includes system index `idx`. */
+  function shardGroupFor(total: number, idx: number, interval: number): number {
+    for (let g = 0; g < interval; g++) {
+      const { start, end } = shardRange(total, g, interval);
+      if (idx >= start && idx < end) return g;
+    }
+    return 0;
   }
 
   it("raises a producer's stock and drains a consumer's stock over ticks", async () => {
-    // Agricultural PRODUCES food (federation region); industrial CONSUMES food
-    // (corporate region). Each market has its own per-band derived from its
-    // demand rate (pop × perCapitaNeed). Seed within each market's own band and
-    // run ticks — production should push the producer toward its ceiling, and
-    // consumption should drain the consumer toward its floor.
+    // Agricultural PRODUCES food; industrial CONSUMES food. Each market has its
+    // own per-band derived from its demand rate (pop × perCapitaNeed). Seed
+    // within each market's own band and process each system on its shard ticks
+    // (interval = ECONOMY_UPDATE_INTERVAL → catch-up = 1, calibrated steps).
     //
     // Band arithmetic (storageCapacity=0 from fixture default, TARGET_COVER=40):
     //   agri (pop 400):  demandRate=1.6 → target=64, min=32,  max=128
@@ -83,14 +95,15 @@ describe("economyProcessor (integration)", () => {
       data: { stock: CONSUMER_SEED },
     });
 
-    const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
-    const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
-    const corpIdx = regions.findIndex((r) => r.id === universe.regions.corporate);
+    const ids = await sortedSystemIds();
+    const interval = ECONOMY_UPDATE_INTERVAL;
+    const prodGroup = shardGroupFor(ids.length, ids.indexOf(universe.systems.agricultural), interval);
+    const consGroup = shardGroupFor(ids.length, ids.indexOf(universe.systems.industrial), interval);
 
-    // Run ~12 economy ticks for each region.
+    // ~12 calibrated updates per system, each on its own shard tick.
     for (let i = 0; i < 12; i++) {
-      await runProcessor(tickForRegion(10 + i * regions.length, fedIdx, regions.length));
-      await runProcessor(tickForRegion(10 + i * regions.length, corpIdx, regions.length));
+      await runProcessor(prodGroup + i * interval, interval);
+      await runProcessor(consGroup + i * interval, interval);
     }
 
     const producer = await prisma.stationMarket.findUnique({
@@ -112,54 +125,51 @@ describe("economyProcessor (integration)", () => {
     }
   });
 
-  it("only the target region's markets change (round-robin)", async () => {
-    const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
-    const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
-    const corpIdx = regions.findIndex((r) => r.id === universe.regions.corporate);
+  it("only the current shard's systems change (a system outside the shard is untouched)", async () => {
+    const ids = await sortedSystemIds();
+    const interval = ids.length; // interval = N → each tick processes exactly one system (its shard group)
+    const industrialIdx = ids.indexOf(universe.systems.industrial);
+    expect(industrialIdx).toBeGreaterThanOrEqual(0);
 
-    // Set a distinctive stock on a corporate-region market (industrial station).
+    // Set a distinctive stock on the industrial system's ore market.
     const oreGoodId = universe.goodIds["ore"];
     const corpStationId = universe.stations.industrial;
-
     await prisma.stationMarket.update({
       where: { stationId_goodId: { stationId: corpStationId, goodId: oreGoodId } },
       data: { stock: 150 },
     });
 
-    // Run on a tick that targets the FEDERATION region (not corporate).
-    const fedTick = tickForRegion(10, fedIdx, regions.length);
-    await runProcessor(fedTick);
-
-    const corpMarket = await prisma.stationMarket.findUnique({
+    // A tick whose shard group is NOT the industrial system → its ore is untouched.
+    const otherTick = (industrialIdx + 1) % interval;
+    await runProcessor(otherTick, interval);
+    const untouched = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId: corpStationId, goodId: oreGoodId } },
     });
-    expect(corpMarket!.stock).toBe(150);
+    expect(untouched!.stock).toBe(150);
 
-    // Now run on the corporate tick.
-    let corpTick = tickForRegion(10, corpIdx, regions.length);
-    if (corpTick === fedTick) corpTick += regions.length;
-    await runProcessor(corpTick);
-
-    const corpMarketAfter = await prisma.stationMarket.findUnique({
+    // The tick whose shard group IS the industrial system → its ore changes.
+    await runProcessor(industrialIdx, interval);
+    const touched = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId: corpStationId, goodId: oreGoodId } },
     });
-    expect(corpMarketAfter!.stock).not.toBe(150);
+    expect(touched!.stock).not.toBe(150);
   });
 
-  it("result contains economyTick global event with correct region", async () => {
-    const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
-    const targetRegion = regions[10 % regions.length];
+  it("result contains economyTick global event with shard metadata", async () => {
+    const ids = await sortedSystemIds();
+    const interval = ids.length; // one system per shard
+    const tick = ids.indexOf(universe.systems.industrial); // a market-bearing system
 
-    const result = await runProcessor(10);
+    const result = await runProcessor(tick, interval);
 
     expect(result.globalEvents).toBeDefined();
     expect(result.globalEvents!.economyTick).toBeDefined();
     expect(result.globalEvents!.economyTick!.length).toBe(1);
 
     const payload = result.globalEvents!.economyTick![0];
-    expect(payload.regionId).toBe(targetRegion.id);
-    expect(payload.regionName).toBe(targetRegion.name);
-    expect(payload.marketCount).toBeGreaterThan(0);
+    expect(payload.shardCount).toBe(interval);
+    expect(payload.shardIndex).toBe(tick % interval);
+    expect(payload.systemCount).toBe(1);
   });
 
   it("raises stock for a good the system has buildings for, but not for one it lacks", async () => {
@@ -170,9 +180,8 @@ describe("economyProcessor (integration)", () => {
     // capacity-driven adapter MUST leave it unproduced here. Its low volatility
     // keeps it near the floor over the run.
     //
-    // Both start at the floor. Food's building-production (~8/tick) pushes it
-    // well above consumer_goods, which has no building and only drifts on
-    // consumption plus small noise.
+    // Both start at the floor. Food's building-production pushes it well above
+    // consumer_goods, which has no building and only drifts on consumption + noise.
     const foodGoodId = universe.goodIds["food"];
     const labourOnlyGoodId = universe.goodIds["consumer_goods"];
     const station = universe.stations.agricultural;
@@ -182,12 +191,10 @@ describe("economyProcessor (integration)", () => {
       data: { stock: 5 }, // pin to per-market band floor (≈minStock for typical goods)
     });
 
-    const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
-    const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
-
-    for (let t = 0; t < 15; t++) {
-      await runProcessor(tickForRegion(t, fedIdx, regions.length));
-    }
+    const ids = await sortedSystemIds();
+    const interval = ECONOMY_UPDATE_INTERVAL;
+    const agriGroup = shardGroupFor(ids.length, ids.indexOf(universe.systems.agricultural), interval);
+    for (let i = 0; i < 15; i++) await runProcessor(agriGroup + i * interval, interval);
 
     const food = await prisma.stationMarket.findFirstOrThrow({
       where: { stationId: station, goodId: foodGoodId },
@@ -204,16 +211,15 @@ describe("economyProcessor (integration)", () => {
   it("keeps every market stock finite and in-band over many ticks with a non-unit yield", async () => {
     // Drive a rich ore yield (×2.5) on the industrial (ore-extracting) system so
     // the tier-0 yield term flows DB→adapter→production→write against Postgres.
-    // Then run ~30 economy ticks across every region and assert no stock ever
-    // goes NaN/Infinity or escapes its own per-market [minStock, maxStock] band.
+    // Run two full refresh cycles (every system processed twice) and assert no
+    // stock ever goes NaN/Infinity or escapes its own per-market band.
     await prisma.starSystem.update({
       where: { id: universe.systems.industrial },
       data: { yieldOre: 2.5 },
     });
 
-    for (let t = 10; t < 40; t++) {
-      await runProcessor(t);
-    }
+    const interval = ECONOMY_UPDATE_INTERVAL;
+    for (let t = 0; t < 2 * interval; t++) await runProcessor(t, interval);
 
     const markets = await prisma.stationMarket.findMany({ select: { stock: true } });
     expect(markets.length).toBeGreaterThan(0);
@@ -223,7 +229,7 @@ describe("economyProcessor (integration)", () => {
     }
 
     // The rich-ore system's ore market produces under the ×2.5 yield: its stock
-    // climbs above the seeded mid-band rather than draining out.
+    // climbs above the per-market band floor rather than draining out.
     const oreMarket = await prisma.stationMarket.findUniqueOrThrow({
       where: {
         stationId_goodId: { stationId: universe.stations.industrial, goodId: universe.goodIds["ore"] },
@@ -265,11 +271,11 @@ describe("economyProcessor (integration)", () => {
       },
     });
 
-    // Run on the tick that processes the federation region (contains agri system).
-    const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
-    const fedIdx = regions.findIndex((r) => r.id === universe.regions.federation);
-    const fedTick = tickForRegion(10, fedIdx, regions.length);
-    await runProcessor(fedTick);
+    // Run the tick whose shard includes the agri system, so the modifier resolves.
+    const ids = await sortedSystemIds();
+    const interval = ECONOMY_UPDATE_INTERVAL;
+    const agriGroup = shardGroupFor(ids.length, ids.indexOf(agriSystemId), interval);
+    await runProcessor(agriGroup, interval);
 
     const updated = await prisma.stationMarket.findUnique({
       where: { stationId_goodId: { stationId: agriStationId, goodId: foodDbId } },

@@ -10,8 +10,8 @@ import type {
  * Pure processor body. Reads the per-system dissatisfaction D the economy
  * processor recorded this tick (via ctx.results), integrates it into unrest,
  * applies logistic growth/decline, and rewrites demandRate for the new
- * population. Scoped to the economy's round-robin region (D's key set), so
- * per-tick work is bounded and the satisfaction signal is fresh.
+ * population. Scoped to the economy's shard (D's key set), so per-tick
+ * work is bounded and the satisfaction signal is fresh.
  */
 export async function runPopulationProcessor(
   world: PopulationWorld,

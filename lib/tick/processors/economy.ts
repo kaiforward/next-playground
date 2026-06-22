@@ -23,6 +23,8 @@ import type {
 } from "@/lib/tick/world/economy-world";
 import { dissatisfaction, strikeMultiplier, type GoodSatisfaction } from "@/lib/engine/population";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
+import { shardRange, catchUpFactor } from "@/lib/tick/shard";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
 
@@ -31,48 +33,55 @@ const DEBUG = process.env.DEBUG_ECONOMY === "1";
  * or the in-memory adapter (simulator + unit tests). All knobs that differ
  * between live and sim (RNG, sim params) come in via `params`.
  *
- * Round-robin: one region per tick, picked from the adapter's region list.
+ * Fixed-interval system shard: each tick processes `shardRange(systems, tick,
+ * interval)` of the stable-sorted system list, so every system refreshes once
+ * per `interval` ticks at any universe scale. Per-update production/consumption
+ * are scaled by `catchUpFactor(interval)` so the wall-clock rate is constant and
+ * the equilibrium stock is interval-invariant.
  */
 export async function runEconomyProcessor(
   world: EconomyWorld,
   ctx: TickContext,
   params: EconomyProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng, simParams, modifierCaps, strikeParams } = params;
+  const { rng, interval, simParams, modifierCaps, strikeParams } = params;
 
-  const regions = await world.getRegions();
-  if (regions.length === 0) {
-    return {
-      globalEvents: {
-        economyTick: [{ regionId: "", regionName: "", marketCount: 0 }],
-      },
-    };
+  const allSystemIds = await world.getSystemIds();
+  const { start, end } = shardRange(allSystemIds.length, ctx.tick, interval);
+  const shardIndex = ((ctx.tick % interval) + interval) % interval;
+  const emptyPayload = {
+    economyTick: [{ systemCount: 0, shardIndex, shardCount: interval }],
+  };
+  if (start >= end) {
+    return { globalEvents: emptyPayload };
   }
 
-  const regionIndex = ctx.tick % regions.length;
-  const targetRegion = regions[regionIndex];
-
-  const markets = await world.getMarketsForRegion(targetRegion.id);
+  const shardSystemIds = allSystemIds.slice(start, end);
+  const markets = await world.getMarketsForSystems(shardSystemIds);
   if (markets.length === 0) {
-    return {
-      globalEvents: {
-        economyTick: [
-          {
-            regionId: targetRegion.id,
-            regionName: targetRegion.name,
-            marketCount: 0,
-          },
-        ],
-      },
-    };
+    return { globalEvents: emptyPayload };
   }
 
-  // Index modifiers: region-scoped apply to all systems; system-scoped target one.
+  // The shard spans regions, so a region-targeted modifier applies only to the
+  // systems in THAT region (not the whole slice). Map each system's region, then
+  // attach region-targeted mods by region and system-targeted mods by system.
   const systemIds = [...new Set(markets.map((m) => m.systemId))];
-  const rawModifiers = await world.getModifiers(systemIds, targetRegion.id);
-  const regionMods = rawModifiers.filter((m) => m.targetType === "region");
+  const regionBySystem = new Map<string, string>();
+  for (const m of markets) regionBySystem.set(m.systemId, m.regionId);
+
+  const rawModifiers = await world.getModifiers(systemIds);
+  const regionModsByRegion = new Map<string, ModifierRow[]>();
+  for (const mod of rawModifiers) {
+    if (mod.targetType === "region" && mod.targetId) {
+      const arr = regionModsByRegion.get(mod.targetId) ?? [];
+      arr.push(mod);
+      regionModsByRegion.set(mod.targetId, arr);
+    }
+  }
   const modifiersBySystem = new Map<string, ModifierRow[]>();
   for (const sysId of systemIds) {
+    const regionId = regionBySystem.get(sysId);
+    const regionMods = regionId ? regionModsByRegion.get(regionId) ?? [] : [];
     modifiersBySystem.set(sysId, [...regionMods]);
   }
   for (const mod of rawModifiers) {
@@ -85,17 +94,20 @@ export async function runEconomyProcessor(
   const unrestBySystem = await world.getUnrest(systemIds);
 
   // Build tick entries via the shared market-tick builder. Government modifiers
-  // are resolved per-market (border regions can contain systems owned by
-  // different factions) rather than once per region. Strike suppression is
-  // production-only — consumption is unaffected by labor action.
+  // are resolved per-market (a shard slice contains systems owned by different
+  // factions) rather than once per region. Strike suppression is production-only
+  // — consumption is unaffected by labor action. The catch-up factor scales the
+  // per-update production AND consumption symmetrically (band geometry — demand
+  // anchor + storage — is rate-independent and stays untouched).
+  const catchUp = catchUpFactor(interval);
   const resolved = markets.map((m) =>
     resolveMarketTickEntry({
       goodId: m.goodId,
       stock: m.stock,
       demandRate: m.demandRate,
       storageCapacity: m.storageCapacity,
-      baseProductionRate: m.baseProductionRate,
-      baseConsumptionRate: m.baseConsumptionRate,
+      baseProductionRate: m.baseProductionRate != null ? m.baseProductionRate * catchUp : undefined,
+      baseConsumptionRate: m.baseConsumptionRate != null ? m.baseConsumptionRate * catchUp : undefined,
       govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
       traits: m.traits,
       productionSuppress: strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams),
@@ -139,7 +151,7 @@ export async function runEconomyProcessor(
   const modCount = rawModifiers.length;
   if (DEBUG) {
     console.log(
-      `[economy] Region "${targetRegion.name}" (${regionIndex + 1}/${regions.length}): ${markets.length} markets` +
+      `[economy] Shard ${shardIndex + 1}/${interval}: ${systemIds.length} systems / ${markets.length} markets` +
         (modCount > 0 ? `, ${modCount} active modifier(s)` : ""),
     );
   }
@@ -148,9 +160,9 @@ export async function runEconomyProcessor(
     globalEvents: {
       economyTick: [
         {
-          regionId: targetRegion.id,
-          regionName: targetRegion.name,
-          marketCount: markets.length,
+          systemCount: systemIds.length,
+          shardIndex,
+          shardCount: interval,
         },
       ],
     },
@@ -166,7 +178,7 @@ const simParams: EconomySimParams = {
 
 export const economyProcessor: TickProcessor = {
   name: "economy",
-  // Runs every tick; round-robin region selection happens inside runEconomyProcessor.
+  // Runs every tick; the fixed-interval system shard happens inside runEconomyProcessor.
   frequency: 1,
   dependsOn: ["events"],
 
@@ -174,6 +186,7 @@ export const economyProcessor: TickProcessor = {
     const world = new PrismaEconomyWorld(ctx.tx);
     return runEconomyProcessor(world, ctx, {
       rng: Math.random,
+      interval: ECONOMY_UPDATE_INTERVAL,
       simParams,
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,

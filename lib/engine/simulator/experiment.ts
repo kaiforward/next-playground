@@ -29,6 +29,7 @@ const BotConfigSchema = z.object({
 const ConstantOverridesSchema = z.object({
   economy: z.object({
     noiseFraction: z.number().min(0).optional(),
+    interval: z.number().int().min(1).optional(),
   }).optional(),
   goods: z.record(z.string(), z.object({ basePrice: z.number() })).optional(),
   fuel: z.object({
@@ -59,7 +60,6 @@ const ConstantOverridesSchema = z.object({
     intraRegionExtraEdges: z.number().optional(),
   }).optional(),
   tradeFlow: z.object({
-    edgesPerTick: z.number().int().min(1).optional(),
     distanceDecay: z.number().min(0).optional(),
     flowBudget: z.number().min(0).optional(),
     gradientThreshold: z.number().min(0).optional(),

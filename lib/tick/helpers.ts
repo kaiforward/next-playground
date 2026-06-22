@@ -1,4 +1,3 @@
-import { createNotifications } from "@/lib/services/notifications";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { TxClient, TickProcessorResult, GlobalEventMap, PlayerEventMap, GameNotificationPayload } from "./types";
 
@@ -58,6 +57,9 @@ export async function persistPlayerNotifications(
     }
   }
 
+  // Deferred import: the notifications service pulls in prisma (and DATABASE_URL)
+  // at load, so import it lazily to keep this module loadable without a DB connection.
+  const { createNotifications } = await import("@/lib/services/notifications");
   await createNotifications(tx, entries);
 }
 

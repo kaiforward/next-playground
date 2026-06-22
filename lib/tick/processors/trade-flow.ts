@@ -1,6 +1,8 @@
 import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
 import { spotPrice, curveForGood, marketBandForRow } from "@/lib/engine/market-pricing";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
+import { shardRange, catchUpFactor } from "@/lib/tick/shard";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { PrismaTradeFlowWorld } from "@/lib/tick/adapters/prisma/trade-flow";
 import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
@@ -15,9 +17,10 @@ let invariantWarned = false;
  *
  * Topology: flow only crosses OPEN edges (both endpoints share a faction; two
  * independents trade via null===null). Cross-faction edges are excluded by the
- * adapter's getOpenEdges(). Scheduling: a work-budget slice of `edgesPerTick`
- * edges per tick, advancing a cursor over the stable edge order, so per-tick
- * DB work is bounded independently of faction-territory size.
+ * adapter's getOpenEdges(). Scheduling: a fixed-interval shard over the stable
+ * edge order — every edge sweeps once per `interval` ticks at any scale, sharing
+ * one clock with the economy. The per-edge moved amount is scaled by
+ * `catchUpFactor(interval)` so the wall-clock flow rate is interval-invariant.
  */
 export async function runTradeFlowProcessor(
   world: TradeFlowWorld,
@@ -28,20 +31,22 @@ export async function runTradeFlowProcessor(
   if (edges.length === 0) return {};
 
   const total = edges.length;
-  const sweepTicks = Math.ceil(total / params.edgesPerTick);
-  if (!invariantWarned && sweepTicks >= params.flowHistoryTicks) {
+  if (!invariantWarned && params.interval >= params.flowHistoryTicks) {
     invariantWarned = true;
     console.warn(
-      `[tradeFlow] INVARIANT: sweep (${sweepTicks} ticks = ceil(${total} edges / ${params.edgesPerTick} per tick)) ≥ FLOW_HISTORY_TICKS (${params.flowHistoryTicks}). ` +
-        `Flow events prune before the sweep returns — overlay will show gaps. Raise EDGES_PER_TICK or FLOW_HISTORY_TICKS.`,
+      `[tradeFlow] INVARIANT: sweep (${params.interval} ticks) ≥ FLOW_HISTORY_TICKS (${params.flowHistoryTicks}). ` +
+        `Flow events prune before the sweep returns — overlay will show gaps. Lower the update interval or raise FLOW_HISTORY_TICKS.`,
     );
   }
 
-  // Work-budget slice: consecutive window advancing edgesPerTick per tick, wrapping.
-  const count = Math.min(params.edgesPerTick, total);
-  const start = (ctx.tick * params.edgesPerTick) % total;
-  const slice: EdgeView[] = [];
-  for (let i = 0; i < count; i++) slice.push(edges[(start + i) % total]);
+  // Fixed-interval edge shard: a contiguous window of the stable edge order.
+  const { start, end } = shardRange(total, ctx.tick, params.interval);
+  const slice: EdgeView[] = edges.slice(start, end);
+  if (slice.length === 0) {
+    await world.pruneFlowEvents(ctx.tick - params.flowHistoryTicks);
+    return {};
+  }
+  const catchUp = catchUpFactor(params.interval);
 
   const systemIds = new Set<string>();
   for (const e of slice) {
@@ -123,8 +128,11 @@ export async function runTradeFlowProcessor(
     const gradientFraction = Math.min(1, Math.abs(bestGradient) * params.gradientSensitivity);
     const rawQty =
       Math.min(edgeBudget, stockHeadroom, stockCapacity) * gradientFraction * distanceFactor;
-    const quantity = Math.floor(rawQty);
-    if (quantity <= 0) continue;
+    // Catch-up: one shard run represents `interval / REFERENCE_INTERVAL` reference
+    // periods of flow (1 at the reference interval). The band clamps below keep
+    // both endpoints inside their bands when a scaled move overshoots.
+    const quantity = Math.floor(rawQty * catchUp);
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
 
     const newFromStock = clamp(mFrom.stock - quantity, bandFrom.minStock, bandFrom.maxStock);
     const newToStock = clamp(mTo.stock + quantity, bandTo.minStock, bandTo.maxStock);
@@ -160,7 +168,7 @@ export const tradeFlowProcessor: TickProcessor = {
   async process(ctx): Promise<TickProcessorResult> {
     const world = new PrismaTradeFlowWorld(ctx.tx);
     return runTradeFlowProcessor(world, ctx, {
-      edgesPerTick: TRADE_SIMULATION.EDGES_PER_TICK,
+      interval: ECONOMY_UPDATE_INTERVAL,
       flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
       gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
       gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,

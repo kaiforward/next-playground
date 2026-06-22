@@ -14,6 +14,7 @@ import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import type { TickContext } from "@/lib/tick/types";
@@ -131,7 +132,7 @@ async function runScenario(
   markets: SimMarketEntry[];
   flowEvents: SimFlowEvent[];
 }> {
-  const { region, systems, connections, markets } = buildFixture();
+  const { systems, connections, markets } = buildFixture();
   const rng = mulberry32(1234);
 
   // Per-iteration state — every tick we rebuild the in-memory adapters from
@@ -142,6 +143,7 @@ async function runScenario(
 
   const econParams = {
     rng,
+    interval: REFERENCE_INTERVAL, // shipping cadence (catch-up = 1); economy + flow share one clock
     simParams: {
       // Deterministic (no noise) so the flow signal is unambiguous. Noise
       // with noiseFraction=0.02 on this fixture's band width produces
@@ -154,9 +156,8 @@ async function runScenario(
   };
 
   const flowParams = {
-    // Process every edge each tick so the small fixture sees enough activity
-    // within the tick budget to exercise the convergence path.
-    edgesPerTick: 100,
+    // Fixed-interval edge shard sharing the economy's clock (catch-up = 1).
+    interval: REFERENCE_INTERVAL,
     flowBudget,
     gradientThreshold: 0.05,
     gradientSensitivity: 1.0,
@@ -169,7 +170,6 @@ async function runScenario(
   for (let t = 1; t <= tickCount; t++) {
     const economyWorld = new InMemoryEconomyWorld(
       { systems: curSystems, markets: curMarkets, modifiers: [] },
-      [region],
     );
     await runEconomyProcessor(economyWorld, makeCtx(t), econParams);
     curSystems = economyWorld.systems;

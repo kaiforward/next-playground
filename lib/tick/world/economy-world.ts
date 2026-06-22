@@ -2,8 +2,9 @@
  * EconomyWorld — data interface for the economy processor.
  *
  * Adapters in `lib/tick/adapters/{prisma,memory}/economy.ts` implement this
- * interface. Round-robin region selection and the simulate→write loop live in
- * the shared processor body (`runEconomyProcessor`).
+ * interface. The fixed-interval system shard (which systems update this tick)
+ * and the simulate→write loop live in the shared processor body
+ * (`runEconomyProcessor`).
  *
  * See `docs/design/active/processor-architecture.md` for the broader pattern.
  */
@@ -15,15 +16,6 @@ import type { EconomySimParams } from "@/lib/engine/tick";
 import type { StrikeParams } from "@/lib/engine/population";
 
 /**
- * Region row needed for round-robin selection. Government does not live on the
- * region (factions own it per-system); see `MarketView.governmentType`.
- */
-export interface RegionView {
-  id: string;
-  name: string;
-}
-
-/**
  * Flat market row + the system context the processor needs. Adapters
  * resolve `goodId` to its canonical key (live: maps via good.name; sim:
  * already canonical) so the processor body never thinks about that.
@@ -32,6 +24,9 @@ export interface MarketView {
   /** Adapter-owned identifier — round-trips into `MarketUpdate.id`. */
   id: string;
   systemId: string;
+  /** Owning region — the shard spans regions, so the body maps each system's
+   *  region-targeted modifiers via this. */
+  regionId: string;
   goodId: string;
   basePrice: number;
   stock: number;
@@ -58,21 +53,18 @@ export interface MarketUpdate {
 }
 
 export interface EconomyWorld {
-  /** Regions, ordered alphabetically by name (round-robin source). */
-  getRegions(): Promise<RegionView[]>;
+  /** All system ids, stable-sorted by id — the shard schedule's item list. */
+  getSystemIds(): Promise<string[]>;
 
-  /** Markets in one region, with system + trait info inlined. */
-  getMarketsForRegion(regionId: string): Promise<MarketView[]>;
+  /** Markets for the given systems (this tick's shard), with system + trait info inlined. */
+  getMarketsForSystems(systemIds: string[]): Promise<MarketView[]>;
 
   /**
-   * Active economy modifiers targeting the given systems OR the region
-   * itself. Returned as a flat list; the processor body indexes by
-   * `targetType`/`targetId`.
+   * Active economy modifiers targeting the given systems OR any of the regions
+   * those systems belong to. Returned as a flat list; the processor body
+   * indexes by `targetType`/`targetId`.
    */
-  getModifiers(
-    systemIds: string[],
-    regionId: string,
-  ): Promise<ModifierRow[]>;
+  getModifiers(systemIds: string[]): Promise<ModifierRow[]>;
 
   /** Bulk-write market stock. */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
@@ -85,6 +77,8 @@ export interface EconomyWorld {
 export interface EconomyProcessorParams {
   /** RNG for market noise. Live: Math.random. Sim: seeded. */
   rng: () => number;
+  /** Ticks for the shard to refresh every system once (fixed gameplay cadence). */
+  interval: number;
   /** Economy simulation params (noise fraction for relative-band noise). */
   simParams: EconomySimParams;
   /** Caps applied when aggregating event modifiers per market. */

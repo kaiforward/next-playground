@@ -3,7 +3,6 @@ import type {
   EconomyWorld,
   MarketUpdate,
   MarketView,
-  RegionView,
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
@@ -28,21 +27,19 @@ import {
 export class PrismaEconomyWorld implements EconomyWorld {
   constructor(private tx: TxClient) {}
 
-  async getRegions(): Promise<RegionView[]> {
-    const rows = await this.tx.region.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
+  async getSystemIds(): Promise<string[]> {
+    const rows = await this.tx.starSystem.findMany({
+      select: { id: true },
+      orderBy: { id: "asc" },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-    }));
+    return rows.map((r) => r.id);
   }
 
-  async getMarketsForRegion(regionId: string): Promise<MarketView[]> {
+  async getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
+    if (systemIds.length === 0) return [];
     const [rows, buildingRows] = await Promise.all([
       this.tx.stationMarket.findMany({
-        where: { station: { system: { regionId } } },
+        where: { station: { system: { id: { in: systemIds } } } },
         include: {
           good: true,
           station: {
@@ -58,7 +55,7 @@ export class PrismaEconomyWorld implements EconomyWorld {
         },
       }),
       this.tx.systemBuilding.findMany({
-        where: { system: { regionId } },
+        where: { systemId: { in: systemIds } },
         select: { systemId: true, buildingType: true, count: true },
       }),
     ]);
@@ -112,6 +109,7 @@ export class PrismaEconomyWorld implements EconomyWorld {
       return {
         id: m.id,
         systemId: sys.id,
+        regionId: sys.regionId,
         goodId: goodKey,
         basePrice: m.good.basePrice,
         stock: m.stock,
@@ -128,17 +126,21 @@ export class PrismaEconomyWorld implements EconomyWorld {
     });
   }
 
-  async getModifiers(
-    systemIds: string[],
-    regionId: string,
-  ): Promise<ModifierRow[]> {
+  async getModifiers(systemIds: string[]): Promise<ModifierRow[]> {
     if (systemIds.length === 0) return [];
+    // The shard slice spans regions; resolve the distinct regions its systems
+    // belong to so region-targeted modifiers are matched (one extra IN query).
+    const regionRows = await this.tx.starSystem.findMany({
+      where: { id: { in: systemIds } },
+      select: { regionId: true },
+    });
+    const regionIds = [...new Set(regionRows.map((r) => r.regionId))];
     const rows = await this.tx.eventModifier.findMany({
       where: {
         domain: "economy",
         OR: [
           { targetType: "system", targetId: { in: systemIds } },
-          { targetType: "region", targetId: regionId },
+          { targetType: "region", targetId: { in: regionIds } },
         ],
       },
     });

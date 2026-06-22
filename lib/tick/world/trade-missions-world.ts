@@ -58,11 +58,15 @@ export interface TradeMissionsWorld {
   /** Delete missions by id. */
   deleteMissions(ids: string[]): Promise<void>;
 
+  /** All system ids, stably sorted by id (shard-range input). */
+  getSystemIds(): Promise<string[]>;
+
   /**
-   * All market price snapshots across stations. Adapters resolve goodIds to
-   * canonical keys so the processor body never reaches into the good name map.
+   * Market price snapshots for stations in the given systems. Returns [] for
+   * an empty list. Adapters resolve goodIds to canonical keys so the processor
+   * body never reaches into the good name map.
    */
-  getMarketPrices(): Promise<MarketPriceView[]>;
+  getMarketPricesForSystems(systemIds: string[]): Promise<MarketPriceView[]>;
 
   /** Active events with a non-null systemId. */
   getActiveEvents(): Promise<ActiveEventView[]>;

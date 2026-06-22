@@ -5,12 +5,18 @@ import { MAX_SNAPSHOTS } from "@/lib/constants/snapshot";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 import type { MarketView } from "@/lib/tick/world/snapshots-world";
 import type { PriceHistoryEntry } from "@/lib/engine/snapshot";
-import type { TickContext } from "@/lib/tick/types";
+import type { TickContext, TickProcessorResult } from "@/lib/tick/types";
 
-function makeCtx(tick: number): TickContext {
+function makeCtx(tick: number, processed?: string[]): TickContext {
   // Processor body never touches `tx`. Cast via never to avoid stubbing the
   // full Prisma client surface for a unit test that doesn't use it.
-  return { tx: undefined as never, tick, results: new Map() };
+  const results = new Map<string, TickProcessorResult>();
+  if (processed) {
+    results.set("economy", {
+      economySignals: { dissatisfactionBySystem: new Map(processed.map((id) => [id, 0])) },
+    });
+  }
+  return { tx: undefined as never, tick, results };
 }
 
 function makeMarket(
@@ -32,6 +38,36 @@ function makeMarket(
 }
 
 describe("runPriceSnapshotsProcessor", () => {
+  it("snapshots only the systems economy processed this tick", async () => {
+    // World has markets + history rows for both sys-a and sys-b, but only
+    // sys-a is in the economy shard this tick — sys-b must not be touched.
+    const world = new InMemorySnapshotsWorld(
+      [
+        makeMarket("sys-a", "iron", TARGET_COVER),
+        makeMarket("sys-b", "iron", TARGET_COVER),
+      ],
+      ["sys-a", "sys-b"],
+    );
+
+    const result = await runPriceSnapshotsProcessor(world, makeCtx(20, ["sys-a"]));
+
+    expect(world.snapshot("sys-a")).toHaveLength(1);
+    expect(world.snapshot("sys-b")).toEqual([]); // not processed → not snapshotted
+    expect(result.globalEvents?.priceSnapshot).toEqual([{ systemCount: 1 }]);
+  });
+
+  it("returns empty when economy did not run this tick", async () => {
+    const world = new InMemorySnapshotsWorld(
+      [makeMarket("sys-a", "iron", TARGET_COVER)],
+      ["sys-a"],
+    );
+
+    const result = await runPriceSnapshotsProcessor(world, makeCtx(20));
+
+    expect(result).toEqual({});
+    expect(world.snapshot("sys-a")).toEqual([]);
+  });
+
   it("appends a snapshot entry to each system with markets", async () => {
     // demandRate is 1, so the per-system reference is TARGET_COVER.
     const world = new InMemorySnapshotsWorld(
@@ -43,7 +79,7 @@ describe("runPriceSnapshotsProcessor", () => {
       ["sys-a", "sys-b"],
     );
 
-    const result = await runPriceSnapshotsProcessor(world, makeCtx(20));
+    const result = await runPriceSnapshotsProcessor(world, makeCtx(20, ["sys-a", "sys-b"]));
 
     const a = world.snapshot("sys-a")!;
     const b = world.snapshot("sys-b")!;
@@ -63,9 +99,9 @@ describe("runPriceSnapshotsProcessor", () => {
       ["sys-a"],
     );
 
-    await runPriceSnapshotsProcessor(world, makeCtx(20));
-    await runPriceSnapshotsProcessor(world, makeCtx(40));
-    await runPriceSnapshotsProcessor(world, makeCtx(60));
+    await runPriceSnapshotsProcessor(world, makeCtx(20, ["sys-a"]));
+    await runPriceSnapshotsProcessor(world, makeCtx(40, ["sys-a"]));
+    await runPriceSnapshotsProcessor(world, makeCtx(60, ["sys-a"]));
 
     const a = world.snapshot("sys-a")!;
     expect(a.map((e) => e.tick)).toEqual([20, 40, 60]);
@@ -83,7 +119,7 @@ describe("runPriceSnapshotsProcessor", () => {
     );
     await world.writePriceHistories([{ systemId: "sys-a", entries: seed }]);
 
-    await runPriceSnapshotsProcessor(world, makeCtx(999));
+    await runPriceSnapshotsProcessor(world, makeCtx(999, ["sys-a"]));
 
     const a = world.snapshot("sys-a")!;
     expect(a).toHaveLength(MAX_SNAPSHOTS);
@@ -101,7 +137,7 @@ describe("runPriceSnapshotsProcessor", () => {
       ["sys-a"],
     );
 
-    const result = await runPriceSnapshotsProcessor(world, makeCtx(20));
+    const result = await runPriceSnapshotsProcessor(world, makeCtx(20, ["sys-a", "sys-b"]));
 
     expect(world.snapshot("sys-a")).toHaveLength(1);
     expect(world.snapshot("sys-b")).toBeUndefined();
@@ -115,7 +151,7 @@ describe("runPriceSnapshotsProcessor", () => {
       ["sys-a", "sys-empty"],
     );
 
-    await runPriceSnapshotsProcessor(world, makeCtx(20));
+    await runPriceSnapshotsProcessor(world, makeCtx(20, ["sys-a", "sys-empty"]));
 
     expect(world.snapshot("sys-a")).toHaveLength(1);
     expect(world.snapshot("sys-empty")).toEqual([]);

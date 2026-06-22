@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { runTradeFlowProcessor } from "../trade-flow";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import type { TradeFlowProcessorParams } from "@/lib/tick/world/trade-flow-world";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { TickContext } from "@/lib/tick/types";
 import type {
   SimConnection,
@@ -12,7 +13,7 @@ import type {
 import { unitResourceVector } from "@/lib/engine/resources";
 
 const PARAMS: TradeFlowProcessorParams = {
-  edgesPerTick: 100,
+  interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
   flowBudget: 8,
   gradientThreshold: 0.05,
   gradientSensitivity: 1.0,
@@ -21,6 +22,10 @@ const PARAMS: TradeFlowProcessorParams = {
   playerVolumeTarget: 50,
   distanceDecay: 0,
 };
+
+// A single-edge world has its lone edge in the LAST shard group at the reference
+// interval, so process it on that tick (catch-up = 1 → full per-edge amounts).
+const EDGE_TICK = REFERENCE_INTERVAL - 1;
 
 function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
   return {
@@ -65,7 +70,7 @@ describe("trade-flow: faction-bounded topology", () => {
     const markets = [market("a", "food", 150), market("b", "food", 20)];
     const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(world, ctx(0), PARAMS);
+    await runTradeFlowProcessor(world, ctx(EDGE_TICK), PARAMS);
 
     const a = world.markets.find((m) => m.systemId === "a")!;
     const b = world.markets.find((m) => m.systemId === "b")!;
@@ -78,7 +83,7 @@ describe("trade-flow: faction-bounded topology", () => {
     const markets = [market("a", "food", 150), market("b", "food", 20)];
     const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(world, ctx(0), PARAMS);
+    await runTradeFlowProcessor(world, ctx(EDGE_TICK), PARAMS);
 
     expect(world.markets.find((m) => m.systemId === "a")!.stock).toBe(150);
     expect(world.markets.find((m) => m.systemId === "b")!.stock).toBe(20);
@@ -90,7 +95,7 @@ describe("trade-flow: faction-bounded topology", () => {
     const markets = [market("a", "food", 150), market("b", "food", 20)];
     const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(world, ctx(0), PARAMS);
+    await runTradeFlowProcessor(world, ctx(EDGE_TICK), PARAMS);
 
     expect(world.flowEvents.length).toBe(1);
   });
@@ -100,15 +105,15 @@ describe("trade-flow: faction-bounded topology", () => {
     const markets = [market("a", "food", 150), market("b", "food", 20)];
     const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(world, ctx(0), PARAMS);
+    await runTradeFlowProcessor(world, ctx(EDGE_TICK), PARAMS);
 
     expect(world.flowEvents.length).toBe(0);
   });
 });
 
-describe("trade-flow: work-budget slicing", () => {
-  it("processes exactly one edge per tick and wraps the cursor", async () => {
-    // 3 same-faction edges sorted by key: a|b, c|d, e|f. edgesPerTick = 1.
+describe("trade-flow: fixed-interval edge shard", () => {
+  it("processes one edge per tick at interval = edge count, wrapping each interval", async () => {
+    // 3 same-faction edges sorted by key: a|b, c|d, e|f. interval = 3 → one edge/tick.
     const systems = ["a", "b", "c", "d", "e", "f"].map((id) => sys(id, "f1"));
     const markets = [
       market("a", "food", 150), market("b", "food", 20),
@@ -117,19 +122,45 @@ describe("trade-flow: work-budget slicing", () => {
     ];
     const connections = [conn("a", "b"), conn("c", "d"), conn("e", "f")];
     const world = makeWorld({ systems, markets, connections });
-    const p = { ...PARAMS, edgesPerTick: 1 };
+    const p = { ...PARAMS, interval: 3 };
 
-    // Each tick advances the cursor by one edge; assert the exact edge that flowed
-    // this tick (filtering by tick isolates it from prior ticks' accumulated events).
+    // Each tick processes its shard group; assert the exact edge that flowed this
+    // tick (filtering by tick isolates it from prior ticks' accumulated events).
     const flowedAt = async (tick: number) => {
       await runTradeFlowProcessor(world, ctx(tick), p);
       return world.flowEvents.filter((e) => e.tick === tick).map((e) => e.fromSystemId);
     };
 
-    expect(await flowedAt(0)).toEqual(["a"]); // start 0 → edge a|b
-    expect(await flowedAt(1)).toEqual(["c"]); // start 1 → edge c|d
-    expect(await flowedAt(2)).toEqual(["e"]); // start 2 → edge e|f
-    expect(await flowedAt(3)).toEqual(["a"]); // start (3 % 3) = 0 → wraps to a|b
+    expect(await flowedAt(0)).toEqual(["a"]); // group 0 → edge a|b
+    expect(await flowedAt(1)).toEqual(["c"]); // group 1 → edge c|d
+    expect(await flowedAt(2)).toEqual(["e"]); // group 2 → edge e|f
+    expect(await flowedAt(3)).toEqual(["a"]); // tick 3 % 3 = 0 → wraps to a|b
+  });
+
+  it("scales the per-edge moved amount by catchUpFactor(interval)", async () => {
+    // Generous headroom + capacity so flowBudget binds and the scaled move is not
+    // clamped; compare interval = REFERENCE (catch-up 1) vs 2×REFERENCE (catch-up 2).
+    const bigMarket = (systemId: string, stock: number): SimMarketEntry => ({
+      systemId, goodId: "food", basePrice: 100, stock,
+      anchorMult: 1, demandRate: 40, priceFloor: 10, priceCeiling: 500, storageCapacity: 5000,
+    });
+    const mkWorld = () => makeWorld({
+      systems: [sys("a", "f1"), sys("b", "f1")],
+      markets: [bigMarket("a", 2000), bigMarket("b", 20)],
+      connections: [conn("a", "b")],
+    });
+    const P = { ...PARAMS, flowBudget: 200 };
+
+    const w1 = mkWorld();
+    await runTradeFlowProcessor(w1, ctx(REFERENCE_INTERVAL - 1), { ...P, interval: REFERENCE_INTERVAL });
+    const q1 = w1.flowEvents[0].quantity;
+
+    const w2 = mkWorld();
+    await runTradeFlowProcessor(w2, ctx(2 * REFERENCE_INTERVAL - 1), { ...P, interval: 2 * REFERENCE_INTERVAL });
+    const q2 = w2.flowEvents[0].quantity;
+
+    expect(q1).toBeGreaterThan(0);
+    expect(Math.abs(q2 - 2 * q1)).toBeLessThanOrEqual(2); // doubles, modulo floor
   });
 });
 
@@ -147,8 +178,8 @@ describe("trade-flow: distance attenuation", () => {
     });
     const p = { ...PARAMS, distanceDecay: 0.1 };
 
-    await runTradeFlowProcessor(near, ctx(0), p);
-    await runTradeFlowProcessor(far, ctx(0), p);
+    await runTradeFlowProcessor(near, ctx(EDGE_TICK), p);
+    await runTradeFlowProcessor(far, ctx(EDGE_TICK), p);
 
     const nearQty = near.flowEvents[0]?.quantity ?? 0;
     const farQty = far.flowEvents[0]?.quantity ?? 0;
@@ -164,7 +195,7 @@ describe("trade-flow: flow controls", () => {
     const markets = [market("a", "food", 150), market("b", "food", 20)];
     const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(world, ctx(0), { ...PARAMS, gradientThreshold: 1000 });
+    await runTradeFlowProcessor(world, ctx(EDGE_TICK), { ...PARAMS, gradientThreshold: 1000 });
 
     expect(world.flowEvents.length).toBe(0);
     expect(world.markets.find((m) => m.systemId === "a")!.stock).toBe(150);
@@ -177,7 +208,7 @@ describe("trade-flow: flow controls", () => {
     const markets = [market("a", "food", 200), market("b", "food", 5)];
     const world = makeWorld({ systems, markets, connections: [conn("a", "b")] });
 
-    await runTradeFlowProcessor(world, ctx(0), { ...PARAMS, flowBudget: 6 });
+    await runTradeFlowProcessor(world, ctx(EDGE_TICK), { ...PARAMS, flowBudget: 6 });
 
     expect(world.flowEvents.length).toBe(1);
     expect(world.flowEvents[0].quantity).toBeGreaterThan(0);
@@ -200,7 +231,7 @@ describe("trade-flow: flow controls", () => {
       playerVolumeBySystem,
     });
 
-    await runTradeFlowProcessor(world, ctx(0), PARAMS);
+    await runTradeFlowProcessor(world, ctx(EDGE_TICK), PARAMS);
 
     expect(world.flowEvents.length).toBe(0);
     expect(world.markets.find((m) => m.systemId === "a")!.stock).toBe(150);

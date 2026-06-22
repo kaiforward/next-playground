@@ -230,14 +230,11 @@ async function processSimEconomy(
   rng: RNG,
   constants: SimConstants,
 ): Promise<{ world: SimWorld; signals: EconomySignals | undefined }> {
-  const economyWorld = new InMemoryEconomyWorld(
-    {
-      systems: world.systems,
-      markets: world.markets,
-      modifiers: world.modifiers,
-    },
-    world.regions,
-  );
+  const economyWorld = new InMemoryEconomyWorld({
+    systems: world.systems,
+    markets: world.markets,
+    modifiers: world.modifiers,
+  });
 
   const tickCtx: TickContext = {
     tx: undefined as never,
@@ -247,6 +244,7 @@ async function processSimEconomy(
 
   const result = await runEconomyProcessor(economyWorld, tickCtx, {
     rng,
+    interval: constants.economy.interval,
     simParams: buildSimParams(constants),
     modifierCaps: constants.events.modifierCaps,
     strikeParams: constants.population.strike,
@@ -283,7 +281,8 @@ async function processSimMigration(world: SimWorld, constants: SimConstants): Pr
   const migWorld = new InMemoryMigrationWorld({ systems: world.systems }, world.connections);
   const tickCtx: TickContext = { tx: undefined as never, tick: world.tick, results: new Map() };
   await runMigrationProcessor(migWorld, tickCtx, {
-    edgesPerTick: constants.migration.edgesPerTick,
+    // Flow + migration share the economy's clock (one coupled-economy cadence).
+    interval: constants.economy.interval,
     flow: {
       weights: constants.migration.weights,
       maxOutflowFraction: constants.migration.maxOutflowFraction,
@@ -316,7 +315,8 @@ async function processSimTradeFlow(
   };
 
   await runTradeFlowProcessor(flowWorld, tickCtx, {
-    edgesPerTick: constants.tradeFlow.edgesPerTick,
+    // Flow + migration share the economy's clock (one coupled-economy cadence).
+    interval: constants.economy.interval,
     flowBudget: constants.tradeFlow.flowBudget,
     gradientThreshold: constants.tradeFlow.gradientThreshold,
     gradientSensitivity: constants.tradeFlow.gradientSensitivity,

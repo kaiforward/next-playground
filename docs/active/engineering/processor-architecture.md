@@ -34,9 +34,9 @@ The processor body depends **only** on its World interface — never on Prisma t
 
 Knobs that differ between live and sim (RNG source, scaled caps, modifier caps, event definitions, sim-only injections) come in via a `XxxProcessorParams` object alongside the world. This keeps the body deterministic given `(world, ctx, params)`.
 
-### Where round-robin lives
+### Where the shard selection lives
 
-For processors that pick one region per tick (economy, missions), the round-robin selection lives in the processor body. The adapter exposes `getRegions()` (sorted alphabetically) and `getXxxForRegion(regionId)`; the body picks `regions[ctx.tick % regions.length]`. Live and sim both see the same selection.
+For processors that shard by system (economy, mission generation), the shard selection lives in the processor body. The adapter exposes `getSystemIds()` (stable sorted) and a `getXxxForSystems(ids)` slice reader; the body processes `shardRange(total, ctx.tick, interval)` over those ids. Live and sim both see the same selection.
 
 ---
 
@@ -83,7 +83,7 @@ Adding it to the sim is then: construct the memory adapter, call the body, copy 
 
 ## Design decisions made along the way
 
-- **Round-robin lives in the processor body, not the adapter.** Tried both. Body-side is simpler because the adapter only has to know how to fetch by region — it doesn't need to know `ctx.tick`.
+- **Shard selection lives in the processor body, not the adapter.** Tried both. Body-side is simpler because the adapter only has to know how to fetch by system id — it doesn't need to know `ctx.tick`.
 - **Memory adapters mutate in-place, then expose the final state via public fields.** The simulator reads back `world.markets`, `world.systems`, etc. after the processor returns. Cleaner than threading return values through every interface method.
 - **Memory adapters match live Prisma adapter semantics for numeric accumulator resets.** The general pattern: use `Math.max(0, current - captured)` in the memory adapter, matching `GREATEST(0, vol - captured)` in the Prisma adapter, so concurrent writes between read and write aren't silently lost. In sim this is moot (no concurrent writers) but matching behavior keeps adapters interchangeable.
 - **`unknown` stays banned at the boundary.** Adapters narrow Prisma's string-typed columns to validated unions via `lib/types/guards.ts` once, on the way out. The processor body receives `EconomyType`, `GovernmentType`, `EventTypeId`, etc. directly.

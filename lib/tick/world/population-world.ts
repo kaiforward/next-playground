@@ -2,7 +2,7 @@
  * PopulationWorld — data interface for the population processor.
  *
  * The processor runs over the systems the economy just processed this tick (the
- * round-robin region), reading the dissatisfaction the economy recorded for them.
+ * economy shard), reading the dissatisfaction the economy recorded for them.
  * Adapters in `lib/tick/adapters/{prisma,memory}/population.ts` implement this.
  */
 import type { UnrestParams, PopulationParams } from "@/lib/engine/population";

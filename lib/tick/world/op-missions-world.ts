@@ -11,12 +11,6 @@ import type { ModifierRow } from "@/lib/engine/events";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { PlayerEventMap } from "@/lib/tick/types";
 
-/** Region row used purely for round-robin selection — government is per-system now. */
-export interface RegionView {
-  id: string;
-  name: string;
-}
-
 /** System + traits + government (from owning faction) for danger + candidate generation. */
 export interface SystemTraitView {
   id: string;
@@ -98,11 +92,11 @@ export interface OpMissionsWorld {
   /** Mark missions failed and free the ship. */
   failMissions(ids: string[]): Promise<void>;
 
-  /** Regions ordered alphabetically (round-robin source). */
-  getRegions(): Promise<RegionView[]>;
+  /** All system ids, stably sorted by id (shard-range input). */
+  getSystemIds(): Promise<string[]>;
 
-  /** Systems (with traits) in one region. */
-  getSystemsInRegion(regionId: string): Promise<SystemTraitView[]>;
+  /** Systems (with traits) for the given ids. Returns [] for an empty list. */
+  getSystemsByIds(systemIds: string[]): Promise<SystemTraitView[]>;
 
   /** Navigation-domain modifiers targeting the given systems. */
   getNavModifiersForSystems(systemIds: string[]): Promise<ModifierRow[]>;

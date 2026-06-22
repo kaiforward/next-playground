@@ -5,9 +5,11 @@
  * this interface. The flow topology is faction-bounded: an edge is "open"
  * iff both endpoints share a faction (with `null===null` letting adjacent
  * independent systems trade), regardless of region. Region lines no longer
- * gate flow. Scheduling is a work-budget slice — the processor body advances
- * a cursor over the stable open-edge order, processing `edgesPerTick` edges
- * each tick, so per-tick DB work is bounded independently of faction size.
+ * gate flow. Scheduling is a fixed-interval edge shard — the processor body
+ * processes `shardRange(totalEdges, tick, interval)` over the stable open-edge
+ * order each tick, so a full sweep takes `interval` (= `ECONOMY_UPDATE_INTERVAL`)
+ * ticks at any scale, bounded independently of faction size and on the same
+ * clock as the economy shard.
  *
  * See `docs/active/gameplay/trade-simulation.md` for the broader pattern.
  */
@@ -83,8 +85,8 @@ export interface TradeFlowWorld {
 
 /** Per-tick params passed alongside the world. */
 export interface TradeFlowProcessorParams {
-  /** Work-budget slice size: edges processed per tick (replaces processEveryNTicks + region round-robin). */
-  edgesPerTick: number;
+  /** Ticks for the edge shard to sweep every open edge once (fixed gameplay cadence). */
+  interval: number;
   /** Max units of one good moved per edge per processor run. */
   flowBudget: number;
   /** Price gradient threshold below which no flow occurs (fraction of basePrice). */

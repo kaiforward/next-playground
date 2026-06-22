@@ -191,8 +191,8 @@ A trade of `q` units moves stock from `S` to `S∓q`, and price moves the whole 
 
 **Why round-trips don't profit:** a same-station buy→sell walks the identical curve segment down then back up (symmetric), so the player ends where they started minus the spread — a guaranteed small loss. Cross-system profit is untouched: buying at a surplus system walks a *low* segment of its curve, selling at a shortage system walks a *high* segment of a *different* curve. The geographic price gap is the profit; slippage only flattens prices *within* one station.
 
-### Per-Tick Simulation (runs once per region per tick, round-robin)
-The economy processor groups the region's markets **by system** and runs the coupled cascade on each (`simulateCoupledEconomyTick`). Within a system goods are processed in recipe-topological order so a fresh input feeds its consumer the same tick; each good's stock is updated:
+### Per-Tick Simulation (runs once per economy-shard update)
+The economy processor groups the shard's markets **by system** and runs the coupled cascade on each (`simulateCoupledEconomyTick`). Within a system goods are processed in recipe-topological order so a fresh input feeds its consumer the same tick; each good's stock is updated:
 
 1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
 2. **Input-gated, self-limiting production** — the building-capacity production rate is throttled by `inputGate` (recipe-input availability; 1 for tier-0), then by the self-limiting `sqrt((MAX − stock) / (MAX − MIN))` ceiling. Near the ceiling, production approaches zero (warehouses full). Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces output. The recipe inputs are then drawn from local stock in proportion to actual output (drawable-above-floor; see [Supply Chain & Input-Gating](#supply-chain--input-gating)).
@@ -250,7 +250,7 @@ Events can shift a good's **pricing reference** (the anchor) — the stock level
 - `goodId: null` — applies to all goods at the target station; setting a specific `goodId` targets one good only
 - Multiple active shifts on the same good **compound** (multiply together)
 
-**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same round-robin cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — player trade, convoy, missions, market display, cross-system comparison, price-history snapshots, and trade-flow gradient.
+**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same shard cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — player trade, convoy, missions, market display, cross-system comparison, price-history snapshots, and trade-flow gradient.
 
 **Safety cap**: `anchorMult` is clamped to **[0.1, 4.0]** — a single good can at most become 4× as expensive (or 10× as cheap) via anchor shift.
 
@@ -262,7 +262,7 @@ See [events.md](./events.md) for the full modifier catalog and event definitions
 
 ## How It Composes Each Tick
 
-The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor settles **one region**'s markets per tick (round-robin), and **event** modifiers plus player trades layer on top in real time. The **trade-flow** processor sweeps a work-budget slice of the **intra-faction** edge graph each tick (region lines ignored, faction borders closed; see [trade-simulation.md](./trade-simulation.md)). Two additional processors — **population** and **migration** — run after economy and complete the consequence loop:
+The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor processes its shard of systems each tick (every system refreshes every `ECONOMY_UPDATE_INTERVAL` ticks), and **event** modifiers plus player trades layer on top in real time. The **trade-flow** processor sweeps its fixed-interval edge shard each tick (region lines ignored, faction borders closed; see [trade-simulation.md](./trade-simulation.md)). Two additional processors — **population** and **migration** — run after economy and complete the consequence loop:
 
 ```
 EVENTS       run first  - stock shocks (one-time jolts) + modifiers
