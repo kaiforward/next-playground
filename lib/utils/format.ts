@@ -25,6 +25,20 @@ export function formatNumber(value: number): string {
   return Math.round(value).toLocaleString();
 }
 
+/**
+ * Format a continuous substrate magnitude — building counts, space-partition
+ * units, worked slots. These are Floats (a partial settlement / sliver of land is
+ * a real, sub-1 magnitude), so a present value must never collapse to "0": large
+ * magnitudes read as whole numbers, small ones keep a decimal, and anything
+ * positive-but-tiny shows "<0.1" rather than rounding away.
+ */
+export function formatMagnitude(value: number): string {
+  if (value <= 0) return "0";
+  if (value >= 10) return String(Math.round(value));
+  if (value >= 0.1) return value.toFixed(1);
+  return "<0.1";
+}
+
 /** People represented by one abstract population unit. */
 export const PEOPLE_PER_UNIT = 1_000_000;
 

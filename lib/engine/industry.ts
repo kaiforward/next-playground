@@ -10,7 +10,7 @@
  * supply-chain cascade. The same functions feed the live tick, the simulator,
  * and the substrate read service.
  */
-import type { ResourceVector } from "@/lib/types/game";
+import type { QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -26,6 +26,8 @@ import {
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
 import { inputGate } from "@/lib/engine/supply-chain";
+import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
+import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
 /**
  * Available space a single body contributes: SPACE_PER_SIZE × size.
@@ -57,6 +59,21 @@ export function buildSpaceUsed(buildings: Record<string, number>): number {
   let used = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
+    used += count * effectiveSpaceCost(type);
+  }
+  return used;
+}
+
+/**
+ * General-space footprint of the built base — factories + population centres.
+ * Tier-0 extractors are excluded: they sit on dedicated deposit slots, not the
+ * fungible general space that industry and housing compete for.
+ */
+export function generalSpaceUsed(buildings: Record<string, number>): number {
+  let used = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    if (BUILDING_TYPES[type]?.resource) continue; // tier-0 extractor → deposit land
     used += count * effectiveSpaceCost(type);
   }
   return used;
@@ -137,7 +154,6 @@ export function inputDemandForGood(
 
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
-  buildSpace: { used: number; total: number };
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
   labourFulfillment: number;
   /** One entry per building type with count > 0, sorted by tier ascending then buildingType. */
@@ -149,25 +165,31 @@ export interface SystemIndustryReadout {
 /**
  * Builds an industry readout for one system from its current industrial base and
  * market stock. Pure — no DB dependency. Reuses the existing helpers for all
- * derived quantities.
+ * derived quantities. (Space-partition headroom is assembled separately via
+ * summariseSpace; this readout covers labour, the building roster, and the
+ * supply chain.)
  *
- * - buildSpace: total capacity from bodies (size-only via bodyAvailableSpace); used from building counts.
  * - labourFulfillment: population vs total labour demand.
  * - buildings: one entry per building type with count > 0 (housing gets tier -1).
  * - supplyChain: tier-1+ produced goods whose recipe inputs may be short.
  *   inputGate < 1 means the good is throttled by at least one short input.
  *   throttledBy lists the inputs where drawable stock < desired draw.
+ *
+ * `marketStock` and `minStockOf` are keyed by good KEY (not the DB good id);
+ * the caller maps the market rows through GOOD_NAME_TO_KEY. `minStockOf` returns
+ * each good's per-market reserve floor — only stock above it is drawable, so the
+ * throttle reflects the real per-market band (not a flat global floor).
+ *
+ * `yields` threads through to `buildingProduction` but is inert for this readout:
+ * supplyChain covers only tier-1+ goods, whose production is yield-independent.
  */
 export function buildIndustryReadout(
   buildings: Record<string, number>,
-  bodies: Array<{ size: number }>,
   population: number,
   marketStock: Record<string, number>,
-  minLevel: number,
+  minStockOf: (goodId: string) => number,
   yields: ResourceVector,
 ): SystemIndustryReadout {
-  const totalSpace = bodies.reduce((s, b) => s + bodyAvailableSpace(b.size), 0);
-  const usedSpace = buildSpaceUsed(buildings);
   const demand = labourDemand(buildings);
   const fulfillment = labourFulfillment(population, demand);
 
@@ -187,7 +209,7 @@ export function buildIndustryReadout(
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
 
   // Supply chain — only produced goods with a recipe (tier-1+).
-  const stockOf = (g: string): number => marketStock[g] ?? minLevel;
+  const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
   const supplyChainEntries: SystemIndustryReadout["supplyChain"] = [];
 
   for (const [buildingType, count] of Object.entries(buildings)) {
@@ -199,13 +221,13 @@ export function buildIndustryReadout(
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
     const effectiveProduction = buildingProduction(buildings, goodId, fulfillment, yields);
-    const gate = inputGate(goodId, effectiveProduction, stockOf, () => minLevel);
+    const gate = inputGate(goodId, effectiveProduction, stockOf, minStockOf);
 
     const throttledBy: string[] = [];
     for (const [input, perOutput] of Object.entries(recipe)) {
       const desired = effectiveProduction * perOutput;
       if (desired <= 0) continue;
-      const drawable = Math.max(0, stockOf(input) - minLevel);
+      const drawable = Math.max(0, stockOf(input) - minStockOf(input));
       if (drawable < desired) throttledBy.push(input);
     }
 
@@ -214,7 +236,6 @@ export function buildIndustryReadout(
   supplyChainEntries.sort((a, b) => a.inputGate - b.inputGate);
 
   return {
-    buildSpace: { used: usedSpace, total: totalSpace },
     labourFulfillment: fulfillment,
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
@@ -242,4 +263,112 @@ export function facilityStorageForGood(buildings: Record<string, number>, goodId
     }
   }
   return storage;
+}
+
+// ── Substrate display summaries (system-panel view helpers) ──────────────────
+// The space partition the seeder built against (industry-seed.ts): tier-0
+// extractors sit on dedicated deposit slots; tier-1+ factories and population
+// centres share fungible general space; pop-centres are additionally bounded by
+// the habitable subset. These pure helpers turn the denormalised substrate
+// columns + built base into the shapes the system panels render.
+
+/**
+ * Tier-0 extractor count per resource from the built base — the worked deposit
+ * slots. Goods sharing a resource (food + textiles → arable) sum onto that
+ * resource. Factories and population centres carry no `resource` and are skipped.
+ */
+export function extractorsByResource(buildings: Record<string, number>): ResourceVector {
+  const v = emptyResourceVector();
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    const resource = BUILDING_TYPES[type]?.resource;
+    if (resource) v[resource] += count;
+  }
+  return v;
+}
+
+/** Per-resource deposit-fill summary — the functional extraction view for one system. */
+export interface SystemDepositSummary {
+  resource: ResourceType;
+  /** Total extractor slots across all bodies (slotCap). */
+  slotCap: number;
+  /** Slots worked by seeded extractors. */
+  worked: number;
+  /** Effective yield multiplier the worked slots deliver. 1.0 when none worked. */
+  yieldMult: number;
+  /** Quality band of the effective yield — drives the row's colour/label. */
+  band: QualityBandId;
+}
+
+/**
+ * One fill row per resource that has any deposit slots, richest cap first.
+ * The extraction view: worked vs available slots and the effective yield the
+ * worked slots deliver. (Intrinsic deposit grade — the static "what is in the
+ * ground" — is surfaced as per-body flavour on the astrography panel, not here.)
+ */
+export function summariseDeposits(
+  slotCap: ResourceVector,
+  worked: ResourceVector,
+  yields: ResourceVector,
+): SystemDepositSummary[] {
+  return RESOURCE_TYPES.filter((r) => slotCap[r] > 0)
+    .map((r) => ({
+      resource: r,
+      slotCap: slotCap[r],
+      worked: worked[r],
+      yieldMult: yields[r],
+      band: bandForMultiplier(yields[r]),
+    }))
+    .sort((a, b) => b.slotCap - a.slotCap);
+}
+
+/** A system's finite surface partition and how much of each part is built out. */
+export interface SubstrateSpace {
+  /** Total available space (SPACE_PER_SIZE × Σ size). */
+  available: number;
+  /** Dedicated extractor land (available − general). */
+  deposit: number;
+  /** Fungible factory + population-centre land. */
+  general: number;
+  /** Habitable subset of general space — caps population centres. */
+  habitable: number;
+  /** Deposit land worked by extractors. */
+  depositWorked: number;
+  /** General land consumed by factories + population centres. */
+  generalUsed: number;
+  /** General land consumed by population centres alone (a subset of generalUsed, drawn from habitable). */
+  habitableUsed: number;
+}
+
+/**
+ * Partition a system's available space into deposit / general / habitable and
+ * tally the built land in each. Extractors are billed to deposit land (one slot
+ * footprint each); factories and population centres to general; population
+ * centres additionally to habitable.
+ */
+export function summariseSpace(
+  available: number,
+  general: number,
+  habitable: number,
+  buildings: Record<string, number>,
+): SubstrateSpace {
+  let habitableUsed = 0;
+  let depositWorked = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    if (BUILDING_TYPES[type]?.resource) {
+      depositWorked += count * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
+      continue;
+    }
+    if (type === HOUSING_TYPE) habitableUsed += count * effectiveSpaceCost(type);
+  }
+  return {
+    available,
+    deposit: Math.max(0, available - general),
+    general,
+    habitable,
+    depositWorked,
+    generalUsed: generalSpaceUsed(buildings),
+    habitableUsed,
+  };
 }

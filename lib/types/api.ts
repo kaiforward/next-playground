@@ -26,6 +26,7 @@ import type {
   SunClass,
   BodyArchetypeId,
   StabilityEntry,
+  ResourceVector,
 } from "./game";
 import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
@@ -126,41 +127,67 @@ export type SystemPopulationData =
       unrest: number;
       /** True when unrest ≥ STRIKE_PARAMS.threshold. */
       striking: boolean;
-      /** Top-N goods by demand rate, descending. */
+      /** Full consumption footprint — goods the population consumes, demand-sorted descending. */
       demand: PopulationDemandEntry[];
     }
   | { visibility: "unknown" };
 export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
 
-// ── System substrate ─────────────────────────────────────────────
+// ── System substrate (physical / static — astrography flavour) ───────────────
 export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
   habitable: boolean;
   size: number;
+  /** Per-resource deposit slots on this body (0 = no deposit). */
+  slots: ResourceVector;
+  /** Per-resource intrinsic quality multiplier on this body (0 = no deposit). */
+  quality: ResourceVector;
 }
-/** Physical substrate for one system — discriminated on fog-of-war visibility. */
+/**
+ * Physical substrate for one system — the static "what is physically here":
+ * star, surface size, habitable fraction, bodies, and the deposits they host.
+ * Discriminated on fog-of-war visibility. (Built-out / production state lives on
+ * the tick-aware industry read.)
+ */
 export type SystemSubstrateData =
   | {
       visibility: "visible";
       sunClass: SunClass;
-      population: number;
-      popCap: number;
+      /** Total available surface space across all bodies (SPACE_PER_SIZE × Σ size). */
+      availableSpace: number;
+      /** Habitable surface across all bodies. */
+      habitableSpace: number;
       bodies: BodyView[];
-      /** Per-good production/consumption computed from this system's substrate. */
-      goods: SubstrateGoodRate[];
     }
   | { visibility: "unknown" };
 export type SystemSubstrateResponse = ApiResponse<SystemSubstrateData>;
-export type { SubstrateGoodRate };
 
-// ── System industry (industrial base + supply-chain) ─────────────────────────
-import type { SystemIndustryReadout } from "@/lib/engine/industry";
-export type { SystemIndustryReadout };
-/** Industrial base and supply-chain state for one system — discriminated on visibility. */
+// ── System industry (built base + supply-chain + output — functional/dynamic) ─
+import type {
+  SystemIndustryReadout,
+  SubstrateSpace,
+  SystemDepositSummary,
+} from "@/lib/engine/industry";
+export type { SystemIndustryReadout, SubstrateSpace, SystemDepositSummary, SubstrateGoodRate };
+/**
+ * Industrial base, development headroom, deposit-fill, supply-chain and
+ * production/consumption for one system — discriminated on visibility.
+ */
 export type SystemIndustryData =
-  | ({ visibility: "visible" } & SystemIndustryReadout)
+  | ({
+      visibility: "visible";
+      /** Economy shard this system lands in (0…ECONOMY_UPDATE_INTERVAL−1) — static.
+       *  Paired with the live tick to count down to the next economy update. */
+      economyShardGroup: number;
+      /** Available-space partition + built-out land per partition (headroom). */
+      space: SubstrateSpace;
+      /** Per-resource deposit-fill rows: slot cap, worked slots, effective yield + band. */
+      deposits: SystemDepositSummary[];
+      /** Per-good production vs consumption from the built base + population (real yields). */
+      goods: SubstrateGoodRate[];
+    } & SystemIndustryReadout)
   | { visibility: "unknown" };
 export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 

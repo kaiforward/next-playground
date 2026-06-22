@@ -24,6 +24,7 @@ import { enrichTraits } from "@/lib/utils/traits";
 import { formatCredits, formatHeadcount } from "@/lib/utils/format";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
+import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { useSystemPopulation } from "@/lib/hooks/use-system-population";
 import { StabilityBadge } from "@/components/ui/stability-badge";
 import { GOODS } from "@/lib/constants/goods";
@@ -82,6 +83,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { data: universeData } = useUniverse();
   const allMissions = useSystemAllMissions(systemId);
   const substrate = useSystemSubstrate(systemId);
+  const industry = useSystemIndustry(systemId);
   const populationState = useSystemPopulation(systemId);
 
   // Owning faction (the source of government). Falls back to the region's
@@ -111,17 +113,17 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     ).length;
   }, [universeData, systemId]);
 
-  // Economy info — net trade balance per good from the system's substrate.
-  // Production and consumption are both universal, so the lists partition the
-  // goods into net exporters (Produces) and net importers (Consumes).
+  // Economy info — net production per good from the system's industrial base.
+  // Production (built base) and consumption (population) partition the goods into
+  // net exporters (Produces) and net importers (Consumes).
   const economyType = systemInfo?.economyType ?? "extraction";
   const { producedGoods, consumedGoods } = useMemo(() => {
-    if (substrate.visibility !== "visible") {
+    if (industry.visibility !== "visible") {
       return { producedGoods: [], consumedGoods: [] };
     }
     const produced: { name: string; rate: number }[] = [];
     const consumed: { name: string; rate: number }[] = [];
-    for (const g of substrate.goods) {
+    for (const g of industry.goods) {
       const net = g.production - g.consumption;
       const name = GOODS[g.goodId]?.name ?? g.goodId;
       if (net > 0) produced.push({ name, rate: net });
@@ -130,7 +132,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     produced.sort((a, b) => b.rate - a.rate);
     consumed.sort((a, b) => b.rate - a.rate);
     return { producedGoods: produced, consumedGoods: consumed };
-  }, [substrate]);
+  }, [industry]);
 
   // Market snapshot — best premiums and biggest discounts
   const { bestPrices, cheapestSorted } = useMemo(() => {

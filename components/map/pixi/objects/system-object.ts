@@ -212,16 +212,29 @@ export class SystemObject extends Container {
       this.currentEconomy = data.economyType;
       this.currentVisibility = data.visibility;
       const colors = ECONOMY_COLORS[data.economyType];
+      const undeveloped = !data.developed;
 
+      // Undeveloped systems carry an economy-type label but no built economy, so
+      // they read as a hollow ring (labelled potential) rather than a filled disc
+      // (live economy). The ring keeps the economy colour; a faint fill stops the
+      // small marker from looking like a hole.
       this.core.clear();
       this.core.circle(0, 0, SIZES.systemCoreRadius);
-      this.core.fill(colors.core);
+      if (undeveloped) {
+        this.core.fill({ color: colors.core, alpha: GLYPH.undevelopedFillAlpha });
+        this.core.stroke({ color: colors.core, width: GLYPH.undevelopedRingWidth });
+      } else {
+        this.core.fill(colors.core);
+      }
       this.core.alpha = isUnknown ? 0.4 : 1;
 
+      // The specular highlight implies a solid body — drop it on hollow markers.
       this.highlight.clear();
-      this.highlight.circle(0, 0, 4);
-      this.highlight.fill({ color: 0xffffff, alpha: isUnknown ? 0.2 : 0.6 });
-      this.highlight.position.set(-3, -3);
+      if (!undeveloped) {
+        this.highlight.circle(0, 0, 4);
+        this.highlight.fill({ color: 0xffffff, alpha: isUnknown ? 0.2 : 0.6 });
+        this.highlight.position.set(-3, -3);
+      }
 
       this.econLabel.text = data.economyType.toUpperCase();
       this.econLabel.style.fill = colors.core;
@@ -314,7 +327,15 @@ export class SystemObject extends Container {
     const tint = data.priceTint;
     const hasPrice = tint != null;
     const haloColor = hasPrice ? tint : ECONOMY_COLORS[data.economyType].glow;
-    const haloAlpha = isUnknown ? 0.05 : hasPrice ? GLYPH.haloPriceAlpha : GLYPH.haloAlpha;
+    // Undeveloped systems (no live economy, never priced) get a dimmed glow so
+    // the filled-vs-hollow distinction reads at the halo level too.
+    const haloAlpha = isUnknown
+      ? 0.05
+      : !data.developed
+        ? GLYPH.haloUndevelopedAlpha
+        : hasPrice
+          ? GLYPH.haloPriceAlpha
+          : GLYPH.haloAlpha;
     this.glow.clear();
     this.glow.circle(0, 0, GLYPH.haloRadius);
     this.glow.fill({ color: haloColor, alpha: haloAlpha });

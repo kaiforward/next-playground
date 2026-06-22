@@ -1,7 +1,31 @@
 import type { EVENT_DEFINITIONS } from "./events";
 import type { MissionType } from "./missions";
 import type { EnemyTier } from "./combat";
-import type { NotificationType, SunClass } from "@/lib/types/game";
+import type { NotificationType, SunClass, QualityBandId } from "@/lib/types/game";
+
+// ── Deposit quality bands ────────────────────────────────────
+// A dull→warm value ramp for deposit grades. Copper (text-accent) marks the
+// richest tier — the signature Foundry accent; green is deliberately avoided
+// since it already denotes "habitable" on body cards.
+
+/** Capitalised band label. */
+export const QUALITY_BAND_LABEL: Record<QualityBandId, string> = {
+  poor: "Poor", average: "Average", good: "Good", rich: "Rich",
+};
+/** Text colour class per band. */
+export const QUALITY_BAND_TEXT: Record<QualityBandId, string> = {
+  poor: "text-status-slate-light",
+  average: "text-text-secondary",
+  good: "text-status-amber-light",
+  rich: "text-text-accent",
+};
+/** Dot/swatch background colour class per band. */
+export const QUALITY_BAND_DOT: Record<QualityBandId, string> = {
+  poor: "bg-status-slate",
+  average: "bg-text-secondary",
+  good: "bg-status-amber",
+  rich: "bg-text-accent",
+};
 
 /** Mapping from event type to Badge/dot color. */
 export const EVENT_TYPE_BADGE_COLOR: Record<

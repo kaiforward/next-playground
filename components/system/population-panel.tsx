@@ -19,6 +19,14 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
 
   const { population, popCap, unrest, striking, demand } = pop;
 
+  // Uninhabited: no housing capacity → no population, no demand. The deposits are
+  // still charted on the Astrography tab (the colonisation hook).
+  if (popCap <= 0) {
+    return (
+      <EmptyState message="Uninhabited — no population is established here. This system's deposits are charted on the Astrography tab." />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Card variant="bordered" padding="md">
@@ -31,8 +39,8 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
           <StabilityBadge unrest={unrest} />
         </div>
         <ProgressBar
-          label="Unrest"
-          value={unrest}
+          label="Stability"
+          value={1 - unrest}
           max={1}
           color="copper"
           formatValue={(n) => n.toFixed(2)}
@@ -50,7 +58,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
         {demand.length === 0 ? (
           <EmptyState message="No demand." />
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-1.5 max-h-72 overflow-y-auto">
             {demand.map((d) => (
               <li key={d.goodId} className="flex items-center justify-between py-1.5 px-3 bg-surface">
                 <span className="text-sm text-text-primary">{d.goodName}</span>

@@ -10,9 +10,14 @@ import {
   inputDemandForGood,
   buildIndustryReadout,
   facilityStorageForGood,
+  extractorsByResource,
+  summariseDeposits,
+  summariseSpace,
+  generalSpaceUsed,
 } from "@/lib/engine/industry";
 import {
   DEFAULT_LABOUR_PER_UNIT,
+  DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
   OUTPUT_PER_UNIT,
   HOUSING_TYPE,
@@ -23,7 +28,7 @@ import {
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
-import { unitResourceVector, makeResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 describe("bodyAvailableSpace", () => {
   it("returns SPACE_PER_SIZE × size with no habitability factor", () => {
@@ -149,35 +154,33 @@ describe("inputDemandForGood", () => {
   });
 });
 
+describe("generalSpaceUsed", () => {
+  it("sums factory + housing footprint; excludes tier-0 extractors (deposit land)", () => {
+    // ore is a tier-0 extractor (sits on a deposit slot); metals + housing sit on general space.
+    expect(generalSpaceUsed({ ore: 4, metals: 2, [HOUSING_TYPE]: 5 }))
+      .toBeCloseTo((2 + 5) * DEFAULT_SPACE_COST, 6);
+  });
+  it("ignores non-positive counts", () => {
+    expect(generalSpaceUsed({ metals: -3, fuel: 2 })).toBeCloseTo(2 * DEFAULT_SPACE_COST, 6);
+  });
+});
+
 describe("buildIndustryReadout", () => {
   const MIN = 5;
-  // One size-1 body + one size-2 body (habitable field present but ignored by space calc).
-  const bodies = [
-    { size: 1, habitable: true },
-    { size: 2, habitable: false },
-  ];
   // 3 metals buildings (recipe: { ore: 1 }), 5 housing.
   const buildings = { metals: 3, [HOUSING_TYPE]: 5 };
   // Population exactly staffs the metals buildings.
   const pop = labourDemand(buildings);
 
-  it("buildSpace.total uses bodyAvailableSpace (size only, no habitability factor)", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
-    const expectedTotal = bodies.reduce((s, b) => s + bodyAvailableSpace(b.size), 0);
-    const expectedUsed = buildSpaceUsed(buildings);
-    expect(readout.buildSpace.total).toBeCloseTo(expectedTotal, 6);
-    expect(readout.buildSpace.used).toBeCloseTo(expectedUsed, 6);
-  });
-
   it("labourFulfillment matches the helper formula", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const demand = labourDemand(buildings);
     const expected = labourFulfillment(pop, demand);
     expect(readout.labourFulfillment).toBeCloseTo(expected, 6);
   });
 
   it("housing appears with tier -1 and no outputGood", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing).toBeDefined();
     expect(housing.tier).toBe(-1);
@@ -186,7 +189,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("production buildings have outputGood and correct tier", () => {
-    const readout = buildIndustryReadout(buildings, bodies, pop, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals).toBeDefined();
     expect(metals.outputGood).toBe("metals");
@@ -197,7 +200,7 @@ describe("buildIndustryReadout", () => {
   it("supplyChain entry is throttled (inputGate < 1) when ore stock is at floor", () => {
     // ore stock = MIN (nothing drawable above floor)
     const marketStock = { ore: MIN };
-    const readout = buildIndustryReadout(buildings, bodies, pop, marketStock, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, marketStock, () => MIN, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeLessThan(1);
@@ -209,7 +212,7 @@ describe("buildIndustryReadout", () => {
     const fullyStaffedProduction = buildingProduction(buildings, "metals", 1, unitResourceVector());
     const oreNeeded = fullyStaffedProduction * GOOD_RECIPES["metals"]["ore"];
     const marketStock = { ore: MIN + oreNeeded * 10 };
-    const readout = buildIndustryReadout(buildings, bodies, pop, marketStock, MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, marketStock, () => MIN, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeCloseTo(1, 6);
@@ -217,7 +220,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("tier-0 goods (no recipe) are absent from supplyChain", () => {
-    const readout = buildIndustryReadout({ ore: 5 }, bodies, 1000, {}, MIN, unitResourceVector());
+    const readout = buildIndustryReadout({ ore: 5 }, 1000, {}, () => MIN, unitResourceVector());
     expect(readout.supplyChain.find((e) => e.goodId === "ore")).toBeUndefined();
   });
 
@@ -228,10 +231,9 @@ describe("buildIndustryReadout", () => {
     const stock = { ore: MIN, gas: MIN + gasNeeded * 10 };
     const readout = buildIndustryReadout(
       { metals: 3, fuel: 2, [HOUSING_TYPE]: 1 },
-      bodies,
       pop + 2 * DEFAULT_LABOUR_PER_UNIT,
       stock,
-      MIN,
+      () => MIN,
       unitResourceVector(),
     );
     const gates = readout.supplyChain.map((e) => e.inputGate);
@@ -259,5 +261,59 @@ describe("facilityStorageForGood", () => {
   it("sums across a mixed build-out", () => {
     expect(facilityStorageForGood({ ore: 2, [HOUSING_TYPE]: 4 }, "ore"))
       .toBe(2 * EXTRACTOR_STORAGE_PER_UNIT + 4 * POP_CENTRE_STORAGE_DEFAULT);
+  });
+});
+
+describe("extractorsByResource", () => {
+  it("sums tier-0 extractor counts by their deposit resource; ignores factories and housing", () => {
+    // ore → ore; food + textiles both → arable (shared deposit); metals is tier-1; housing has no resource.
+    const v = extractorsByResource({ ore: 3, food: 1, textiles: 2, metals: 5, [HOUSING_TYPE]: 9 });
+    expect(v.ore).toBe(3);
+    expect(v.arable).toBe(3);
+    expect(v.gas).toBe(0);
+  });
+  it("ignores non-positive counts", () => {
+    expect(extractorsByResource({ ore: -2, gas: 4 }).ore).toBe(0);
+    expect(extractorsByResource({ ore: -2, gas: 4 }).gas).toBe(4);
+  });
+});
+
+describe("summariseSpace", () => {
+  it("partitions available into deposit/general/habitable and tracks built land per partition", () => {
+    // available 100, general 40 → deposit 60; habitable 10.
+    // ore×4 extractors sit on deposit land; metals×2 factories + housing×5 sit on general; housing also on habitable.
+    const space = summariseSpace(100, 40, 10, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
+    expect(space.available).toBe(100);
+    expect(space.general).toBe(40);
+    expect(space.habitable).toBe(10);
+    expect(space.deposit).toBe(60);
+    expect(space.depositWorked).toBeCloseTo(4 * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT, 6);
+    expect(space.generalUsed).toBeCloseTo((2 + 5) * DEFAULT_SPACE_COST, 6);
+    expect(space.habitableUsed).toBeCloseTo(5 * DEFAULT_SPACE_COST, 6);
+  });
+  it("clamps deposit to zero when general exceeds available (degenerate input)", () => {
+    expect(summariseSpace(10, 40, 5, {}).deposit).toBe(0);
+  });
+});
+
+describe("summariseDeposits", () => {
+  it("summarises present deposits: slot cap, worked slots, effective yield + its band", () => {
+    const slotCap = makeResourceVector({ ore: 12, gas: 2 });
+    const worked = makeResourceVector({ ore: 5, gas: 0 });
+    const yields = makeResourceVector({ ore: 1.55, gas: 1 }); // ore 1.55 → "good"; gas unworked 1.0 → "average"
+    const deposits = summariseDeposits(slotCap, worked, yields);
+    // Only ore + gas have slots; sorted by slotCap descending → ore first.
+    expect(deposits.map((d) => d.resource)).toEqual(["ore", "gas"]);
+    const ore = deposits[0];
+    expect(ore.slotCap).toBe(12);
+    expect(ore.worked).toBe(5);
+    expect(ore.yieldMult).toBeCloseTo(1.55, 6);
+    expect(ore.band).toBe("good"); // 1.55 ≤ 1.8
+    // Gas: unworked, neutral yield 1.0 → "average".
+    expect(deposits[1].worked).toBe(0);
+    expect(deposits[1].band).toBe("average");
+  });
+  it("excludes resources with no deposit slots", () => {
+    expect(summariseDeposits(emptyResourceVector(), emptyResourceVector(), unitResourceVector())).toEqual([]);
   });
 });
