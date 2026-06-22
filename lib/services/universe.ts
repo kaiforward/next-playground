@@ -336,9 +336,10 @@ export async function getSystemIndustry(
     getPlayerVisibility(playerId),
     prisma.starSystem.findUnique({
       where: { id: systemId },
+      relationLoadStrategy: "join",
       select: {
         population: true,
-        bodies: { select: { size: true, habitable: true } },
+        generalSpace: true,
         buildings: { select: { buildingType: true, count: true } },
         station: {
           select: {
@@ -368,9 +369,10 @@ export async function getSystemIndustry(
 
   return {
     visibility: "visible",
+    // yields are inert for this readout (supplyChain covers only yield-independent tier-1+ goods).
     ...buildIndustryReadout(
       buildings,
-      system.bodies,
+      system.generalSpace,
       system.population,
       marketStock,
       5, // display approx: per-market floor varies by good; 5 is a typical floor for this informational readout
