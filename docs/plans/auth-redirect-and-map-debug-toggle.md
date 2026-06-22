@@ -169,5 +169,13 @@ test, matching nothing else in the codebase, so skip unless cheap.)
   then hard-reload a game URL → redirected to `/login`; (c) normal logout still redirects;
   (d) Dev Tools → Map toggles the zoom/LOD overlay on/off; default is off.
 
+## Implementation notes (deviations from the design above)
+- `isAuthError` lives in `lib/query/fetcher.ts` (beside `ApiError`), not `client.ts` — keeps the
+  unit test's import graph free of `next-auth/react`. `client.ts` imports it.
+- Tests live at `lib/query/__tests__/fetcher.test.ts` — the `unit` project only globs
+  `lib/**/__tests__/**/*.test.ts`.
+- The client `signOut({ redirectTo: "/login" })` call mirrors the existing working logout in
+  `components/game-sidebar.tsx`.
+
 ## Out of scope
 UX/UI gamification of the system tabs (Industry-first) — separate brainstorm → spec → plan cycle.
