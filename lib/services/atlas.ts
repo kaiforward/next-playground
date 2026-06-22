@@ -30,6 +30,7 @@ export async function getAtlas(): Promise<AtlasData> {
         economyType: true,
         isGateway: true,
         factionId: true,
+        popCap: true,
       },
     }),
     prisma.systemConnection.findMany({
@@ -90,6 +91,7 @@ export async function getAtlas(): Promise<AtlasData> {
       factionId: s.factionId,
       economyType: toEconomyType(s.economyType),
       isGateway: s.isGateway,
+      developed: s.popCap > 0,
     })),
     connections: connections.map((c) => ({
       id: c.id,
