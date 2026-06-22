@@ -28,6 +28,7 @@ When you flag a violation, use the matching slug below so dedup is deterministic
 |------|-------------------------------------|
 | `missing-driver-adapter` | `new PrismaClient()` with no `@prisma/adapter-pg` |
 | `missing-tx-timeout` | `$transaction()` without `{ timeout: 30_000 }` |
+| `relation-fanout-no-join` | a multi-relation `findMany`/`findUnique` on the tick / `$transaction` path without `relationLoadStrategy: "join"` — see nuance below |
 | `n+1-writes-in-tx` | per-row `create` / `update` / `findMany` inside `$transaction` (batch via `createMany` / `unnest()`) |
 | `tx-error-swallowed` | catching a query error inside `$transaction` and continuing on the same `tx` (PG aborts it) |
 | `nan-to-raw-sql` | `NaN` / `Infinity` reaching raw SQL unguarded |
@@ -50,6 +51,7 @@ Distinguish carefully before flagging; these are the recurring false-positive tr
 - **`as-cast`** — the `as` type-assertion keyword (`x as Foo`), not the word "as" in identifiers / comments / strings; `as const` is permitted.
 - **`unknown-in-types`** — the literal `unknown` in a type position, not the English word in prose.
 - **`sort-mutates-state`** — only a `.sort()` on a React **state** value during render, not every `.sort()`.
+- **`relation-fanout-no-join`** — flag only multi-relation reads on the tick / `$transaction` hot path (where the concurrent fan-out actually bites). A one-off page/service query that pulls relations is fine; don't flag every `include`.
 - Non-executable text (markdown, prompts, YAML) is never a violation by content match — see the severity rubric's scope guard.
 
 ## Maintenance note
