@@ -8,11 +8,11 @@ function netClass(net: number): string {
 }
 
 /**
- * Per-good trade profile as diverging bars: consumption grows left from the
- * centre, production grows right, both scaled to the system's largest single
- * rate. The asymmetry is the net balance, shown numerically on the right and
- * coloured by direction (green = net export, red = net import). Goods are
- * ordered net exporters first.
+ * Per-good production/consumption profile as diverging bars: consumption grows
+ * left from the centre, production grows right, both scaled to the system's
+ * largest single rate. The asymmetry is the net balance, shown numerically on
+ * the right and coloured by direction (green = net export, red = net import).
+ * Goods are ordered net exporters first.
  */
 export function SubstrateTradeBars({ goods }: { goods: SubstrateGoodRate[] }) {
   const bars = prepareTradeBars(goods);

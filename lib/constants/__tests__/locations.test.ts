@@ -21,8 +21,6 @@ function makeBody(bodyType: BodyArchetypeId): BodyView {
     archetypeName: arch.name,
     habitable: arch.habitable,
     size: 1,
-    generalSpace: 0,
-    habitableSpace: 0,
     slots: emptyResourceVector(),
     quality: emptyResourceVector(),
   };

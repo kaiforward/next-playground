@@ -154,8 +154,6 @@ export function inputDemandForGood(
 
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
-  /** General-space utilisation: factory + population-centre footprint vs the system's general space. */
-  buildSpace: { used: number; total: number };
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
   labourFulfillment: number;
   /** One entry per building type with count > 0, sorted by tier ascending then buildingType. */
@@ -167,10 +165,10 @@ export interface SystemIndustryReadout {
 /**
  * Builds an industry readout for one system from its current industrial base and
  * market stock. Pure — no DB dependency. Reuses the existing helpers for all
- * derived quantities.
+ * derived quantities. (Space-partition headroom is assembled separately via
+ * summariseSpace; this readout covers labour, the building roster, and the
+ * supply chain.)
  *
- * - buildSpace: general-space utilisation — factory + pop-centre footprint vs the
- *   system's general space (extractors live on deposit slots, surfaced separately).
  * - labourFulfillment: population vs total labour demand.
  * - buildings: one entry per building type with count > 0 (housing gets tier -1).
  * - supplyChain: tier-1+ produced goods whose recipe inputs may be short.
@@ -182,13 +180,11 @@ export interface SystemIndustryReadout {
  */
 export function buildIndustryReadout(
   buildings: Record<string, number>,
-  generalSpace: number,
   population: number,
   marketStock: Record<string, number>,
   minLevel: number,
   yields: ResourceVector,
 ): SystemIndustryReadout {
-  const usedSpace = generalSpaceUsed(buildings);
   const demand = labourDemand(buildings);
   const fulfillment = labourFulfillment(population, demand);
 
@@ -235,7 +231,6 @@ export function buildIndustryReadout(
   supplyChainEntries.sort((a, b) => a.inputGate - b.inputGate);
 
   return {
-    buildSpace: { used: usedSpace, total: generalSpace },
     labourFulfillment: fulfillment,
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
@@ -287,61 +282,38 @@ export function extractorsByResource(buildings: Record<string, number>): Resourc
   return v;
 }
 
-/** Slot-weighted mean intrinsic quality of all deposits for `resource` across bodies. 1.0 when no slots exist. */
-function intrinsicQuality(
-  bodies: Array<{ slots: ResourceVector; quality: ResourceVector }>,
-  resource: ResourceType,
-): number {
-  let weighted = 0;
-  let slots = 0;
-  for (const b of bodies) {
-    const s = b.slots[resource];
-    if (s > 0) {
-      weighted += s * b.quality[resource];
-      slots += s;
-    }
-  }
-  return slots > 0 ? weighted / slots : 1;
-}
-
-/** Per-resource deposit summary for one system — what is in the ground and how much of it is worked. */
+/** Per-resource deposit-fill summary — the functional extraction view for one system. */
 export interface SystemDepositSummary {
   resource: ResourceType;
   /** Total extractor slots across all bodies (slotCap). */
   slotCap: number;
   /** Slots worked by seeded extractors. */
   worked: number;
-  /** Slot-weighted intrinsic grade of the deposit (independent of development). */
-  quality: number;
-  /** Quality band of the intrinsic grade — drives the row's colour/label. */
-  band: QualityBandId;
-  /** Effective yield multiplier the worked slots deliver (drives production). 1.0 when none worked. */
+  /** Effective yield multiplier the worked slots deliver. 1.0 when none worked. */
   yieldMult: number;
+  /** Quality band of the effective yield — drives the row's colour/label. */
+  band: QualityBandId;
 }
 
 /**
- * One summary row per resource that has any deposit slots, richest cap first.
- * Intrinsic `quality`/`band` describe the deposit itself (shown even when
- * undeveloped); `yieldMult` is the effective multiplier of the worked subset.
+ * One fill row per resource that has any deposit slots, richest cap first.
+ * The extraction view: worked vs available slots and the effective yield the
+ * worked slots deliver. (Intrinsic deposit grade — the static "what is in the
+ * ground" — is surfaced as per-body flavour on the astrography panel, not here.)
  */
 export function summariseDeposits(
-  bodies: Array<{ slots: ResourceVector; quality: ResourceVector }>,
   slotCap: ResourceVector,
   worked: ResourceVector,
   yields: ResourceVector,
 ): SystemDepositSummary[] {
   return RESOURCE_TYPES.filter((r) => slotCap[r] > 0)
-    .map((r) => {
-      const quality = intrinsicQuality(bodies, r);
-      return {
-        resource: r,
-        slotCap: slotCap[r],
-        worked: worked[r],
-        quality,
-        band: bandForMultiplier(quality),
-        yieldMult: yields[r],
-      };
-    })
+    .map((r) => ({
+      resource: r,
+      slotCap: slotCap[r],
+      worked: worked[r],
+      yieldMult: yields[r],
+      band: bandForMultiplier(yields[r]),
+    }))
     .sort((a, b) => b.slotCap - a.slotCap);
 }
 

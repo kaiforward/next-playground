@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { unitResourceVector, resourceVectorFromColumns } from "@/lib/engine/resources";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
   buildIndustryReadout,
@@ -229,26 +229,17 @@ export async function getSystemSubstrate(
       relationLoadStrategy: "join",
       select: {
         sunClass: true,
-        population: true,
-        popCap: true,
         availableSpace: true,
-        generalSpace: true,
         habitableSpace: true,
-        slotGas: true, slotMinerals: true, slotOre: true, slotBiomass: true,
-        slotArable: true, slotWater: true, slotRadioactive: true,
-        yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
-        yieldArable: true, yieldWater: true, yieldRadioactive: true,
         bodies: {
           select: {
             id: true, bodyType: true, habitable: true, size: true,
-            generalSpace: true, habitableSpace: true,
             slotGas: true, slotMinerals: true, slotOre: true, slotBiomass: true,
             slotArable: true, slotWater: true, slotRadioactive: true,
             qualGas: true, qualMinerals: true, qualOre: true, qualBiomass: true,
             qualArable: true, qualWater: true, qualRadioactive: true,
           },
         },
-        buildings: { select: { buildingType: true, count: true } },
       },
     }),
   ]);
@@ -268,8 +259,6 @@ export async function getSystemSubstrate(
       archetypeName: BODY_ARCHETYPES[bodyType].name,
       habitable: b.habitable,
       size: b.size,
-      generalSpace: b.generalSpace,
-      habitableSpace: b.habitableSpace,
       slots: resourceVectorFromColumns(
         {
           slotGas: b.slotGas, slotMinerals: b.slotMinerals, slotOre: b.slotOre,
@@ -289,36 +278,12 @@ export async function getSystemSubstrate(
     };
   });
 
-  const buildings: Record<string, number> = {};
-  for (const b of system.buildings) buildings[b.buildingType] = b.count;
-
-  const slotCap = resourceVectorFromColumns(
-    {
-      slotGas: system.slotGas, slotMinerals: system.slotMinerals, slotOre: system.slotOre,
-      slotBiomass: system.slotBiomass, slotArable: system.slotArable,
-      slotWater: system.slotWater, slotRadioactive: system.slotRadioactive,
-    },
-    "slot",
-  );
-  const yields = resourceVectorFromColumns(
-    {
-      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-    },
-    "yield",
-  );
-  const worked = extractorsByResource(buildings);
-
   return {
     visibility: "visible",
     sunClass: toSunClass(system.sunClass),
-    population: system.population,
-    popCap: system.popCap,
+    availableSpace: system.availableSpace,
+    habitableSpace: system.habitableSpace,
     bodies,
-    goods: capacityGoodRates(buildings, system.population, yields),
-    space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
-    deposits: summariseDeposits(bodies, slotCap, worked, yields),
   };
 }
 
@@ -339,7 +304,13 @@ export async function getSystemIndustry(
       relationLoadStrategy: "join",
       select: {
         population: true,
+        availableSpace: true,
         generalSpace: true,
+        habitableSpace: true,
+        slotGas: true, slotMinerals: true, slotOre: true, slotBiomass: true,
+        slotArable: true, slotWater: true, slotRadioactive: true,
+        yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
+        yieldArable: true, yieldWater: true, yieldRadioactive: true,
         buildings: { select: { buildingType: true, count: true } },
         station: {
           select: {
@@ -367,16 +338,37 @@ export async function getSystemIndustry(
     }
   }
 
+  const slotCap = resourceVectorFromColumns(
+    {
+      slotGas: system.slotGas, slotMinerals: system.slotMinerals, slotOre: system.slotOre,
+      slotBiomass: system.slotBiomass, slotArable: system.slotArable,
+      slotWater: system.slotWater, slotRadioactive: system.slotRadioactive,
+    },
+    "slot",
+  );
+  const yields = resourceVectorFromColumns(
+    {
+      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
+      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
+      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
+    },
+    "yield",
+  );
+  const worked = extractorsByResource(buildings);
+
   return {
     visibility: "visible",
-    // yields are inert for this readout (supplyChain covers only yield-independent tier-1+ goods).
+    // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
+    // but feed the deposit-fill rows and the production/consumption profile below.
     ...buildIndustryReadout(
       buildings,
-      system.generalSpace,
       system.population,
       marketStock,
       5, // display approx: per-market floor varies by good; 5 is a typical floor for this informational readout
-      unitResourceVector(),
+      yields,
     ),
+    space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
+    deposits: summariseDeposits(slotCap, worked, yields),
+    goods: capacityGoodRates(buildings, system.population, yields),
   };
 }
