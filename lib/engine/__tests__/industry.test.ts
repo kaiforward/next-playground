@@ -1,9 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  bodyAvailableSpace,
   labourDemand,
   labourFulfillment,
-  buildSpaceUsed,
   housingPopCap,
   buildingProduction,
   capacityGoodRates,
@@ -30,17 +28,6 @@ import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
-describe("bodyAvailableSpace", () => {
-  it("returns SPACE_PER_SIZE × size with no habitability factor", () => {
-    expect(bodyAvailableSpace(1)).toBeCloseTo(SUBSTRATE_GEN.SPACE_PER_SIZE, 6);
-    expect(bodyAvailableSpace(2)).toBeCloseTo(SUBSTRATE_GEN.SPACE_PER_SIZE * 2, 6);
-    expect(bodyAvailableSpace(0)).toBe(0);
-  });
-  it("clamps negative sizes to 0", () => {
-    expect(bodyAvailableSpace(-1)).toBe(0);
-  });
-});
-
 describe("labourDemand", () => {
   it("sums count × labourPerUnit across production types; housing demands none", () => {
     const buildings = { ore: 4, metals: 2, [HOUSING_TYPE]: 10 };
@@ -58,16 +45,6 @@ describe("labourFulfillment", () => {
   it("is min(1, population / demand)", () => {
     expect(labourFulfillment(100, 50)).toBe(1);
     expect(labourFulfillment(50, 100)).toBeCloseTo(0.5, 6);
-  });
-});
-
-describe("buildSpaceUsed", () => {
-  it("sums count × effectiveSpaceCost across all building types incl. housing", () => {
-    const buildings = { ore: 3, [HOUSING_TYPE]: 5 };
-    expect(buildSpaceUsed(buildings)).toBeCloseTo(8, 6); // default spaceCost 1.0
-  });
-  it("ignores buildings with a non-positive count", () => {
-    expect(buildSpaceUsed({ ore: 3, [HOUSING_TYPE]: -5 })).toBeCloseTo(3, 6); // default spaceCost 1.0
   });
 });
 

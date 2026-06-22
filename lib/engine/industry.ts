@@ -29,14 +29,6 @@ import { inputGate } from "@/lib/engine/supply-chain";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
-/**
- * Available space a single body contributes: SPACE_PER_SIZE × size.
- * Size-only — habitability is the habitable fraction of space, not a total multiplier.
- */
-export function bodyAvailableSpace(size: number): number {
-  return SUBSTRATE_GEN.SPACE_PER_SIZE * Math.max(0, size);
-}
-
 /** Σ count × labourPerUnit across production types. Housing demands no labour. */
 export function labourDemand(buildings: Record<string, number>): number {
   let demand = 0;
@@ -52,16 +44,6 @@ export function labourDemand(buildings: Record<string, number>): number {
 export function labourFulfillment(population: number, demand: number): number {
   if (demand <= 0) return 1;
   return Math.min(1, Math.max(0, population) / demand);
-}
-
-/** Σ count × effectiveSpaceCost across all building types (incl. housing). */
-export function buildSpaceUsed(buildings: Record<string, number>): number {
-  let used = 0;
-  for (const [type, count] of Object.entries(buildings)) {
-    if (count <= 0) continue;
-    used += count * effectiveSpaceCost(type);
-  }
-  return used;
 }
 
 /**
