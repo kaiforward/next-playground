@@ -308,6 +308,7 @@ export async function getSystemIndustry(
       relationLoadStrategy: "join",
       select: {
         population: true,
+        unrest: true,
         availableSpace: true,
         generalSpace: true,
         habitableSpace: true,
@@ -385,6 +386,7 @@ export async function getSystemIndustry(
   return {
     visibility: "visible",
     economyShardGroup,
+    unrest: system.unrest,
     // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
     // but feed the deposit-fill rows and the production/consumption profile below.
     ...buildIndustryReadout(

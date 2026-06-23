@@ -12,7 +12,9 @@ import {
   summariseDeposits,
   summariseSpace,
   generalSpaceUsed,
+  industryHealth,
 } from "@/lib/engine/industry";
+import type { IndustryHealth } from "@/lib/engine/industry";
 import {
   DEFAULT_LABOUR_PER_UNIT,
   DEFAULT_SPACE_COST,
@@ -217,6 +219,28 @@ describe("buildIndustryReadout", () => {
     for (let i = 1; i < gates.length; i++) {
       expect(gates[i]).toBeGreaterThanOrEqual(gates[i - 1]);
     }
+  });
+
+  it("exposes staffed = count × labourFulfillment per building", () => {
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+    const f = labourFulfillment(pop, labourDemand(buildings));
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.staffed).toBeCloseTo(metals.count * f, 6);
+    const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
+    expect(housing.staffed).toBeCloseTo(housing.count * f, 6);
+  });
+});
+
+describe("industryHealth", () => {
+  const T = 0.75; // unrestDecayThreshold
+  it("is 'declining' when unrest is at/above the decay threshold (snowball)", () => {
+    expect(industryHealth({ labourFulfillment: 1, unrest: 0.8, idleFraction: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining");
+  });
+  it("is 'coasting' when idle capacity is meaningful but unrest is calm", () => {
+    expect(industryHealth({ labourFulfillment: 0.5, unrest: 0.1, idleFraction: 0.4, unrestDecayThreshold: T })).toBe<IndustryHealth>("coasting");
+  });
+  it("is 'thriving' when built ≈ used and unrest is calm", () => {
+    expect(industryHealth({ labourFulfillment: 1, unrest: 0.1, idleFraction: 0.02, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving");
   });
 });
 

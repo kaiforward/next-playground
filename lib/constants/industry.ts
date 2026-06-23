@@ -113,6 +113,9 @@ export const POP_CENTRE_STORAGE: Record<string, number> = {
   consumer_goods: 12, food: 8, water: 8, medicine: 6, luxuries: 6, textiles: 5,
 };
 
+/** Idle fraction (Σ(count − staffed) / Σ count) at/above which a system is "coasting". */
+export const IDLE_COASTING_FRACTION = 0.15;
+
 export function sizeFactor(size: number): number {
   return Math.max(0, size);
 }

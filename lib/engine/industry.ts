@@ -22,6 +22,7 @@ import {
   PRODUCTION_STORAGE_PER_UNIT,
   POP_CENTRE_STORAGE,
   POP_CENTRE_STORAGE_DEFAULT,
+  IDLE_COASTING_FRACTION,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -139,9 +140,36 @@ export interface SystemIndustryReadout {
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
   labourFulfillment: number;
   /** One entry per building type with count > 0, sorted by tier ascending then buildingType. */
-  buildings: Array<{ buildingType: string; outputGood?: string; tier: number; count: number }>;
+  buildings: Array<{ buildingType: string; outputGood?: string; tier: number; count: number; staffed: number }>;
   /** Produced goods that have a recipe. Sorted by inputGate ascending (most-throttled first). */
   supplyChain: Array<{ goodId: string; inputGate: number; throttledBy: string[] }>;
+}
+
+/** Coarse industry health read, derived from the decay-loop quantities. */
+export type IndustryHealth = "thriving" | "coasting" | "declining";
+
+export interface IndustryHealthInput {
+  /** System-wide labour ratio in [0,1]. */
+  labourFulfillment: number;
+  /** Stored unrest integral 0…1. */
+  unrest: number;
+  /** Σ idle capacity (built − staffed) ÷ Σ built across the base, in [0,1]. */
+  idleFraction: number;
+  /** θ_decay — unrest at/above this means active unrest-teardown (the snowball). */
+  unrestDecayThreshold: number;
+}
+
+/**
+ * Coarse "thriving / coasting / falling apart" read for the Industry panel, grounded
+ * in the same quantities the decay loop runs on:
+ *  - declining: unrest at/above the decay threshold (capacity is actively torn down),
+ *  - coasting: meaningful idle capacity that disuse decay will slowly shed,
+ *  - thriving: built ≈ used and calm.
+ */
+export function industryHealth(input: IndustryHealthInput): IndustryHealth {
+  if (input.unrest >= input.unrestDecayThreshold) return "declining";
+  if (input.idleFraction >= IDLE_COASTING_FRACTION) return "coasting";
+  return "thriving";
 }
 
 /**
@@ -180,12 +208,12 @@ export function buildIndustryReadout(
   for (const [buildingType, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
-      buildingEntries.push({ buildingType, tier: -1, count });
+      buildingEntries.push({ buildingType, tier: -1, count, staffed: count * fulfillment });
     } else {
       const def = BUILDING_TYPES[buildingType];
       const outputGood = def?.outputGood;
       const tier: number = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
-      buildingEntries.push({ buildingType, outputGood, tier, count });
+      buildingEntries.push({ buildingType, outputGood, tier, count, staffed: count * fulfillment });
     }
   }
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
