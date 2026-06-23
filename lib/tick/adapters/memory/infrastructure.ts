@@ -23,7 +23,7 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
     return Promise.resolve(
       this.systems
         .filter((s) => wanted.has(s.id))
-        .map((s) => ({ systemId: s.id, population: s.population, unrest: s.unrest, buildings: s.buildings })),
+        .map((s) => ({ systemId: s.id, population: s.population, unrest: s.unrest, buildings: { ...s.buildings } })),
     );
   }
 

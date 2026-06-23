@@ -1,0 +1,69 @@
+import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
+import { computeSystemDecay } from "@/lib/engine/infrastructure-decay";
+import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
+import { PrismaInfrastructureWorld } from "@/lib/tick/adapters/prisma/infrastructure";
+import type {
+  InfrastructureWorld,
+  InfrastructureProcessorParams,
+  BuildingCountUpdate,
+  PopCapUpdate,
+} from "@/lib/tick/world/infrastructure-world";
+
+/**
+ * Pure processor body. Runs right after the economy processor, on the SAME shard:
+ * the system set is exactly the economy's `dissatisfactionBySystem` key set (its
+ * processed shard), and uptake comes from the same in-memory signals. Reads the
+ * building roster + population + unrest, computes downward-only `count` deltas
+ * (disuse + unrest decay) plus the recomputed popCap, and batch-writes both. Writes
+ * are skipped where nothing decayed; popCap is written only where housing changed.
+ */
+export async function runInfrastructureDecayProcessor(
+  world: InfrastructureWorld,
+  ctx: TickContext,
+  params: InfrastructureProcessorParams,
+): Promise<TickProcessorResult> {
+  const signals = ctx.results.get("economy")?.economySignals;
+  if (!signals || signals.dissatisfactionBySystem.size === 0) return {};
+
+  const systemIds = [...signals.dissatisfactionBySystem.keys()];
+  const states = await world.getInfrastructureState(systemIds);
+
+  const countUpdates: BuildingCountUpdate[] = [];
+  const popCapUpdates: PopCapUpdate[] = [];
+  for (const s of states) {
+    const uptake = signals.outputUptakeBySystem.get(s.systemId);
+    const result = computeSystemDecay(
+      {
+        buildings: s.buildings,
+        population: s.population,
+        unrest: s.unrest,
+        outputUptake: (goodId) => uptake?.get(goodId) ?? 1,
+      },
+      params.decay,
+    );
+    for (const [buildingType, count] of Object.entries(result.newCounts)) {
+      countUpdates.push({ systemId: s.systemId, buildingType, count });
+    }
+    if (HOUSING_TYPE in result.newCounts) {
+      popCapUpdates.push({ systemId: s.systemId, popCap: result.popCap });
+    }
+  }
+
+  await world.applyBuildingDecays(countUpdates);
+  await world.applyPopCapUpdates(popCapUpdates);
+  return {};
+}
+
+// ── Live-game wiring ──────────────────────────────────────────────
+
+export const infrastructureDecayProcessor: TickProcessor = {
+  name: "infrastructure-decay",
+  // Runs every tick; only acts on the economy's just-processed shard (read off signals).
+  frequency: 1,
+  dependsOn: ["economy"],
+  async process(ctx): Promise<TickProcessorResult> {
+    const world = new PrismaInfrastructureWorld(ctx.tx);
+    return runInfrastructureDecayProcessor(world, ctx, { decay: INFRASTRUCTURE_DECAY_PARAMS });
+  },
+};

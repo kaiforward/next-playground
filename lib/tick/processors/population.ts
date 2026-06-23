@@ -44,7 +44,7 @@ export async function runPopulationProcessor(
 export const populationProcessor: TickProcessor = {
   name: "population",
   frequency: 1,
-  dependsOn: ["economy"],
+  dependsOn: ["economy", "infrastructure-decay"],
   async process(ctx): Promise<TickProcessorResult> {
     const world = new PrismaPopulationWorld(ctx.tx);
     return runPopulationProcessor(world, ctx, { unrest: UNREST_PARAMS, population: POPULATION_PARAMS });
