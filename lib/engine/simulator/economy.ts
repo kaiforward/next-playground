@@ -21,11 +21,13 @@ import {
 import type { RNG } from "@/lib/engine/universe-gen";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
+import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
 import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
+import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
@@ -256,6 +258,28 @@ async function processSimEconomy(
   };
 }
 
+async function processSimInfrastructureDecay(
+  world: SimWorld,
+  signals: EconomySignals | undefined,
+  constants: SimConstants,
+): Promise<SimWorld> {
+  if (!signals) return world;
+  const decayWorld = new InMemoryInfrastructureWorld({ systems: world.systems });
+  const tickCtx: TickContext = {
+    tx: undefined as never,
+    tick: world.tick,
+    results: new Map([["economy", { economySignals: signals }]]),
+  };
+  await runInfrastructureDecayProcessor(decayWorld, tickCtx, {
+    decay: {
+      disuseRate: constants.infrastructure.disuseRate,
+      unrestRate: constants.infrastructure.unrestRate,
+      unrestThreshold: constants.infrastructure.unrestThreshold,
+    },
+  });
+  return { ...world, systems: decayWorld.systems };
+}
+
 async function processSimPopulation(
   world: SimWorld,
   signals: EconomySignals | undefined,
@@ -351,7 +375,8 @@ export async function simulateWorldTick(
   w = processSimShipArrivals(w, rng);
   w = await processSimEvents(w, rng, ctx);
   const eco = await processSimEconomy(w, rng, ctx.constants);
-  w = await processSimPopulation(eco.world, eco.signals, ctx.constants);
+  w = await processSimInfrastructureDecay(eco.world, eco.signals, ctx.constants);
+  w = await processSimPopulation(w, eco.signals, ctx.constants);
   w = await processSimMigration(w, ctx.constants);
   w = await processSimTradeFlow(w, ctx.constants);
   return w;

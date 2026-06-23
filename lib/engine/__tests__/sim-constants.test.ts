@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveConstants, DEFAULT_SIM_CONSTANTS } from "../simulator/constants";
+import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { REFUEL_COST_PER_UNIT } from "@/lib/constants/fuel";
@@ -141,5 +142,16 @@ describe("SimConstants", () => {
       const fresh = resolveConstants();
       expect(DEFAULT_SIM_CONSTANTS).toEqual(fresh);
     });
+  });
+});
+
+describe("sim constants: infrastructure decay", () => {
+  it("defaults to the live INFRASTRUCTURE_DECAY_PARAMS and is overridable", () => {
+    const base = resolveConstants();
+    expect(base.infrastructure).toEqual({ ...INFRASTRUCTURE_DECAY_PARAMS });
+
+    const overridden = resolveConstants({ infrastructure: { disuseRate: 0.5 } });
+    expect(overridden.infrastructure.disuseRate).toBe(0.5);
+    expect(overridden.infrastructure.unrestThreshold).toBe(INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold);
   });
 });
