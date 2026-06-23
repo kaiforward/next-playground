@@ -86,13 +86,26 @@ export interface PopulationParams {
   growthRate: number;
   /** Decline rate scaled by unrest. */
   declineRate: number;
+  /**
+   * Fraction of housing-overshoot (population − popCap) removed as death per run,
+   * scaled by unrest. Fires only when housing has rotted below its occupants (the
+   * unrest-snowball case) — a non-conserved sink, distinct from conserved migration.
+   */
+  overshootDeathRate: number;
 }
 
 /**
  * Logistic population change for one tick:
- *   delta = growthRate * pop * (1 - pop/popCap) * (1 - D)  -  declineRate * pop * unrest
+ *   delta = growthRate * pop * (1 - pop/popCap) * (1 - D)
+ *         - declineRate * pop * unrest
+ *         - overshootDeathRate * max(0, pop - popCap) * unrest
  * Fed and calm: grows toward popCap then asymptotes (no runaway).
  * Starved or unstable: net-declines. popCap = 0 suppresses the growth term entirely.
+ * Housing-overshoot displacement: when housing has rotted below its occupants
+ * (population > popCap — the unrest-snowball case), the excess is displaced; the
+ * non-conserved death portion is removed here, unrest-weighted, so a violent collapse
+ * is death-dominant. The conserved migration half is handled by the migration engine's
+ * explicit overshoot coupling (negative headroom → repels outward migration).
  */
 export function populationDelta(
   population: number,
@@ -105,5 +118,7 @@ export function populationDelta(
   const satisfactionFactor = clamp(1 - d, 0, 1);
   const growth = params.growthRate * population * headroom * satisfactionFactor;
   const decline = params.declineRate * population * clamp(unrest, 0, 1);
-  return growth - decline;
+  const overshoot = Math.max(0, population - popCap);
+  const displacementDeath = params.overshootDeathRate * overshoot * clamp(unrest, 0, 1);
+  return growth - decline - displacementDeath;
 }

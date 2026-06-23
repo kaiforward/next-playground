@@ -72,7 +72,7 @@ export interface SimConstants {
   };
   population: {
     unrest: { gain: number; decay: number };
-    dynamics: { growthRate: number; declineRate: number };
+    dynamics: { growthRate: number; declineRate: number; overshootDeathRate: number };
     strike: { threshold: number; floorMultiplier: number };
   };
   infrastructure: {

@@ -7,7 +7,7 @@ import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/marke
 import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
 import { unitResourceVector } from "@/lib/engine/resources";
 
-const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02 } };
+const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 } };
 
 function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): SimSystem {
   return {
