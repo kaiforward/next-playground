@@ -369,6 +369,8 @@ export interface SimResults {
   finalWorld: SimWorld;
   /** Total population summed across all systems at tick 0 (before the loop). */
   initialPopulationTotal: number;
+  /** Total building count summed across all systems at tick 0 (before the loop). */
+  initialBuildingTotal: number;
   /** Population snapshots sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
   populationSnapshots: Array<Map<string, number>>;
 }

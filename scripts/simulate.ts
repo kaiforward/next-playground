@@ -22,7 +22,7 @@ import {
   buildExperimentResult,
 } from "../lib/engine/simulator/experiment";
 import { STRATEGY_NAMES } from "../lib/engine/simulator/strategies";
-import { summarizePopulation, detectPingPong } from "../lib/engine/simulator/population-analysis";
+import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/engine/simulator/population-analysis";
 import type { SimConfig, BotConfig, SimResults } from "../lib/engine/simulator/types";
 
 // ── Argument parsing ────────────────────────────────────────────
@@ -74,7 +74,7 @@ function fmtNum(n: number): string {
 }
 
 function formatTable(results: SimResults): string {
-  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, constants, populationSnapshots } = results;
+  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, constants, populationSnapshots } = results;
 
   const lines: string[] = [];
 
@@ -231,6 +231,23 @@ function formatTable(results: SimResults): string {
     for (const [label, value] of pRows) {
       lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));
     }
+  }
+
+  // Infrastructure decay summary
+  {
+    const infra = summarizeInfrastructure(finalWorld.systems, initialBuildingTotal);
+    lines.push("");
+    lines.push("Infrastructure (end of simulation):");
+    const iWidths = [24, 16];
+    lines.push([pad("Metric", iWidths[0]), rpad("Value", iWidths[1])].join(" | "));
+    lines.push(iWidths.map((w) => "-".repeat(w)).join("-+-"));
+    const iRows: [string, string][] = [
+      ["Built start", fmtNum(infra.builtStart)],
+      ["Built end", fmtNum(infra.builtEnd)],
+      ["Decayed %", infra.decayedPct.toFixed(2) + "%"],
+      ["Collapsed systems (≈0)", String(infra.collapsedCount)],
+    ];
+    for (const [l, v] of iRows) lines.push([pad(l, iWidths[0]), rpad(v, iWidths[1])].join(" | "));
   }
 
   // Event impact (top 20 only — full list in JSON output)

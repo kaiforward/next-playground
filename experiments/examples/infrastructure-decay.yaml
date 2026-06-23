@@ -1,0 +1,9 @@
+label: infrastructure-decay
+seed: 42
+ticks: 3000
+
+bots:
+  - strategy: random
+    count: 1
+  - strategy: greedy
+    count: 1

@@ -114,6 +114,10 @@ export async function runSimulation(
 
   // Snapshot total population before the tick loop for trajectory analysis.
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
+  const initialBuildingTotal = world.systems.reduce(
+    (sum, s) => sum + Object.values(s.buildings).reduce((a, c) => a + Math.max(0, c), 0),
+    0,
+  );
 
   // Main loop
   for (let t = 0; t < config.tickCount; t++) {
@@ -188,6 +192,7 @@ export async function runSimulation(
     elapsedMs: performance.now() - start,
     finalWorld: world,
     initialPopulationTotal,
+    initialBuildingTotal,
     populationSnapshots,
   };
 }

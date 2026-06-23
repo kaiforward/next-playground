@@ -1,5 +1,42 @@
 import type { SimSystem } from "./types";
 
+export interface InfrastructureSummary {
+  /** Total building count across all systems at tick 0. */
+  builtStart: number;
+  /** Total building count across all systems at simulation end. */
+  builtEnd: number;
+  /** Percentage of the built base that decayed away. */
+  decayedPct: number;
+  /** Systems whose entire built base has rotted to ~0 (ghost-industry watch). */
+  collapsedCount: number;
+}
+
+/** Σ of all building counts in a system. */
+function totalBuilt(s: SimSystem): number {
+  let n = 0;
+  for (const count of Object.values(s.buildings)) n += Math.max(0, count);
+  return n;
+}
+
+export function summarizeInfrastructure(
+  systems: SimSystem[],
+  initialBuildingTotal: number,
+): InfrastructureSummary {
+  let builtEnd = 0;
+  let collapsedCount = 0;
+  for (const s of systems) {
+    const built = totalBuilt(s);
+    builtEnd += built;
+    if (built < 1) collapsedCount++;
+  }
+  return {
+    builtStart: initialBuildingTotal,
+    builtEnd,
+    decayedPct: initialBuildingTotal > 0 ? ((initialBuildingTotal - builtEnd) / initialBuildingTotal) * 100 : 0,
+    collapsedCount,
+  };
+}
+
 /**
  * Migration ping-pong: a system whose population direction reverses many times
  * across snapshots is oscillating (two systems trading the same people). Counts
