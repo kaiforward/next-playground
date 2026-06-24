@@ -1,12 +1,11 @@
 # Economy Simulation SP3.5 — Autonomic Infrastructure Decay
 
-> **Status: Planned** — the next economy sub-project, sequenced **between SP3 (shipped) and SP4**.
-> Graduates the converged brainstorm in `docs/plans/autonomic-growth-decay-brainstorm.md` (delete that
-> on ship) and draws its layering conclusions from `docs/plans/sp5-war-layering-contract-audit.md`.
+> **Status: Active (shipped)** — economy sub-project SP3.5, sequenced **between SP3 and SP4**.
 > Sits *under* the SP3 input-gating cascade and *on* the substrate-v2 available-space model (both
 > unchanged). Roadmap home: [economy-simulation-vision.md](./economy-simulation-vision.md) §13 — this is
 > the **decay** half of the §13-item-5 autonomic mechanism brought forward, fused with a narrow slice of
-> the §13-item-4 booked phase *"Population ← economic viability."*
+> the §13-item-4 booked phase *"Population ← economic viability."* The SP5/war layering conclusions it drew on
+> live in `docs/plans/sp5-war-layering-contract-audit.md`.
 
 ---
 
@@ -37,9 +36,10 @@ natural process (decay) with a deliberate one (construction). Splitting them mak
 and needs **no treasury**.
 
 The capstone is a **rework of the Industry panel** so the three quantities the decay loop runs on —
-**available** (what could be built), **built** (`count`), and **staffed/used** (`count × labourFulfillment`)
-— read clearly at a glance, per land-type and per building. The panel was deferred until the economy *moved*;
-this slice is what makes it move.
+**available** (shared land headroom), **built** (`count`), and **in-use** (occupancy for housing,
+staffed-and-selling `count × min(labourFulfillment, outputUptake)` for production) — read clearly at a glance,
+per land pool and per building, health-coloured. The panel was deferred until the economy *moved*; this slice
+is what makes it move.
 
 ---
 
@@ -205,11 +205,18 @@ read** now that the substrate moves — is this system holding at equilibrium (b
 capacity that will rot, or actively decaying under unrest? The panel should make "this world is thriving / coasting
 / falling apart" obvious without reading numbers.
 
-Scope notes: this is a **rework** of `industry-panel.tsx` (and likely surfacing staffed-per-building + a health
-signal through `use-system-industry.ts`), building on the substrate-v2 panel, not a greenfield screen. Honour
-the Foundry theme and existing `components/ui` primitives. The detailed visual design is a build-time concern
-(use the `frontend-design` skill); this spec fixes only *what must be legible*, not the exact layout. It lands
-**last**, so it renders the finished, moving substrate.
+**Shipped design** (collaborative, prototype-first — not an agent invoking `frontend-design` blind). The panel
+groups buildings by the two physical land **pools** — **Deposit land** (extractors) and **General land**
+(housing + factories, shared) — each with a stacked land bar whose free tail two-tones the **habitable** sub-cap
+(housing-growable vs factory-only). A system **health strip** (thriving / coasting / declining via
+`industryHealth`) carries a `stable · idle · collapsing` building tally and an info-icon legend popover. Each
+building row shows **in-use vs built** as a health-coloured bar — green stable / amber idle / red collapsing,
+green holding below 100% via the `IDLE_COASTING_FRACTION` deadband, red past `IDLE_COLLAPSING_FRACTION` or on
+unrest-teardown / overshoot — with the % and decimal magnitude, the binding `cause`, and per-input `needs` chips
+for producers. The read path surfaces per-building `used` + `idleReason` and a `buildingHealth` helper
+(`lib/engine/industry.ts`, fed by live `outputUptake`); the trade balance (produces-vs-consumes) is kept as the
+one secondary block. Honours the Foundry theme and reuses `components/ui` primitives. It landed **last**, so it
+renders the finished, moving substrate.
 
 ---
 
@@ -261,7 +268,7 @@ holds, nonviable decays; dispersion across systems) — precise tuning is perish
 
 ## Where this sits in the roadmap
 
-- **Supersedes** `docs/plans/autonomic-growth-decay-brainstorm.md` (delete on ship).
+- **Superseded** the converged brainstorm `docs/plans/autonomic-growth-decay-brainstorm.md` (now deleted).
 - **Draws from** `docs/plans/sp5-war-layering-contract-audit.md` — its SP5/war layering conclusions (treasury
   G1, runtime build-out as the *growth* path, labour priority, military channel, topology-cache invalidation)
   remain the reference for SP5 and should fold into the SP5 spec when written.

@@ -15,7 +15,7 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Processor Pipeline
 
-12 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+13 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
 
 ```
 Ship Arrivals ────────────────────────────────────────┐
@@ -23,7 +23,8 @@ Ship Arrivals ──────────────────────
 Events ──────────────────────────────────────────────┤
   └→ Economy (depends on: events) ─────────────────── ┤
   │    └→ Trade Flow (depends on: economy) ───────────┤
-  │    └→ Population (depends on: economy) ──────────┤
+  │    └→ Infrastructure Decay (depends on: economy) ─┤
+  │    └→ Population (depends on: economy, infra-decay)┤
   │         └→ Migration (depends on: population) ────┤
   │    └→ Trade Missions (depends on: events, economy)
   │    └→ Op Missions (depends on: events, economy)
@@ -43,7 +44,8 @@ Notification Prune (independent, every 50 ticks)
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
 | Economy | Every tick | Events | Processes ~`total/ECONOMY_UPDATE_INTERVAL` systems each tick (sorted by id via `shardRange`), so every system refreshes every `ECONOMY_UPDATE_INTERVAL` (24) ticks at any scale. Applies event modifiers and government effects to each market's stock; applies strike suppression to production (derived from last tick's `unrest`). Applied rates × `catchUpFactor` (= 1 at the reference interval). Records per-system satisfaction (`delivered / demanded`) into `ctx.results` for the population processor |
 | Trade Flow | Every tick (fixed-interval edge shard) | Economy | Simulates inter-system goods flow over the **intra-faction** edge graph (region lines ignored, faction borders closed), distance-attenuated by fuel cost. Each tick processes `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` over the stable edge order — full sweep takes `ECONOMY_UPDATE_INTERVAL` ticks at any scale. Per-edge amount × `catchUpFactor`. Mutates stock at both endpoints, appends flow events, increments per-system volume. Recent player trade volume throttles edge budget toward zero (per-edge displacement). See [trade-simulation.md](../gameplay/trade-simulation.md) |
-| Population | Every tick | Economy | Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline (gated by satisfaction + unrest); rewrites `StationMarket.demandRate` for each system's new population level |
+| Infrastructure Decay | Every tick (economy shard) | Economy | Shrinks `SystemBuilding.count` **downward only** toward what is *used* — disuse decay where built exceeds staffed-and-selling (`count × min(labourFulfillment, outputUptake)`) or housing occupancy (`population / POP_CENTRE_DENSITY`), plus a catastrophic unrest teardown above θ_decay. Acts only on the economy's just-processed shard (read off `ctx.results`, incl. per-good output uptake); batches `count` deltas via `unnest()` and recomputes `popCap` live from the surviving housing. Never raises a count or goes below 0 |
+| Population | Every tick | Economy, Infrastructure Decay | Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline against the **live** post-decay `popCap`; housing-overshoot (`population > popCap`, the unrest-snowball case) sheds the excess as unrest-weighted death (the conserved migration half rides the migration processor); rewrites `StationMarket.demandRate` for each system's new population level |
 | Migration | Every tick (fixed-interval edge shard) | Population | Relocates population (conserved) along the same intra-faction open-edge topology + fixed-interval edge shard as trade-flow; population flows down-unrest / up-headroom (`popCap − population`), distance-attenuated, per-edge amount × `catchUpFactor`. Gateways throttle migration as they do goods. Produces boom/bust geography over time |
 | Trade Missions | Every tick | Events, Economy | Housekeeping (expiry) runs every tick. *Generation* runs on the mission-generation shard (`MISSION_GEN_INTERVAL`, 120): economy/price-extreme generation is sharded; event-driven generation stays responsive. Notifies players |
 | Op Missions | Every tick | Events, Economy | Housekeeping (expiry/completion/failure) runs every tick. *Generation* runs on the `MISSION_GEN_INTERVAL` shard (patrol/survey/bounty/salvage/recon from danger levels and traits) |
