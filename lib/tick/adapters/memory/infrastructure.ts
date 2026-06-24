@@ -1,0 +1,60 @@
+import type {
+  InfrastructureWorld,
+  InfrastructureStateView,
+  BuildingCountUpdate,
+  PopCapUpdate,
+} from "@/lib/tick/world/infrastructure-world";
+import type { SimSystem } from "@/lib/engine/simulator/types";
+
+/**
+ * In-memory adapter for the infrastructure-decay processor. Owns a mutable copy of
+ * the simulator's systems for one processor run; the caller reads `systems` back
+ * after the processor returns. Decays are downward-only and floored at 0.
+ */
+export class InMemoryInfrastructureWorld implements InfrastructureWorld {
+  systems: SimSystem[];
+
+  constructor(initial: { systems: SimSystem[] }) {
+    this.systems = initial.systems.map((s) => ({ ...s, buildings: { ...s.buildings } }));
+  }
+
+  getInfrastructureState(systemIds: string[]): Promise<InfrastructureStateView[]> {
+    const wanted = new Set(systemIds);
+    return Promise.resolve(
+      this.systems
+        .filter((s) => wanted.has(s.id))
+        .map((s) => ({ systemId: s.id, population: s.population, unrest: s.unrest, buildings: { ...s.buildings } })),
+    );
+  }
+
+  applyBuildingDecays(updates: BuildingCountUpdate[]): Promise<void> {
+    if (updates.length === 0) return Promise.resolve();
+    const bySystem = new Map<string, Map<string, number>>();
+    for (const u of updates) {
+      const m = bySystem.get(u.systemId) ?? new Map<string, number>();
+      m.set(u.buildingType, u.count);
+      bySystem.set(u.systemId, m);
+    }
+    this.systems = this.systems.map((s) => {
+      const m = bySystem.get(s.id);
+      if (!m) return s;
+      const buildings = { ...s.buildings };
+      for (const [type, next] of m) {
+        // Downward-only + floor (mirrors the SQL LEAST(count, GREATEST(0, …))).
+        buildings[type] = Math.min(buildings[type] ?? 0, Math.max(0, next));
+      }
+      return { ...s, buildings };
+    });
+    return Promise.resolve();
+  }
+
+  applyPopCapUpdates(updates: PopCapUpdate[]): Promise<void> {
+    if (updates.length === 0) return Promise.resolve();
+    const byId = new Map(updates.map((u) => [u.systemId, Math.max(0, u.popCap)]));
+    this.systems = this.systems.map((s) => {
+      const pc = byId.get(s.id);
+      return pc === undefined ? s : { ...s, popCap: pc };
+    });
+    return Promise.resolve();
+  }
+}

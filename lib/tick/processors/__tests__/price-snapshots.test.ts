@@ -13,7 +13,7 @@ function makeCtx(tick: number, processed?: string[]): TickContext {
   const results = new Map<string, TickProcessorResult>();
   if (processed) {
     results.set("economy", {
-      economySignals: { dissatisfactionBySystem: new Map(processed.map((id) => [id, 0])) },
+      economySignals: { dissatisfactionBySystem: new Map(processed.map((id) => [id, 0])), outputUptakeBySystem: new Map() },
     });
   }
   return { tx: undefined as never, tick, results };

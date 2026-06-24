@@ -17,15 +17,19 @@ import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES,
   HOUSING_TYPE,
+  POP_CENTRE_DENSITY,
   effectiveSpaceCost,
   EXTRACTOR_STORAGE_PER_UNIT,
   PRODUCTION_STORAGE_PER_UNIT,
   POP_CENTRE_STORAGE,
   POP_CENTRE_STORAGE_DEFAULT,
+  IDLE_COASTING_FRACTION,
+  IDLE_COLLAPSING_FRACTION,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
 import { inputGate } from "@/lib/engine/supply-chain";
+import { outputUptake } from "@/lib/engine/tick";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
@@ -134,14 +138,77 @@ export function inputDemandForGood(
   return demand;
 }
 
+/** Why a building's `used` sits below its `count` — the binding constraint for the idle caption. */
+export type IdleReason = "occupancy" | "labour" | "selling";
+
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
   labourFulfillment: number;
-  /** One entry per building type with count > 0, sorted by tier ascending then buildingType. */
-  buildings: Array<{ buildingType: string; outputGood?: string; tier: number; count: number }>;
+  /**
+   * One entry per building type with count > 0, sorted by tier ascending then buildingType.
+   * `used` is the decay-relevant "in use" amount — occupancy for housing, staffed-and-selling
+   * for producers (≤ count, except housing overshoot). `idleReason` names the binding constraint.
+   */
+  buildings: Array<{ buildingType: string; outputGood?: string; tier: number; count: number; used: number; idleReason?: IdleReason }>;
   /** Produced goods that have a recipe. Sorted by inputGate ascending (most-throttled first). */
   supplyChain: Array<{ goodId: string; inputGate: number; throttledBy: string[] }>;
+}
+
+/** Coarse industry health read, derived from the decay-loop quantities. */
+export type IndustryHealth = "thriving" | "coasting" | "declining";
+
+export interface IndustryHealthInput {
+  /** System-wide labour ratio in [0,1]. */
+  labourFulfillment: number;
+  /** Stored unrest integral 0…1. */
+  unrest: number;
+  /** Σ idle capacity (built − staffed) ÷ Σ built across the base, in [0,1]. */
+  idleFraction: number;
+  /** θ_decay — unrest at/above this means active unrest-teardown (the snowball). */
+  unrestDecayThreshold: number;
+}
+
+/**
+ * Coarse "thriving / coasting / falling apart" read for the Industry panel, grounded
+ * in the same quantities the decay loop runs on:
+ *  - declining: unrest at/above the decay threshold (capacity is actively torn down),
+ *  - coasting: meaningful idle capacity that disuse decay will slowly shed,
+ *  - thriving: built ≈ used and calm.
+ */
+export function industryHealth(input: IndustryHealthInput): IndustryHealth {
+  if (input.unrest >= input.unrestDecayThreshold) return "declining";
+  if (input.idleFraction >= IDLE_COASTING_FRACTION) return "coasting";
+  return "thriving";
+}
+
+export interface BuildingHealthInput {
+  /** In-use amount for this building (occupancy for housing, staffed-and-selling for producers). */
+  used: number;
+  /** Built count. */
+  built: number;
+  /** Stored unrest integral 0…1. */
+  unrest: number;
+  /** θ_decay — unrest at/above this means active unrest-teardown. */
+  unrestDecayThreshold: number;
+}
+
+/**
+ * Per-building health for the Industry panel's row colour, grounded in the decay
+ * loop: declining when capacity is torn down fast (unrest teardown, housing
+ * overshoot, or severe idle ≥ IDLE_COLLAPSING_FRACTION), coasting when disuse decay
+ * nibbles past the slack deadband (≥ IDLE_COASTING_FRACTION), thriving when in use
+ * within the deadband and calm.
+ */
+export function buildingHealth(input: BuildingHealthInput): IndustryHealth {
+  const { used, built, unrest, unrestDecayThreshold } = input;
+  if (built <= 0) return "thriving";
+  if (used > built) return "declining"; // over capacity (overshoot death-sink)
+  if (unrest >= unrestDecayThreshold) return "declining"; // unrest teardown
+  const idle = Math.max(0, Math.min(1, 1 - used / built));
+  if (idle >= IDLE_COLLAPSING_FRACTION) return "declining";
+  if (idle >= IDLE_COASTING_FRACTION) return "coasting";
+  return "thriving";
 }
 
 /**
@@ -171,27 +238,46 @@ export function buildIndustryReadout(
   marketStock: Record<string, number>,
   minStockOf: (goodId: string) => number,
   yields: ResourceVector,
+  maxStockOf?: (goodId: string) => number | undefined,
 ): SystemIndustryReadout {
   const demand = labourDemand(buildings);
   const fulfillment = labourFulfillment(population, demand);
+  const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
 
-  // Buildings array — one entry per type with count > 0.
+  // Per-building "in use" — the decay-relevant quantity (mirrors computeSystemDecay):
+  //  - housing: occupancy = population / POP_CENTRE_DENSITY,
+  //  - producers: count × min(labourFulfillment, outputUptake) (staffed AND selling).
+  // idleReason names the binding constraint so the panel can caption an idle row.
+  // outputUptake needs the maxStock band; without it (legacy callers) output sells
+  // freely (uptake 1) so `used` falls back to the labour-only figure.
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
   for (const [buildingType, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
-      buildingEntries.push({ buildingType, tier: -1, count });
-    } else {
-      const def = BUILDING_TYPES[buildingType];
-      const outputGood = def?.outputGood;
-      const tier: number = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
-      buildingEntries.push({ buildingType, outputGood, tier, count });
+      const used = Math.max(0, population) / POP_CENTRE_DENSITY;
+      buildingEntries.push({ buildingType, tier: -1, count, used, idleReason: used < count ? "occupancy" : undefined });
+      continue;
     }
+    const def = BUILDING_TYPES[buildingType];
+    const outputGood = def?.outputGood;
+    const tier: number = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
+    // Output uptake needs the market band; a good with no band (no market row, or a
+    // legacy caller without maxStockOf) sells freely (uptake 1) → labour-only `used`.
+    let uptake = 1;
+    if (outputGood !== undefined && maxStockOf !== undefined) {
+      const maxStock = maxStockOf(outputGood);
+      if (maxStock !== undefined) {
+        uptake = outputUptake(stockOf(outputGood), minStockOf(outputGood), maxStock);
+      }
+    }
+    const used = count * Math.min(fulfillment, uptake);
+    const idleReason: IdleReason | undefined =
+      used < count ? (uptake < fulfillment ? "selling" : "labour") : undefined;
+    buildingEntries.push({ buildingType, outputGood, tier, count, used, idleReason });
   }
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
 
   // Supply chain — only produced goods with a recipe (tier-1+).
-  const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
   const supplyChainEntries: SystemIndustryReadout["supplyChain"] = [];
 
   for (const [buildingType, count] of Object.entries(buildings)) {

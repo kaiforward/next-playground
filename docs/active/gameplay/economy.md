@@ -95,7 +95,7 @@ yield_g           = system yieldMult[resource(g)]  for tier-0 extractables, else
 
 - **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, gas, …), each extracted from a body resource deposit with no recipe (`inputGate = 1`). Their building count is capped at world-gen by the system's **deposit slots** (a per-resource extractor ceiling), and their output is scaled by the resource's **yield multiplier** (`yieldMult`, the mean quality of the filled slots) — so both how *much* (slots) and how *rich* (quality) a body's deposits are drive extraction. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
 - **Tier-1+ manufacturers** — bounded by **general space** and labour, **and input-gated**: each building type carries an `inputs` recipe and draws those inputs from local market stock each tick. A manufacturer short of any input throttles its output proportionally (`inputGate_g < 1`), so shortages cascade down the chain. See [Supply Chain & Input-Gating](#supply-chain--input-gating).
-- **Population centres** (the `housing` building type) — a non-production type: they do not appear in production sums. Instead `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, sourced **entirely from built centres** on a body's habitable land — there is no body baseline (the v1 `bodyBaselinePopCap` is retired). Centres are sized at seed to staff the system's labour demand. See [system-traits.md](./system-traits.md) §1.4.
+- **Population centres** (the `housing` building type) — a non-production type: they do not appear in production sums. Instead `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, sourced **entirely from built centres** on a body's habitable land — there is no body baseline (the v1 `bodyBaselinePopCap` is retired). Centres are sized at seed to staff the system's labour demand, but their `count` is no longer frozen — both it and the `popCap` it yields are **downward-mutable**, recomputed live each economy shard from the surviving housing (see [Infrastructure Decay](#infrastructure-decay)). See [system-traits.md](./system-traits.md) §1.4.
 
 **Consumption** — two channels drain each good's stock:
 
@@ -107,6 +107,16 @@ A system runs a positive **net balance** for a good when its production exceeds 
 **Emergent geography:** raw goods flow from deposit-rich frontier worlds toward populous cores; manufactured goods follow wherever build space and labour concentrate. Economy-type labels now reflect the build-space allocation at world-gen — a system seeded with more extractor capacity reads as `extraction`, one with heavier manufacturing allocation reads as `industrial` — rather than a coarse labour-only heuristic.
 
 All `outputPerUnit` constants and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller output and smaller need). The government `consumptionBoost` layers on top of consumption; strike suppression scales production down when `unrest` exceeds the strike threshold.
+
+### Infrastructure Decay
+
+`SystemBuilding.count` is no longer seed-frozen. A dedicated **infrastructure-decay** processor runs each economy shard (right after economy commits, before population) and mutates `count` **downward only**, toward what is actively *used* — the gap between *built* and *used* is what rots:
+
+- **"Used" per role.** Housing → occupancy `population / POP_CENTRE_DENSITY`; production/extraction → staffed *and* selling `count × min(labourFulfillment, outputUptake)`. `outputUptake(stock, minStock, maxStock)` (in `lib/engine/tick.ts`) is the seller-side mirror of satisfaction — ~1 when output sells freely at the floor, → 0 as it piles against the storage ceiling.
+- **Disuse decay (gentle).** `count ← count − disuseRate · max(0, count − used)`. A small `disuseRate` is itself the hysteresis — one idle shard sheds only a sliver; only a *sustained* gap compounds down.
+- **Unrest decay (catastrophic).** Above θ_decay, working capacity is torn down even while in use: `count ← count − unrestRate · count · max(0, unrest − θ_decay)` — the infrastructure mirror of the population-decline term, the snowball.
+
+`count` never rises here (growth is a deliberate, treasury-funded decision deferred to the faction-agency layer) and never drops below 0. Because housing `count` changes, **`popCap` recomputes live** each shard (`Σ housing.count × POP_CENTRE_DENSITY`), and the population processor reads that live value. When housing has rotted *below* its occupants (`population > popCap`, the unrest-snowball case), the overshoot is displaced as **unrest-weighted migration ⊕ death** (the non-conserved death term `overshootDeathRate · overshoot · unrest` in `populationDelta`; the conserved flee-half rides the migration processor, which already repels high-unrest systems). The full model and the Industry-panel surface (available · built · in-use, health-coloured) live in [economy-infrastructure-decay.md](./economy-infrastructure-decay.md).
 
 ### Supply Chain & Input-Gating
 
@@ -282,11 +292,17 @@ TRADE FLOW   run third  - goods flow along open intra-faction edges
    |                      distance-attenuated, by mid-price gradient;
    |                      a single stock delta moves cheap -> dear
    v
-POPULATION   run fourth - reads per-system satisfaction from ctx.results;
-   |                      integrates unrest (D formula); applies growth/decline;
-   |                      rewrites demandRate for new population level
+INFRA DECAY  run fourth - shrinks SystemBuilding.count downward toward used
+   |                      (disuse where built > used, + unrest teardown above
+   |                      theta); recomputes popCap live from surviving housing;
+   |                      acts on the economy's just-processed shard
    v
-MIGRATION    run fifth  - relocates population (conserved) along the same
+POPULATION   run fifth  - reads per-system satisfaction from ctx.results;
+   |                      integrates unrest (D formula); applies growth/decline
+   |                      against the live popCap; housing-overshoot sheds the
+   |                      excess as unrest-weighted death; rewrites demandRate
+   v
+MIGRATION    run sixth  - relocates population (conserved) along the same
                           intra-faction open-edge topology + work-budget slice;
                           population flows down-unrest / up-headroom,
                           distance-attenuated (gateways throttle both flows)
@@ -313,8 +329,9 @@ Viewed another way, the simulation stacks four layers from static to real-time:
 2  Tick evolution (each tick)  input-gated self-limiting production (the
                                supply-chain cascade) + civilian consumption,
                                strike suppression (from unrest), noise,
-                               clamp, edge flow, population growth/decline,
-                               migration, demandRate rewrite
+                               clamp, edge flow, infrastructure decay
+                               (count -> used, live popCap), population
+                               growth/decline, migration, demandRate rewrite
 3  Disruptions (events)        shocks + modifiers temporarily change how
                                layer 2 behaves
 4  Player agency (real-time)   trading on the edge-flow background

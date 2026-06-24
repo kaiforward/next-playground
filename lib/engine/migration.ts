@@ -25,10 +25,17 @@ export interface AttractivenessWeights {
 /**
  * Migration appeal of a system — a weighted sum of contentment (1 − unrest) and
  * relative headroom. The extension slot for future appeal terms.
+ *
+ * Headroom is clamped to [-1, 1]: a system at capacity scores 0; an overshot system
+ * (population > popCap) scores negative, making it actively repulsive and driving
+ * conserved outward migration via the existing gradient/flow machinery. At 2× capacity
+ * the term floors at −1 (mirror of an empty system's +1). The destination-headroom
+ * cap in migrationFlow (`destHeadroom = Math.max(0, ...)`) is intentionally left
+ * clamped at 0 so population cannot migrate INTO an overshot system.
  */
 export function migrationAttractiveness(node: MigrationNode, weights: AttractivenessWeights): number {
   const contentment = 1 - clamp(node.unrest, 0, 1);
-  const headroom = node.popCap > 0 ? clamp((node.popCap - node.population) / node.popCap, 0, 1) : 0;
+  const headroom = node.popCap > 0 ? clamp((node.popCap - node.population) / node.popCap, -1, 1) : 0;
   return weights.contentment * contentment + weights.headroom * headroom;
 }
 

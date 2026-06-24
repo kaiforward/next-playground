@@ -308,6 +308,7 @@ export async function getSystemIndustry(
       relationLoadStrategy: "join",
       select: {
         population: true,
+        unrest: true,
         availableSpace: true,
         generalSpace: true,
         habitableSpace: true,
@@ -356,11 +357,14 @@ export async function getSystemIndustry(
   // readout indexes by key, not DB id — mirror the tick adapter's mapping).
   const marketStock: Record<string, number> = {};
   const minStockByGood: Record<string, number> = {};
+  const maxStockByGood: Record<string, number> = {};
   if (system.station) {
     for (const row of system.station.markets) {
       const goodKey = GOOD_NAME_TO_KEY.get(row.good.name) ?? row.good.name;
+      const band = marketBandForRow(row, row.good);
       marketStock[goodKey] = row.stock;
-      minStockByGood[goodKey] = marketBandForRow(row, row.good).minStock;
+      minStockByGood[goodKey] = band.minStock;
+      maxStockByGood[goodKey] = band.maxStock;
     }
   }
 
@@ -385,6 +389,7 @@ export async function getSystemIndustry(
   return {
     visibility: "visible",
     economyShardGroup,
+    unrest: system.unrest,
     // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
     // but feed the deposit-fill rows and the production/consumption profile below.
     ...buildIndustryReadout(
@@ -393,6 +398,7 @@ export async function getSystemIndustry(
       marketStock,
       (goodKey) => minStockByGood[goodKey] ?? 0,
       yields,
+      (goodKey) => maxStockByGood[goodKey],
     ),
     space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
     deposits: summariseDeposits(slotCap, worked, yields),

@@ -62,7 +62,7 @@ Per-body slots, qualities, and spaces are **collapsed to per-system aggregates**
 
 ### 1.5 Build-out & industrial base
 
-The seeding allocator builds an **industrial base** onto a system's available space — abstract per-`(system, buildingType)` **counts** in `SystemBuilding` rows, seeded-static (never changed at runtime by the current tick processors; runtime construction is the SP5 agency layer). Building types correspond one-to-one with output goods, plus one singleton `housing` (population-centre) type. Each carries `outputPerUnit`, `labourPerUnit`, `spaceCost`, and `inputs` (recipe). Allocator rules:
+The seeding allocator builds an **industrial base** onto a system's available space — abstract per-`(system, buildingType)` **counts** in `SystemBuilding` rows, seeded at world-gen and **downward-mutable** at runtime — the infrastructure-decay processor shrinks a count toward what is actively *used* (see [economy.md](./economy.md#infrastructure-decay)), but never *raises* one; runtime construction (growth) is the SP5 agency layer. Building types correspond one-to-one with output goods, plus one singleton `housing` (population-centre) type. Each carries `outputPerUnit`, `labourPerUnit`, `spaceCost`, and `inputs` (recipe). Allocator rules:
 
 - **Tier-0 extractors** — sit on **dedicated deposit slots**; count is bounded by the resource's `slotCap`, and runtime output is multiplied by its `yieldMult`.
 - **Tier-1+ manufacturers** — sit on fungible **general space**, bounded by it; input-gated at runtime (each draws its recipe inputs from local stock and throttles on the scarcest — the SP3 cascade; see [economy.md](./economy.md) §Supply Chain & Input-Gating).

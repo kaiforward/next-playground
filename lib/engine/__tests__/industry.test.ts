@@ -12,7 +12,10 @@ import {
   summariseDeposits,
   summariseSpace,
   generalSpaceUsed,
+  industryHealth,
+  buildingHealth,
 } from "@/lib/engine/industry";
+import type { IndustryHealth } from "@/lib/engine/industry";
 import {
   DEFAULT_LABOUR_PER_UNIT,
   DEFAULT_SPACE_COST,
@@ -217,6 +220,94 @@ describe("buildIndustryReadout", () => {
     for (let i = 1; i < gates.length; i++) {
       expect(gates[i]).toBeGreaterThanOrEqual(gates[i - 1]);
     }
+  });
+
+});
+
+describe("buildIndustryReadout — per-building used + idleReason", () => {
+  const MIN = 5;
+  const MAX = 100;
+  const MAXBAND = () => MAX;
+
+  it("housing used = occupancy (population / POP_CENTRE_DENSITY); 'occupancy' when under-filled", () => {
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
+    expect(housing.used).toBeCloseTo(6, 6);
+    expect(housing.idleReason).toBe("occupancy");
+  });
+
+  it("producer used = count × min(labourFulfillment, outputUptake); 'labour' when labour binds", () => {
+    const buildings = { metals: 4 };
+    const demand = labourDemand(buildings);
+    const pop = demand * 0.5; // labour fulfillment 0.5
+    // stock at the floor → output sells freely (uptake ≈ 1), so labour is the binding constraint.
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.used).toBeCloseTo(4 * 0.5, 6);
+    expect(metals.idleReason).toBe("labour");
+  });
+
+  it("'selling' when output uptake binds (stock pinned at the ceiling)", () => {
+    const buildings = { metals: 4 };
+    const pop = labourDemand(buildings); // fully staffed
+    // stock at the ceiling → output piling up (uptake ≈ 0), so selling is the binding constraint.
+    const readout = buildIndustryReadout(buildings, pop, { metals: MAX }, () => MIN, unitResourceVector(), MAXBAND);
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.used).toBeLessThan(4 * 0.2);
+    expect(metals.idleReason).toBe("selling");
+  });
+
+  it("no idleReason when fully staffed and selling", () => {
+    const buildings = { metals: 4 };
+    const pop = labourDemand(buildings);
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.used).toBeCloseTo(4, 6);
+    expect(metals.idleReason).toBeUndefined();
+  });
+
+  it("defaults output uptake to 1 when no maxStock band is supplied (sells freely)", () => {
+    const buildings = { metals: 4 };
+    const pop = labourDemand(buildings);
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.used).toBeCloseTo(4, 6); // uptake 1 → labour-only
+  });
+});
+
+describe("industryHealth", () => {
+  const T = 0.75; // unrestDecayThreshold
+  it("is 'declining' when unrest is at/above the decay threshold (snowball)", () => {
+    expect(industryHealth({ labourFulfillment: 1, unrest: 0.8, idleFraction: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining");
+  });
+  it("is 'coasting' when idle capacity is meaningful but unrest is calm", () => {
+    expect(industryHealth({ labourFulfillment: 0.5, unrest: 0.1, idleFraction: 0.4, unrestDecayThreshold: T })).toBe<IndustryHealth>("coasting");
+  });
+  it("is 'thriving' when built ≈ used and unrest is calm", () => {
+    expect(industryHealth({ labourFulfillment: 1, unrest: 0.1, idleFraction: 0.02, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving");
+  });
+});
+
+describe("buildingHealth (per-building)", () => {
+  const T = 0.75; // unrestDecayThreshold
+
+  it("is 'declining' when used exceeds built (housing overshoot)", () => {
+    expect(buildingHealth({ used: 12, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining");
+  });
+  it("is 'declining' when unrest is at/above the decay threshold (teardown)", () => {
+    expect(buildingHealth({ used: 10, built: 10, unrest: 0.8, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining");
+  });
+  it("is 'declining' when idle capacity is severe (≥ IDLE_COLLAPSING_FRACTION)", () => {
+    expect(buildingHealth({ used: 3, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining"); // idle 0.7
+  });
+  it("is 'coasting' when idle is past the deadband but not severe", () => {
+    expect(buildingHealth({ used: 8, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("coasting"); // idle 0.2
+  });
+  it("is 'thriving' when in use within the slack deadband and calm", () => {
+    expect(buildingHealth({ used: 9.5, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving"); // idle 0.05
+  });
+  it("is 'thriving' when nothing is built (no base to decay)", () => {
+    expect(buildingHealth({ used: 0, built: 0, unrest: 1, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving");
   });
 });
 

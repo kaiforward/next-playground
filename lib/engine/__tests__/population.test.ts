@@ -61,7 +61,7 @@ describe("strikeMultiplier", () => {
 });
 
 describe("populationDelta (logistic, gated)", () => {
-  const p = { growthRate: 0.02, declineRate: 0.02 };
+  const p = { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 };
   it("grows when fed + calm, asymptotes at popCap, declines when starved + unstable", () => {
     expect(populationDelta(500, 1000, 0, 0, p)).toBeGreaterThan(0);
     expect(populationDelta(1000, 1000, 0, 0, p)).toBeCloseTo(0, 6);
@@ -72,5 +72,25 @@ describe("populationDelta (logistic, gated)", () => {
   });
   it("stays at 0 when population is already 0 (both terms scale by population)", () => {
     expect(populationDelta(0, 1000, 0.5, 0.5, p)).toBe(0);
+  });
+});
+
+describe("populationDelta — housing-overshoot displacement", () => {
+  const p = { growthRate: 0.015, declineRate: 0.015, overshootDeathRate: 0.1 };
+
+  it("displaces no one when population ≤ popCap", () => {
+    // At/under cap there is no overshoot, so the term is inert.
+    expect(populationDelta(1000, 1000, 0, 0, p)).toBeCloseTo(0, 6);
+    expect(populationDelta(800, 1000, 0, 0, p)).toBeGreaterThan(0);
+  });
+
+  it("removes overshoot as death, scaled by unrest (death-dominant when violent)", () => {
+    // pop 1200, popCap 1000 → overshoot 200. headroom 0 (no growth).
+    const calm = populationDelta(1200, 1000, 0, 0, p);    // unrest 0 → no displacement, no decline
+    const violent = populationDelta(1200, 1000, 0, 1, p);  // unrest 1 → full displacement + decline
+    expect(calm).toBeCloseTo(0, 6);
+    // decline = 0.015·1200·1 = 18; displacement death = 0.1·200·1 = 20.
+    expect(violent).toBeCloseTo(-(18 + 20), 6);
+    expect(violent).toBeLessThan(calm);
   });
 });

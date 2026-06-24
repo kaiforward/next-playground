@@ -1,1 +1,1 @@
-export { MapPin as MapPinIcon } from "lucide-react";
+export { MapPin as MapPinIcon, Info as InfoIcon } from "lucide-react";

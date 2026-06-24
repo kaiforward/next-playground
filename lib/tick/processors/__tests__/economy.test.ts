@@ -387,3 +387,40 @@ describe("economy processor: supply-chain input-gating", () => {
     expect(metalsA).toBeGreaterThan(metalsB);
   });
 });
+
+// ── outputUptake signal ───────────────────────────────────────────
+
+describe("economy processor: outputUptake signal", () => {
+  it("emits low uptake for a producer pinned at the ceiling, high near the floor", async () => {
+    const goodId = "food";
+    const pinned = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("p-high", 0)],
+      markets: [makeMarket("p-high", goodId, FIXTURE_BAND.maxStock - 1)],
+      modifiers: [],
+    });
+    const r1 = await runEconomyProcessor(pinned, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const uHigh = r1.economySignals!.outputUptakeBySystem.get("p-high")!.get(goodId)!;
+
+    const draining = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("p-low", 0)],
+      markets: [makeMarket("p-low", goodId, FIXTURE_BAND.minStock + 1)],
+      modifiers: [],
+    });
+    const r2 = await runEconomyProcessor(draining, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const uLow = r2.economySignals!.outputUptakeBySystem.get("p-low")!.get(goodId)!;
+
+    expect(uHigh).toBeLessThan(0.2);
+    expect(uLow).toBeGreaterThan(0.8);
+    expect(uLow).toBeGreaterThan(uHigh);
+  });
+
+  it("records no uptake entry for a pure consumer (produces nothing)", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("c", 0)],
+      markets: [makeMarket("c", "food", 100)],
+      modifiers: [],
+    });
+    const r = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    expect(r.economySignals!.outputUptakeBySystem.get("c")).toBeUndefined();
+  });
+});

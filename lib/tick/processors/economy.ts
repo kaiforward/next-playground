@@ -6,6 +6,7 @@ import type {
 } from "../types";
 import {
   selfLimitingFactor,
+  outputUptake,
   type EconomySimParams,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
@@ -130,23 +131,32 @@ export async function runEconomyProcessor(
 
   await world.applyMarketUpdates(marketUpdates);
 
-  // Measure per-system convex demand-weighted dissatisfaction D from post-tick stock.
-  // satisfaction_g = consume self-limiting factor = sqrt((stock−min)/range).
+  // Measure per-system convex demand-weighted dissatisfaction D (consume side) and
+  // per-produced-good output uptake (produce side) from post-tick stock.
   const goodsBySystem = new Map<string, GoodSatisfaction[]>();
+  const uptakeBySystem = new Map<string, Map<string, number>>();
   markets.forEach((m, i) => {
     const consumptionRate = tickEntries[i].consumptionRate;
-    if (consumptionRate == null || consumptionRate <= 0) return;
-    const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
-    const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock, "consume");
-    const arr = goodsBySystem.get(m.systemId) ?? [];
-    arr.push({ satisfaction, demanded });
-    goodsBySystem.set(m.systemId, arr);
+    if (consumptionRate != null && consumptionRate > 0) {
+      const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
+      const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock, "consume");
+      const arr = goodsBySystem.get(m.systemId) ?? [];
+      arr.push({ satisfaction, demanded });
+      goodsBySystem.set(m.systemId, arr);
+    }
+    const productionRate = tickEntries[i].productionRate;
+    if (productionRate != null && productionRate > 0) {
+      const uptake = outputUptake(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock);
+      const map = uptakeBySystem.get(m.systemId) ?? new Map<string, number>();
+      map.set(m.goodId, uptake);
+      uptakeBySystem.set(m.systemId, map);
+    }
   });
   const dissatisfactionBySystem = new Map<string, number>();
   for (const sysId of systemIds) {
     dissatisfactionBySystem.set(sysId, dissatisfaction(goodsBySystem.get(sysId) ?? []));
   }
-  const economySignals: EconomySignals = { dissatisfactionBySystem };
+  const economySignals: EconomySignals = { dissatisfactionBySystem, outputUptakeBySystem: uptakeBySystem };
 
   const modCount = rawModifiers.length;
   if (DEBUG) {

@@ -58,6 +58,17 @@ export function selfLimitingFactor(
 }
 
 /**
+ * Seller-side output uptake ∈ [0,1] — the produce-direction self-limiting factor.
+ * 1 when stock sits at the floor (output sells freely), → 0 as stock pins against
+ * the storage ceiling (overproduction, piling up). The mirror of the consume-side
+ * satisfaction signal; the infrastructure-decay processor uses it to decide whether
+ * a producer's built capacity is actually "used" (staffed AND selling).
+ */
+export function outputUptake(stock: number, minStock: number, maxStock: number): number {
+  return selfLimitingFactor(stock, minStock, maxStock, "produce");
+}
+
+/**
  * Simulate one economy tick across all market entries.
  *
  * For each entry: applies production when `productionRate > 0`, consumption

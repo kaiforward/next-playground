@@ -4,6 +4,7 @@ import {
   buildMarketTickEntry,
   processShipArrivals,
   selfLimitingFactor,
+  outputUptake,
   type MarketTickEntry,
   type EconomySimParams,
 } from "../tick";
@@ -282,5 +283,18 @@ describe("processShipArrivals", () => {
   it("handles empty ship array", () => {
     const arrived = processShipArrivals([], 10);
     expect(arrived).toEqual([]);
+  });
+});
+
+describe("outputUptake (seller-side stock signal)", () => {
+  it("is ~1 at the floor (selling freely) and ~0 at the ceiling (piling up)", () => {
+    expect(outputUptake(10, 10, 100)).toBeCloseTo(1, 6);
+    expect(outputUptake(100, 10, 100)).toBeCloseTo(0, 6);
+  });
+  it("mirrors the produce self-limiting factor exactly", () => {
+    expect(outputUptake(40, 10, 100)).toBeCloseTo(selfLimitingFactor(40, 10, 100, "produce"), 6);
+  });
+  it("returns 0 for a degenerate zero-width band", () => {
+    expect(outputUptake(5, 5, 5)).toBe(0);
   });
 });

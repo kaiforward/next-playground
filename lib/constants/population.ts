@@ -27,7 +27,7 @@ export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0
  * drain. Equal rates let such systems hold steady while genuinely high-unrest ones still
  * decline. Calibrated against the simulator.
  */
-export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineRate: 0.015 };
+export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineRate: 0.015, overshootDeathRate: 0.05 };
 
 /**
  * Migration over the de-regioned intra-faction topology (same open edges + fixed-interval

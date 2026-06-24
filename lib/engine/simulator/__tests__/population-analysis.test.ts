@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { detectPingPong } from "../population-analysis";
+import { detectPingPong, summarizeInfrastructure } from "../population-analysis";
+import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { unitResourceVector } from "@/lib/engine/resources";
+import type { SimSystem } from "@/lib/engine/simulator/types";
 
 /**
  * Characterization tests for detectPingPong. If any of these fail the
@@ -56,5 +59,28 @@ describe("detectPingPong", () => {
       ]),
     );
     expect(detectPingPong(snapshots)).toBe(1);
+  });
+});
+
+function infraSys(id: string, buildings: Record<string, number>, popCap: number): SimSystem {
+  return {
+    id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1",
+    governmentType: "frontier", population: 50, popCap, traits: [], bodyDanger: 0,
+    unrest: 0, buildings, yields: unitResourceVector(),
+  };
+}
+
+describe("summarizeInfrastructure", () => {
+  it("reports total built, decay %, and counts collapsed systems", () => {
+    // Started with 100 built; now 60 → 40% decayed. s2 fully collapsed.
+    const systems = [
+      infraSys("s1", { [HOUSING_TYPE]: 30, ore: 30 }, 600),
+      infraSys("s2", { [HOUSING_TYPE]: 0, ore: 0 }, 0),
+    ];
+    const summary = summarizeInfrastructure(systems, 100);
+    expect(summary.builtStart).toBe(100);
+    expect(summary.builtEnd).toBe(60);
+    expect(summary.decayedPct).toBeCloseTo(40, 6);
+    expect(summary.collapsedCount).toBe(1);
   });
 });

@@ -40,6 +40,16 @@ describe("migration processor", () => {
     await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS);
     expect(world.systems.find((s) => s.id === "a")!.population).toBe(1000);
   });
+  it("drains a CALM overshot system (population > popCap, unrest 0) to a roomy neighbour, conserved", async () => {
+    // Overshoot with zero unrest: the death sink would do nothing here; migration must.
+    const systems = [sys("a", "f1", 1500, 1000, 0), sys("b", "f1", 100, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
+    const before = world.systems.reduce((s, x) => s + x.population, 0);
+    await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS);
+    expect(world.systems.find((s) => s.id === "a")!.population).toBeLessThan(1500);
+    expect(world.systems.find((s) => s.id === "b")!.population).toBeGreaterThan(100);
+    expect(world.systems.reduce((s, x) => s + x.population, 0)).toBeCloseTo(before, 5);
+  });
   it("scales the migrated amount by catchUpFactor(interval)", async () => {
     // Same single edge processed at interval = REFERENCE (catch-up 1) vs 2×REFERENCE
     // (catch-up 2). Migration conserves, so the moved amount simply doubles.

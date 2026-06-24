@@ -113,6 +113,17 @@ export const POP_CENTRE_STORAGE: Record<string, number> = {
   consumer_goods: 12, food: 8, water: 8, medicine: 6, luxuries: 6, textiles: 5,
 };
 
+/** Idle fraction (Σ(count − used) / Σ count) at/above which a system is "coasting". */
+export const IDLE_COASTING_FRACTION = 0.15;
+
+/**
+ * Per-building idle fraction (1 − used/built) at/above which a building reads as
+ * "declining" rather than merely "idle". A display classification band (how the
+ * Industry panel colours a row), not an economy rule — a producer running below
+ * half capacity is effectively failing, not just slack.
+ */
+export const IDLE_COLLAPSING_FRACTION = 0.5;
+
 export function sizeFactor(size: number): number {
   return Math.max(0, size);
 }

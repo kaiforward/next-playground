@@ -17,6 +17,7 @@ import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
 import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS } from "@/lib/constants/population";
+import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -71,8 +72,13 @@ export interface SimConstants {
   };
   population: {
     unrest: { gain: number; decay: number };
-    dynamics: { growthRate: number; declineRate: number };
+    dynamics: { growthRate: number; declineRate: number; overshootDeathRate: number };
     strike: { threshold: number; floorMultiplier: number };
+  };
+  infrastructure: {
+    disuseRate: number;
+    unrestRate: number;
+    unrestThreshold: number;
   };
   migration: {
     weights: { contentment: number; headroom: number };
@@ -104,6 +110,7 @@ export type SimConstantOverrides = {
     dynamics?: Partial<SimConstants["population"]["dynamics"]>;
     strike?: Partial<SimConstants["population"]["strike"]>;
   };
+  infrastructure?: Partial<SimConstants["infrastructure"]>;
   migration?: Partial<Omit<SimConstants["migration"], "weights">> & {
     weights?: Partial<SimConstants["migration"]["weights"]>;
   };
@@ -188,6 +195,7 @@ function buildDefaults(): SimConstants {
       dynamics: { ...POPULATION_PARAMS },
       strike: { ...STRIKE_PARAMS },
     },
+    infrastructure: { ...INFRASTRUCTURE_DECAY_PARAMS },
     migration: {
       weights: { ...MIGRATION_PARAMS.weights },
       maxOutflowFraction: MIGRATION_PARAMS.maxOutflowFraction,
@@ -224,6 +232,7 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
       dynamics: { ...base.population.dynamics, ...overrides.population?.dynamics },
       strike: { ...base.population.strike, ...overrides.population?.strike },
     },
+    infrastructure: { ...base.infrastructure, ...overrides.infrastructure },
     migration: {
       weights: { ...base.migration.weights, ...overrides.migration?.weights },
       maxOutflowFraction: overrides.migration?.maxOutflowFraction ?? base.migration.maxOutflowFraction,

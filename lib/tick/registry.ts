@@ -1,6 +1,7 @@
 import { shipArrivalsProcessor } from "./processors/ship-arrivals";
 import { eventsProcessor } from "./processors/events";
 import { economyProcessor } from "./processors/economy";
+import { infrastructureDecayProcessor } from "./processors/infrastructure-decay";
 import { populationProcessor } from "./processors/population";
 import { migrationProcessor } from "./processors/migration";
 import { tradeFlowProcessor } from "./processors/trade-flow";
@@ -17,6 +18,7 @@ export const processors: TickProcessor[] = [
   shipArrivalsProcessor,
   eventsProcessor,
   economyProcessor,
+  infrastructureDecayProcessor,
   populationProcessor,
   migrationProcessor,
   tradeFlowProcessor,
