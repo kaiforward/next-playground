@@ -91,9 +91,10 @@ describe("computeSystemDecay", () => {
     };
     const params = { disuseRate: 0, unrestRate: 0.05, unrestThreshold: 0.75 };
     const result = computeSystemDecay(input, params);
-    // Used = built, so disuse is 0; unrest tears down anyway.
-    expect(result.newCounts[HOUSING_TYPE]).toBeLessThan(5);
-    expect(result.newCounts.ore).toBeLessThan(2);
+    // Used = built, so disuse is 0; unrest tears down anyway:
+    // unrestDecay = 0.05 · count · (1 − 0.75) → housing 5−0.0625, ore 2−0.025.
+    expect(result.newCounts[HOUSING_TYPE]).toBeCloseTo(4.9375, 6);
+    expect(result.newCounts.ore).toBeCloseTo(1.975, 6);
   });
 
   it("is a no-op (no writes) under zero rates", () => {

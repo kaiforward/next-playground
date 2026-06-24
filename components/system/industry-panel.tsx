@@ -110,6 +110,11 @@ function BuildingRow({
           )}
         </span>
         <div
+          role="progressbar"
+          aria-valuenow={Math.round(ratioPct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${label(b.buildingType)}: ${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier)}`}
           className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active"
           style={{ backgroundImage: IDLE_HATCH }}
           title={`${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier)}`}
@@ -286,8 +291,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           segments={[
             { key: "housing", width: pct(space.habitableUsed, space.general), className: "bg-accent" },
             { key: "factory", width: pct(factoryFootprint, space.general), className: "bg-accent-muted" },
-            { key: "habfree", width: pct(habFree, space.general), className: "border-l border-[#0e1117]", style: { backgroundImage: COPPER_HATCH } },
-            { key: "facfree", width: pct(factoryOnlyFree, space.general), className: "border-l border-[#0e1117]" },
+            { key: "habfree", width: pct(habFree, space.general), className: "border-l border-background", style: { backgroundImage: COPPER_HATCH } },
+            { key: "facfree", width: pct(factoryOnlyFree, space.general), className: "border-l border-background" },
           ]}
         />
 

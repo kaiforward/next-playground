@@ -306,6 +306,9 @@ describe("buildingHealth (per-building)", () => {
   it("is 'thriving' when in use within the slack deadband and calm", () => {
     expect(buildingHealth({ used: 9.5, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving"); // idle 0.05
   });
+  it("is 'thriving' when nothing is built (no base to decay)", () => {
+    expect(buildingHealth({ used: 0, built: 0, unrest: 1, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving");
+  });
 });
 
 describe("facilityStorageForGood", () => {

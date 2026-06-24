@@ -38,8 +38,10 @@ describe("infrastructure-decay processor", () => {
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY });
     const s = world.systems[0];
-    expect(s.buildings.ore).toBeLessThan(10);
-    expect(s.buildings[HOUSING_TYPE]).toBeLessThan(10);
+    // disuse 0.1·(built − used), unrest 0: housing 10−0.1·(10−5)=9.5, ore 10−0.1·(10−4)=9.4
+    // (housing used 5 = pop/DENSITY; ore staffed 4 = fulfillment 100/250 × 10).
+    expect(s.buildings[HOUSING_TYPE]).toBeCloseTo(9.5, 6);
+    expect(s.buildings.ore).toBeCloseTo(9.4, 6);
     expect(s.popCap).toBeCloseTo(s.buildings[HOUSING_TYPE] * POP_CENTRE_DENSITY, 6);
   });
 
@@ -60,6 +62,7 @@ describe("infrastructure-decay processor", () => {
       outputUptakeBySystem: new Map(), // no uptake recorded for s1
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY });
-    expect(world.systems[0].buildings.ore).toBeLessThan(10); // unrest teardown fires regardless
+    // ore: disuse 0.1·(10−4 staffed)=0.6 + unrest 0.05·10·(1−0.75)=0.125 → 9.275
+    expect(world.systems[0].buildings.ore).toBeCloseTo(9.275, 6);
   });
 });
