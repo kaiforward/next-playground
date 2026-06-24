@@ -161,6 +161,28 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
   );
   if (popCentreCount > 0) buildings[HOUSING_TYPE] = popCentreCount;
 
+  // ── 3b) Staffing self-consistency — never seed more industry than the population can staff. ──
+  // The habitable-clamped housing fixes the labour budget (popCap = housing × POP_CENTRE_DENSITY).
+  // Scale every production building down proportionally so labourDemand ≤ popCap: a freshly seeded
+  // system is then fully staffable as its population matures, instead of carrying idle capacity that
+  // autonomic decay would immediately liquidate. The freed deposit/general space stays as headroom
+  // for later (SP5) faction build-out. Worlds with no habitable land (popCap 0) seed zero industry —
+  // extraction still needs a workforce housed locally. yieldMult below is left on the unscaled
+  // placement on purpose: it measures the worked deposit grade (a property of the ground), so the
+  // economy-type label stays independent of how much labour is available to staff the slots.
+  const staffBudget = housingPopCap(buildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR;
+  const seededLabour = labourDemand(buildings);
+  if (seededLabour > staffBudget) {
+    const staffScale = staffBudget / seededLabour;
+    for (const goodId of PRODUCTION_BUILDING_TYPES) {
+      const count = buildings[goodId];
+      if (count === undefined || count <= 0) continue;
+      const scaled = count * staffScale;
+      if (scaled > 0) buildings[goodId] = scaled;
+      else delete buildings[goodId];
+    }
+  }
+
   // ── 4) popCap (full-fold) + per-resource effective yield. ──
   const popCap = housingPopCap(buildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR;
   const yieldMult = unitResourceVector();

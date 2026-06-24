@@ -184,6 +184,52 @@ describe("allocateIndustry — available-space model", () => {
   });
 });
 
+describe("allocateIndustry — staffing self-consistency", () => {
+  it("never seeds more labour demand than popCap can staff (labourDemand ≤ popCap)", () => {
+    // Property check across varied inputs — including habitable-bound worlds.
+    for (let seed = 30; seed < 40; seed++) {
+      const r = allocateIndustry(richInput(0.9), mulberry32(seed));
+      expect(labourDemand(r.buildings), `seed ${seed}`).toBeLessThanOrEqual(r.popCap + 1e-6);
+    }
+  });
+
+  it("scales industry down when habitable land clamps housing below the staffing need", () => {
+    // Deposit-rich but tiny habitable land + ample general space: the old seeder built
+    // extractors/factories to the deposit/general caps while housing was clamped to the
+    // habitable subset, leaving labourDemand far above popCap. Now industry is scaled to fit.
+    const bodies = [body({ ore: 10, minerals: 6, gas: 4, radioactive: 2 }, 1.2)];
+    const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
+    const input: AllocateInput = { bodies, slotCap, generalSpace: 300, habitableSpace: 8, fill: 0.9 };
+    const r = allocateIndustry(input, mulberry32(41));
+    expect(r.popCap).toBeGreaterThan(0);
+    expect(labourDemand(r.buildings)).toBeLessThanOrEqual(r.popCap + 1e-6);
+  });
+
+  it("seeds zero industry on a world with no habitable land (popCap 0 → truly dead)", () => {
+    // No habitable land → no housing → popCap 0 → no workforce → no industry, even with
+    // rich deposits and a nonzero fill. Extraction still needs a locally-housed workforce.
+    const bodies = [body({ gas: 8, radioactive: 3 }, 1.0)];
+    const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
+    const input: AllocateInput = { bodies, slotCap, generalSpace: 200, habitableSpace: 0, fill: 0.9 };
+    const r = allocateIndustry(input, mulberry32(42));
+    expect(r.popCap).toBe(0);
+    expect(labourDemand(r.buildings)).toBe(0);
+    for (const goodId of PRODUCTION_BUILDING_TYPES) {
+      expect(r.buildings[goodId] ?? 0, goodId).toBe(0);
+    }
+  });
+
+  it("leaves industry fully built when habitable/general space can staff it (demand == popCap)", () => {
+    // Generous space → housing meets labourDemand / POP_CENTRE_DENSITY → popCap == labourDemand,
+    // so the staffing scale is a no-op (the system is self-consistently fully staffable).
+    const bodies = [body({ ore: 6, arable: 4, water: 3, gas: 2 }, 1.0)];
+    const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
+    const input: AllocateInput = { bodies, slotCap, generalSpace: 10000, habitableSpace: 10000, fill: 0.9 };
+    const r = allocateIndustry(input, mulberry32(43));
+    expect(labourDemand(r.buildings)).toBeCloseTo(r.popCap, 4);
+  });
+});
+
 describe("allocateIndustry — yieldMult (best-quality-slots-first)", () => {
   it("yieldMult[r] = 1.0 when no extractors are placed for r", () => {
     // No slots at all → no extractors → neutral yield everywhere.

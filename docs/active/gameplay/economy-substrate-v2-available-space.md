@@ -153,14 +153,24 @@ entries that consume general space and carry their own effects — no structural
 
 Population centres are sized at seed to **staff the system's industry** — `wantedPopCentres =
 labourDemand(buildings) / POP_CENTRE_DENSITY` (`lib/engine/industry-seed.ts`), bounded by the habitable
-space available. So `popCap ≈ the workforce the built extractors and factories demand`, and a barren world
-whose habitable space runs out *before* it can house enough workers stays permanently under-staffed (its
-mines run below capacity — the barren constraint biting, by design).
+space available. On most worlds the habitable bound binds first (housing fills the habitable land before it
+can house the full workforce), so a **staffing-self-consistency step** (`industry-seed.ts` step 3b) then
+scales the built industry *down* to what that housing can staff: every production building is multiplied by
+`popCap / labourDemand` so `labourDemand ≤ popCap`. The result is a system that is **fully staffable as its
+population matures**, rather than one carrying idle capacity that autonomic decay would immediately
+liquidate. The freed deposit/general space is left as honest unbuilt **headroom for later (SP5) faction
+build-out**. So a barren world ends up with *less* industry — a skeleton crew sized to its habitable land,
+sitting on mostly-unworked deposits — not the same industry run permanently under-staffed; a world with
+**no** habitable land (`popCap 0`) builds **nothing** at all (no workforce to house). `yieldMult` is left on
+the unscaled placement on purpose — it measures the worked deposit *grade* (a property of the ground), so
+the economy-type label stays independent of how much labour is available.
 
 Consequences (intended, and observed in calibration):
 - Housing is a **real land competitor** everywhere, not a vestigial top-up.
-- **Labour fulfilment is a live constraint** — a high-industry, low-habitability system is genuinely
-  under-staffed, instead of population always dwarfing labour demand.
+- **Industry is sized to local labour, not to deposits.** A high-deposit, low-habitability world is a small,
+  fully-staffed operation on mostly-unworked deposits — the barren constraint biting as *less built*, with
+  the remainder as SP5 headroom. (Population seeds below `popCap` so labour fulfilment ramps from ~the seed
+  fill up toward 1 as the world matures, rather than sitting at a permanent structural shortfall.)
 
 **Full-fold held in calibration.** Sourcing capacity entirely from built centres (no body baseline) was
 the highest-risk knob, but it calibrated without needing the escape hatch: `POP_BASELINE_FLOOR` ships
