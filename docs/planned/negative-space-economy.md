@@ -71,7 +71,7 @@ A throughput experiment on trade-flow (push food harder, measure how much of the
 
 ## Grounding evidence — the 2026-06-24 viability audit
 
-Run against the live DB and a fresh in-memory new-seed universe at mature `popCap` (the two agree closely — viability is deposit-and-topology driven, so it's seed-robust). Scripts: `scripts/diagnose-viability.ts` (live DB), `scripts/diagnose-viability-gen.ts` (new seed), `scripts/diagnose-labour.ts`, `scripts/verify-staffing-gen.ts`.
+Measured against the live DB and a fresh in-memory new-seed universe at mature `popCap` (the two agree closely — viability is deposit-and-topology driven, so it's seed-robust), via one-off diagnostics (not retained).
 
 - **It's distribution, not scarcity** — 19/20 factions run a food *and* water surplus (1.6–3.1×). The galaxy makes plenty of food; it just doesn't reach everywhere.
 - **Structural viability classes (new seed, mature):** ~41% **self-sufficient** (the durable core — survives with zero agency, the equilibrium anchor) · ~58% **suppliable** (deficit, but a same-faction food surplus sits within ~2 hops — lives or dies on whether trade *delivers*) · ~1.2% **stranded** (no local food, none reachable — doomed by geography, and that's fine).
