@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { GOODS } from "@/lib/constants/goods";
 import { BUILDING_TYPES, HOUSING_TYPE } from "@/lib/constants/industry";
+import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import { buildingHealth, industryHealth } from "@/lib/engine/industry";
@@ -93,7 +94,8 @@ function BuildingRow({
     else if (b.idleReason) cause = IDLE_CAUSE[b.idleReason];
   }
 
-  const throttled = supply !== undefined && supply.inputGate < 0.999;
+  // Each recipe input as its own chip: ✓ when supplied, ⚠ + the throttle gate when short.
+  const inputs = supply ? Object.keys(GOOD_RECIPES[supply.goodId] ?? {}) : [];
 
   return (
     <div className="border-b border-border/40 px-3 py-1.5 last:border-b-0">
@@ -125,16 +127,17 @@ function BuildingRow({
           <span className="font-mono uppercase tracking-wide text-text-tertiary/80">cause</span> {cause}
         </p>
       )}
-      {supply && (
-        <p className="mt-1 ml-[26px] flex items-center gap-1.5 text-[11px]">
+      {supply && inputs.length > 0 && (
+        <p className="mt-1 ml-[26px] flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
           <span className="font-mono uppercase tracking-wide text-text-tertiary/80">needs</span>
-          {throttled ? (
-            <span className="font-mono text-status-red-light">
-              &#9888; {supply.throttledBy.map(label).join(", ")} {Math.round(supply.inputGate * 100)}%
-            </span>
-          ) : (
-            <span className="font-mono text-status-green-light">&#10003; inputs</span>
-          )}
+          {inputs.map((input) => {
+            const short = supply.throttledBy.includes(input);
+            return (
+              <span key={input} className={`font-mono ${short ? "text-status-red-light" : "text-status-green-light"}`}>
+                {short ? "⚠" : "✓"} {label(input)}{short ? ` ${Math.round(supply.inputGate * 100)}%` : ""}
+              </span>
+            );
+          })}
         </p>
       )}
     </div>
