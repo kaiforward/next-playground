@@ -238,7 +238,7 @@ export function buildIndustryReadout(
   marketStock: Record<string, number>,
   minStockOf: (goodId: string) => number,
   yields: ResourceVector,
-  maxStockOf?: (goodId: string) => number,
+  maxStockOf?: (goodId: string) => number | undefined,
 ): SystemIndustryReadout {
   const demand = labourDemand(buildings);
   const fulfillment = labourFulfillment(population, demand);
@@ -261,10 +261,15 @@ export function buildIndustryReadout(
     const def = BUILDING_TYPES[buildingType];
     const outputGood = def?.outputGood;
     const tier: number = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
-    const uptake =
-      outputGood !== undefined && maxStockOf !== undefined
-        ? outputUptake(stockOf(outputGood), minStockOf(outputGood), maxStockOf(outputGood))
-        : 1;
+    // Output uptake needs the market band; a good with no band (no market row, or a
+    // legacy caller without maxStockOf) sells freely (uptake 1) → labour-only `used`.
+    let uptake = 1;
+    if (outputGood !== undefined && maxStockOf !== undefined) {
+      const maxStock = maxStockOf(outputGood);
+      if (maxStock !== undefined) {
+        uptake = outputUptake(stockOf(outputGood), minStockOf(outputGood), maxStock);
+      }
+    }
     const used = count * Math.min(fulfillment, uptake);
     const idleReason: IdleReason | undefined =
       used < count ? (uptake < fulfillment ? "selling" : "labour") : undefined;
