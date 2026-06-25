@@ -10,7 +10,11 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "simulate": "tsx scripts/simulate.ts"
+    "simulate": "tsx scripts/simulate.ts",
+    "bench:tick": "tsx --tsconfig tsconfig.json --env-file=.env scripts/bench-tick.ts",
+    "validate:gen": "tsx --tsconfig tsconfig.json scripts/validate-distributions.ts",
+    "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts",
+    "find:smoke-systems": "tsx --tsconfig tsconfig.json --env-file=.env scripts/find-smoke-systems.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
