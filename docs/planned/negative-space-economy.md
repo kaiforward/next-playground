@@ -70,7 +70,7 @@ A throughput experiment on trade-flow (push food harder, measure how much of the
 
 ---
 
-## Grounding evidence — the 2026-06-24 viability audit
+## Grounding evidence — the viability + health audit (2026-06-24/25)
 
 Measured against the live DB and a fresh in-memory new-seed universe at mature `popCap` (the two agree closely — viability is deposit-and-topology driven, so it's seed-robust), via one-off diagnostics (not retained).
 
@@ -78,7 +78,7 @@ Measured against the live DB and a fresh in-memory new-seed universe at mature `
 - **Structural viability classes (new seed, mature):** ~41% **self-sufficient** (the durable core — survives with zero agency, the equilibrium anchor) · ~58% **suppliable** (deficit, but a same-faction food surplus sits within ~2 hops — lives or dies on whether trade *delivers*) · ~1.2% **stranded** (no local food, none reachable — doomed by geography, and that's fine).
 - **The 58% middle is a throughput problem, not a scarcity one** — food is "2 hops away" but market diffusion is distance/fuel-attenuated, so a gateway hop delivers a trickle. This is exactly the gap directed logistics is for. *(Build agency can't save it — these worlds have no arable deposits to build food on; the food must be **moved**.)*
 - **Decay-only is a one-way ratchet that progressively hollows** — over 3000 ticks: pop −11.5% (and trending, not plateauing), striking systems 11 → 112, infra decayed 4.7% → 25.4%. Not a uniform death — a spreading tail-spiral of the suppliable middle, never recovered because nothing rebuilds.
-- **Seed staffing-self-consistency fix (shipped this session, working tree):** industry is now seeded only up to what local population can staff (`labourDemand ≤ popCap`), so a fresh system is fully staffable as it matures instead of carrying phantom idle capacity the decay loop immediately liquidates. ~60% fewer buildings seeded (28.3K → 11.1K at sim scale); mean staffing ceiling 0.24 → 1.000; 11 zero-habitable worlds correctly seed no industry. Population decline and unrest both *improved* (sim −2.9% → −1.3% at 500 ticks). The freed space is headroom for SP5 build-out.
+- **Seed staffing-self-consistency fix (#113):** industry is now seeded only up to what local population can staff (`labourDemand ≤ popCap`), so a fresh system is fully staffable as it matures instead of carrying phantom idle capacity the decay loop immediately liquidates. ~60% fewer buildings seeded (28.3K → 11.1K at sim scale); mean staffing ceiling 0.24 → 1.000; 11 zero-habitable worlds correctly seed no industry. Population decline and unrest both *improved* (sim −2.9% → −1.3% at 500 ticks). The freed space is headroom for SP5 build-out.
 - **Live health at a high tick (2026-06-25 follow-up, tick 2831, ~7.9K systems) — the un-agentic galaxy settles into a permanent *coast*, not a slide to "thriving":** 0 thriving / 90% coasting / 10% declining, and no system anywhere exceeds `pop/popCap` 0.82. As population matures the **labour** gap closes exactly as designed (idle-from-labour falls 31% → 5% across the pop bins — production decays to meet its workforce), but two idle sources replace it: **empty housing** (seeded for the full `popCap` workforce, while population equilibrates at ~0.46 of it) and a **"selling" idle that *grows* with maturity** (15% → 54%) — a fully-staffed system out-produces its local market, stock pins at the ceiling, output can't sell. Selling idle is **scale-invariant under decay** (`used = count × uptake`, so shedding capacity rescales `count` and `used` together — the idle *fraction* stays ≈ `1 − uptake`); it never closes, the producer just shrinks. **That undeliverable surplus *is* the supply directed logistics carries to the suppliable middle** — drain it by export and local uptake recovers. (Corollary for the seeding + health-metric revisit, *not* a base-mechanic to tune up: the health read counts export-surplus and empty housing as "idle", so "thriving" is unreachable until logistics + a population-vs-housing pass land.)
 
 ---
@@ -87,7 +87,7 @@ Measured against the live DB and a fresh in-memory new-seed universe at mature `
 
 The audit resequences the [vision §13](./economy-simulation-vision.md#13-sub-project-decomposition) order. See that section's dated callout for the canonical statement; in brief:
 
-1. ✅ **Seed staffing-self-consistency fix** (done this session).
+1. ✅ **Seed staffing-self-consistency fix** (#113).
 2. **SP5 autonomic-light agency, brought forward — logistics-first, build-second.** The at-risk middle needs food *moved*, not industry rebuilt; build agency is the durable core's recovery mechanism. Self-funded, slow, no treasury — SP5's designed first slice, not throwaway.
 3. **SP4 "Population ← economic viability."** Safe only once a recovery counterforce exists — on a decay-only base it just sharpens the hollowing.
 4. **Full faction agency** (treasury, build planner, directed-logistics v2, military ceiling) + inherited rebellion / relation-weighted borders.
