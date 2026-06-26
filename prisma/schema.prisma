@@ -408,6 +408,7 @@ model TradeFlow {
   toSystemId   String
   goodId       String
   quantity     Int
+  flowType     String @default("market") // "market" (diffusion) | "logistics" (directed)
 
   fromSystem StarSystem @relation("TradeFlowsFrom", fields: [fromSystemId], references: [id])
   toSystem   StarSystem @relation("TradeFlowsTo", fields: [toSystemId], references: [id])
