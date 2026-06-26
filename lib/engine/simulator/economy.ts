@@ -33,6 +33,9 @@ import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
+import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
+import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
+import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -424,10 +427,80 @@ async function processSimDirectedLogistics(
   return { ...world, markets: updatedMarkets, flowEvents: updatedFlowEvents };
 }
 
+// ── Directed build (delegates to the unified processor) ─────────
+
+async function processSimDirectedBuild(
+  world: SimWorld,
+  constants: SimConstants,
+): Promise<SimWorld> {
+  // Group markets by systemId for row construction (same as directed-logistics).
+  const marketsBySystem = new Map<string, typeof world.markets>();
+  for (const m of world.markets) {
+    const list = marketsBySystem.get(m.systemId) ?? [];
+    list.push(m);
+    marketsBySystem.set(m.systemId, list);
+  }
+
+  const rows = world.systems.map((s) => ({
+    systemId: s.id,
+    factionId: s.factionId,
+    population: s.population,
+    buildings: s.buildings,
+    yields: s.yields,
+    slotCap: s.slotCap,
+    generalSpace: s.generalSpace,
+    habitableSpace: s.habitableSpace,
+    markets: (marketsBySystem.get(s.id) ?? []).map((m) => ({
+      id: `${m.systemId}|${m.goodId}`,
+      goodId: m.goodId,
+      stock: m.stock,
+      basePrice: m.basePrice,
+      anchorMult: m.anchorMult,
+      demandRate: m.demandRate,
+      priceFloor: m.priceFloor,
+      priceCeiling: m.priceCeiling,
+      storageCapacity: m.storageCapacity,
+    })),
+  }));
+
+  const hops = computeBoundedHopDistances(world.connections, DIRECTED_BUILD.MAX_HOPS);
+  const routeCost: RouteCost = (f, t) => {
+    const h = hops.get(f)?.get(t);
+    return h === undefined || h > DIRECTED_BUILD.MAX_HOPS ? null : h * DIRECTED_BUILD.HOP_WEIGHT;
+  };
+
+  const dbWorld = new MemoryDirectedBuildWorld(rows);
+
+  // Live INTERVAL = 2 × economy clock; preserve that relationship under sim overrides.
+  await runDirectedBuildProcessor(dbWorld, { tick: world.tick }, {
+    interval: 2 * constants.economy.interval,
+    routeCost,
+  });
+
+  if (dbWorld.buildingUpdates.length === 0) return world;
+
+  // Write captured absolute building counts back into the sim systems.
+  const countsBySystem = new Map<string, Map<string, number>>();
+  for (const u of dbWorld.buildingUpdates) {
+    const byType = countsBySystem.get(u.systemId) ?? new Map<string, number>();
+    byType.set(u.buildingType, u.count);
+    countsBySystem.set(u.systemId, byType);
+  }
+  const updatedSystems = world.systems.map((s) => {
+    const byType = countsBySystem.get(s.id);
+    if (!byType) return s;
+    const buildings = { ...s.buildings };
+    for (const [type, count] of byType) buildings[type] = count;
+    return { ...s, buildings };
+  });
+
+  return { ...world, systems: updatedSystems };
+}
+
 // ── Main entry point ────────────────────────────────────────────
 
 /**
- * Simulate one world tick: ship arrivals → events → economy → population → migration → trade flow → directed logistics.
+ * Simulate one world tick: ship arrivals → events → economy → population → migration → trade flow → directed logistics → directed build.
  * Returns a new SimWorld. Async because the unified processors are async
  * (the in-memory adapters resolve immediately, but `await` still requires
  * an async caller).
@@ -446,5 +519,6 @@ export async function simulateWorldTick(
   w = await processSimMigration(w, ctx.constants);
   w = await processSimTradeFlow(w, ctx.constants);
   w = await processSimDirectedLogistics(w, ctx.constants);
+  w = await processSimDirectedBuild(w, ctx.constants);
   return w;
 }
