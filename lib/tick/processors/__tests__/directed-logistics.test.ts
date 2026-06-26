@@ -55,7 +55,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const world = new MemoryDirectedLogisticsWorld(systems, new Map([["food", "good-food"]]));
     await runDirectedLogisticsProcessor(
       world,
-      { tick: DUE_TICK } as { tick: number; tx: never; results: never },
+      { tick: DUE_TICK },
       { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(1);
@@ -66,14 +66,37 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(world.stockUpdates.has("mB")).toBe(true);
   });
 
-  it("does nothing when no faction shard is due this tick", async () => {
-    // tick=7, interval=48: shardRange(0, 7, 48) → empty factionKeys list → returns {}
+  it("does nothing for an empty world", async () => {
+    // empty world → getFactionShardKeys() returns [] → factionKeys.length === 0 → early return (before shardRange)
     const world = new MemoryDirectedLogisticsWorld([], new Map());
     await runDirectedLogisticsProcessor(
       world,
-      { tick: 7 } as { tick: number; tx: never; results: never },
+      { tick: 7 },
       { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(0);
+  });
+
+  it("skips a faction that has work but whose shard is not due this tick", async () => {
+    // Same surplus(mA)+deficit(mB) as the happy path, but tick=0: shardRange(1, 0, 48) is an
+    // empty window, so f1 is not due and NO work runs — distinct from the empty-world early return.
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems, new Map([["food", "good-food"]]));
+    await runDirectedLogisticsProcessor(
+      world,
+      { tick: 0 },
+      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+    );
+    expect(world.flows).toHaveLength(0);
+    expect(world.stockUpdates.size).toBe(0);
   });
 });

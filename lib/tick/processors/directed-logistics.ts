@@ -15,7 +15,6 @@ import {
   type GoodMarketState,
   type RouteCost,
 } from "@/lib/engine/directed-logistics";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type {
   DirectedLogisticsWorld,
   SystemLogisticsRow,
