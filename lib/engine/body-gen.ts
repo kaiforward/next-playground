@@ -168,10 +168,14 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     rng,
   );
   const popCap = allocation.popCap;
-  // Population is a continuous magnitude (like building counts) — a tiny outpost is
-  // pop 0.3, not rounded down to a false 0. Only a truly uninhabitable system
-  // (popCap 0) is genuinely empty.
-  const population = popCap * fill;
+  // Seed population fully staffs the built industry. `popCap` is already the
+  // fill-scaled, labour-matched housing capacity — allocateIndustry scales the
+  // industry by `fill` and sizes housing to staff exactly that — so population
+  // fills it rather than re-applying `fill` a second time (which would seed a
+  // system at ~fill of the labour its own industry needs, leaving it perpetually
+  // understaffed). A continuous magnitude (like building counts) — a tiny outpost
+  // is pop 0.3, not a false 0; only a truly uninhabitable system (popCap 0) is empty.
+  const population = popCap;
 
   const features = rollFeatures(rng);
 
