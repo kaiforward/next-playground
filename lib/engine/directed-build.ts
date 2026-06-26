@@ -8,6 +8,7 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { classifyMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
 
 /** Market state for one good at one system — the build planner's per-good input. */
 export interface BuildGoodState {
@@ -44,4 +45,47 @@ export interface PlannedBuild {
 /** This system's per-cycle build-unit budget (free, population-scaled in v1). */
 export function systemBuildGeneration(population: number): number {
   return Math.max(0, population) * DIRECTED_BUILD.GENERATION_PER_POP;
+}
+
+/** A deficit with no reachable surplus of its good — the build target. */
+export interface StructuralDeficit {
+  systemId: string;
+  goodId: string;
+  shortfall: number;
+  demand: number;
+}
+
+/**
+ * Find deficits that logistics cannot serve because no reachable surplus of the
+ * good exists. Build classification per (system, good); collect deficits and the
+ * surplus-holding systems per good; a deficit is structural when no surplus system
+ * of its good can reach it (routeCost(surplus, deficit) non-null).
+ */
+export function findStructuralDeficits(
+  systems: BuildSystemState[],
+  routeCost: RouteCost,
+): StructuralDeficit[] {
+  const deficits: Array<{ systemId: string; goodId: string; shortfall: number; demand: number }> = [];
+  const surplusSystemsByGood = new Map<string, string[]>();
+
+  for (const s of systems) {
+    for (const g of s.goods) {
+      const c = classifyMarketState(g.stock, g.targetStock);
+      if (c.kind === "deficit" && c.shortfall > 0) {
+        deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, demand: g.demand });
+      } else if (c.kind === "surplus" && c.drawable > 0) {
+        const list = surplusSystemsByGood.get(g.goodId) ?? [];
+        list.push(s.systemId);
+        surplusSystemsByGood.set(g.goodId, list);
+      }
+    }
+  }
+
+  const structural: StructuralDeficit[] = [];
+  for (const d of deficits) {
+    const sources = surplusSystemsByGood.get(d.goodId) ?? [];
+    const reachableSurplus = sources.some((su) => routeCost(su, d.systemId) !== null);
+    if (!reachableSurplus) structural.push(d);
+  }
+  return structural;
 }
