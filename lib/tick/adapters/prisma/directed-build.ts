@@ -187,9 +187,12 @@ export class PrismaDirectedBuildWorld implements DirectedBuildWorld {
 
     // Which (systemId,buildingType) rows already exist? (one bulk read). Nested
     // Set keyed by systemId — no concatenated string keys (CLAUDE.md \uXXXX note).
+    // Narrowed to only the building types touched by this update to avoid pulling
+    // every type for each system on the hot path.
     const systemIds = [...new Set(clean.map((u) => u.systemId))];
+    const buildingTypes = [...new Set(clean.map((u) => u.buildingType))];
     const existingRows = await this.tx.systemBuilding.findMany({
-      where: { systemId: { in: systemIds } },
+      where: { systemId: { in: systemIds }, buildingType: { in: buildingTypes } },
       select: { systemId: true, buildingType: true },
     });
     const existingBySystem = new Map<string, Set<string>>();
