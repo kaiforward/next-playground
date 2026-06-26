@@ -2,10 +2,42 @@ import { describe, it, expect } from "vitest";
 import {
   systemLogisticsGeneration,
   matchFactionTransfers,
+  classifyMarketState,
   type SystemLogisticsState,
   type RouteCost,
 } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+
+describe("classifyMarketState", () => {
+  it("classifies below the deficit fraction as deficit with shortfall to target", () => {
+    // targetStock 10, DEFICIT_FRACTION 0.8 → threshold 8; stock 2 < 8.
+    const c = classifyMarketState(2, 10);
+    expect(c.kind).toBe("deficit");
+    expect(c.shortfall).toBe(8);
+    expect(c.drawable).toBe(0);
+  });
+
+  it("classifies at/above the surplus margin as surplus with drawable above target", () => {
+    // targetStock 50, SURPLUS_MARGIN 1.4 → threshold 70; stock 100 ≥ 70.
+    const c = classifyMarketState(100, 50);
+    expect(c.kind).toBe("surplus");
+    expect(c.drawable).toBe(50);
+    expect(c.shortfall).toBe(0);
+  });
+
+  it("classifies the dead-band between thresholds as balanced", () => {
+    // targetStock 10 → deficit < 8, surplus ≥ 14; stock 10 is between.
+    const c = classifyMarketState(10, 10);
+    expect(c.kind).toBe("balanced");
+    expect(c.shortfall).toBe(0);
+    expect(c.drawable).toBe(0);
+  });
+
+  it("never reports a negative shortfall or drawable", () => {
+    expect(classifyMarketState(0, 0).kind).toBe("balanced");
+    expect(classifyMarketState(7.9, 10).shortfall).toBeCloseTo(2.1);
+  });
+});
 
 describe("systemLogisticsGeneration", () => {
   it("scales linearly with population", () => {

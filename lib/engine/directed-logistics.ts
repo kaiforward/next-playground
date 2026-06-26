@@ -6,6 +6,35 @@
  */
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
+export type MarketKind = "deficit" | "surplus" | "balanced";
+
+export interface MarketClassification {
+  kind: MarketKind;
+  /** targetStock − stock when deficit (> 0); else 0. */
+  shortfall: number;
+  /** stock − targetStock when surplus (> 0); else 0 — never draws below the anchor. */
+  drawable: number;
+}
+
+/**
+ * Classify one good's market against its days-of-supply anchor. Deficit ⇔
+ * stock < targetStock × DEFICIT_FRACTION; surplus ⇔ stock ≥ targetStock ×
+ * SURPLUS_MARGIN; the dead-band between is balanced. Shared by the logistics
+ * matcher and the build planner so both read one definition.
+ */
+export function classifyMarketState(stock: number, targetStock: number): MarketClassification {
+  if (targetStock <= 0) {
+    return { kind: "balanced", shortfall: 0, drawable: 0 };
+  }
+  if (stock < targetStock * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
+    return { kind: "deficit", shortfall: Math.max(0, targetStock - stock), drawable: 0 };
+  }
+  if (stock >= targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN) {
+    return { kind: "surplus", shortfall: 0, drawable: Math.max(0, stock - targetStock) };
+  }
+  return { kind: "balanced", shortfall: 0, drawable: 0 };
+}
+
 /** This system's per-cycle logistics work-budget contribution (free, population-scaled in v1). */
 export function systemLogisticsGeneration(population: number): number {
   return Math.max(0, population) * DIRECTED_LOGISTICS.GENERATION_PER_POP;
@@ -60,18 +89,13 @@ export function matchFactionTransfers(
 
   for (const s of systems) {
     for (const g of s.goods) {
-      if (g.stock < g.targetStock * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
-        const shortfall = g.targetStock - g.stock;
-        if (shortfall > 0) {
-          deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall, severity: shortfall * g.demand });
-        }
-      } else if (g.stock >= g.targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN) {
-        const drawable = g.stock - g.targetStock;
-        if (drawable > 0) {
-          const list = surplusesByGood.get(g.goodId) ?? [];
-          list.push({ systemId: s.systemId, goodId: g.goodId, drawable });
-          surplusesByGood.set(g.goodId, list);
-        }
+      const c = classifyMarketState(g.stock, g.targetStock);
+      if (c.kind === "deficit" && c.shortfall > 0) {
+        deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, severity: c.shortfall * g.demand });
+      } else if (c.kind === "surplus" && c.drawable > 0) {
+        const list = surplusesByGood.get(g.goodId) ?? [];
+        list.push({ systemId: s.systemId, goodId: g.goodId, drawable: c.drawable });
+        surplusesByGood.set(g.goodId, list);
       }
     }
   }
