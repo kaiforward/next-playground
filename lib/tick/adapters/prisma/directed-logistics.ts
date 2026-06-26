@@ -141,15 +141,10 @@ export class PrismaDirectedLogisticsWorld implements DirectedLogisticsWorld {
 
   async applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void> {
     if (updates.length === 0) return;
-    // Guard non-finite stocks before raw SQL — NaN/Infinity abort the tx (CLAUDE.md pg gotcha).
-    const ids: string[] = [];
-    const stocks: number[] = [];
-    for (const u of updates) {
-      if (!Number.isFinite(u.stock)) continue;
-      ids.push(u.id);
-      stocks.push(u.stock);
-    }
-    if (ids.length === 0) return;
+    // Clamp non-finite stocks to 0 before raw SQL — NaN/Infinity abort the tx
+    // (CLAUDE.md pg gotcha). Row-preserving, matching the trade-flow adapter.
+    const ids = updates.map((u) => u.id);
+    const stocks = updates.map((u) => (Number.isFinite(u.stock) ? u.stock : 0));
     await this.tx.$executeRaw`
       UPDATE "StationMarket" AS sm
       SET "stock" = batch."stock"
