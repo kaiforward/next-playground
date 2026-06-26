@@ -75,4 +75,19 @@ describe("matchFactionTransfers", () => {
     const b = sys("B", 0, { goodId: "food", stock: 50, minStock: 10, maxStock: 100, demand: 5 });
     expect(matchFactionTransfers([a, b], oneHop)).toHaveLength(0);
   });
+
+  it("draws one source across two deficits without exceeding its drawable", () => {
+    // A: near-ceiling surplus, drawable = 20 - 10 = 10. Only A generates → budget = 100.
+    const surplus = sys("A", 100, { goodId: "food", stock: 20, minStock: 10, maxStock: 20, demand: 0 });
+    // C more severe (demand 10), B less severe (demand 1); each shortfall = 6.
+    const severe = sys("C", 0, { goodId: "food", stock: 4, minStock: 10, maxStock: 100, demand: 10 });
+    const mild = sys("B", 0, { goodId: "food", stock: 4, minStock: 10, maxStock: 100, demand: 1 });
+    const transfers = matchFactionTransfers([surplus, severe, mild], oneHop);
+    // C served first (severity 60 > 6): qty = min(shortfall 6, drawable 10, budget 100) = 6.
+    // B served from A's residual drawable (10 - 6 = 4): qty = min(shortfall 6, drawable 4, budget 94) = 4.
+    // Proves the source is not over-drawn below its floor across iterations.
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "C", quantity: 6 });
+    expect(transfers[1]).toMatchObject({ fromSystemId: "A", toSystemId: "B", quantity: 4 });
+  });
 });
