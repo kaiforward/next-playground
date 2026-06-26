@@ -128,6 +128,7 @@ function extractorsOnResource(buildings: Record<string, number>, resource: strin
  */
 export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   const tier = GOOD_TIER_BY_KEY[goodId];
+  if (tier === undefined) return 0;
   if (tier === 0) {
     const resource = BUILDING_TYPES[goodId]?.resource;
     if (!resource) return 0;

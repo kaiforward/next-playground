@@ -96,4 +96,13 @@ describe("buildableUnits / buildableOutput", () => {
     // metals occupies general space; with 100 units already built, ~no room left.
     expect(buildableUnits(full, "metals")).toBeCloseTo(0);
   });
+
+  it("returns zero capacity for an unknown good not in GOOD_TIER_BY_KEY", () => {
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
+    };
+    // "not_a_real_good" is not in GOOD_TIER_BY_KEY; should return 0, not divide by default footprint
+    expect(buildableUnits(sys, "not_a_real_good")).toBe(0);
+  });
 });
