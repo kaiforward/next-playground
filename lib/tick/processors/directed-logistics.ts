@@ -1,0 +1,162 @@
+import type { TickContext, TickProcessorResult } from "../types";
+import { shardRange, catchUpFactor } from "@/lib/tick/shard";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
+import {
+  capacityGoodRates,
+  inputDemandForGood,
+  labourDemand,
+  labourFulfillment,
+} from "@/lib/engine/industry";
+import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
+import {
+  matchFactionTransfers,
+  systemLogisticsGeneration,
+  type SystemLogisticsState,
+  type GoodMarketState,
+  type RouteCost,
+} from "@/lib/engine/directed-logistics";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import type {
+  DirectedLogisticsWorld,
+  SystemLogisticsRow,
+  MarketRowForLogistics,
+  LogisticsMarketUpdate,
+  LogisticsFlowInsert,
+} from "@/lib/tick/world/directed-logistics-world";
+
+export interface DirectedLogisticsProcessorParams {
+  interval: number;
+  /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
+  routeCost: RouteCost;
+}
+
+/** Build the engine's per-system state from raw rows: generation + per-good band + total demand. */
+function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
+  const demand = labourDemand(row.buildings);
+  const fulfillment = labourFulfillment(row.population, demand);
+  const rates = capacityGoodRates(row.buildings, row.population, row.yields);
+  const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
+
+  const goods: GoodMarketState[] = [];
+  for (const m of row.markets) {
+    const goodKey = GOOD_NAME_TO_KEY.get(m.goodId) ?? m.goodId;
+    const band = marketBandForRow(m, m);
+    const civ = consByKey.get(goodKey) ?? 0;
+    const industrial = inputDemandForGood(row.buildings, goodKey, fulfillment, row.yields);
+    goods.push({
+      goodId: m.goodId,
+      stock: m.stock,
+      minStock: band.minStock,
+      maxStock: band.maxStock,
+      demand: civ + industrial,
+    });
+  }
+  return {
+    systemId: row.systemId,
+    factionId: row.factionId,
+    generation: systemLogisticsGeneration(row.population),
+    goods,
+  };
+}
+
+/**
+ * Pure processor body. PER-FACTION shard: a contiguous window of the stable
+ * faction-key order runs each tick, so every faction is matched once per
+ * `interval` ticks. Matched volume is moved silently (stock deltas + logistics
+ * flow rows). The catch-up factor scales moved volume to wall-clock at any
+ * interval.
+ */
+export async function runDirectedLogisticsProcessor(
+  world: DirectedLogisticsWorld,
+  ctx: Pick<TickContext, "tick">,
+  params: DirectedLogisticsProcessorParams,
+): Promise<TickProcessorResult> {
+  const factionKeys = await world.getFactionShardKeys();
+  if (factionKeys.length === 0) return {};
+
+  const { start, end } = shardRange(factionKeys.length, ctx.tick, params.interval);
+  const dueKeys = factionKeys.slice(start, end);
+  if (dueKeys.length === 0) return {};
+
+  const rows = await world.getSystemsForFactions(dueKeys);
+  if (rows.length === 0) return {};
+
+  const goodKeyToId = await world.resolveGoodIds();
+  const catchUp = catchUpFactor(params.interval);
+
+  // Group rows by faction key, build engine state, match each group.
+  const byFaction = new Map<string | null, SystemLogisticsRow[]>();
+  for (const r of rows) {
+    const list = byFaction.get(r.factionId) ?? [];
+    list.push(r);
+    byFaction.set(r.factionId, list);
+  }
+
+  // Market lookup by (systemId|goodId) so we can clamp stock per transfer.
+  type MarketEntry = MarketRowForLogistics & { systemId: string; min: number; max: number };
+  const marketByKey = new Map<string, MarketEntry>();
+  for (const r of rows) {
+    for (const m of r.markets) {
+      const band = marketBandForRow(m, m);
+      marketByKey.set(`${r.systemId}|${m.goodId}`, {
+        ...m,
+        systemId: r.systemId,
+        min: band.minStock,
+        max: band.maxStock,
+      });
+    }
+  }
+
+  const allTransfers = [...byFaction.values()].flatMap((group) =>
+    matchFactionTransfers(group.map(toLogisticsState), params.routeCost),
+  );
+
+  // Apply: clamp both endpoints, accumulate absolute writes, record flow rows.
+  const updates = new Map<string, number>();
+  const flows: LogisticsFlowInsert[] = [];
+
+  for (const t of allTransfers) {
+    const qty = Math.floor(t.quantity * catchUp);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+
+    const from = marketByKey.get(`${t.fromSystemId}|${t.goodId}`);
+    const to = marketByKey.get(`${t.toSystemId}|${t.goodId}`);
+    if (!from || !to) continue;
+
+    const fromCur = updates.get(from.id) ?? from.stock;
+    const toCur = updates.get(to.id) ?? to.stock;
+    const moved = Math.min(
+      qty,
+      Math.max(0, fromCur - from.min),
+      Math.max(0, to.max - toCur),
+    );
+    if (moved <= 0) continue;
+
+    updates.set(from.id, fromCur - moved);
+    updates.set(to.id, toCur + moved);
+
+    const dbGoodId = goodKeyToId.get(GOOD_NAME_TO_KEY.get(t.goodId) ?? t.goodId) ?? t.goodId;
+    flows.push({
+      tick: ctx.tick,
+      fromSystemId: t.fromSystemId,
+      toSystemId: t.toSystemId,
+      goodId: dbGoodId,
+      quantity: moved,
+    });
+  }
+
+  if (updates.size > 0) {
+    const marketUpdates: LogisticsMarketUpdate[] = [...updates.entries()].map(
+      ([id, stock]) => ({ id, stock }),
+    );
+    await world.applyMarketUpdates(marketUpdates);
+  }
+  if (flows.length > 0) await world.appendLogisticsFlows(flows);
+
+  return {};
+}
+
+// ── Note ──────────────────────────────────────────────────────────────────────
+// Task 7 will wire this into the live TickProcessor registry (PrismaDirectedLogisticsWorld
+// + real routeCost from the hop-distances cache). The body is intentionally
+// agnostic: route cost is injected so it stays unit-testable with a fake closure.
