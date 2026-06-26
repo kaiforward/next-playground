@@ -104,5 +104,10 @@ deliberate demolish, doctrine, military ceiling) → events → war capstone →
   assumptions.
 
 ## Next action
-Write the **Stage 1 design doc** (the build-up mechanic + minimal-core seeder + age-forward harness),
-starting from the build-target question.
+Design doc (`sp5-stage1-seed-coherence-design.md`) and the first implementation plan
+(`sp5-stage1-build-engine-impl-plan.md` — the pure engine, 5 TDD tasks) are **written + committed** on
+`feat/sp5-autonomic-light` (renamed from `feat/sp5-logistics`). **Resume = subagent-execute the
+build-engine plan.** Then the follow-on plans, in order: processor body + in-memory adapter + sim wiring
+→ live Prisma adapter + registry → minimal-core seeder → age-forward harness → validation pass. UI is
+deferred + display-only (a small Industry-tab direction cue — developing/stable/declining — once build
+goes live; no construction queue, `count` is a continuous Float).

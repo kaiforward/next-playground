@@ -1,7 +1,7 @@
 # SP5 Stage 1 — Seed-Coherence Foundation (design)
 
 > **Status: Design (brainstormed 2026-06-26).** First slice of the SP5 seed-coherence re-sequencing.
-> Sits **on** substrate-v2 + SP3.5 decay + the unmerged logistics Phase 1 (`feat/sp5-logistics`,
+> Sits **on** substrate-v2 + SP3.5 decay + the unmerged logistics Phase 1 (on `feat/sp5-autonomic-light`,
 > reused as the silent engine). Roadmap home: `economy-simulation-vision.md` §13 (2026-06-26 callout) ·
 > `negative-space-economy.md` · resume/rationale in `sp5-seed-coherence-resequencing.md`.
 > North-star constraints: emergent realism from physical primitives + the negative-space economy.
@@ -171,6 +171,25 @@ manufactured goods (a lone producer is often 6–10 hops away). **Recommendation
 **No new schema for Stage 1.** Build increments existing `SystemBuilding.count`; population and market
 stock already exist; `factionId` stays static (Stage 2 makes it dynamic). A `FactionBuild` summary row
 (budget/spent, mirroring `FactionLogistics`) is **optional and deferred** — there is no Stage 1 UI.
+
+---
+
+## UI (deferred — display-only)
+
+No UI in Stage 1 (the engine + seeder + harness are validated in the **simulator**). When build goes
+**live** (after the Prisma adapter + registry land), the only surface is a small modification to the
+**existing Industry tab**: a **direction cue** per building/system — *developing* (count trending up) /
+stable / *declining* (count trending down) — complementing, not replacing, the existing utilisation
+health colours (idle/collapsing read in-use-vs-built; direction is a different axis). Its value is a
+trade signal: it shows which systems are growing (where demand is about to rise).
+
+**Display-only** — build is a faction autonomic behaviour, not a player action (player-driven building
+is the separate `player-facilities` doc). **No construction queue / progress bar:** `count` is a
+continuous Float that ramps over agency cycles (the mirror of decay), so there is no discrete
+in-progress build to render — a progress bar would misrepresent the mechanic. The only data question
+for that phase: the direction cue needs a recent count-delta signal (a small per-building signed delta
+written as build/decay touch `count`, or derive system-level direction from the existing
+population/unrest trend).
 
 ---
 
