@@ -5,18 +5,12 @@ import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { shardRange, catchUpFactor } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import {
-  capacityGoodRates,
-  inputDemandForGood,
-  labourDemand,
-  labourFulfillment,
-} from "@/lib/engine/industry";
-import {
   matchFactionTransfers,
   systemLogisticsGeneration,
   type SystemLogisticsState,
-  type GoodMarketState,
   type RouteCost,
 } from "@/lib/engine/directed-logistics";
+import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedLogisticsWorld,
   SystemLogisticsRow,
@@ -33,29 +27,11 @@ export interface DirectedLogisticsProcessorParams {
 
 /** Build the engine's per-system state from raw rows: generation + per-good band + total demand. */
 function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
-  const demand = labourDemand(row.buildings);
-  const fulfillment = labourFulfillment(row.population, demand);
-  const rates = capacityGoodRates(row.buildings, row.population, row.yields);
-  const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
-
-  const goods: GoodMarketState[] = [];
-  // m.goodId is the good KEY (normalised by the adapter), matching consumption/industry maps.
-  for (const m of row.markets) {
-    const band = marketBandForRow(m, m);
-    const civ = consByKey.get(m.goodId) ?? 0;
-    const industrial = inputDemandForGood(row.buildings, m.goodId, fulfillment, row.yields);
-    goods.push({
-      goodId: m.goodId,
-      stock: m.stock,
-      targetStock: band.targetStock,
-      demand: civ + industrial,
-    });
-  }
   return {
     systemId: row.systemId,
     factionId: row.factionId,
     generation: systemLogisticsGeneration(row.population),
-    goods,
+    goods: toGoodMarketStates(row),
   };
 }
 
