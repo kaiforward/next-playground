@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { systemBuildGeneration, findStructuralDeficits, type BuildSystemState } from "@/lib/engine/directed-build";
+import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, type BuildSystemState } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { OUTPUT_PER_UNIT } from "@/lib/constants/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
 describe("systemBuildGeneration", () => {
@@ -51,5 +52,48 @@ describe("findStructuralDeficits", () => {
   it("does not treat a balanced or surplus market as a deficit", () => {
     const balanced = buildSys("A", { goodId: "ore", stock: 10, targetStock: 10, demand: 4 });
     expect(findStructuralDeficits([balanced], reachable)).toHaveLength(0);
+  });
+});
+
+// A tier-0 good (food → arable) with deposit slots; sys has space but partial build.
+function tier0Sys(builtFood: number, foodSlots: number): BuildSystemState {
+  const slotCap = emptyResourceVector();
+  // food's resource is arable — set via the building catalog's resource at runtime in the impl;
+  // here we set every resource's cap so the test is independent of the food→resource mapping.
+  for (const k of RESOURCE_TYPES) slotCap[k] = foodSlots;
+  return {
+    systemId: "A", factionId: "f1", population: 100,
+    buildings: { food: builtFood }, slotCap, generalSpace: 100, habitableSpace: 50, goods: [],
+  };
+}
+
+describe("buildableUnits / buildableOutput", () => {
+  it("caps a tier-0 extractor by remaining deposit slots for its resource", () => {
+    const sys = tier0Sys(3, 5); // 3 of 5 slots used → 2 remaining
+    expect(buildableUnits(sys, "food")).toBeCloseTo(2);
+    expect(buildableOutput(sys, "food")).toBeCloseTo(2 * OUTPUT_PER_UNIT.food);
+  });
+
+  it("returns zero tier-0 capacity when slots are full", () => {
+    const sys = tier0Sys(5, 5);
+    expect(buildableUnits(sys, "food")).toBe(0);
+  });
+
+  it("caps a tier-1+ factory by remaining general space ÷ footprint", () => {
+    // metals is tier-1 (recipe { ore: 1 }); generalSpace 100, no buildings → 100 / spaceCost units.
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
+    };
+    expect(buildableUnits(sys, "metals")).toBeGreaterThan(0);
+  });
+
+  it("reduces tier-1+ capacity by space already used by existing buildings", () => {
+    const full: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, buildings: { metals: 100 },
+      slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
+    };
+    // metals occupies general space; with 100 units already built, ~no room left.
+    expect(buildableUnits(full, "metals")).toBeCloseTo(0);
   });
 });

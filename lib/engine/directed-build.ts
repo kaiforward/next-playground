@@ -9,6 +9,8 @@
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { classifyMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
+import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
+import { BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
 export interface BuildGoodState {
@@ -88,4 +90,58 @@ export function findStructuralDeficits(
     if (!reachableSurplus) structural.push(d);
   }
   return structural;
+}
+
+/**
+ * General space consumed by current buildings: every tier-1+ factory and housing
+ * occupies general space (× its footprint). Tier-0 extractors sit on deposit slots,
+ * NOT general space, so they are excluded.
+ */
+function generalSpaceUsed(buildings: Record<string, number>): number {
+  let used = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    if (type === HOUSING_TYPE) {
+      used += count * effectiveSpaceCost(type);
+      continue;
+    }
+    if (GOOD_TIER_BY_KEY[type] === 0) continue; // extractors don't use general space
+    used += count * effectiveSpaceCost(type);
+  }
+  return used;
+}
+
+/** Deposit-slot units already used for `resource` (goods sharing the resource share the cap). */
+function extractorsOnResource(buildings: Record<string, number>, resource: string): number {
+  let used = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0 || GOOD_TIER_BY_KEY[type] !== 0) continue;
+    if (BUILDING_TYPES[type]?.resource === resource) used += count;
+  }
+  return used;
+}
+
+/**
+ * Additional building units of `goodId` a system can host given current builds.
+ * Tier-0: remaining deposit slots for the good's resource. Tier-1+: remaining
+ * general space ÷ the type's footprint. Never negative.
+ */
+export function buildableUnits(sys: BuildSystemState, goodId: string): number {
+  const tier = GOOD_TIER_BY_KEY[goodId];
+  if (tier === 0) {
+    const resource = BUILDING_TYPES[goodId]?.resource;
+    if (!resource) return 0;
+    const cap = sys.slotCap[resource];
+    const remaining = cap - extractorsOnResource(sys.buildings, resource);
+    return Math.max(0, remaining);
+  }
+  const cost = effectiveSpaceCost(goodId);
+  if (cost <= 0) return 0;
+  const remainingGeneral = sys.generalSpace - generalSpaceUsed(sys.buildings);
+  return Math.max(0, remainingGeneral / cost);
+}
+
+/** Additional output of `goodId` a system can host = buildable units × per-unit output. */
+export function buildableOutput(sys: BuildSystemState, goodId: string): number {
+  return buildableUnits(sys, goodId) * (OUTPUT_PER_UNIT[goodId] ?? 0);
 }
