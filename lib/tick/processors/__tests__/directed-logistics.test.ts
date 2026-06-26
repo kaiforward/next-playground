@@ -27,8 +27,8 @@ describe("MemoryDirectedLogisticsWorld", () => {
 
 // ── market band math (anchorMult:1, demandRate:1, priceFloor:0.5, priceCeiling:2.0)
 // targetStock = 40×1×1 = 40; minStock = 40/2 = 20; maxStock = 40/0.5 + storageCapacity = 80+storageCapacity.
-// mA: stock=95, storageCapacity=20 → maxStock=100; surplusThreshold=0.9×100=90; 95≥90 ✓ surplus; drawable=95−20=75.
-// mB: stock=10, storageCapacity=20 → maxStock=100; minStock=20; 10<20 ✓ deficit; shortfall=10.
+// mA: stock=95, storageCapacity=20 → targetStock=40; surplusThreshold=40×1.4=56; 95≥56 ✓ surplus; drawable=95−20=75.
+// mB: stock=10, storageCapacity=20 → minStock=20; 10<20 ✓ deficit; shortfall=10.
 // tick=INTERVAL−1 (=47): shardRange(1, 47, 48) → start=0, end=1; catchUp=48/24=2.
 // engine quantity=min(10,75,100)=10; body qty=floor(10×2)=20; moved=min(20,75,90)=20 > 0 ✓.
 function market(id: string, goodId: string, stock: number, storageCapacity: number) {

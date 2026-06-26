@@ -48,7 +48,7 @@ function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
       goodId: m.goodId,
       stock: m.stock,
       minStock: band.minStock,
-      maxStock: band.maxStock,
+      targetStock: band.targetStock,
       demand: civ + industrial,
     });
   }

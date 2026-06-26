@@ -90,8 +90,12 @@ Per faction, per cycle (sharded over systems for scale; see Cadence):
 1. **Deficits** — system+good where market `stock` is below its band floor (`minStock`), i.e. local
    demand outruns local supply. Severity = shortfall × demand rate (civ + industrial, per the demand
    basis below) × urgency (how far below floor / days-of-supply). Worst-first.
-2. **Surpluses** — system+good export-pinned at/near the band ceiling (`maxStock`). Drawable =
-   `stock − minStock` (never below the source's own floor).
+2. **Surpluses** — system+good holding above its days-of-supply anchor: `stock ≥ targetStock ×
+   SURPLUS_MARGIN` (where `targetStock = TARGET_COVER × demandRate`; margin > 1 leaves a deliberate
+   residual). Drawable = `stock − minStock` (never below the source's own floor). *(The original
+   near-ceiling definition — `stock ≥ maxStock × 0.9` — almost never fired because `maxStock` includes
+   a large `storageCapacity` term; the anchor-relative rule corrects this, per 2026-06-26 simulator
+   diagnosis.)*
 3. **Match** — for each ranked deficit, find the nearest same-faction surplus of that good within a hop
    budget; allocate `transfer = min(deficit shortfall, surplus drawable, remaining_pool / distance_cost)`.
    Spend the pool; advance; stop when exhausted.

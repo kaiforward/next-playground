@@ -15,7 +15,8 @@ export interface GoodMarketState {
   goodId: string;
   stock: number;
   minStock: number;
-  maxStock: number;
+  /** Days-of-supply price anchor (TARGET_COVER × demandRate). Surplus ⇔ stock ≥ targetStock × SURPLUS_MARGIN. */
+  targetStock: number;
   /** Total local demand rate (civilian + industrial). Severity weight only. */
   demand: number;
 }
@@ -65,7 +66,7 @@ export function matchFactionTransfers(
         if (shortfall > 0) {
           deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall, severity: shortfall * g.demand });
         }
-      } else if (g.stock >= g.maxStock * DIRECTED_LOGISTICS.SURPLUS_FRACTION) {
+      } else if (g.stock >= g.targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN) {
         const drawable = g.stock - g.minStock;
         if (drawable > 0) {
           const list = surplusesByGood.get(g.goodId) ?? [];

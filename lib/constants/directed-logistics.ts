@@ -9,8 +9,8 @@ export const DIRECTED_LOGISTICS = {
   INTERVAL: 2 * ECONOMY_UPDATE_INTERVAL,
   /** Work-budget a system contributes per cycle = population × this. Free in v1 (no treasury). */
   GENERATION_PER_POP: 0.5,
-  /** A good is a surplus when stock ≥ maxStock × this (export-pinned). */
-  SURPLUS_FRACTION: 0.9,
+  /** A good is a surplus when stock ≥ targetStock × this (held above its days-of-supply anchor). Margin > 1 leaves a deliberate residual (negative space). */
+  SURPLUS_MARGIN: 1.4,
   /** A good is a deficit when stock < minStock × this (below the reserve floor). */
   DEFICIT_FRACTION: 1.0,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
