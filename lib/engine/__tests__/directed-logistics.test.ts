@@ -37,6 +37,12 @@ describe("classifyMarketState", () => {
     expect(classifyMarketState(0, 0).kind).toBe("balanced");
     expect(classifyMarketState(7.9, 10).shortfall).toBeCloseTo(2.1);
   });
+
+  it("classifies a zero-anchor good (targetStock 0, positive stock) as balanced, not surplus", () => {
+    const c = classifyMarketState(50, 0);
+    expect(c.kind).toBe("balanced");
+    expect(c.drawable).toBe(0);
+  });
 });
 
 describe("systemLogisticsGeneration", () => {

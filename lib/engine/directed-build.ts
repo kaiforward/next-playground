@@ -227,6 +227,7 @@ export function planFactionBuilds(
           .sort((a, b) => a.cost - b.cost);
         if (reachable.length === 0) continue;
 
+        // Score reflects full reachable capacity; the per-iteration budget cap is applied to wantUnits below, not to the score (greedy re-scores each pass).
         let score = 0;
         let servedOutput = 0;
         for (const r of reachable) {

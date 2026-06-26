@@ -23,6 +23,7 @@ export interface MarketClassification {
  * matcher and the build planner so both read one definition.
  */
 export function classifyMarketState(stock: number, targetStock: number): MarketClassification {
+  // A zero/negative demand anchor means no days-of-supply target — never a drawable surplus; treat as balanced.
   if (targetStock <= 0) {
     return { kind: "balanced", shortfall: 0, drawable: 0 };
   }

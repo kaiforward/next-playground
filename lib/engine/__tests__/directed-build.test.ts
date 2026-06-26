@@ -182,4 +182,43 @@ describe("planFactionBuilds", () => {
     };
     expect(planFactionBuilds([balanced], () => 1)).toHaveLength(0);
   });
+
+  it("serves two distinct structural deficits across multiple greedy iterations", () => {
+    // A: structural food deficit (no food surplus reachable — food not produced at B or C).
+    // B: structural water deficit (no water surplus reachable — water not produced at A or C).
+    // C: the builder — large population (ample budget), full deposit slots, general + habitable
+    //    space, no goods of its own. Reachable from both A and B (cost 1).
+    //
+    // Iteration 1 of the greedy loop: both (C, food) and (C, water) are candidates.
+    //   Both score identically (same shortfall, same cost). Whichever wins is built at C.
+    // Iteration 2: the other good still has remaining structural deficit; (C, other-good) is
+    //   picked and built. The test FAILS if the loop only runs once — only one good would
+    //   appear in builds, and the expect for the other good would be 0.
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+
+    const deficitFood: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+    };
+    const deficitWater: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 0, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "water", stock: 1, targetStock: 20, demand: 5 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 10000, buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 50,
+      goods: [],
+    };
+
+    const builds = planFactionBuilds([deficitFood, deficitWater, builder], () => 1);
+
+    // Both goods must be built at C, requiring at least two greedy iterations.
+    expect(countFor(builds, "C", "food")).toBeGreaterThan(0);
+    expect(countFor(builds, "C", "water")).toBeGreaterThan(0);
+    // Co-built housing also appears (from the first build's staffing co-build).
+    expect(countFor(builds, "C", "housing")).toBeGreaterThan(0);
+  });
 });
