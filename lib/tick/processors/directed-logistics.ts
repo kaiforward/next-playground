@@ -47,7 +47,6 @@ function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
     goods.push({
       goodId: m.goodId,
       stock: m.stock,
-      minStock: band.minStock,
       targetStock: band.targetStock,
       demand: civ + industrial,
     });

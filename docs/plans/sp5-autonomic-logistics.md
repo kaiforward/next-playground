@@ -56,9 +56,9 @@ cheap; many players → more Contracts, less silent** — same goods moved, just
 
 Benign coupling, already noted in the negative-space doc: when logistics dumps food into a deficit
 system its price drops, which *naturally* tapers the market diffusion into that system. No double-supply
-— they compose. Logistics draws only from market stock **above the band floor** (`minStock`), exactly
-like diffusion's export draw, so a source market is never drained dry and locals keep their reserve —
-this is the v1 form of "civilian crowd-out" (emergent, floor-protected; the explicit
+— they compose. Logistics draws only from market stock **above the days-of-supply anchor** (`targetStock`),
+so a donor market is never drawn below its own comfort target and locals keep their supply — this is the
+v1 form of "civilian crowd-out" (emergent, target-protected; the explicit
 pull-starves-downstream-→-revolt cascade is a later refinement).
 
 ---
@@ -87,15 +87,17 @@ pull-starves-downstream-→-revolt cascade is a later refinement).
 
 Per faction, per cycle (sharded over systems for scale; see Cadence):
 
-1. **Deficits** — system+good where market `stock` is below its band floor (`minStock`), i.e. local
-   demand outruns local supply. Severity = shortfall × demand rate (civ + industrial, per the demand
-   basis below) × urgency (how far below floor / days-of-supply). Worst-first.
+1. **Deficits** — system+good where `stock < targetStock × DEFICIT_FRACTION` (below the days-of-supply
+   anchor; `DEFICIT_FRACTION = 0.8` leaves a comfortable dead-band). Severity = shortfall ×
+   demand rate (civ + industrial, per the demand basis below). Worst-first. *(Sim audit 2026-06-26:
+   the market keeps almost all stock above the band floor, so a floor-triggered deficit almost never
+   fires; anchoring to `targetStock` is the deficit-side twin of the surplus anchor fix in Task 8.)*
 2. **Surpluses** — system+good holding above its days-of-supply anchor: `stock ≥ targetStock ×
    SURPLUS_MARGIN` (where `targetStock = TARGET_COVER × demandRate`; margin > 1 leaves a deliberate
-   residual). Drawable = `stock − minStock` (never below the source's own floor). *(The original
-   near-ceiling definition — `stock ≥ maxStock × 0.9` — almost never fired because `maxStock` includes
-   a large `storageCapacity` term; the anchor-relative rule corrects this, per 2026-06-26 simulator
-   diagnosis.)*
+   residual). Drawable = `stock − targetStock` (donor never drops below its own target, so moving
+   goods never creates a new deficit). *(The original near-ceiling definition — `stock ≥ maxStock × 0.9`
+   — almost never fired because `maxStock` includes a large `storageCapacity` term; the anchor-relative
+   rule corrects this, per 2026-06-26 simulator diagnosis.)*
 3. **Match** — for each ranked deficit, find the nearest same-faction surplus of that good within a hop
    budget; allocate `transfer = min(deficit shortfall, surplus drawable, remaining_pool / distance_cost)`.
    Spend the pool; advance; stop when exhausted.
@@ -243,7 +245,7 @@ On a multi-thousand-tick run the decay-only ratchet visibly **bends for the supp
 decline arrested rather than trending down, striking-system count plateaus instead of climbing, the
 suppliable class survives where it currently hollows — while the **self-sufficient core and the stranded
 ~1% are untouched**. Coarse health-bar, not precision (per the calibrate-to-shape stance): no NaN /
-runaway / pinning; logistics never drains a market below its floor; budget < need leaves a visible
+runaway / pinning; logistics never draws a donor market below its own target; budget < need leaves a visible
 residual. Validate in the simulator first, then live observation.
 
 ---

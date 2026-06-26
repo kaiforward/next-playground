@@ -14,8 +14,7 @@ export function systemLogisticsGeneration(population: number): number {
 export interface GoodMarketState {
   goodId: string;
   stock: number;
-  minStock: number;
-  /** Days-of-supply price anchor (TARGET_COVER × demandRate). Surplus ⇔ stock ≥ targetStock × SURPLUS_MARGIN. */
+  /** Days-of-supply price anchor (TARGET_COVER × demandRate). Deficit ⇔ stock < targetStock × DEFICIT_FRACTION; surplus ⇔ stock ≥ targetStock × SURPLUS_MARGIN. Both converge toward targetStock. */
   targetStock: number;
   /** Total local demand rate (civilian + industrial). Severity weight only. */
   demand: number;
@@ -61,13 +60,13 @@ export function matchFactionTransfers(
 
   for (const s of systems) {
     for (const g of s.goods) {
-      if (g.stock < g.minStock * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
-        const shortfall = g.minStock - g.stock;
+      if (g.stock < g.targetStock * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
+        const shortfall = g.targetStock - g.stock;
         if (shortfall > 0) {
           deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall, severity: shortfall * g.demand });
         }
       } else if (g.stock >= g.targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN) {
-        const drawable = g.stock - g.minStock;
+        const drawable = g.stock - g.targetStock;
         if (drawable > 0) {
           const list = surplusesByGood.get(g.goodId) ?? [];
           list.push({ systemId: s.systemId, goodId: g.goodId, drawable });

@@ -11,8 +11,8 @@ export const DIRECTED_LOGISTICS = {
   GENERATION_PER_POP: 0.5,
   /** A good is a surplus when stock ≥ targetStock × this (held above its days-of-supply anchor). Margin > 1 leaves a deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
-  /** A good is a deficit when stock < minStock × this (below the reserve floor). */
-  DEFICIT_FRACTION: 1.0,
+  /** A good is a deficit when stock < targetStock × this (below its days-of-supply anchor). < 1 leaves a comfortable dead-band above it (with SURPLUS_MARGIN) — the residual / negative space. */
+  DEFICIT_FRACTION: 0.8,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
   MAX_HOPS: 4,
   /** Per-unit route cost = quantity × (hops × HOP_WEIGHT + totalFuelCost × FUEL_WEIGHT). */
