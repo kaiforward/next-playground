@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { systemLogisticsGeneration } from "@/lib/engine/directed-logistics";
+import {
+  systemLogisticsGeneration,
+  matchFactionTransfers,
+  type SystemLogisticsState,
+  type RouteCost,
+} from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 describe("systemLogisticsGeneration", () => {
@@ -8,5 +13,66 @@ describe("systemLogisticsGeneration", () => {
   });
   it("never negative (clamps negative population to 0)", () => {
     expect(systemLogisticsGeneration(-5)).toBe(0);
+  });
+});
+
+// Helper: a system with one good's market state.
+function sys(
+  systemId: string,
+  generation: number,
+  good: { goodId: string; stock: number; minStock: number; maxStock: number; demand: number },
+): SystemLogisticsState {
+  return { systemId, factionId: "f1", generation, goods: [good] };
+}
+
+// Unit cost = hops; 1 hop between any two systems, unreachable for "far".
+const oneHop: RouteCost = (_from, to) => (to === "far" ? null : 1);
+
+describe("matchFactionTransfers", () => {
+  it("moves drawable surplus to a below-floor deficit", () => {
+    const surplus = sys("A", 100, { goodId: "food", stock: 100, minStock: 10, maxStock: 100, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 2, minStock: 10, maxStock: 100, demand: 5 });
+    const transfers = matchFactionTransfers([surplus, deficit], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0]).toMatchObject({ goodId: "food", fromSystemId: "A", toSystemId: "B" });
+    // shortfall = minStock - stock = 8; drawable = stock - minStock = 90; budget = 100/1 → 8 wins
+    expect(transfers[0].quantity).toBe(8);
+    expect(transfers[0].cost).toBe(8); // quantity × 1 hop
+  });
+
+  it("never draws a source below its own floor", () => {
+    const surplus = sys("A", 100, { goodId: "food", stock: 12, minStock: 10, maxStock: 100, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, minStock: 10, maxStock: 100, demand: 5 });
+    const transfers = matchFactionTransfers([surplus, deficit], oneHop);
+    expect(transfers[0].quantity).toBe(2); // drawable = 12 - 10
+  });
+
+  it("is bounded by the faction budget (under-serves, leaving residual)", () => {
+    const surplus = sys("A", 3, { goodId: "food", stock: 100, minStock: 10, maxStock: 100, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, minStock: 10, maxStock: 100, demand: 5 });
+    // budget = 3 (only A generates), cost 1/unit → at most 3 moved despite a shortfall of 10
+    const transfers = matchFactionTransfers([surplus, deficit], oneHop);
+    expect(transfers[0].quantity).toBe(3);
+  });
+
+  it("ranks the most severe deficit first when budget is scarce", () => {
+    const surplus = sys("A", 5, { goodId: "food", stock: 100, minStock: 10, maxStock: 100, demand: 1 });
+    // B mild (demand 1), C severe (demand 10) — C should be served first.
+    const mild = sys("B", 0, { goodId: "food", stock: 5, minStock: 10, maxStock: 100, demand: 1 });
+    const severe = sys("C", 0, { goodId: "food", stock: 5, minStock: 10, maxStock: 100, demand: 10 });
+    const transfers = matchFactionTransfers([surplus, mild, severe], oneHop);
+    expect(transfers[0].toSystemId).toBe("C");
+  });
+
+  it("skips unreachable deficits (route cost null)", () => {
+    const surplus = sys("A", 100, { goodId: "food", stock: 100, minStock: 10, maxStock: 100, demand: 5 });
+    const deficit = sys("far", 0, { goodId: "food", stock: 0, minStock: 10, maxStock: 100, demand: 5 });
+    expect(matchFactionTransfers([surplus, deficit], oneHop)).toHaveLength(0);
+  });
+
+  it("ignores goods that are neither surplus nor deficit", () => {
+    const a = sys("A", 100, { goodId: "food", stock: 50, minStock: 10, maxStock: 100, demand: 5 });
+    const b = sys("B", 0, { goodId: "food", stock: 50, minStock: 10, maxStock: 100, demand: 5 });
+    expect(matchFactionTransfers([a, b], oneHop)).toHaveLength(0);
   });
 });
