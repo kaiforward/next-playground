@@ -5,6 +5,7 @@ import { infrastructureDecayProcessor } from "./processors/infrastructure-decay"
 import { populationProcessor } from "./processors/population";
 import { migrationProcessor } from "./processors/migration";
 import { tradeFlowProcessor } from "./processors/trade-flow";
+import { directedLogisticsProcessor } from "./processors/directed-logistics";
 import { tradeMissionsProcessor } from "./processors/trade-missions";
 import { missionsProcessor } from "./processors/missions";
 import { battlesProcessor } from "./processors/battles";
@@ -22,6 +23,7 @@ export const processors: TickProcessor[] = [
   populationProcessor,
   migrationProcessor,
   tradeFlowProcessor,
+  directedLogisticsProcessor,
   tradeMissionsProcessor,
   missionsProcessor,
   battlesProcessor,

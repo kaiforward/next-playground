@@ -1,4 +1,7 @@
-import type { TickContext, TickProcessorResult } from "../types";
+import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
+import { PrismaDirectedLogisticsWorld } from "@/lib/tick/adapters/prisma/directed-logistics";
+import { loadHopDistances } from "@/lib/services/hop-distances";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { shardRange, catchUpFactor } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import {
@@ -153,7 +156,24 @@ export async function runDirectedLogisticsProcessor(
   return {};
 }
 
-// ── Note ──────────────────────────────────────────────────────────────────────
-// Task 7 will wire this into the live TickProcessor registry (PrismaDirectedLogisticsWorld
-// + real routeCost from the hop-distances cache). The body is intentionally
-// agnostic: route cost is injected so it stays unit-testable with a fake closure.
+// ── Live-game wiring ──────────────────────────────────────────────
+
+export const directedLogisticsProcessor: TickProcessor = {
+  name: "directed-logistics",
+  frequency: 1, // per-faction shard handled inside the body
+  dependsOn: ["economy"],
+
+  async process(ctx): Promise<TickProcessorResult> {
+    const world = new PrismaDirectedLogisticsWorld(ctx.tx);
+    const hops = await loadHopDistances();
+    const routeCost: RouteCost = (fromId, toId) => {
+      const h = hops.get(fromId)?.get(toId);
+      if (h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS) return null;
+      return h * DIRECTED_LOGISTICS.HOP_WEIGHT;
+    };
+    return runDirectedLogisticsProcessor(world, ctx, {
+      interval: DIRECTED_LOGISTICS.INTERVAL,
+      routeCost,
+    });
+  },
+};
