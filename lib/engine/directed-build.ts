@@ -10,7 +10,9 @@ import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { classifyMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
-import { BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
+import { BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { GOOD_RECIPES } from "@/lib/constants/recipes";
+import { labourDemand, housingPopCap } from "@/lib/engine/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
 export interface BuildGoodState {
@@ -145,4 +147,143 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
 /** Additional output of `goodId` a system can host = buildable units × per-unit output. */
 export function buildableOutput(sys: BuildSystemState, goodId: string): number {
   return buildableUnits(sys, goodId) * (OUTPUT_PER_UNIT[goodId] ?? 0);
+}
+
+/** A tier-1+ site is build-eligible this cycle only when every recipe input is locally produced or has a reachable surplus. */
+function inputsAvailable(
+  goodId: string,
+  site: BuildSystemState,
+  reachableSurplusGoods: Set<string>,
+): boolean {
+  const recipe = GOOD_RECIPES[goodId];
+  if (!recipe) return true; // tier-0 has no recipe
+  return Object.keys(recipe).every(
+    (input) => (site.buildings[input] ?? 0) > 0 || reachableSurplusGoods.has(input),
+  );
+}
+
+/**
+ * Greedy demand-pulled build planner for ONE faction's systems. Budget = Σ system
+ * generation, spent as building units. For each structural-gap good, score candidate
+ * sites by the reachable structural demand they can serve (capacity-bounded,
+ * nearest-first), build at the best, co-build housing to staff it, decrement, repeat.
+ */
+export function planFactionBuilds(
+  systems: BuildSystemState[],
+  routeCost: RouteCost,
+): PlannedBuild[] {
+  let budget = 0;
+  for (const s of systems) budget += systemBuildGeneration(s.population);
+  if (budget <= 0) return [];
+
+  const structural = findStructuralDeficits(systems, routeCost);
+  if (structural.length === 0) return [];
+
+  // Goods for which this faction has a reachable surplus anywhere (for the tier-1+ input gate).
+  const reachableSurplusGoods = new Set<string>();
+  for (const s of systems) {
+    for (const g of s.goods) {
+      const c = classifyMarketState(g.stock, g.targetStock);
+      if (c.kind === "surplus" && c.drawable > 0) reachableSurplusGoods.add(g.goodId);
+    }
+  }
+
+  // Mutable per-system building working copy so capacity reflects builds made this pass.
+  const working = new Map<string, BuildSystemState>();
+  for (const s of systems) working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
+
+  // Remaining structural shortfall per (good → systemId → shortfall).
+  const remainingByGood = new Map<string, Map<string, number>>();
+  for (const d of structural) {
+    const m = remainingByGood.get(d.goodId) ?? new Map<string, number>();
+    m.set(d.systemId, (m.get(d.systemId) ?? 0) + d.shortfall);
+    remainingByGood.set(d.goodId, m);
+  }
+
+  const builds: PlannedBuild[] = [];
+
+  // Greedy: repeatedly pick the highest-scoring (site, good) and build there until budget runs out.
+  while (budget > 0) {
+    let best: { site: BuildSystemState; goodId: string; score: number; units: number } | null = null;
+
+    for (const [goodId, deficitMap] of remainingByGood) {
+      const totalRemaining = [...deficitMap.values()].reduce((a, b) => a + b, 0);
+      if (totalRemaining <= 0) continue;
+
+      for (const site of working.values()) {
+        const capUnits = buildableUnits(site, goodId);
+        if (capUnits <= 0) continue;
+        if (GOOD_TIER_BY_KEY[goodId] !== 0 && !inputsAvailable(goodId, site, reachableSurplusGoods)) continue;
+
+        const perUnit = OUTPUT_PER_UNIT[goodId] ?? 0;
+        if (perUnit <= 0) continue;
+
+        // Score: allocate this site's output capacity to its reachable structural deficits,
+        // nearest-first, summing allocated ÷ routeCost (capacity + proximity, each once).
+        let capOutput = capUnits * perUnit;
+        const reachable = [...deficitMap.entries()]
+          .map(([sysId, short]) => ({ sysId, short, cost: routeCost(site.systemId, sysId) }))
+          .filter((r): r is { sysId: string; short: number; cost: number } => r.cost !== null && r.cost > 0)
+          .sort((a, b) => a.cost - b.cost);
+        if (reachable.length === 0) continue;
+
+        let score = 0;
+        let servedOutput = 0;
+        for (const r of reachable) {
+          if (capOutput <= 0) break;
+          const take = Math.min(capOutput, r.short);
+          score += take / r.cost;
+          servedOutput += take;
+          capOutput -= take;
+        }
+        if (servedOutput <= 0) continue;
+
+        // Units to build = output needed ÷ per-unit, capped by capacity and budget.
+        const wantUnits = Math.min(capUnits, servedOutput / perUnit, budget);
+        if (wantUnits <= 0) continue;
+        if (!best || score > best.score) best = { site, goodId, score, units: wantUnits };
+      }
+    }
+
+    if (!best) break;
+
+    // Apply the production build to the working copy + emit it.
+    const site = best.site;
+    site.buildings[best.goodId] = (site.buildings[best.goodId] ?? 0) + best.units;
+    builds.push({ systemId: site.systemId, buildingType: best.goodId, count: best.units });
+    budget -= best.units;
+
+    // Co-build housing to keep labourDemand ≤ popCap, bounded by habitable + general space.
+    const needLabour = labourDemand(site.buildings);
+    const havePopCap = housingPopCap(site.buildings);
+    if (needLabour > havePopCap) {
+      const housingUnits = (needLabour - havePopCap) / POP_CENTRE_DENSITY;
+      const cost = effectiveSpaceCost(HOUSING_TYPE);
+      const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
+      const affordable = Math.min(site.habitableSpace, remainingGeneral) / cost;
+      const housing = Math.max(0, Math.min(housingUnits, affordable));
+      if (housing > 0) {
+        site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + housing;
+        builds.push({ systemId: site.systemId, buildingType: HOUSING_TYPE, count: housing });
+      }
+    }
+
+    // Decrement the served structural demand (nearest-first again) so we don't re-target it.
+    const deficitMap = remainingByGood.get(best.goodId);
+    if (deficitMap) {
+      let producedOutput = best.units * (OUTPUT_PER_UNIT[best.goodId] ?? 0);
+      const nearest = [...deficitMap.entries()]
+        .map(([sysId, short]) => ({ sysId, short, cost: routeCost(site.systemId, sysId) }))
+        .filter((r): r is { sysId: string; short: number; cost: number } => r.cost !== null && r.cost > 0)
+        .sort((a, b) => a.cost - b.cost);
+      for (const r of nearest) {
+        if (producedOutput <= 0) break;
+        const take = Math.min(producedOutput, r.short);
+        deficitMap.set(r.sysId, r.short - take);
+        producedOutput -= take;
+      }
+    }
+  }
+
+  return builds;
 }

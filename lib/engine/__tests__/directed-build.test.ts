@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, type BuildSystemState } from "@/lib/engine/directed-build";
+import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT } from "@/lib/constants/industry";
@@ -104,5 +104,82 @@ describe("buildableUnits / buildableOutput", () => {
     };
     // "not_a_real_good" is not in GOOD_TIER_BY_KEY; should return 0, not divide by default footprint
     expect(buildableUnits(sys, "not_a_real_good")).toBe(0);
+  });
+});
+
+function countFor(builds: PlannedBuild[], systemId: string, type: string): number {
+  return builds.filter((b) => b.systemId === systemId && b.buildingType === type)
+    .reduce((sum, b) => sum + b.count, 0);
+}
+
+describe("planFactionBuilds", () => {
+  it("builds tier-0 production at a site that can serve a reachable structural deficit", () => {
+    // A: structural food deficit (no surplus anywhere). B: has arable slots + population budget, reachable from A.
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 50,
+      goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
+    };
+    const builds = planFactionBuilds([deficit, builder], () => 1);
+    expect(countFor(builds, "B", "food")).toBeGreaterThan(0);
+    // Co-built housing accompanies the production so it can be staffed.
+    expect(countFor(builds, "B", "housing")).toBeGreaterThan(0);
+  });
+
+  it("does not build where the good's deficit already has a reachable surplus", () => {
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+    };
+    const surplus: BuildSystemState = {
+      systemId: "S", factionId: "f1", population: 100, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 100, targetStock: 20, demand: 5 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 50, goods: [],
+    };
+    const builds = planFactionBuilds([deficit, surplus, builder], () => 1);
+    expect(countFor(builds, "B", "food")).toBe(0);
+  });
+
+  it("gates a tier-1+ build until its inputs are locally produced (the cascade)", () => {
+    // A: structural metals deficit. B: general space + budget but NO ore production and no reachable ore surplus.
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5 }],
+    };
+    const builderNoInput: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50, goods: [],
+    };
+    expect(countFor(planFactionBuilds([deficit, builderNoInput], () => 1), "B", "metals")).toBe(0);
+
+    // Same, but B locally produces ore → the metals factory becomes eligible.
+    const builderWithInput: BuildSystemState = {
+      ...builderNoInput, buildings: { ore: 5 },
+    };
+    expect(countFor(planFactionBuilds([deficit, builderWithInput], () => 1), "B", "metals")).toBeGreaterThan(0);
+  });
+
+  it("returns no builds when the faction has no structural deficits", () => {
+    const balanced: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
+      goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
+    };
+    expect(planFactionBuilds([balanced], () => 1)).toHaveLength(0);
   });
 });
