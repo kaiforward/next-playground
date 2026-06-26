@@ -25,12 +25,17 @@ import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastru
 import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
+import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
+import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
+import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { InjectionRequest } from "@/lib/tick/world/events-world";
 import type { EconomySignals, TickContext } from "@/lib/tick/types";
 import type { SimConstants } from "./constants";
@@ -358,10 +363,71 @@ async function processSimTradeFlow(
   };
 }
 
+// ── Directed logistics (delegates to the unified processor) ─────
+
+async function processSimDirectedLogistics(
+  world: SimWorld,
+  constants: SimConstants,
+): Promise<SimWorld> {
+  // Group markets by systemId for row construction.
+  const marketsBySystem = new Map<string, typeof world.markets>();
+  for (const m of world.markets) {
+    const list = marketsBySystem.get(m.systemId) ?? [];
+    list.push(m);
+    marketsBySystem.set(m.systemId, list);
+  }
+
+  // Build SystemLogisticsRow[] — give each market a synthetic id (SimMarketEntry has none).
+  const rows = world.systems.map((s) => ({
+    systemId: s.id,
+    factionId: s.factionId,
+    population: s.population,
+    buildings: s.buildings,
+    yields: s.yields,
+    markets: (marketsBySystem.get(s.id) ?? []).map((m) => ({
+      id: `${m.systemId}|${m.goodId}`,
+      goodId: m.goodId,
+      stock: m.stock,
+      basePrice: m.basePrice,
+      anchorMult: m.anchorMult,
+      demandRate: m.demandRate,
+      priceFloor: m.priceFloor,
+      priceCeiling: m.priceCeiling,
+      storageCapacity: m.storageCapacity,
+    })),
+  }));
+
+  // Build bounded hop distances from the sim connection graph (SimConnection ≡ ConnectionInfo).
+  const hops = computeBoundedHopDistances(world.connections, DIRECTED_LOGISTICS.MAX_HOPS);
+  const routeCost: RouteCost = (f, t) => {
+    const h = hops.get(f)?.get(t);
+    return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
+  };
+
+  const dlWorld = new MemoryDirectedLogisticsWorld(rows);
+
+  // Live INTERVAL = 2 × economy clock; preserve that relationship under sim overrides.
+  await runDirectedLogisticsProcessor(dlWorld, { tick: world.tick }, {
+    interval: 2 * constants.economy.interval,
+    routeCost,
+  });
+
+  // Write captured stock updates back into the sim world.
+  const updatedMarkets = world.markets.map((m) => {
+    const newStock = dlWorld.stockUpdates.get(`${m.systemId}|${m.goodId}`);
+    return newStock !== undefined ? { ...m, stock: newStock } : m;
+  });
+
+  // LogisticsFlowInsert ≡ SimFlowEvent — shapes match directly.
+  const updatedFlowEvents = [...world.flowEvents, ...dlWorld.flows];
+
+  return { ...world, markets: updatedMarkets, flowEvents: updatedFlowEvents };
+}
+
 // ── Main entry point ────────────────────────────────────────────
 
 /**
- * Simulate one world tick: ship arrivals → events → economy → population → migration → trade flow.
+ * Simulate one world tick: ship arrivals → events → economy → population → migration → trade flow → directed logistics.
  * Returns a new SimWorld. Async because the unified processors are async
  * (the in-memory adapters resolve immediately, but `await` still requires
  * an async caller).
@@ -379,5 +445,6 @@ export async function simulateWorldTick(
   w = await processSimPopulation(w, eco.signals, ctx.constants);
   w = await processSimMigration(w, ctx.constants);
   w = await processSimTradeFlow(w, ctx.constants);
+  w = await processSimDirectedLogistics(w, ctx.constants);
   return w;
 }
