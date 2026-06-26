@@ -39,6 +39,12 @@ export interface SimSystem {
   buildings: Record<string, number>;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
+  /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */
+  slotCap: ResourceVector;
+  /** Body-derived fungible build space — tier-1+ factories + housing draw here. */
+  generalSpace: number;
+  /** Habitable subset of build space — additionally caps housing. */
+  habitableSpace: number;
 }
 
 export interface SimConnection {

@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { SimSystem } from "@/lib/engine/simulator/types";
 
 function sys(id: string, buildings: Record<string, number>): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1",
     governmentType: "frontier", population: 100, popCap: 200, traits: [], bodyDanger: 0,
-    unrest: 0.3, buildings, yields: unitResourceVector(),
+    unrest: 0.3, buildings, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 

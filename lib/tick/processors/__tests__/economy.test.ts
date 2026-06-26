@@ -14,7 +14,7 @@ import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
 import { mulberry32 } from "@/lib/engine/universe-gen";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import { shardRange } from "@/lib/tick/shard";
 import type { TickContext } from "@/lib/tick/types";
@@ -63,6 +63,9 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
     unrest,
     buildings: { food: 2 },
     yields: unitResourceVector(),
+    slotCap: emptyResourceVector(),
+    generalSpace: 0,
+    habitableSpace: 0,
   };
 }
 
@@ -81,6 +84,9 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
     unrest,
     buildings: {},
     yields: unitResourceVector(),
+    slotCap: emptyResourceVector(),
+    generalSpace: 0,
+    habitableSpace: 0,
   };
 }
 
@@ -349,6 +355,9 @@ describe("economy processor: supply-chain input-gating", () => {
         unrest: 0,
         buildings: { metals: 2 }, // smelter only — no ore extractor
         yields: unitResourceVector(),
+        slotCap: emptyResourceVector(),
+        generalSpace: 0,
+        habitableSpace: 0,
       };
     }
 

@@ -25,7 +25,7 @@ import type {
   SimRegion,
   SimSystem,
 } from "@/lib/engine/simulator/types";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
   return { tx: undefined as never, tick, results: new Map() };
@@ -63,6 +63,9 @@ function buildFixture(): {
     unrest: 0,
     buildings: { food: 3 },
     yields: unitResourceVector(),
+    slotCap: emptyResourceVector(),
+    generalSpace: 0,
+    habitableSpace: 0,
   }));
 
   // High-pop consumers: food consumption ≈ 4/tick (0.004 × 1000), no production buildings.
@@ -80,6 +83,9 @@ function buildFixture(): {
     unrest: 0,
     buildings: {},
     yields: unitResourceVector(),
+    slotCap: emptyResourceVector(),
+    generalSpace: 0,
+    habitableSpace: 0,
   }));
 
   const systems = [...producers, ...consumers];

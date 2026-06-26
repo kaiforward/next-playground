@@ -83,6 +83,9 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       unrest: 0,
       buildings: s.buildings,
       yields: s.yieldMult,
+      slotCap: s.slotCap,
+      generalSpace: s.generalSpace,
+      habitableSpace: s.habitableSpace,
     };
   });
 

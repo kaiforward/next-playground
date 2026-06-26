@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { buildingProduction, labourFulfillment, labourDemand } from "@/lib/engine/industry";
-import { makeResourceVector, unitResourceVector } from "@/lib/engine/resources";
+import { makeResourceVector, unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { SimSystem, SimMarketEntry } from "@/lib/engine/simulator/types";
 
 function sys(overrides: Partial<SimSystem>): SimSystem {
@@ -10,7 +10,7 @@ function sys(overrides: Partial<SimSystem>): SimSystem {
     factionId: "f1", governmentType: "frontier",
     population: 1000, popCap: 1200,
     traits: [], bodyDanger: 0, unrest: 0, buildings: { ore: 5 },
-    yields: unitResourceVector(),
+    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...overrides,
   };
 }

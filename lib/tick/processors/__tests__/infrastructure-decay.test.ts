@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickContext, EconomySignals } from "@/lib/tick/types";
 import type { SimSystem } from "@/lib/engine/simulator/types";
 
@@ -11,6 +11,7 @@ function sys(id: string, over: Partial<SimSystem>): SimSystem {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1",
     governmentType: "frontier", population: 100, popCap: 200, traits: [], bodyDanger: 0,
     unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, yields: unitResourceVector(),
+    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...over,
   };
 }

@@ -5,7 +5,7 @@ import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 } };
 
@@ -13,7 +13,7 @@ function sys(id: string, population: number, popCap: number, unrest = 0, buildin
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation",
     population, popCap, unrest, traits: [], bodyDanger: 0, buildings,
-    yields: unitResourceVector(),
+    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 function market(systemId: string, goodId: string): SimMarketEntry {
