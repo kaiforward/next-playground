@@ -41,7 +41,7 @@ describe("matchFactionTransfers", () => {
   });
 
   it("never draws a source below its own floor", () => {
-    const surplus = sys("A", 100, { goodId: "food", stock: 12, minStock: 10, maxStock: 100, demand: 5 });
+    const surplus = sys("A", 100, { goodId: "food", stock: 12, minStock: 10, maxStock: 12, demand: 5 });
     const deficit = sys("B", 0, { goodId: "food", stock: 0, minStock: 10, maxStock: 100, demand: 5 });
     const transfers = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers[0].quantity).toBe(2); // drawable = 12 - 10
