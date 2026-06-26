@@ -52,14 +52,14 @@ describe("runDirectedLogisticsProcessor (body)", () => {
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
-    const world = new MemoryDirectedLogisticsWorld(systems, new Map([["food", "good-food"]]));
+    const world = new MemoryDirectedLogisticsWorld(systems);
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
       { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(1);
-    expect(world.flows[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", goodId: "good-food" });
+    expect(world.flows[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", goodId: "food" });
     expect(world.flows[0].quantity).toBeGreaterThan(0);
     // both market stocks were written (source down, dest up)
     expect(world.stockUpdates.has("mA")).toBe(true);
@@ -68,7 +68,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
 
   it("does nothing for an empty world", async () => {
     // empty world → getFactionShardKeys() returns [] → factionKeys.length === 0 → early return (before shardRange)
-    const world = new MemoryDirectedLogisticsWorld([], new Map());
+    const world = new MemoryDirectedLogisticsWorld([]);
     await runDirectedLogisticsProcessor(
       world,
       { tick: 7 },
@@ -90,7 +90,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
-    const world = new MemoryDirectedLogisticsWorld(systems, new Map([["food", "good-food"]]));
+    const world = new MemoryDirectedLogisticsWorld(systems);
     await runDirectedLogisticsProcessor(
       world,
       { tick: 0 },

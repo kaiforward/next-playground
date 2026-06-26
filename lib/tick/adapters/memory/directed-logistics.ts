@@ -10,10 +10,7 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   readonly stockUpdates = new Map<string, number>();
   readonly flows: LogisticsFlowInsert[] = [];
 
-  constructor(
-    private readonly systems: SystemLogisticsRow[],
-    private readonly goodIdByKey: Map<string, string> = new Map(),
-  ) {}
+  constructor(private readonly systems: SystemLogisticsRow[]) {}
 
   async getFactionShardKeys(): Promise<Array<string | null>> {
     const seen = new Set<string | null>();
@@ -24,10 +21,6 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   async getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]> {
     const set = new Set(factionKeys);
     return this.systems.filter((s) => set.has(s.factionId));
-  }
-
-  async resolveGoodIds(): Promise<Map<string, string>> {
-    return this.goodIdByKey;
   }
 
   async applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void> {

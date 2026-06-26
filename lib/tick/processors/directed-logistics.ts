@@ -7,7 +7,6 @@ import {
   labourDemand,
   labourFulfillment,
 } from "@/lib/engine/industry";
-import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import {
   matchFactionTransfers,
   systemLogisticsGeneration,
@@ -37,11 +36,11 @@ function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
 
   const goods: GoodMarketState[] = [];
+  // m.goodId is the good KEY (normalised by the adapter), matching consumption/industry maps.
   for (const m of row.markets) {
-    const goodKey = GOOD_NAME_TO_KEY.get(m.goodId) ?? m.goodId;
     const band = marketBandForRow(m, m);
-    const civ = consByKey.get(goodKey) ?? 0;
-    const industrial = inputDemandForGood(row.buildings, goodKey, fulfillment, row.yields);
+    const civ = consByKey.get(m.goodId) ?? 0;
+    const industrial = inputDemandForGood(row.buildings, m.goodId, fulfillment, row.yields);
     goods.push({
       goodId: m.goodId,
       stock: m.stock,
@@ -80,7 +79,6 @@ export async function runDirectedLogisticsProcessor(
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
 
-  const goodKeyToId = await world.resolveGoodIds();
   const catchUp = catchUpFactor(params.interval);
 
   // Group rows by faction key, build engine state, match each group.
@@ -134,12 +132,12 @@ export async function runDirectedLogisticsProcessor(
     updates.set(from.id, fromCur - moved);
     updates.set(to.id, toCur + moved);
 
-    const dbGoodId = goodKeyToId.get(GOOD_NAME_TO_KEY.get(t.goodId) ?? t.goodId) ?? t.goodId;
+    // t.goodId is already the good KEY — write it directly, matching trade-flow convention.
     flows.push({
       tick: ctx.tick,
       fromSystemId: t.fromSystemId,
       toSystemId: t.toSystemId,
-      goodId: dbGoodId,
+      goodId: t.goodId,
       quantity: moved,
     });
   }

@@ -48,8 +48,6 @@ export interface DirectedLogisticsWorld {
   getFactionShardKeys(): Promise<Array<string | null>>;
   /** All systems (with markets) belonging to the given faction keys. */
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]>;
-  /** Map good KEY → DB good id (TradeFlow/market rows key differ from good KEY). */
-  resolveGoodIds(): Promise<Map<string, string>>;
   /** Bulk absolute stock writes (already clamped). */
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows (flowType = "logistics"). */
