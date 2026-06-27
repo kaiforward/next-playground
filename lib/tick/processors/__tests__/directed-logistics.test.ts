@@ -77,7 +77,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1, contractCount: 0, contractTerms: () => null },
     );
     expect(world.flows).toHaveLength(1);
     expect(world.flows[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", goodId: "food" });
@@ -93,7 +93,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 7 },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1, contractCount: 0, contractTerms: () => null },
     );
     expect(world.flows).toHaveLength(0);
   });
@@ -115,9 +115,75 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 0 },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1, contractCount: 0, contractTerms: () => null },
     );
     expect(world.flows).toHaveLength(0);
     expect(world.stockUpdates.size).toBe(0);
+  });
+});
+
+describe("runDirectedLogisticsProcessor — Contracts", () => {
+  const noTerms = () => null;
+
+  it("diverts the matched transfer into a Contract instead of a silent move", async () => {
+    const systems = [
+      { systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+      { systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: DIRECTED_LOGISTICS.INTERVAL,
+      routeCost: () => 1,
+      contractCount: 1,
+      contractTerms: ({ quantity }) => ({ reward: quantity * 2, deadlineTick: DUE_TICK + 48 }),
+    });
+    // The one transfer became a Contract: no silent flow, no stock move at creation.
+    expect(world.createdContracts).toHaveLength(1);
+    expect(world.createdContracts[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", goodId: "food" });
+    expect(world.flows).toHaveLength(0);
+    expect(world.stockUpdates.size).toBe(0);
+  });
+
+  it("hauls an expired unclaimed Contract itself (timeout-resolve), then closes it", async () => {
+    const systems = [
+      { systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+      { systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+    ];
+    const expired = [{ id: "c1", fromSystemId: "A", toSystemId: "B", goodId: "food", quantity: 6 }];
+    const world = new MemoryDirectedLogisticsWorld(systems, expired);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: DIRECTED_LOGISTICS.INTERVAL,
+      routeCost: () => 1,
+      contractCount: 0,        // no new Contracts; isolate the resolve path
+      contractTerms: noTerms,
+    });
+    expect(world.closedContractIds).toEqual(["c1"]);
+    // The haul produced a logistics flow A→B and moved stock.
+    const haul = world.flows.find((f) => f.fromSystemId === "A" && f.toSystemId === "B");
+    expect(haul?.quantity).toBe(6);
+    expect(world.stockUpdates.has("mA")).toBe(true);
+    expect(world.stockUpdates.has("mB")).toBe(true);
+  });
+
+  it("contractCount 0 → no Contracts created (pure silent, the sim path)", async () => {
+    const systems = [
+      { systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+      { systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: DIRECTED_LOGISTICS.INTERVAL,
+      routeCost: () => 1,
+      contractCount: 0,
+      contractTerms: noTerms,
+    });
+    expect(world.createdContracts).toHaveLength(0);
+    expect(world.flows).toHaveLength(1); // still moved silently
   });
 });

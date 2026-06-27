@@ -413,6 +413,8 @@ async function processSimDirectedLogistics(
   await runDirectedLogisticsProcessor(dlWorld, { tick: world.tick }, {
     interval: 2 * constants.economy.interval,
     routeCost,
+    contractCount: 0,          // sim has no players → all volume moves silently (no Contract churn)
+    contractTerms: () => null,
   });
 
   // Write captured stock updates back into the sim world.
