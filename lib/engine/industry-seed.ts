@@ -153,7 +153,7 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
   // habitable subset of space and by the general space the factories left behind.
   const wantedPopCentres = labourDemand(buildings) / POP_CENTRE_DENSITY;
   const popCost = effectiveSpaceCost(HOUSING_TYPE);
-  const habitableAffordable = habitableSpace / popCost;
+  const habitableAffordable = (habitableSpace * SUBSTRATE_GEN.SEED_HOUSING_FRACTION) / popCost;
   const generalRemainingAffordable = (generalSpace - factoryUsed) / popCost;
   const popCentreCount = Math.max(
     0,

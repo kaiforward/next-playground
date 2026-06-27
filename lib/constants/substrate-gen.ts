@@ -35,12 +35,13 @@ export const SUBSTRATE_GEN = {
   /** Reference habitable space treated as "fully developable" for the seed-fill curve. P4-tuned; not load-bearing for invariants. */
   HABITABLE_REF: 25,
   /**
-   * Validation lever: multiplies the seeded development fill so systems start BELOW
-   * their substrate potential, letting the autonomic build be observed climbing toward
-   * it (the loop is idle at potential). 1 = production (seed at potential). Lower for
-   * the seed-below-potential harness (e.g. 0.5). See docs/plans/sp5-autonomic-build-design.md.
+   * Fraction of a system's habitable space seeded as housing. Below 1 leaves habitable
+   * headroom so the autonomic build (housing → population → industry) has room to climb
+   * toward potential — i.e. the galaxy seeds as a developing one, not at capacity.
+   * Industry follows automatically: the staffing-self-consistency pass scales seeded
+   * industry down to staff the reduced population. Tunable (0.25 / 0.5 / 0.75).
    */
-  SEED_FILL_MULT: 1,
+  SEED_HOUSING_FRACTION: 0.5,
 } as const;
 
 export interface QualityBand {
