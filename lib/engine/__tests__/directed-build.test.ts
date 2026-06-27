@@ -449,3 +449,37 @@ describe("planFactionBuilds — spare-labour gate", () => {
     expect(built).toBeLessThanOrEqual(4 + 1e-9);
   });
 });
+
+describe("planFactionBuilds — idle at potential & barren worlds", () => {
+  it("builds nothing at a system already at its potential", () => {
+    // Housing fills the habitable cap (5 units → popCap 100); population 100 == popCap and
+    // == labourDemand (4 ore × 25), so spareLabour 0; ore market balanced → no deficit.
+    const slotCap = emptyResourceVector();
+    slotCap.ore = 4;
+    const atPotential: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, unrest: 0,
+      buildings: { housing: 5, ore: 4 },
+      slotCap, generalSpace: 9, habitableSpace: 5,
+      goods: [{ goodId: "ore", stock: 50, targetStock: 50, demand: 20 }],
+    };
+    expect(planFactionBuilds([atPotential], () => 1)).toHaveLength(0);
+  });
+
+  it("does not work deposit slots on a barren, low-habitable world", () => {
+    // 56 ore slots but ~no habitable land → can't house labour → spareLabour 0 → no extraction.
+    const slotCap = emptyResourceVector();
+    slotCap.ore = 56;
+    const barren: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 3, unrest: 0,
+      buildings: { ore: 0.12 }, // 0.12 × 25 = 3 labour == population → spareLabour 0
+      slotCap, generalSpace: 60, habitableSpace: 0.001,
+      goods: [],
+    };
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, unrest: 0, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50 }],
+    };
+    expect(countFor(planFactionBuilds([barren, deficit], () => 1), "B", "ore")).toBe(0);
+  });
+});
