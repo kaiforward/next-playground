@@ -1,10 +1,11 @@
 /**
- * Pure directed-build planning — zero DB dependency. The faction build planner:
- * given each system's market state + buildable capacity and a route-cost function,
- * find structural deficits (a deficit with no reachable surplus) and decide what
- * production (+ co-built housing) to add where, demand-pulled. The processor maps
- * DB/sim rows into BuildSystemState and applies the returned PlannedBuild[].
- * See docs/plans/sp5-stage1-seed-coherence-design.md.
+ * Pure directed-build planning — zero DB dependency. Two-pass faction build planner:
+ * (1) Proactive housing pass — housing leads population, building ahead of the
+ *     habitable cap at fed-and-calm systems before industry claims the space.
+ * (2) Demand-pulled, labour-gated industry pass — finds structural deficits (a
+ *     deficit with no reachable surplus) and allocates production capacity, capped
+ *     to what the already-resident population can staff (no co-built housing here).
+ * The processor maps DB/sim rows into BuildSystemState and applies the returned PlannedBuild[].
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -365,7 +366,15 @@ export function planFactionBuilds(
     }
     if (servedOutput <= 0) continue;
 
-    const wantUnits = Math.min(capUnits, servedOutput / opp.perUnit, budget);
+    // Spare-labour gate: a site may add only the production its already-resident
+    // population can staff (population − labour already demanded). Housing built this
+    // cycle adds no labour now — population fills it over later ticks — so industry
+    // follows the people who already live there, never population that doesn't yet exist.
+    const labourPerUnit = BUILDING_TYPES[opp.goodId]?.labourPerUnit ?? 0;
+    const spareLabour = Math.max(0, site.population - labourDemand(site.buildings));
+    const labourCapUnits = labourPerUnit > 0 ? spareLabour / labourPerUnit : Infinity;
+
+    const wantUnits = Math.min(capUnits, servedOutput / opp.perUnit, budget, labourCapUnits);
     if (wantUnits <= 0) continue;
 
     // Apply the production build to the working copy + emit it.

@@ -415,3 +415,37 @@ describe("plannedHousingUnits", () => {
     expect(units).toBeCloseTo(5);
   });
 });
+
+describe("planFactionBuilds — spare-labour gate", () => {
+  // A: ore-starved consumer (pop 0). B: builder with ore slots + general space but NO
+  // habitable land (so the housing pass never interferes — this isolates industry).
+  function deficitAndBuilder(builderPop: number, builderBuildings: Record<string, number>): BuildSystemState[] {
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    return [
+      {
+        systemId: "A", factionId: "f1", population: 0, unrest: 0, buildings: {},
+        slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+        goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50 }],
+      },
+      {
+        systemId: "B", factionId: "f1", population: builderPop, unrest: 0, buildings: builderBuildings,
+        slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+      },
+    ];
+  }
+
+  it("builds no industry when the builder has no spare labour", () => {
+    // pop 100 fully absorbed by 4 ore extractors (4 × 25 = 100 labour) → spareLabour 0.
+    const builds = planFactionBuilds(deficitAndBuilder(100, { ore: 4 }), () => 1);
+    expect(countFor(builds, "B", "ore")).toBe(0);
+  });
+
+  it("caps industry at the spare labour the resident population supports", () => {
+    // pop 200, 4 ore extractors demand 100 → spareLabour 100 → ≤ 100/25 = 4 new units.
+    const builds = planFactionBuilds(deficitAndBuilder(200, { ore: 4 }), () => 1);
+    const built = countFor(builds, "B", "ore");
+    expect(built).toBeGreaterThan(0);
+    expect(built).toBeLessThanOrEqual(4 + 1e-9);
+  });
+});
