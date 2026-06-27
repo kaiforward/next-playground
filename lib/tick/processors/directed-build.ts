@@ -2,7 +2,7 @@ import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
 import { PrismaDirectedBuildWorld } from "@/lib/tick/adapters/prisma/directed-build";
 import { loadHopDistances } from "@/lib/services/hop-distances";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { shardRange, catchUpFactor } from "@/lib/tick/shard";
+import { shardRange } from "@/lib/tick/shard";
 import { planFactionBuilds, type BuildSystemState } from "@/lib/engine/directed-build";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
@@ -36,8 +36,9 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
  * Pure processor body. PER-FACTION shard (mirrors directed-logistics): a contiguous
  * window of the stable faction-key order runs each tick, so every faction is planned
  * once per `interval` ticks. The build engine returns production + housing builds; we
- * apply them as building-count increments (continuous Float), scaled to wall-clock by
- * the catch-up factor. Removal stays disuse-decay's job — this only adds.
+ * apply them as building-count increments (continuous Float). The engine bounds each
+ * build to the site's remaining capacity, so counts never exceed capacity. Removal
+ * stays disuse-decay's job — this only adds.
  */
 export async function runDirectedBuildProcessor(
   world: DirectedBuildWorld,
@@ -53,8 +54,6 @@ export async function runDirectedBuildProcessor(
 
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
-
-  const catchUp = catchUpFactor(params.interval);
 
   // Group rows by faction; plan each faction independently.
   const byFaction = new Map<string | null, SystemBuildRow[]>();
@@ -80,15 +79,17 @@ export async function runDirectedBuildProcessor(
   }
   if (addedBySystem.size === 0) return {};
 
-  // Emit absolute new counts = current + added × catch-up (continuous; counts are Float).
+  // Emit absolute new counts = current + added (continuous Float). The engine already
+  // bounds `added` to each site's remaining capacity, so cur + added never exceeds the
+  // capacity cap. The per-cycle build budget already represents one shard cycle, so no
+  // catch-up scaling is applied (scaling the capacity-bounded output would overshoot it).
   const updates: BuildBuildingUpdate[] = [];
   for (const [systemId, byType] of addedBySystem) {
     const current = currentBySystem.get(systemId);
     for (const [buildingType, added] of byType) {
-      const scaled = added * catchUp;
-      if (!Number.isFinite(scaled) || scaled <= 0) continue;
+      if (!Number.isFinite(added) || added <= 0) continue;
       const cur = current?.[buildingType] ?? 0;
-      updates.push({ systemId, buildingType, count: cur + scaled });
+      updates.push({ systemId, buildingType, count: cur + added });
     }
   }
   if (updates.length > 0) await world.applyBuildingIncreases(updates);

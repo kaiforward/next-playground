@@ -27,7 +27,7 @@ function builderSlots(n: number) {
 }
 
 // A: deep structural food deficit, no capacity. B: builder with arable slots + budget, reachable from A.
-function scenario(bFood: number, bHousing: number): SystemBuildRow[] {
+function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[] {
   return [
     {
       systemId: "A", factionId: "f1", population: 100, buildings: {},
@@ -36,7 +36,7 @@ function scenario(bFood: number, bHousing: number): SystemBuildRow[] {
     },
     {
       systemId: "B", factionId: "f1", population: 5000, buildings: { food: bFood, housing: bHousing },
-      yields: unitResourceVector(), slotCap: builderSlots(20),
+      yields: unitResourceVector(), slotCap: builderSlots(slots),
       generalSpace: 100, habitableSpace: 100, markets: [],
     },
   ];
@@ -64,15 +64,41 @@ describe("runDirectedBuildProcessor", () => {
   });
 
   it("develops a hand-seeded world: keeps building toward the unmet deficit across cycles", async () => {
+    // Builder cap (1000 slots) far exceeds one cycle's build budget, so it fills
+    // gradually: cycle 2 must add more on top of cycle 1's count (not cap out in one).
     // Cycle 1 from a blank builder; feed its output counts back as cycle-2 input so increments persist.
-    const w1 = new MemoryDirectedBuildWorld(scenario(0, 0));
+    const w1 = new MemoryDirectedBuildWorld(scenario(0, 0, 1000));
     await runDirectedBuildProcessor(w1, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
     const food1 = countOf(w1, "B", "food");
     expect(food1).toBeGreaterThan(0);
 
-    const w2 = new MemoryDirectedBuildWorld(scenario(food1, countOf(w1, "B", "housing")));
+    const w2 = new MemoryDirectedBuildWorld(scenario(food1, countOf(w1, "B", "housing"), 1000));
     await runDirectedBuildProcessor(w2, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
     expect(countOf(w2, "B", "food")).toBeGreaterThan(food1);
+  });
+
+  it("never builds past capacity, even when the catch-up factor exceeds 1", async () => {
+    // The live INTERVAL (48) is 2× the reference interval, so catchUpFactor = 2. The
+    // build budget is per-cycle, so the planner already plans one cycle's worth and the
+    // capacity-bounded output must be written as-is — a builder with a 10-slot arable cap
+    // and ample budget must end at ≤ 10 food, never 20.
+    const rows: SystemBuildRow[] = [
+      {
+        systemId: "A", factionId: "f1", population: 100, buildings: {},
+        yields: unitResourceVector(), slotCap: emptyResourceVector(),
+        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 5000, buildings: {},
+        yields: unitResourceVector(), slotCap: builderSlots(10),
+        generalSpace: 0, habitableSpace: 0, markets: [],
+      },
+    ];
+    const w = new MemoryDirectedBuildWorld(rows);
+    await runDirectedBuildProcessor(w, { tick: 47 }, { interval: 48, routeCost: reachable });
+    const food = countOf(w, "B", "food");
+    expect(food).toBeGreaterThan(0);
+    expect(food).toBeLessThanOrEqual(10);
   });
 
   it("returns no writes when there are no structural deficits", async () => {
