@@ -3,8 +3,10 @@ import {
   systemLogisticsGeneration,
   matchFactionTransfers,
   classifyMarketState,
+  splitContractTransfers,
   type SystemLogisticsState,
   type RouteCost,
+  type PlannedTransfer,
 } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
@@ -168,5 +170,38 @@ describe("matchFactionTransfers", () => {
     const transfers = matchFactionTransfers([surplus, importer], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
+  });
+});
+
+describe("splitContractTransfers", () => {
+  const t = (id: string, cost: number): PlannedTransfer => ({
+    goodId: "food", fromSystemId: "A", toSystemId: id, quantity: 10, cost,
+  });
+
+  it("takes the top-`count` by descending cost as contracts, rest silent", () => {
+    const transfers = [t("B", 5), t("C", 20), t("D", 12)];
+    const { contracts, silent } = splitContractTransfers(transfers, 2);
+    expect(contracts.map((x) => x.toSystemId)).toEqual(["C", "D"]); // 20, 12
+    expect(silent.map((x) => x.toSystemId)).toEqual(["B"]);         // 5
+  });
+
+  it("count >= length → everything is a contract", () => {
+    const transfers = [t("B", 5), t("C", 20)];
+    const { contracts, silent } = splitContractTransfers(transfers, 9);
+    expect(contracts).toHaveLength(2);
+    expect(silent).toHaveLength(0);
+  });
+
+  it("count <= 0 → everything is silent (the simulator path)", () => {
+    const transfers = [t("B", 5), t("C", 20)];
+    const { contracts, silent } = splitContractTransfers(transfers, 0);
+    expect(contracts).toHaveLength(0);
+    expect(silent).toEqual(transfers);
+  });
+
+  it("breaks cost ties by original order (deterministic)", () => {
+    const transfers = [t("B", 7), t("C", 7), t("D", 7)];
+    const { contracts } = splitContractTransfers(transfers, 2);
+    expect(contracts.map((x) => x.toSystemId)).toEqual(["B", "C"]);
   });
 });

@@ -144,3 +144,29 @@ export function matchFactionTransfers(
 
   return transfers;
 }
+
+/**
+ * Split matched transfers into the top-`count` most valuable — `cost` ≈ quantity ×
+ * route distance ≈ player payout — exposed as player Contracts, and the cheaper
+ * remainder, which move silently. Tie-broken by original order so the split is
+ * deterministic. `count <= 0` (the simulator) → everything silent.
+ */
+export function splitContractTransfers(
+  transfers: PlannedTransfer[],
+  count: number,
+): { contracts: PlannedTransfer[]; silent: PlannedTransfer[] } {
+  if (count <= 0 || transfers.length === 0) {
+    return { contracts: [], silent: [...transfers] };
+  }
+  const ranked = transfers
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => b.t.cost - a.t.cost || a.i - b.i);
+  const contractIdx = new Set(ranked.slice(0, count).map((r) => r.i));
+  const contracts: PlannedTransfer[] = [];
+  const silent: PlannedTransfer[] = [];
+  transfers.forEach((t, i) => {
+    if (contractIdx.has(i)) contracts.push(t);
+    else silent.push(t);
+  });
+  return { contracts, silent };
+}
