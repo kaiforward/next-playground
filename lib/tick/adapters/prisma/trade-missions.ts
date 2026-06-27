@@ -2,11 +2,9 @@ import type { TxClient, PlayerEventMap } from "@/lib/tick/types";
 import type {
   AcceptedMissionView,
   ActiveEventView,
-  MarketPriceView,
   MissionCreate,
   TradeMissionsWorld,
 } from "@/lib/tick/world/trade-missions-world";
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { persistPlayerNotifications } from "@/lib/tick/helpers";
 import { toEventTypeId } from "@/lib/types/guards";
@@ -17,7 +15,7 @@ export class PrismaTradeMissionsWorld implements TradeMissionsWorld {
 
   async expireUnclaimedMissions(currentTick: number): Promise<number> {
     const result = await this.tx.tradeMission.deleteMany({
-      where: { deadlineTick: { lte: currentTick }, playerId: null },
+      where: { deadlineTick: { lte: currentTick }, playerId: null, origin: { not: "logistics" } },
     });
     return result.count;
   }
@@ -49,37 +47,6 @@ export class PrismaTradeMissionsWorld implements TradeMissionsWorld {
   async deleteMissions(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.tx.tradeMission.deleteMany({ where: { id: { in: ids } } });
-  }
-
-  async getSystemIds(): Promise<string[]> {
-    const rows = await this.tx.starSystem.findMany({
-      select: { id: true },
-      orderBy: { id: "asc" },
-    });
-    return rows.map((r) => r.id);
-  }
-
-  async getMarketPricesForSystems(systemIds: string[]): Promise<MarketPriceView[]> {
-    if (systemIds.length === 0) return [];
-    const rows = await this.tx.stationMarket.findMany({
-      where: { station: { systemId: { in: systemIds } } },
-      include: {
-        good: true,
-        station: { select: { systemId: true } },
-      },
-    });
-    return rows.map((m) => {
-      const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.id;
-      return {
-        systemId: m.station.systemId,
-        goodId: goodKey,
-        currentPrice: spotPrice(
-          curveForGood(m.good.basePrice, m.good.priceFloor, m.good.priceCeiling, m.demandRate, m.anchorMult),
-          m.stock,
-        ),
-        basePrice: m.good.basePrice,
-      };
-    });
   }
 
   async getActiveEvents(): Promise<ActiveEventView[]> {
@@ -119,7 +86,9 @@ export class PrismaTradeMissionsWorld implements TradeMissionsWorld {
 
   async createMissions(rows: MissionCreate[]): Promise<void> {
     if (rows.length === 0) return;
-    await this.tx.tradeMission.createMany({ data: rows });
+    await this.tx.tradeMission.createMany({
+      data: rows.map((r) => ({ ...r, origin: "event" as const })),
+    });
   }
 
   async persistNotifications(

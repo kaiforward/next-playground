@@ -7,13 +7,6 @@ import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 
 // ── Types ───────────────────────────────────────────────────────
 
-export interface MarketSnapshot {
-  systemId: string;
-  goodId: string;
-  currentPrice: number;
-  basePrice: number;
-}
-
 export interface MissionCandidate {
   systemId: string;
   destinationId: string;
@@ -62,86 +55,6 @@ export function calculateReward(
 
   const raw = REWARD_PER_UNIT * quantity * distMult * tierMult * eventMult;
   return Math.max(REWARD_MIN, Math.floor(raw));
-}
-
-// ── Economy-based candidate generation ──────────────────────────
-
-/**
- * Generate mission candidates from market conditions.
- * High-price markets → import missions (dest = that system).
- * Low-price markets → export missions (source = that system, dest = random neighbor).
- */
-export function selectEconomyCandidates(
-  markets: MarketSnapshot[],
-  hopDistances: Map<string, Map<string, number>>,
-  goodTiers: Record<string, number>,
-  tick: number,
-  rng: () => number,
-): MissionCandidate[] {
-  const {
-    HIGH_PRICE_THRESHOLD,
-    LOW_PRICE_THRESHOLD,
-    ECONOMY_GEN_PROBABILITY,
-    DEADLINE_TICKS,
-    QUANTITY_RANGE,
-    MAX_EXPORT_DISTANCE,
-  } = MISSION_CONSTANTS;
-
-  const candidates: MissionCandidate[] = [];
-
-  for (const market of markets) {
-    const ratio = market.currentPrice / market.basePrice;
-
-    if (ratio > HIGH_PRICE_THRESHOLD) {
-      // Import mission: "We need X, bring it here"
-      if (rng() > ECONOMY_GEN_PROBABILITY) continue;
-
-      const quantity = QUANTITY_RANGE[0] + Math.floor(rng() * (QUANTITY_RANGE[1] - QUANTITY_RANGE[0] + 1));
-      const tier = goodTiers[market.goodId] ?? 0;
-      // Import: destination is the same system, hops=0 for self-delivery reward base
-      // But we need a hops estimate for reward — use 1 as minimum since player must come from elsewhere
-      const reward = calculateReward(quantity, 1, tier, false);
-
-      candidates.push({
-        systemId: market.systemId,
-        destinationId: market.systemId,
-        goodId: market.goodId,
-        quantity,
-        reward,
-        deadlineTick: tick + DEADLINE_TICKS,
-        eventId: null,
-      });
-    } else if (ratio < LOW_PRICE_THRESHOLD) {
-      // Export mission: "We have surplus X, deliver to Y"
-      if (rng() > ECONOMY_GEN_PROBABILITY) continue;
-
-      const distances = hopDistances.get(market.systemId);
-      if (!distances) continue;
-
-      // Pick a random destination 1-MAX_EXPORT_DISTANCE hops away
-      const eligible = [...distances.entries()].filter(
-        ([id, hops]) => id !== market.systemId && hops >= 1 && hops <= MAX_EXPORT_DISTANCE,
-      );
-      if (eligible.length === 0) continue;
-
-      const [destId, hops] = eligible[Math.floor(rng() * eligible.length)];
-      const quantity = QUANTITY_RANGE[0] + Math.floor(rng() * (QUANTITY_RANGE[1] - QUANTITY_RANGE[0] + 1));
-      const tier = goodTiers[market.goodId] ?? 0;
-      const reward = calculateReward(quantity, hops, tier, false);
-
-      candidates.push({
-        systemId: market.systemId,
-        destinationId: destId,
-        goodId: market.goodId,
-        quantity,
-        reward,
-        deadlineTick: tick + DEADLINE_TICKS,
-        eventId: null,
-      });
-    }
-  }
-
-  return candidates;
 }
 
 // ── Event-based candidate generation ────────────────────────────

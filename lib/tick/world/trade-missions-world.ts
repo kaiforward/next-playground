@@ -20,15 +20,6 @@ export interface AcceptedMissionView {
   destinationName: string;
 }
 
-/** Per-market price snapshot used by the candidate selection engine. */
-export interface MarketPriceView {
-  systemId: string;
-  /** Canonical good key (already resolved from DB good.name). */
-  goodId: string;
-  currentPrice: number;
-  basePrice: number;
-}
-
 /** Active event with a non-null systemId (the selector filters those out anyway). */
 export interface ActiveEventView {
   id: string;
@@ -57,16 +48,6 @@ export interface TradeMissionsWorld {
 
   /** Delete missions by id. */
   deleteMissions(ids: string[]): Promise<void>;
-
-  /** All system ids, stably sorted by id (shard-range input). */
-  getSystemIds(): Promise<string[]>;
-
-  /**
-   * Market price snapshots for stations in the given systems. Returns [] for
-   * an empty list. Adapters resolve goodIds to canonical keys so the processor
-   * body never reaches into the good name map.
-   */
-  getMarketPricesForSystems(systemIds: string[]): Promise<MarketPriceView[]>;
 
   /** Active events with a non-null systemId. */
   getActiveEvents(): Promise<ActiveEventView[]>;

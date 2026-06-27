@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateReward,
-  selectEconomyCandidates,
   selectEventCandidates,
   validateAccept,
   validateDelivery,
-  type MarketSnapshot,
   type MissionEventSnapshot,
 } from "../missions";
 import { MISSION_CONSTANTS } from "@/lib/constants/missions";
@@ -14,24 +12,6 @@ import { MISSION_CONSTANTS } from "@/lib/constants/missions";
 
 /** Deterministic RNG that always returns the given value. */
 const fixedRng = (value: number) => () => value;
-
-/** Build a simple hop distance map for testing. */
-function makeHopDistances(
-  entries: [string, string, number][],
-): Map<string, Map<string, number>> {
-  const result = new Map<string, Map<string, number>>();
-  for (const [from, to, hops] of entries) {
-    if (!result.has(from)) result.set(from, new Map());
-    result.get(from)!.set(to, hops);
-    // Also add self-distance
-    result.get(from)!.set(from, 0);
-    // Add reverse
-    if (!result.has(to)) result.set(to, new Map());
-    result.get(to)!.set(from, hops);
-    result.get(to)!.set(to, 0);
-  }
-  return result;
-}
 
 const goodTiers: Record<string, number> = {
   food: 0,
@@ -85,81 +65,6 @@ describe("calculateReward", () => {
   it("returns integer values", () => {
     const reward = calculateReward(33, 2, 1, true);
     expect(reward).toBe(Math.floor(reward));
-  });
-});
-
-// ── selectEconomyCandidates ─────────────────────────────────────
-
-describe("selectEconomyCandidates", () => {
-  const hopDist = makeHopDistances([
-    ["sys-a", "sys-b", 1],
-    ["sys-a", "sys-c", 2],
-    ["sys-b", "sys-c", 1],
-  ]);
-
-  it("generates import mission for high-price market", () => {
-    const markets: MarketSnapshot[] = [
-      { systemId: "sys-a", goodId: "food", currentPrice: 100, basePrice: 30 }, // ratio 3.33
-    ];
-
-    // rng returns 0.0 to pass probability check, then 0.5 for quantity
-    let callCount = 0;
-    const rng = () => {
-      callCount++;
-      return callCount === 1 ? 0.0 : 0.5;
-    };
-
-    const candidates = selectEconomyCandidates(markets, hopDist, goodTiers, 100, rng);
-    expect(candidates).toHaveLength(1);
-
-    const c = candidates[0];
-    expect(c.systemId).toBe("sys-a");
-    expect(c.destinationId).toBe("sys-a"); // Import: same system
-    expect(c.goodId).toBe("food");
-    expect(c.eventId).toBeNull();
-    expect(c.deadlineTick).toBe(100 + MISSION_CONSTANTS.DEADLINE_TICKS);
-  });
-
-  it("generates export mission for low-price market", () => {
-    const markets: MarketSnapshot[] = [
-      { systemId: "sys-a", goodId: "food", currentPrice: 10, basePrice: 30 }, // ratio 0.33
-    ];
-
-    // rng: 0.0 (prob), 0.0 (dest pick), 0.5 (quantity)
-    let callCount = 0;
-    const rng = () => {
-      callCount++;
-      if (callCount === 1) return 0.0; // pass probability
-      if (callCount === 2) return 0.0; // pick first destination
-      return 0.5; // quantity
-    };
-
-    const candidates = selectEconomyCandidates(markets, hopDist, goodTiers, 100, rng);
-    expect(candidates).toHaveLength(1);
-
-    const c = candidates[0];
-    expect(c.systemId).toBe("sys-a");
-    expect(c.destinationId).not.toBe("sys-a"); // Export: different system
-    expect(c.goodId).toBe("food");
-  });
-
-  it("skips markets that don't pass probability roll", () => {
-    const markets: MarketSnapshot[] = [
-      { systemId: "sys-a", goodId: "food", currentPrice: 100, basePrice: 30 },
-    ];
-
-    // rng returns 1.0 → fails probability check (> 0.08)
-    const candidates = selectEconomyCandidates(markets, hopDist, goodTiers, 100, fixedRng(1.0));
-    expect(candidates).toHaveLength(0);
-  });
-
-  it("skips markets in normal price range", () => {
-    const markets: MarketSnapshot[] = [
-      { systemId: "sys-a", goodId: "food", currentPrice: 30, basePrice: 30 }, // ratio 1.0
-    ];
-
-    const candidates = selectEconomyCandidates(markets, hopDist, goodTiers, 100, fixedRng(0.0));
-    expect(candidates).toHaveLength(0);
   });
 });
 
