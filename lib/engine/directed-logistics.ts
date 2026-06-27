@@ -46,8 +46,10 @@ export interface GoodMarketState {
   stock: number;
   /** Days-of-supply price anchor (TARGET_COVER × demandRate). Deficit ⇔ stock < targetStock × DEFICIT_FRACTION; surplus ⇔ stock ≥ targetStock × SURPLUS_MARGIN. Both converge toward targetStock. */
   targetStock: number;
-  /** Total local demand rate (civilian + industrial). Severity weight only. */
+  /** Total local demand rate (civilian + industrial). Severity weight + the self-supply gate (vs production). */
   demand: number;
+  /** Local production rate of this good. A system that self-supplies (production ≥ demand) is never a deficit sink — its low standing stock is throughput, not need, and importing more just piles it against the ceiling and decays its own producers. */
+  production: number;
 }
 
 export interface SystemLogisticsState {
@@ -91,7 +93,12 @@ export function matchFactionTransfers(
   for (const s of systems) {
     for (const g of s.goods) {
       const c = classifyMarketState(g.stock, g.targetStock);
-      if (c.kind === "deficit" && c.shortfall > 0) {
+      // Self-supply gate: a system that produces at least its own demand is never a deficit
+      // sink for that good (it refills from its own output), even when standing stock dips below
+      // the days-of-supply anchor. Without this, high-throughput producers — which hold little
+      // inventory relative to their demand rate — read as deficits and get shipped a good they
+      // already make, piling stock to the ceiling and decaying their own producers.
+      if (c.kind === "deficit" && c.shortfall > 0 && g.production < g.demand) {
         deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, severity: c.shortfall * g.demand });
       } else if (c.kind === "surplus" && c.drawable > 0) {
         const list = surplusesByGood.get(g.goodId) ?? [];

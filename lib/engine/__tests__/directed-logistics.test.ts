@@ -54,13 +54,14 @@ describe("systemLogisticsGeneration", () => {
   });
 });
 
-// Helper: a system with one good's market state.
+// Helper: a system with one good's market state. `production` defaults to 0 (pure
+// consumer) so existing cases are unaffected; the net-producer gate cases set it.
 function sys(
   systemId: string,
   generation: number,
-  good: { goodId: string; stock: number; targetStock: number; demand: number },
+  good: { goodId: string; stock: number; targetStock: number; demand: number; production?: number },
 ): SystemLogisticsState {
-  return { systemId, factionId: "f1", generation, goods: [good] };
+  return { systemId, factionId: "f1", generation, goods: [{ ...good, production: good.production ?? 0 }] };
 }
 
 // Unit cost = hops; 1 hop between any two systems, unreachable for "far".
@@ -149,5 +150,23 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
     // shortfall = 10, drawable = 80−50 = 30, budget = 100 → qty = 10
     expect(transfers[0].quantity).toBe(10);
+  });
+
+  it("never ships a good into a system that already produces enough of it (production ≥ demand)", () => {
+    // B sits below its anchor (stock 2 < targetStock 10 × 0.8 = 8 → would classify as a deficit),
+    // but it produces 20/tick against demand 5 → it self-supplies. Shipping more in just piles its
+    // stock toward the ceiling and decays its own extractors, so it must NOT be a sink.
+    const surplus = sys("A", 100, { goodId: "ore", stock: 100, targetStock: 50, demand: 5, production: 0 });
+    const producer = sys("B", 0, { goodId: "ore", stock: 2, targetStock: 10, demand: 5, production: 20 });
+    expect(matchFactionTransfers([surplus, producer], oneHop)).toHaveLength(0);
+  });
+
+  it("still serves a deficit that produces some of the good but cannot self-supply (production < demand)", () => {
+    // B produces 3/tick but demands 8 → a genuine net importer; logistics should still fill it.
+    const surplus = sys("A", 100, { goodId: "ore", stock: 100, targetStock: 50, demand: 8, production: 0 });
+    const importer = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 10, demand: 8, production: 3 });
+    const transfers = matchFactionTransfers([surplus, importer], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
   });
 });

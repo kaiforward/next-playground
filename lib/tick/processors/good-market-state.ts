@@ -29,13 +29,20 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
   const fulfillment = labourFulfillment(row.population, demand);
   const rates = capacityGoodRates(row.buildings, row.population, row.yields);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
+  const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
 
   const goods: GoodMarketState[] = [];
   for (const m of row.markets) {
     const band = marketBandForRow(m, m);
     const civ = consByKey.get(m.goodId) ?? 0;
     const industrial = inputDemandForGood(row.buildings, m.goodId, fulfillment, row.yields);
-    goods.push({ goodId: m.goodId, stock: m.stock, targetStock: band.targetStock, demand: civ + industrial });
+    goods.push({
+      goodId: m.goodId,
+      stock: m.stock,
+      targetStock: band.targetStock,
+      demand: civ + industrial,
+      production: prodByKey.get(m.goodId) ?? 0,
+    });
   }
   return goods;
 }

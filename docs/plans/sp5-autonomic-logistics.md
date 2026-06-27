@@ -89,7 +89,13 @@ Per faction, per cycle (sharded over systems for scale; see Cadence):
 
 1. **Deficits** — system+good where `stock < targetStock × DEFICIT_FRACTION` (below the days-of-supply
    anchor; `DEFICIT_FRACTION = 0.8` leaves a comfortable dead-band). Severity = shortfall ×
-   demand rate (civ + industrial, per the demand basis below). Worst-first. *(Sim audit 2026-06-26:
+   demand rate (civ + industrial, per the demand basis below). Worst-first. **Self-supply gate:** a
+   system that produces at least its own demand (`production ≥ demand`) is *never* a deficit sink for
+   that good — its low standing stock is throughput, not need; importing into it only piles stock toward
+   the storage ceiling, where infrastructure-decay reads the producer as not-selling and tears down its
+   own extractors. Net-negative producers (make some, need more) are still sinks. *(Live audit
+   2026-06-27: removed the ~49% of logistics tonnage that had been landing in self-sufficient producers;
+   matcher-only, the build planner is unchanged.)* *(Sim audit 2026-06-26:
    the market keeps almost all stock above the band floor, so a floor-triggered deficit almost never
    fires; anchoring to `targetStock` is the deficit-side twin of the surplus anchor fix in Task 8.)*
 2. **Surpluses** — system+good holding above its days-of-supply anchor: `stock ≥ targetStock ×

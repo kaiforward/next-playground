@@ -32,4 +32,21 @@ describe("toGoodMarketStates", () => {
     });
     expect(out.map((g) => g.goodId)).toEqual(["food", "water"]);
   });
+
+  it("surfaces local production per good (powers the matcher's self-supply gate)", () => {
+    // A system with gas extractors produces gas → production must be reported > 0.
+    const out = toGoodMarketStates({
+      buildings: { gas: 3 }, population: 100, yields: unitResourceVector(),
+      markets: [{ ...foodMarket(100, 5), id: "A|gas", goodId: "gas" }],
+    });
+    const gas = out.find((g) => g.goodId === "gas")!;
+    expect(gas.production).toBeGreaterThan(0);
+  });
+
+  it("reports zero production for a good the system does not make", () => {
+    const out = toGoodMarketStates({
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(50, 20)],
+    });
+    expect(out[0].production).toBe(0);
+  });
 });
