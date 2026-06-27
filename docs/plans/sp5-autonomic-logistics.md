@@ -302,6 +302,29 @@ phase-PR convention.
 - Validation order: loop all goods + both demand terms, but sim-validate civ-staple-dominant behaviour
   before leaning on industrial-demand relief.
 
+### Phase 2 resolutions (2026-06-27 — see `sp5-logistics-phase2-impl-plan.md`)
+
+- **Split dial = constant top-K, not a fraction.** Each cycle the **top `CONTRACTS_PER_CYCLE` (=5)
+  most valuable** transfers per faction (ranked by `cost` ≈ quantity × distance ≈ player payout) become
+  Contracts; the rest move silently. Player-activity scaling stays an SP5+ hook. Pure helper
+  `splitContractTransfers`.
+- **Contracts ARE the demand-driven trade missions.** `selectEconomyCandidates` (price-ratio + random
+  destination — never read the substrate-v2 demand figures) is **deleted**. After Phase 2 the only
+  trade-mission generators are the logistics matcher (demand-driven) and `selectEventCandidates`
+  (event-themed). The bulk of player trade opportunity remains open-ended market arbitrage + the
+  budget-unreached residual (negative space), not missions.
+- **`origin` is internal only.** Needed so timeout-resolve knows which expired Contracts the faction
+  self-hauls (`origin === "logistics"`) vs which just expire (events). **No player-facing badge or
+  filter** — every contract reads as one undifferentiated transport contract; faction-supply framing is
+  deferred to the Phase 4 Logistics tab.
+- **Timeout-resolve lives in `directedLogistics`** (re-reads drawable, band-clamps, hauls + logistics
+  flow row, closes). `trade-missions` `expireUnclaimedMissions` excludes `origin:"logistics"`. Deadline
+  = one INTERVAL so resolve lands on the owning faction's next shard run.
+- **Reward** reuses `calculateReward(quantity, hops, tier, false)`. **Delivery-adds-to-destination-stock
+  already shipped** (`lib/services/missions.ts`) — reused unchanged.
+- **Sim** passes `contractCount: 0` → pure-silent (Phase-1 curve unchanged); Contract paths covered by
+  unit + integration tests.
+
 ## Out of scope (explicit)
 
 Build/recovery half · treasury & money · strategic bottleneck-relief prioritisation (the demand *term*
