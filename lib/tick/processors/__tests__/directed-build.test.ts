@@ -104,8 +104,8 @@ describe("runDirectedBuildProcessor", () => {
   it("returns no writes when there are no structural deficits", async () => {
     const balanced: SystemBuildRow[] = [{
       systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
-      yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 50, habitableSpace: 50,
-      markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → targetStock 0 → balanced
+      yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
+      markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → balanced; no habitable land → no proactive housing → no writes
     }];
     const w = new MemoryDirectedBuildWorld(balanced);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });

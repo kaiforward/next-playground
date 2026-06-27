@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
+import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT } from "@/lib/constants/industry";
@@ -137,7 +137,7 @@ describe("planFactionBuilds", () => {
     };
     const builds = planFactionBuilds([deficit, builder], () => 1);
     expect(countFor(builds, "B", "food")).toBeGreaterThan(0);
-    // Co-built housing accompanies the production so it can be staffed.
+    // Proactive housing accompanies the build (B is fed and calm with habitable land).
     expect(countFor(builds, "B", "housing")).toBeGreaterThan(0);
   });
 
@@ -182,13 +182,15 @@ describe("planFactionBuilds", () => {
     expect(countFor(planFactionBuilds([deficit, builderWithInput], () => 1), "B", "metals")).toBeGreaterThan(0);
   });
 
-  it("returns no builds when the faction has no structural deficits", () => {
-    const balanced: BuildSystemState = {
+  it("builds proactive housing (no production) at a fed system with no structural deficits", () => {
+    const fed: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
     };
-    expect(planFactionBuilds([balanced], () => 1)).toHaveLength(0);
+    const builds = planFactionBuilds([fed], () => 1);
+    expect(countFor(builds, "A", "housing")).toBeGreaterThan(0);
+    expect(builds.every((b) => b.buildingType === "housing")).toBe(true);
   });
 
   it("serves two distinct structural deficits across multiple greedy iterations", () => {
@@ -226,8 +228,59 @@ describe("planFactionBuilds", () => {
     // Both goods must be built at C, requiring at least two greedy iterations.
     expect(countFor(builds, "C", "food")).toBeGreaterThan(0);
     expect(countFor(builds, "C", "water")).toBeGreaterThan(0);
-    // Co-built housing also appears (from the first build's staffing co-build).
+    // Proactive housing also appears (C is fed and calm with habitable headroom).
     expect(countFor(builds, "C", "housing")).toBeGreaterThan(0);
+  });
+});
+
+describe("planFactionBuilds — proactive housing", () => {
+  it("does not build housing at a starved system", () => {
+    const starved: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100 }],
+    };
+    expect(countFor(planFactionBuilds([starved], () => 1), "A", "housing")).toBe(0);
+  });
+
+  it("does not build housing at an unsettled (high-unrest) system", () => {
+    const unsettled: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, unrest: 0.9, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    };
+    expect(countFor(planFactionBuilds([unsettled], () => 1), "A", "housing")).toBe(0);
+  });
+
+  it("never builds housing past the habitable cap", () => {
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100000, unrest: 0, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 1000, habitableSpace: 5,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    };
+    const housing = countFor(planFactionBuilds([sys], () => 1), "A", "housing");
+    expect(housing).toBeGreaterThan(0);
+    expect(housing).toBeLessThanOrEqual(5); // habitableSpace 5 ÷ spaceCost 1
+  });
+
+  it("does not co-build housing on the industry path (housing comes only from the housing pass)", () => {
+    // Builder has NO habitable land: the housing pass cannot fire, so any housing here
+    // would be the deleted co-build. Expect production, zero housing.
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+    };
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, unrest: 0, buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0,
+      goods: [],
+    };
+    const builds = planFactionBuilds([deficit, builder], () => 1);
+    expect(countFor(builds, "B", "food")).toBeGreaterThan(0);
+    expect(countFor(builds, "B", "housing")).toBe(0);
   });
 });
 
@@ -310,5 +363,55 @@ describe("fedAndCalm", () => {
   it("is false when the system is starved (high supply dissatisfaction)", () => {
     const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100 }];
     expect(fedAndCalm(sysWith({ goods: starved, unrest: 0 }))).toBe(false);
+  });
+});
+
+describe("habitableHousingHeadroom", () => {
+  it("returns the min of remaining habitable and remaining general, in housing units", () => {
+    expect(habitableHousingHeadroom(sysWith({ generalSpace: 100, habitableSpace: 40 }))).toBeCloseTo(40);
+  });
+
+  it("subtracts existing housing from both habitable and general", () => {
+    const sys = sysWith({ generalSpace: 100, habitableSpace: 40, buildings: { housing: 10 } });
+    expect(habitableHousingHeadroom(sys)).toBeCloseTo(30); // habitable 40 - 10 = 30 binds
+  });
+
+  it("is bounded by remaining general space when factories crowd it", () => {
+    const sys = sysWith({ generalSpace: 20, habitableSpace: 50, buildings: { metals: 15 } });
+    expect(habitableHousingHeadroom(sys)).toBeCloseTo(5); // general 20 - 15 = 5 binds
+  });
+});
+
+describe("plannedHousingUnits", () => {
+  it("paces housing a settle-margin ahead of population", () => {
+    // pop 100, no housing, ample habitable → target popCap = 100 × 1.25 = 125 → 6.25 housing.
+    const units = plannedHousingUnits(sysWith({
+      population: 100, buildings: {}, generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }));
+    expect(units).toBeCloseTo(125 / 20 - 0); // 6.25
+  });
+
+  it("returns 0 when the system is not fed and calm", () => {
+    expect(plannedHousingUnits(sysWith({
+      population: 100, generalSpace: 100, habitableSpace: 100, unrest: 0.9,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }))).toBe(0);
+  });
+
+  it("returns 0 at the habitable cap (no headroom)", () => {
+    expect(plannedHousingUnits(sysWith({
+      population: 100, buildings: { housing: 50 }, generalSpace: 100, habitableSpace: 50,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }))).toBe(0);
+  });
+
+  it("never targets more housing than the habitable land allows", () => {
+    // Huge pop, tiny habitable: housing is bounded by habitable (5 units), not population.
+    const units = plannedHousingUnits(sysWith({
+      population: 100000, buildings: {}, generalSpace: 1000, habitableSpace: 5,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }));
+    expect(units).toBeCloseTo(5);
   });
 });

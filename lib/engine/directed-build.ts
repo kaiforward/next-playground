@@ -79,6 +79,42 @@ export function fedAndCalm(sys: BuildSystemState): boolean {
   );
 }
 
+/**
+ * Additional housing units a site can build before hitting its physical bounds: the
+ * habitable subset of space (minus the housing already standing) and the remaining
+ * general space (housing competes with factories for it), in housing units. Never
+ * negative. Mirrors the seeder's habitable bound.
+ */
+export function habitableHousingHeadroom(sys: BuildSystemState): number {
+  const cost = effectiveSpaceCost(HOUSING_TYPE);
+  if (cost <= 0) return 0;
+  const housing = sys.buildings[HOUSING_TYPE] ?? 0;
+  const remainingGeneral = sys.generalSpace - generalSpaceUsed(sys.buildings);
+  const remainingHabitable = sys.habitableSpace - housing * cost;
+  return Math.max(0, Math.min(remainingHabitable, remainingGeneral) / cost);
+}
+
+/**
+ * Proactive housing units to build at a site this cycle: paced to keep popCap a
+ * SETTLE_MARGIN ahead of population, never past the habitable headroom. Returns 0
+ * when the site is not fed-and-calm or already at its habitable cap. Housing leads —
+ * it creates the popCap headroom the (untouched) population logistic then fills.
+ */
+export function plannedHousingUnits(sys: BuildSystemState): number {
+  if (!fedAndCalm(sys)) return 0;
+  const headroom = habitableHousingHeadroom(sys);
+  if (headroom <= 0) return 0;
+  const popProvided = BUILDING_TYPES[HOUSING_TYPE]?.popProvided ?? POP_CENTRE_DENSITY;
+  if (popProvided <= 0) return 0;
+  const housing = sys.buildings[HOUSING_TYPE] ?? 0;
+  const currentPopCap = housingPopCap(sys.buildings);
+  const habitableCapPop = (housing + headroom) * popProvided;
+  const pop = Math.max(0, sys.population);
+  const targetPopCap = Math.min(habitableCapPop, pop * (1 + DIRECTED_BUILD.SETTLE_MARGIN));
+  const wantUnits = Math.max(0, (targetPopCap - currentPopCap) / popProvided);
+  return Math.min(wantUnits, headroom);
+}
+
 /** A deficit with no reachable surplus of its good — the build target. */
 export interface StructuralDeficit {
   systemId: string;
@@ -220,10 +256,34 @@ export function planFactionBuilds(
   for (const s of systems) budget += systemBuildGeneration(s.population);
   if (budget <= 0) return [];
 
-  const structural = findStructuralDeficits(systems, routeCost);
-  if (structural.length === 0) return [];
+  // Mutable per-system working copy so capacity/labour reflect builds made this pass.
+  const working = new Map<string, BuildSystemState>();
+  for (const s of systems) working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
 
-  // Goods for which this faction has a reachable surplus anywhere (for the tier-1+ input gate).
+  const builds: PlannedBuild[] = [];
+
+  // ── Pass 1: proactive housing (housing leads population). ──
+  // Build housing toward the habitable cap wherever a system is fed and calm, paced a
+  // margin ahead of its current population. Housing draws general space, so it runs
+  // before industry — habitable land is housing's by right; factories take what's left.
+  for (const site of working.values()) {
+    if (budget <= 0) break;
+    const want = plannedHousingUnits(site);
+    if (want <= 0) continue;
+    const units = Math.min(want, budget);
+    if (units <= 0) continue;
+    site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + units;
+    builds.push({ systemId: site.systemId, buildingType: HOUSING_TYPE, count: units });
+    budget -= units;
+  }
+
+  // ── Pass 2: labour-gated industry (industry follows the resident workforce). ──
+  if (budget <= 0) return builds;
+
+  const structural = findStructuralDeficits(systems, routeCost);
+  if (structural.length === 0) return builds;
+
+  // Goods for which this faction has a reachable surplus anywhere (tier-1+ input gate).
   const reachableSurplusGoods = new Set<string>();
   for (const s of systems) {
     for (const g of s.goods) {
@@ -231,10 +291,6 @@ export function planFactionBuilds(
       if (c.kind === "surplus" && c.drawable > 0) reachableSurplusGoods.add(g.goodId);
     }
   }
-
-  // Mutable per-system building working copy so capacity reflects builds made this pass.
-  const working = new Map<string, BuildSystemState>();
-  for (const s of systems) working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
 
   // Remaining structural shortfall per (good → systemId → shortfall).
   const remainingByGood = new Map<string, Map<string, number>>();
@@ -244,10 +300,9 @@ export function planFactionBuilds(
     remainingByGood.set(d.goodId, m);
   }
 
-  // Precompute every candidate (site, good) opportunity once. The reachable deficit list
-  // and its order depend only on the static route costs, so they never change during
-  // allocation — only the shortfalls drain. Building them here (not per-build) is what
-  // keeps the planner near-linear in the faction's system count.
+  // Precompute every candidate (site, good) opportunity once — the reachable deficit
+  // list depends only on static route costs, so building it here (not per-build) keeps
+  // the planner near-linear in the faction's system count.
   const opportunities: BuildOpportunity[] = [];
   for (const [goodId, deficitMap] of remainingByGood) {
     const perUnit = OUTPUT_PER_UNIT[goodId] ?? 0;
@@ -266,8 +321,8 @@ export function planFactionBuilds(
         .sort((a, b) => a.cost - b.cost);
       if (reachable.length === 0) continue;
 
-      // Score: allocate this site's output capacity to its reachable deficits, nearest-first,
-      // summing served ÷ route cost (capacity + proximity, each once). Ordering only.
+      // Score: allocate this site's output capacity to its reachable deficits,
+      // nearest-first, summing served ÷ route cost (capacity + proximity). Ordering only.
       let capOutput = capUnits * perUnit;
       let score = 0;
       for (const r of reachable) {
@@ -284,16 +339,13 @@ export function planFactionBuilds(
     }
   }
 
-  // Highest-value opportunities first; spend the budget in a single pass.
   opportunities.sort((a, b) => b.score - a.score);
 
-  const builds: PlannedBuild[] = [];
   for (const opp of opportunities) {
     if (budget <= 0) break;
     const site = working.get(opp.systemId);
     if (!site) continue;
 
-    // Live capacity — an earlier opportunity at this site may have consumed its space/slots.
     const capUnits = buildableUnits(site, opp.goodId);
     if (capUnits <= 0) continue;
 
@@ -320,21 +372,6 @@ export function planFactionBuilds(
     site.buildings[opp.goodId] = (site.buildings[opp.goodId] ?? 0) + wantUnits;
     builds.push({ systemId: site.systemId, buildingType: opp.goodId, count: wantUnits });
     budget -= wantUnits;
-
-    // Co-build housing to keep labourDemand ≤ popCap, bounded by habitable + general space.
-    const needLabour = labourDemand(site.buildings);
-    const havePopCap = housingPopCap(site.buildings);
-    if (needLabour > havePopCap) {
-      const housingUnits = (needLabour - havePopCap) / POP_CENTRE_DENSITY;
-      const cost = effectiveSpaceCost(HOUSING_TYPE);
-      const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
-      const affordable = Math.min(site.habitableSpace, remainingGeneral) / cost;
-      const housing = Math.max(0, Math.min(housingUnits, affordable));
-      if (housing > 0) {
-        site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + housing;
-        builds.push({ systemId: site.systemId, buildingType: HOUSING_TYPE, count: housing });
-      }
-    }
 
     // Decrement the served structural demand (nearest-first) so later opportunities don't re-target it.
     let producedOutput = wantUnits * opp.perUnit;
