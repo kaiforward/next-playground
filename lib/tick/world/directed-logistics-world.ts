@@ -43,6 +43,31 @@ export interface LogisticsFlowInsert {
   quantity: number;
 }
 
+/**
+ * A logistics Contract to create — a TradeMission with origin = "logistics". Board station =
+ * surplus system (player picks up); destination = deficit system. Quantities are catch-up-scaled;
+ * `goodId` is the canonical good KEY (the adapter resolves it to the DB Good.id FK).
+ */
+export interface LogisticsContractCreate {
+  fromSystemId: string;
+  toSystemId: string;
+  goodId: string;
+  quantity: number;
+  reward: number;
+  deadlineTick: number;
+  factionId: string | null;
+  createdAtTick: number;
+}
+
+/** An expired, unclaimed logistics Contract the faction will now haul itself. `goodId` = good KEY. */
+export interface ExpiredLogisticsContract {
+  id: string;
+  fromSystemId: string;
+  toSystemId: string;
+  goodId: string;
+  quantity: number;
+}
+
 export interface DirectedLogisticsWorld {
   /** Total distinct faction groups (incl. one null/independents group) — drives the shard split. */
   getFactionShardKeys(): Promise<Array<string | null>>;
@@ -52,4 +77,16 @@ export interface DirectedLogisticsWorld {
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows (flowType = "logistics"). */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
+  /** Insert logistics Contracts (TradeMission rows, origin = "logistics"). No stock moves here. */
+  createLogisticsContracts(rows: LogisticsContractCreate[]): Promise<void>;
+  /**
+   * Expired (deadlineTick ≤ tick) UNCLAIMED logistics Contracts owned by the given faction keys,
+   * for the faction to self-haul. Faction-scoped so their endpoints are in the current shard's rows.
+   */
+  takeExpiredLogisticsContracts(
+    tick: number,
+    factionKeys: Array<string | null>,
+  ): Promise<ExpiredLogisticsContract[]>;
+  /** Delete resolved logistics Contracts by id. */
+  closeLogisticsContracts(ids: string[]): Promise<void>;
 }

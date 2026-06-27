@@ -40,6 +40,27 @@ function market(id: string, goodId: string, stock: number, storageCapacity: numb
 
 const DUE_TICK = DIRECTED_LOGISTICS.INTERVAL - 1; // 47 — last slot, shard window [0,1) covers the 1 faction key
 
+describe("MemoryDirectedLogisticsWorld — Contract I/O", () => {
+  it("captures created + closed Contracts and returns seeded expired ones", async () => {
+    const expired = [
+      { id: "c1", fromSystemId: "A", toSystemId: "B", goodId: "food", quantity: 12 },
+    ];
+    const world = new MemoryDirectedLogisticsWorld([], expired);
+
+    expect(await world.takeExpiredLogisticsContracts(99, ["f1"])).toEqual(expired);
+
+    await world.createLogisticsContracts([
+      { fromSystemId: "A", toSystemId: "B", goodId: "food", quantity: 8,
+        reward: 50, deadlineTick: 100, factionId: "f1", createdAtTick: 52 },
+    ]);
+    await world.closeLogisticsContracts(["c1"]);
+
+    expect(world.createdContracts).toHaveLength(1);
+    expect(world.createdContracts[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
+    expect(world.closedContractIds).toEqual(["c1"]);
+  });
+});
+
 describe("runDirectedLogisticsProcessor (body)", () => {
   it("moves staple surplus to a deficit system and records a logistics flow", async () => {
     const systems = [

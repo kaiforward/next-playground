@@ -4,6 +4,8 @@ import type {
   LogisticsFlowInsert,
   LogisticsMarketUpdate,
   SystemLogisticsRow,
+  LogisticsContractCreate,
+  ExpiredLogisticsContract,
 } from "@/lib/tick/world/directed-logistics-world";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
@@ -165,5 +167,82 @@ export class PrismaDirectedLogisticsWorld implements DirectedLogisticsWorld {
         flowType: "logistics" as const,
       })),
     });
+  }
+
+  /** key → DB Good.id (TradeMission.goodId is an FK, unlike TradeFlow.goodId which stores the key). */
+  private async goodIdByKey(): Promise<Map<string, string>> {
+    const goods = await this.tx.good.findMany({ select: { id: true, name: true } });
+    const map = new Map<string, string>();
+    for (const g of goods) {
+      const key = GOOD_NAME_TO_KEY.get(g.name);
+      if (key) map.set(key, g.id);
+    }
+    return map;
+  }
+
+  async createLogisticsContracts(rows: LogisticsContractCreate[]): Promise<void> {
+    if (rows.length === 0) return;
+    const goodIdByKey = await this.goodIdByKey();
+    const data = [];
+    for (const r of rows) {
+      const dbGoodId = goodIdByKey.get(r.goodId);
+      if (!dbGoodId) continue; // unknown good — skip rather than insert a dangling FK
+      data.push({
+        systemId: r.fromSystemId,      // board = surplus system
+        destinationId: r.toSystemId,   // delivery = deficit system
+        goodId: dbGoodId,
+        quantity: r.quantity,
+        reward: r.reward,
+        deadlineTick: r.deadlineTick,
+        factionId: r.factionId,
+        origin: "logistics" as const,
+        createdAtTick: r.createdAtTick,
+      });
+    }
+    if (data.length === 0) return;
+    await this.tx.tradeMission.createMany({ data });
+  }
+
+  async takeExpiredLogisticsContracts(
+    tick: number,
+    factionKeys: Array<string | null>,
+  ): Promise<ExpiredLogisticsContract[]> {
+    if (factionKeys.length === 0) return [];
+    const ids = factionKeys.filter((k): k is string => k !== null);
+    const includeNull = factionKeys.some((k) => k === null);
+    const factionWhere: Prisma.TradeMissionWhereInput =
+      includeNull && ids.length > 0
+        ? { OR: [{ factionId: { in: ids } }, { factionId: null }] }
+        : includeNull
+          ? { factionId: null }
+          : { factionId: { in: ids } };
+
+    const rows = await this.tx.tradeMission.findMany({
+      where: {
+        origin: "logistics",
+        playerId: null,
+        deadlineTick: { lte: tick },
+        ...factionWhere,
+      },
+      select: {
+        id: true,
+        systemId: true,
+        destinationId: true,
+        quantity: true,
+        good: { select: { name: true } },
+      },
+    });
+    return rows.map((m) => ({
+      id: m.id,
+      fromSystemId: m.systemId,
+      toSystemId: m.destinationId,
+      goodId: GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name,
+      quantity: m.quantity,
+    }));
+  }
+
+  async closeLogisticsContracts(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.tx.tradeMission.deleteMany({ where: { id: { in: ids } } });
   }
 }
