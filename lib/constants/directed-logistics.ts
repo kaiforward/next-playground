@@ -18,4 +18,16 @@ export const DIRECTED_LOGISTICS = {
   /** Per-unit route cost = quantity × (hops × HOP_WEIGHT + totalFuelCost × FUEL_WEIGHT). */
   HOP_WEIGHT: 1.0,
   FUEL_WEIGHT: 0.1,
+  /**
+   * Top-K most-valuable matched transfers per faction per cycle exposed as player
+   * Contracts (the rest move silently). The agency dial: constant in v1; scaling by
+   * player count/activity is an SP5+ hook. First-draft — calibrate against the simulator.
+   */
+  CONTRACTS_PER_CYCLE: 5,
+  /**
+   * Ticks a logistics Contract stays open before the faction hauls it itself. One
+   * INTERVAL, so a Contract created on a faction's shard run is due for timeout-resolve
+   * on that same faction's NEXT shard run (sharding is per-faction + deterministic).
+   */
+  CONTRACT_DEADLINE_TICKS: 2 * ECONOMY_UPDATE_INTERVAL,
 } as const;
