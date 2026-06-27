@@ -20,7 +20,7 @@ describe("PrismaDirectedBuildWorld (integration)", () => {
     const sysId = universe.systems.industrial;
     await prisma.starSystem.update({
       where: { id: sysId },
-      data: { generalSpace: 100, habitableSpace: 40, slotArable: 7 },
+      data: { generalSpace: 100, habitableSpace: 40, slotArable: 7, unrest: 0.42 },
     });
     const { factionId } = await prisma.starSystem.findUniqueOrThrow({
       where: { id: sysId },
@@ -37,6 +37,7 @@ describe("PrismaDirectedBuildWorld (integration)", () => {
     expect(row.generalSpace).toBe(100);
     expect(row.habitableSpace).toBe(40);
     expect(row.slotCap.arable).toBe(7);
+    expect(row.unrest).toBe(0.42);
     // Markets + buildings still assembled (mirrors logistics).
     expect(Array.isArray(row.markets)).toBe(true);
     expect(typeof row.buildings).toBe("object");

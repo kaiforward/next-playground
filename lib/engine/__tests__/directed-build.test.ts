@@ -1,9 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
+import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT } from "@/lib/constants/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
+
+function sysWith(partial: Partial<BuildSystemState>): BuildSystemState {
+  return {
+    systemId: "X", factionId: "f1", population: 100, unrest: 0, buildings: {},
+    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0, goods: [],
+    ...partial,
+  };
+}
 
 describe("systemBuildGeneration", () => {
   it("scales the build budget linearly with population", () => {
@@ -21,7 +29,7 @@ function buildSys(
   good: { goodId: string; stock: number; targetStock: number; demand: number },
 ): BuildSystemState {
   return {
-    systemId, factionId: "f1", population: 100, buildings: {},
+    systemId, factionId: "f1", population: 100, unrest: 0, buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0, goods: [good],
   };
 }
@@ -62,7 +70,7 @@ function tier0Sys(builtFood: number, foodSlots: number): BuildSystemState {
   // here we set every resource's cap so the test is independent of the food→resource mapping.
   for (const k of RESOURCE_TYPES) slotCap[k] = foodSlots;
   return {
-    systemId: "A", factionId: "f1", population: 100,
+    systemId: "A", factionId: "f1", population: 100, unrest: 0,
     buildings: { food: builtFood }, slotCap, generalSpace: 100, habitableSpace: 50, goods: [],
   };
 }
@@ -82,7 +90,7 @@ describe("buildableUnits / buildableOutput", () => {
   it("caps a tier-1+ factory by remaining general space ÷ footprint", () => {
     // metals is tier-1 (recipe { ore: 1 }); generalSpace 100, no buildings → 100 / spaceCost units.
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
     };
     expect(buildableUnits(sys, "metals")).toBeGreaterThan(0);
@@ -90,7 +98,7 @@ describe("buildableUnits / buildableOutput", () => {
 
   it("reduces tier-1+ capacity by space already used by existing buildings", () => {
     const full: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, buildings: { metals: 100 },
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: { metals: 100 },
       slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
     };
     // metals occupies general space; with 100 units already built, ~no room left.
@@ -99,7 +107,7 @@ describe("buildableUnits / buildableOutput", () => {
 
   it("returns zero capacity for an unknown good not in GOOD_TIER_BY_KEY", () => {
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
     };
     // "not_a_real_good" is not in GOOD_TIER_BY_KEY; should return 0, not divide by default footprint
@@ -118,12 +126,12 @@ describe("planFactionBuilds", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
     };
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, buildings: {},
+      systemId: "B", factionId: "f1", population: 200, unrest: 0, buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
     };
@@ -137,17 +145,17 @@ describe("planFactionBuilds", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
     };
     const surplus: BuildSystemState = {
-      systemId: "S", factionId: "f1", population: 100, buildings: {},
+      systemId: "S", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 100, targetStock: 20, demand: 5 }],
     };
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, buildings: {},
+      systemId: "B", factionId: "f1", population: 200, unrest: 0, buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50, goods: [],
     };
     const builds = planFactionBuilds([deficit, surplus, builder], () => 1);
@@ -157,12 +165,12 @@ describe("planFactionBuilds", () => {
   it("gates a tier-1+ build until its inputs are locally produced (the cascade)", () => {
     // A: structural metals deficit. B: general space + budget but NO ore production and no reachable ore surplus.
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5 }],
     };
     const builderNoInput: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, buildings: {},
+      systemId: "B", factionId: "f1", population: 200, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50, goods: [],
     };
     expect(countFor(planFactionBuilds([deficit, builderNoInput], () => 1), "B", "metals")).toBe(0);
@@ -176,7 +184,7 @@ describe("planFactionBuilds", () => {
 
   it("returns no builds when the faction has no structural deficits", () => {
     const balanced: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
     };
@@ -198,17 +206,17 @@ describe("planFactionBuilds", () => {
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
 
     const deficitFood: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 0, buildings: {},
+      systemId: "A", factionId: "f1", population: 0, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
     };
     const deficitWater: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 0, buildings: {},
+      systemId: "B", factionId: "f1", population: 0, unrest: 0, buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "water", stock: 1, targetStock: 20, demand: 5 }],
     };
     const builder: BuildSystemState = {
-      systemId: "C", factionId: "f1", population: 10000, buildings: {},
+      systemId: "C", factionId: "f1", population: 10000, unrest: 0, buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50,
       goods: [],
     };
@@ -239,6 +247,7 @@ describe("planFactionBuilds performance", () => {
         systemId: `S${i}`,
         factionId: "f1",
         population: 100,
+        unrest: 0,
         buildings: {},
         slotCap,
         generalSpace: 50,
@@ -262,4 +271,44 @@ describe("planFactionBuilds performance", () => {
     expect(builds.length).toBeGreaterThan(0);
     expect(ms).toBeLessThan(2000);
   }, 120_000);
+});
+
+describe("supplyDissatisfaction", () => {
+  it("is ~0 when every demanded good sits at or above target", () => {
+    const d = supplyDissatisfaction([
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10 },
+      { goodId: "water", stock: 30, targetStock: 20, demand: 8 },
+    ]);
+    expect(d).toBeCloseTo(0);
+  });
+
+  it("is high when a heavily-demanded good is far below target", () => {
+    const d = supplyDissatisfaction([
+      { goodId: "food", stock: 1, targetStock: 20, demand: 100 },
+      { goodId: "luxuries", stock: 10, targetStock: 10, demand: 1 },
+    ]);
+    expect(d).toBeGreaterThan(0.5);
+  });
+
+  it("returns 0 when nothing is demanded", () => {
+    expect(supplyDissatisfaction([])).toBe(0);
+    expect(supplyDissatisfaction([{ goodId: "ore", stock: 0, targetStock: 0, demand: 0 }])).toBe(0);
+  });
+});
+
+describe("fedAndCalm", () => {
+  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10 }];
+
+  it("is true for a well-supplied, calm system", () => {
+    expect(fedAndCalm(sysWith({ goods: fedGoods, unrest: 0 }))).toBe(true);
+  });
+
+  it("is false when stored unrest exceeds the calm threshold", () => {
+    expect(fedAndCalm(sysWith({ goods: fedGoods, unrest: DIRECTED_BUILD.UNREST_SETTLE + 0.1 }))).toBe(false);
+  });
+
+  it("is false when the system is starved (high supply dissatisfaction)", () => {
+    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100 }];
+    expect(fedAndCalm(sysWith({ goods: starved, unrest: 0 }))).toBe(false);
+  });
 });

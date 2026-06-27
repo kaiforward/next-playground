@@ -14,4 +14,10 @@ export const DIRECTED_BUILD = {
   MAX_HOPS: 4,
   /** Per-unit route cost = hops × this (proximity weight in placement scoring). */
   HOP_WEIGHT: 1.0,
+  /** "Fed" gate: grow housing only where supply-dissatisfaction D ≤ this (0…1). */
+  D_SETTLE: 0.15,
+  /** "Calm" gate: grow housing only where stored unrest ≤ this (0…1). */
+  UNREST_SETTLE: 0.2,
+  /** Housing is paced to keep popCap at most this fraction ahead of current population. */
+  SETTLE_MARGIN: 0.25,
 } as const;

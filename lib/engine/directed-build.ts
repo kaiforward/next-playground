@@ -9,6 +9,8 @@
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { classifyMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
+import { clamp } from "@/lib/utils/math";
+import { dissatisfaction } from "@/lib/engine/population";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -28,6 +30,8 @@ export interface BuildSystemState {
   systemId: string;
   factionId: string | null;
   population: number;
+  /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
+  unrest: number;
   /** Current building counts (production types + "housing"). */
   buildings: Record<string, number>;
   /** Per-resource deposit-slot cap (Σ body slots) — caps tier-0 extractor counts. */
@@ -49,6 +53,30 @@ export interface PlannedBuild {
 /** This system's per-cycle build-unit budget (free, population-scaled in v1). */
 export function systemBuildGeneration(population: number): number {
   return Math.max(0, population) * DIRECTED_BUILD.GENERATION_PER_POP;
+}
+
+/**
+ * Stock-coverage dissatisfaction D in [0,1] for one system — the "fed" half of the
+ * settle gate. Reuses the population engine's demand-weighted convex fold, with a
+ * stock-based satisfaction proxy (stock ÷ targetStock, clamped): the build planner
+ * sees standing market state, not the economy's per-tick delivered/demanded flow, so
+ * a good sitting at or above its days-of-supply anchor reads as satisfied.
+ */
+export function supplyDissatisfaction(goods: BuildGoodState[]): number {
+  return dissatisfaction(
+    goods.map((g) => ({
+      satisfaction: g.targetStock > 0 ? clamp(g.stock / g.targetStock, 0, 1) : 1,
+      demanded: Math.max(0, g.demand),
+    })),
+  );
+}
+
+/** Settle gate: a system grows housing only when well-supplied (D ≤ D_SETTLE) and calm (unrest ≤ UNREST_SETTLE). */
+export function fedAndCalm(sys: BuildSystemState): boolean {
+  return (
+    supplyDissatisfaction(sys.goods) <= DIRECTED_BUILD.D_SETTLE &&
+    sys.unrest <= DIRECTED_BUILD.UNREST_SETTLE
+  );
 }
 
 /** A deficit with no reachable surplus of its good — the build target. */

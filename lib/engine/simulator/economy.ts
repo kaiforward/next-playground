@@ -445,6 +445,7 @@ async function processSimDirectedBuild(
     systemId: s.id,
     factionId: s.factionId,
     population: s.population,
+    unrest: s.unrest,
     buildings: s.buildings,
     yields: s.yields,
     slotCap: s.slotCap,

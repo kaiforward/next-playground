@@ -30,12 +30,12 @@ function builderSlots(n: number) {
 function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[] {
   return [
     {
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
     },
     {
-      systemId: "B", factionId: "f1", population: 5000, buildings: { food: bFood, housing: bHousing },
+      systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { food: bFood, housing: bHousing },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
       generalSpace: 100, habitableSpace: 100, markets: [],
     },
@@ -84,12 +84,12 @@ describe("runDirectedBuildProcessor", () => {
     // and ample budget must end at ≤ 10 food, never 20.
     const rows: SystemBuildRow[] = [
       {
-        systemId: "A", factionId: "f1", population: 100, buildings: {},
+        systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
       },
       {
-        systemId: "B", factionId: "f1", population: 5000, buildings: {},
+        systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: builderSlots(10),
         generalSpace: 0, habitableSpace: 0, markets: [],
       },
@@ -103,7 +103,7 @@ describe("runDirectedBuildProcessor", () => {
 
   it("returns no writes when there are no structural deficits", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", population: 100, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 50, habitableSpace: 50,
       markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → targetStock 0 → balanced
     }];
