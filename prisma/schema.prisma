@@ -475,6 +475,7 @@ model TradeMission {
   reward         Int // Fixed CR payout
   deadlineTick   Int // Available missions expire here
   eventId        String? // Cascade-deletes with event
+  origin         String  @default("economy") // internal: "economy" (legacy) | "event" | "logistics"; drives timeout-resolve, NOT shown to players
   factionId      String? // Owning faction (faction reputation)
   penaltyType    String  @default("none") // Future: "credits" | "reputation"
   penaltyValue   Int     @default(0)
