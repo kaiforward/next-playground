@@ -15,12 +15,12 @@ describe("directed-logistics Contract I/O (integration)", () => {
 
   it("creates a logistics Contract, then reads + closes it after its deadline", async () => {
     // Arrange: bind real fixture identifiers from the seeded universe.
-    // federation owns the agricultural system; industrial is in the same
-    // faction shard (corporate) — use federation faction + two of its systems
-    // (agri → ind is connected, so a realistic hop).
-    const factionId = universe.factions.federation;
-    const fromId = universe.systems.agricultural;
-    const toId = universe.systems.industrial;
+    // The corporate faction owns both industrial and tech — use both as a
+    // within-faction from/to hop (ind ↔ tech is directly connected), so the
+    // contract's factionId agrees with its endpoints' ownership.
+    const factionId = universe.factions.corporate;
+    const fromId = universe.systems.industrial;
+    const toId = universe.systems.tech;
     // "food" exists as a Good row in every seeded universe (GOODS constant).
     const goodKey = "food";
 
@@ -45,6 +45,7 @@ describe("directed-logistics Contract I/O (integration)", () => {
       where: { origin: "logistics", systemId: fromId, destinationId: toId },
     });
     expect(created).toHaveLength(1);
+    expect(created[0].origin).toBe("logistics");
     expect(created[0].playerId).toBeNull();
 
     // Act + Assert: not yet expired at tick 99; expired+returned at tick 100;
