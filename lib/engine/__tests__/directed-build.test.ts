@@ -222,3 +222,44 @@ describe("planFactionBuilds", () => {
     expect(countFor(builds, "C", "housing")).toBeGreaterThan(0);
   });
 });
+
+describe("planFactionBuilds performance", () => {
+  // A major faction at 10k scale owns hundreds of fully-populated systems, each
+  // with structural deficits AND build capacity, all mutually reachable. That is
+  // the worst case the live processor faces; an 837-system faction took 93s under
+  // the naive per-iteration re-scan. This guards the planner against re-introducing
+  // a super-linear (builds × sites × deficits) blowup.
+  function makeLargeFaction(n: number): BuildSystemState[] {
+    const goods = ["food", "water", "ore", "gas", "minerals", "biomass"];
+    const systems: BuildSystemState[] = [];
+    for (let i = 0; i < n; i++) {
+      const slotCap = emptyResourceVector();
+      for (const k of RESOURCE_TYPES) slotCap[k] = 5;
+      systems.push({
+        systemId: `S${i}`,
+        factionId: "f1",
+        population: 100,
+        buildings: {},
+        slotCap,
+        generalSpace: 50,
+        habitableSpace: 50,
+        // Two distinct structural deficits per system (no surplus anywhere → all structural).
+        goods: [
+          { goodId: goods[i % goods.length], stock: 1, targetStock: 20, demand: 5 },
+          { goodId: goods[(i + 1) % goods.length], stock: 1, targetStock: 20, demand: 5 },
+        ],
+      });
+    }
+    return systems;
+  }
+
+  it("plans a 500-system faction well within the tick budget", () => {
+    const systems = makeLargeFaction(500);
+    const t0 = performance.now();
+    const builds = planFactionBuilds(systems, () => 1);
+    const ms = performance.now() - t0;
+    // It must actually do the work (not early-exit), and do it fast.
+    expect(builds.length).toBeGreaterThan(0);
+    expect(ms).toBeLessThan(2000);
+  }, 120_000);
+});

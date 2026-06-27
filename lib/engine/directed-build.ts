@@ -162,11 +162,27 @@ function inputsAvailable(
   );
 }
 
+/** One candidate build action: site S can produce `goodId` to serve nearby structural deficits. */
+interface BuildOpportunity {
+  systemId: string;
+  goodId: string;
+  perUnit: number;
+  /** Structural-deficit systems of this good reachable from the site, nearest first (cost > 0). */
+  reachable: Array<{ sysId: string; cost: number }>;
+  /** Initial allocation score (served ÷ route cost) — used to rank opportunities once. */
+  score: number;
+}
+
 /**
  * Greedy demand-pulled build planner for ONE faction's systems. Budget = Σ system
  * generation, spent as building units. For each structural-gap good, score candidate
  * sites by the reachable structural demand they can serve (capacity-bounded,
- * nearest-first), build at the best, co-build housing to staff it, decrement, repeat.
+ * nearest-first), then spend the budget on the highest-scoring opportunities.
+ *
+ * Each (site, good) opportunity's route-cost-sorted reachable deficits are static, so
+ * they are computed ONCE and the budget is spent in a single descending-score pass —
+ * never re-scanning every site×good per build. A faction owning hundreds of systems
+ * would otherwise cost O(builds × sites × deficits) and take tens of seconds at 10k.
  */
 export function planFactionBuilds(
   systems: BuildSystemState[],
@@ -200,59 +216,82 @@ export function planFactionBuilds(
     remainingByGood.set(d.goodId, m);
   }
 
-  const builds: PlannedBuild[] = [];
+  // Precompute every candidate (site, good) opportunity once. The reachable deficit list
+  // and its order depend only on the static route costs, so they never change during
+  // allocation — only the shortfalls drain. Building them here (not per-build) is what
+  // keeps the planner near-linear in the faction's system count.
+  const opportunities: BuildOpportunity[] = [];
+  for (const [goodId, deficitMap] of remainingByGood) {
+    const perUnit = OUTPUT_PER_UNIT[goodId] ?? 0;
+    if (perUnit <= 0) continue;
+    const isTier0 = GOOD_TIER_BY_KEY[goodId] === 0;
+    const deficitSystemIds = [...deficitMap.keys()];
 
-  // Greedy: repeatedly pick the highest-scoring (site, good) and build there until budget runs out.
-  while (budget > 0) {
-    let best: { site: BuildSystemState; goodId: string; score: number; units: number } | null = null;
+    for (const site of working.values()) {
+      const capUnits = buildableUnits(site, goodId);
+      if (capUnits <= 0) continue;
+      if (!isTier0 && !inputsAvailable(goodId, site, reachableSurplusGoods)) continue;
 
-    for (const [goodId, deficitMap] of remainingByGood) {
-      const totalRemaining = [...deficitMap.values()].reduce((a, b) => a + b, 0);
-      if (totalRemaining <= 0) continue;
+      const reachable = deficitSystemIds
+        .map((sysId) => ({ sysId, cost: routeCost(site.systemId, sysId) }))
+        .filter((r): r is { sysId: string; cost: number } => r.cost !== null && r.cost > 0)
+        .sort((a, b) => a.cost - b.cost);
+      if (reachable.length === 0) continue;
 
-      for (const site of working.values()) {
-        const capUnits = buildableUnits(site, goodId);
-        if (capUnits <= 0) continue;
-        if (GOOD_TIER_BY_KEY[goodId] !== 0 && !inputsAvailable(goodId, site, reachableSurplusGoods)) continue;
-
-        const perUnit = OUTPUT_PER_UNIT[goodId] ?? 0;
-        if (perUnit <= 0) continue;
-
-        // Score: allocate this site's output capacity to its reachable structural deficits,
-        // nearest-first, summing allocated ÷ routeCost (capacity + proximity, each once).
-        let capOutput = capUnits * perUnit;
-        const reachable = [...deficitMap.entries()]
-          .map(([sysId, short]) => ({ sysId, short, cost: routeCost(site.systemId, sysId) }))
-          .filter((r): r is { sysId: string; short: number; cost: number } => r.cost !== null && r.cost > 0)
-          .sort((a, b) => a.cost - b.cost);
-        if (reachable.length === 0) continue;
-
-        // Score reflects full reachable capacity; the per-iteration budget cap is applied to wantUnits below, not to the score (greedy re-scores each pass).
-        let score = 0;
-        let servedOutput = 0;
-        for (const r of reachable) {
-          if (capOutput <= 0) break;
-          const take = Math.min(capOutput, r.short);
-          score += take / r.cost;
-          servedOutput += take;
-          capOutput -= take;
-        }
-        if (servedOutput <= 0) continue;
-
-        // Units to build = output needed ÷ per-unit, capped by capacity and budget.
-        const wantUnits = Math.min(capUnits, servedOutput / perUnit, budget);
-        if (wantUnits <= 0) continue;
-        if (!best || score > best.score) best = { site, goodId, score, units: wantUnits };
+      // Score: allocate this site's output capacity to its reachable deficits, nearest-first,
+      // summing served ÷ route cost (capacity + proximity, each once). Ordering only.
+      let capOutput = capUnits * perUnit;
+      let score = 0;
+      for (const r of reachable) {
+        if (capOutput <= 0) break;
+        const short = deficitMap.get(r.sysId) ?? 0;
+        if (short <= 0) continue;
+        const take = Math.min(capOutput, short);
+        score += take / r.cost;
+        capOutput -= take;
       }
-    }
+      if (score <= 0) continue;
 
-    if (!best) break;
+      opportunities.push({ systemId: site.systemId, goodId, perUnit, reachable, score });
+    }
+  }
+
+  // Highest-value opportunities first; spend the budget in a single pass.
+  opportunities.sort((a, b) => b.score - a.score);
+
+  const builds: PlannedBuild[] = [];
+  for (const opp of opportunities) {
+    if (budget <= 0) break;
+    const site = working.get(opp.systemId);
+    if (!site) continue;
+
+    // Live capacity — an earlier opportunity at this site may have consumed its space/slots.
+    const capUnits = buildableUnits(site, opp.goodId);
+    if (capUnits <= 0) continue;
+
+    const deficitMap = remainingByGood.get(opp.goodId);
+    if (!deficitMap) continue;
+
+    // Output we can usefully place = Σ over reachable remaining shortfalls, capped by capacity.
+    let capOutput = capUnits * opp.perUnit;
+    let servedOutput = 0;
+    for (const r of opp.reachable) {
+      if (capOutput <= 0) break;
+      const short = deficitMap.get(r.sysId) ?? 0;
+      if (short <= 0) continue;
+      const take = Math.min(capOutput, short);
+      servedOutput += take;
+      capOutput -= take;
+    }
+    if (servedOutput <= 0) continue;
+
+    const wantUnits = Math.min(capUnits, servedOutput / opp.perUnit, budget);
+    if (wantUnits <= 0) continue;
 
     // Apply the production build to the working copy + emit it.
-    const site = best.site;
-    site.buildings[best.goodId] = (site.buildings[best.goodId] ?? 0) + best.units;
-    builds.push({ systemId: site.systemId, buildingType: best.goodId, count: best.units });
-    budget -= best.units;
+    site.buildings[opp.goodId] = (site.buildings[opp.goodId] ?? 0) + wantUnits;
+    builds.push({ systemId: site.systemId, buildingType: opp.goodId, count: wantUnits });
+    budget -= wantUnits;
 
     // Co-build housing to keep labourDemand ≤ popCap, bounded by habitable + general space.
     const needLabour = labourDemand(site.buildings);
@@ -269,20 +308,15 @@ export function planFactionBuilds(
       }
     }
 
-    // Decrement the served structural demand (nearest-first again) so we don't re-target it.
-    const deficitMap = remainingByGood.get(best.goodId);
-    if (deficitMap) {
-      let producedOutput = best.units * (OUTPUT_PER_UNIT[best.goodId] ?? 0);
-      const nearest = [...deficitMap.entries()]
-        .map(([sysId, short]) => ({ sysId, short, cost: routeCost(site.systemId, sysId) }))
-        .filter((r): r is { sysId: string; short: number; cost: number } => r.cost !== null && r.cost > 0)
-        .sort((a, b) => a.cost - b.cost);
-      for (const r of nearest) {
-        if (producedOutput <= 0) break;
-        const take = Math.min(producedOutput, r.short);
-        deficitMap.set(r.sysId, r.short - take);
-        producedOutput -= take;
-      }
+    // Decrement the served structural demand (nearest-first) so later opportunities don't re-target it.
+    let producedOutput = wantUnits * opp.perUnit;
+    for (const r of opp.reachable) {
+      if (producedOutput <= 0) break;
+      const short = deficitMap.get(r.sysId) ?? 0;
+      if (short <= 0) continue;
+      const take = Math.min(producedOutput, short);
+      deficitMap.set(r.sysId, short - take);
+      producedOutput -= take;
     }
   }
 
