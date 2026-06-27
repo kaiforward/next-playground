@@ -34,6 +34,14 @@ export const SUBSTRATE_GEN = {
   POP_BASELINE_FLOOR: 0,
   /** Reference habitable space treated as "fully developable" for the seed-fill curve. P4-tuned; not load-bearing for invariants. */
   HABITABLE_REF: 25,
+  /**
+   * Fraction of a system's habitable space seeded as housing. Below 1 leaves habitable
+   * headroom so the autonomic build (housing → population → industry) has room to climb
+   * toward potential — i.e. the galaxy seeds as a developing one, not at capacity.
+   * Industry follows automatically: the staffing-self-consistency pass scales seeded
+   * industry down to staff the reduced population. Tunable (0.25 / 0.5 / 0.75).
+   */
+  SEED_HOUSING_FRACTION: 0.5,
 } as const;
 
 export interface QualityBand {

@@ -149,11 +149,13 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
   }
 
   // ── 3) Population centres — full-fold, sized to staff ALL labour. ──
-  // No body baseline: wanted = labourDemand / POP_CENTRE_DENSITY. Bounded by the
-  // habitable subset of space and by the general space the factories left behind.
+  // No body baseline: wanted = labourDemand / POP_CENTRE_DENSITY. Bounded by a seeded
+  // fraction (SEED_HOUSING_FRACTION) of the habitable subset of space — so systems start
+  // below their habitable potential, leaving headroom the autonomic build climbs into —
+  // and by the general space the factories left behind.
   const wantedPopCentres = labourDemand(buildings) / POP_CENTRE_DENSITY;
   const popCost = effectiveSpaceCost(HOUSING_TYPE);
-  const habitableAffordable = habitableSpace / popCost;
+  const habitableAffordable = (habitableSpace * SUBSTRATE_GEN.SEED_HOUSING_FRACTION) / popCost;
   const generalRemainingAffordable = (generalSpace - factoryUsed) / popCost;
   const popCentreCount = Math.max(
     0,
@@ -162,7 +164,7 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
   if (popCentreCount > 0) buildings[HOUSING_TYPE] = popCentreCount;
 
   // ── 3b) Staffing self-consistency — never seed more industry than the population can staff. ──
-  // The habitable-clamped housing fixes the labour budget (popCap = housing × POP_CENTRE_DENSITY).
+  // The fraction-clamped housing fixes the labour budget (popCap = housing × POP_CENTRE_DENSITY).
   // Scale every production building down proportionally so labourDemand ≤ popCap: a freshly seeded
   // system is then fully staffable as its population matures, instead of carrying idle capacity that
   // autonomic decay would immediately liquidate. The freed deposit/general space stays as headroom

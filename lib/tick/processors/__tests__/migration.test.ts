@@ -4,7 +4,7 @@ import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = {
   interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
@@ -18,7 +18,7 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId, governmentType: "federation",
     population, popCap, unrest, traits: [], bodyDanger: 0, buildings: {},
-    yields: unitResourceVector(),
+    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 const conn = (a: string, b: string, fuelCost = 10): SimConnection => ({ fromSystemId: a, toSystemId: b, fuelCost });

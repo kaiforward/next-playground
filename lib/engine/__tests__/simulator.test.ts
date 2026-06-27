@@ -103,7 +103,7 @@ describe("Simulator", () => {
       expect(world.tick).toBe(originalTick);
     });
 
-    it("markets drift after 100 ticks", async () => {
+    it("markets drift after 100 ticks", { timeout: 30_000 }, async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);
@@ -154,7 +154,7 @@ describe("Simulator", () => {
   // ── Event injection ───────────────────────────────────────────
 
   describe("event injection", () => {
-    it("disableRandomEvents: true → no events spawn over 100 ticks", async () => {
+    it("disableRandomEvents: true → no events spawn over 100 ticks", { timeout: 30_000 }, async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);

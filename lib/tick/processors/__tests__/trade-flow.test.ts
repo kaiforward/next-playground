@@ -10,7 +10,7 @@ import type {
   SimMarketEntry,
   SimSystem,
 } from "@/lib/engine/simulator/types";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 const PARAMS: TradeFlowProcessorParams = {
   interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
@@ -32,7 +32,7 @@ function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
     id, name: id, economyType: "extraction", regionId, factionId,
     governmentType: "federation",
     population: 1000, popCap: 2000, traits: [], bodyDanger: 0, unrest: 0, buildings: {},
-    yields: unitResourceVector(),
+    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 

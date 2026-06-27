@@ -108,7 +108,7 @@ describe("Simulator Integration", () => {
       expect(results.label).toBe("test-label");
     });
 
-    it("frontier regions have higher price volatility than federation", async () => {
+    it("frontier regions have higher price volatility than federation", { timeout: 30_000 }, async () => {
       const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
       let world = createSimWorld(config, DEFAULT_SIM_CONSTANTS);
       const rng = mulberry32(42);

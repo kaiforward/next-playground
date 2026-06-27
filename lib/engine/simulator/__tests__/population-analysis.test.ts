@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { detectPingPong, summarizeInfrastructure } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { SimSystem } from "@/lib/engine/simulator/types";
 
 /**
@@ -66,7 +66,7 @@ function infraSys(id: string, buildings: Record<string, number>, popCap: number)
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1",
     governmentType: "frontier", population: 50, popCap, traits: [], bodyDanger: 0,
-    unrest: 0, buildings, yields: unitResourceVector(),
+    unrest: 0, buildings, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 

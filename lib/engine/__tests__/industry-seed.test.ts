@@ -219,6 +219,31 @@ describe("allocateIndustry — staffing self-consistency", () => {
     }
   });
 
+  it("housing is capped at SEED_HOUSING_FRACTION of habitable space, leaving headroom for autonomic build", () => {
+    // Ample deposits and general space so industry demands more than FRACTION × habitable
+    // housing to staff it. The fraction cap must bind: housing ≈ SEED_HOUSING_FRACTION ×
+    // habitableSpace / popCost (NOT the full habitableSpace / popCost). Step 3b then scales
+    // industry down to the reduced popCap so the staffing invariant still holds.
+    const bodies = [body({ ore: 10, arable: 8, water: 6, minerals: 4, gas: 3 }, 1.2)];
+    const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
+    // habitableSpace = 8: fraction cap = 4 housing, full-habitable cap = 8 housing.
+    // Extractors alone (31 slots × fill=1 × ~25 labour each) need wantedPopCentres ≫ 4,
+    // so the fraction cap always binds here.
+    const input: AllocateInput = { bodies, slotCap, generalSpace: 300, habitableSpace: 8, fill: 1 };
+    const r = allocateIndustry(input, mulberry32(99));
+    const popCost = effectiveSpaceCost(HOUSING_TYPE);
+    const expectedMaxHousing = (input.habitableSpace * SUBSTRATE_GEN.SEED_HOUSING_FRACTION) / popCost;
+    // Housing is capped at the fractioned habitable limit, not the full habitable.
+    expect(r.buildings[HOUSING_TYPE] ?? 0).toBeCloseTo(expectedMaxHousing, 4);
+    // popCap reflects only the fractioned housing.
+    expect(r.popCap).toBeCloseTo(
+      expectedMaxHousing * POP_CENTRE_DENSITY + SUBSTRATE_GEN.POP_BASELINE_FLOOR,
+      4,
+    );
+    // Staffing invariant still holds (step 3b scaled industry down to the reduced popCap).
+    expect(labourDemand(r.buildings)).toBeLessThanOrEqual(r.popCap + 1e-6);
+  });
+
   it("leaves industry fully built when habitable/general space can staff it (demand == popCap)", () => {
     // Generous space → housing meets labourDemand / POP_CENTRE_DENSITY → popCap == labourDemand,
     // so the staffing scale is a no-op (the system is self-consistently fully staffable).

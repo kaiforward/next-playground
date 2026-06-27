@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { executeBotTick } from "@/lib/engine/simulator/bot";
 import { marketBand } from "@/lib/engine/market-pricing";
 import { resolveConstants } from "@/lib/engine/simulator/constants";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { SimWorld, SimMarketEntry, SimPlayer, SimShip, SimRunContext } from "@/lib/engine/simulator/types";
 import type { TradeStrategy } from "@/lib/engine/simulator/strategies/types";
 
@@ -85,7 +85,7 @@ function baseWorld(
   return {
     tick: 0,
     regions: [{ id: "r1", name: "Test" }],
-    systems: [{ id: "sys-a", name: "A", economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation", population: 100, popCap: 200, traits: [], bodyDanger: 0, unrest: 0, buildings: {}, yields: unitResourceVector() }],
+    systems: [{ id: "sys-a", name: "A", economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation", population: 100, popCap: 200, traits: [], bodyDanger: 0, unrest: 0, buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0 }],
     connections: [],
     markets,
     events: [],

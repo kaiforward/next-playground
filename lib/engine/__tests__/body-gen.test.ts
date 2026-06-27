@@ -143,11 +143,13 @@ describe("generateSubstrate — available-space seeder + yield (P3)", () => {
     }
   });
 
-  it("population = popCap × fill lies within [0, popCap], continuous (not rounded)", () => {
+  it("seeds population = popCap (fully staffs the built industry), continuous (not rounded)", () => {
     const systems = sampleP3(200);
     for (const s of systems) {
       expect(s.population).toBeGreaterThanOrEqual(0);
-      expect(s.population).toBeLessThanOrEqual(s.popCap + 1e-6);
+      // Population fills the labour-matched housing capacity — fully staffed at seed,
+      // not re-discounted by `fill` (which would leave every system understaffed).
+      expect(s.population).toBe(s.popCap);
     }
     // population is a continuous magnitude (no Math.round) — inhabited systems
     // carry a fractional headcount.
