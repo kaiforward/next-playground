@@ -22,8 +22,15 @@ export interface BuildGoodState {
   goodId: string;
   stock: number;
   targetStock: number;
-  /** Total local demand rate (civilian + industrial); severity weight only. */
+  /** Total local demand rate (civilian + industrial); severity weight + the self-supply gate (vs production). */
   demand: number;
+  /**
+   * Local production rate of this good. A self-supplier (production ≥ demand) is never a
+   * structural deficit — its low standing stock is throughput, not need (mirrors the logistics
+   * matcher's self-supply gate). Optional for engine-test fixtures; the live/sim path always
+   * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
+   */
+  production?: number;
 }
 
 /** A system's buildable state — markets + the body-derived capacity it can build into. */
@@ -128,7 +135,10 @@ export interface StructuralDeficit {
  * Find deficits that logistics cannot serve because no reachable surplus of the
  * good exists. Build classification per (system, good); collect deficits and the
  * surplus-holding systems per good; a deficit is structural when no surplus system
- * of its good can reach it (routeCost(surplus, deficit) non-null).
+ * of its good can reach it (routeCost(surplus, deficit) non-null). A self-supplier
+ * (production ≥ demand) is never a deficit sink — its low standing stock is throughput,
+ * not need — so building it more capacity is skipped (mirrors the logistics matcher's
+ * self-supply gate; without it the planner over-builds goods a system already makes).
  */
 export function findStructuralDeficits(
   systems: BuildSystemState[],
@@ -140,7 +150,7 @@ export function findStructuralDeficits(
   for (const s of systems) {
     for (const g of s.goods) {
       const c = classifyMarketState(g.stock, g.targetStock);
-      if (c.kind === "deficit" && c.shortfall > 0) {
+      if (c.kind === "deficit" && c.shortfall > 0 && (g.production ?? 0) < g.demand) {
         deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, demand: g.demand });
       } else if (c.kind === "surplus" && c.drawable > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
@@ -214,17 +224,25 @@ export function buildableOutput(sys: BuildSystemState, goodId: string): number {
   return buildableUnits(sys, goodId) * (OUTPUT_PER_UNIT[goodId] ?? 0);
 }
 
-/** A tier-1+ site is build-eligible this cycle only when every recipe input is locally produced or has a reachable surplus. */
+/**
+ * A tier-1+ site is build-eligible this cycle only when every recipe input is either produced
+ * locally or held as a surplus at a system REACHABLE FROM THE SITE. The factory's inputs arrive
+ * via logistics, which is route-cost bounded, so a surplus that merely exists somewhere in the
+ * faction is not enough — it must be deliverable to this site (routeCost(source, site) non-null).
+ */
 function inputsAvailable(
   goodId: string,
   site: BuildSystemState,
-  reachableSurplusGoods: Set<string>,
+  surplusSystemsByGood: Map<string, string[]>,
+  routeCost: RouteCost,
 ): boolean {
   const recipe = GOOD_RECIPES[goodId];
   if (!recipe) return true; // tier-0 has no recipe
-  return Object.keys(recipe).every(
-    (input) => (site.buildings[input] ?? 0) > 0 || reachableSurplusGoods.has(input),
-  );
+  return Object.keys(recipe).every((input) => {
+    if ((site.buildings[input] ?? 0) > 0) return true;
+    const sources = surplusSystemsByGood.get(input);
+    return sources !== undefined && sources.some((su) => routeCost(su, site.systemId) !== null);
+  });
 }
 
 /** One candidate build action: site S can produce `goodId` to serve nearby structural deficits. */
@@ -284,12 +302,18 @@ export function planFactionBuilds(
   const structural = findStructuralDeficits(systems, routeCost);
   if (structural.length === 0) return builds;
 
-  // Goods for which this faction has a reachable surplus anywhere (tier-1+ input gate).
-  const reachableSurplusGoods = new Set<string>();
+  // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
+  // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
+  // reachable FROM each candidate site (see inputsAvailable), not merely one somewhere in the faction.
+  const surplusSystemsByGood = new Map<string, string[]>();
   for (const s of systems) {
     for (const g of s.goods) {
       const c = classifyMarketState(g.stock, g.targetStock);
-      if (c.kind === "surplus" && c.drawable > 0) reachableSurplusGoods.add(g.goodId);
+      if (c.kind === "surplus" && c.drawable > 0) {
+        const list = surplusSystemsByGood.get(g.goodId) ?? [];
+        list.push(s.systemId);
+        surplusSystemsByGood.set(g.goodId, list);
+      }
     }
   }
 
@@ -314,7 +338,7 @@ export function planFactionBuilds(
     for (const site of working.values()) {
       const capUnits = buildableUnits(site, goodId);
       if (capUnits <= 0) continue;
-      if (!isTier0 && !inputsAvailable(goodId, site, reachableSurplusGoods)) continue;
+      if (!isTier0 && !inputsAvailable(goodId, site, surplusSystemsByGood, routeCost)) continue;
 
       const reachable = deficitSystemIds
         .map((sysId) => ({ sysId, cost: routeCost(site.systemId, sysId) }))

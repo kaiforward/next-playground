@@ -26,7 +26,7 @@ describe("systemBuildGeneration", () => {
 
 function buildSys(
   systemId: string,
-  good: { goodId: string; stock: number; targetStock: number; demand: number },
+  good: { goodId: string; stock: number; targetStock: number; demand: number; production?: number },
 ): BuildSystemState {
   return {
     systemId, factionId: "f1", population: 100, unrest: 0, buildings: {},
@@ -60,6 +60,19 @@ describe("findStructuralDeficits", () => {
   it("does not treat a balanced or surplus market as a deficit", () => {
     const balanced = buildSys("A", { goodId: "ore", stock: 10, targetStock: 10, demand: 4 });
     expect(findStructuralDeficits([balanced], reachable)).toHaveLength(0);
+  });
+
+  it("does not flag a self-supplier (production ≥ demand) as a deficit despite low standing stock", () => {
+    // Low stock but produces at least its own demand → throughput, not need. Mirrors the
+    // logistics matcher's self-supply gate: building more capacity for a good a system already
+    // makes piles stock to the ceiling and decays its own producers.
+    const selfSupplier = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 10 });
+    expect(findStructuralDeficits([selfSupplier], reachable)).toHaveLength(0);
+  });
+
+  it("still flags a net importer (production < demand) with low stock as structural", () => {
+    const importer = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 2 });
+    expect(findStructuralDeficits([importer], reachable)).toHaveLength(1);
   });
 });
 
@@ -230,6 +243,46 @@ describe("planFactionBuilds", () => {
     expect(countFor(builds, "C", "water")).toBeGreaterThan(0);
     // Proactive housing also appears (C is fed and calm with habitable headroom).
     expect(countFor(builds, "C", "housing")).toBeGreaterThan(0);
+  });
+});
+
+describe("planFactionBuilds — tier-1+ input reachability", () => {
+  // metals (tier-1, recipe { ore }) is a structural deficit at A; builder B has space + budget
+  // but no local ore; an ore surplus sits at S. A metals factory may be built at B only if B can
+  // actually RECEIVE ore — i.e. S is reachable from B — because logistics delivery (which feeds
+  // the factory's inputs) is route-cost bounded. A faction-wide "ore surplus exists somewhere"
+  // test would wrongly green-light a factory whose inputs can never arrive.
+  function scenario(): { deficit: BuildSystemState; builder: BuildSystemState; oreSurplus: BuildSystemState } {
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    return {
+      deficit: {
+        systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+        slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+        goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5 }],
+      },
+      builder: {
+        systemId: "B", factionId: "f1", population: 200, unrest: 0, buildings: {},
+        slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+      },
+      oreSurplus: {
+        systemId: "S", factionId: "f1", population: 100, unrest: 0, buildings: {},
+        slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+        goods: [{ goodId: "ore", stock: 100, targetStock: 20, demand: 5, production: 0 }],
+      },
+    };
+  }
+
+  it("does not build a tier-1+ factory when its input surplus is unreachable from the site", () => {
+    const { deficit, builder, oreSurplus } = scenario();
+    // B can reach the deficit A (so it could serve it), but the ore source S is unreachable from B.
+    const routeCost: RouteCost = (from, to) => (from === "S" || to === "S" ? null : 1);
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], routeCost), "B", "metals")).toBe(0);
+  });
+
+  it("builds a tier-1+ factory when its input surplus is reachable from the site (not just locally produced)", () => {
+    const { deficit, builder, oreSurplus } = scenario();
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1), "B", "metals")).toBeGreaterThan(0);
   });
 });
 
