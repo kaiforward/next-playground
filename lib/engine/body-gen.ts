@@ -161,7 +161,7 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
   // is built and nobody lives there. Factions develop it later (SP5) by paying for
   // orbital/artificial habitation alongside the extractors. (rawFill still consumes
   // its rng draw so other systems' streams don't shift.)
-  const fill = habitableSpace > 0 ? rawFill : 0;
+  const fill = habitableSpace > 0 ? rawFill * SUBSTRATE_GEN.SEED_FILL_MULT : 0;
 
   const allocation = allocateIndustry(
     { bodies, slotCap, generalSpace, habitableSpace, fill },

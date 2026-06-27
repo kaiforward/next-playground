@@ -34,6 +34,13 @@ export const SUBSTRATE_GEN = {
   POP_BASELINE_FLOOR: 0,
   /** Reference habitable space treated as "fully developable" for the seed-fill curve. P4-tuned; not load-bearing for invariants. */
   HABITABLE_REF: 25,
+  /**
+   * Validation lever: multiplies the seeded development fill so systems start BELOW
+   * their substrate potential, letting the autonomic build be observed climbing toward
+   * it (the loop is idle at potential). 1 = production (seed at potential). Lower for
+   * the seed-below-potential harness (e.g. 0.5). See docs/plans/sp5-autonomic-build-design.md.
+   */
+  SEED_FILL_MULT: 1,
 } as const;
 
 export interface QualityBand {
