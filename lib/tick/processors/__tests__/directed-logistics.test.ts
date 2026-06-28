@@ -27,10 +27,11 @@ describe("MemoryDirectedLogisticsWorld", () => {
 
 // ── market band math (anchorMult:1, demandRate:1, priceFloor:0.5, priceCeiling:2.0)
 // targetStock = 40×1×1 = 40; minStock = 40/2 = 20; maxStock = 40/0.5 + storageCapacity = 80+storageCapacity.
-// mA: stock=95, storageCapacity=20 → targetStock=40; surplusThreshold=40×1.4=56; 95≥56 ✓ surplus; drawable=95−20=75.
-// mB: stock=10, storageCapacity=20 → minStock=20; 10<20 ✓ deficit; shortfall=10.
-// tick=INTERVAL−1 (=47): shardRange(1, 47, 48) → start=0, end=1; catchUp=48/24=2.
-// engine quantity=min(10,75,100)=10; body qty=floor(10×2)=20; moved=min(20,75,90)=20 > 0 ✓.
+// mA: stock=95, storageCapacity=20 → targetStock=40; surplusThreshold=40×1.4=56; 95≥56 ✓ surplus; drawable=95−40=55.
+// mB: stock=10, storageCapacity=20 → targetStock=40; deficitThreshold=40×0.8=32; 10<32 ✓ deficit; shortfall=40−10=30.
+// tick=INTERVAL−1 (=47): shardRange(1, 47, 48) → start=0, end=1.
+// engine quantity=min(shortfall 30, drawable 55, affordable 200)=30. A logistics delivery is a level-fill
+// toward the anchor, so the body moves exactly that (no catch-up): moved=min(30, 95−20, 100−10)=30 → mB lands at 40 (=anchor).
 function market(id: string, goodId: string, stock: number, storageCapacity: number) {
   return {
     id, goodId, stock,
@@ -64,6 +65,36 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // both market stocks were written (source down, dest up)
     expect(world.stockUpdates.has("mA")).toBe(true);
     expect(world.stockUpdates.has("mB")).toBe(true);
+  });
+
+  it("fills a deficit toward its anchor in one delivery — never overshoots into surplus", async () => {
+    // Regression for the catch-up overshoot: a single delivery is a level-fill toward the
+    // days-of-supply anchor (targetStock), NOT a rate that scales with the shard interval.
+    // mB: stock 10, anchor 40 → must land at the anchor (40), not be doubled into surplus (≥56).
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(
+      world,
+      { tick: DUE_TICK },
+      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+    );
+    const targetStock = 40; // 40 × demandRate 1 × anchorMult 1
+    const surplusThreshold = targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 56
+    const mBStock = world.stockUpdates.get("mB")!;
+    expect(mBStock).toBeGreaterThan(10); // something was delivered
+    expect(mBStock).toBeLessThanOrEqual(targetStock); // filled to the anchor, no further
+    expect(mBStock).toBeLessThan(surplusThreshold); // and not flipped into a surplus donor
+    // conservation: donor lost exactly what the recipient gained
+    expect(world.stockUpdates.get("mA")!).toBeCloseTo(95 - (mBStock - 10), 6);
   });
 
   it("does nothing for an empty world", async () => {

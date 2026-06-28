@@ -14,7 +14,8 @@
     "bench:tick": "tsx --tsconfig tsconfig.json --env-file=.env scripts/bench-tick.ts",
     "validate:gen": "tsx --tsconfig tsconfig.json scripts/validate-distributions.ts",
     "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts",
-    "find:smoke-systems": "tsx --tsconfig tsconfig.json --env-file=.env scripts/find-smoke-systems.ts"
+    "find:smoke-systems": "tsx --tsconfig tsconfig.json --env-file=.env scripts/find-smoke-systems.ts",
+    "audit:economy": "tsx --tsconfig tsconfig.json --env-file=.env scripts/economy-audit.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
