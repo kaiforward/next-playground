@@ -3,7 +3,6 @@
  * divider and a right stack from it, normalised to a shared `maxValue` so
  * multiple instances (e.g. per tier) share one scale. Segments carry a
  * direction colour (in = red, out = green) and a solid/hatch pattern.
- * Generalised from the former SubstrateTradeBars.
  */
 
 export interface BarSegment {

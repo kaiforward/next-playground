@@ -70,25 +70,12 @@ export interface TradeFlowPartner {
   systemName: string;
   quantity: number;
 }
-/** One good's total flow and the top partner systems that contributed. */
-export interface TradeFlowGoodSummary {
-  goodId: string;
-  goodName: string;
-  totalQuantity: number;
-  partners: TradeFlowPartner[];
-}
 /** One bucket of the import/export volume sparkline. `tick` is the bucket end. */
 export interface TradeFlowVolumeBucket {
   tick: number;
   importVolume: number;
   exportVolume: number;
 }
-export interface SystemTradeFlowData {
-  topImports: TradeFlowGoodSummary[];
-  topExports: TradeFlowGoodSummary[];
-  volumeHistory: TradeFlowVolumeBucket[];
-}
-export type SystemTradeFlowResponse = ApiResponse<SystemTradeFlowData>;
 // ── System logistics (production/consumption + imports/exports dashboard) ─────
 /** One good's full logistics row: internal prod/con + external flow split + partners. */
 export interface LogisticsGoodRow {

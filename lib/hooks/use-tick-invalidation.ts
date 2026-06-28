@@ -23,7 +23,6 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.visibility });
         queryClient.invalidateQueries({ queryKey: queryKeys.dynamicVisible });
         queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
-        queryClient.invalidateQueries({ queryKey: queryKeys.systemTradeFlowAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemLogisticsAll });
       }),
       // Economy ticks → refresh market data, trade flow, stability, and population
@@ -31,7 +30,6 @@ export function useTickInvalidation() {
       subscribeToEvent("economyTick", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
-        queryClient.invalidateQueries({ queryKey: queryKeys.systemTradeFlowAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.stability });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemPopulationAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemIndustryAll });
