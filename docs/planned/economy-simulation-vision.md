@@ -353,18 +353,18 @@ Trade-flow edge diffusion already exists and threads through all of them.
 > NOW ▶  still inside  SP5 AUTONOMIC-LIGHT  (brought-forward cut — NOT full agency)
 >   Directed-logistics track:
 >      P1 ✅ silent surplus→deficit redistribution        (on main)
->      P2 ✗  DEFUNCT — discrete "Contract layer". Built + reviewed on branch
+>      P2 ✗  DEFUNCT (only P2) — discrete "Contract layer". Built + reviewed on branch
 >             feat/sp5-logistics-contracts, then ditched: discrete claimable trade
 >             missions are the wrong primitive for multiplayer (rival resource +
 >             hoarding/contention). Branch kept unmerged for reference; lessons captured.
->      ★ NEW INITIATIVE expands the track (own doc: economy-scaling-and-trade-rework.md):
+>      P3 ◻ map overlay by flowType        ← NEXT (UI; visualises silent market vs logistics flows)
+>      P4 ◻ logistics tab = imports/exports dashboard   (UI; per-system flow view; NOT a contract board)
+>      ★ THEN the NEW INITIATIVE (own doc: economy-scaling-and-trade-rework.md):
 >          A. Global economy-scale knob   (foundational; unblocks sim calibration)
 >          B. Calibrate scale via sim
->          C. Contract-model rework       (discrete vs bounty vs marketplace) → feeds P4
+>          C. Contract-model rework       (discrete vs bounty vs marketplace)
 >          D. Ship re-pricing/capacity    (to the scaled economy)
 >          (+ transit-time equalisation — deferred enabler for high player-offered share)
->      P3 ◻ map overlay by flowType                       (visualises silent flows; model-agnostic)
->      P4 ◻ logistics tab = imports/exports dashboard     (NOT a contract board; model-agnostic)
 > ──────────────────────────────────────────────────────────────────────
 > THEN (unchanged, in order)
 >   SP4   population ← economic viability

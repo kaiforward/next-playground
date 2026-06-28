@@ -146,26 +146,30 @@ as a reference.
 
 Each is its own spec → plan → build.
 
+**First — the UI / visualisation pieces** (model-agnostic, do not need contracts, build *before* the
+scaling work):
+
+- **P3 — map overlay by `flowType`** — visualise silent market vs logistics flows on the map.
+- **P4 — logistics tab = imports/exports dashboard** — per-system flow view; *not* a contract board.
+
+**Then — the scaling + contract rework** (each its own spec → plan → build):
+
 1. **Global economy-scale knob** — one modifiable `ECONOMY_SCALE` that uniformly scales production,
    consumption, and the audited absolute terms; ratio-invariant terms (target-cover, price) deliberately
-   *don't* scale. Foundational, independently mergeable, equilibrium-preserving. **Do first.**
+   *don't* scale. Foundational, independently mergeable, equilibrium-preserving. **Do first of the scaling work.**
 2. **Calibrate the scale via the simulator** — bump the knob, run sims, find the factor that lands typical
    imports/exports in the hundreds–thousands. A measurement pass, not a build.
 3. **Contract-model rework** — resolve [the pivotal fork](#the-pivotal-fork-what-is-a-player-trade-opportunity)
-   (discrete vs bounty vs marketplace), then build it. Needs (1)'s magnitudes. Own brainstorm.
+   (discrete vs bounty vs marketplace), then build it (its own player-facing surface — *not* P4). Needs
+   (1)'s magnitudes. Own brainstorm.
 4. **Ship re-pricing / capacity** — re-tune ship cargo and price *to* the scaled economy (inverting today's
    accidental dependency). Later.
-
-Running alongside (model-agnostic visualisation, do not need contracts):
-- **P3 — map overlay by `flowType`** (visualise silent market vs logistics flows).
-- **P4 — logistics tab**, reframed as an **imports/exports dashboard** (per-system flow view), *not* a
-  contract board.
 
 Deferred enabler: **transit-time equalisation** (slot in when we want to push F high).
 
 ## Relationship to the roadmap
 
 This expands the SP5 autonomic-light directed-logistics track from "Contract layer → map → tab" into
-"~~Contract layer~~ → **scale → calibrate → contract-model** → map + imports/exports tab → ships." It sits
-before SP4 (population ← viability) and well before full-SP5 agency (treasury, build planner, military
-ceiling). See [economy-simulation-vision.md](./economy-simulation-vision.md) §13 for the full sequence.
+"~~Contract layer~~ → **map overlay → imports/exports tab** → scale → calibrate → contract-model → ships"
+(the UI/visualisation comes first; the scaling rework follows). It sits before SP4 (population ← viability)
+and well before full-SP5 agency (treasury, build planner, military ceiling). See [economy-simulation-vision.md](./economy-simulation-vision.md) §13 for the full sequence.
