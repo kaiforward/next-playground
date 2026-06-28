@@ -1,5 +1,9 @@
 import { Container, Graphics } from "pixi.js";
 import { cumulativeLengths, pointAtFraction, type Point } from "../flow-arc";
+import { SIZES } from "../theme";
+
+/** Gap (world units) between the arrowhead tip and the destination circle edge. */
+const ARROW_TIP_GAP = 2;
 
 /** Visual treatment for a flow edge's particles + optional decorations. */
 export interface FlowEdgeStyle {
@@ -76,19 +80,30 @@ export class TradeFlowEdge {
       this.container.addChild(line);
     }
 
-    // Static arrowhead at the destination, oriented along the last segment.
+    // Static arrowhead near the destination, oriented along the last segment.
+    // Pulled back along the arrival tangent so the tip touches the destination
+    // circle edge (core radius + gap) instead of sitting under the system glyph.
     if (style.arrowhead && path.length >= 2) {
       const a = path[path.length - 2];
       const b = path[path.length - 1];
-      const tri = new Graphics();
-      const s = style.arrowSize;
-      tri.moveTo(s, 0);
-      tri.lineTo(-s * 0.8, s * 0.7);
-      tri.lineTo(-s * 0.8, -s * 0.7);
-      tri.fill({ color, alpha: style.particleAlpha });
-      tri.position.set(b.x, b.y);
-      tri.rotation = Math.atan2(b.y - a.y, b.x - a.x);
-      this.container.addChild(tri);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const segLen = Math.hypot(dx, dy);
+      if (segLen > 0) {
+        const s = style.arrowSize;
+        const ux = dx / segLen;
+        const uy = dy / segLen;
+        // Tip (local +s) should land at the circle edge: position back by radius + gap + s.
+        const pullback = SIZES.systemCoreRadius + ARROW_TIP_GAP + s;
+        const tri = new Graphics();
+        tri.moveTo(s, 0);
+        tri.lineTo(-s * 0.8, s * 0.7);
+        tri.lineTo(-s * 0.8, -s * 0.7);
+        tri.fill({ color, alpha: style.particleAlpha });
+        tri.position.set(b.x - ux * pullback, b.y - uy * pullback);
+        tri.rotation = Math.atan2(dy, dx);
+        this.container.addChild(tri);
+      }
     }
 
     const speedPerMs = total > 0 ? style.particleSpeed / total / 1000 : 0;

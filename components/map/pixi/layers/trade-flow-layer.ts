@@ -48,7 +48,7 @@ export const LOGISTICS_FLOW_CONFIG: FlowLayerConfig = {
     particleAlpha: LOGISTICS_FLOW.particleAlpha,
     particleSpeed: LOGISTICS_FLOW.particleSpeed,
     glowBlur: LOGISTICS_FLOW.glowBlur,
-    drawPath: true,
+    drawPath: false,
     pathAlpha: LOGISTICS_FLOW.pathAlpha,
     arrowhead: true,
     arrowSize: LOGISTICS_FLOW.arrowSize,
