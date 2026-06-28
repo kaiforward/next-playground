@@ -1,5 +1,11 @@
 # SP5 Stage 1 — Seed-Coherence Foundation (design)
 
+> **⚠ ABANDONED (2026-06-28) — this Stage-1/Stage-2 "seed-coherence" path was NOT taken.**
+> #114 shipped the simpler housing-led seed plus the reactive autonomic-build slice
+> (`lib/engine/directed-build.ts`), and the directed-logistics track resumed directly. Canonical sequence:
+> [economy-simulation-vision.md](../planned/economy-simulation-vision.md) §13 "CURRENT SEQUENCE (2026-06-28)".
+> Kept for historical/design reference only; safe to delete.
+
 > **Status: Design (brainstormed 2026-06-26).** First slice of the SP5 seed-coherence re-sequencing.
 > Sits **on** substrate-v2 + SP3.5 decay + the unmerged logistics Phase 1 (on `feat/sp5-autonomic-light`,
 > reused as the silent engine). Roadmap home: `economy-simulation-vision.md` §13 (2026-06-26 callout) ·
