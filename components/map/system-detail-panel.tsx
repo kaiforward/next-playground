@@ -14,6 +14,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { CompactShipCard } from "@/components/map/compact-ship-card";
 import { CompactConvoyCard } from "@/components/map/compact-convoy-card";
 import { enrichTraits } from "@/lib/utils/traits";
+import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 
 interface GatewayTarget {
   regionId: string;
@@ -113,30 +114,6 @@ export function SystemDetailPanel({
                 Faction: <span className="text-text-secondary">{factionName}</span>
               </p>
             )}
-          </div>
-        )}
-
-        {/* Tab shortcuts — only when system is visible. Overview is reached via the footer button. */}
-        {visibility === "visible" && (
-          <div className="grid grid-cols-3 gap-1">
-            {[
-              { href: `/system/${system.id}/market`, label: "Market" },
-              { href: `/system/${system.id}/ships`, label: "Ships" },
-              { href: `/system/${system.id}/convoys`, label: "Convoys" },
-              { href: `/system/${system.id}/shipyard`, label: "Shipyard" },
-              { href: `/system/${system.id}/contracts`, label: "Contracts" },
-              { href: `/system/${system.id}/explore`, label: "Explore" },
-            ].map(({ href, label }) => (
-              <Button
-                key={label}
-                href={href}
-                variant="ghost"
-                size="xs"
-                className="bg-surface border-border-strong text-text-primary uppercase tracking-wider font-medium hover:bg-surface-hover"
-              >
-                {label}
-              </Button>
-            ))}
           </div>
         )}
 
@@ -271,7 +248,22 @@ export function SystemDetailPanel({
 
       {/* Actions */}
       {visibility === "visible" && (
-        <div className="px-4 py-3 border-t border-gray-700">
+        <div className="px-4 py-3 border-t border-gray-700 space-y-3">
+          {/* Tab shortcuts — Overview has its own dedicated button below. */}
+          <div className="flex flex-col gap-1">
+            {SYSTEM_TABS.filter((tab) => tab.segment).map((tab) => (
+              <Button
+                key={tab.segment}
+                href={`/system/${system.id}/${tab.segment}`}
+                variant="ghost"
+                size="xs"
+                fullWidth
+                className="bg-surface border-border-strong text-text-primary uppercase tracking-wider font-medium hover:bg-surface-hover"
+              >
+                {tab.label}
+              </Button>
+            ))}
+          </div>
           <Button
             href={`/system/${system.id}`}
             variant="outline"

@@ -9,6 +9,7 @@ import { useSystemAllMissions } from "@/lib/hooks/use-op-missions";
 import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
 import { enrichTraits } from "@/lib/utils/traits";
 import { deriveSystemLocations } from "@/lib/constants/locations";
+import { SYSTEM_TABS, type SystemTabSegment } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,19 +53,21 @@ function SystemPanelContent({
   }, [systemInfo?.traits]);
 
   const basePath = `/system/${systemId}`;
-  const tabs = [
-    { label: "Overview", href: basePath, active: pathname === basePath, badge: 0 },
-    { label: "Astrography", href: `${basePath}/astrography`, active: pathname.startsWith(`${basePath}/astrography`), badge: 0 },
-    { label: "Population", href: `${basePath}/population`, active: pathname.startsWith(`${basePath}/population`), badge: 0 },
-    { label: "Industry", href: `${basePath}/industry`, active: pathname.startsWith(`${basePath}/industry`), badge: 0 },
-    { label: "Logistics", href: `${basePath}/logistics`, active: pathname.startsWith(`${basePath}/logistics`), badge: 0 },
-    { label: "Market", href: `${basePath}/market`, active: pathname.startsWith(`${basePath}/market`), badge: 0 },
-    { label: "Ships", href: `${basePath}/ships`, active: pathname.startsWith(`${basePath}/ships`), badge: soloShipCount },
-    { label: "Convoys", href: `${basePath}/convoys`, active: pathname.startsWith(`${basePath}/convoys`), badge: convoyCount },
-    { label: "Shipyard", href: `${basePath}/shipyard`, active: pathname.startsWith(`${basePath}/shipyard`), badge: 0 },
-    { label: "Contracts", href: `${basePath}/contracts`, active: pathname.startsWith(`${basePath}/contracts`), badge: contractCount },
-    { label: "Explore", href: `${basePath}/explore`, active: pathname.startsWith(`${basePath}/explore`), badge: exploreCount },
-  ];
+  const tabBadges: Partial<Record<SystemTabSegment, number>> = {
+    ships: soloShipCount,
+    convoys: convoyCount,
+    contracts: contractCount,
+    explore: exploreCount,
+  };
+  const tabs = SYSTEM_TABS.map((tab) => {
+    const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;
+    return {
+      label: tab.label,
+      href,
+      active: tab.segment ? pathname.startsWith(href) : pathname === basePath,
+      badge: tabBadges[tab.segment] ?? 0,
+    };
+  });
 
   const subtitle = (
     <span className="inline-flex items-center gap-2">
