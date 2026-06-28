@@ -3,7 +3,7 @@ import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 /**
  * Directed-build (faction build planner) tuning. First-draft, simulator-calibrated;
  * only relative shape matters. The up-arrow twin of SP3.5 infrastructure decay.
- * See docs/plans/sp5-stage1-seed-coherence-design.md.
+ * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 export const DIRECTED_BUILD = {
   /** Ticks for the per-faction shard to sweep every faction once — the agency clock (matches logistics). */

@@ -6,7 +6,7 @@
 > fold into the eventual SP5 design (→ `docs/planned/`). Delete once that spec absorbs it.
 >
 > Sources audited: `docs/planned/economy-simulation-vision.md` (§5, §10, §12, §13, §14 — the
-> authoritative SP4/SP5 design), `docs/planned/economy-simulation-supply-chain.md` (SP3 §2, §15 —
+> authoritative SP4/SP5 design), the shipped SP3 model (`docs/active/gameplay/economy.md` + `system-traits.md`) (SP3 §2, §15 —
 > the discrete-vs-abstract decision + deferral list), `docs/planned/war-system.md`,
 > `docs/active/gameplay/economy-substrate-v2-available-space.md`, `docs/active/gameplay/faction-system.md`,
 > `prisma/schema.prisma`, `lib/engine/industry.ts`, `lib/engine/industry-seed.ts`,

@@ -22,7 +22,7 @@ Four sub-projects, executed in order. Each has a detailed implementation plan wr
 
 | # | Sub-project | Status | Detailed plan | Source design |
 |---|---|---|---|---|
-| 1 | [Faction Foundation](#3-sub-project-1--faction-foundation) | ✅ Shipped (PRs 1–5 on `feat/layer-2-foundation`, awaiting merge to main) | [layer-2-faction-foundation.md](../archive/layer-2-faction-foundation.md) | active/faction-system.md, navigation-changes.md §6 (border-conflict danger only) |
+| 1 | [Faction Foundation](#3-sub-project-1--faction-foundation) | ✅ Shipped (PRs 1–5 on `feat/layer-2-foundation`, awaiting merge to main) | — shipped, see [active/faction-system.md](../active/gameplay/faction-system.md) | active/faction-system.md, navigation-changes.md §6 (border-conflict danger only) |
 | 2 | [Faction Facilities](#4-sub-project-2--faction-facilities) | Not started | `layer-2-facilities.md` (TBD) | facilities.md |
 | 3 | [Goods & Government Restrictions](#5-sub-project-3--goods--government-restrictions) | Not started | `layer-2-contraband.md` (TBD) | navigation-changes.md §4 |
 | 4 | [War & Battle Engine](#6-sub-project-4--war--battle-engine) | Not started | `layer-2-war.md` (TBD) | war-system.md, navigation-changes.md §6 (war-zone danger) |
@@ -67,7 +67,7 @@ These decisions affect more than one sub-project and are settled here so each de
 
 The structural backbone. Every later sub-project depends on this.
 
-**Status: ✅ Shipped on `feat/layer-2-foundation`** (5 squash-merged phase PRs, awaiting the final merge to `main`). Detailed plan: [layer-2-faction-foundation.md](../archive/layer-2-faction-foundation.md). Live behaviour: [active/faction-system.md](../active/gameplay/faction-system.md). The "In scope" list below reflects what was planned and (with two small exceptions noted below) what shipped.
+**Status: ✅ Shipped on `feat/layer-2-foundation`** (5 squash-merged phase PRs, awaiting the final merge to `main`). Live behaviour: [active/faction-system.md](../active/gameplay/faction-system.md). The "In scope" list below reflects what was planned and (with two small exceptions noted below) what shipped.
 
 ### In scope
 
@@ -119,7 +119,7 @@ The structural backbone. Every later sub-project depends on this.
 - Players can see faction territory on the map, view their reputation with each faction, and feel reputation in buy/sell prices
 - All Layer 1 tests still pass; existing tick processors run unchanged against the new ownership model
 
-### Open questions (resolved in [layer-2-faction-foundation.md](../archive/layer-2-faction-foundation.md))
+### Open questions (resolved during Foundation — see [active/faction-system.md](../active/gameplay/faction-system.md))
 
 | # | Question | Resolution |
 |---|---|---|
@@ -325,9 +325,8 @@ Once stable, Layer 3 (faction-gated missions, in-system gameplay) can begin.
 | Document | Purpose | Status |
 |---|---|---|
 | `layer-2-roadmap.md` (this file) | Roadmap, sub-project decomposition, cross-cutting decisions | Active |
-| [`layer-2-faction-foundation.md`](../archive/layer-2-faction-foundation.md) | Detailed plan for sub-project 1 | ✅ Shipped — preserved as the as-built record |
 | `layer-2-facilities.md` | Detailed plan for sub-project 2 | To be written before Facilities begins |
 | `layer-2-contraband.md` | Detailed plan for sub-project 3 | To be written before Contraband begins |
 | `layer-2-war.md` | Detailed plan for sub-project 4 | To be written before War begins |
 
-Each sub-project plan is brainstormed and written before any code for that sub-project lands — a code-heavy build plan in `docs/plans/` (deleted once the sub-project ships), covering a phase breakdown, file-change summary, test/validation strategy, and branch strategy.
+Each sub-project plan is brainstormed and written before any code for that sub-project lands — a code-heavy build plan in `docs/build-plans/` (deleted once the sub-project ships), covering a phase breakdown, file-change summary, test/validation strategy, and branch strategy.

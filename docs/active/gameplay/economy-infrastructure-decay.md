@@ -2,10 +2,10 @@
 
 > **Status: Active (shipped)** — economy sub-project SP3.5, sequenced **between SP3 and SP4**.
 > Sits *under* the SP3 input-gating cascade and *on* the substrate-v2 available-space model (both
-> unchanged). Roadmap home: [economy-simulation-vision.md](./economy-simulation-vision.md) §13 — this is
+> unchanged). Roadmap home: [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13 — this is
 > the **decay** half of the §13-item-5 autonomic mechanism brought forward, fused with a narrow slice of
 > the §13-item-4 booked phase *"Population ← economic viability."* The SP5/war layering conclusions it drew on
-> live in `docs/plans/sp5-war-layering-contract-audit.md`.
+> live in `docs/planned/sp5-war-layering-contract-audit.md`.
 
 ---
 
@@ -268,8 +268,8 @@ holds, nonviable decays; dispersion across systems) — precise tuning is perish
 
 ## Where this sits in the roadmap
 
-- **Superseded** the converged brainstorm `docs/plans/autonomic-growth-decay-brainstorm.md` (now deleted).
-- **Draws from** `docs/plans/sp5-war-layering-contract-audit.md` — its SP5/war layering conclusions (treasury
+- **Superseded** the converged brainstorm `docs/build-plans/autonomic-growth-decay-brainstorm.md` (now deleted).
+- **Draws from** `docs/planned/sp5-war-layering-contract-audit.md` — its SP5/war layering conclusions (treasury
   G1, runtime build-out as the *growth* path, labour priority, military channel, topology-cache invalidation)
   remain the reference for SP5 and should fold into the SP5 spec when written.
 - **Vision §13:** decay half of item 5 (autonomic) brought forward + narrow slice of item 4 (pop-viability).

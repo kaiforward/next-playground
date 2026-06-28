@@ -2,7 +2,7 @@
 
 A dedicated, immersive surface for in-cantina mini-games. Mini-games currently render *inside* the system detail panel, which is dismissable mid-game; this design moves them to a top-layer fullscreen modal that escapes the shell and can only be left deliberately.
 
-> **Status — designed, not built.** Approach and the two product decisions (confirm-and-forfeit exit, escrow-at-start wagers) are settled. This doc is the spec; turn it into a build plan (`docs/plans/`) when the work is picked up. Depends on nothing not already shipped — Void's Gambit (`lib/engine/mini-games/voids-gambit/`) and the cantina are live.
+> **Status — designed, not built.** Approach and the two product decisions (confirm-and-forfeit exit, escrow-at-start wagers) are settled. This doc is the spec; turn it into a build plan (`docs/build-plans/`) when the work is picked up. Depends on nothing not already shipped — Void's Gambit (`lib/engine/mini-games/voids-gambit/`) and the cantina are live.
 
 ---
 
