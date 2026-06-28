@@ -112,7 +112,7 @@ A tier-colour legend sits beneath the toggle so first-time players can decode th
 
 The system detail panel has a **Logistics** tab (between Industry and Market) pairing two diverging-bar charts over a full-width volume-over-time series. It is a legibility instrument for the per-system trade picture — where the price overlay surfaces *opportunity*, this tab gives the *precise per-good breakdown*.
 
-**Internal** (left column): production vs consumption for all goods, per-cycle rates, solid bars. Relocated from the Industry tab's "Trade balance" card. Dense on inhabited systems (~all 24 goods present).
+**Internal** (left column): production vs consumption for all goods, per-cycle rates, solid bars. Relocated from the Industry tab's "Trade balance" card. Dense on inhabited systems (~all 26 goods present).
 
 **External** (right column): imports vs exports over the rolling `FLOW_HISTORY_TICKS` window, cumulative volume. Each bar splits by **flow type** — solid for directed **logistics** (autonomic), diagonal-hatched for **market** diffusion — the same two-layer distinction as the map overlay. Per-row hover tooltips list the top source/destination partner systems.
 
