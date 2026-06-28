@@ -9,7 +9,15 @@ import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
 import type {
   SystemTradeFlowData,
   TradeFlowEdges,
+  SystemLogisticsData,
 } from "@/lib/types/api";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { capacityGoodRates } from "@/lib/engine/industry";
+import {
+  aggregateLogisticsFlows,
+  buildLogisticsRows,
+  type LogisticsFlowRow,
+} from "@/lib/engine/logistics";
 
 /**
  * Returns the two map-overlay edge sets (market diffusion + directed logistics)
@@ -115,6 +123,84 @@ export async function getSystemTradeFlow(
       (f) => f.toSystemId,
       resolveName,
     ),
+    volumeHistory: bucketizeVolumeHistory(flows, systemId, currentTick),
+  };
+}
+
+/**
+ * Per-system Logistics tab data: internal production/consumption rates +
+ * external imports/exports (split by flow type) + the volume-over-time series.
+ * Visibility-gated: an unsurveyed system returns `{ visibility: "unknown" }`.
+ */
+export async function getSystemLogistics(
+  playerId: string,
+  systemId: string,
+): Promise<SystemLogisticsData> {
+  const { visibleSet, currentTick } = await getPlayerVisibility(playerId);
+  if (!visibleSet.has(systemId)) return { visibility: "unknown" };
+
+  const minTick = currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
+
+  const [system, flows] = await Promise.all([
+    prisma.starSystem.findUnique({
+      where: { id: systemId },
+      relationLoadStrategy: "join",
+      select: {
+        population: true,
+        yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
+        yieldArable: true, yieldWater: true, yieldRadioactive: true,
+        buildings: { select: { buildingType: true, count: true } },
+      },
+    }),
+    prisma.tradeFlow.findMany({
+      where: {
+        tick: { gt: minTick },
+        OR: [{ fromSystemId: systemId }, { toSystemId: systemId }],
+      },
+      select: {
+        tick: true, fromSystemId: true, toSystemId: true,
+        goodId: true, quantity: true, flowType: true,
+      },
+    }),
+  ]);
+
+  if (!system) return { visibility: "unknown" };
+
+  const buildings: Record<string, number> = {};
+  for (const b of system.buildings) buildings[b.buildingType] = b.count;
+  const yields = resourceVectorFromColumns(
+    {
+      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
+      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
+      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
+    },
+    "yield",
+  );
+  const prodCon = capacityGoodRates(buildings, system.population, yields);
+
+  // Resolve partner system names once (no N+1) for the source/destination tooltips.
+  const partnerIds = new Set<string>();
+  for (const f of flows) {
+    partnerIds.add(f.fromSystemId === systemId ? f.toSystemId : f.fromSystemId);
+  }
+  const partnerRows = await prisma.starSystem.findMany({
+    where: { id: { in: [...partnerIds] } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(partnerRows.map((r) => [r.id, r.name]));
+  const resolveName = (id: string): string => nameById.get(id) ?? "Unknown System";
+
+  const flowRows: LogisticsFlowRow[] = flows;
+  const flowsByGood = aggregateLogisticsFlows(flowRows, systemId, resolveName);
+  const model = buildLogisticsRows(prodCon, flowsByGood);
+
+  return {
+    visibility: "visible",
+    rows: model.rows,
+    internalMax: model.internalMax,
+    externalMax: model.externalMax,
+    activeGoodCount: model.activeGoodCount,
+    tradedGoodCount: model.tradedGoodCount,
     volumeHistory: bucketizeVolumeHistory(flows, systemId, currentTick),
   };
 }
