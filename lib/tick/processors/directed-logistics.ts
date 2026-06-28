@@ -2,7 +2,7 @@ import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
 import { PrismaDirectedLogisticsWorld } from "@/lib/tick/adapters/prisma/directed-logistics";
 import { loadHopDistances } from "@/lib/services/hop-distances";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-import { shardRange, catchUpFactor } from "@/lib/tick/shard";
+import { shardRange } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import {
   matchFactionTransfers,
@@ -39,8 +39,16 @@ function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
  * Pure processor body. PER-FACTION shard: a contiguous window of the stable
  * faction-key order runs each tick, so every faction is matched once per
  * `interval` ticks. Matched volume is moved silently (stock deltas + logistics
- * flow rows). The catch-up factor scales moved volume to wall-clock at any
- * interval.
+ * flow rows).
+ *
+ * No catch-up scaling: unlike trade-flow (a per-tick *rate* that must scale with
+ * the shard interval), a logistics transfer is an absolute *level-fill* toward the
+ * days-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
+ * by the interval ratio overshoots the anchor — at INTERVAL = 2× the economy it
+ * doubled deliveries, pushing recipients past the surplus margin (≈2× anchor),
+ * which both wasted hauls and flipped fresh recipients into donors / cheap
+ * re-export targets. The anchor (40 economy-runs of cover) already vastly exceeds
+ * one inter-cycle draw, so a single fill-to-anchor over-provisions on its own.
  */
 export async function runDirectedLogisticsProcessor(
   world: DirectedLogisticsWorld,
@@ -56,8 +64,6 @@ export async function runDirectedLogisticsProcessor(
 
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
-
-  const catchUp = catchUpFactor(params.interval);
 
   // Group rows by faction key, build engine state, match each group.
   const byFaction = new Map<string | null, SystemLogisticsRow[]>();
@@ -91,7 +97,7 @@ export async function runDirectedLogisticsProcessor(
   const flows: LogisticsFlowInsert[] = [];
 
   for (const t of allTransfers) {
-    const qty = Math.floor(t.quantity * catchUp);
+    const qty = Math.floor(t.quantity);
     if (!Number.isFinite(qty) || qty <= 0) continue;
 
     const from = marketByKey.get(`${t.fromSystemId}|${t.goodId}`);

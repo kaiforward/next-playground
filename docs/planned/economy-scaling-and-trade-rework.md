@@ -67,6 +67,19 @@ a sliver of it; the faction's own logistics moves the rest. Density and mission 
 3. **There is no global magnitude multiplier today.** `UNIVERSE_SCALE` controls system/region count, not
    per-system magnitudes. Introducing one modifiable `ECONOMY_SCALE` is the foundational change.
 
+4. **The live galaxy has almost no price spread to arbitrage — "nowhere is expensive."** A tick-8.7k /
+   10k-scale audit (`npm run audit:economy`) found **82% of markets below 0.9× base price (median 0.59×)**,
+   only 6.8% above 1.1×, and even the *priciest whole region* averaging 0.86× base. Structural over-capacity
+   (tier-0 ~1.39× consumption, tier-1 ~1.20×, tier-2 ~1.74×) keeps stock high in-band almost everywhere, so
+   prices sit near the floor and sell-high destinations are scattered needles, not regions. This directly
+   constrains the [marketplace-arbitrage option](#the-pivotal-fork-what-is-a-player-trade-opportunity):
+   arbitrage "paid by the spread" needs a spread to exist. `ECONOMY_SCALE` is **ratio-invariant and won't
+   create one** — a real price gradient has to come from sharper supply scarcity (less idle over-capacity /
+   faster decay of it) and/or demand concentration. Treat reviving a genuine spread as an explicit
+   calibration target for sub-projects 2 (calibrate) and 4 (re-pricing), not a free side-effect of the
+   magnitude knob. (Tier-2 *military* over-capacity — weapons ~4.84× — is expected to invert once war makes
+   military expensive; the staple/processed compression is the part that needs a deliberate fix.)
+
 ### Scaling-seam inventory (sub-project 1's audit)
 
 First cut of the audit Key Finding #1 calls for — every term that does **not** ride the `targetStock/stock`
