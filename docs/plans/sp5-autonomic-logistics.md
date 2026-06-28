@@ -10,6 +10,19 @@
 >
 > **Delete this file once the slice ships** — the functional design moves to
 > `docs/active/gameplay/economy-directed-logistics.md` and the code becomes the source of truth.
+>
+> ---
+>
+> **⚠ STATUS UPDATE (2026-06-28).** **Phase 1 (silent logistics) shipped** on main (#114) and remains
+> accurate. **The Contract layer (Phases 2–4 below) is SUPERSEDED.** Phase 2 was built + reviewed on
+> branch `feat/sp5-logistics-contracts`, then **ditched** — discrete claimable trade missions are the
+> wrong primitive for multiplayer (a *rival* deficit made individually claimable invites hoarding/
+> blocking). The player trade-logistics layer is being reworked (global economy scale-up → a
+> contract-model that is bounty / surfaced-marketplace-arbitrage, not claimable discrete missions). The
+> "Contracts = top-K skim" / `origin` discriminator / accept-deliver design in the sections below is
+> **historical**. Phases **3 (map overlay)** and **4 (logistics tab = imports/exports dashboard)** survive,
+> decoupled from contracts (they visualise the *silent* flows). Current design + decomposition:
+> **[economy-scaling-and-trade-rework.md](../planned/economy-scaling-and-trade-rework.md).**
 
 ---
 
