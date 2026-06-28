@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import { cumulativeLengths, pointAtFraction, type Point } from "../flow-arc";
+import { cumulativeLengths, pointAtFractionInto, type Point } from "../flow-arc";
 import { SIZES } from "../theme";
 
 /** Gap (world units) between the arrowhead tip and the destination circle edge. */
@@ -54,6 +54,13 @@ export class TradeFlowEdge {
   private path: Point[];
   private cum: number[];
   private total: number;
+  /** Polyline AABB, baked once with the path; frustum culling reads it each frame. */
+  private readonly bboxMinX: number;
+  private readonly bboxMinY: number;
+  private readonly bboxMaxX: number;
+  private readonly bboxMaxY: number;
+  /** Reused per-particle position so the per-frame loop allocates nothing. */
+  private readonly scratch: Point = { x: 0, y: 0 };
 
   constructor(
     path: Point[],
@@ -70,6 +77,22 @@ export class TradeFlowEdge {
     const { cum, total } = cumulativeLengths(path);
     this.cum = cum;
     this.total = total;
+
+    // Bake the polyline AABB once — frustum culling reads it every frame.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of path) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    this.bboxMinX = minX;
+    this.bboxMinY = minY;
+    this.bboxMaxX = maxX;
+    this.bboxMaxY = maxY;
 
     // Faint static route line under the particles (off-lane arcs read better).
     if (style.drawPath && path.length >= 2 && total > 0) {
@@ -127,19 +150,14 @@ export class TradeFlowEdge {
     }
   }
 
-  /** Returns true if a frustum AABB overlaps this edge's polyline bounding box. */
+  /** Returns true if a frustum AABB overlaps this edge's baked polyline bbox. */
   intersects(minX: number, minY: number, maxX: number, maxY: number): boolean {
-    let segMinX = Infinity;
-    let segMinY = Infinity;
-    let segMaxX = -Infinity;
-    let segMaxY = -Infinity;
-    for (const p of this.path) {
-      if (p.x < segMinX) segMinX = p.x;
-      if (p.x > segMaxX) segMaxX = p.x;
-      if (p.y < segMinY) segMinY = p.y;
-      if (p.y > segMaxY) segMaxY = p.y;
-    }
-    return segMaxX >= minX && segMinX <= maxX && segMaxY >= minY && segMinY <= maxY;
+    return (
+      this.bboxMaxX >= minX &&
+      this.bboxMinX <= maxX &&
+      this.bboxMaxY >= minY &&
+      this.bboxMinY <= maxY
+    );
   }
 
   /** Advance particle offsets. Caller guarantees the edge is visible. */
@@ -147,8 +165,8 @@ export class TradeFlowEdge {
     if (this.total === 0) return;
     for (const p of this.particles) {
       p.offset = (p.offset + p.speed * dtMs) % 1;
-      const pt = pointAtFraction(this.path, this.cum, this.total, p.offset);
-      p.gfx.position.set(pt.x, pt.y);
+      pointAtFractionInto(this.path, this.cum, this.total, p.offset, this.scratch);
+      p.gfx.position.set(this.scratch.x, this.scratch.y);
     }
   }
 

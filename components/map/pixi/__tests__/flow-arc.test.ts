@@ -3,6 +3,8 @@ import {
   arcPolyline,
   cumulativeLengths,
   pointAtFraction,
+  pointAtFractionInto,
+  type Point,
 } from "@/components/map/pixi/flow-arc";
 
 describe("arcPolyline", () => {
@@ -51,5 +53,31 @@ describe("cumulativeLengths / pointAtFraction", () => {
     expect(pointAtFraction(pts, cum, total, 0)).toEqual({ x: 0, y: 0 });
     expect(pointAtFraction(pts, cum, total, 1)).toEqual({ x: 10, y: 0 });
     expect(pointAtFraction(pts, cum, total, 0.5)).toEqual({ x: 5, y: 0 });
+  });
+
+  it("interpolates within a later segment of a multi-point polyline", () => {
+    // L-shaped path: 3 units right, then 4 units up. total = 7.
+    const pts = [{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: 4 }];
+    const { cum, total } = cumulativeLengths(pts);
+    // u = 5/7 → arc-length 5 → 2 units up the vertical second segment.
+    const p = pointAtFraction(pts, cum, total, 5 / 7);
+    expect(p.x).toBeCloseTo(3);
+    expect(p.y).toBeCloseTo(2);
+  });
+
+  it("returns the first point when total arc-length is zero", () => {
+    const pts = [{ x: 5, y: 5 }, { x: 5, y: 5 }];
+    const { cum, total } = cumulativeLengths(pts);
+    expect(total).toBe(0);
+    expect(pointAtFraction(pts, cum, total, 0.5)).toEqual({ x: 5, y: 5 });
+  });
+
+  it("pointAtFractionInto writes into the supplied point without allocating a new one", () => {
+    const pts = [{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: 4 }];
+    const { cum, total } = cumulativeLengths(pts);
+    const out: Point = { x: -1, y: -1 };
+    pointAtFractionInto(pts, cum, total, 5 / 7, out);
+    expect(out.x).toBeCloseTo(3);
+    expect(out.y).toBeCloseTo(2);
   });
 });

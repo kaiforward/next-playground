@@ -63,4 +63,38 @@ describe("buildFlowEdges", () => {
     );
     expect(marketEdges).toHaveLength(0);
   });
+
+  it("ignores rows with non-positive quantity", () => {
+    const { marketEdges } = buildFlowEdges(
+      [
+        row({ fromSystemId: "A", toSystemId: "B", quantity: 0 }),
+        row({ fromSystemId: "A", toSystemId: "B", quantity: -5 }),
+        row({ fromSystemId: "A", toSystemId: "B", quantity: 10 }),
+      ],
+      VISIBLE,
+      5,
+      1,
+    );
+    // The 0 and -5 rows are dropped by the `quantity <= 0` guard, so the edge's
+    // volume is 10 — not 5 (which is what counting the -5 row would give).
+    expect(marketEdges).toHaveLength(1);
+    expect(marketEdges[0].totalVolume).toBe(10);
+  });
+
+  it("falls back to canonical order when the dominant good's net flow is balanced", () => {
+    // Equal forward/reverse on the dominant good → dominantNet === 0 → A→B.
+    const { marketEdges } = buildFlowEdges(
+      [
+        row({ fromSystemId: "A", toSystemId: "B", quantity: 10 }),
+        row({ fromSystemId: "B", toSystemId: "A", quantity: 10 }),
+      ],
+      VISIBLE,
+      5,
+      1,
+    );
+    expect(marketEdges).toHaveLength(1);
+    expect(marketEdges[0].fromSystemId).toBe("A");
+    expect(marketEdges[0].toSystemId).toBe("B");
+    expect(marketEdges[0].totalVolume).toBe(20);
+  });
 });
