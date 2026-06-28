@@ -12,13 +12,10 @@ import type { IndustryHealth, IdleReason, SystemIndustryReadout } from "@/lib/en
 import type { QualityBandId } from "@/lib/types/game";
 import { formatMagnitude } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
-import { SectionHeader } from "@/components/ui/section-header";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { SubstrateTradeBars } from "@/components/system/substrate-trade-bars";
-import { EconomyCycleCaption } from "@/components/system/economy-cycle-caption";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 
@@ -207,7 +204,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     return <EmptyState message="Scan this system with a ship in range to survey its industry." />;
   }
 
-  const { space, deposits, goods, labourFulfillment, buildings, supplyChain, unrest, economyShardGroup } = data;
+  const { space, deposits, labourFulfillment, buildings, supplyChain, unrest } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -239,8 +236,6 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const habitableHeadroom = Math.max(0, space.habitable - space.habitableUsed);
   const habFree = Math.min(generalFree, habitableHeadroom);
   const factoryOnlyFree = Math.max(0, generalFree - habFree);
-
-  const hasFlow = goods.some((g) => g.production > 0 || g.consumption > 0);
 
   const yieldFor = (b: BuildingEntry) => {
     const resource = BUILDING_TYPES[b.buildingType]?.resource;
@@ -316,18 +311,6 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         )}
       </Card>
 
-      {/* Trade balance — what the base makes vs what the population needs */}
-      {hasFlow && (
-        <Card variant="bordered" padding="md">
-          <SectionHeader as="h4" className="mb-1">Trade balance</SectionHeader>
-          <p className="mb-1 text-xs text-text-tertiary">
-            What this system&apos;s industry produces against what its population consumes — the net is what it can
-            export or must import.
-          </p>
-          <EconomyCycleCaption shardGroup={economyShardGroup} />
-          <SubstrateTradeBars goods={goods} />
-        </Card>
-      )}
     </div>
   );
 }
