@@ -66,8 +66,11 @@ export function DivergingBars({ rows, maxValue }: { rows: DivergingBarRow[]; max
       {rows.map((row) => {
         const left = row.segments.filter((s) => s.side === "left");
         const right = row.segments.filter((s) => s.side === "right");
+        // A row carrying tooltip detail is keyboard-focusable so the Radix tooltip
+        // opens on focus (not just pointer hover); bare rows stay out of tab order.
+        const interactive = row.tooltip != null;
         const barRow = (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" tabIndex={interactive ? 0 : undefined}>
             <span className={`w-24 shrink-0 truncate text-xs ${row.muted ? "text-text-tertiary" : "text-text-secondary"}`}>
               {row.label}
             </span>
@@ -94,7 +97,7 @@ export function DivergingBars({ rows, maxValue }: { rows: DivergingBarRow[]; max
 
         // A row with tooltip content wraps its bar in a Radix tooltip (asChild keeps
         // the bar the direct grid child); otherwise it renders bare.
-        if (!row.tooltip) {
+        if (!interactive) {
           return <Fragment key={row.key}>{barRow}</Fragment>;
         }
         return (

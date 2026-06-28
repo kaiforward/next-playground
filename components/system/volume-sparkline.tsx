@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   CartesianGrid,
   Line,
@@ -18,11 +19,15 @@ const EXPORT_COLOR = "#22c55e";
 
 /** Bucketed import vs export volume over the flow-history window. */
 export function VolumeSparkline({ buckets }: { buckets: TradeFlowVolumeBucket[] }) {
-  const data = buckets.map((b) => ({
-    tick: b.tick,
-    imports: b.importVolume,
-    exports: b.exportVolume,
-  }));
+  const data = useMemo(
+    () =>
+      buckets.map((b) => ({
+        tick: b.tick,
+        imports: b.importVolume,
+        exports: b.exportVolume,
+      })),
+    [buckets],
+  );
 
   return (
     <div className="w-full h-32">

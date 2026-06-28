@@ -57,6 +57,12 @@ describe("buildLogisticsRows", () => {
     ]);
     const model = buildLogisticsRows(prod, flows);
     expect(model.rows.map((r) => r.goodId)).toEqual(["chemicals"]); // ore dropped (no activity)
+    // The lone trade-only good drives the model aggregates: no internal activity,
+    // external scale = its 5-unit import, counted as traded but not active.
+    expect(model.internalMax).toBe(0);
+    expect(model.externalMax).toBe(5);
+    expect(model.activeGoodCount).toBe(0);
+    expect(model.tradedGoodCount).toBe(1);
   });
 
   it("resolves display name and tier", () => {
@@ -90,6 +96,23 @@ describe("aggregateLogisticsFlows", () => {
     ]);
     expect(out.get("food")!.importPartners).toEqual([
       { systemId: "C", systemName: "C-name", quantity: 4 },
+    ]);
+  });
+
+  it("caps partners at the top 3 by quantity", () => {
+    const many: LogisticsFlowRow[] = [
+      { tick: 1, fromSystemId: SYS, toSystemId: "P1", goodId: "ore", quantity: 1, flowType: "market" },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P2", goodId: "ore", quantity: 5, flowType: "market" },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P3", goodId: "ore", quantity: 3, flowType: "market" },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P4", goodId: "ore", quantity: 4, flowType: "market" },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P5", goodId: "ore", quantity: 2, flowType: "market" },
+    ];
+    const out = aggregateLogisticsFlows(many, SYS, resolveName);
+    // 5 distinct destinations collapse to the 3 highest-volume partners, qty-desc.
+    expect(out.get("ore")!.exportPartners).toEqual([
+      { systemId: "P2", systemName: "P2-name", quantity: 5 },
+      { systemId: "P4", systemName: "P4-name", quantity: 4 },
+      { systemId: "P3", systemName: "P3-name", quantity: 3 },
     ]);
   });
 

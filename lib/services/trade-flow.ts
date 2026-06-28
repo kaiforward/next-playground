@@ -110,9 +110,14 @@ export async function getSystemLogistics(
   const prodCon = capacityGoodRates(buildings, system.population, yields);
 
   // Resolve partner system names once (no N+1) for the source/destination tooltips.
+  // Only name partners the player can actually see; an unsurveyed partner stays
+  // anonymous ("Unknown System" fallback below) so this endpoint never discloses
+  // the identity of a system the player hasn't surveyed — same server-side
+  // visibility gate the map-overlay edge sets apply.
   const partnerIds = new Set<string>();
   for (const f of flows) {
-    partnerIds.add(f.fromSystemId === systemId ? f.toSystemId : f.fromSystemId);
+    const partnerId = f.fromSystemId === systemId ? f.toSystemId : f.fromSystemId;
+    if (visibleSet.has(partnerId)) partnerIds.add(partnerId);
   }
   const partnerRows = await prisma.starSystem.findMany({
     where: { id: { in: [...partnerIds] } },

@@ -101,6 +101,17 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
     return map;
   }, [data]);
 
+  // Build each tier's internal/external bar rows once per data change — the
+  // transforms allocate fresh tooltip JSX, so keep them out of the render body.
+  const tierRows = useMemo(() => {
+    if (!byTier) return null;
+    const out = new Map<GoodTier, { internal: DivergingBarRow[]; external: DivergingBarRow[] }>();
+    for (const [tier, rows] of byTier) {
+      out.set(tier, { internal: rows.map(internalRow), external: rows.map(externalRow) });
+    }
+    return out;
+  }, [byTier]);
+
   if (data.visibility === "unknown") {
     return <EmptyState message="Scan this system with a ship in range to survey its logistics." />;
   }
@@ -149,8 +160,8 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
 
         {/* tier groups */}
         {TIERS.map((tier) => {
-          const rows = byTier?.get(tier) ?? [];
-          if (rows.length === 0) return null;
+          const group = tierRows?.get(tier);
+          if (!group || group.internal.length === 0) return null;
           return (
             <div key={tier} className="mt-3">
               <div className="mb-1.5 flex items-center gap-2">
@@ -159,8 +170,8 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
                 <span className="h-px flex-1 bg-border" />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <DivergingBars rows={rows.map(internalRow)} maxValue={data.internalMax} />
-                <DivergingBars rows={rows.map(externalRow)} maxValue={data.externalMax} />
+                <DivergingBars rows={group.internal} maxValue={data.internalMax} />
+                <DivergingBars rows={group.external} maxValue={data.externalMax} />
               </div>
             </div>
           );
