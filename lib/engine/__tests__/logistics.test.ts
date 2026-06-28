@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildLogisticsRows, type GoodFlowAggregate } from "@/lib/engine/logistics";
+import { aggregateLogisticsFlows, type LogisticsFlowRow } from "@/lib/engine/logistics";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 
 const agg = (p: Partial<GoodFlowAggregate>): GoodFlowAggregate => ({
@@ -62,5 +63,41 @@ describe("buildLogisticsRows", () => {
     const model = buildLogisticsRows([{ goodId: "water", production: 1, consumption: 0 }], new Map());
     expect(model.rows[0].goodName).toBe("Water");
     expect(model.rows[0].tier).toBe(0);
+  });
+});
+
+describe("aggregateLogisticsFlows", () => {
+  const SYS = "sys1";
+  const resolveName = (id: string) => `${id}-name`;
+  const flows: LogisticsFlowRow[] = [
+    { tick: 1, fromSystemId: SYS, toSystemId: "A", goodId: "water", quantity: 4, flowType: "market" },
+    { tick: 2, fromSystemId: SYS, toSystemId: "B", goodId: "water", quantity: 2, flowType: "logistics" },
+    { tick: 3, fromSystemId: "C", toSystemId: SYS, goodId: "food", quantity: 3, flowType: "market" },
+    { tick: 4, fromSystemId: "C", toSystemId: SYS, goodId: "food", quantity: 1, flowType: "logistics" },
+  ];
+
+  it("splits exports/imports by flow type", () => {
+    const out = aggregateLogisticsFlows(flows, SYS, resolveName);
+    expect(out.get("water")).toMatchObject({ exportMarket: 4, exportLogistics: 2, importMarket: 0 });
+    expect(out.get("food")).toMatchObject({ importMarket: 3, importLogistics: 1, exportMarket: 0 });
+  });
+
+  it("ranks partners by quantity with resolved names", () => {
+    const out = aggregateLogisticsFlows(flows, SYS, resolveName);
+    expect(out.get("water")!.exportPartners).toEqual([
+      { systemId: "A", systemName: "A-name", quantity: 4 },
+      { systemId: "B", systemName: "B-name", quantity: 2 },
+    ]);
+    expect(out.get("food")!.importPartners).toEqual([
+      { systemId: "C", systemName: "C-name", quantity: 4 },
+    ]);
+  });
+
+  it("ignores non-positive quantities", () => {
+    const out = aggregateLogisticsFlows(
+      [{ tick: 1, fromSystemId: SYS, toSystemId: "A", goodId: "ore", quantity: 0, flowType: "market" }],
+      SYS, resolveName,
+    );
+    expect(out.has("ore")).toBe(false);
   });
 });

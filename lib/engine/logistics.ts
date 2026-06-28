@@ -8,6 +8,7 @@
 
 import { GOODS, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
+import type { SystemFlowRow } from "@/lib/engine/system-trade-flow";
 import type { LogisticsGoodRow, TradeFlowPartner } from "@/lib/types/api";
 
 /** Per-good cross-border flow totals (split by flow type) plus top partners. */
@@ -95,4 +96,74 @@ export function buildLogisticsRows(
   );
 
   return { rows, internalMax, externalMax, activeGoodCount, tradedGoodCount };
+}
+
+/** A flow row carrying its flow type, for the import/export split. */
+export interface LogisticsFlowRow extends SystemFlowRow {
+  flowType: string;
+}
+
+/** Partner systems shown per good in the import/export tooltips. */
+const TOP_PARTNERS = 3;
+
+/**
+ * Aggregate one system's flow rows into per-good import/export totals split by
+ * flow type ("logistics" = directed, anything else = market diffusion), plus
+ * the top contributing partner systems for each direction.
+ */
+export function aggregateLogisticsFlows(
+  flows: ReadonlyArray<LogisticsFlowRow>,
+  systemId: string,
+  resolveName: (id: string) => string,
+): Map<string, GoodFlowAggregate> {
+  interface Acc {
+    importMarket: number;
+    importLogistics: number;
+    exportMarket: number;
+    exportLogistics: number;
+    importByPartner: Map<string, number>;
+    exportByPartner: Map<string, number>;
+  }
+  const byGood = new Map<string, Acc>();
+
+  for (const f of flows) {
+    if (f.quantity <= 0) continue;
+    let acc = byGood.get(f.goodId);
+    if (!acc) {
+      acc = {
+        importMarket: 0, importLogistics: 0, exportMarket: 0, exportLogistics: 0,
+        importByPartner: new Map(), exportByPartner: new Map(),
+      };
+      byGood.set(f.goodId, acc);
+    }
+    const directed = f.flowType === "logistics";
+    if (f.toSystemId === systemId) {
+      if (directed) acc.importLogistics += f.quantity;
+      else acc.importMarket += f.quantity;
+      acc.importByPartner.set(f.fromSystemId, (acc.importByPartner.get(f.fromSystemId) ?? 0) + f.quantity);
+    } else if (f.fromSystemId === systemId) {
+      if (directed) acc.exportLogistics += f.quantity;
+      else acc.exportMarket += f.quantity;
+      acc.exportByPartner.set(f.toSystemId, (acc.exportByPartner.get(f.toSystemId) ?? 0) + f.quantity);
+    }
+  }
+
+  const topPartners = (m: Map<string, number>): TradeFlowPartner[] =>
+    [...m.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TOP_PARTNERS)
+      .map(([id, quantity]) => ({ systemId: id, systemName: resolveName(id), quantity }));
+
+  const out = new Map<string, GoodFlowAggregate>();
+  for (const [goodId, acc] of byGood) {
+    out.set(goodId, {
+      importMarket: acc.importMarket,
+      importLogistics: acc.importLogistics,
+      exportMarket: acc.exportMarket,
+      exportLogistics: acc.exportLogistics,
+      importPartners: topPartners(acc.importByPartner),
+      exportPartners: topPartners(acc.exportByPartner),
+    });
+  }
+  return out;
 }
