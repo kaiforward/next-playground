@@ -56,7 +56,12 @@ export interface TradeFlowEdgeInfo {
   /** Per-good magnitude (both directions summed). */
   perGood: Record<string, number>;
 }
-export type TradeFlowResponse = ApiResponse<{ edges: TradeFlowEdgeInfo[] }>;
+/** The two overlay edge sets the map renders — market diffusion and directed logistics. */
+export interface TradeFlowEdges {
+  marketEdges: TradeFlowEdgeInfo[];
+  logisticsEdges: TradeFlowEdgeInfo[];
+}
+export type TradeFlowResponse = ApiResponse<TradeFlowEdges>;
 export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
