@@ -8,7 +8,10 @@ import type { SimConfig, SimRunContext } from "@/lib/engine/simulator/types";
 import type { GovernmentType } from "@/lib/types/game";
 
 describe("directed-build in the simulator tick", () => {
-  it("runs the full tick incl. directed-build, adding buildings with finite, non-negative counts", async () => {
+  // Runs 12 full sim ticks — fast in isolation (~1.3s) but can exceed the 5s
+  // default under CI parallel load, so give it headroom like the other sim
+  // tests (simulator-integration uses 30–60s).
+  it("runs the full tick incl. directed-build, adding buildings with finite, non-negative counts", { timeout: 30_000 }, async () => {
     const config: SimConfig = { tickCount: 1, bots: [], seed: 42 };
     // directed-build's per-faction shard sweeps once per (2 × economy.interval) ticks. Shrink the
     // economy clock so the sweep completes within this short run — at the live interval (48) the
