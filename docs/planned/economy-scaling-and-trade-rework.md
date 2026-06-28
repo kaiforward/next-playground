@@ -23,8 +23,12 @@ contention problem the discrete-mission model can't solve.
 - **The economy is internally float-coherent; whole units only appear at the player boundary.**
   Production, consumption, market stock (`Float`/`double precision`), and price are continuous floats.
   Whole units appear only where a player buys/sells or where a deficit becomes a mission/contract `Int`.
-  This is a *boundary* mismatch at a handful of seams (buy/sell capacity `Math.floor(stock − band)`,
-  and `Math.floor(shortfall × catchUp)` → mission quantity), not an engine-wide rounding mess.
+  This is a *boundary* mismatch at a handful of seams — buy/sell capacity `Math.floor(stock − band)`, the
+  silent-flow Int-floors (`Math.floor(qty × catchUp)` in the directed-logistics and trade-flow processors),
+  and seed-stock `Math.round` — not an engine-wide rounding mess. (The `Math.floor(shortfall × catchUp)` →
+  mission-quantity seam belonged to the *ditched* Phase-2 contract generator; the live generator uses a
+  fixed `QUANTITY_RANGE`, so it isn't a live seam.) Rounding error *shrinks* under scaling, so this set
+  only gets safer.
 - **Magnitudes are small and hard to reason about.** Per-capita consumption is tiny (≈0.007/run for a
   staple); at modest populations a system moves a few units per cycle, and per-tick rates read as
   "0.1/cyc". Players can't form a clear trade mental model around fractions.
@@ -45,20 +49,70 @@ a sliver of it; the faction's own logistics moves the rest. Density and mission 
 
 ## Key findings (grounding the design)
 
-1. **Linear scaling is safe for price equilibrium.** Price = `base × (targetStock/stock)^k`, and
-   `targetStock = TARGET_COVER × demandRate`. Scale production **and** consumption by the same factor S
-   and both `stock` and `targetStock` scale by S — the *ratio* is unchanged, so prices and equilibrium
-   are untouched. You just get bigger numbers, and float→int rounding loss shrinks (`floor(476.2)` loses
-   0.04% vs `floor(4.7)` losing 6%). The catch: a handful of **absolute** terms that don't ride the ratio
-   and must be scaled explicitly — `storageCapacity` (additive in `maxStock`), route/fuel costs, the
-   mission reward formula, the affordable-budget cap, and seed-time stock rounding. That audit *is* the
-   work of sub-project 1.
+1. **Linear scaling is safe for price equilibrium — above the demand floor.** Price = `base ×
+   (targetStock/stock)^k`, and `targetStock = TARGET_COVER × demandRate`. Scale production **and**
+   consumption by the same factor S and both `stock` and `targetStock` scale by S — the *ratio* is
+   unchanged, so prices and equilibrium are untouched. You just get bigger numbers, and float→int rounding
+   loss shrinks (`floor(476.2)` loses 0.04% vs `floor(4.7)` losing 6%). **The exception:** `demandRate` is
+   floored at `MIN_DEMAND` (0.05), so a system whose natural demand sits below the floor keeps a *pinned*
+   `targetStock` while its `stock` scales by S — the ratio inflates and it clamps to the price floor. In a
+   barren galaxy a large share of (system × good) cells are demand-floored, so `MIN_DEMAND` must scale by S
+   too (after which a higher S also lifts more cells off the floor). The broader catch: a set of
+   **absolute** (non-ratio) terms that must be scaled explicitly. That inventory *is* the work of
+   sub-project 1 — see [Scaling-seam inventory](#scaling-seam-inventory-sub-project-1s-audit) below.
 2. **"Integers everywhere" is the wrong goal.** The economy's dynamic range is enormous (a sub-1-pop
    outpost needs ~0.0003 of a rare good per run; a populated world needs hundreds of a staple). No single
    multiplier makes both ends integer-friendly. Keep the **float engine**; keep the **integer/rounded
    player surface**; scale up enough that fractions are *noise* at the systems players actually trade at.
 3. **There is no global magnitude multiplier today.** `UNIVERSE_SCALE` controls system/region count, not
    per-system magnitudes. Introducing one modifiable `ECONOMY_SCALE` is the foundational change.
+
+### Scaling-seam inventory (sub-project 1's audit)
+
+First cut of the audit Key Finding #1 calls for — every term that does **not** ride the `targetStock/stock`
+ratio and so must be handled when `ECONOMY_SCALE = S` ships. Grouped by what to do.
+
+**Scale by S — the goods-side magnitudes (the point of the knob):**
+- Production output — `OUTPUT_PER_UNIT` / `OUTPUT_OVERRIDES`.
+- Consumption — `GOOD_CONSUMPTION`.
+- Seeded market `stock` (and `getInitialStock`'s `Math.round`).
+
+**Scale by S — absolute terms that silently break if left unscaled:**
+- **Demand floor** — `MIN_DEMAND` (0.05, `lib/constants/market-economy.ts`). Unscaled, sub-floor systems
+  clamp to the price floor (see Key Finding #1). Applied live every tick via `rewriteDemandRates`, not just
+  at seed.
+- **Storage capacity** — `storageCapacity` is *additive* in `maxStock` (`lib/engine/market-pricing.ts`) and
+  is `Σ(buildingCount × per-unit storage)`. Building counts are space-driven and do **not** scale, so what
+  actually scales is the per-unit constants: `EXTRACTOR_STORAGE_PER_UNIT` (40),
+  `PRODUCTION_STORAGE_PER_UNIT` (15), `POP_CENTRE_STORAGE_DEFAULT` (2), and the `POP_CENTRE_STORAGE` map.
+- **Silent-flow budgets — there are *two*, and equilibrium-invariance needs both to scale:**
+  - *Market diffusion* — `TRADE_SIMULATION.FLOW_BUDGET` (8) is a hard per-edge unit cap
+    (`min(edgeBudget, headroom, capacity)` in `trade-flow.ts`), plus its `edgeBudget < 1` skip guard. Stock
+    headroom scales by S but the 8-unit cap doesn't, so diffusion would move a fixed ~8 units against ×S
+    stock and cross-system price dispersion would *widen* by ~1/S.
+  - *Directed logistics* — the work-budget `DIRECTED_LOGISTICS.GENERATION_PER_POP` (0.5) drives
+    `affordable = floor(budget / perUnit)` (`directed-logistics.ts`); this **is** what "the
+    affordable-budget cap" refers to. `budget` is population-derived (not goods-denominated), so it must
+    scale by S or the matcher heals only ~1/S of the now-×S deficits.
+
+**Do NOT scale — goods-agnostic (scaling them is the *wrong* lever):**
+- Route/fuel cost in the matcher — `perUnit = hops × HOP_WEIGHT + fuelCost × FUEL_WEIGHT`. A transport cost
+  in budget-units, not goods. Scaling it *up* shrinks `affordable` — the opposite of what's needed; the
+  directed-logistics budget above is the lever, not this.
+
+**Ratio-invariant — deliberately do NOT scale (verified against code):** `TARGET_COVER`, the price exponent
+`k`, band ratios, `classifyMarketState` thresholds, the self-supply gate, HIGH/LOW price thresholds, and
+self-limiting / output-uptake / dissatisfaction — all pure ratios that ride S correctly.
+
+**Deferred to sub-project 3, not 1:** the **mission reward formula** and `QUANTITY_RANGE` ([20, 60]). The
+live generator (`selectEconomyCandidates`) uses a *fixed* quantity, so with prices invariant the reward
+doesn't move under sub-project-1 scaling — it only matters once mission quantity becomes the chunk (C) in
+the contract-model rework.
+
+**No overflow risk:** `stock` and `population` are `Float`. Goods *quantities* do live in `Int` columns
+(`TradeFlow` / `TradeMission` / `CargoItem` / `TradeHistory.quantity`), but scaled magnitudes (hundreds–
+thousands) sit far below `int4`'s ~2.1B ceiling — the only Int effect is whole-unit rounding, which shrinks
+under scaling.
 
 ## The three-dial model
 
@@ -155,10 +209,14 @@ scaling work):
 **Then — the scaling + contract rework** (each its own spec → plan → build):
 
 1. **Global economy-scale knob** — one modifiable `ECONOMY_SCALE` that uniformly scales production,
-   consumption, and the audited absolute terms; ratio-invariant terms (target-cover, price) deliberately
-   *don't* scale. Foundational, independently mergeable, equilibrium-preserving. **Do first of the scaling work.**
+   consumption, and the audited absolute terms (full list: [Scaling-seam inventory](#scaling-seam-inventory-sub-project-1s-audit));
+   ratio-invariant terms (target-cover, price) deliberately *don't* scale. Foundational, independently
+   mergeable, equilibrium-preserving. **Do first of the scaling work.**
 2. **Calibrate the scale via the simulator** — bump the knob, run sims, find the factor that lands typical
-   imports/exports in the hundreds–thousands. A measurement pass, not a build.
+   imports/exports in the hundreds–thousands. A measurement pass, not a build. **Caveat:** the sim's own
+   trading-pressure constants are absolute and unscaled — bot `startingCredits` (500), ship cargo, and the
+   sim `tradeFlow.flowBudget` — so scale them by S for the run too, or synthetic pressure is under-powered
+   against the ×S economy and the measured dispersion is distorted.
 3. **Contract-model rework** — resolve [the pivotal fork](#the-pivotal-fork-what-is-a-player-trade-opportunity)
    (discrete vs bounty vs marketplace), then build it (its own player-facing surface — *not* P4). Needs
    (1)'s magnitudes. Own brainstorm.

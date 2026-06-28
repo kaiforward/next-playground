@@ -1,12 +1,13 @@
 # SP5 Autonomic-Light — Autonomic Build (Growth Toward Viable Potential)
 
-> **Status: Design (not yet built)** — economy sub-project SP5 autonomic-light, the **build** half (SP3.5
-> shipped the **decay** half). Sits *on* the substrate-v2 available-space model and the SP3.5 decay loop (both
-> unchanged) and *beside* the directed-logistics half (built on `feat/sp5-logistics`). This spec **replaces the
-> reactive "co-build housing to staff industry" approach** that the live build slice on `feat/sp5-autonomic-light`
-> currently ships (`lib/engine/directed-build.ts::planFactionBuilds`). Roadmap home:
+> **Status: ✅ Complete — shipped to main in #114** (`5e665be`, 2026-06-27). Economy sub-project SP5
+> autonomic-light, the **build** half (SP3.5 shipped the **decay** half). Sits *on* the substrate-v2
+> available-space model and the SP3.5 decay loop (both unchanged) and *beside* the directed-logistics half.
+> This spec **replaced the reactive "co-build housing to staff industry" approach**; the proactive
+> housing-led build it describes — housing leads, population fills, industry follows the resident workforce
+> (spare-labour gated) — is now live in `lib/engine/directed-build.ts::planFactionBuilds`. Roadmap home:
 > [economy-simulation-vision.md](../planned/economy-simulation-vision.md) §13 item 5 (autonomic, build half).
-> When this ships, the functional content moves to `docs/active/gameplay/` and this plan doc is deleted.
+> **Follow-up:** migrate the functional content to `docs/active/gameplay/`, then delete this plan doc.
 
 ---
 
