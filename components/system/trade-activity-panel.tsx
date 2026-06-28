@@ -1,28 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeader } from "@/components/ui/section-header";
-import { TIER_COLOR, pixiHexToCss } from "@/lib/constants/good-colors";
-import { CHART_THEME, getGoodColor } from "@/lib/constants/ui";
+import { getGoodColor } from "@/lib/constants/ui";
 import { useSystemTradeFlow } from "@/lib/hooks/use-system-trade-flow";
-
-const SPARKLINE_IMPORT_COLOR = pixiHexToCss(TIER_COLOR[0]);
-const SPARKLINE_EXPORT_COLOR = pixiHexToCss(TIER_COLOR[1]);
-import type {
-  TradeFlowGoodSummary,
-  TradeFlowVolumeBucket,
-} from "@/lib/types/api";
+import type { TradeFlowGoodSummary } from "@/lib/types/api";
+import { VolumeSparkline } from "@/components/system/volume-sparkline";
 
 interface TradeActivityPanelProps {
   systemId: string;
@@ -165,76 +150,3 @@ function GoodFlowRow({
   );
 }
 
-// ── Sparkline ─────────────────────────────────────────────────────
-
-interface VolumeSparklineProps {
-  buckets: TradeFlowVolumeBucket[];
-}
-
-function VolumeSparkline({ buckets }: VolumeSparklineProps) {
-  // Compress to {tick, imports, exports} for the chart. Use the bucket's
-  // right-edge tick directly so the tooltip can show absolute tick numbers
-  // — the chart's job is the trend, not exact labels on the X axis.
-  const data = buckets.map((b) => ({
-    tick: b.tick,
-    imports: b.importVolume,
-    exports: b.exportVolume,
-  }));
-
-  return (
-    <div className="w-full h-32">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart
-          data={data}
-          margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke={CHART_THEME.gridStroke}
-          />
-          <XAxis
-            dataKey="tick"
-            stroke={CHART_THEME.axisStroke}
-            tick={{
-              fill: CHART_THEME.tickFill,
-              fontSize: CHART_THEME.tickFontSize,
-            }}
-            tickFormatter={(v: number) => `t${v}`}
-            minTickGap={32}
-          />
-          <YAxis
-            stroke={CHART_THEME.axisStroke}
-            tick={{
-              fill: CHART_THEME.tickFill,
-              fontSize: CHART_THEME.tickFontSize,
-            }}
-            width={28}
-          />
-          <ChartTooltip
-            labelFormatter={(label) => `Tick ${label}`}
-            formatter={(value, name) => [
-              `${value ?? 0} units`,
-              name === "imports" ? "Imports" : "Exports",
-            ]}
-          />
-          <Line
-            type="monotone"
-            dataKey="imports"
-            stroke={SPARKLINE_IMPORT_COLOR}
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: SPARKLINE_IMPORT_COLOR }}
-          />
-          <Line
-            type="monotone"
-            dataKey="exports"
-            stroke={SPARKLINE_EXPORT_COLOR}
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: SPARKLINE_EXPORT_COLOR }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
