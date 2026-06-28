@@ -235,6 +235,34 @@ export const TRADE_FLOW = {
   particleAlpha: 0.9,
 } as const;
 
+/**
+ * Directed-logistics overlay. Arced, glowing "convoy" particles distinct from
+ * market's small ambient dots. Visual values are placeholders — tune in the
+ * manual smoke (bow/glow/speed) the way TRADE_FLOW's are.
+ */
+export const LOGISTICS_FLOW = {
+  /** Perpendicular bow as a fraction of chord length. */
+  arcBowFraction: 0.18,
+  /** Max bow in world units (clamps long hauls so they don't balloon). */
+  arcMaxBow: 600,
+  /** Polyline segments per arc. */
+  arcSegments: 24,
+  particleRadius: 3.4,
+  particleSpeed: 95,
+  particleAlpha: 0.95,
+  /** Halo radius behind each particle (cheap glow). */
+  glowBlur: 3,
+  /** Faint static arc line under the particles. */
+  pathAlpha: 0.18,
+  /** Arrowhead size at the importing (destination) system. */
+  arrowSize: 6,
+  minParticlesPerEdge: 2,
+  volumePerExtraParticle: 6,
+  maxParticlesPerEdge: 10,
+  /** Smaller global budget than market — logistics is sparse. */
+  maxTotalParticles: 800,
+} as const;
+
 // ── Background ───────────────────────────────────────────────────
 
 export const BG_COLOR = 0x030712; // gray-950

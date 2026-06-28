@@ -21,6 +21,7 @@ export interface MapOverlays {
   fleet: boolean;
   events: boolean;
   tradeFlow: boolean;
+  logistics: boolean;
   priceHeatmap: boolean;
   shipRoutes: boolean;
 }
@@ -31,6 +32,7 @@ const DEFAULT_OVERLAYS: MapOverlays = {
   fleet: true,
   events: true,
   tradeFlow: false,
+  logistics: false,
   priceHeatmap: false,
   shipRoutes: false,
 };
@@ -44,6 +46,7 @@ function hydrateFromSession(): MapOverlays {
     fleet: stored.fleet ?? DEFAULT_OVERLAYS.fleet,
     events: stored.events ?? DEFAULT_OVERLAYS.events,
     tradeFlow: stored.tradeFlow ?? DEFAULT_OVERLAYS.tradeFlow,
+    logistics: stored.logistics ?? DEFAULT_OVERLAYS.logistics,
     priceHeatmap: stored.priceHeatmap ?? DEFAULT_OVERLAYS.priceHeatmap,
     shipRoutes: stored.shipRoutes ?? DEFAULT_OVERLAYS.shipRoutes,
   };
@@ -73,6 +76,7 @@ export function useMapOverlays(): {
       events: overlays.events,
     };
     if (overlays.tradeFlow) stored.tradeFlow = true;
+    if (overlays.logistics) stored.logistics = true;
     if (overlays.priceHeatmap) stored.priceHeatmap = true;
     if (overlays.shipRoutes) stored.shipRoutes = true;
     setOverlaysInSession(stored);

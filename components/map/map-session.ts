@@ -8,6 +8,7 @@ export interface MapOverlaysState {
   fleet?: boolean;
   events?: boolean;
   tradeFlow?: boolean;
+  logistics?: boolean;
   priceHeatmap?: boolean;
   shipRoutes?: boolean;
 }
@@ -29,6 +30,9 @@ function parseOverlays(value: unknown): MapOverlaysState | undefined {
   }
   if ("tradeFlow" in value && typeof value.tradeFlow === "boolean") {
     out.tradeFlow = value.tradeFlow;
+  }
+  if ("logistics" in value && typeof value.logistics === "boolean") {
+    out.logistics = value.logistics;
   }
   if ("priceHeatmap" in value && typeof value.priceHeatmap === "boolean") {
     out.priceHeatmap = value.priceHeatmap;
