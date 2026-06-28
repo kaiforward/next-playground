@@ -90,6 +90,7 @@ export interface MapData {
    * Empty when the Trade Flows overlay is off — the Pixi layer renders nothing.
    */
   flowEdges: Map<string, TradeFlowEdgeInfo>;
+  logisticsFlowEdges: Map<string, TradeFlowEdgeInfo>;
   /** Per-system price data for the active heatmap good. Null when overlay is off. */
   priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
   // Detail panel data
@@ -114,6 +115,7 @@ interface UseMapDataOptions {
   visibleSystemIds: Set<string>;
   dynamicSystems: DynamicTileSystem[];
   tradeFlowEdges: TradeFlowEdgeInfo[];
+  logisticsEdges: TradeFlowEdgeInfo[];
   selectedSystem: StarSystemInfo | null;
   navigationMode: NavigationMode;
   isNavigationActive: boolean;
@@ -121,6 +123,23 @@ interface UseMapDataOptions {
   regionMap: Map<string, { id: string; name: string }>;
   priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
   priceMode: "buy" | "sell";
+}
+
+// ── Helpers ─────────────────────────────────────────────────────
+
+/** Key edges by canonical (sorted) endpoint pair for O(1) Pixi lookup. */
+function keyByCanonicalPair(
+  edges: TradeFlowEdgeInfo[],
+): Map<string, TradeFlowEdgeInfo> {
+  const map = new Map<string, TradeFlowEdgeInfo>();
+  for (const edge of edges) {
+    const [a, b] =
+      edge.fromSystemId < edge.toSystemId
+        ? [edge.fromSystemId, edge.toSystemId]
+        : [edge.toSystemId, edge.fromSystemId];
+    map.set(`${a}|${b}`, edge);
+  }
+  return map;
 }
 
 // ── Hook ────────────────────────────────────────────────────────
@@ -133,6 +152,7 @@ export function useMapData({
   visibleSystemIds,
   dynamicSystems,
   tradeFlowEdges,
+  logisticsEdges,
   selectedSystem,
   navigationMode: mode,
   isNavigationActive,
@@ -420,26 +440,18 @@ export function useMapData({
     ? (visibleSystemIds.has(selectedSystem.id) ? "visible" : "unknown")
     : "unknown";
 
-  // ── Trade-flow edges keyed for O(1) lookup by Pixi layer ─────
+  // ── Trade-flow edges keyed for O(1) lookup by the Pixi layers ─────
   // `fromSystemId`/`toSystemId` reflect net flow direction (not sort order),
-  // so we key by canonical pair `${min}|${max}` for lookup. The renderer
-  // uses the value's from/to as-is for direction.
-  const flowEdges = useMemo(() => {
-    const map = new Map<string, TradeFlowEdgeInfo>();
-    for (const edge of tradeFlowEdges) {
-      const [a, b] =
-        edge.fromSystemId < edge.toSystemId
-          ? [edge.fromSystemId, edge.toSystemId]
-          : [edge.toSystemId, edge.fromSystemId];
-      map.set(`${a}|${b}`, edge);
-    }
-    return map;
-  }, [tradeFlowEdges]);
+  // so we key by canonical pair `${min}|${max}`. The renderer uses each value's
+  // from/to as-is for direction.
+  const flowEdges = useMemo(() => keyByCanonicalPair(tradeFlowEdges), [tradeFlowEdges]);
+  const logisticsFlowEdges = useMemo(() => keyByCanonicalPair(logisticsEdges), [logisticsEdges]);
 
   return {
     systems,
     connections,
     flowEdges,
+    logisticsFlowEdges,
     priceHeatmap,
     shipsAtSelected,
     convoysAtSelected,

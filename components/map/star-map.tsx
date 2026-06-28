@@ -63,7 +63,10 @@ export function StarMap({
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
-  const { edges: tradeFlowEdges } = useTradeFlow(overlays.tradeFlow);
+  const { marketEdges, logisticsEdges } = useTradeFlow(
+    overlays.tradeFlow,
+    overlays.logistics,
+  );
   const stabilityBySystem = useStability(mapMode === "stability");
 
   // ── Live tick + in-transit marker selection ───────────────────
@@ -198,7 +201,8 @@ export function StarMap({
     events,
     visibleSystemIds,
     dynamicSystems,
-    tradeFlowEdges,
+    tradeFlowEdges: marketEdges,
+    logisticsEdges,
     selectedSystem: view.selectedSystem,
     navigationMode: mode,
     isNavigationActive,
