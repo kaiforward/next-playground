@@ -44,6 +44,9 @@ export const queryKeys = {
   // Per-system industrial base + supply-chain state — tick-invalidated.
   systemIndustryAll: ["systemIndustry"] as const,
   systemIndustry: (systemId: string) => ["systemIndustry", systemId] as const,
+  // Per-system logistics (imports/exports + prod/con dashboard) — tick-invalidated.
+  systemLogisticsAll: ["systemLogistics"] as const,
+  systemLogistics: (systemId: string) => ["systemLogistics", systemId] as const,
   // Cantina
   cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
   cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,

@@ -24,6 +24,7 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.dynamicVisible });
         queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemTradeFlowAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.systemLogisticsAll });
       }),
       // Economy ticks → refresh market data, trade flow, stability, and population
       // (market + unrest + population are all written by the economy processor on the same tick)
@@ -34,6 +35,7 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.stability });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemPopulationAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemIndustryAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.systemLogisticsAll });
       }),
       // Event notifications → refresh events cache and dynamic data (event state changed)
       subscribeToEvent("eventNotifications", () => {
