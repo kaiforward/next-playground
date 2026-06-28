@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeShip } from "@/lib/auth/serialize";
 import { validateShipPurchase } from "@/lib/engine/shipyard";
 import { buildShipData, buildUpgradeSlots } from "@/lib/engine/ship-factory";
+import { invalidateVisibilityCache } from "@/lib/services/visibility-cache";
 import type { ShipPurchaseResult } from "@/lib/types/api";
 
 type PurchaseResult =
@@ -92,6 +93,11 @@ export async function purchaseShip(
   if (!newShip) {
     return { ok: false, error: "State changed. Please try again.", status: 409 };
   }
+
+  // The new ship expands sensor coverage, but the player's visibility set is
+  // cached per tick and buying a ship doesn't advance the tick — clear it so
+  // in-range systems reveal immediately instead of only after the next move.
+  invalidateVisibilityCache(playerId);
 
   return {
     ok: true,
