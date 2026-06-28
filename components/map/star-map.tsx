@@ -69,6 +69,17 @@ export function StarMap({
   );
   const stabilityBySystem = useStability(mapMode === "stability");
 
+  // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
+  // the player can currently sense. Topology (political/regions) stays public;
+  // this gate is what the stability choropleth and other dynamic modes share.
+  const visibleStability = useMemo(() => {
+    const gated = new Map<string, number>();
+    for (const [systemId, unrest] of stabilityBySystem) {
+      if (visibleSystemIds.has(systemId)) gated.set(systemId, unrest);
+    }
+    return gated;
+  }, [stabilityBySystem, visibleSystemIds]);
+
   // ── Live tick + in-transit marker selection ───────────────────
   const { currentTick } = useTickContext();
   const [selectedTransitId, setSelectedTransitId] = useState<string | null>(null);
@@ -333,7 +344,7 @@ export function StarMap({
         showEvents={overlays.events}
         selectedTransitId={selectedTransitId}
         onTransitClick={onTransitClick}
-        stabilityBySystem={stabilityBySystem}
+        stabilityBySystem={visibleStability}
       />
 
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}
