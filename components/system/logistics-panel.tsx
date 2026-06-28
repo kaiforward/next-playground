@@ -1,0 +1,149 @@
+"use client";
+
+import { useMemo } from "react";
+import { useSystemLogistics } from "@/lib/hooks/use-system-logistics";
+import { DivergingBars, type DivergingBarRow } from "@/components/ui/diverging-bars";
+import { VolumeSparkline } from "@/components/system/volume-sparkline";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
+import type { GoodTier } from "@/lib/types/game";
+import type { LogisticsGoodRow, TradeFlowPartner } from "@/lib/types/api";
+
+const TIERS: GoodTier[] = [0, 1, 2];
+
+function fmtNet(n: number): string {
+  const r = Math.round(n * 10) / 10;
+  return `${r > 0 ? "+" : ""}${r}`;
+}
+
+function partnerTitle(label: string, partners: TradeFlowPartner[]): string | null {
+  if (partners.length === 0) return null;
+  return `${label}:\n` + partners.map((p) => `${p.systemName} — ${Math.round(p.quantity)}`).join("\n");
+}
+
+function internalRow(g: LogisticsGoodRow): DivergingBarRow {
+  return {
+    key: g.goodId,
+    label: g.goodName,
+    net: g.internalNet,
+    netLabel: fmtNet(g.internalNet),
+    title: `Produces ${g.production.toFixed(1)}/cyc · Consumes ${g.consumption.toFixed(1)}/cyc`,
+    segments: [
+      { value: g.consumption, side: "left", color: "in", pattern: "solid" },
+      { value: g.production, side: "right", color: "out", pattern: "solid" },
+    ],
+  };
+}
+
+function externalRow(g: LogisticsGoodRow): DivergingBarRow {
+  if (!g.traded) {
+    return { key: g.goodId, label: g.goodName, net: 0, netLabel: "·", blank: true, muted: true, segments: [] };
+  }
+  const title = [partnerTitle("Sources", g.importPartners), partnerTitle("Destinations", g.exportPartners)]
+    .filter((s): s is string => s !== null)
+    .join("\n");
+  return {
+    key: g.goodId,
+    label: g.goodName,
+    net: g.externalNet,
+    netLabel: fmtNet(g.externalNet),
+    title: title || undefined,
+    segments: [
+      // imports (left): hatch market then solid logistics → solid sits at the divider
+      { value: g.importMarket, side: "left", color: "in", pattern: "hatch" },
+      { value: g.importLogistics, side: "left", color: "in", pattern: "solid" },
+      // exports (right): solid logistics then hatch market → solid sits at the divider
+      { value: g.exportLogistics, side: "right", color: "out", pattern: "solid" },
+      { value: g.exportMarket, side: "right", color: "out", pattern: "hatch" },
+    ],
+  };
+}
+
+export function LogisticsPanel({ systemId }: { systemId: string }) {
+  const data = useSystemLogistics(systemId);
+
+  const byTier = useMemo(() => {
+    if (data.visibility !== "visible") return null;
+    const map = new Map<GoodTier, LogisticsGoodRow[]>();
+    for (const g of data.rows) {
+      const arr = map.get(g.tier) ?? [];
+      arr.push(g);
+      map.set(g.tier, arr);
+    }
+    return map;
+  }, [data]);
+
+  if (data.visibility === "unknown") {
+    return <EmptyState message="Scan this system with a ship in range to survey its logistics." />;
+  }
+  if (data.rows.length === 0) {
+    return <EmptyState message="No logistics activity — this system neither produces, consumes, nor trades." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card variant="bordered" padding="md">
+        {/* column headers + legends */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-baseline justify-between">
+              <h4 className="font-display text-xs font-semibold uppercase tracking-wider text-text-primary">Internal · production vs consumption</h4>
+              <span className="font-mono text-[10px] text-text-tertiary">{data.activeGoodCount} goods</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[10px] text-text-tertiary">
+              <span className="w-24 shrink-0" />
+              <div className="flex flex-1 justify-between"><span>&#9664; Consumes</span><span>Produces &#9654;</span></div>
+              <span className="w-12 shrink-0 text-right">Net/cyc</span>
+            </div>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between">
+              <h4 className="font-display text-xs font-semibold uppercase tracking-wider text-text-primary">External · imports vs exports</h4>
+              <span className="font-mono text-[10px] text-text-tertiary">trades {data.tradedGoodCount}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[10px] text-text-tertiary">
+              <span className="w-24 shrink-0" />
+              <div className="flex flex-1 justify-between"><span>&#9664; Imports</span><span>Exports &#9654;</span></div>
+              <span className="w-12 shrink-0 text-right">Net</span>
+            </div>
+          </div>
+        </div>
+
+        {/* flow-split legend */}
+        <div className="mt-2 flex items-center gap-4 border-t border-border pt-2 text-[10px] text-text-tertiary">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)" }} /> directed logistics
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)", backgroundImage: "repeating-linear-gradient(135deg, rgba(0,0,0,0.5) 0 2px, transparent 2px 5px)" }} /> market diffusion
+          </span>
+        </div>
+
+        {/* tier groups */}
+        {TIERS.map((tier) => {
+          const rows = byTier?.get(tier) ?? [];
+          if (rows.length === 0) return null;
+          return (
+            <div key={tier} className="mt-3">
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="h-2 w-2 shrink-0" style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }} />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-text-secondary">{TIER_LABEL[tier]}</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <DivergingBars rows={rows.map(internalRow)} maxValue={data.internalMax} />
+                <DivergingBars rows={rows.map(externalRow)} maxValue={data.externalMax} />
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+
+      <Card variant="bordered" padding="md">
+        <h4 className="mb-1 font-display text-xs font-semibold uppercase tracking-wider text-text-primary">Trade volume over time</h4>
+        <VolumeSparkline buckets={data.volumeHistory} />
+      </Card>
+    </div>
+  );
+}
