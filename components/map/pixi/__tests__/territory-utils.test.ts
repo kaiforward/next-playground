@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { Delaunay } from "d3-delaunay";
-import { computeTerritoryPolygons } from "@/components/map/pixi/territory-utils";
+import {
+  computeTerritoryPolygons,
+  clipPolygonToDisc,
+} from "@/components/map/pixi/territory-utils";
 
 describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
   it("produces one polygon group per system when keyed by id", () => {
@@ -43,6 +46,48 @@ describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
     expect(left.length).toBe(1);
     expect(right.length).toBe(1);
     expect(left[0][0].length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("clips a cell to a disc, bounding every output vertex within the radius", () => {
+    // A 1000×1000 square fully contains a small disc at its centre, so the
+    // intersection is the disc n-gon itself — every vertex sits within `radius`.
+    const square: [number, number][] = [
+      [0, 0], [1000, 0], [1000, 1000], [0, 1000], [0, 0],
+    ];
+    const result = clipPolygonToDisc(square, 500, 500, 100, 24);
+
+    const verts = result.flat(2);
+    expect(verts.length).toBeGreaterThanOrEqual(3);
+    for (const [x, y] of verts) {
+      expect(Math.hypot(x - 500, y - 500)).toBeLessThanOrEqual(100 + 1e-6);
+    }
+  });
+
+  it("clips edge cells so territory never reaches the far box corners", () => {
+    // A 5×5 grid clustered in the centre of a large box. Without edge clipping,
+    // the perimeter cells extend all the way to the box corners (0,0)/(10000,
+    // 10000) as boxy spurs. With clipping they round off near the systems.
+    const pts: [number, number][] = [];
+    const ids: string[] = [];
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        pts.push([4000 + c * 500, 4000 + r * 500]);
+        ids.push(`s${r}-${c}`);
+      }
+    }
+    const voronoi = Delaunay.from(pts).voronoi([0, 0, 10000, 10000]);
+    const cells = computeTerritoryPolygons(pts.length, voronoi, (i) => ids[i]);
+
+    // Median nearest-neighbour spacing is 500; with any sane radius factor the
+    // clipped territory stays well inside this window and clear of the corners.
+    const verts = [...cells.values()].flat(3);
+    expect(verts.length).toBeGreaterThan(0);
+    for (const [x, y] of verts) {
+      expect(x).toBeGreaterThan(1500);
+      expect(x).toBeLessThan(8500);
+      expect(y).toBeGreaterThan(1500);
+      expect(y).toBeLessThan(8500);
+    }
   });
 
   it("skips systems whose group key is null", () => {
