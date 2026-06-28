@@ -1,8 +1,8 @@
 import { Container } from "pixi.js";
 import { TradeFlowEdge, type FlowEdgeStyle } from "../objects/trade-flow-edge";
 import { getGoodColor } from "@/lib/constants/good-colors";
-import { TRADE_FLOW } from "../theme";
-import type { Point } from "../flow-arc";
+import { TRADE_FLOW, LOGISTICS_FLOW } from "../theme";
+import { arcPolyline, type Point } from "../flow-arc";
 import type { Frustum } from "../frustum";
 import type { LODState } from "../lod";
 import type { SystemNodeData } from "@/lib/hooks/use-map-data";
@@ -37,6 +37,26 @@ export const MARKET_FLOW_CONFIG: FlowLayerConfig = {
   volumePerExtraParticle: TRADE_FLOW.volumePerExtraParticle,
   maxParticlesPerEdge: TRADE_FLOW.maxParticlesPerEdge,
   maxTotalParticles: TRADE_FLOW.maxTotalParticles,
+};
+
+/** Directed logistics: arced path, larger glowing convoys, route line + arrow. */
+export const LOGISTICS_FLOW_CONFIG: FlowLayerConfig = {
+  buildPath: (from, to) =>
+    arcPolyline(from, to, LOGISTICS_FLOW.arcBowFraction, LOGISTICS_FLOW.arcMaxBow, LOGISTICS_FLOW.arcSegments),
+  style: {
+    particleRadius: LOGISTICS_FLOW.particleRadius,
+    particleAlpha: LOGISTICS_FLOW.particleAlpha,
+    particleSpeed: LOGISTICS_FLOW.particleSpeed,
+    glowBlur: LOGISTICS_FLOW.glowBlur,
+    drawPath: true,
+    pathAlpha: LOGISTICS_FLOW.pathAlpha,
+    arrowhead: true,
+    arrowSize: LOGISTICS_FLOW.arrowSize,
+  },
+  minParticlesPerEdge: LOGISTICS_FLOW.minParticlesPerEdge,
+  volumePerExtraParticle: LOGISTICS_FLOW.volumePerExtraParticle,
+  maxParticlesPerEdge: LOGISTICS_FLOW.maxParticlesPerEdge,
+  maxTotalParticles: LOGISTICS_FLOW.maxTotalParticles,
 };
 
 /**

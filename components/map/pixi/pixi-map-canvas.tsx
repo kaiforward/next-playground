@@ -13,7 +13,7 @@ import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
 import { StabilityTerritoryLayer } from "./layers/stability-territory-layer";
 import { FleetDotLayer } from "./layers/fleet-dot-layer";
-import { TradeFlowLayer } from "./layers/trade-flow-layer";
+import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { EffectLayer } from "./layers/effect-layer";
 import { FleetTransitLayer } from "./layers/fleet-transit-layer";
 import { setupInteractions } from "./interactions";
@@ -69,6 +69,7 @@ interface PixiRefs {
   stabilityTerritoryLayer: StabilityTerritoryLayer;
   fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
+  logisticsFlowLayer: TradeFlowLayer;
   fleetTransitLayer: FleetTransitLayer;
   effectLayer: EffectLayer;
 }
@@ -187,6 +188,10 @@ export function PixiMapCanvas({
       const tradeFlowLayer = new TradeFlowLayer();
       world.addChild(tradeFlowLayer.container);
 
+      // Logistics convoys render just above market diffusion, below territories.
+      const logisticsFlowLayer = new TradeFlowLayer(LOGISTICS_FLOW_CONFIG);
+      world.addChild(logisticsFlowLayer.container);
+
       const territoryLayer = new TerritoryLayer();
       world.addChild(territoryLayer.container);
 
@@ -285,6 +290,9 @@ export function PixiMapCanvas({
         tradeFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
         if (tradeFlowLayer.container.visible) tradeFlowLayer.update(dtMs);
 
+        logisticsFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
+        if (logisticsFlowLayer.container.visible) logisticsFlowLayer.update(dtMs);
+
         // Fleet transit markers — always-on across zoom levels
         fleetTransitLayer.setTick(currentTickRef.current);
         fleetTransitLayer.update(dtMs, camera.zoom, frustum);
@@ -305,7 +313,7 @@ export function PixiMapCanvas({
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
         politicalTerritoryLayer, stabilityTerritoryLayer, fleetDotLayer, tradeFlowLayer,
-        fleetTransitLayer, effectLayer,
+        logisticsFlowLayer, fleetTransitLayer, effectLayer,
       };
       setPixiReady(true);
     })();
@@ -326,6 +334,7 @@ export function PixiMapCanvas({
           refs.politicalTerritoryLayer.destroy();
           refs.stabilityTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
+          refs.logisticsFlowLayer.destroy();
           refs.fleetTransitLayer.destroy();
           refs.effectLayer.destroy();
           refs.starfield.destroy();
@@ -413,6 +422,7 @@ export function PixiMapCanvas({
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems);
     p.tradeFlowLayer.sync(mapData.systems, mapData.flowEdges);
+    p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges);
     const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
     p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
 
