@@ -108,15 +108,19 @@ A toggle on the floating overlay-controls cluster (default off) reveals a Pixi p
 
 A tier-colour legend sits beneath the toggle so first-time players can decode the colour story (raw → green, processed → amber, advanced → cyan). Tier colours live in `lib/constants/good-colors.ts` as the single source of truth shared by the legend and the Pixi tinting layer.
 
-### Per-System Trade Activity Panel
+### Logistics Tab
 
-The system detail panel includes a "Trade Activity" card showing:
+The system detail panel has a **Logistics** tab (between Industry and Market) pairing two diverging-bar charts over a full-width volume-over-time series. It is a legibility instrument for the per-system trade picture — where the price overlay surfaces *opportunity*, this tab gives the *precise per-good breakdown*.
 
-- **Top imports** — the goods with the highest inbound volume, each with the top contributing source systems linked into the detail panel.
-- **Top exports** — mirror view by destination.
-- **Volume history** — a bucketed sparkline of inbound vs outbound volume over the history window.
+**Internal** (left column): production vs consumption for all goods, per-cycle rates, solid bars. Relocated from the Industry tab's "Trade balance" card. Dense on inhabited systems (~all 24 goods present).
 
-The panel is visibility-gated: an invisible system returns empty data rather than leaking activity intel.
+**External** (right column): imports vs exports over the rolling `FLOW_HISTORY_TICKS` window, cumulative volume. Each bar splits by **flow type** — solid for directed **logistics** (autonomic), diagonal-hatched for **market** diffusion — the same two-layer distinction as the map overlay. Per-row hover tooltips list the top source/destination partner systems.
+
+Both columns share a single **tier-grouped, net-descending** row order (raw → processed → advanced; net-descending within tier) so each good aligns across both columns. Un-traded goods render blank on the External side. Each column normalises to its own maximum (per-cycle rates vs cumulative volume are incommensurable), so the cross-column comparison is qualitative — sign and within-column relative size, not absolute magnitude.
+
+A full-width Recharts line series below the charts shows bucketed import/export volume over the history window.
+
+Visibility-gated: an unsurveyed system shows the scan `EmptyState`. *Replaces* the Overview "Trade Activity" panel and the Industry "Trade balance" card.
 
 ---
 
