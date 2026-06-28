@@ -17,9 +17,22 @@ function fmtNet(n: number): string {
   return `${r > 0 ? "+" : ""}${r}`;
 }
 
-function partnerTitle(label: string, partners: TradeFlowPartner[]): string | null {
+/** Top source/destination partner systems for an External bar's hover tooltip. */
+function PartnerList({ label, partners }: { label: string; partners: TradeFlowPartner[] }) {
   if (partners.length === 0) return null;
-  return `${label}:\n` + partners.map((p) => `${p.systemName} — ${Math.round(p.quantity)}`).join("\n");
+  return (
+    <div className="space-y-0.5">
+      <p className="font-display text-[10px] uppercase tracking-wider text-text-tertiary">{label}</p>
+      <dl className="space-y-0.5 text-xs">
+        {partners.map((p) => (
+          <div key={p.systemId} className="flex justify-between gap-3">
+            <dt className="truncate text-text-secondary">{p.systemName}</dt>
+            <dd className="shrink-0 font-mono text-text-primary">{Math.round(p.quantity)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 }
 
 function internalRow(g: LogisticsGoodRow): DivergingBarRow {
@@ -28,7 +41,18 @@ function internalRow(g: LogisticsGoodRow): DivergingBarRow {
     label: g.goodName,
     net: g.internalNet,
     netLabel: fmtNet(g.internalNet),
-    title: `Produces ${g.production.toFixed(1)}/cyc · Consumes ${g.consumption.toFixed(1)}/cyc`,
+    tooltip: (
+      <dl className="space-y-0.5 text-xs">
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-tertiary">Produces</dt>
+          <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-text-tertiary">Consumes</dt>
+          <dd className="font-mono text-status-red-light">{g.consumption.toFixed(1)}/cyc</dd>
+        </div>
+      </dl>
+    ),
     segments: [
       { value: g.consumption, side: "left", color: "in", pattern: "solid" },
       { value: g.production, side: "right", color: "out", pattern: "solid" },
@@ -40,15 +64,18 @@ function externalRow(g: LogisticsGoodRow): DivergingBarRow {
   if (!g.traded) {
     return { key: g.goodId, label: g.goodName, net: 0, netLabel: "·", blank: true, muted: true, segments: [] };
   }
-  const title = [partnerTitle("Sources", g.importPartners), partnerTitle("Destinations", g.exportPartners)]
-    .filter((s): s is string => s !== null)
-    .join("\n");
+  const hasPartners = g.importPartners.length > 0 || g.exportPartners.length > 0;
   return {
     key: g.goodId,
     label: g.goodName,
     net: g.externalNet,
     netLabel: fmtNet(g.externalNet),
-    title: title || undefined,
+    tooltip: hasPartners ? (
+      <div className="space-y-1.5">
+        <PartnerList label="Sources" partners={g.importPartners} />
+        <PartnerList label="Destinations" partners={g.exportPartners} />
+      </div>
+    ) : undefined,
     segments: [
       // imports (left): hatch market then solid logistics → solid sits at the divider
       { value: g.importMarket, side: "left", color: "in", pattern: "hatch" },

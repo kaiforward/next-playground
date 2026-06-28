@@ -5,6 +5,9 @@
  * direction colour (in = red, out = green) and a solid/hatch pattern.
  */
 
+import { Fragment, type ReactNode } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
 export interface BarSegment {
   value: number;
   side: "left" | "right";
@@ -22,8 +25,9 @@ export interface DivergingBarRow {
   /** Render the label muted and skip the bar track (e.g. an un-traded good). */
   blank?: boolean;
   muted?: boolean;
-  /** Native hover tooltip text (e.g. partner sources/destinations). */
-  title?: string;
+  /** Rich hover tooltip content (e.g. partner sources/destinations), shown in a
+   *  Radix tooltip. Requires an ancestor `TooltipProvider`. */
+  tooltip?: ReactNode;
 }
 
 const FILL: Record<"in" | "out", string> = {
@@ -62,8 +66,8 @@ export function DivergingBars({ rows, maxValue }: { rows: DivergingBarRow[]; max
       {rows.map((row) => {
         const left = row.segments.filter((s) => s.side === "left");
         const right = row.segments.filter((s) => s.side === "right");
-        return (
-          <div key={row.key} className="flex items-center gap-2" title={row.title}>
+        const barRow = (
+          <div className="flex items-center gap-2">
             <span className={`w-24 shrink-0 truncate text-xs ${row.muted ? "text-text-tertiary" : "text-text-secondary"}`}>
               {row.label}
             </span>
@@ -86,6 +90,18 @@ export function DivergingBars({ rows, maxValue }: { rows: DivergingBarRow[]; max
               {row.blank ? "·" : row.netLabel}
             </span>
           </div>
+        );
+
+        // A row with tooltip content wraps its bar in a Radix tooltip (asChild keeps
+        // the bar the direct grid child); otherwise it renders bare.
+        if (!row.tooltip) {
+          return <Fragment key={row.key}>{barRow}</Fragment>;
+        }
+        return (
+          <Tooltip key={row.key}>
+            <TooltipTrigger asChild>{barRow}</TooltipTrigger>
+            <TooltipContent>{row.tooltip}</TooltipContent>
+          </Tooltip>
         );
       })}
     </div>

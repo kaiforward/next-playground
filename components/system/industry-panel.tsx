@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 
@@ -166,34 +166,32 @@ function RoleLabel({ children }: { children: string }) {
 
 function LegendTooltip() {
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button type="button" aria-label="Legend" className="text-text-tertiary transition-colors hover:text-text-secondary">
-            <InfoIcon className="h-3.5 w-3.5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent className="w-60 space-y-2">
-          <div>
-            <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Health — bar colour</p>
-            <ul className="space-y-0.5 text-[11px] text-text-secondary">
-              <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-green align-middle" /> stable — in use, holding</li>
-              <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-amber align-middle" /> idle — slack past the deadband, slowly shrinking</li>
-              <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-red align-middle" /> collapsing — unrest teardown, over-capacity, or can't sell</li>
-            </ul>
-            <p className="mt-1 text-[11px] text-text-tertiary">Bar length = capacity in use (% + magnitude). Green holds below 100% — a little slack is normal.</p>
-          </div>
-          <div>
-            <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Land bar</p>
-            <ul className="space-y-0.5 text-[11px] text-text-secondary">
-              <li><span className="mr-1.5 inline-block h-2 w-3 bg-accent align-middle" /> housing &nbsp;<span className="mr-1.5 inline-block h-2 w-3 bg-accent-muted align-middle" /> factories</li>
-              <li><span className="mr-1.5 inline-block h-2 w-3 border border-border align-middle" style={{ backgroundImage: COPPER_HATCH }} /> housing can still grow here</li>
-              <li><span className="mr-1.5 inline-block h-2 w-3 border border-border bg-surface-active align-middle" /> factories only (beyond habitable)</li>
-            </ul>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-label="Legend" className="text-text-tertiary transition-colors hover:text-text-secondary">
+          <InfoIcon className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="w-60 space-y-2">
+        <div>
+          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Health — bar colour</p>
+          <ul className="space-y-0.5 text-[11px] text-text-secondary">
+            <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-green align-middle" /> stable — in use, holding</li>
+            <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-amber align-middle" /> idle — slack past the deadband, slowly shrinking</li>
+            <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-red align-middle" /> collapsing — unrest teardown, over-capacity, or can't sell</li>
+          </ul>
+          <p className="mt-1 text-[11px] text-text-tertiary">Bar length = capacity in use (% + magnitude). Green holds below 100% — a little slack is normal.</p>
+        </div>
+        <div>
+          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Land bar</p>
+          <ul className="space-y-0.5 text-[11px] text-text-secondary">
+            <li><span className="mr-1.5 inline-block h-2 w-3 bg-accent align-middle" /> housing &nbsp;<span className="mr-1.5 inline-block h-2 w-3 bg-accent-muted align-middle" /> factories</li>
+            <li><span className="mr-1.5 inline-block h-2 w-3 border border-border align-middle" style={{ backgroundImage: COPPER_HATCH }} /> housing can still grow here</li>
+            <li><span className="mr-1.5 inline-block h-2 w-3 border border-border bg-surface-active align-middle" /> factories only (beyond habitable)</li>
+          </ul>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

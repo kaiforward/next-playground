@@ -9,7 +9,8 @@ import { forwardRef } from "react";
  * Escape/blur, and portals the content out of the DOM flow — so it never grows
  * its container or nests block content inside an interactive trigger.
  *
- * Wrap a region in `<TooltipProvider>` once, then per tooltip:
+ * A single app-wide `<TooltipProvider>` is mounted near the root (in
+ * `app/(game)/layout.tsx`) — consumers don't add their own, just use:
  *   <Tooltip><TooltipTrigger asChild>{control}</TooltipTrigger>
  *     <TooltipContent>{legend}</TooltipContent></Tooltip>
  */

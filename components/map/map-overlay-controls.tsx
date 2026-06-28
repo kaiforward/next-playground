@@ -10,7 +10,6 @@ import { CheckboxInput } from "@/components/form/checkbox-input";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
@@ -80,48 +79,46 @@ export function MapOverlayControls({
   toggle,
 }: MapOverlayControlsProps) {
   return (
-    <TooltipProvider delayDuration={150}>
-      <div className="w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
-        <div className="px-3 py-2 border-b border-border">
-          <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
-            Map
-          </h3>
-        </div>
-
-        <SectionHeading>Mode</SectionHeading>
-        <RadioGroup
-          ariaLabel="Mode"
-          name="mapMode"
-          value={mode}
-          onChange={setMode}
-          options={TERRITORY_OPTIONS}
-        />
-
-        <div className="border-t border-border" />
-        <SectionHeading>Overlays</SectionHeading>
-        <div role="group" aria-label="Map overlays">
-          {OVERLAY_DEFS.map(({ key, label, swatch, legend }) => {
-            const checkbox = (
-              <CheckboxInput
-                label={label}
-                checked={overlays[key]}
-                onChange={() => toggle(key)}
-                color={swatch}
-              />
-            );
-            if (!legend) return <div key={key}>{checkbox}</div>;
-            return (
-              <Tooltip key={key}>
-                <TooltipTrigger asChild>{checkbox}</TooltipTrigger>
-                <TooltipContent side="right">
-                  <OverlayLegend kind={legend} />
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
+    <div className="w-44 border border-border bg-surface/95 backdrop-blur shadow-lg">
+      <div className="px-3 py-2 border-b border-border">
+        <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-text-secondary">
+          Map
+        </h3>
       </div>
-    </TooltipProvider>
+
+      <SectionHeading>Mode</SectionHeading>
+      <RadioGroup
+        ariaLabel="Mode"
+        name="mapMode"
+        value={mode}
+        onChange={setMode}
+        options={TERRITORY_OPTIONS}
+      />
+
+      <div className="border-t border-border" />
+      <SectionHeading>Overlays</SectionHeading>
+      <div role="group" aria-label="Map overlays">
+        {OVERLAY_DEFS.map(({ key, label, swatch, legend }) => {
+          const checkbox = (
+            <CheckboxInput
+              label={label}
+              checked={overlays[key]}
+              onChange={() => toggle(key)}
+              color={swatch}
+            />
+          );
+          if (!legend) return <div key={key}>{checkbox}</div>;
+          return (
+            <Tooltip key={key}>
+              <TooltipTrigger asChild>{checkbox}</TooltipTrigger>
+              <TooltipContent side="right">
+                <OverlayLegend kind={legend} />
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
