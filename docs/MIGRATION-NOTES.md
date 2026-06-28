@@ -16,7 +16,7 @@ Enriches the physical universe that everything else builds on. No new gameplay s
 
 | System | What it does | Status |
 |---|---|---|
-| ~~System Traits~~ → [System Substrate & Traits](./active/gameplay/system-traits.md) | The physical + narrative foundation each system is built on | **Rebuilt by Economy Simulation SP1.** The original flat trait model (traits drove economy type via affinity scoring) shipped first, then was replaced by a two-layer model: a **physical substrate** (sun, bodies, resource vectors, richness) that drives economy type and population, and **narrative features** (the surviving traits) that gate missions / exploration / danger but carry no economic role. SP1 Part 1 is shipped; the design + Part 2–3 plan live in [economy-simulation-substrate.md](./planned/economy-simulation-substrate.md). |
+| ~~System Traits~~ → [System Substrate & Traits](./active/gameplay/system-traits.md) | The physical + narrative foundation each system is built on | **Rebuilt by Economy Simulation SP1.** The original flat trait model (traits drove economy type via affinity scoring) shipped first, then was replaced by a two-layer model: a **physical substrate** (sun, bodies, resource vectors, richness) that drives economy type and population, and **narrative features** (the surviving traits) that gate missions / exploration / danger but carry no economic role. SP1 is shipped; current rules in [system-traits.md](./active/gameplay/system-traits.md) + [economy.md](./active/gameplay/economy.md). |
 
 **Why first**: Every later system references the substrate or its features — factions value resource-rich territory, missions and exploration sites hang off features, danger reads body composition. Without the foundation, the rest of the planned systems have nothing to hang on.
 
@@ -228,7 +228,7 @@ To be designed during implementation of each respective system.
 - Danger sums a body-derived `StarSystem.bodyDanger` term; exploration sites come from `deriveSystemLocations(bodies, features)`.
 - `TraitId` is narrowed 52 → 31 (features only); the trait-migration scaffolding is removed.
 
-**Status**: SP1 Parts 1–2 shipped (on branch): the substrate drives production/consumption directly and economy type is a display-only label. Part 3 (emergent days-of-supply pricing) is forward design — see [economy-simulation-substrate.md](./planned/economy-simulation-substrate.md) §8.2. Delete this item once SP1 fully lands on `main` and the active docs reflect the final model.
+**Status**: SP1 Parts 1–2 shipped (on branch): the substrate drives production/consumption directly and economy type is a display-only label. Part 3 (emergent days-of-supply pricing) has since shipped — current rules in [economy.md](./active/gameplay/economy.md). Delete this item once SP1 fully lands on `main` and the active docs reflect the final model.
 
 ---
 

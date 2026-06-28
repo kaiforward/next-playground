@@ -2,7 +2,7 @@ import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 
 /**
  * Directed-logistics tuning. First-draft, simulator-calibrated; only relative shape matters.
- * See docs/plans/sp5-autonomic-logistics.md.
+ * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 export const DIRECTED_LOGISTICS = {
   /** Ticks for the per-faction shard to sweep every faction once (2× the economy clock). */

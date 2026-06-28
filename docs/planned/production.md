@@ -312,7 +312,6 @@ See also [Production Roster §10](./production-roster.md) for per-good tuning (p
 - **[Economy](../active/gameplay/economy.md)** — market simulation, supply/demand, production/consumption rates
 - **[System Traits (active)](../active/gameplay/system-traits.md)** — system traits, economy types, trait quality tiers
 - **[Facilities](./facilities.md)** — faction facilities (separate from player facilities)
-- **[Simulation Enhancements](../archive/simulation-enhancements.md)** — supply chain dependencies, NPC trade pressure (archived — supply chain mechanics now covered in this doc)
 - **[Faction System](../active/gameplay/faction-system.md)** — war material demand, faction economy effects, reputation
 - **[War System](./war-system.md)** — war material consumption, front-line demand spikes
 - **[Player Progression](./player-progression.md)** — production facilities as mid/late game content, ship automation

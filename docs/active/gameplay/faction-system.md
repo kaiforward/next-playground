@@ -12,7 +12,7 @@ Core political and territorial layer for multiplayer gameplay. Factions are name
 
 ## Implementation Status
 
-Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-section status at a glance; details inline in each section. The full plan that shipped is in [layer-2-faction-foundation.md](../../archive/layer-2-faction-foundation.md).
+Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-section status at a glance; details inline in each section. This spec is the source of truth for the shipped behaviour.
 
 | Section | Status | Notes |
 |---|---|---|
@@ -356,7 +356,7 @@ Every faction has a homeworld — their capital system.
 
 ### Starting Position (Implemented)
 
-Per the resolved design question in [layer-2-faction-foundation.md](../../archive/layer-2-faction-foundation.md): **players are not faction-aligned at creation**. There is no `primaryFactionId` on `Player`. New players spawn at `GameWorld.startingSystemId` (the existing core-economy system near map center, now owned by a Federation-government major after Phase 2). All faction reputation scores start at 0; no faction nudge on registration.
+**Players are not faction-aligned at creation.** There is no `primaryFactionId` on `Player`. New players spawn at `GameWorld.startingSystemId` (the existing core-economy system near map center, now owned by a Federation-government major after Phase 2). All faction reputation scores start at 0; no faction nudge on registration.
 
 Reputation grows through play (trading, eventual faction missions, eventual war contributions) and players choose their loyalties through behavior rather than character creation. This preserves the "neutral trader path is viable but limited" design from §3.
 

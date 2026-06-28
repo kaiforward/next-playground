@@ -2,7 +2,7 @@
  * Pure directed-logistics matching — zero DB dependency. The processor computes
  * per-system supply/demand/band numbers (reusing capacityGoodRates / inputDemandForGood /
  * marketBandForRow) and a route-cost function; this engine just classifies and matches.
- * See docs/plans/sp5-autonomic-logistics.md.
+ * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
