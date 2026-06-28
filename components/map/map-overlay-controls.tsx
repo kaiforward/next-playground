@@ -22,7 +22,7 @@ const MODE_LABELS: Record<MapMode, string> = {
 };
 
 /** Overlays whose colour mapping isn't self-evident carry a hover/focus legend. */
-type LegendKind = "price" | "tradeFlow" | "routes";
+type LegendKind = "price" | "tradeFlow" | "logistics" | "routes";
 
 interface OverlayDef {
   key: MapOverlayKey;
@@ -42,6 +42,7 @@ const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
   { key: "events", label: "Events", swatch: "#f59e0b" }, // EVENT_DOT_COLORS.amber
   { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium, legend: "price" },
   { key: "tradeFlow", label: "Trade Flows", swatch: pixiHexToCss(TIER_COLOR[2]), legend: "tradeFlow" },
+  { key: "logistics", label: "Logistics", swatch: pixiHexToCss(TIER_COLOR[1]), legend: "logistics" },
   { key: "shipRoutes", label: "Ship Routes", swatch: "#38bdf8", legend: "routes" },
 ];
 
@@ -138,6 +139,7 @@ function SectionHeading({ children }: { children: string }) {
 function OverlayLegend({ kind }: { kind: LegendKind }) {
   if (kind === "price") return <PriceRampLegend />;
   if (kind === "tradeFlow") return <TradeFlowLegend />;
+  if (kind === "logistics") return <LogisticsLegend />;
   return (
     <p className="text-[10px] leading-relaxed text-text-secondary">
       Every in-transit ship&apos;s route. Markers stay visible at all zooms —
@@ -201,28 +203,49 @@ function StabilityRampLegend() {
   );
 }
 
-function TradeFlowLegend() {
+function TierSwatchList() {
   const tiers = [0, 1, 2] as const;
+  return (
+    <ul className="space-y-0.5">
+      {tiers.map((tier) => (
+        <li
+          key={tier}
+          className="flex items-center gap-1.5 text-[10px] text-text-secondary"
+        >
+          <span
+            className="h-2 w-2 shrink-0"
+            style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
+            aria-hidden
+          />
+          <span>{TIER_LABEL[tier]}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TradeFlowLegend() {
   return (
     <div>
       <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
         Good Tier
       </h5>
-      <ul className="space-y-0.5">
-        {tiers.map((tier) => (
-          <li
-            key={tier}
-            className="flex items-center gap-1.5 text-[10px] text-text-secondary"
-          >
-            <span
-              className="h-2 w-2 shrink-0"
-              style={{ backgroundColor: pixiHexToCss(TIER_COLOR[tier]) }}
-              aria-hidden
-            />
-            <span>{TIER_LABEL[tier]}</span>
-          </li>
-        ))}
-      </ul>
+      <TierSwatchList />
+    </div>
+  );
+}
+
+function LogisticsLegend() {
+  return (
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Directed Logistics
+      </h5>
+      <TierSwatchList />
+      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+        Curved arc = a faction haul across systems; the arrow points to the
+        importing system. Straight dots are market diffusion.
+      </p>
     </div>
   );
 }
