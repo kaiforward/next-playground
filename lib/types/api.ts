@@ -24,6 +24,7 @@ import type {
   QualityTier,
   PlayerNotificationInfo,
   SunClass,
+  GoodTier,
   BodyArchetypeId,
   StabilityEntry,
   ResourceVector,
@@ -69,25 +70,52 @@ export interface TradeFlowPartner {
   systemName: string;
   quantity: number;
 }
-/** One good's total flow and the top partner systems that contributed. */
-export interface TradeFlowGoodSummary {
-  goodId: string;
-  goodName: string;
-  totalQuantity: number;
-  partners: TradeFlowPartner[];
-}
 /** One bucket of the import/export volume sparkline. `tick` is the bucket end. */
 export interface TradeFlowVolumeBucket {
   tick: number;
   importVolume: number;
   exportVolume: number;
 }
-export interface SystemTradeFlowData {
-  topImports: TradeFlowGoodSummary[];
-  topExports: TradeFlowGoodSummary[];
-  volumeHistory: TradeFlowVolumeBucket[];
+// ── System logistics (production/consumption + imports/exports dashboard) ─────
+/** One good's full logistics row: internal prod/con + external flow split + partners. */
+export interface LogisticsGoodRow {
+  goodId: string;
+  goodName: string;
+  tier: GoodTier;
+  production: number;
+  consumption: number;
+  /** production − consumption. */
+  internalNet: number;
+  importMarket: number;
+  importLogistics: number;
+  exportMarket: number;
+  exportLogistics: number;
+  /** (exports total) − (imports total). */
+  externalNet: number;
+  /** Any of the four flow totals > 0. */
+  traded: boolean;
+  /** Top source systems feeding imports of this good. */
+  importPartners: TradeFlowPartner[];
+  /** Top destination systems receiving exports of this good. */
+  exportPartners: TradeFlowPartner[];
 }
-export type SystemTradeFlowResponse = ApiResponse<SystemTradeFlowData>;
+export type SystemLogisticsData =
+  | {
+      visibility: "visible";
+      /** Tier-ascending, net-descending-within-tier; one entry per good with activity. */
+      rows: LogisticsGoodRow[];
+      /** Largest single production/consumption rate across rows (internal bar scale). */
+      internalMax: number;
+      /** Largest single import/export total across rows (external bar scale). */
+      externalMax: number;
+      /** Goods with production or consumption activity. */
+      activeGoodCount: number;
+      /** Goods with any cross-border flow. */
+      tradedGoodCount: number;
+      volumeHistory: TradeFlowVolumeBucket[];
+    }
+  | { visibility: "unknown" };
+export type SystemLogisticsResponse = ApiResponse<SystemLogisticsData>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
   traitId: TraitId;

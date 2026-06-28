@@ -1,15 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { getPlayerVisibility } from "./visibility-cache";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import {
-  bucketizeVolumeHistory,
-  rankGoodFlows,
-} from "@/lib/engine/system-trade-flow";
+import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
 import type {
-  SystemTradeFlowData,
   TradeFlowEdges,
+  SystemLogisticsData,
 } from "@/lib/types/api";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { capacityGoodRates } from "@/lib/engine/industry";
+import {
+  aggregateLogisticsFlows,
+  buildLogisticsRows,
+  type LogisticsFlowRow,
+} from "@/lib/engine/logistics";
 
 /**
  * Returns the two map-overlay edge sets (market diffusion + directed logistics)
@@ -55,47 +59,65 @@ export async function getTradeFlowEdges(playerId: string): Promise<TradeFlowEdge
 }
 
 /**
- * Returns top imports / exports and a bucketed volume sparkline for one
- * system. Visibility-gated: an invisible system returns empty data instead
- * of leaking activity intel.
+ * Per-system Logistics tab data: internal production/consumption rates +
+ * external imports/exports (split by flow type) + the volume-over-time series.
+ * Visibility-gated: an unsurveyed system returns `{ visibility: "unknown" }`.
  */
-export async function getSystemTradeFlow(
+export async function getSystemLogistics(
   playerId: string,
   systemId: string,
-): Promise<SystemTradeFlowData> {
+): Promise<SystemLogisticsData> {
   const { visibleSet, currentTick } = await getPlayerVisibility(playerId);
-
-  const EMPTY: SystemTradeFlowData = {
-    topImports: [],
-    topExports: [],
-    volumeHistory: bucketizeVolumeHistory([], systemId, currentTick),
-  };
-
-  if (!visibleSet.has(systemId)) return EMPTY;
+  if (!visibleSet.has(systemId)) return { visibility: "unknown" };
 
   const minTick = currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
-  const flows = await prisma.tradeFlow.findMany({
-    where: {
-      tick: { gt: minTick },
-      OR: [{ fromSystemId: systemId }, { toSystemId: systemId }],
-    },
-    select: {
-      tick: true,
-      fromSystemId: true,
-      toSystemId: true,
-      goodId: true,
-      quantity: true,
-    },
-  });
+  const [system, flows] = await Promise.all([
+    prisma.starSystem.findUnique({
+      where: { id: systemId },
+      relationLoadStrategy: "join",
+      select: {
+        population: true,
+        yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
+        yieldArable: true, yieldWater: true, yieldRadioactive: true,
+        buildings: { select: { buildingType: true, count: true } },
+      },
+    }),
+    prisma.tradeFlow.findMany({
+      where: {
+        tick: { gt: minTick },
+        OR: [{ fromSystemId: systemId }, { toSystemId: systemId }],
+      },
+      select: {
+        tick: true, fromSystemId: true, toSystemId: true,
+        goodId: true, quantity: true, flowType: true,
+      },
+    }),
+  ]);
 
-  if (flows.length === 0) return EMPTY;
+  if (!system) return { visibility: "unknown" };
 
-  // Resolve partner system names in one batched query so the rendered
-  // imports/exports lists can show real names without N+1 lookups.
+  const buildings: Record<string, number> = {};
+  for (const b of system.buildings) buildings[b.buildingType] = b.count;
+  const yields = resourceVectorFromColumns(
+    {
+      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
+      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
+      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
+    },
+    "yield",
+  );
+  const prodCon = capacityGoodRates(buildings, system.population, yields);
+
+  // Resolve partner system names once (no N+1) for the source/destination tooltips.
+  // Only name partners the player can actually see; an unsurveyed partner stays
+  // anonymous ("Unknown System" fallback below) so this endpoint never discloses
+  // the identity of a system the player hasn't surveyed — same server-side
+  // visibility gate the map-overlay edge sets apply.
   const partnerIds = new Set<string>();
   for (const f of flows) {
-    partnerIds.add(f.fromSystemId === systemId ? f.toSystemId : f.fromSystemId);
+    const partnerId = f.fromSystemId === systemId ? f.toSystemId : f.fromSystemId;
+    if (visibleSet.has(partnerId)) partnerIds.add(partnerId);
   }
   const partnerRows = await prisma.starSystem.findMany({
     where: { id: { in: [...partnerIds] } },
@@ -104,17 +126,17 @@ export async function getSystemTradeFlow(
   const nameById = new Map(partnerRows.map((r) => [r.id, r.name]));
   const resolveName = (id: string): string => nameById.get(id) ?? "Unknown System";
 
+  const flowRows: LogisticsFlowRow[] = flows;
+  const flowsByGood = aggregateLogisticsFlows(flowRows, systemId, resolveName);
+  const model = buildLogisticsRows(prodCon, flowsByGood);
+
   return {
-    topImports: rankGoodFlows(
-      flows.filter((f) => f.toSystemId === systemId),
-      (f) => f.fromSystemId,
-      resolveName,
-    ),
-    topExports: rankGoodFlows(
-      flows.filter((f) => f.fromSystemId === systemId),
-      (f) => f.toSystemId,
-      resolveName,
-    ),
+    visibility: "visible",
+    rows: model.rows,
+    internalMax: model.internalMax,
+    externalMax: model.externalMax,
+    activeGoodCount: model.activeGoodCount,
+    tradedGoodCount: model.tradedGoodCount,
     volumeHistory: bucketizeVolumeHistory(flows, systemId, currentTick),
   };
 }

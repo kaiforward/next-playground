@@ -16,7 +16,6 @@ import { StatList, StatRow } from "@/components/ui/stat-row";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { TradeActivityPanel } from "@/components/system/trade-activity-panel";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { getPriceTrendPct } from "@/lib/utils/market";
@@ -347,12 +346,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </CardContent>
         </Card>
       </div>
-
-      {/* Trade Activity — independently boundaried so this section's
-          fetch never blocks the rest of the system overview from rendering. */}
-      <QueryBoundary>
-        <TradeActivityPanel systemId={systemId} />
-      </QueryBoundary>
 
       {/* System Traits — full width */}
       {traits.length > 0 && (

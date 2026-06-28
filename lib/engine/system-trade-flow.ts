@@ -8,12 +8,8 @@
  * directly against an in-memory array of rows.
  */
 
-import { GOODS } from "@/lib/constants/goods";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import type {
-  TradeFlowGoodSummary,
-  TradeFlowVolumeBucket,
-} from "@/lib/types/api";
+import type { TradeFlowVolumeBucket } from "@/lib/types/api";
 
 /** Minimal flow row shape consumed by the aggregation helpers. */
 export interface SystemFlowRow {
@@ -24,59 +20,8 @@ export interface SystemFlowRow {
   quantity: number;
 }
 
-/** Goods shown per import/export list. */
-const TOP_GOODS_PER_DIRECTION = 5;
-/** Partner systems shown nested under each good. */
-const TOP_PARTNERS_PER_GOOD = 3;
 /** Sparkline bucket count — the FLOW_HISTORY_TICKS window is split across this many buckets. */
 export const VOLUME_HISTORY_BUCKETS = 20;
-
-/**
- * Aggregate flows into the top-N goods by total quantity, with the top
- * partner systems contributing to each good.
- */
-export function rankGoodFlows(
-  flows: ReadonlyArray<SystemFlowRow>,
-  getPartnerId: (f: SystemFlowRow) => string,
-  resolveName: (id: string) => string,
-): TradeFlowGoodSummary[] {
-  const byGood = new Map<
-    string,
-    { total: number; byPartner: Map<string, number> }
-  >();
-
-  for (const f of flows) {
-    if (f.quantity <= 0) continue;
-    let entry = byGood.get(f.goodId);
-    if (!entry) {
-      entry = { total: 0, byPartner: new Map() };
-      byGood.set(f.goodId, entry);
-    }
-    entry.total += f.quantity;
-    const partner = getPartnerId(f);
-    entry.byPartner.set(
-      partner,
-      (entry.byPartner.get(partner) ?? 0) + f.quantity,
-    );
-  }
-
-  return [...byGood.entries()]
-    .sort((a, b) => b[1].total - a[1].total)
-    .slice(0, TOP_GOODS_PER_DIRECTION)
-    .map(([goodId, { total, byPartner }]) => ({
-      goodId,
-      goodName: GOODS[goodId]?.name ?? goodId,
-      totalQuantity: total,
-      partners: [...byPartner.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, TOP_PARTNERS_PER_GOOD)
-        .map(([partnerId, quantity]) => ({
-          systemId: partnerId,
-          systemName: resolveName(partnerId),
-          quantity,
-        })),
-    }));
-}
 
 /**
  * Bucketize flows by tick into a fixed-length sparkline window. Buckets are

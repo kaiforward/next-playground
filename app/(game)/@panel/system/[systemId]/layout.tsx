@@ -57,6 +57,7 @@ function SystemPanelContent({
     { label: "Astrography", href: `${basePath}/astrography`, active: pathname.startsWith(`${basePath}/astrography`), badge: 0 },
     { label: "Population", href: `${basePath}/population`, active: pathname.startsWith(`${basePath}/population`), badge: 0 },
     { label: "Industry", href: `${basePath}/industry`, active: pathname.startsWith(`${basePath}/industry`), badge: 0 },
+    { label: "Logistics", href: `${basePath}/logistics`, active: pathname.startsWith(`${basePath}/logistics`), badge: 0 },
     { label: "Market", href: `${basePath}/market`, active: pathname.startsWith(`${basePath}/market`), badge: 0 },
     { label: "Ships", href: `${basePath}/ships`, active: pathname.startsWith(`${basePath}/ships`), badge: soloShipCount },
     { label: "Convoys", href: `${basePath}/convoys`, active: pathname.startsWith(`${basePath}/convoys`), badge: convoyCount },

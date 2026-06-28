@@ -203,8 +203,8 @@ Each is its own spec → plan → build.
 **First — the UI / visualisation pieces** (model-agnostic, do not need contracts, build *before* the
 scaling work):
 
-- **P3 — map overlay by `flowType`** — visualise silent market vs logistics flows on the map.
-- **P4 — logistics tab = imports/exports dashboard** — per-system flow view; *not* a contract board.
+- **P3 — map overlay by `flowType`** — visualise silent market vs logistics flows on the map. *(shipped)*
+- **P4 — logistics tab = imports/exports dashboard** — *(shipped)*
 
 **Then — the scaling + contract rework** (each its own spec → plan → build):
 

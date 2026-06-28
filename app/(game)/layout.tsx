@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth/auth";
 import { getSessionPlayerId } from "@/lib/auth/get-player";
 import AuthSessionProvider from "@/components/providers/session-provider";
 import { GameQueryProvider } from "@/components/providers/query-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameShell } from "@/components/game-shell";
 
 export default async function GameLayout({
@@ -30,13 +31,17 @@ export default async function GameLayout({
   return (
     <AuthSessionProvider>
       <GameQueryProvider>
-        <GameShell
-          userEmail={session.user?.email ?? null}
-          defaultSidebarCollapsed={sidebarCollapsed}
-          panel={panel}
-        >
-          {children}
-        </GameShell>
+        {/* One app-wide Radix tooltip provider (shared open/close delay) for every
+            tooltip in the game UI — panels, map controls, form legends. */}
+        <TooltipProvider delayDuration={150}>
+          <GameShell
+            userEmail={session.user?.email ?? null}
+            defaultSidebarCollapsed={sidebarCollapsed}
+            panel={panel}
+          >
+            {children}
+          </GameShell>
+        </TooltipProvider>
       </GameQueryProvider>
     </AuthSessionProvider>
   );
