@@ -101,6 +101,7 @@ Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't
 - Zod v4: `superRefine` uses `code: "custom"` (string) and runs only after base validation passes.
 - RHF: a resolver swapped via `useMemo` does NOT auto-revalidate — `useEffect` + `trigger()`.
 - react-error-boundary v5 `fallbackRender`: `error` is `unknown` — coerce `error instanceof Error ? error : new Error(String(error))`.
+- A server-only env read at module load (`process.env.X`) is `undefined` in the **client bundle** unless `NEXT_PUBLIC_*` or listed in `next.config.ts` `env` — so a client component that reads its *resolved value* (directly, or via a transitively-imported constant derived from it) silently falls back to the default client-side while the server uses the real value. The trigger is the client **reading the value**, not merely importing the module (importing a module that derives `X` but reading only unscaled siblings is safe). Prefer keeping such envs **server-only** and having the client consume already-resolved data from the API; expose via `next.config.ts` only when the client genuinely must recompute from the env itself (`UNIVERSE_SCALE` → tile geometry). `ECONOMY_SCALE` is intentionally server-only for this reason.
 
 **Caching / API / data shapes**
 - Never `Cache-Control: public` on auth-gated routes (behind `requirePlayer()`) — shared caches could cross-serve users; use `private`.
@@ -109,7 +110,7 @@ Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't
 - `ECONOMY_PRODUCTION`/`ECONOMY_CONSUMPTION` are `Record<EconomyType, Record<string, number>>` — use `getProducedGoods()`/`getConsumedGoods()` or the `in` operator, never `.includes()` (fails silently on a Record).
 
 **Map / Pixi** (skip unless touching the map / WebGL surface)
-- `UNIVERSE_SCALE` — and any server-only env a client module transitively imports — must be in `next.config.ts` `env`, or it's `undefined` in the client bundle and tile features break silently.
+- `UNIVERSE_SCALE` is in `next.config.ts` `env` because the client recomputes tile geometry from it — see the client-bundle env rule under *Next.js 16 / React / TanStack Query*; without it the client defaults while the server uses the real scale and tile features break silently.
 - Pixi rasterizes small text / sharp corners as aliased mush — map markers use rounded corners + zoom-gated text. Deliberate departure from Foundry's no-rounding rule, which is HTML-only; the WebGL map is its own surface.
 - Throttle (leading+trailing), not debounce, for Pixi-ticker→`setState` (debounce never fires during continuous zoom).
 - Frustum-gate object *creation*, not just visibility — `SystemObject` is expensive; create only in-frustum, batched per frame.
