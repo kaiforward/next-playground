@@ -12,6 +12,7 @@
  * relative shape matters here (higher tier → smaller coeff and smaller need).
  */
 import type { ResourceType } from "@/lib/types/game";
+import { scaleRecord } from "@/lib/constants/economy-scale";
 
 export interface GoodProductionDriver {
   /** Production coefficient — seeds the per-building output for this good. */
@@ -54,7 +55,7 @@ export const GOOD_PRODUCTION: Record<string, GoodProductionDriver> = {
 };
 
 /** Per-good per-capita consumption need. consRate = need × population. Higher tier → lower need. */
-export const GOOD_CONSUMPTION: Record<string, number> = {
+export const GOOD_CONSUMPTION: Record<string, number> = scaleRecord({
   // Tier 0.
   water: 0.007,
   food: 0.006,
@@ -84,7 +85,7 @@ export const GOOD_CONSUMPTION: Record<string, number> = {
   targeting_arrays: 0.0004,
   reactor_cores: 0.0003,
   ship_frames: 0.0003,
-};
+});
 
 /** Legacy soft-saturating labour half-population. Retained for back-compat; the capacity model uses explicit labour fulfilment. First-draft; simulator-calibrated. */
 export const LABOUR_HALF_POP = 500;

@@ -18,6 +18,7 @@ import type { ResourceType } from "@/lib/types/game";
 import { GOOD_NAMES } from "@/lib/constants/goods";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
+import { scaleValue, scaleRecord } from "@/lib/constants/economy-scale";
 
 export const HOUSING_TYPE = "housing";
 
@@ -73,8 +74,8 @@ const OUTPUT_OVERRIDES: Record<string, number> = {
   biomass: 2.2,
 };
 
-export const OUTPUT_PER_UNIT: Record<string, number> = Object.fromEntries(
-  GOOD_NAMES.map((g) => [g, OUTPUT_OVERRIDES[g] ?? GOOD_PRODUCTION[g]?.coeff ?? 1]),
+export const OUTPUT_PER_UNIT: Record<string, number> = scaleRecord(
+  Object.fromEntries(GOOD_NAMES.map((g) => [g, OUTPUT_OVERRIDES[g] ?? GOOD_PRODUCTION[g]?.coeff ?? 1])),
 );
 
 function buildProductionTypes(): Record<string, BuildingTypeDef> {
@@ -103,15 +104,15 @@ export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
 export const PRODUCTION_BUILDING_TYPES: string[] = [...GOOD_NAMES];
 
 /** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). First-draft; subject to calibration. */
-export const EXTRACTOR_STORAGE_PER_UNIT = 40;
+export const EXTRACTOR_STORAGE_PER_UNIT = scaleValue(40);
 /** Storage one tier-1+ factory adds for its output good (output buffer). */
-export const PRODUCTION_STORAGE_PER_UNIT = 15;
+export const PRODUCTION_STORAGE_PER_UNIT = scaleValue(15);
 /** Nominal storage a population centre adds per good it consumes (retail/utility/government holdings). */
-export const POP_CENTRE_STORAGE_DEFAULT = 2;
+export const POP_CENTRE_STORAGE_DEFAULT = scaleValue(2);
 /** Pop-centre storage overrides for consumer-facing goods — people keep more of what they buy. */
-export const POP_CENTRE_STORAGE: Record<string, number> = {
+export const POP_CENTRE_STORAGE: Record<string, number> = scaleRecord({
   consumer_goods: 12, food: 8, water: 8, medicine: 6, luxuries: 6, textiles: 5,
-};
+});
 
 /** Idle fraction (Σ(count − used) / Σ count) at/above which a system is "coasting". */
 export const IDLE_COASTING_FRACTION = 0.15;

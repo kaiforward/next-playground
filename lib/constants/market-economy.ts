@@ -4,6 +4,7 @@
  */
 
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { scaleValue } from "@/lib/constants/economy-scale";
 import {
   buildingProduction,
   facilityStorageForGood,
@@ -40,7 +41,7 @@ export const TARGET_COVER = 40;
  * Floor on the days-of-supply denominator so a near-empty system yields a finite
  * cover instead of a divide-by-zero / zero reference. First-draft value; tuned via `npm run simulate`.
  */
-export const MIN_DEMAND = 0.05;
+export const MIN_DEMAND = scaleValue(0.05);
 
 /**
  * Seed-cover multipliers on the per-system reference: a pure consumer seeds at

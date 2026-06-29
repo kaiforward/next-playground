@@ -5,6 +5,8 @@
  * sim-sweep calibration; tune via the simulator before promoting changes.
  */
 
+import { scaleValue } from "@/lib/constants/economy-scale";
+
 export const TRADE_SIMULATION = {
   /**
    * Distance attenuation coefficient. Per-edge flow is scaled by
@@ -17,7 +19,7 @@ export const TRADE_SIMULATION = {
    */
   DISTANCE_DECAY: 0.1,
   /** Max units of one good moved per edge per processor run. */
-  FLOW_BUDGET: 8,
+  FLOW_BUDGET: scaleValue(8),
   /**
    * Price gradient threshold below which no flow occurs. Expressed as a
    * fraction of basePrice so all goods use the same trigger.
