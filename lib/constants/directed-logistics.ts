@@ -1,4 +1,5 @@
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { scaleValue } from "@/lib/constants/economy-scale";
 
 /**
  * Directed-logistics tuning. First-draft, simulator-calibrated; only relative shape matters.
@@ -8,7 +9,7 @@ export const DIRECTED_LOGISTICS = {
   /** Ticks for the per-faction shard to sweep every faction once (2× the economy clock). */
   INTERVAL: 2 * ECONOMY_UPDATE_INTERVAL,
   /** Work-budget a system contributes per cycle = population × this. Free in v1 (no treasury). */
-  GENERATION_PER_POP: 0.5,
+  GENERATION_PER_POP: scaleValue(0.5),
   /** A good is a surplus when stock ≥ targetStock × this (held above its days-of-supply anchor). Margin > 1 leaves a deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
   /** A good is a deficit when stock < targetStock × this (below its days-of-supply anchor). < 1 leaves a comfortable dead-band above it (with SURPLUS_MARGIN) — the residual / negative space. */
