@@ -18,6 +18,7 @@ import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
 import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
+import { scaleValue } from "@/lib/constants/economy-scale";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -203,7 +204,7 @@ function buildDefaults(): SimConstants {
       distanceDecay: MIGRATION_PARAMS.distanceDecay,
     },
     bots: {
-      startingCredits: 500,
+      startingCredits: scaleValue(500),
       refuelThreshold: 0.5,
       tradeImpactFactor: 0.5,
     },
