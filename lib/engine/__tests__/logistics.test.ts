@@ -70,6 +70,25 @@ describe("buildLogisticsRows", () => {
     expect(model.rows[0].goodName).toBe("Water");
     expect(model.rows[0].tier).toBe(0);
   });
+
+  it("normalises imports/exports (and partners) to a per-cycle rate, leaving prod/con untouched", () => {
+    const flows = new Map<string, GoodFlowAggregate>([
+      ["water", agg({
+        exportMarket: 40, exportLogistics: 20, // window total 60
+        exportPartners: [{ systemId: "A", systemName: "A", quantity: 60 }],
+      })],
+    ]);
+    const model = buildLogisticsRows(prodCon, flows, 8); // 8 cycles in the window
+    const water = model.rows.find((r) => r.goodId === "water")!;
+    // imports/exports divided by 8; production/consumption (per-cycle already) unchanged
+    expect(water.exportMarket).toBe(5);
+    expect(water.exportLogistics).toBe(2.5);
+    expect(water.externalNet).toBe(7.5);
+    expect(water.production).toBe(10);
+    expect(water.consumption).toBe(2);
+    expect(water.exportPartners[0].quantity).toBe(7.5);
+    expect(model.externalMax).toBe(7.5); // per-cycle export rate, not the 60 window total
+  });
 });
 
 describe("aggregateLogisticsFlows", () => {

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getPlayerVisibility } from "./visibility-cache";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
 import type {
@@ -128,7 +129,10 @@ export async function getSystemLogistics(
 
   const flowRows: LogisticsFlowRow[] = flows;
   const flowsByGood = aggregateLogisticsFlows(flowRows, systemId, resolveName);
-  const model = buildLogisticsRows(prodCon, flowsByGood);
+  // Imports/exports are summed over the FLOW_HISTORY_TICKS window; normalise to a
+  // per-economy-cycle rate so they share units with the production/consumption rates.
+  const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / ECONOMY_UPDATE_INTERVAL;
+  const model = buildLogisticsRows(prodCon, flowsByGood, cyclesInWindow);
 
   return {
     visibility: "visible",

@@ -35,6 +35,8 @@ export const queryKeys = {
   tradeFlow: ["tradeFlow"] as const,
   // Per-system physical substrate (Astrography panel) — static, not tick-scoped.
   systemSubstrate: (systemId: string) => ["systemSubstrate", systemId] as const,
+  // Per-system cadence shard groups (header countdowns) — static, not tick-scoped.
+  systemCadence: (systemId: string) => ["systemCadence", systemId] as const,
   // Per-system dynamic population/unrest/demand — tick-invalidated.
   systemPopulationAll: ["systemPopulation"] as const,
   systemPopulation: (systemId: string) => ["systemPopulation", systemId] as const,

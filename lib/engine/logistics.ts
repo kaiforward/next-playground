@@ -39,11 +39,22 @@ const EMPTY_AGG: GoodFlowAggregate = {
  * per-good flow aggregate. Goods active in either source appear; goods with
  * neither prod/con nor flow are dropped. Rows are ordered tier-ascending then
  * internal-net-descending (stable by goodId), so both columns share one order.
+ *
+ * `cyclesInWindow` normalises the imports/exports — which are SUMMED over the
+ * whole flow-retention window — into a per-economy-cycle RATE, so the External
+ * column shares units with the Internal production/consumption rates (both
+ * per-cycle) and the two are directly comparable. Default 1 = raw window totals.
+ * Partner quantities are normalised the same way so tooltips read in /cyc too.
  */
 export function buildLogisticsRows(
   prodCon: ReadonlyArray<SubstrateGoodRate>,
   flowsByGood: ReadonlyMap<string, GoodFlowAggregate>,
+  cyclesInWindow: number = 1,
 ): LogisticsRowModel {
+  const norm = cyclesInWindow > 0 ? cyclesInWindow : 1;
+  const normPartners = (ps: TradeFlowPartner[]): TradeFlowPartner[] =>
+    norm === 1 ? ps : ps.map((p) => ({ ...p, quantity: p.quantity / norm }));
+
   const prodConByGood = new Map(prodCon.map((g) => [g.goodId, g]));
   const goodIds = new Set<string>([...prodConByGood.keys(), ...flowsByGood.keys()]);
 
@@ -59,8 +70,14 @@ export function buildLogisticsRows(
     const consumption = pc?.consumption ?? 0;
     const a = flowsByGood.get(goodId) ?? EMPTY_AGG;
 
-    const importTotal = a.importMarket + a.importLogistics;
-    const exportTotal = a.exportMarket + a.exportLogistics;
+    // Window sums → per-cycle rates (matches production/consumption units).
+    const importMarket = a.importMarket / norm;
+    const importLogistics = a.importLogistics / norm;
+    const exportMarket = a.exportMarket / norm;
+    const exportLogistics = a.exportLogistics / norm;
+
+    const importTotal = importMarket + importLogistics;
+    const exportTotal = exportMarket + exportLogistics;
     const traded = importTotal > 0 || exportTotal > 0;
     const active = production > 0 || consumption > 0;
     if (!active && !traded) continue;
@@ -77,14 +94,14 @@ export function buildLogisticsRows(
       production,
       consumption,
       internalNet: production - consumption,
-      importMarket: a.importMarket,
-      importLogistics: a.importLogistics,
-      exportMarket: a.exportMarket,
-      exportLogistics: a.exportLogistics,
+      importMarket,
+      importLogistics,
+      exportMarket,
+      exportLogistics,
       externalNet: exportTotal - importTotal,
       traded,
-      importPartners: a.importPartners,
-      exportPartners: a.exportPartners,
+      importPartners: normPartners(a.importPartners),
+      exportPartners: normPartners(a.exportPartners),
     });
   }
 

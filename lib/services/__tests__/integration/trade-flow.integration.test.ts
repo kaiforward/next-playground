@@ -2,9 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse, createTestPlayer, createTestShip } from "@/lib/test-utils/fixtures";
 import type { TestUniverse, TestPlayerResult } from "@/lib/test-utils/fixtures";
+import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
+import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 
 const { prisma } = useIntegrationDb();
 vi.mock("@/lib/prisma", () => ({ prisma }));
+
+// Imports/exports are summed over the flow window then normalised to a per-economy-cycle
+// rate (so they share units with production/consumption). Expected values follow suit.
+const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / ECONOMY_UPDATE_INTERVAL;
+const perCycle = (windowTotal: number): number => windowTotal / cyclesInWindow;
 
 const { getSystemLogistics } = await import("@/lib/services/trade-flow");
 const { invalidateVisibilityCache } = await import("@/lib/services/visibility-cache");
@@ -62,28 +69,28 @@ describe("getSystemLogistics (integration)", () => {
     expect(data.visibility).toBe("visible");
     if (data.visibility !== "visible") throw new Error("expected visible");
 
-    // Exports split by flow type, no inbound flow.
+    // Exports split by flow type, no inbound flow (window totals 4 + 2, per cycle).
     const water = data.rows.find((r) => r.goodId === "water")!;
-    expect(water.exportMarket).toBe(4);
-    expect(water.exportLogistics).toBe(2);
+    expect(water.exportMarket).toBeCloseTo(perCycle(4));
+    expect(water.exportLogistics).toBeCloseTo(perCycle(2));
     expect(water.importMarket).toBe(0);
     expect(water.importLogistics).toBe(0);
-    expect(water.externalNet).toBe(6);
+    expect(water.externalNet).toBeCloseTo(perCycle(6));
     expect(water.traded).toBe(true);
 
-    // Imports split by flow type, summed across both source partners.
+    // Imports split by flow type, summed across both source partners (window totals 3 + 1).
     const food = data.rows.find((r) => r.goodId === "food")!;
-    expect(food.importMarket).toBe(3); // from the hidden partner
-    expect(food.importLogistics).toBe(1); // from the visible partner
+    expect(food.importMarket).toBeCloseTo(perCycle(3)); // from the hidden partner
+    expect(food.importLogistics).toBeCloseTo(perCycle(1)); // from the visible partner
     expect(food.exportMarket).toBe(0);
-    expect(food.externalNet).toBe(-4);
+    expect(food.externalNet).toBeCloseTo(perCycle(-4));
     expect(food.traded).toBe(true);
 
     expect(data.tradedGoodCount).toBe(2);
     // No top-N cap: the full prod/con footprint of a populated system is returned.
     expect(data.activeGoodCount).toBeGreaterThan(5);
     expect(data.internalMax).toBeGreaterThan(0);
-    expect(data.externalMax).toBe(6);
+    expect(data.externalMax).toBeCloseTo(perCycle(6));
 
     // Volume history covers the window and carries the seeded throughput.
     const totalVolume = data.volumeHistory.reduce((s, b) => s + b.importVolume + b.exportVolume, 0);
@@ -108,7 +115,7 @@ describe("getSystemLogistics (integration)", () => {
     const food = data.rows.find((r) => r.goodId === "food")!;
     const hiddenPartner = food.importPartners.find((p) => p.systemId === hiddenSystem.id)!;
     expect(hiddenPartner.systemName).toBe("Unknown System");
-    expect(hiddenPartner.quantity).toBe(3); // quantity still surfaces; only the name is gated
+    expect(hiddenPartner.quantity).toBeCloseTo(perCycle(3)); // quantity still surfaces (per cycle); only the name is gated
     const visibleImportPartner = food.importPartners.find((p) => p.systemId === visiblePartner.id)!;
     expect(visibleImportPartner.systemName).toBe(indName);
   });

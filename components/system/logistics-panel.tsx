@@ -27,7 +27,7 @@ function PartnerList({ label, partners }: { label: string; partners: TradeFlowPa
         {partners.map((p) => (
           <div key={p.systemId} className="flex justify-between gap-3">
             <dt className="truncate text-text-secondary">{p.systemName}</dt>
-            <dd className="shrink-0 font-mono text-text-primary">{Math.round(p.quantity)}</dd>
+            <dd className="shrink-0 font-mono text-text-primary">{p.quantity.toFixed(1)}/cyc</dd>
           </div>
         ))}
       </dl>
@@ -143,7 +143,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
             <div className="mt-1 flex items-center gap-2 text-[10px] text-text-tertiary">
               <span className="w-24 shrink-0" />
               <div className="flex flex-1 justify-between"><span>&#9664; Imports</span><span>Exports &#9654;</span></div>
-              <span className="w-12 shrink-0 text-right">Net</span>
+              <span className="w-12 shrink-0 text-right">Net/cyc</span>
             </div>
           </div>
         </div>
