@@ -17,6 +17,7 @@ import { EconomyBadge } from "@/components/ui/economy-badge";
 import { TabList, TabLink } from "@/components/ui/tabs";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { MapPinIcon } from "@/components/ui/icons";
+import { SystemCadenceCountdown } from "@/components/system/system-cadence-countdown";
 
 function SystemPanelContent({
   systemId,
@@ -79,23 +80,26 @@ function SystemPanelContent({
     </span>
   );
 
-  const showOnMapButton = (
-    <Button
-      variant="ghost"
-      size="xs"
-      href={`/?systemId=${systemId}`}
-      aria-label="Show on map"
-    >
-      <MapPinIcon />
-      <span className="ml-1">Show on Map</span>
-    </Button>
+  const headerAction = (
+    <>
+      <SystemCadenceCountdown systemId={systemId} />
+      <Button
+        variant="ghost"
+        size="xs"
+        href={`/?systemId=${systemId}`}
+        aria-label="Show on map"
+      >
+        <MapPinIcon />
+        <span className="ml-1">Show on Map</span>
+      </Button>
+    </>
   );
 
   return (
     <DetailPanel
       title={systemInfo?.name ?? "System"}
       subtitle={subtitle}
-      headerAction={showOnMapButton}
+      headerAction={headerAction}
       size="xl"
     >
       {/* Tab bar */}

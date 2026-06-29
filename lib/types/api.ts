@@ -77,7 +77,12 @@ export interface TradeFlowVolumeBucket {
   exportVolume: number;
 }
 // ── System logistics (production/consumption + imports/exports dashboard) ─────
-/** One good's full logistics row: internal prod/con + external flow split + partners. */
+/**
+ * One good's full logistics row: internal prod/con + external flow split + partners.
+ * All rates are PER ECONOMY CYCLE: production/consumption are per-cycle directly;
+ * imports/exports (and partner quantities) are the flow-window sum normalised to a
+ * per-cycle rate, so the Internal and External columns share units.
+ */
 export interface LogisticsGoodRow {
   goodId: string;
   goodName: string;
@@ -90,7 +95,7 @@ export interface LogisticsGoodRow {
   importLogistics: number;
   exportMarket: number;
   exportLogistics: number;
-  /** (exports total) − (imports total). */
+  /** (exports total) − (imports total), per cycle. */
   externalNet: number;
   /** Any of the four flow totals > 0. */
   traded: boolean;
@@ -106,7 +111,7 @@ export type SystemLogisticsData =
       rows: LogisticsGoodRow[];
       /** Largest single production/consumption rate across rows (internal bar scale). */
       internalMax: number;
-      /** Largest single import/export total across rows (external bar scale). */
+      /** Largest single per-cycle import/export rate across rows (external bar scale). */
       externalMax: number;
       /** Goods with production or consumption activity. */
       activeGoodCount: number;
@@ -115,6 +120,20 @@ export type SystemLogisticsData =
       volumeHistory: TradeFlowVolumeBucket[];
     }
   | { visibility: "unknown" };
+
+// ── System cadence (header "next update" countdowns) ─────────────────────────
+/**
+ * Static per-system shard groups for the header cadence countdowns. Both never
+ * change for a given universe (id-rank / faction-rank are fixed), so the client
+ * fetches once (staleTime Infinity) and counts down off the live tick.
+ */
+export interface SystemCadence {
+  /** Group in [0, ECONOMY_UPDATE_INTERVAL): when this system's economy shard runs. */
+  economyShardGroup: number;
+  /** Group in [0, DIRECTED_LOGISTICS.INTERVAL): when this faction's logistics/build shard runs. */
+  logisticsShardGroup: number;
+}
+export type SystemCadenceResponse = ApiResponse<SystemCadence>;
 export type SystemLogisticsResponse = ApiResponse<SystemLogisticsData>;
 /** Enriched trait data returned from system detail API. */
 export interface SystemTraitResponse {
