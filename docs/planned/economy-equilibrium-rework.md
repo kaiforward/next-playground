@@ -116,6 +116,21 @@ harmless but changes every displayed magnitude with no player-facing payoff yet;
 UI unchanged. Lean: **stage it** (record the value, don't flip) unless we want the bigger numbers in the
 dev UI now.
 
+**Decision (calibrated): `ECONOMY_SCALE = 100`, staged (live default stays `1`).** Measured on the
+settled `HOLD_COVER = 1.3` economy (3000-tick sim, seed 42, 8 greedy + 8 random): final-world flow
+magnitudes were median **1**, p90 **4**, max **49** units, with per-good typical (median) flows of
+**2–3** and busy lanes (p90) of **14–27**. The linear solve to land typical flows in the hundreds–
+thousands gives `S ≈ 100` (typical 200–300, busy lanes 1.4K–2.7K, biggest ~4.9K). Ratio-invariance
+re-confirmed on the new equilibrium (`economy-scale-invariance.test.ts`, 2/2), so prices and balance are
+unchanged at any `S` — this is purely cosmetic magnitude.
+
+**Staged, not flipped — but the flip IS coming in SP3 (this is expected, not a regression).** SP3 will
+set the live default to `100`, which **changes every displayed magnitude ×100** (stock, production,
+consumption, storage, flows) while prices and gameplay stay identical, and **requires a reseed** (the
+seed writes scaled magnitudes). That reseed is a known, planned step — not something to avoid. We stage
+here only because there is no player-facing payoff until SP3 consumes the larger numbers; the live UI and
+existing dev seed stay on `S = 1` until then.
+
 ### 4. Simulator dispersion metric (the test instrument)
 
 The simulator already runs the same economy / population / logistics processor bodies as live, in-memory,
