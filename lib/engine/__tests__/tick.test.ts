@@ -323,3 +323,16 @@ describe("outputUptake (seller-side stock signal)", () => {
     expect(outputUptake(5, 5, 5)).toBe(0);
   });
 });
+
+describe("outputUptake — stays storage-relative (decay signal)", () => {
+  it("reads a producer at the operating ceiling as selling, only a storage-pinned glut as stuck", () => {
+    // Operating ceiling (1.3 × target 100 = 130) is well below maxStock 200. A healthy
+    // exporter resting near the ceiling must NOT read as a glut, or infra-decay tears it
+    // down. uptake is measured on the full [minStock, maxStock] storage band.
+    const healthy = outputUptake(130, 5, 200); // at the operating ceiling
+    expect(healthy).toBeGreaterThan(0.5); // clearly "selling"
+
+    const glut = outputUptake(199, 5, 200); // pinned at the storage ceiling
+    expect(glut).toBeLessThan(0.1); // genuinely stuck → decay is correct here
+  });
+});
