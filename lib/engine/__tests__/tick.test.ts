@@ -58,6 +58,17 @@ describe("simulateEconomyTick — operating ceiling", () => {
   });
 });
 
+describe("simulateEconomyTick — anchor-relative consumption", () => {
+  it("consumes at the full nominal rate once stock is at/above the anchor", () => {
+    // targetStock 100: consume factor = 1 at the anchor and above (clamped).
+    const atAnchor = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
+    expect(100 - atAnchor[0].stock).toBeCloseTo(10, 5);
+
+    const above = simulateEconomyTick([entry({ consumptionRate: 10, stock: 150 })], PARAMS);
+    expect(150 - above[0].stock).toBeCloseTo(10, 5);
+  });
+});
+
 describe("simulateEconomyTick — consumption", () => {
   it("lowers stock for a consumer, self-limiting near the floor", () => {
     const mid = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);

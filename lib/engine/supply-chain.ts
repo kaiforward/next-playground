@@ -108,7 +108,7 @@ export function simulateSystemEconomyTick(
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
     if (effectiveConsumption > 0) {
-      s -= effectiveConsumption * selfLimitingFactor(s, minStock, maxStock, "consume");
+      s -= effectiveConsumption * selfLimitingFactor(s, minStock, entry.targetStock, "consume");
     }
 
     const noise = (rng() * 2 - 1) * noiseFraction * (maxStock - minStock) * (entry.volatility ?? 1);

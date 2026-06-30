@@ -139,7 +139,7 @@ export async function runEconomyProcessor(
     const consumptionRate = tickEntries[i].consumptionRate;
     if (consumptionRate != null && consumptionRate > 0) {
       const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
-      const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock, "consume");
+      const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].targetStock, "consume");
       const arr = goodsBySystem.get(m.systemId) ?? [];
       arr.push({ satisfaction, demanded });
       goodsBySystem.set(m.systemId, arr);

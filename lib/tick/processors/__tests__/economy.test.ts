@@ -248,6 +248,23 @@ describe("economy processor: dissatisfaction signal", () => {
     expect(dStarved).toBeGreaterThan(dFed);
   });
 
+  it("reports a well-supplied system (stock at the anchor) as fully content", async () => {
+    // Seed stock at targetStock (=40 for demandRate=1). After the change the
+    // consume factor saturates at the anchor, so post-tick stock is just slightly
+    // below targetStock — satisfaction ≈ 1 → D ≈ 0. Pre-change: ceiling was maxStock
+    // (320), giving factor ≈ sqrt(32/312) ≈ 0.32 at stock=40, D >> 0.05.
+    const systemId = "sys-anchor";
+    const consumer = makeConsumerSystem(systemId, 0);
+    const world = new InMemoryEconomyWorld({
+      systems: [consumer],
+      markets: [makeMarket(systemId, "food", FIXTURE_BAND.targetStock)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const d = result.economySignals?.dissatisfactionBySystem.get(systemId) ?? 1;
+    expect(d).toBeLessThan(0.05); // at the anchor → content (was >> 0.05 pre-change)
+  });
+
   it("producer system with stock near maxStock has very low D", async () => {
     // Producers also consume at per-capita rates but with small population;
     // when stock is near the per-market ceiling (maxStock=320), satisfaction
