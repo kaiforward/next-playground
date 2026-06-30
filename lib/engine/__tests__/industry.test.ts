@@ -6,6 +6,7 @@ import {
   buildingProduction,
   capacityGoodRates,
   inputDemandForGood,
+  inputDemandFromProduction,
   buildIndustryReadout,
   facilityStorageForGood,
   extractorsByResource,
@@ -131,6 +132,30 @@ describe("inputDemandForGood", () => {
       inputDemandForGood({ alloys: 2 }, "minerals", f, yields) +
       inputDemandForGood({ components: 2 }, "minerals", f, yields);
     expect(inputDemandForGood(buildings, "minerals", f, yields)).toBeCloseTo(direct, 6);
+  });
+});
+
+describe("inputDemandFromProduction", () => {
+  it("equals inputDemandForGood when fed the production rates capacityGoodRates computes", () => {
+    // A forge world drawing ore + minerals. The production-map path must equal the recompute path
+    // good-for-good — same fulfillment/yields are baked into capacityGoodRates's production rates.
+    const buildings = { metals: 4, alloys: 2 };
+    const yields = unitResourceVector();
+    const pop = labourDemand(buildings); // population == labour demand ⇒ fulfillment 1
+    const f = labourFulfillment(pop, labourDemand(buildings));
+    const productionByGood = new Map(
+      capacityGoodRates(buildings, pop, yields).map((g) => [g.goodId, g.production]),
+    );
+    for (const goodId of ["ore", "minerals", "luxuries"]) {
+      expect(inputDemandFromProduction(goodId, productionByGood)).toBeCloseTo(
+        inputDemandForGood(buildings, goodId, f, yields),
+        6,
+      );
+    }
+  });
+
+  it("returns 0 for a good nothing consumes as an input", () => {
+    expect(inputDemandFromProduction("luxuries", new Map([["metals", 4]]))).toBe(0);
   });
 });
 

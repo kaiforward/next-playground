@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useSystemLogistics } from "@/lib/hooks/use-system-logistics";
-import { DivergingBars, type DivergingBarRow } from "@/components/ui/diverging-bars";
+import { DivergingBars, BAR_FILL, BAR_HATCH, type DivergingBarRow } from "@/components/ui/diverging-bars";
 import { VolumeSparkline } from "@/components/system/volume-sparkline";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,6 +15,17 @@ const TIERS: GoodTier[] = [0, 1, 2];
 function fmtNet(n: number): string {
   const r = Math.round(n * 10) / 10;
   return `${r > 0 ? "+" : ""}${r}`;
+}
+
+/** A legend colour chip keyed off the SAME fill/hatch tokens the bars use (diverging-bars.tsx),
+ *  so the legend can't drift from the colours it documents. */
+function LegendSwatch({ color, hatch = false }: { color: "in" | "out"; hatch?: boolean }) {
+  return (
+    <span
+      className="inline-block h-2.5 w-5"
+      style={{ backgroundColor: BAR_FILL[color], backgroundImage: hatch ? BAR_HATCH : undefined }}
+    />
+  );
 }
 
 /** Top source/destination partner systems for an External bar's hover tooltip. */
@@ -42,8 +53,11 @@ function internalRow(g: LogisticsGoodRow): DivergingBarRow {
     label: g.goodName,
     net: g.internalNet,
     netLabel: fmtNet(g.internalNet),
+    // Wider than the default tooltip + non-wrapping rows: the civilian/manufacturing split
+    // carries long labels next to multi-digit /cyc rates that wrap the label at the default w-44.
+    tooltipClassName: "w-56",
     tooltip: (
-      <dl className="space-y-0.5 text-xs">
+      <dl className="space-y-0.5 text-xs whitespace-nowrap">
         <div className="flex justify-between gap-3">
           <dt className="text-text-tertiary">Produces</dt>
           <dd className="font-mono text-status-green-light">{g.production.toFixed(1)}/cyc</dd>
@@ -167,18 +181,18 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
         <div className="mt-2 grid grid-cols-2 gap-4 border-t border-border pt-2 text-[10px] text-text-tertiary">
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(239,68,68,0.8)" }} /> civilian
+              <LegendSwatch color="in" /> civilian
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(239,68,68,0.8)", backgroundImage: "repeating-linear-gradient(135deg, rgba(0,0,0,0.5) 0 2px, transparent 2px 5px)" }} /> manufacturing input
+              <LegendSwatch color="in" hatch /> manufacturing input
             </span>
           </div>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)" }} /> directed logistics
+              <LegendSwatch color="out" /> directed logistics
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)", backgroundImage: "repeating-linear-gradient(135deg, rgba(0,0,0,0.5) 0 2px, transparent 2px 5px)" }} /> market diffusion
+              <LegendSwatch color="out" hatch /> market diffusion
             </span>
           </div>
         </div>

@@ -9,7 +9,7 @@ import type {
   SystemLogisticsData,
 } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
-import { capacityGoodRates, inputDemandForGood, labourDemand, labourFulfillment } from "@/lib/engine/industry";
+import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/industry";
 import {
   aggregateLogisticsFlows,
   buildLogisticsRows,
@@ -111,10 +111,12 @@ export async function getSystemLogistics(
   const prodCon = capacityGoodRates(buildings, system.population, yields);
   // Manufacturing input demand per good (recipe draw from local factories) — also local
   // consumption, but distinct from the civilian per-capita need carried in prodCon.consumption.
-  const fulfillment = labourFulfillment(system.population, labourDemand(buildings));
+  // Each input's draw is its consumer goods' production, which capacityGoodRates already computed,
+  // so read those rates back rather than recomputing buildingProduction per consumer.
+  const productionByGood = new Map(prodCon.map((g) => [g.goodId, g.production]));
   const inputDemandByGood = new Map<string, number>();
   for (const g of prodCon) {
-    const d = inputDemandForGood(buildings, g.goodId, fulfillment, yields);
+    const d = inputDemandFromProduction(g.goodId, productionByGood);
     if (d > 0) inputDemandByGood.set(g.goodId, d);
   }
 

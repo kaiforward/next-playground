@@ -28,13 +28,22 @@ export interface DivergingBarRow {
   /** Rich hover tooltip content (e.g. partner sources/destinations), shown in a
    *  Radix tooltip. Requires an ancestor `TooltipProvider`. */
   tooltip?: ReactNode;
+  /** Optional class override for this row's tooltip content box — e.g. a wider width
+   *  when the rows carry long labels + large values that would otherwise wrap. */
+  tooltipClassName?: string;
 }
 
-const FILL: Record<"in" | "out", string> = {
+/**
+ * Segment fill by direction and the hatch overlay, exported so legends key off the SAME source
+ * of truth as the bars they document — no drifting duplicate colour literals. The hatch is
+ * deliberately dense/dark enough to read as distinct from a solid same-colour segment at the
+ * 10px bar height (the only differentiator between e.g. civilian vs manufacturing-input draw).
+ */
+export const BAR_FILL: Record<"in" | "out", string> = {
   in: "rgba(239,68,68,0.8)",
   out: "rgba(34,197,94,0.8)",
 };
-const HATCH = "repeating-linear-gradient(135deg, rgba(0,0,0,0.5) 0 2px, transparent 2px 5px)";
+export const BAR_HATCH = "repeating-linear-gradient(135deg, rgba(0,0,0,0.55) 0 2px, transparent 2px 4px)";
 
 function netClass(net: number): string {
   if (net > 0) return "text-status-green-light";
@@ -51,8 +60,8 @@ function Segments({ segments, max }: { segments: BarSegment[]; max: number }) {
           className="h-full"
           style={{
             width: max > 0 ? `${(s.value / max) * 100}%` : "0%",
-            backgroundColor: FILL[s.color],
-            backgroundImage: s.pattern === "hatch" ? HATCH : undefined,
+            backgroundColor: BAR_FILL[s.color],
+            backgroundImage: s.pattern === "hatch" ? BAR_HATCH : undefined,
           }}
         />
       ))}
@@ -103,7 +112,7 @@ export function DivergingBars({ rows, maxValue }: { rows: DivergingBarRow[]; max
         return (
           <Tooltip key={row.key}>
             <TooltipTrigger asChild>{barRow}</TooltipTrigger>
-            <TooltipContent>{row.tooltip}</TooltipContent>
+            <TooltipContent className={row.tooltipClassName}>{row.tooltip}</TooltipContent>
           </Tooltip>
         );
       })}
