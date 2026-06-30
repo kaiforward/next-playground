@@ -156,6 +156,7 @@ async function runScenario(
       // ~3.8 units/tick stochastic variation that swamps the flow signal
       // after 80 ticks even with the same seed.
       noiseFraction: 0,
+      holdCover: 1.3,
     },
     modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
     strikeParams: STRIKE_PARAMS,

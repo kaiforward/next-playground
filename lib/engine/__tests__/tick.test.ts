@@ -11,6 +11,7 @@ import {
 
 const PARAMS: EconomySimParams = {
   noiseFraction: 0, // deterministic: no noise unless a test opts in
+  holdCover: 1.3,
 };
 
 function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
@@ -18,6 +19,7 @@ function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
     goodId: "food",
     stock: 100,
     minStock: 5,
+    targetStock: 100,
     maxStock: 200,
     ...over,
   };
@@ -44,6 +46,29 @@ describe("simulateEconomyTick — production", () => {
   });
 });
 
+describe("simulateEconomyTick — operating ceiling", () => {
+  it("idles production at holdCover × targetStock, well below maxStock", () => {
+    // targetStock 100, holdCover 1.3 → operating ceiling 130 (maxStock is 200).
+    const atCeiling = simulateEconomyTick([entry({ productionRate: 10, stock: 130 })], PARAMS);
+    expect(atCeiling[0].stock).toBeCloseTo(130, 5); // throttled to ~0 at the operating ceiling
+
+    const below = simulateEconomyTick([entry({ productionRate: 10, stock: 100 })], PARAMS);
+    expect(below[0].stock).toBeGreaterThan(100); // still produces below the ceiling
+    expect(below[0].stock).toBeLessThan(130);
+  });
+});
+
+describe("simulateEconomyTick — anchor-relative consumption", () => {
+  it("consumes at the full nominal rate once stock is at/above the anchor", () => {
+    // targetStock 100: consume factor = 1 at the anchor and above (clamped).
+    const atAnchor = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
+    expect(100 - atAnchor[0].stock).toBeCloseTo(10, 5);
+
+    const above = simulateEconomyTick([entry({ consumptionRate: 10, stock: 150 })], PARAMS);
+    expect(150 - above[0].stock).toBeCloseTo(10, 5);
+  });
+});
+
 describe("simulateEconomyTick — consumption", () => {
   it("lowers stock for a consumer, self-limiting near the floor", () => {
     const mid = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
@@ -63,7 +88,7 @@ describe("simulateEconomyTick — noise", () => {
   it("perturbs stock within the band when noiseFraction > 0", () => {
     const out = simulateEconomyTick(
       [entry({ stock: 100, volatility: 1 })],
-      { noiseFraction: 0.1 }, // 10% of band width (195) = 19.5 per tick
+      { noiseFraction: 0.1, holdCover: 1.3 }, // 10% of band width (195) = 19.5 per tick
       () => 1, // rng=1 -> +full noise
     );
     expect(out[0].stock).toBeGreaterThan(100);
@@ -79,7 +104,7 @@ describe("simulateEconomyTick — noise", () => {
 });
 
 describe("buildMarketTickEntry", () => {
-  const BASE_BAND = { minStock: 5, maxStock: 200 };
+  const BASE_BAND = { minStock: 5, targetStock: 100, maxStock: 200 };
 
   it("passes through the base production rate unmodified", () => {
     const e = buildMarketTickEntry({
@@ -95,6 +120,7 @@ describe("buildMarketTickEntry", () => {
     expect(e.productionRate).toBeCloseTo(10, 5);
     expect(e.stock).toBe(100);
     expect(e.minStock).toBe(5);
+    expect(e.targetStock).toBe(100);
     expect(e.maxStock).toBe(200);
   });
 
@@ -219,8 +245,8 @@ describe("selfLimitingFactor", () => {
 
 describe("simulateEconomyTick — per-entry band", () => {
   it("clamps to the per-entry band and scales noise to band width", () => {
-    const e = { goodId: "ore", stock: 50, minStock: 10, maxStock: 90, productionRate: 0, consumptionRate: 0 };
-    const high = simulateEconomyTick([e], { noiseFraction: 0.02 }, () => 1)[0]; // +max noise
+    const e = { goodId: "ore", stock: 50, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const high = simulateEconomyTick([e], { noiseFraction: 0.02, holdCover: 1.3 }, () => 1)[0]; // +max noise
     expect(high.stock).toBeLessThanOrEqual(90);
     expect(high.stock).toBeCloseTo(51.6, 5); // band-width-scaled: (1*2-1)*0.02*80 = +1.6, not ±3
   });
@@ -231,14 +257,14 @@ describe("simulateEconomyTick — per-entry band", () => {
   });
 
   it("clamps stock to per-entry minStock when noise would push it below", () => {
-    const e = { goodId: "ore", stock: 10, minStock: 10, maxStock: 90, productionRate: 0, consumptionRate: 0 };
-    const low = simulateEconomyTick([e], { noiseFraction: 0.02 }, () => 0)[0]; // -max noise
+    const e = { goodId: "ore", stock: 10, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const low = simulateEconomyTick([e], { noiseFraction: 0.02, holdCover: 1.3 }, () => 0)[0]; // -max noise
     expect(low.stock).toBeGreaterThanOrEqual(10);
   });
 
   it("clamps stock to per-entry maxStock when noise would push it above", () => {
-    const e = { goodId: "ore", stock: 90, minStock: 10, maxStock: 90, productionRate: 0, consumptionRate: 0 };
-    const high = simulateEconomyTick([e], { noiseFraction: 0.02 }, () => 1)[0]; // +max noise
+    const e = { goodId: "ore", stock: 90, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const high = simulateEconomyTick([e], { noiseFraction: 0.02, holdCover: 1.3 }, () => 1)[0]; // +max noise
     expect(high.stock).toBeLessThanOrEqual(90);
   });
 });
@@ -296,5 +322,18 @@ describe("outputUptake (seller-side stock signal)", () => {
   });
   it("returns 0 for a degenerate zero-width band", () => {
     expect(outputUptake(5, 5, 5)).toBe(0);
+  });
+});
+
+describe("outputUptake — stays storage-relative (decay signal)", () => {
+  it("reads a producer at the operating ceiling as selling, only a storage-pinned glut as stuck", () => {
+    // Operating ceiling (1.3 × target 100 = 130) is well below maxStock 200. A healthy
+    // exporter resting near the ceiling must NOT read as a glut, or infra-decay tears it
+    // down. uptake is measured on the full [minStock, maxStock] storage band.
+    const healthy = outputUptake(130, 5, 200); // at the operating ceiling
+    expect(healthy).toBeGreaterThan(0.5); // clearly "selling"
+
+    const glut = outputUptake(199, 5, 200); // pinned at the storage ceiling
+    expect(glut).toBeLessThan(0.1); // genuinely stuck → decay is correct here
   });
 });

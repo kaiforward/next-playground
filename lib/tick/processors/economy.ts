@@ -139,11 +139,16 @@ export async function runEconomyProcessor(
     const consumptionRate = tickEntries[i].consumptionRate;
     if (consumptionRate != null && consumptionRate > 0) {
       const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
-      const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock, "consume");
+      const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].targetStock, "consume");
       const arr = goodsBySystem.get(m.systemId) ?? [];
       arr.push({ satisfaction, demanded });
       goodsBySystem.set(m.systemId, arr);
     }
+    // outputUptake stays on the FULL [minStock, maxStock] storage band — NOT the
+    // operating ceiling. It is decay's "is output stuck against the physical wall?"
+    // signal; a healthy exporter resting at the operating ceiling must read as selling,
+    // or infrastructure-decay would tear it down. The throttle and this signal are
+    // deliberately separate calls (see docs/planned/economy-equilibrium-rework.md).
     const productionRate = tickEntries[i].productionRate;
     if (productionRate != null && productionRate > 0) {
       const uptake = outputUptake(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock);
@@ -184,6 +189,7 @@ export async function runEconomyProcessor(
 
 const simParams: EconomySimParams = {
   noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
+  holdCover: ECONOMY_CONSTANTS.HOLD_COVER,
 };
 
 export const economyProcessor: TickProcessor = {

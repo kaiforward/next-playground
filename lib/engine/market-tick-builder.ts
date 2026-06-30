@@ -97,6 +97,7 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     goodId: input.goodId,
     stock: input.stock,
     minStock: band.minStock,
+    targetStock: band.targetStock,
     maxStock: band.maxStock,
     volatility,
     baseProductionRate: input.baseProductionRate,

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/*
+ * Docs are prose, not a source of utility classes. Exclude them from Tailwind's
+ * automatic content detection: markdown often contains Windows paths or regexes
+ * with backslash-hex sequences (e.g. `\c5612c`), which the oxide scanner parses
+ * as CSS escapes and rejects as an "Invalid code point", breaking the build.
+ */
+@source not "../docs";
+
 @theme inline {
   /* Fonts */
   --font-sans: var(--font-geist), "Geist", system-ui, sans-serif;

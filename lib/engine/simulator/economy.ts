@@ -54,6 +54,7 @@ const EVENT_DEFINITIONS = SCALED.definitions;
 function buildSimParams(constants: SimConstants): EconomySimParams {
   return {
     noiseFraction: constants.economy.noiseFraction,
+    holdCover: constants.economy.holdCover,
   };
 }
 

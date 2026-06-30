@@ -266,6 +266,31 @@ export interface MarketSnapshot {
   price: number;
 }
 
+export interface PriceLevelSummary {
+  /** Median price / basePrice across all markets (galaxy-wide). */
+  median: number;
+  /** 10th percentile price / basePrice. */
+  p10: number;
+  /** 90th percentile price / basePrice. */
+  p90: number;
+  /** Fraction of markets below 0.9× base (cheap — overstocked). */
+  cheapFrac: number;
+  /** Fraction within 0.9–1.1× base (near the anchor). */
+  nearFrac: number;
+  /** Fraction above 1.1× base (expensive — scarce). */
+  expensiveFrac: number;
+}
+
+export interface CoverLevelEntry {
+  goodId: string;
+  /** Median stock / targetStock (days-of-supply cover) across systems. */
+  medianCover: number;
+  /** Fraction of markets at/above the surplus margin. */
+  surplusFrac: number;
+  /** Fraction below the deficit fraction. */
+  deficitFrac: number;
+}
+
 export interface MarketHealthSummary {
   /** Per-good average price standard deviation across systems (high = trade opportunity). */
   priceDispersion: { goodId: string; avgStdDev: number }[];
@@ -273,6 +298,10 @@ export interface MarketHealthSummary {
   stockDrift: { goodId: string; avgStockDrift: number }[];
   /** Per-good fraction of markets clamped at the stock floor / ceiling (supply pathology surface). */
   stockPins: { goodId: string; floorFrac: number; ceilingFrac: number }[];
+  /** Galaxy-wide price/base distribution — the floor-pinning signal. */
+  priceLevels: PriceLevelSummary;
+  /** Per-good stock cover distribution (stock/anchor) — surplus/deficit balance. */
+  coverLevels: CoverLevelEntry[];
 }
 
 // ── Event impact ────────────────────────────────────────────────

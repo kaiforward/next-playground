@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { inputGate, simulateSystemEconomyTick, simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { MarketTickEntry, EconomySimParams } from "@/lib/engine/tick";
 
-const PARAMS: EconomySimParams = { noiseFraction: 0 };
+const PARAMS: EconomySimParams = { noiseFraction: 0, holdCover: 1.3 };
 const noRng = () => 0.5; // noise = 0 when noiseFraction = 0
 
 // Convenience: build a full MarketTickEntry with per-entry band defaults.
@@ -13,8 +13,9 @@ function entry(
   cons?: number,
   minStock = 5,
   maxStock = 200,
+  targetStock = 100,
 ): MarketTickEntry {
-  return { goodId, stock, minStock, maxStock, productionRate: prod, consumptionRate: cons };
+  return { goodId, stock, minStock, targetStock, maxStock, productionRate: prod, consumptionRate: cons };
 }
 
 describe("inputGate", () => {
@@ -124,13 +125,14 @@ describe("simulateSystemEconomyTick", () => {
       goodId: "ore",
       stock: 50,
       minStock: 10,
+      targetStock: 30,
       maxStock: 50,
       productionRate: 0,
       consumptionRate: 0,
     };
     const out = simulateSystemEconomyTick(
       [oreEntry],
-      { noiseFraction: 0.5 },
+      { noiseFraction: 0.5, holdCover: 1.3 },
       () => 1, // always +max noise
     );
     expect(out[0].stock).toBeLessThanOrEqual(50);
@@ -146,6 +148,7 @@ describe("simulateSystemEconomyTick", () => {
       goodId: "ore",
       stock: 25,
       minStock: 20,
+      targetStock: 100,
       maxStock: 200,
       productionRate: 0,
     };
@@ -153,6 +156,7 @@ describe("simulateSystemEconomyTick", () => {
       goodId: "metals",
       stock: 50,
       minStock: 5,
+      targetStock: 100,
       maxStock: 200,
       productionRate: 10,
     };
@@ -168,12 +172,25 @@ describe("simulateSystemEconomyTick", () => {
       goodId: "water",
       stock: 50,
       minStock: 40,
+      targetStock: 50,
       maxStock: 60,
       productionRate: 0,
       consumptionRate: 0,
     };
-    const out = simulateSystemEconomyTick([narrowEntry], { noiseFraction: 0.5 }, () => 1)[0];
+    const out = simulateSystemEconomyTick([narrowEntry], { noiseFraction: 0.5, holdCover: 1.3 }, () => 1)[0];
     expect(out.stock).toBeCloseTo(60, 5); // 50 + 10 noise, clamped at 60
+  });
+});
+
+describe("simulateSystemEconomyTick — operating ceiling", () => {
+  it("idles production at the operating ceiling in the coupled tick", () => {
+    // tier-0 good (no recipe) → input gate 1. holdCover 1.3 × targetStock 100 = 130.
+    const out = simulateSystemEconomyTick(
+      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, maxStock: 200, volatility: 1, productionRate: 10 }],
+      PARAMS,
+      noRng,
+    );
+    expect(out[0].stock).toBeCloseTo(130, 5); // throttled to ~0 at the operating ceiling
   });
 });
 
@@ -181,10 +198,10 @@ describe("simulateCoupledEconomyTick", () => {
   it("isolates systems — system A's ore does not feed system B's metals", () => {
     // A: ore-rich + metals. B: ore-starved + metals. Same flat array.
     const entries: MarketTickEntry[] = [
-      { goodId: "ore", stock: 150, minStock: 5, maxStock: 200, productionRate: 0 },   // A
-      { goodId: "metals", stock: 50, minStock: 5, maxStock: 200, productionRate: 20 }, // A
-      { goodId: "ore", stock: 6, minStock: 5, maxStock: 200, productionRate: 0 },      // B
-      { goodId: "metals", stock: 50, minStock: 5, maxStock: 200, productionRate: 20 }, // B
+      { goodId: "ore", stock: 150, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 0 },   // A
+      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 20 }, // A
+      { goodId: "ore", stock: 6, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 0 },      // B
+      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 20 }, // B
     ];
     const systemIds = ["A", "A", "B", "B"];
     const out = simulateCoupledEconomyTick(entries, systemIds, PARAMS, () => 0.5);

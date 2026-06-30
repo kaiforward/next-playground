@@ -59,7 +59,7 @@ export function simulateSystemEconomyTick(
   params: EconomySimParams,
   rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { noiseFraction } = params;
+  const { noiseFraction, holdCover } = params;
 
   // Build per-good band lookups from entry data.
   const minStockMap = new Map<string, number>();
@@ -88,7 +88,8 @@ export function simulateSystemEconomyTick(
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
       const gate = inputGate(entry.goodId, effectiveProduction, stockOf, minStockOf);
-      const ceiling = selfLimitingFactor(s, minStock, maxStock, "produce");
+      const operatingCeiling = entry.targetStock * holdCover;
+      const ceiling = selfLimitingFactor(s, minStock, operatingCeiling, "produce");
       const actualOutput = effectiveProduction * gate * ceiling;
       s += actualOutput;
       // Drain inputs proportional to actual output. Because gate ≤ ratio_i =
@@ -107,7 +108,7 @@ export function simulateSystemEconomyTick(
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
     if (effectiveConsumption > 0) {
-      s -= effectiveConsumption * selfLimitingFactor(s, minStock, maxStock, "consume");
+      s -= effectiveConsumption * selfLimitingFactor(s, minStock, entry.targetStock, "consume");
     }
 
     const noise = (rng() * 2 - 1) * noiseFraction * (maxStock - minStock) * (entry.volatility ?? 1);

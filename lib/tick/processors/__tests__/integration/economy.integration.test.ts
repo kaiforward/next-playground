@@ -17,6 +17,7 @@ const { prisma } = useIntegrationDb();
 
 const simParams: EconomySimParams = {
   noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
+  holdCover: ECONOMY_CONSTANTS.HOLD_COVER,
 };
 
 describe("economyProcessor (integration)", () => {

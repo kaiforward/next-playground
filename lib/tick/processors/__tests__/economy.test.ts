@@ -35,6 +35,7 @@ const ECON_PARAMS = {
   interval: 1,
   simParams: {
     noiseFraction: 0, // deterministic — no noise
+    holdCover: 1.3,
   },
   modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
   strikeParams: STRIKE_PARAMS,
@@ -114,14 +115,15 @@ function makeMarket(systemId: string, goodId: string, stock: number): SimMarketE
 describe("economy processor: strike suppression", () => {
   it("high unrest (≥ threshold) produces lower post-tick stock than unrest=0", async () => {
     const goodId = "food";
-    // Mid-band: well above minStock(8) and well below maxStock(320) so the
-    // direction of stock change is unambiguous regardless of production level.
-    const midStock = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
+    // Active-production zone: below the operating ceiling (targetStock × holdCover = 40 × 1.3 = 52)
+    // and well above the floor (minStock=8) so both production factors are positive and the
+    // strike multiplier's suppression is observable.
+    const prodStock = FIXTURE_BAND.targetStock - 2; // ≈ 38 — below operating ceiling
 
     // Run with unrest=0 (no strike).
     const calmSystem = makeProducerSystem("sys-calm", 0);
     const calmWorld = new InMemoryEconomyWorld(
-      { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, midStock)], modifiers: [] },
+      { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, prodStock)], modifiers: [] },
     );
     await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const calmStock = calmWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -129,7 +131,7 @@ describe("economy processor: strike suppression", () => {
     // Run with unrest well above the strike threshold (0.5).
     const strikeSystem = makeProducerSystem("sys-strike", 0.9);
     const strikeWorld = new InMemoryEconomyWorld(
-      { systems: [strikeSystem], markets: [makeMarket("sys-strike", goodId, midStock)], modifiers: [] },
+      { systems: [strikeSystem], markets: [makeMarket("sys-strike", goodId, prodStock)], modifiers: [] },
     );
     await runEconomyProcessor(strikeWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const strikeStock = strikeWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -140,13 +142,13 @@ describe("economy processor: strike suppression", () => {
 
   it("unrest below threshold leaves production unchanged", async () => {
     const goodId = "food";
-    // Mid-band: same as above — a neutral starting point for comparing
-    // unrest=0 vs unrest just below the strike threshold.
-    const midStock = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
+    // Active-production zone: below the operating ceiling (≈ 52) so production is active
+    // and unrest=0 vs below-threshold unrest can be compared meaningfully.
+    const prodStock = FIXTURE_BAND.targetStock - 2; // ≈ 38 — same zone as strike test above
 
     const calmSystem = makeProducerSystem("sys-calm", 0);
     const calmWorld = new InMemoryEconomyWorld(
-      { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, midStock)], modifiers: [] },
+      { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, prodStock)], modifiers: [] },
     );
     await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const calmStock = calmWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -154,7 +156,7 @@ describe("economy processor: strike suppression", () => {
     // Unrest just below threshold — should behave like unrest=0.
     const belowSystem = makeProducerSystem("sys-below", STRIKE_PARAMS.threshold - 0.01);
     const belowWorld = new InMemoryEconomyWorld(
-      { systems: [belowSystem], markets: [makeMarket("sys-below", goodId, midStock)], modifiers: [] },
+      { systems: [belowSystem], markets: [makeMarket("sys-below", goodId, prodStock)], modifiers: [] },
     );
     await runEconomyProcessor(belowWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
     const belowStock = belowWorld.markets.find((m) => m.goodId === goodId)!.stock;
@@ -244,6 +246,23 @@ describe("economy processor: dissatisfaction signal", () => {
     const dFed = fedResult.economySignals!.dissatisfactionBySystem.get("sys-f") ?? 0;
 
     expect(dStarved).toBeGreaterThan(dFed);
+  });
+
+  it("reports a well-supplied system (stock at the anchor) as fully content", async () => {
+    // Seed stock at targetStock (=40 for demandRate=1). After the change the
+    // consume factor saturates at the anchor, so post-tick stock is just slightly
+    // below targetStock — satisfaction ≈ 1 → D ≈ 0. Pre-change: ceiling was maxStock
+    // (320), giving factor ≈ sqrt(32/312) ≈ 0.32 at stock=40, D >> 0.05.
+    const systemId = "sys-anchor";
+    const consumer = makeConsumerSystem(systemId, 0);
+    const world = new InMemoryEconomyWorld({
+      systems: [consumer],
+      markets: [makeMarket(systemId, "food", FIXTURE_BAND.targetStock)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const d = result.economySignals?.dissatisfactionBySystem.get(systemId) ?? 1;
+    expect(d).toBeLessThan(0.05); // at the anchor → content (was >> 0.05 pre-change)
   });
 
   it("producer system with stock near maxStock has very low D", async () => {
@@ -337,8 +356,9 @@ describe("economy processor: supply-chain input-gating", () => {
    * directly and does not grow.
    */
   it("throttles metals production when local ore is scarce", async () => {
-    // Mid-band for metals starting stock — within [minStock=8, maxStock=320].
-    const MID_METALS = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
+    // Active-production zone for metals: below the operating ceiling (targetStock × 1.3 ≈ 52)
+    // so production can occur when ore is available and be fully blocked when gate = 0.
+    const MID_METALS = FIXTURE_BAND.minStock + 10; // ≈ 18 — well within [floor=8, ceiling≈52]
 
     function makeSmeltingSystem(id: string): SimSystem {
       return {
