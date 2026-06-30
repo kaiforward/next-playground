@@ -36,6 +36,7 @@ function PartnerList({ label, partners }: { label: string; partners: TradeFlowPa
 }
 
 function internalRow(g: LogisticsGoodRow): DivergingBarRow {
+  const totalConsumption = g.consumption + g.inputDemand;
   return {
     key: g.goodId,
     label: g.goodName,
@@ -49,11 +50,25 @@ function internalRow(g: LogisticsGoodRow): DivergingBarRow {
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-text-tertiary">Consumes</dt>
-          <dd className="font-mono text-status-red-light">{g.consumption.toFixed(1)}/cyc</dd>
+          <dd className="font-mono text-status-red-light">{totalConsumption.toFixed(1)}/cyc</dd>
         </div>
+        {g.inputDemand > 0 && (
+          <>
+            <div className="flex justify-between gap-3 pl-2">
+              <dt className="text-text-tertiary">· civilian</dt>
+              <dd className="font-mono text-text-secondary">{g.consumption.toFixed(1)}/cyc</dd>
+            </div>
+            <div className="flex justify-between gap-3 pl-2">
+              <dt className="text-text-tertiary">· manufacturing</dt>
+              <dd className="font-mono text-text-secondary">{g.inputDemand.toFixed(1)}/cyc</dd>
+            </div>
+          </>
+        )}
       </dl>
     ),
     segments: [
+      // consumes (left): hatch manufacturing-input then solid civilian → solid sits at the divider
+      { value: g.inputDemand, side: "left", color: "in", pattern: "hatch" },
       { value: g.consumption, side: "left", color: "in", pattern: "solid" },
       { value: g.production, side: "right", color: "out", pattern: "solid" },
     ],
@@ -148,14 +163,24 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
           </div>
         </div>
 
-        {/* flow-split legend */}
-        <div className="mt-2 flex items-center gap-4 border-t border-border pt-2 text-[10px] text-text-tertiary">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)" }} /> directed logistics
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)", backgroundImage: "repeating-linear-gradient(135deg, rgba(0,0,0,0.5) 0 2px, transparent 2px 5px)" }} /> market diffusion
-          </span>
+        {/* per-column solid/hatch legend — internal = consumption split, external = flow type */}
+        <div className="mt-2 grid grid-cols-2 gap-4 border-t border-border pt-2 text-[10px] text-text-tertiary">
+          <div className="flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(239,68,68,0.8)" }} /> civilian
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(239,68,68,0.8)", backgroundImage: "repeating-linear-gradient(135deg, rgba(0,0,0,0.5) 0 2px, transparent 2px 5px)" }} /> manufacturing input
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)" }} /> directed logistics
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-5" style={{ backgroundColor: "rgba(34,197,94,0.8)", backgroundImage: "repeating-linear-gradient(135deg, rgba(0,0,0,0.5) 0 2px, transparent 2px 5px)" }} /> market diffusion
+            </span>
+          </div>
         </div>
 
         {/* tier groups */}

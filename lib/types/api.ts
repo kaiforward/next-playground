@@ -88,8 +88,11 @@ export interface LogisticsGoodRow {
   goodName: string;
   tier: GoodTier;
   production: number;
+  /** Civilian consumption (population × per-capita need). */
   consumption: number;
-  /** production − consumption. */
+  /** Manufacturing input demand — recipe draw from local factories. Also local consumption. */
+  inputDemand: number;
+  /** production − (consumption + inputDemand). */
   internalNet: number;
   importMarket: number;
   importLogistics: number;

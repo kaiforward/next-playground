@@ -71,6 +71,26 @@ describe("buildLogisticsRows", () => {
     expect(model.rows[0].tier).toBe(0);
   });
 
+  it("folds manufacturing input demand into total consumption and the internal net", () => {
+    // gas: produces 287, civilian need 200, manufacturing input draw 985 → a net importer once
+    // industrial consumption is counted (the civilian-only figure hid this).
+    const pc: SubstrateGoodRate[] = [{ goodId: "gas", production: 287, consumption: 200 }];
+    const model = buildLogisticsRows(pc, new Map(), 1, new Map([["gas", 985]]));
+    const gas = model.rows.find((r) => r.goodId === "gas")!;
+    expect(gas.consumption).toBe(200); // civilian portion kept separate
+    expect(gas.inputDemand).toBe(985); // manufacturing portion surfaced
+    expect(gas.internalNet).toBe(287 - 1185); // net of TOTAL local demand
+    expect(model.internalMax).toBe(1185); // bar scale uses total consumption, not civilian alone
+  });
+
+  it("counts a good consumed only as a manufacturing input as active", () => {
+    // minerals: no civilian need, no production, but drawn 50/cyc as a factory input → must show.
+    const model = buildLogisticsRows([], new Map(), 1, new Map([["minerals", 50]]));
+    const minerals = model.rows.find((r) => r.goodId === "minerals");
+    expect(minerals?.inputDemand).toBe(50);
+    expect(model.activeGoodCount).toBe(1);
+  });
+
   it("normalises imports/exports (and partners) to a per-cycle rate, leaving prod/con untouched", () => {
     const flows = new Map<string, GoodFlowAggregate>([
       ["water", agg({
