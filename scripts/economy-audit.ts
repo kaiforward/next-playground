@@ -241,9 +241,10 @@ async function main() {
         if (m.stock <= band.min * 1.02) a.nPinnedLow++;
       }
 
-      // real satisfaction = consume-direction self-limiting factor (exactly economy.ts), for civilian-consumed goods
-      if (civ > 0 && band.max > band.min) {
-        const sat = selfLimitingFactor(m.stock, band.min, band.max, "consume");
+      // real satisfaction = consume-direction self-limiting factor (exactly economy.ts),
+      // anchor-relative: saturates at the days-of-supply anchor (target), for civilian goods.
+      if (civ > 0 && band.target > band.min) {
+        const sat = selfLimitingFactor(m.stock, band.min, band.target, "consume");
         a.satisfactions.push(sat);
         satGoods.push({ satisfaction: sat, demanded: civ });
         ra.sumSat += sat; ra.nSat++;
@@ -267,9 +268,9 @@ async function main() {
   L.push(`  unrest: mean ${meanUnrest.toFixed(3)}  median ${median(unrests).toFixed(3)}  p90 ${quantile(unrests, 0.9).toFixed(3)}  p99 ${quantile(unrests, 0.99).toFixed(3)}  max ${Math.max(...unrests).toFixed(3)}`);
   L.push(`  calm (<0.2): ${nCalm} (${pct(nCalm, systems.length)})   elevated (0.2–0.65): ${nElevated} (${pct(nElevated, systems.length)})   STRIKING (>=0.65): ${nStriking} (${pct(nStriking, systems.length)})`);
   L.push(``);
-  L.push(`  SATISFACTION (= √((stock−min)/(max−min)), the consume self-limiting factor — only reaches 1.0 at the storage CEILING):`);
+  L.push(`  SATISFACTION (= √((stock−min)/(target−min)), the consume self-limiting factor — reaches 1.0 at the days-of-supply ANCHOR):`);
   L.push(`    mean per-good satisfaction: ${meanSat.toFixed(3)}   →  equilibrium unrest target D (mean): ${meanD.toFixed(3)}   vs actual mean unrest ${meanUnrest.toFixed(3)}`);
-  L.push(`    NB: a good sitting exactly at its price anchor (stock=target) reads ~0.58 satisfied for tier-0 → unrest floors ~0.3 regardless of abundance.`);
+  L.push(`    NB: a good at/above its anchor (stock≥target) now reads fully satisfied → unrest is no longer floored by abundance the model refused to credit.`);
   L.push(``);
   L.push(`ECONOMY TYPES: ${[...econDist.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join("  ")}`);
   L.push(``);
