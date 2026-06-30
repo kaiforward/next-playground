@@ -170,8 +170,8 @@ function formatTable(results: SimResults): string {
     lines.push("");
     lines.push("Market Health (end of simulation):");
 
-    const dHeaders = ["Good", "Price StdDev", "Stock Drift", "Floor %", "Ceil %"];
-    const dWidths = [12, 13, 13, 8, 8];
+    const dHeaders = ["Good", "Price StdDev", "Stock Drift", "Cover", "Floor %", "Ceil %"];
+    const dWidths = [12, 13, 13, 7, 8, 8];
 
     lines.push(dHeaders.map((h, i) => pad(h, dWidths[i])).join(" | "));
     lines.push(dWidths.map((w) => "-".repeat(w)).join("-+-"));
@@ -179,6 +179,7 @@ function formatTable(results: SimResults): string {
     const dispMap = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d]));
     const driftMap = new Map(marketHealth.stockDrift.map((d) => [d.goodId, d]));
     const pinMap = new Map(marketHealth.stockPins.map((p) => [p.goodId, p]));
+    const coverMap = new Map(marketHealth.coverLevels.map((c) => [c.goodId, c]));
     const allGoods = [...new Set([
       ...marketHealth.priceDispersion.map((d) => d.goodId),
       ...marketHealth.stockDrift.map((d) => d.goodId),
@@ -190,15 +191,29 @@ function formatTable(results: SimResults): string {
       const disp = dispMap.get(goodId);
       const drift = driftMap.get(goodId);
       const pin = pinMap.get(goodId);
+      const cover = coverMap.get(goodId);
       const row = [
         pad(goodId, dWidths[0]),
         rpad(disp ? disp.avgStdDev.toFixed(1) : "-", dWidths[1]),
         rpad(drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-", dWidths[2]),
-        rpad(pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-", dWidths[3]),
-        rpad(pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-", dWidths[4]),
+        rpad(cover ? cover.medianCover.toFixed(2) + "x" : "-", dWidths[3]),
+        rpad(pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-", dWidths[4]),
+        rpad(pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-", dWidths[5]),
       ];
       lines.push(row.join(" | "));
     }
+
+    const pl = marketHealth.priceLevels;
+    lines.push("");
+    lines.push(
+      `Price levels (price/base, all markets): median ${pl.median.toFixed(2)}x  ` +
+        `p10 ${pl.p10.toFixed(2)}x  p90 ${pl.p90.toFixed(2)}x`,
+    );
+    lines.push(
+      `  cheap <0.9x: ${(pl.cheapFrac * 100).toFixed(0)}%   ` +
+        `near 0.9-1.1x: ${(pl.nearFrac * 100).toFixed(0)}%   ` +
+        `expensive >1.1x: ${(pl.expensiveFrac * 100).toFixed(0)}%`,
+    );
   }
 
   // Population and unrest summary

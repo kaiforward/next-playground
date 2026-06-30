@@ -138,3 +138,37 @@ describe("computeMarketHealth — price dispersion", () => {
     expect(priceDispersion[0].goodId).toBe("water");
   });
 });
+
+describe("computeMarketHealth — price levels", () => {
+  it("reports the galaxy-wide price/base distribution and cheap/near/expensive split", () => {
+    // ratios: stock 80 → 0.5 (cheap), stock 40 → 1.0 (near), stock 20 → 2.0 (expensive).
+    const { priceLevels } = computeMarketHealth(
+      world([
+        market("sys-1", "water", 80),
+        market("sys-2", "water", 40),
+        market("sys-3", "water", 20),
+      ]),
+    );
+    expect(priceLevels.median).toBeCloseTo(1.0, 5);
+    expect(priceLevels.cheapFrac).toBeCloseTo(1 / 3, 5);
+    expect(priceLevels.nearFrac).toBeCloseTo(1 / 3, 5);
+    expect(priceLevels.expensiveFrac).toBeCloseTo(1 / 3, 5);
+  });
+});
+
+describe("computeMarketHealth — cover levels", () => {
+  it("reports per-good median cover and surplus/deficit fractions vs the anchor", () => {
+    // covers (stock/target=40): 80→2.0 surplus(≥1.4), 40→1.0 balanced, 20→0.5 deficit(<0.8).
+    const { coverLevels } = computeMarketHealth(
+      world([
+        market("sys-1", "water", 80),
+        market("sys-2", "water", 40),
+        market("sys-3", "water", 20),
+      ]),
+    );
+    const water = coverLevels.find((c) => c.goodId === "water");
+    expect(water?.medianCover).toBeCloseTo(1.0, 5);
+    expect(water?.surplusFrac).toBeCloseTo(1 / 3, 5);
+    expect(water?.deficitFrac).toBeCloseTo(1 / 3, 5);
+  });
+});
