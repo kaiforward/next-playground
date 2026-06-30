@@ -120,6 +120,7 @@ describe("buildMarketTickEntry", () => {
     expect(e.productionRate).toBeCloseTo(10, 5);
     expect(e.stock).toBe(100);
     expect(e.minStock).toBe(5);
+    expect(e.targetStock).toBe(100);
     expect(e.maxStock).toBe(200);
   });
 

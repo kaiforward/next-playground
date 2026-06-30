@@ -150,6 +150,8 @@ describe("computeMarketHealth — price levels", () => {
       ]),
     );
     expect(priceLevels.median).toBeCloseTo(1.0, 5);
+    expect(priceLevels.p10).toBeCloseTo(0.5, 5);
+    expect(priceLevels.p90).toBeCloseTo(2.0, 5);
     expect(priceLevels.cheapFrac).toBeCloseTo(1 / 3, 5);
     expect(priceLevels.nearFrac).toBeCloseTo(1 / 3, 5);
     expect(priceLevels.expensiveFrac).toBeCloseTo(1 / 3, 5);
