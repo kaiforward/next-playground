@@ -9,7 +9,7 @@ import type {
   SystemLogisticsData,
 } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
-import { capacityGoodRates } from "@/lib/engine/industry";
+import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/industry";
 import {
   aggregateLogisticsFlows,
   buildLogisticsRows,
@@ -109,6 +109,16 @@ export async function getSystemLogistics(
     "yield",
   );
   const prodCon = capacityGoodRates(buildings, system.population, yields);
+  // Manufacturing input demand per good (recipe draw from local factories) — also local
+  // consumption, but distinct from the civilian per-capita need carried in prodCon.consumption.
+  // Each input's draw is its consumer goods' production, which capacityGoodRates already computed,
+  // so read those rates back rather than recomputing buildingProduction per consumer.
+  const productionByGood = new Map(prodCon.map((g) => [g.goodId, g.production]));
+  const inputDemandByGood = new Map<string, number>();
+  for (const g of prodCon) {
+    const d = inputDemandFromProduction(g.goodId, productionByGood);
+    if (d > 0) inputDemandByGood.set(g.goodId, d);
+  }
 
   // Resolve partner system names once (no N+1) for the source/destination tooltips.
   // Only name partners the player can actually see; an unsurveyed partner stays
@@ -132,7 +142,7 @@ export async function getSystemLogistics(
   // Imports/exports are summed over the FLOW_HISTORY_TICKS window; normalise to a
   // per-economy-cycle rate so they share units with the production/consumption rates.
   const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / ECONOMY_UPDATE_INTERVAL;
-  const model = buildLogisticsRows(prodCon, flowsByGood, cyclesInWindow);
+  const model = buildLogisticsRows(prodCon, flowsByGood, cyclesInWindow, inputDemandByGood);
 
   return {
     visibility: "visible",

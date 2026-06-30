@@ -170,8 +170,8 @@ function formatTable(results: SimResults): string {
     lines.push("");
     lines.push("Market Health (end of simulation):");
 
-    const dHeaders = ["Good", "Price StdDev", "Stock Drift", "Cover", "Floor %", "Ceil %"];
-    const dWidths = [12, 13, 13, 7, 8, 8];
+    const dHeaders = ["Good", "Price StdDev", "Stock Drift", "Cover", "Deficit %", "Surplus %", "Floor %", "Ceil %"];
+    const dWidths = [12, 13, 13, 7, 9, 9, 8, 8];
 
     lines.push(dHeaders.map((h, i) => pad(h, dWidths[i])).join(" | "));
     lines.push(dWidths.map((w) => "-".repeat(w)).join("-+-"));
@@ -197,8 +197,10 @@ function formatTable(results: SimResults): string {
         rpad(disp ? disp.avgStdDev.toFixed(1) : "-", dWidths[1]),
         rpad(drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-", dWidths[2]),
         rpad(cover ? cover.medianCover.toFixed(2) + "x" : "-", dWidths[3]),
-        rpad(pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-", dWidths[4]),
-        rpad(pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-", dWidths[5]),
+        rpad(cover ? (cover.deficitFrac * 100).toFixed(0) + "%" : "-", dWidths[4]),
+        rpad(cover ? (cover.surplusFrac * 100).toFixed(0) + "%" : "-", dWidths[5]),
+        rpad(pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-", dWidths[6]),
+        rpad(pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-", dWidths[7]),
       ];
       lines.push(row.join(" | "));
     }

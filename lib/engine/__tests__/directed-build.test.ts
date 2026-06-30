@@ -74,6 +74,16 @@ describe("findStructuralDeficits", () => {
     const importer = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 2 });
     expect(findStructuralDeficits([importer], reachable)).toHaveLength(1);
   });
+
+  it("excludes a deficit when a reachable structural producer (below the 1.4× margin) can supply it", () => {
+    // B produces 30 > demand 5 → structural exporter; stock 110 = 1.1× anchor 100, BELOW the 1.4×
+    // margin. Directed logistics can now donate from it, so A's deficit is not structural — the build
+    // planner must read 'surplus' the same way the matcher does, or it builds redundant capacity for
+    // a good logistics already delivers.
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4 });
+    const producer = buildSys("B", { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 30 });
+    expect(findStructuralDeficits([deficit, producer], reachable)).toHaveLength(0);
+  });
 });
 
 // A tier-0 good (food → arable) with deposit slots; sys has space but partial build.
@@ -283,6 +293,25 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
   it("builds a tier-1+ factory when its input surplus is reachable from the site (not just locally produced)", () => {
     const { deficit, builder, oreSurplus } = scenario();
     expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1), "B", "metals")).toBeGreaterThan(0);
+  });
+
+  it("greenlights the factory when the only input source is a structural producer below the 1.4× margin", () => {
+    // S holds ore at stock 22 = 1.1× its anchor 20 (BELOW the 1.4× margin of 28), but produces
+    // 30 > demand 5 → a structural exporter. The input gate must read 'surplus' via surplusDrawable
+    // exactly as the logistics matcher does, or the planner refuses a factory whose inputs the
+    // production-throttled exporter can in fact supply (the regression this branch guards against).
+    const { deficit, builder, oreSurplus } = scenario();
+    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 30 }];
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1), "B", "metals")).toBeGreaterThan(0);
+  });
+
+  it("does not greenlight the factory when the in-band input holder is a non-producer (no phantom source)", () => {
+    // Same stock 22 in the 1.0–1.4× band, but production 0 → sitting on imported inventory, not a
+    // structural exporter. surplusDrawable returns 0, so ore is not a reachable input and no metals
+    // factory is built — mirroring the matcher's re-export guard at the build-planner gate.
+    const { deficit, builder, oreSurplus } = scenario();
+    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 0 }];
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1), "B", "metals")).toBe(0);
   });
 });
 

@@ -50,13 +50,14 @@ export function buildLogisticsRows(
   prodCon: ReadonlyArray<SubstrateGoodRate>,
   flowsByGood: ReadonlyMap<string, GoodFlowAggregate>,
   cyclesInWindow: number = 1,
+  inputDemandByGood: ReadonlyMap<string, number> = new Map(),
 ): LogisticsRowModel {
   const norm = cyclesInWindow > 0 ? cyclesInWindow : 1;
   const normPartners = (ps: TradeFlowPartner[]): TradeFlowPartner[] =>
     norm === 1 ? ps : ps.map((p) => ({ ...p, quantity: p.quantity / norm }));
 
   const prodConByGood = new Map(prodCon.map((g) => [g.goodId, g]));
-  const goodIds = new Set<string>([...prodConByGood.keys(), ...flowsByGood.keys()]);
+  const goodIds = new Set<string>([...prodConByGood.keys(), ...flowsByGood.keys(), ...inputDemandByGood.keys()]);
 
   const rows: LogisticsGoodRow[] = [];
   let internalMax = 0;
@@ -68,6 +69,8 @@ export function buildLogisticsRows(
     const pc = prodConByGood.get(goodId);
     const production = pc?.production ?? 0;
     const consumption = pc?.consumption ?? 0;
+    const inputDemand = inputDemandByGood.get(goodId) ?? 0;
+    const totalConsumption = consumption + inputDemand;
     const a = flowsByGood.get(goodId) ?? EMPTY_AGG;
 
     // Window sums → per-cycle rates (matches production/consumption units).
@@ -79,12 +82,12 @@ export function buildLogisticsRows(
     const importTotal = importMarket + importLogistics;
     const exportTotal = exportMarket + exportLogistics;
     const traded = importTotal > 0 || exportTotal > 0;
-    const active = production > 0 || consumption > 0;
+    const active = production > 0 || totalConsumption > 0;
     if (!active && !traded) continue;
 
     if (active) activeGoodCount++;
     if (traded) tradedGoodCount++;
-    internalMax = Math.max(internalMax, production, consumption);
+    internalMax = Math.max(internalMax, production, totalConsumption);
     externalMax = Math.max(externalMax, importTotal, exportTotal);
 
     rows.push({
@@ -93,7 +96,8 @@ export function buildLogisticsRows(
       tier: GOOD_TIER_BY_KEY[goodId] ?? 0,
       production,
       consumption,
-      internalNet: production - consumption,
+      inputDemand,
+      internalNet: production - totalConsumption,
       importMarket,
       importLogistics,
       exportMarket,

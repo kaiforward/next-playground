@@ -2,6 +2,7 @@
 
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { forwardRef } from "react";
+import { twMerge } from "tailwind-merge";
 
 /**
  * Accessible tooltip wrapper over Radix. Radix wires `aria-describedby` from
@@ -26,7 +27,10 @@ export const TooltipContent = forwardRef<
     <TooltipPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
-      className={`z-50 w-44 border border-border bg-surface px-2 py-1.5 text-left shadow-lg animate-in fade-in-0 zoom-in-95 ${className}`}
+      className={twMerge(
+        "z-50 w-44 border border-border bg-surface px-2 py-1.5 text-left shadow-lg animate-in fade-in-0 zoom-in-95",
+        className,
+      )}
       {...props}
     >
       {children}

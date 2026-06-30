@@ -138,6 +138,23 @@ export function inputDemandForGood(
   return demand;
 }
 
+/**
+ * Same production-input demand as `inputDemandForGood`, but reading each consumer good's
+ * production from a precomputed per-good map instead of recomputing `buildingProduction`.
+ * Use when the production rates are already in hand (e.g. from `capacityGoodRates`): a consumer's
+ * production from that map is identical to `buildingProduction(...)` at the same fulfillment/yields.
+ */
+export function inputDemandFromProduction(
+  goodId: string,
+  productionByGood: ReadonlyMap<string, number>,
+): number {
+  let demand = 0;
+  for (const consumer of GOOD_RECIPE_CONSUMERS[goodId] ?? []) {
+    demand += (productionByGood.get(consumer.goodId) ?? 0) * consumer.perOutput;
+  }
+  return demand;
+}
+
 /** Why a building's `used` sits below its `count` — the binding constraint for the idle caption. */
 export type IdleReason = "occupancy" | "labour" | "selling";
 

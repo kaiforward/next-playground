@@ -3,8 +3,14 @@
 > Foundational substrate for the
 > [Economy Scaling & Trade-Logistics Rework](../../planned/economy-scaling-and-trade-rework.md); the
 > roadmap sequence is [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13.
-> Shipped and inert by default (`S = 1`) — the calibration pass picks the real value of `S`. The code
-> is the source of truth; this spec records the invariant contract and the audited seam inventory.
+> Shipped and inert by default (`S = 1`). The calibration pass (2026-06-30) landed on **`S ≈ 100`** —
+> validated equilibrium-preserving on both the simulator (clean S=1 vs S=100: prices invariant, quantities
+> ×100, dispersion *tightens* as rounding noise shrinks) and a real-DB reseed (tick-500 audit ≈ the
+> current-code sim at the same maturity), with magnitudes landing in the legible hundreds–thousands. `S` is
+> set via the `ECONOMY_SCALE` **env var**; the code **default stays `1`** so the unscaled baseline keeps the
+> unit+sim suite green (the `UNIVERSE_SCALE` pattern — flipping the default to 100 breaks ~6 magnitude-pinning
+> tests). The code is the source of truth; this spec records the invariant contract and the audited seam
+> inventory.
 
 ## What it is
 

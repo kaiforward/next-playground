@@ -3,6 +3,7 @@ import {
   systemLogisticsGeneration,
   matchFactionTransfers,
   classifyMarketState,
+  surplusDrawable,
   type SystemLogisticsState,
   type RouteCost,
 } from "@/lib/engine/directed-logistics";
@@ -168,5 +169,68 @@ describe("matchFactionTransfers", () => {
     const transfers = matchFactionTransfers([surplus, importer], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
+  });
+
+  it("treats a structural producer above its anchor as a surplus, even below the 1.4× margin", () => {
+    // A produces 30 > demand 5 → a structural exporter; stock 110 = 1.1× its targetStock 100, BELOW
+    // the 1.4× margin (140). The production throttle caps producers at ~1.3× their anchor so they
+    // never reach 1.4× — a structural exporter must still donate what it holds above its own anchor
+    // (drawable = 110 − 100 = 10), mirroring the deficit-side self-supply gate.
+    const producer = sys("A", 100, { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 30 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5, production: 0 });
+    const transfers = matchFactionTransfers([producer, deficit], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0]).toMatchObject({ goodId: "food", fromSystemId: "A", toSystemId: "B" });
+    // shortfall = 10 − 2 = 8, drawable = 110 − 100 = 10, budget 100 → qty = 8
+    expect(transfers[0].quantity).toBe(8);
+  });
+
+  it("does NOT treat a non-producer sitting below the 1.4× margin as a surplus (no re-export churn)", () => {
+    // A holds stock 110 = 1.1× anchor but produces 0 — it's sitting on imported inventory, not a
+    // structural exporter. Only structural producers donate from the 1.0–1.4× band; a non-producer
+    // keeps the protective margin so logistics doesn't immediately re-export what was shipped to it.
+    const holder = sys("A", 100, { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 0 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5, production: 0 });
+    expect(matchFactionTransfers([holder, deficit], oneHop)).toHaveLength(0);
+  });
+});
+
+// Direct coverage of the donor test shared by the logistics matcher AND the build planner.
+// The two-path rule (clears-margin OR structural-producer-above-anchor) and its guards are
+// pinned here so a boundary mutation — e.g. the structural-producer `>` softening to `>=`, or a
+// dropped zero-anchor guard — fails a test rather than silently regressing directed logistics.
+describe("surplusDrawable", () => {
+  const margin = DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 1.4
+
+  it("returns 0 for a zero/negative demand anchor (no days-of-supply target), even for a producer", () => {
+    expect(surplusDrawable(50, 0, 5, 30)).toBe(0);
+    expect(surplusDrawable(50, -10, 5, 30)).toBe(0);
+  });
+
+  it("returns 0 at or below the anchor (never donates a system below its own days-of-supply)", () => {
+    expect(surplusDrawable(100, 100, 5, 30)).toBe(0); // exactly at anchor → aboveAnchor 0
+    expect(surplusDrawable(90, 100, 5, 30)).toBe(0); // below anchor, even a structural producer
+  });
+
+  it("path (a): any holder clearing the surplus margin donates stock above its anchor", () => {
+    // stock 150 ≥ 100 × 1.4 = 140 → clears margin; non-producer still donates 150 − 100 = 50.
+    expect(surplusDrawable(100 * margin + 10, 100, 5, 0)).toBe(100 * margin + 10 - 100);
+  });
+
+  it("path (b): a structural producer above its anchor donates even below the 1.4× margin", () => {
+    // stock 110 = 1.1× anchor (below 140), production 30 > demand 5 → drawable 110 − 100 = 10.
+    expect(surplusDrawable(110, 100, 5, 30)).toBe(10);
+  });
+
+  it("excludes a non-producer sitting in the 1.0–1.4× band (no re-export churn)", () => {
+    // stock 110 in-band, production 0 ≤ demand 5, doesn't clear the margin → not drawable.
+    expect(surplusDrawable(110, 100, 5, 0)).toBe(0);
+  });
+
+  it("excludes the production == demand boundary in-band (a balanced self-supplier is not a donor)", () => {
+    // Pins the strict `production > demand`: equal production must NOT qualify as path (b).
+    expect(surplusDrawable(110, 100, 5, 5)).toBe(0);
+    // A hair above demand DOES qualify — confirms the boundary sits exactly at equality.
+    expect(surplusDrawable(110, 100, 5, 5.01)).toBe(10);
   });
 });

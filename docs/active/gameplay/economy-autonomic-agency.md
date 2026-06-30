@@ -71,8 +71,14 @@ deficit or surplus *is*:
 
 - **Deficit** — `stock < targetStock × DEFICIT_FRACTION` (below the anchor, with a dead-band). Severity =
   shortfall × demand.
-- **Surplus** — `stock ≥ targetStock × SURPLUS_MARGIN` (held above the anchor; margin > 1 leaves the
-  deliberate residual). Drawable = `stock − targetStock` (never below the anchor).
+- **Surplus** — a source of drawable stock by either path, always donating only `stock − targetStock`
+  (never below the anchor): **(a)** `stock ≥ targetStock × SURPLUS_MARGIN` — any holder of excess
+  inventory (margin > 1 leaves the deliberate residual); or **(b)** a **structural producer**
+  (`production > demand`) holding stock above its anchor. Path (b) mirrors the deficit-side self-supply
+  gate and is required because the economy's production throttle caps a producer at
+  `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin — without it a structural exporter could
+  never form a surplus, and directed logistics went dead for every good its producers also consume
+  (food, water, biomass).
 - **Balanced** — the dead-band between, and anything with no demand anchor.
 
 **Self-supply gate.** A system that produces at least its own demand for a good (`production ≥ demand`) is
