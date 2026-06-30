@@ -36,6 +36,25 @@ export function classifyMarketState(stock: number, targetStock: number): MarketC
   return { kind: "balanced", shortfall: 0, drawable: 0 };
 }
 
+/**
+ * Drawable directed-logistics surplus for one (system, good): the stock a donor can ship without
+ * dropping below its own days-of-supply anchor. Zero unless one of two paths qualifies:
+ *  (a) standing stock clears `SURPLUS_MARGIN` — any holder of excess inventory; or
+ *  (b) a **structural producer** (`production > demand`) holding stock above its anchor — the mirror
+ *      of the deficit-side self-supply gate. Path (b) is required because the economy's production
+ *      throttle caps a producer at `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin, so a
+ *      structural exporter never reaches path (a); without it directed logistics goes dead for every
+ *      good its producers also consume (food, water, biomass).
+ * One definition, shared by the logistics matcher and the build planner so both read "surplus" alike.
+ */
+export function surplusDrawable(stock: number, targetStock: number, demand: number, production: number): number {
+  if (targetStock <= 0) return 0;
+  const aboveAnchor = stock - targetStock;
+  if (aboveAnchor <= 0) return 0;
+  const clearsMargin = stock >= targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN;
+  return clearsMargin || production > demand ? aboveAnchor : 0;
+}
+
 /** This system's per-cycle logistics work-budget contribution (free, population-scaled in v1). */
 export function systemLogisticsGeneration(population: number): number {
   return Math.max(0, population) * DIRECTED_LOGISTICS.GENERATION_PER_POP;
@@ -100,9 +119,14 @@ export function matchFactionTransfers(
       // already make, piling stock to the ceiling and decaying their own producers.
       if (c.kind === "deficit" && c.shortfall > 0 && g.production < g.demand) {
         deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, severity: c.shortfall * g.demand });
-      } else if (c.kind === "surplus" && c.drawable > 0) {
+        continue;
+      }
+      // Surplus source — standing excess inventory OR a structural producer above its anchor
+      // (see surplusDrawable; the latter is what the production throttle would otherwise suppress).
+      const drawable = surplusDrawable(g.stock, g.targetStock, g.demand, g.production);
+      if (drawable > 0) {
         const list = surplusesByGood.get(g.goodId) ?? [];
-        list.push({ systemId: s.systemId, goodId: g.goodId, drawable: c.drawable });
+        list.push({ systemId: s.systemId, goodId: g.goodId, drawable });
         surplusesByGood.set(g.goodId, list);
       }
     }

@@ -9,7 +9,7 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { classifyMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
+import { classifyMarketState, surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { clamp } from "@/lib/utils/math";
 import { dissatisfaction } from "@/lib/engine/population";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -152,7 +152,7 @@ export function findStructuralDeficits(
       const c = classifyMarketState(g.stock, g.targetStock);
       if (c.kind === "deficit" && c.shortfall > 0 && (g.production ?? 0) < g.demand) {
         deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, demand: g.demand });
-      } else if (c.kind === "surplus" && c.drawable > 0) {
+      } else if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0) > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
         surplusSystemsByGood.set(g.goodId, list);
@@ -308,8 +308,7 @@ export function planFactionBuilds(
   const surplusSystemsByGood = new Map<string, string[]>();
   for (const s of systems) {
     for (const g of s.goods) {
-      const c = classifyMarketState(g.stock, g.targetStock);
-      if (c.kind === "surplus" && c.drawable > 0) {
+      if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0) > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
         surplusSystemsByGood.set(g.goodId, list);

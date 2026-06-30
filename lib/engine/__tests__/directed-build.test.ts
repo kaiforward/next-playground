@@ -74,6 +74,16 @@ describe("findStructuralDeficits", () => {
     const importer = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 2 });
     expect(findStructuralDeficits([importer], reachable)).toHaveLength(1);
   });
+
+  it("excludes a deficit when a reachable structural producer (below the 1.4× margin) can supply it", () => {
+    // B produces 30 > demand 5 → structural exporter; stock 110 = 1.1× anchor 100, BELOW the 1.4×
+    // margin. Directed logistics can now donate from it, so A's deficit is not structural — the build
+    // planner must read 'surplus' the same way the matcher does, or it builds redundant capacity for
+    // a good logistics already delivers.
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4 });
+    const producer = buildSys("B", { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 30 });
+    expect(findStructuralDeficits([deficit, producer], reachable)).toHaveLength(0);
+  });
 });
 
 // A tier-0 good (food → arable) with deposit slots; sys has space but partial build.
