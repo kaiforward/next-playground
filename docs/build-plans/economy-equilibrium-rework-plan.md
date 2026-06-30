@@ -834,8 +834,7 @@ With the equilibrium settled, measure the baseline export/import magnitude distr
 
 - [ ] **Step 1: Measure baseline flow magnitudes from the settled sim**
 
-Write a throwaway inspection script in the scratchpad (NOT committed — per project convention one-off diagnostics never land in `scripts/`):
-`C:\Users\kaifo\AppData\Local\Temp\claude\C--source-next-playground\c5612caa-98c1-425f-b9e7-77542ba95d44\scratchpad\measure-flows.ts`
+Write a throwaway inspection script in the session scratchpad (NOT committed — per project convention one-off diagnostics never land in `scripts/`), e.g. `<session-scratchpad>/measure-flows.ts`.
 
 It should import the sim runner, run the `equilibrium-calibration.yaml` config, and print the median / p90 of `results.finalWorld.flowEvents.map((f) => f.quantity)` (and, optionally, median per-market production rate). Run it with `npx tsx --tsconfig tsconfig.json <scratch path>`.
 
