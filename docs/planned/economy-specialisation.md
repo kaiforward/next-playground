@@ -86,7 +86,11 @@ Decisions recorded so they aren't re-litigated:
   [the merged factor model](#skill-tiered-labour-the-merged-factor-model). The "scalar-proxy" skilled
   stopgap once floated is dropped.)*
 - **Per-good space cost** — `spaceCost` varies by good. Shipyards/foundries are *enormous*; a gas
-  harvester is sparse. You physically can't fit the whole tier-2 basket on one body.
+  harvester is sparse. You physically can't fit the whole tier-2 basket on one body. *(Scope: this
+  differentiates **general-space** footprints — tier-1/2 factories + housing, the land industry and
+  population compete for. Tier-0 extractor footprint stays on the deposit-slot model
+  (`DEPOSIT_SLOT_FOOTPRINT`); making deposit footprints per-good is a deeper substrate change, out of
+  S1.)*
 - **Specialisation complexes** (anchor buildings) — *see [its section](#specialisation-complexes-anchor-buildings)*.
   *(This is the chosen lever for manufacturing comparative advantage. It supersedes two earlier ideas:
   (a) **trait affinity for tier-1 goods** — dropped, because no physical trait sensibly "makes
@@ -183,6 +187,13 @@ institute** (licenses skill-2). Each is a building: it eats general space and dr
 to run (adds to `labourDemand`), and it raises its pool's ceiling. They do **not** require skilled labour
 to staff — otherwise you'd need an academy to staff an academy. Instructors are abstracted into the
 licensing function. (One academy type per grade; no finer split — there isn't a more interesting cut.)
+
+**Academies decay toward skill demand.** Like every building, an academy rots toward what it actually
+serves: its `used = count × min(1, skillDemand / skillCap)` (skill-1 demand for a vocational school,
+skill-2 for a research institute). An academy licensing more skilled work than the system demands sheds
+the excess; one orphaned by a contracted hub (`skillDemand → 0`) decays away entirely. Same single decay
+rule as production and housing — it keeps academies concentrated at genuine hubs and reinforces the
+concentration moat.
 
 **The development ladder falls out for free.** Because tier-2 goods draw skill-1 labour too (a fab needs
 technicians, not just engineers), a system cannot run tier-2 without *both* a research institute and the
@@ -289,6 +300,8 @@ economies-of-scale are captured above as explicitly-not-now.
   + research-institute + anchor building types), `lib/engine/industry.ts` (`skill1Fulfil`/`skill2Fulfil`
   gates folded into `buildingProduction`), `lib/engine/directed-build.ts` (the autonomic build planner —
   academy as a buildable labour gate, transitively co-built against the deficit it unblocks),
+  `lib/engine/industry-seed.ts` (seed academies sized to seeded skill demand so seeded tier-1/2 can run),
+  `lib/engine/infrastructure-decay.ts` (academy decay toward skill demand, S1),
   `lib/constants/physical-economy.ts` (demand concentration, S3), and the diffusion/decay constants
   (S4 guardrails).
 
