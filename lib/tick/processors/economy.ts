@@ -184,6 +184,7 @@ export async function runEconomyProcessor(
 
 const simParams: EconomySimParams = {
   noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
+  holdCover: ECONOMY_CONSTANTS.HOLD_COVER,
 };
 
 export const economyProcessor: TickProcessor = {

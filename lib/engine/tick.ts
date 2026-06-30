@@ -18,7 +18,12 @@ export interface MarketTickEntry {
   stock: number;
   /** Stock floor for this market entry — scarcity reserve and buy-price floor. */
   minStock: number;
-  /** Stock ceiling for this market entry — demand headroom and sell-price floor. */
+  /**
+   * Days-of-supply anchor (price === basePrice). The produce throttle saturates at
+   * holdCover × targetStock; the consume/satisfaction factor saturates at targetStock.
+   */
+  targetStock: number;
+  /** Stock ceiling — storage clamp, noise width, and the decay-uptake band. */
   maxStock: number;
   /** Per-good base production rate (undefined/0 = not a producer of this good). */
   productionRate?: number;
@@ -35,6 +40,12 @@ export interface MarketTickEntry {
 export interface EconomySimParams {
   /** Noise as a fraction of the per-entry band width (maxStock - minStock). */
   noiseFraction: number;
+  /**
+   * Operating-ceiling cover multiple on targetStock. The production self-limiting
+   * factor saturates at holdCover × targetStock, not at maxStock. Passed in (not
+   * imported) so this module stays constant-free.
+   */
+  holdCover: number;
 }
 
 /**
@@ -80,7 +91,7 @@ export function simulateEconomyTick(
   params: EconomySimParams,
   rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { noiseFraction } = params;
+  const { noiseFraction, holdCover } = params;
 
   return markets.map((entry) => {
     let stock = entry.stock;
@@ -88,7 +99,8 @@ export function simulateEconomyTick(
 
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
-      stock += effectiveProduction * selfLimitingFactor(stock, minStock, maxStock, "produce");
+      const operatingCeiling = entry.targetStock * holdCover;
+      stock += effectiveProduction * selfLimitingFactor(stock, minStock, operatingCeiling, "produce");
     }
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
@@ -115,6 +127,11 @@ export interface TickEntryInput {
   stock: number;
   /** Stock floor for this market entry — resolved upstream from the pricing-band. */
   minStock: number;
+  /**
+   * Days-of-supply anchor (price === basePrice) — resolved upstream from the pricing-band.
+   * The production throttle saturates at holdCover × targetStock (operating ceiling).
+   */
+  targetStock: number;
   /** Stock ceiling for this market entry — resolved upstream from the pricing-band. */
   maxStock: number;
   /** Volatility after government scaling. */
@@ -151,6 +168,7 @@ export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
     goodId: input.goodId,
     stock: input.stock,
     minStock: input.minStock,
+    targetStock: input.targetStock,
     maxStock: input.maxStock,
     productionRate,
     consumptionRate,
