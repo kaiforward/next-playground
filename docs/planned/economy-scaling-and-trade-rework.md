@@ -80,6 +80,22 @@ a sliver of it; the faction's own logistics moves the rest. Density and mission 
    magnitude knob. (Tier-2 *military* over-capacity — weapons ~4.84× — is expected to invert once war makes
    military expensive; the staple/processed compression is the part that needs a deliberate fix.)
 
+   **[UPDATE 2026-06-30 — the spread is *maturity-dependent*; the old baseline was stale-ruleset.]** A fresh
+   `S=100` reseed + audit on current code (post the SP2 equilibrium rework) reframes #4. A **young** galaxy
+   has a *rich* spread — real-DB tick-500 and a current-code sim agree closely (median **~1.3× base, ~65% of
+   markets expensive**), with deep-chain manufactured goods genuinely starved (electronics 95% deficit @
+   2.03×, components 72% @ 1.49×) while raws glut. The flat "nowhere is expensive" reading is specifically
+   the **matured** equilibrium: the autonomic build planner fills out manufacturing everywhere and decay
+   trims idle capacity, collapsing the gradient over ~thousands of ticks (current-code 6000-tick sim:
+   1.27× → 1.06×). The original tick-8.7k baseline (median 0.59×) was matured under **pre-rework code**, so
+   its exact flatness is not authoritative. **Consequence:** "create a spread" is a **build/decay-pacing
+   problem at the matured equilibrium** — stop autonomic build over-filling relative to the negative-space
+   intent (build budget meant to stay below total need) — *not* a pricing-formula or scale change. It is a
+   **prerequisite for sub-project 3**: an economy with no spread has no player trade-opportunities worth
+   generating. The matured-10k equilibrium under *current* code is still being measured (advance the `S=100`
+   DB to ~tick 6000, then re-audit); the default-scale sim under-flattens (smaller universe → less
+   redistribution → optimistic about spread), so validate spread-preservation against the real 10k DB.
+
 ### Scaling-seam inventory (sub-project 1's audit)
 
 First cut of the audit Key Finding #1 calls for — every term that does **not** ride the `targetStock/stock`
@@ -224,15 +240,22 @@ scaling work):
 1. **Global economy-scale knob** — one modifiable `ECONOMY_SCALE` that uniformly scales production,
    consumption, and the audited absolute terms (full list: [Scaling-seam inventory](#scaling-seam-inventory-sub-project-1s-audit));
    ratio-invariant terms (target-cover, price) deliberately *don't* scale. Foundational, independently
-   mergeable, equilibrium-preserving. **Do first of the scaling work.**
+   mergeable, equilibrium-preserving. **Do first of the scaling work.** *(✅ shipped — commit `cacd132`.)*
 2. **Calibrate the scale via the simulator** — bump the knob, run sims, find the factor that lands typical
    imports/exports in the hundreds–thousands. A measurement pass, not a build. **Caveat:** the sim's own
    trading-pressure constants are absolute and unscaled — bot `startingCredits` (500), ship cargo, and the
    sim `tradeFlow.flowBudget` — so scale them by S for the run too, or synthetic pressure is under-powered
-   against the ×S economy and the measured dispersion is distorted.
+   against the ×S economy and the measured dispersion is distorted. *(✅ done 2026-06-30 — landed `S ≈ 100`:
+   equilibrium-preserving on sim + a real-DB reseed, magnitudes legible. Set via env; code default stays 1.
+   Surfaced the maturity-dependent-spread prerequisite — see Key Finding #4 UPDATE.)*
+2a. **Preserve a spread at the matured equilibrium** *(new prerequisite, surfaced by 2; blocks 3)* — the
+   autonomic build/decay loop flattens the price gradient as the galaxy matures (Key Finding #4 UPDATE).
+   Tune build-pacing / idle-capacity decay so the negative-space residual survives at maturity (without
+   re-breaking system viability), giving an economy with hauls worth generating opportunities over. Iterate
+   in the simulator; cross-check the real 10k DB at ~tick 6000. Its own brainstorm + sim-calibration pass.
 3. **Contract-model rework** — resolve [the pivotal fork](#the-pivotal-fork-what-is-a-player-trade-opportunity)
    (discrete vs bounty vs marketplace), then build it (its own player-facing surface — *not* P4). Needs
-   (1)'s magnitudes. Own brainstorm.
+   (1)'s magnitudes **and (2a)'s spread**. Own brainstorm.
 4. **Ship re-pricing / capacity** — re-tune ship cargo and price *to* the scaled economy (inverting today's
    accidental dependency). Later.
 

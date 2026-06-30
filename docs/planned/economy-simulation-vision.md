@@ -359,12 +359,15 @@ Trade-flow edge diffusion already exists and threads through all of them.
 >             feat/sp5-logistics-contracts, then ditched: discrete claimable trade
 >             missions are the wrong primitive for multiplayer (rival resource +
 >             hoarding/contention). Branch kept unmerged for reference; lessons captured.
->      P3 ◻ map overlay by flowType        ← NEXT (UI; visualises silent market vs logistics flows)
->      P4 ◻ logistics tab = imports/exports dashboard   (UI; per-system flow view; NOT a contract board)
+>      P3 ✅ map overlay by flowType        (shipped #116)
+>      P4 ✅ logistics tab = imports/exports dashboard   (shipped — commit 1fff2ce)
 >      ★ THEN the NEW INITIATIVE (own doc: economy-scaling-and-trade-rework.md):
->          A. Global economy-scale knob   (foundational; unblocks sim calibration)
->          B. Calibrate scale via sim
->          C. Contract-model rework       (discrete vs bounty vs marketplace)
+>          A. Global economy-scale knob   ✅ shipped (cacd132)
+>          B. Calibrate scale via sim     ✅ 2026-06-30 → S≈100 (env-set; code default stays 1)
+>          ◆ PREREQ (surfaced by B): the price spread is *maturity-dependent* — autonomic build over-fills
+>            and flattens it as the galaxy matures. Create a durable spread via build/decay-pacing BEFORE C
+>            (no spread → no missions worth generating). Tune in the sim; cross-check the real DB at ~tick 6000.
+>          C. Contract-model rework       (discrete vs bounty vs marketplace) — needs the spread
 >          D. Ship re-pricing/capacity    (to the scaled economy)
 >          (+ transit-time equalisation — deferred enabler for high player-offered share)
 > ──────────────────────────────────────────────────────────────────────
