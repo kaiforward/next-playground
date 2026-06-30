@@ -120,6 +120,7 @@ Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't
 
 **Misc**
 - An esbuild-bundled worker thread has its own module-level state — module caches (e.g. hop distances) are naturally per-process.
+- **Tailwind v4 (`@tailwindcss/oxide`) auto-scans the whole project — incl. `docs/*.md` — for class candidates.** A backslash-hex sequence in scanned prose (a Windows path like `…\c5612caa…`, a regex `\d`/`\c`) is read as a CSS escape and rejected as `Invalid code point <n>` at `globals.css:1:1`, aborting `npm run build`. `docs/` is excluded via `@source not "../docs"` in `globals.css`; keep non-source prose out of the scan (or add another `@source not`). Note this only surfaces on a real `next build` (Turbopack) — `tsc` and Vitest stay green — and only on a branch whose offending doc was actually pushed, so CI catches it but local `tsc`-only checks won't.
 
 ## UI Components
 
