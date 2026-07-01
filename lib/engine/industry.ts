@@ -180,6 +180,74 @@ export function computeLabourState(buildings: Record<string, number>, population
   return labourStateFromParts(labourParts(buildings), population);
 }
 
+/**
+ * Population decomposed into what it is actually doing — the Labour card's primary view.
+ * Disjoint role buckets plus unemployed, summing exactly to `population`. Population is a single
+ * undifferentiated pool (one person fills one head), so this is a display-layer allocation of that
+ * pool against built jobs and academy licences; it changes no economy behaviour. Scarce population
+ * is allocated skilled-first (those roles are the academy-gated, harder-to-fill ones); with a labour
+ * surplus the skilled buckets fill to their jobs and the remainder is unemployed — the honest slack
+ * the panel now shows explicitly instead of hiding inside a grand-total "workforce" figure.
+ */
+export interface LabourAllocation {
+  population: number;
+  /** People working unskilled heads. */
+  unskilled: number;
+  /** People working skill-1 (technician) heads — bounded by the vocational-school licence. */
+  technicians: number;
+  /** People working skill-2 (engineer) heads — bounded by the research-institute licence. */
+  engineers: number;
+  /** population − Σ working — fed and housed but jobless (or unstaffable given the licence walls). */
+  unemployed: number;
+}
+
+/**
+ * Allocate a system's population across role buckets for the Labour card. Skilled heads fill first
+ * (each bounded by both its jobs and its academy licence ceiling), then unskilled jobs, then the
+ * remainder is unemployed. Total heads = `parts.demand`, so unskilled jobs are the remainder after
+ * the two skill demands. No bucket exceeds its jobs or its licence, and the four fields always sum
+ * to max(0, population).
+ */
+export function computeLabourAllocation(parts: LabourParts, population: number): LabourAllocation {
+  let pool = Math.max(0, population);
+  const engineers = Math.min(parts.skill2Demand, parts.skill2Cap, pool);
+  pool -= engineers;
+  const technicians = Math.min(parts.skill1Demand, parts.skill1Cap, pool);
+  pool -= technicians;
+  const unskilledJobs = Math.max(0, parts.demand - parts.skill1Demand - parts.skill2Demand);
+  const unskilled = Math.min(unskilledJobs, pool);
+  pool -= unskilled;
+  return { population: Math.max(0, population), unskilled, technicians, engineers, unemployed: pool };
+}
+
+/** One skilled grade's academy-licensing state for the Labour card — working vs licensed seats vs jobs. */
+export interface SkillLicensing {
+  /** Skill-grade jobs the built base demands. */
+  jobs: number;
+  /** Academy-licensed ceiling (vocational-school / research-institute seats). */
+  licensed: number;
+  /** Filled seats = min(licensed, jobs) — a seat counts only with both a licence and a job behind it. */
+  working: number;
+  /** licensed − jobs when positive — idle training capacity (over-provisioned, sheds slowly). */
+  idleSeats: number;
+  /** jobs − licensed when positive — jobs no academy can license (the wall; build an academy). */
+  unlicensedJobs: number;
+  /** max(licensed, jobs) — the bar's full width, so both over- and under-provision read honestly. */
+  full: number;
+}
+
+/** Derive one skilled grade's licensing view from its licence ceiling and its jobs. */
+export function skillLicensing(licensed: number, jobs: number): SkillLicensing {
+  return {
+    jobs,
+    licensed,
+    working: Math.min(licensed, jobs),
+    idleSeats: Math.max(0, licensed - jobs),
+    unlicensedJobs: Math.max(0, jobs - licensed),
+    full: Math.max(licensed, jobs),
+  };
+}
+
 /** Effective staffing ratio for a good of `tier`: each tier min()s only the pools it draws on. */
 export function effectiveFulfilment(state: LabourState, tier: GoodTier): number {
   if (tier <= 0) return state.labourFulfil;
@@ -341,6 +409,8 @@ export interface SystemIndustryReadout {
   labourFulfillment: number;
   /** The three system-wide labour pools (workforce/technician/engineer), supply vs demand. */
   labour: SystemLabour;
+  /** Population decomposed into disjoint role buckets + unemployed (sums to population). */
+  labourAllocation: LabourAllocation;
   /**
    * One entry per building type with count > 0, sorted by tier ascending then buildingType.
    * `used` is the decay-relevant "in use" amount — occupancy for housing, staffed-and-selling
@@ -542,6 +612,7 @@ export function buildIndustryReadout(
   return {
     labourFulfillment: state.labourFulfil,
     labour,
+    labourAllocation: computeLabourAllocation(parts, population),
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
   };
