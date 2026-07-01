@@ -14,7 +14,7 @@
  * supply-chain cascade. The same functions feed the live tick, the simulator,
  * and the substrate read service.
  */
-import type { QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
+import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -111,17 +111,59 @@ function poolFulfil(cap: number, demand: number): number {
   return Math.min(1, Math.max(0, cap) / demand);
 }
 
-/** Compute the three-part labour state for one system once; reuse across its goods. */
-export function computeLabourState(buildings: Record<string, number>, population: number): LabourState {
+/** Headcount demand + skill demand/cap totals for one system. */
+export interface LabourParts {
+  /** Σ count × labourTotal — the headcount demand. */
+  demand: number;
+  skill1Demand: number;
+  skill1Cap: number;
+  skill2Demand: number;
+  skill2Cap: number;
+}
+
+/**
+ * Every labour demand/cap total for a system in ONE pass over its buildings. The
+ * per-total helpers (labourDemand, skill1Demand, …) remain for callers that need a
+ * single figure; this is the batched path for the hot callers that need all of them
+ * at once (computeLabourState, computeSystemDecay).
+ */
+export function labourParts(buildings: Record<string, number>): LabourParts {
+  let demand = 0;
+  let s1d = 0;
+  let s1c = 0;
+  let s2d = 0;
+  let s2c = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    const def = BUILDING_TYPES[type];
+    const v = def?.labour;
+    if (v) {
+      demand += count * labourTotal(v);
+      s1d += count * v.skill1;
+      s2d += count * v.skill2;
+    }
+    s1c += count * (def?.skill1Licensed ?? 0);
+    s2c += count * (def?.skill2Licensed ?? 0);
+  }
+  return { demand, skill1Demand: s1d, skill1Cap: s1c, skill2Demand: s2d, skill2Cap: s2c };
+}
+
+/** Derive the three-part labour state from precomputed parts. */
+export function labourStateFromParts(parts: LabourParts, population: number): LabourState {
   return {
-    labourFulfil: labourFulfillment(population, labourDemand(buildings)),
-    skill1Fulfil: poolFulfil(skill1Cap(buildings), skill1Demand(buildings)),
-    skill2Fulfil: poolFulfil(skill2Cap(buildings), skill2Demand(buildings)),
+    labourFulfil: labourFulfillment(population, parts.demand),
+    skill1Fulfil: poolFulfil(parts.skill1Cap, parts.skill1Demand),
+    skill2Fulfil: poolFulfil(parts.skill2Cap, parts.skill2Demand),
   };
 }
 
+/** Compute the three-part labour state for one system once; reuse across its goods. */
+export function computeLabourState(buildings: Record<string, number>, population: number): LabourState {
+  return labourStateFromParts(labourParts(buildings), population);
+}
+
 /** Effective staffing ratio for a good of `tier`: each tier min()s only the pools it draws on. */
-export function effectiveFulfilment(state: LabourState, tier: number): number {
+export function effectiveFulfilment(state: LabourState, tier: GoodTier): number {
   if (tier <= 0) return state.labourFulfil;
   if (tier === 1) return Math.min(state.labourFulfil, state.skill1Fulfil);
   return Math.min(state.labourFulfil, state.skill1Fulfil, state.skill2Fulfil);
@@ -357,7 +399,7 @@ export function buildIndustryReadout(
     }
     const def = BUILDING_TYPES[buildingType];
     const outputGood = def?.outputGood;
-    const tier: number = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
+    const tier: GoodTier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
     // Output uptake needs the market band; a good with no band (no market row, or a
     // legacy caller without maxStockOf) sells freely (uptake 1) → labour-only `used`.
     let uptake = 1;

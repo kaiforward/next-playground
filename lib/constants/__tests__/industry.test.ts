@@ -68,9 +68,11 @@ describe("BUILDING_TYPES catalog", () => {
 });
 
 describe("per-good space", () => {
-  it("the most-integrated tier-2 goods occupy more general space than a default factory", () => {
-    expect(effectiveSpaceCost("ship_frames")).toBeGreaterThan(effectiveSpaceCost("fuel"));
-    expect(effectiveSpaceCost("reactor_cores")).toBeGreaterThan(effectiveSpaceCost("metals"));
+  it("every good with a per-good space override occupies more general space than a default factory", () => {
+    // fuel has no SPACE_OVERRIDES entry → default footprint; each overridden good exceeds it.
+    for (const good of ["ship_frames", "reactor_cores", "machinery", "weapons_systems"]) {
+      expect(effectiveSpaceCost(good), good).toBeGreaterThan(effectiveSpaceCost("fuel"));
+    }
   });
 });
 

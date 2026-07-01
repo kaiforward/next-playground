@@ -1,10 +1,13 @@
 # Economy Specialisation — Forced Trade Gradients via Industry Differentiation
 
-> **Status:** Designed, not built — created 2026-06-30 (brainstorm). Sits inside **SP5 autonomic-light**,
-> and **expands the roadmap's narrow "2a — preserve a spread" item** (in
-> [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from "build/decay pacing"
-> into a real structural-specialisation track. Decomposes into **four** ordered stages, each its own spec →
-> plan → build. Authoritative sequence in [economy-simulation-vision.md](./economy-simulation-vision.md) §13.
+> **Status:** Track designed 2026-06-30 (brainstorm); **stage S1 (skill-tiered labour) shipped** — its
+> as-built functional spec now lives in
+> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md). Stages **S2–S4 remain
+> planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
+> spread" item** (in [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from
+> "build/decay pacing" into a real structural-specialisation track. Decomposes into **four** ordered
+> stages, each its own spec → plan → build. Authoritative sequence in
+> [economy-simulation-vision.md](./economy-simulation-vision.md) §13.
 
 ## Headline
 
@@ -141,7 +144,9 @@ the *capital* cost arrives later with the treasury (full SP5 agency). The tradeo
 
 ## Skill-tiered labour (the merged factor model)
 
-> **This is S1.** It folds together what were three separate levers — per-good labour, per-good space, and
+> **This is S1 — ✅ shipped.** The as-built functional spec lives in
+> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md); this section is kept as
+> the design rationale. It folds together what were three separate levers — per-good labour, per-good space, and
 > the standalone skilled-labour stage — because they are **the same factor equation** and must be
 > calibrated as one. Shipping per-good labour first and *then* layering skilled gates on would re-derive
 > every staffing number and rebuild the labour model from scalar into vector; merging avoids that churn.
@@ -257,7 +262,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 
 | Stage | Lever(s) | Failure mode | Needs agency? |
 |---|---|---|---|
-| **S1** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
+| **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
 | **S2** | **Specialisation complexes** (manufacturing CA + economies-of-scale) | Breadth (comparative advantage) | No |
 | **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |

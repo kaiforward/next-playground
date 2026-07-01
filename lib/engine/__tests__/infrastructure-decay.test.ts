@@ -119,10 +119,11 @@ describe("computeSystemDecay", () => {
 describe("academy decay", () => {
   const params = { disuseRate: 0.5, unrestRate: 0, unrestThreshold: 0.5 };
   it("sheds a vocational school that licenses more than the system demands", () => {
-    // 2 schools license 2×SKILL1_PER_SCHOOL; demand from one metals fab (skill1 7) is tiny → mostly idle.
+    // 2 schools license 2×SKILL1_PER_SCHOOL=300; one metals fab demands skill1 7 →
+    // used = 2×(7/300) = 0.046667; disuse 0.5·(2−0.046667) = 0.976667 → next 1.023333.
     const buildings = { metals: 1, vocational_school: 2, housing: 100 };
     const res = computeSystemDecay({ buildings, population: 100000, unrest: 0, outputUptake: () => 1 }, params);
-    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE]).toBeLessThan(2);
+    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE]).toBeCloseTo(1.023333, 5);
   });
   it("does not shed a school whose licensing the system fully uses", () => {
     // skill1 demand ≈ school cap: many fabs vs one school.
@@ -132,8 +133,9 @@ describe("academy decay", () => {
     expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE] ?? 1).toBeGreaterThanOrEqual(1 - 1e-9);
   });
   it("fully decays an academy orphaned by collapsed industry (no skill demand)", () => {
+    // No tier-2 producers → skill2 demand 0 → used 0 → disuse 0.5·(1−0) = 0.5 → next 0.5.
     const buildings = { research_institute: 1, housing: 10 };
     const res = computeSystemDecay({ buildings, population: 100, unrest: 0, outputUptake: () => 1 }, params);
-    expect(res.newCounts[RESEARCH_INSTITUTE_TYPE]).toBeLessThan(1);
+    expect(res.newCounts[RESEARCH_INSTITUTE_TYPE]).toBeCloseTo(0.5, 6);
   });
 });

@@ -24,13 +24,10 @@
  * is a deliberate, treasury-funded decision and belongs to SP5.
  */
 import {
-  computeLabourState,
   effectiveFulfilment,
   housingPopCap,
-  skill1Cap,
-  skill1Demand,
-  skill2Cap,
-  skill2Demand,
+  labourParts,
+  labourStateFromParts,
 } from "@/lib/engine/industry";
 import {
   BUILDING_TYPES,
@@ -103,11 +100,10 @@ export function decayedCount(count: number, used: number, unrest: number, params
  */
 export function computeSystemDecay(input: SystemDecayInput, params: DecayParams): SystemDecayResult {
   const { buildings, population, unrest } = input;
-  const state = computeLabourState(buildings, population);
-  const s1d = skill1Demand(buildings);
-  const s1c = skill1Cap(buildings);
-  const s2d = skill2Demand(buildings);
-  const s2c = skill2Cap(buildings);
+  // One pass yields the headcount + skill demand/cap totals; reuse them for both the
+  // production fulfilment state and the academies' own used-ratio below.
+  const parts = labourParts(buildings);
+  const state = labourStateFromParts(parts, population);
 
   const newCounts: Record<string, number> = {};
   for (const [type, count] of Object.entries(buildings)) {
@@ -118,9 +114,9 @@ export function computeSystemDecay(input: SystemDecayInput, params: DecayParams)
     } else if (type === VOCATIONAL_SCHOOL_TYPE) {
       // Academy's own "used" is the inverse ratio of production fulfilment: how much
       // of ITS licensed capacity the system's skill-1 demand actually draws on.
-      used = count * (s1c > 0 ? Math.min(1, s1d / s1c) : 0);
+      used = count * (parts.skill1Cap > 0 ? Math.min(1, parts.skill1Demand / parts.skill1Cap) : 0);
     } else if (type === RESEARCH_INSTITUTE_TYPE) {
-      used = count * (s2c > 0 ? Math.min(1, s2d / s2c) : 0);
+      used = count * (parts.skill2Cap > 0 ? Math.min(1, parts.skill2Demand / parts.skill2Cap) : 0);
     } else {
       const outputGood = BUILDING_TYPES[type]?.outputGood;
       const uptake = outputGood !== undefined ? input.outputUptake(outputGood) : 1;
