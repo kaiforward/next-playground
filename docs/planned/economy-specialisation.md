@@ -263,7 +263,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 | Stage | Lever(s) | Failure mode | Needs agency? |
 |---|---|---|---|
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
-| **S2** | **Specialisation complexes** (manufacturing CA + economies-of-scale) | Breadth (comparative advantage) | No |
+| **S2** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](./economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
 | **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
 
