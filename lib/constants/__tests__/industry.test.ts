@@ -6,6 +6,7 @@ import {
   HOUSING_TYPE,
   sizeFactor,
   effectiveSpaceCost,
+  labourTotal,
 } from "@/lib/constants/industry";
 
 describe("BUILDING_TYPES catalog", () => {
@@ -32,11 +33,11 @@ describe("BUILDING_TYPES catalog", () => {
     expect(housing.popProvided).toBeGreaterThan(0);
   });
 
-  it("gives every production type a positive spaceCost, labourPerUnit, outputPerUnit", () => {
+  it("gives every production type a positive spaceCost, labour total, outputPerUnit", () => {
     for (const type of PRODUCTION_BUILDING_TYPES) {
       const def = BUILDING_TYPES[type];
       expect(def.spaceCost, type).toBeGreaterThan(0);
-      expect(def.labourPerUnit ?? 0, type).toBeGreaterThan(0);
+      expect(labourTotal(def.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }), type).toBeGreaterThan(0);
       expect(def.outputPerUnit ?? 0, type).toBeGreaterThan(0);
     }
   });

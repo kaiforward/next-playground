@@ -368,7 +368,7 @@ describe("economy processor: supply-chain input-gating", () => {
         regionId: "r1",
         factionId: "f1",
         governmentType: "federation",
-        population: 50, // 2 buildings × 25 labourPerUnit = exactly 50 → fulfillment = 1
+        population: 50, // 2 buildings × 25 labourTotal = exactly 50 → fulfillment = 1
         popCap: 200,
         traits: [],
         bodyDanger: 0,

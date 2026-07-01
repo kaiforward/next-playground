@@ -18,7 +18,6 @@ import {
 } from "@/lib/engine/industry";
 import type { IndustryHealth } from "@/lib/engine/industry";
 import {
-  DEFAULT_LABOUR_PER_UNIT,
   DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
   OUTPUT_PER_UNIT,
@@ -27,18 +26,53 @@ import {
   PRODUCTION_STORAGE_PER_UNIT,
   POP_CENTRE_STORAGE,
   POP_CENTRE_STORAGE_DEFAULT,
+  BUILDING_TYPES,
+  PRODUCTION_BUILDING_TYPES,
+  labourTotal,
 } from "@/lib/constants/industry";
+import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
-describe("labourDemand", () => {
-  it("sums count × labourPerUnit across production types; housing demands none", () => {
-    const buildings = { ore: 4, metals: 2, [HOUSING_TYPE]: 10 };
-    expect(labourDemand(buildings)).toBeCloseTo(6 * DEFAULT_LABOUR_PER_UNIT, 6);
+describe("labour vector", () => {
+  it("every production type carries a 3-grade labour vector whose shares partition a positive total", () => {
+    for (const good of PRODUCTION_BUILDING_TYPES) {
+      const v = BUILDING_TYPES[good]?.labour;
+      expect(v, good).toBeDefined();
+      if (!v) continue;
+      expect(v.unskilled, good).toBeGreaterThanOrEqual(0);
+      expect(v.skill1, good).toBeGreaterThanOrEqual(0);
+      expect(v.skill2, good).toBeGreaterThanOrEqual(0);
+      expect(labourTotal(v), good).toBeGreaterThan(0);
+      expect(labourTotal(v), good).toBeCloseTo(v.unskilled + v.skill1 + v.skill2, 9);
+    }
   });
+
+  it("tier-0 extractors are unskilled-only; tier-2 draws all three grades", () => {
+    for (const good of PRODUCTION_BUILDING_TYPES) {
+      const v = BUILDING_TYPES[good]!.labour!;
+      if (GOOD_TIER_BY_KEY[good] === 0) {
+        expect(v.skill1, good).toBe(0);
+        expect(v.skill2, good).toBe(0);
+      }
+      if (GOOD_TIER_BY_KEY[good] === 2) {
+        expect(v.skill1, good).toBeGreaterThan(0);
+        expect(v.skill2, good).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("labourDemand sums labourTotal across production types; housing demands none", () => {
+    // ore tier-0 total 10, metals tier-1 total 25 → 5*10 + 2*25 = 100; housing adds 0.
+    const demand = labourDemand({ ore: 5, metals: 2, housing: 3 });
+    expect(demand).toBeCloseTo(5 * labourTotal(BUILDING_TYPES.ore!.labour!) + 2 * labourTotal(BUILDING_TYPES.metals!.labour!), 6);
+  });
+});
+
+describe("labourDemand", () => {
   it("ignores buildings with a non-positive count", () => {
-    expect(labourDemand({ ore: -2, metals: 3 })).toBeCloseTo(3 * DEFAULT_LABOUR_PER_UNIT, 6);
+    expect(labourDemand({ ore: -2, metals: 3 })).toBeCloseTo(3 * labourTotal(BUILDING_TYPES.metals!.labour!), 6);
   });
 });
 
@@ -236,7 +270,7 @@ describe("buildIndustryReadout", () => {
     const stock = { ore: MIN, gas: MIN + gasNeeded * 10 };
     const readout = buildIndustryReadout(
       { metals: 3, fuel: 2, [HOUSING_TYPE]: 1 },
-      pop + 2 * DEFAULT_LABOUR_PER_UNIT,
+      pop + 2 * labourTotal(BUILDING_TYPES.fuel!.labour!),
       stock,
       () => MIN,
       unitResourceVector(),

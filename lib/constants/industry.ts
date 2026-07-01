@@ -14,13 +14,49 @@
  * bound). Recipe `inputs` are inert here — input-gating arrives with the
  * supply-chain cascade.
  */
-import type { ResourceType } from "@/lib/types/game";
-import { GOOD_NAMES } from "@/lib/constants/goods";
+import type { ResourceType, GoodTier } from "@/lib/types/game";
+import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { scaleValue, scaleRecord } from "@/lib/constants/economy-scale";
 
 export const HOUSING_TYPE = "housing";
+
+/** Per-good labour requirement, partitioned across skill grades. The three shares SUM to the head count. */
+export interface LabourVector {
+  /** Tier-0-grade workers — no academy gate. */
+  unskilled: number;
+  /** Technician-grade work, licensed by vocational schools. */
+  skill1: number;
+  /** Engineer-grade work, licensed by research institutes. */
+  skill2: number;
+}
+
+/** Total head count one building of this good demands (the partition's sum). */
+export function labourTotal(v: LabourVector): number {
+  return v.unskilled + v.skill1 + v.skill2;
+}
+
+// ── Labour vectors (coarse first-cut; Task 8 calibrates) ──
+// Per-tier default partition; advanced manufacturing is both labour- and skill-heavier.
+const LABOUR_BY_TIER: Record<GoodTier, LabourVector> = {
+  0: { unskilled: 10, skill1: 0, skill2: 0 },
+  1: { unskilled: 18, skill1: 7, skill2: 0 },
+  2: { unskilled: 30, skill1: 20, skill2: 10 },
+};
+// Per-good overrides where the partition reads differently (only a few; rest = tier default).
+const LABOUR_OVERRIDES: Record<string, LabourVector> = {
+  // Most-integrated tier-2 — engineer- and labour-heavy.
+  ship_frames: { unskilled: 35, skill1: 25, skill2: 20 },
+  reactor_cores: { unskilled: 30, skill1: 22, skill2: 18 },
+  weapons_systems: { unskilled: 30, skill1: 22, skill2: 16 },
+  // Labour-heavy, low-skill tier-1.
+  consumer_goods: { unskilled: 28, skill1: 8, skill2: 0 },
+};
+
+function labourFor(goodId: string): LabourVector {
+  return LABOUR_OVERRIDES[goodId] ?? LABOUR_BY_TIER[GOOD_TIER_BY_KEY[goodId] ?? 0];
+}
 
 export interface BuildingTypeDef {
   /** Good this type produces (=== type id in this model). Undefined for housing. */
@@ -31,8 +67,8 @@ export interface BuildingTypeDef {
   resource?: ResourceType;
   /** Build-space units one building occupies. */
   spaceCost: number;
-  /** Population needed to fully staff one building. Production types only. */
-  labourPerUnit?: number;
+  /** Skill-partitioned population to fully staff one building. Production types + academies. */
+  labour?: LabourVector;
   /** Output units one building yields at full labour (and inputs). Production types only. */
   outputPerUnit?: number;
   /** popCap added per building. Housing only. */
@@ -42,9 +78,7 @@ export interface BuildingTypeDef {
 // ── Build-space knobs (first-draft; simulator-calibrated) ──
 /** Default build-space footprint of one building. */
 export const DEFAULT_SPACE_COST = 1.0;
-/** Default population to fully staff one production building. */
-export const DEFAULT_LABOUR_PER_UNIT = 25;
-/** popCap one population-centre building provides. Below labourPerUnit by design — pop-centres alone can't staff the industry they enable, forcing a mixed build-out. */
+/** popCap one population-centre building provides. Below a building's labour total by design — pop-centres alone can't staff the industry they enable, forcing a mixed build-out. */
 export const POP_CENTRE_DENSITY = 20;
 
 /**
@@ -88,7 +122,7 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
       ...(recipe ? { inputs: recipe } : {}),
       ...(resource ? { resource } : {}),
       spaceCost: DEFAULT_SPACE_COST,
-      labourPerUnit: DEFAULT_LABOUR_PER_UNIT,
+      labour: labourFor(goodId),
       outputPerUnit: OUTPUT_PER_UNIT[goodId],
     };
   }

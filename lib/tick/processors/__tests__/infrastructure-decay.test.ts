@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY, BUILDING_TYPES, labourTotal } from "@/lib/constants/industry";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickContext, EconomySignals } from "@/lib/tick/types";
 import type { SimSystem } from "@/lib/engine/simulator/types";
+
+const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
 
 function sys(id: string, over: Partial<SimSystem>): SimSystem {
   return {
@@ -30,18 +32,20 @@ describe("infrastructure-decay processor", () => {
   });
 
   it("decays idle capacity for systems in the economy's shard set and lowers popCap", async () => {
-    // population 100 staffs only 4 of 10 ore (demand 250 → fulfillment 0.4) and fills
-    // 5 of 10 housing → both have idle capacity that should rot.
-    const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", {})] });
+    // population = 4 × oreLabour staffs only 4 of 10 ore (demand 10×oreLabour → fulfillment 0.4)
+    // and fills population/DENSITY of 10 housing → both have idle capacity that should rot.
+    const population = 4 * ORE_LABOUR;
+    const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { population })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY });
     const s = world.systems[0];
-    // disuse 0.1·(built − used), unrest 0: housing 10−0.1·(10−5)=9.5, ore 10−0.1·(10−4)=9.4
-    // (housing used 5 = pop/DENSITY; ore staffed 4 = fulfillment 100/250 × 10).
-    expect(s.buildings[HOUSING_TYPE]).toBeCloseTo(9.5, 6);
+    // disuse 0.1·(built − used), unrest 0: housing 10−0.1·(10−housingUsed), ore 10−0.1·(10−4)=9.4
+    // (housingUsed = population/DENSITY; ore staffed 4 = fulfillment 0.4 × 10).
+    const housingUsed = population / POP_CENTRE_DENSITY;
+    expect(s.buildings[HOUSING_TYPE]).toBeCloseTo(10 - 0.1 * (10 - housingUsed), 6);
     expect(s.buildings.ore).toBeCloseTo(9.4, 6);
     expect(s.popCap).toBeCloseTo(s.buildings[HOUSING_TYPE] * POP_CENTRE_DENSITY, 6);
   });
@@ -57,7 +61,7 @@ describe("infrastructure-decay processor", () => {
   });
 
   it("defaults missing uptake to 1 (decay still driven by labour + unrest)", async () => {
-    const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { unrest: 1 })] });
+    const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { unrest: 1, population: 4 * ORE_LABOUR })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       outputUptakeBySystem: new Map(), // no uptake recorded for s1

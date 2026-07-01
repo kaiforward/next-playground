@@ -7,7 +7,9 @@ import {
   decayedCount,
   computeSystemDecay,
 } from "@/lib/engine/infrastructure-decay";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY, BUILDING_TYPES, labourTotal } from "@/lib/constants/industry";
+
+const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
 
 const NO_DECAY = { disuseRate: 0, unrestRate: 0, unrestThreshold: 0.75 };
 
@@ -66,11 +68,11 @@ describe("computeSystemDecay", () => {
   });
 
   it("disuse-decays idle production toward used and shrinks popCap as excess housing rots", () => {
-    // 10 housing → popCap 200, but population 100 only fills 5 → housing rots toward 5.
-    // 10 'ore' extractors but labour only staffs half (uptake 1, labour 0.5) → used = 5.
+    // population = 4 × oreLabour → fulfillment 0.4 (10 ore extractors demand 10×oreLabour).
+    // 10 housing → popCap 200, but population only fills population/DENSITY < 10 → housing rots too.
     const input = {
       buildings: { [HOUSING_TYPE]: 10, ore: 10 },
-      population: 100, // labourDemand(ore:10) = 250 → fulfillment 0.4
+      population: 4 * ORE_LABOUR, // labourDemand(ore:10) = 10×oreLabour → fulfillment 0.4
       unrest: 0,
       outputUptake: () => 1,
     };

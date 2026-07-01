@@ -5,7 +5,7 @@
  *   production_g = Σ_{t: outputGood_t = g} count_t × outputPerUnit_t × labourFulfillment × yieldMult
  * where yieldMult = yields[resource] for tier-0 goods, 1 for tier-1+.
  * Labour is a single system-wide ratio (uniform proportional allocation):
- *   labourFulfillment = min(1, population / Σ count_t × labourPerUnit_t)
+ *   labourFulfillment = min(1, population / Σ count_t × labourTotal_t)
  * Input-gating (the recipe `inputs`) is not applied here — that is the
  * supply-chain cascade. The same functions feed the live tick, the simulator,
  * and the substrate read service.
@@ -25,6 +25,7 @@ import {
   POP_CENTRE_STORAGE_DEFAULT,
   IDLE_COASTING_FRACTION,
   IDLE_COLLAPSING_FRACTION,
+  labourTotal,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -33,13 +34,13 @@ import { outputUptake } from "@/lib/engine/tick";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
-/** Σ count × labourPerUnit across production types. Housing demands no labour. */
+/** Σ count × labourTotal across types that demand labour (production + academies). Housing demands none. */
 export function labourDemand(buildings: Record<string, number>): number {
   let demand = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
-    const labour = BUILDING_TYPES[type]?.labourPerUnit;
-    if (labour) demand += count * labour;
+    const labour = BUILDING_TYPES[type]?.labour;
+    if (labour) demand += count * labourTotal(labour);
   }
   return demand;
 }

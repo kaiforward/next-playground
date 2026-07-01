@@ -13,7 +13,7 @@ import { classifyMarketState, surplusDrawable, type RouteCost } from "@/lib/engi
 import { clamp } from "@/lib/utils/math";
 import { dissatisfaction } from "@/lib/engine/population";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
-import { BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY, labourTotal } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { labourDemand, housingPopCap } from "@/lib/engine/industry";
 
@@ -393,7 +393,7 @@ export function planFactionBuilds(
     // population can staff (population − labour already demanded). Housing built this
     // cycle adds no labour now — population fills it over later ticks — so industry
     // follows the people who already live there, never population that doesn't yet exist.
-    const labourPerUnit = BUILDING_TYPES[opp.goodId]?.labourPerUnit ?? 0;
+    const labourPerUnit = labourTotal(BUILDING_TYPES[opp.goodId]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 });
     const spareLabour = Math.max(0, site.population - labourDemand(site.buildings));
     const labourCapUnits = labourPerUnit > 0 ? spareLabour / labourPerUnit : Infinity;
 

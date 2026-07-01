@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { OUTPUT_PER_UNIT } from "@/lib/constants/industry";
+import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal } from "@/lib/constants/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
 function sysWith(partial: Partial<BuildSystemState>): BuildSystemState {
@@ -517,15 +517,17 @@ describe("planFactionBuilds — spare-labour gate", () => {
     ];
   }
 
+  const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
+
   it("builds no industry when the builder has no spare labour", () => {
-    // pop 100 fully absorbed by 4 ore extractors (4 × 25 = 100 labour) → spareLabour 0.
-    const builds = planFactionBuilds(deficitAndBuilder(100, { ore: 4 }), () => 1);
+    // pop fully absorbed by 4 ore extractors (4 × oreLabour) → spareLabour 0.
+    const builds = planFactionBuilds(deficitAndBuilder(4 * oreLabour, { ore: 4 }), () => 1);
     expect(countFor(builds, "B", "ore")).toBe(0);
   });
 
   it("caps industry at the spare labour the resident population supports", () => {
-    // pop 200, 4 ore extractors demand 100 → spareLabour 100 → ≤ 100/25 = 4 new units.
-    const builds = planFactionBuilds(deficitAndBuilder(200, { ore: 4 }), () => 1);
+    // pop = 2× the 4 extractors' labour demand → spareLabour == demand → ≤ demand/oreLabour = 4 new units.
+    const builds = planFactionBuilds(deficitAndBuilder(8 * oreLabour, { ore: 4 }), () => 1);
     const built = countFor(builds, "B", "ore");
     expect(built).toBeGreaterThan(0);
     expect(built).toBeLessThanOrEqual(4 + 1e-9);
@@ -534,8 +536,8 @@ describe("planFactionBuilds — spare-labour gate", () => {
 
 describe("planFactionBuilds — idle at potential & barren worlds", () => {
   it("builds nothing at a system already at its potential", () => {
-    // Housing fills the habitable cap (5 units → popCap 100); population 100 == popCap and
-    // == labourDemand (4 ore × 25), so spareLabour 0; ore market balanced → no deficit.
+    // Housing fills the habitable cap (5 units → popCap 100); ore market already balanced
+    // (stock 50 == target) → no structural deficit regardless of spare labour.
     const slotCap = emptyResourceVector();
     slotCap.ore = 4;
     const atPotential: BuildSystemState = {
@@ -549,11 +551,12 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
 
   it("does not work deposit slots on a barren, low-habitable world", () => {
     // 56 ore slots but ~no habitable land → can't house labour → spareLabour 0 → no extraction.
+    const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
     const slotCap = emptyResourceVector();
     slotCap.ore = 56;
     const barren: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 3, unrest: 0,
-      buildings: { ore: 0.12 }, // 0.12 × 25 = 3 labour == population → spareLabour 0
+      buildings: { ore: 3 / oreLabour }, // ore count × oreLabour == population → spareLabour 0
       slotCap, generalSpace: 60, habitableSpace: 0.001,
       goods: [],
     };
