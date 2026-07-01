@@ -3,7 +3,11 @@ import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildabl
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE } from "@/lib/constants/industry";
+import { labourDemand } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
+
+/** ore's total per-unit head count (labour.unskilled + skill1 + skill2) — shared across fixtures. */
+const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
 
 function sysWith(partial: Partial<BuildSystemState>): BuildSystemState {
   return {
@@ -517,8 +521,6 @@ describe("planFactionBuilds — spare-labour gate", () => {
     ];
   }
 
-  const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
-
   it("builds no industry when the builder has no spare labour", () => {
     // pop fully absorbed by 4 ore extractors (4 × oreLabour) → spareLabour 0.
     const builds = planFactionBuilds(deficitAndBuilder(4 * oreLabour, { ore: 4 }), () => 1);
@@ -551,7 +553,6 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
 
   it("does not work deposit slots on a barren, low-habitable world", () => {
     // 56 ore slots but ~no habitable land → can't house labour → spareLabour 0 → no extraction.
-    const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
     const slotCap = emptyResourceVector();
     slotCap.ore = 56;
     const barren: BuildSystemState = {
@@ -598,13 +599,16 @@ function makeElectronicsDeficitWithCapableSite(): BuildSystemState[] {
 }
 
 // Ore (tier-0, no recipe, no skill draw) is a structural deficit at neighbour A; site B has
-// deposit slots + population to extract it. No academy should ever be built for a tier-0 good.
+// deposit slots + population to extract it, but ZERO general space — a barren mining outpost.
+// Tier-0 extraction sits on dedicated deposit slots, not general space, so it must still build
+// here; without the tier-0 general-space exemption this fixture would build nothing. No academy
+// should ever be built for a tier-0 good.
 function makeOreDeficitWithCapableSite(): BuildSystemState[] {
   const slotCap = emptyResourceVector();
   for (const k of RESOURCE_TYPES) slotCap[k] = 10;
   const capable: BuildSystemState = {
     systemId: "B", factionId: "f1", population: 300, unrest: 0, buildings: {},
-    slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    slotCap, generalSpace: 0, habitableSpace: 0, goods: [],
   };
   return [deficitOnly("ore"), capable];
 }
@@ -623,6 +627,18 @@ function makeTier1DeficitWithSchoolsAlready(): BuildSystemState[] {
   return [deficitOnly("metals"), capable];
 }
 
+// Reconstructs one system's final building counts by applying the builds the planner emitted
+// for it onto its initial buildings — for asserting post-hoc physical limits (e.g. labour) the
+// planner must never violate, without duplicating its internal working-copy bookkeeping.
+function applyBuilds(initial: Record<string, number>, builds: PlannedBuild[], systemId: string): Record<string, number> {
+  const result = { ...initial };
+  for (const b of builds) {
+    if (b.systemId !== systemId) continue;
+    result[b.buildingType] = (result[b.buildingType] ?? 0) + b.count;
+  }
+  return result;
+}
+
 describe("academy co-build", () => {
   it("builds the institute needed to run a tier-2 good that serves a reachable deficit", () => {
     // One site with population + space + tier-2 inputs available, but no academies, and a
@@ -635,6 +651,12 @@ describe("academy co-build", () => {
     expect(byType.get("electronics") ?? 0).toBeGreaterThan(0);
     expect(byType.get(VOCATIONAL_SCHOOL_TYPE) ?? 0).toBeGreaterThan(0);   // electronics needs skill1 too
     expect(byType.get(RESEARCH_INSTITUTE_TYPE) ?? 0).toBeGreaterThan(0);  // and skill2
+
+    // Population is a single pool that staffs ALL labour (unskilled + skill1 + skill2 heads) —
+    // the planner must never commit more total labour demand than the site's population supplies.
+    const site = systems.find((s) => s.systemId === "B")!;
+    const finalBuildings = applyBuilds(site.buildings, builds, "B");
+    expect(labourDemand(finalBuildings)).toBeLessThanOrEqual(site.population + 1e-9);
   });
 
   it("does not build academies when the deficit good is tier-0 (no skill draw)", () => {
@@ -650,5 +672,11 @@ describe("academy co-build", () => {
     const builds = planFactionBuilds(systems, selfAndNeighbourRoute);
     expect(countFor(builds, "B", "metals")).toBeGreaterThan(0); // the build actually happens
     expect(builds.some((b) => b.buildingType === VOCATIONAL_SCHOOL_TYPE)).toBe(false);
+
+    // Same over-commit guard as the tier-2 case: metals draws a full labourTotal per unit
+    // (unskilled + skill1), not just its unskilled slice.
+    const site = systems.find((s) => s.systemId === "B")!;
+    const finalBuildings = applyBuilds(site.buildings, builds, "B");
+    expect(labourDemand(finalBuildings)).toBeLessThanOrEqual(site.population + 1e-9);
   });
 });

@@ -15,7 +15,7 @@ import { dissatisfaction } from "@/lib/engine/population";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY,
-  VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, SKILL1_PER_SCHOOL, SKILL2_PER_INSTITUTE,
+  VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, SKILL1_PER_SCHOOL, SKILL2_PER_INSTITUTE, labourTotal,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap } from "@/lib/engine/industry";
@@ -431,34 +431,66 @@ export function planFactionBuilds(
     let wantUnits = Math.min(capUnits, servedOutput / opp.perUnit, budget);
     if (wantUnits <= 0) continue;
 
-    // Spare-UNSKILLED gate: a site may add only the production (+ any co-built academies) its
-    // already-resident population can staff. Housing built this cycle adds no labour now —
-    // population fills it over later ticks — so industry follows the people who already live
-    // there, never population that doesn't yet exist.
-    const spareUnskilled = Math.max(0, site.population - labourDemand(site.buildings));
+    // Spare-LABOUR gate: a site may add only the production (+ any co-built academies) its
+    // already-resident population can staff. Population is a single undifferentiated pool that
+    // staffs ALL labour (unskilled + skill1 + skill2 heads) — skill1/skill2 are academy-licensed
+    // CEILINGS on how much of that pool may work skilled roles, not separate head pools. Housing
+    // built this cycle adds no labour now — population fills it over later ticks — so industry
+    // follows the people who already live there, never population that doesn't yet exist.
+    const spareLabour = Math.max(0, site.population - labourDemand(site.buildings));
 
     // Size production against the academies it needs — a skill-gated good must co-build the
-    // schools/institutes that lift its ceiling, charged to the SAME budget/space/spare-unskilled
+    // schools/institutes that lift its ceiling, charged to the SAME budget/space/spare-labour
     // pool as the production itself. Iterate to convergence: each shrink of wantUnits shrinks the
     // academy lift it requires, which may relax the gate that shrank it.
     let lift = academyLift(site, opp.goodId, wantUnits);
     const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
     // Tier-0 extractors sit on dedicated deposit slots, not general space (mirrors generalSpaceUsed).
     const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
-    const prodUnskilledPerUnit = unskilledPerUnit(opp.goodId);
+    // Full per-unit head count (unskilled + skill1 + skill2) — population staffs the WHOLE labour
+    // draw of a production unit, not just its unskilled slice. Academy terms stay unskilled-only
+    // (schools/institutes draw no skill labour, so their labourTotal equals their unskilled share).
+    const prodLabourPerUnit = labourTotal(BUILDING_TYPES[opp.goodId]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 });
 
-    // Shrink wantUnits until production + lift fit budget, space, and spare unskilled.
+    // Shrink wantUnits until production + lift fit budget, space, and spare labour.
     for (let guard = 0; guard < 8 && wantUnits > 0; guard++) {
       const totalBudget = wantUnits + lift.units;
       const totalSpace = wantUnits * prodSpacePerUnit + lift.space;
-      const totalUnskilled = wantUnits * prodUnskilledPerUnit + lift.unskilled;
+      const totalLabour = wantUnits * prodLabourPerUnit + lift.unskilled;
       const overBudget = totalBudget > budget ? budget / totalBudget : 1;
       const overSpace = totalSpace > remainingGeneral && totalSpace > 0 ? remainingGeneral / totalSpace : 1;
-      const overUnskilled = totalUnskilled > spareUnskilled && totalUnskilled > 0 ? spareUnskilled / totalUnskilled : 1;
-      const shrink = Math.min(overBudget, overSpace, overUnskilled);
+      const overLabour = totalLabour > spareLabour && totalLabour > 0 ? spareLabour / totalLabour : 1;
+      const shrink = Math.min(overBudget, overSpace, overLabour);
       if (shrink >= 1) break;
       wantUnits *= shrink;
       lift = academyLift(site, opp.goodId, wantUnits);
+    }
+    if (wantUnits <= 0) continue;
+
+    // Defensive final guard: the proportional-shrink loop converges geometrically but is not
+    // guaranteed to land within all three constraints after 8 iterations for pathological inputs
+    // (e.g. a large pre-existing skill deficit comparable to the remaining budget). Recompute the
+    // fit ratios once more; if still short, apply the shrink and recompute the academy lift. If
+    // it STILL violates a constraint, skip the opportunity rather than emit an over-commit.
+    {
+      const totalBudget = wantUnits + lift.units;
+      const totalSpace = wantUnits * prodSpacePerUnit + lift.space;
+      const totalLabour = wantUnits * prodLabourPerUnit + lift.unskilled;
+      const overBudget = totalBudget > budget ? budget / totalBudget : 1;
+      const overSpace = totalSpace > remainingGeneral && totalSpace > 0 ? remainingGeneral / totalSpace : 1;
+      const overLabour = totalLabour > spareLabour && totalLabour > 0 ? spareLabour / totalLabour : 1;
+      const finalShrink = Math.min(overBudget, overSpace, overLabour);
+      if (finalShrink < 1) {
+        wantUnits *= finalShrink;
+        lift = academyLift(site, opp.goodId, wantUnits);
+        const EPS = 1e-6;
+        const recheckBudget = wantUnits + lift.units;
+        const recheckSpace = wantUnits * prodSpacePerUnit + lift.space;
+        const recheckLabour = wantUnits * prodLabourPerUnit + lift.unskilled;
+        if (recheckBudget > budget + EPS || recheckSpace > remainingGeneral + EPS || recheckLabour > spareLabour + EPS) {
+          continue; // truly pathological — skip rather than emit an over-commit
+        }
+      }
     }
     if (wantUnits <= 0) continue;
 
