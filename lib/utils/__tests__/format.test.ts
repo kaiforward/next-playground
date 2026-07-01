@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude } from "../format";
+import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude, formatPeople } from "../format";
 
 describe("formatNumber", () => {
   it("rounds to the nearest integer", () => {
@@ -40,6 +40,22 @@ describe("formatHeadcountShort", () => {
   });
   it("renders zero", () => {
     expect(formatHeadcountShort(0)).toBe("0");
+  });
+});
+
+describe("formatPeople", () => {
+  it("keeps K precision for sub-million quantities (no whole-unit pre-round)", () => {
+    // the differentiator from formatHeadcountShort: a < 1 abstract unit must not collapse to 0.
+    expect(formatPeople(0.98)).toBe("980K");
+    expect(formatPeople(0.011)).toBe("11K");
+  });
+  it("formats larger magnitudes compactly to 3 significant digits", () => {
+    expect(formatPeople(198)).toBe("198M");
+    expect(formatPeople(3.8)).toBe("3.8M");
+  });
+  it("renders a non-positive population as '0'", () => {
+    expect(formatPeople(0)).toBe("0");
+    expect(formatPeople(-5)).toBe("0");
   });
 });
 

@@ -16,10 +16,10 @@ describe("building descriptions", () => {
     expect(BUILDING_DESCRIPTIONS[RESEARCH_INSTITUTE_TYPE].toLowerCase()).toContain("engineer");
   });
 
-  it("TIER_LABELS covers all three tiers", () => {
-    expect(TIER_LABELS[0]).toBeTruthy();
-    expect(TIER_LABELS[1]).toBeTruthy();
-    expect(TIER_LABELS[2]).toBeTruthy();
+  it("TIER_LABELS names each manufacturing class exactly", () => {
+    expect(TIER_LABELS[0]).toBe("Extraction");
+    expect(TIER_LABELS[1]).toBe("Basic manufacturing");
+    expect(TIER_LABELS[2]).toBe("Advanced manufacturing");
   });
 
   it("describeBuilding falls back to the good description for production buildings", () => {

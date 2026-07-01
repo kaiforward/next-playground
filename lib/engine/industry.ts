@@ -349,7 +349,8 @@ export interface SystemIndustryReadout {
   buildings: Array<{
     buildingType: string;
     outputGood?: string;
-    tier: number;
+    /** Good tier for producers/extractors; -1 sentinel for housing (population centres). */
+    tier: GoodTier | -1;
     count: number;
     used: number;
     /** Pure-staffing ratio the panel bar shows: effectiveFulfilment(tier) for producers, occupancy for housing. */

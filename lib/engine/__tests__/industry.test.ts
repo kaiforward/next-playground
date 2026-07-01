@@ -459,6 +459,13 @@ describe("perGradeStaffing", () => {
     expect(rows.find((r) => r.wall)!.grade).toBe("skill1");
     expect(rows.filter((r) => r.wall)).toHaveLength(1);
   });
+
+  it("breaks a min-fulfil tie toward the lower grade (skill1 over an equally-starved skill2)", () => {
+    const s: LabourState = { labourFulfil: 0.9, skill1Fulfil: 0.25, skill2Fulfil: 0.25 };
+    const rows: GradeStaffing[] = perGradeStaffing(V, 1, 2, s);
+    expect(rows.find((r) => r.wall)!.grade).toBe("skill1"); // strict < keeps the earlier/lower grade on a tie
+    expect(rows.filter((r) => r.wall)).toHaveLength(1);
+  });
 });
 
 describe("facilityStorageForGood", () => {

@@ -50,11 +50,16 @@ const HEALTH_GLYPH: Record<IndustryHealth, string> = {
   declining: "▼",
 };
 
-/** The one at-a-glance state signal: a trend glyph coloured by health. */
-function HealthGlyph({ health, className = "" }: { health: IndustryHealth; className?: string }) {
+/**
+ * The one at-a-glance state signal: a trend glyph coloured by health. Carries the health
+ * word as its accessible name, unless `decorative` — set that where the word is already
+ * adjacent visible text (e.g. the system Badge) so screen readers don't announce it twice.
+ */
+function HealthGlyph({ health, className = "", decorative = false }: { health: IndustryHealth; className?: string; decorative?: boolean }) {
   return (
     <span
-      aria-label={HEALTH[health].sys}
+      aria-label={decorative ? undefined : HEALTH[health].sys}
+      aria-hidden={decorative || undefined}
       title={HEALTH[health].sys}
       className={`font-mono leading-none ${HEALTH[health].text} ${className}`}
     >
@@ -63,11 +68,11 @@ function HealthGlyph({ health, className = "" }: { health: IndustryHealth; class
   );
 }
 
-/** Labour-grade hues — distinct from health and from land (copper). Redundant U/T/E label at call sites. */
+/** Labour-grade hues + names — distinct from health and from land (copper). Redundant U/T/E label at call sites. */
 const GRADE = {
-  unskilled: { bar: "bg-status-blue", text: "text-status-blue-light", tag: "U" },
-  skill1: { bar: "bg-status-cyan", text: "text-status-cyan-light", tag: "T" },
-  skill2: { bar: "bg-status-purple", text: "text-status-purple-light", tag: "E" },
+  unskilled: { bar: "bg-status-blue", text: "text-status-blue-light", tag: "U", name: "Unskilled" },
+  skill1: { bar: "bg-status-cyan", text: "text-status-cyan-light", tag: "T", name: "Technicians" },
+  skill2: { bar: "bg-status-purple", text: "text-status-purple-light", tag: "E", name: "Engineers" },
 } as const;
 
 /** Coarse 3-band health for a pool fulfil ratio — drives the % numeral colour on the Labour card. */
@@ -82,6 +87,11 @@ const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 
 const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(201,209,217,0.06) 4px 8px)";
 
 type BuildingEntry = SystemIndustryReadout["buildings"][number];
+
+/** Narrow a readout building's tier (GoodTier | -1, housing = -1) to a GoodTier for the producer-only staffing helpers. */
+function producerTier(b: BuildingEntry): GoodTier {
+  return b.tier === 1 ? 1 : b.tier === 2 ? 2 : 0;
+}
 
 /** Academy building types don't produce a good, so they're not in GOODS — name them explicitly. */
 const ACADEMY_LABELS: Record<string, string> = {
@@ -131,7 +141,7 @@ function RowHeader({ showOutput }: { showOutput: boolean }) {
 function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
   const isProducer = b.outputGood !== undefined && !isAcademy && b.tier >= 0;
-  const goodTier: GoodTier = b.tier === 1 ? 1 : b.tier === 2 ? 2 : 0;
+  const goodTier = producerTier(b);
   const grades = isProducer
     ? perGradeStaffing(BUILDING_TYPES[b.buildingType]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }, b.count, goodTier, {
         labourFulfil: labour.workforce.fulfil,
@@ -222,10 +232,10 @@ function ProductionRow({
 
   const inputs = supply ? Object.keys(GOOD_RECIPES[supply.goodId] ?? {}) : [];
 
-  // Detailed density: per-grade micro-bars in place of the single health bar (Phase 3).
-  // b.tier is a widened `number` on the readout (housing uses -1); the guard below only
-  // reaches here for producers/extractors, whose tier is always 0, 1, or 2.
-  const goodTier: GoodTier = b.tier === 1 ? 1 : b.tier === 2 ? 2 : 0;
+  // Detailed density swaps the single health bar for per-grade micro-bars. Only producers/
+  // extractors reach the grade split (housing/academies are excluded by the guard), so
+  // producerTier narrows the readout's tier sentinel to a real GoodTier here.
+  const goodTier = producerTier(b);
   const grades =
     density === "detailed" && !isAcademy && b.tier >= 0
       ? perGradeStaffing(BUILDING_TYPES[b.buildingType]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }, b.count, goodTier, {
@@ -260,7 +270,14 @@ function ProductionRow({
             {grades.map((g) => (
               <div key={g.grade} className="flex items-center gap-1.5">
                 <span aria-hidden className={`w-3 font-mono text-[9px] ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
-                <div className="relative h-2 flex-1 overflow-hidden border border-border bg-surface-active">
+                <div
+                  role="progressbar"
+                  aria-valuenow={Math.round(g.fulfil * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${GRADE[g.grade].name}: ${Math.round(g.fulfil * 100)}% staffed`}
+                  className="relative h-2 flex-1 overflow-hidden border border-border bg-surface-active"
+                >
                   <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${Math.max(0, Math.min(100, g.fulfil * 100))}%` }} />
                 </div>
               </div>
@@ -484,7 +501,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
       <Card variant="bordered" padding="md">
         <div className="flex items-center gap-2.5">
           <Badge color={HEALTH[sysHealth].badge}>
-            <HealthGlyph health={sysHealth} className="mr-1 text-xs" />
+            <HealthGlyph health={sysHealth} className="mr-1 text-xs" decorative />
             {HEALTH[sysHealth].sys}
           </Badge>
           <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
