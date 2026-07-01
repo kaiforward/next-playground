@@ -26,13 +26,13 @@ export const RESEARCH_INSTITUTE_TYPE = "research_institute";
 /** The two academy building type ids, in grade order. */
 export const ACADEMY_TYPES: string[] = [VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE];
 
-// ── Academy licensing (coarse first-cut; Task 8 calibrates) ──
+// ── Academy licensing (coarse first-cut; tune against sim equilibrium) ──
 // One academy licenses this much skilled-grade work system-wide; large enough that one
 // academy serves several factories, so academies are lumpy/concentrated, not per-factory.
 export const SKILL1_PER_SCHOOL = 150;
 export const SKILL2_PER_INSTITUTE = 90;
 
-/** Magnitude knob on recipe input-demand draws (S1 wires it; value stays neutral until Task 8 calibration). */
+/** Magnitude knob on recipe input-demand draws; neutral (1.0) until calibrated against sim equilibrium. */
 export const INPUT_DEMAND_MULTIPLIER = 1.0;
 
 /** Per-good labour requirement, partitioned across skill grades. The three shares SUM to the head count. */
@@ -50,7 +50,7 @@ export function labourTotal(v: LabourVector): number {
   return v.unskilled + v.skill1 + v.skill2;
 }
 
-// ── Labour vectors (coarse first-cut; Task 8 calibrates) ──
+// ── Labour vectors (coarse first-cut; tune against sim equilibrium) ──
 // Per-tier default partition; advanced manufacturing is both labour- and skill-heavier.
 const LABOUR_BY_TIER: Record<GoodTier, LabourVector> = {
   0: { unskilled: 10, skill1: 0, skill2: 0 },
@@ -129,9 +129,10 @@ export const OUTPUT_PER_UNIT: Record<string, number> = scaleRecord(
   Object.fromEntries(GOOD_NAMES.map((g) => [g, OUTPUT_OVERRIDES[g] ?? GOOD_PRODUCTION[g]?.coeff ?? 1])),
 );
 
-// ── Per-good general-space footprint (coarse first-cut; Task 8 calibrates) ──
+// ── Per-good general-space footprint (coarse first-cut; tune against sim equilibrium) ──
 // Differentiates tier-1/2 factory footprints; default 1.0. Tier-0 extractor footprint stays
-// on the deposit-slot model (DEPOSIT_SLOT_FOOTPRINT), not spaceCost — see the S1 spec scope note.
+// on the deposit-slot model (DEPOSIT_SLOT_FOOTPRINT), not spaceCost — extractor count is
+// capped by deposits, not general build-space.
 const SPACE_OVERRIDES: Record<string, number> = {
   ship_frames: 4.0,
   reactor_cores: 3.0,

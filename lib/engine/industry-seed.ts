@@ -72,6 +72,28 @@ const MANUFACTURER_BASE_COUNT = 2;
 const EXTRACTOR_JITTER = 0.15;
 
 /**
+ * Places one academy type sized to license `demand` units of skill capacity,
+ * capped by what's still affordable within the shared factory budget. Mutates
+ * `buildings` in place and returns the general space spent (0 if nothing placed).
+ */
+function placeAcademy(
+  buildings: Record<string, number>,
+  type: string,
+  demand: number,
+  perUnit: number,
+  budgetRemaining: number,
+): number {
+  if (demand <= 0) return 0;
+  const wanted = demand / perUnit;
+  const cost = effectiveSpaceCost(type);
+  const affordable = Math.max(0, budgetRemaining / cost);
+  const count = Math.min(wanted, affordable);
+  if (count <= 0) return 0;
+  buildings[type] = count;
+  return count * cost;
+}
+
+/**
  * Effective yield multiplier for one resource: the mean quality of the filled
  * deposit slots, allocated best-quality-first across bodies.
  *
@@ -158,26 +180,20 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
   // factory budget. Without these, every seeded tier-1/2 building would produce nothing (caps start at 0).
   const seededSkill1 = skill1Demand(buildings);
   const seededSkill2 = skill2Demand(buildings);
-  const schoolCost = effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE);
-  const instCost = effectiveSpaceCost(RESEARCH_INSTITUTE_TYPE);
-  if (seededSkill1 > 0) {
-    const schools = seededSkill1 / SKILL1_PER_SCHOOL;
-    const affordable = Math.max(0, (factoryBudget - factoryUsed) / schoolCost);
-    const count = Math.min(schools, affordable);
-    if (count > 0) {
-      buildings[VOCATIONAL_SCHOOL_TYPE] = count;
-      factoryUsed += count * schoolCost;
-    }
-  }
-  if (seededSkill2 > 0) {
-    const institutes = seededSkill2 / SKILL2_PER_INSTITUTE;
-    const affordable = Math.max(0, (factoryBudget - factoryUsed) / instCost);
-    const count = Math.min(institutes, affordable);
-    if (count > 0) {
-      buildings[RESEARCH_INSTITUTE_TYPE] = count;
-      factoryUsed += count * instCost;
-    }
-  }
+  factoryUsed += placeAcademy(
+    buildings,
+    VOCATIONAL_SCHOOL_TYPE,
+    seededSkill1,
+    SKILL1_PER_SCHOOL,
+    factoryBudget - factoryUsed,
+  );
+  factoryUsed += placeAcademy(
+    buildings,
+    RESEARCH_INSTITUTE_TYPE,
+    seededSkill2,
+    SKILL2_PER_INSTITUTE,
+    factoryBudget - factoryUsed,
+  );
 
   // ── 3) Population centres — full-fold, sized to staff ALL labour. ──
   // No body baseline: wanted = labourDemand / POP_CENTRE_DENSITY. Bounded by a seeded
