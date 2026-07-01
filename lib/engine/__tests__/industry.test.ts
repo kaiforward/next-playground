@@ -37,6 +37,7 @@ import {
   labourTotal,
   SKILL1_PER_SCHOOL,
   SKILL2_PER_INSTITUTE,
+  INPUT_DEMAND_MULTIPLIER,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -162,7 +163,7 @@ describe("inputDemandForGood", () => {
     const state = computeLabourState(buildings, pop);
     const yields = unitResourceVector();
     const metalsCapacity = 4 * OUTPUT_PER_UNIT["metals"] * effectiveFulfilment(state, GOOD_TIER_BY_KEY["metals"]);
-    const expectedOreDemand = metalsCapacity * GOOD_RECIPES["metals"]["ore"];
+    const expectedOreDemand = metalsCapacity * GOOD_RECIPES["metals"]["ore"] * INPUT_DEMAND_MULTIPLIER;
     expect(inputDemandForGood(buildings, "ore", state, yields)).toBeCloseTo(expectedOreDemand, 6);
   });
 

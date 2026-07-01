@@ -10,7 +10,6 @@ import {
   computeLabourState,
   facilityStorageForGood,
   inputDemandForGood,
-  type LabourState,
 } from "@/lib/engine/industry";
 import { GOODS } from "@/lib/constants/goods";
 import { marketBand } from "@/lib/engine/market-pricing";
@@ -65,11 +64,10 @@ export function demandRateForGood(goodId: string, population: number): number {
  * Total days-of-supply demand denominator: civilian (population) + industrial
  * (production-input draw). The industrial term is capacity-based and stable —
  * it depends on the industrial base and labour ratio, not on this tick's stock.
- * `fulfillment` is the system-wide headcount labour ratio
- * (`labourFulfillment(population, labourDemand(buildings))`) — the population
- * adapters that call this don't carry per-system skill state, so it is applied
- * uniformly across the headcount and both skill-ceiling pools (this is a demand
- * *forecast* for pricing/migration, not the gated production the tick itself runs).
+ * The labour state is recomputed from `buildings`/`population` via
+ * `computeLabourState` so the forecast is skill-gated exactly like the tick's
+ * actual production — a tier-1/2 system with no academy correctly forecasts
+ * zero (not phantom) input demand.
  * `yields` is the system's per-resource yield multiplier vector (pass unitResourceVector()
  * when real yields are not yet available).
  */
@@ -77,11 +75,10 @@ export function totalDemandRateForGood(
   goodId: string,
   population: number,
   buildings: Record<string, number>,
-  fulfillment: number,
   yields: ResourceVector,
 ): number {
   const civilian = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
-  const state: LabourState = { labourFulfil: fulfillment, skill1Fulfil: fulfillment, skill2Fulfil: fulfillment };
+  const state = computeLabourState(buildings, population);
   const industrial = inputDemandForGood(buildings, goodId, state, yields);
   return Math.max(civilian + industrial, MIN_DEMAND);
 }

@@ -5,7 +5,6 @@ import type {
 import type { ResourceVector } from "@/lib/types/game";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
-import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
 import { resourceVectorFromColumns, unitResourceVector } from "@/lib/engine/resources";
 
 /**
@@ -89,9 +88,6 @@ export class PrismaPopulationWorld implements PopulationWorld {
       );
     }
 
-    // Cache fulfillment per system to avoid recomputing for every market.
-    const fulfillmentBySystem = new Map<string, number>();
-
     const ids: string[] = [];
     const rates: number[] = [];
     for (const m of markets) {
@@ -100,12 +96,7 @@ export class PrismaPopulationWorld implements PopulationWorld {
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
       const buildings = buildingsBySystem.get(m.station.systemId) ?? {};
       const yields = yieldsBySystem.get(m.station.systemId) ?? unitResourceVector();
-      let fulfillment = fulfillmentBySystem.get(m.station.systemId);
-      if (fulfillment == null) {
-        fulfillment = labourFulfillment(population, labourDemand(buildings));
-        fulfillmentBySystem.set(m.station.systemId, fulfillment);
-      }
-      const rate = totalDemandRateForGood(goodKey, population, buildings, fulfillment, yields);
+      const rate = totalDemandRateForGood(goodKey, population, buildings, yields);
       ids.push(m.id);
       rates.push(isFinite(rate) ? rate : 1);
     }

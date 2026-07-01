@@ -4,7 +4,6 @@ import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
-import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 } };
@@ -48,8 +47,10 @@ describe("population processor", () => {
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's
     // demandRate must be larger than the civilian-only floor once the input term is folded in.
+    // metals is skill1-gated (tier 1), so a vocational_school is required for the forecast
+    // to see any production — without one, computeLabourState gates metals output to 0.
     const population = 500;
-    const buildings = { metals: 3, housing: 1 };
+    const buildings = { metals: 3, housing: 1, vocational_school: 1 };
     const world = new InMemoryPopulationWorld({
       systems: [sys("s", population, 1000, 0, buildings)],
       markets: [
@@ -61,11 +62,10 @@ describe("population processor", () => {
 
     const oreMarket = world.markets.find((m) => m.systemId === "s" && m.goodId === "ore")!;
     const afterPop = world.systems.find((s) => s.id === "s")!.population;
-    const fulfillment = labourFulfillment(afterPop, labourDemand(buildings));
 
     // Ore has no per-capita need, so civilian-only gives MIN_DEMAND.
     const civilianOnly = demandRateForGood("ore", afterPop);
-    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, fulfillment, unitResourceVector());
+    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, unitResourceVector());
 
     // The smelter's ore draw must push the rate above the civilian-only floor.
     expect(withIndustrial).toBeGreaterThan(civilianOnly);

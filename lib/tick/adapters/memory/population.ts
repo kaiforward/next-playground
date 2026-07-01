@@ -4,7 +4,6 @@ import type {
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 import type { ResourceVector } from "@/lib/types/game";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
-import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
 import { unitResourceVector } from "@/lib/engine/resources";
 
 /** In-memory adapter for the population processor (sim + unit tests). */
@@ -45,8 +44,6 @@ export class InMemoryPopulationWorld implements PopulationWorld {
   rewriteDemandRates(pops: Array<{ systemId: string; population: number }>): Promise<void> {
     if (pops.length === 0) return Promise.resolve();
     const popBySystem = new Map(pops.map((p) => [p.systemId, p.population]));
-    // Cache fulfillment per system to avoid recomputing for every market.
-    const fulfillmentBySystem = new Map<string, number>();
     const buildingsBySystemId = new Map<string, Record<string, number>>();
     const yieldsBySystemId = new Map<string, ResourceVector>();
     for (const s of this.systems) {
@@ -58,12 +55,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       if (population == null) return m;
       const buildings = buildingsBySystemId.get(m.systemId) ?? {};
       const yields = yieldsBySystemId.get(m.systemId) ?? unitResourceVector();
-      let fulfillment = fulfillmentBySystem.get(m.systemId);
-      if (fulfillment == null) {
-        fulfillment = labourFulfillment(population, labourDemand(buildings));
-        fulfillmentBySystem.set(m.systemId, fulfillment);
-      }
-      return { ...m, demandRate: totalDemandRateForGood(m.goodId, population, buildings, fulfillment, yields) };
+      return { ...m, demandRate: totalDemandRateForGood(m.goodId, population, buildings, yields) };
     });
     return Promise.resolve();
   }
