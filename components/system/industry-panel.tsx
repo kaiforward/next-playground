@@ -23,6 +23,8 @@ import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { SegmentedControl } from "@/components/form/segmented-control";
+import { useIndustryDensity, type IndustryDensity } from "@/lib/hooks/use-industry-density";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 
@@ -124,8 +126,6 @@ function RowHeader({ showOutput }: { showOutput: boolean }) {
   );
 }
 
-type Density = "compact" | "detailed";
-
 /** Rich per-building tooltip: header · description · per-grade filled/needed · footer. Producers get the grade split; housing/academies a lighter body. */
 function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
@@ -202,7 +202,7 @@ function ProductionRow({
   yieldMult?: number;
   yieldBand?: QualityBandId;
   supply?: SystemIndustryReadout["supplyChain"][number];
-  density?: Density;
+  density?: IndustryDensity;
   showOutput?: boolean;
 }) {
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
@@ -434,6 +434,7 @@ function LabourCard({ labour }: { labour: SystemLabour }) {
 
 export function IndustryPanel({ systemId }: { systemId: string }) {
   const data = useSystemIndustry(systemId);
+  const { density, setDensity } = useIndustryDensity();
 
   if (data.visibility === "unknown") {
     return <EmptyState message="Scan this system with a ship in range to survey its industry." />;
@@ -492,6 +493,16 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
             <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
             <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
+            <SegmentedControl<IndustryDensity>
+              ariaLabel="Row density"
+              name="industryDensity"
+              value={density}
+              onChange={setDensity}
+              options={[
+                { value: "compact", label: "Compact" },
+                { value: "detailed", label: "Detailed" },
+              ]}
+            />
             <LegendTooltip />
           </span>
         </div>
@@ -517,7 +528,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <div className="mt-2.5 -mx-1">
             {extractors.map((b) => {
               const dep = yieldFor(b);
-              return <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} yieldMult={dep?.yieldMult} yieldBand={dep?.band} showOutput />;
+              return <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} yieldMult={dep?.yieldMult} yieldBand={dep?.band} density={density} showOutput />;
             })}
           </div>
         </Card>
@@ -539,7 +550,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <>
             <RoleLabel>Housing</RoleLabel>
             <div className="-mx-1">
-              {housing.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} />)}
+              {housing.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
             </div>
           </>
         )}
@@ -547,7 +558,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <>
             <RoleLabel>Academies</RoleLabel>
             <div className="-mx-1">
-              {academies.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} />)}
+              {academies.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
             </div>
           </>
         )}
@@ -557,7 +568,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             <RowHeader showOutput />
             <div className="-mx-1">
               {factories.map((b) => (
-                <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} showOutput supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
+                <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} showOutput supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
               ))}
             </div>
           </>
