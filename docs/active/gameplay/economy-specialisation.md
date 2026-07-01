@@ -27,6 +27,18 @@ capacity to license.**
 Because skill is a *ceiling on existing labour*, population stays a **single scalar** (the vision §4
 keystone — population is a magnitude, not a roster of people). Skill is not a kind of person.
 
+### Industry panel legibility (S1 surfacing)
+
+The Industry panel surfaces S1's skilled-labour model without changing any mechanic:
+a **Labour card** shows the three system-wide pools (Workforce / Technicians / Engineers)
+as supply-vs-demand rows — surviving the no-academy case, where a licensed-cap-zero pool
+reads red 0% with the exact academy it needs. Each building carries a health **trend glyph**
+(`▲ ▬ ▼`, colourblind-safe), a pure-staffing bar with `staff% · used/built · output/cyc`,
+and a hover tooltip with per-grade filled/needed staffing (the binding grade flagged), a
+"what it does" description, and the academy fix. A **Compact/Detailed** toggle swaps the single
+health bar for per-grade micro-bars (unskilled blue / technician cyan / engineer purple). An
+idle factory names the specific academy it needs (vocational school vs research institute).
+
 ---
 
 ## The merged factor model

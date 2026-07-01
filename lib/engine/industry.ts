@@ -31,6 +31,7 @@ import {
   IDLE_COLLAPSING_FRACTION,
   labourTotal,
   INPUT_DEMAND_MULTIPLIER,
+  type LabourVector,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -121,6 +122,23 @@ export interface LabourParts {
   skill2Cap: number;
 }
 
+/** One supply-vs-demand labour pool for the Industry panel's Labour card. */
+export interface LabourPool {
+  /** Supply: population for workforce, licensed cap for skill pools. */
+  have: number;
+  /** Demand: Σ head count for workforce, Σ skill-grade demand for skill pools. */
+  need: number;
+  /** min(1, have / need) — 1 when nothing is demanded. */
+  fulfil: number;
+}
+
+/** The three system-wide labour pools, supply vs demand. */
+export interface SystemLabour {
+  workforce: LabourPool;
+  skill1: LabourPool;
+  skill2: LabourPool;
+}
+
 /**
  * Every labour demand/cap total for a system in ONE pass over its buildings. The
  * per-total helpers (labourDemand, skill1Demand, …) remain for callers that need a
@@ -167,6 +185,43 @@ export function effectiveFulfilment(state: LabourState, tier: GoodTier): number 
   if (tier <= 0) return state.labourFulfil;
   if (tier === 1) return Math.min(state.labourFulfil, state.skill1Fulfil);
   return Math.min(state.labourFulfil, state.skill1Fulfil, state.skill2Fulfil);
+}
+
+/** One grade's staffing for a building: how many workers it needs, how many are filled, and whether it is the wall. */
+export interface GradeStaffing {
+  grade: "unskilled" | "skill1" | "skill2";
+  /** built × the grade's share of the labour vector. */
+  needed: number;
+  /** needed × the grade's system-wide fulfilment. */
+  filled: number;
+  /** The grade's system-wide fulfilment ratio in [0,1]. */
+  fulfil: number;
+  /** True on the binding grade (the min fulfil among the grades the tier draws on). */
+  wall: boolean;
+}
+
+/**
+ * Per-grade staffing for one building type, derived from its static labour vector, its built
+ * count and the system labour state. Emits only the grades the good's tier draws on
+ * (tier-0 → unskilled; tier-1 → +skill1; tier-2 → +skill2). Pure — the same values feed the
+ * Detailed micro-bars and the tooltip. `wall` marks the grade whose fulfil is the effective min.
+ */
+export function perGradeStaffing(
+  labour: LabourVector,
+  built: number,
+  tier: GoodTier,
+  state: LabourState,
+): GradeStaffing[] {
+  const rows: GradeStaffing[] = [
+    { grade: "unskilled", needed: built * labour.unskilled, fulfil: state.labourFulfil, filled: 0, wall: false },
+  ];
+  if (tier >= 1) rows.push({ grade: "skill1", needed: built * labour.skill1, fulfil: state.skill1Fulfil, filled: 0, wall: false });
+  if (tier >= 2) rows.push({ grade: "skill2", needed: built * labour.skill2, fulfil: state.skill2Fulfil, filled: 0, wall: false });
+  for (const r of rows) r.filled = r.needed * r.fulfil;
+  let wall = rows[0];
+  for (const r of rows) if (r.fulfil < wall.fulfil) wall = r;
+  wall.wall = true;
+  return rows;
 }
 
 /**
@@ -274,19 +329,36 @@ export function inputDemandFromProduction(
   return demand * INPUT_DEMAND_MULTIPLIER;
 }
 
-/** Why a building's `used` sits below its `count` — the binding constraint for the idle caption. */
-export type IdleReason = "occupancy" | "labour" | "skill" | "selling";
+/**
+ * Why a building's `used` sits below its `count` — the binding constraint for the idle caption.
+ * "skill1" names the vocational school (technicians), "skill2" the research institute (engineers).
+ */
+export type IdleReason = "occupancy" | "labour" | "skill1" | "skill2" | "selling";
 
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
   labourFulfillment: number;
+  /** The three system-wide labour pools (workforce/technician/engineer), supply vs demand. */
+  labour: SystemLabour;
   /**
    * One entry per building type with count > 0, sorted by tier ascending then buildingType.
    * `used` is the decay-relevant "in use" amount — occupancy for housing, staffed-and-selling
    * for producers (≤ count, except housing overshoot). `idleReason` names the binding constraint.
    */
-  buildings: Array<{ buildingType: string; outputGood?: string; tier: number; count: number; used: number; idleReason?: IdleReason }>;
+  buildings: Array<{
+    buildingType: string;
+    outputGood?: string;
+    /** Good tier for producers/extractors; -1 sentinel for housing (population centres). */
+    tier: GoodTier | -1;
+    count: number;
+    used: number;
+    /** Pure-staffing ratio the panel bar shows: effectiveFulfilment(tier) for producers, occupancy for housing. */
+    staffedFraction: number;
+    /** Real production rate this cycle (buildingProduction × inputGate). Producers/extractors only. */
+    output?: number;
+    idleReason?: IdleReason;
+  }>;
   /** Produced goods that have a recipe. Sorted by inputGate ascending (most-throttled first). */
   supplyChain: Array<{ goodId: string; inputGate: number; throttledBy: string[] }>;
 }
@@ -376,7 +448,14 @@ export function buildIndustryReadout(
   yields: ResourceVector,
   maxStockOf?: (goodId: string) => number | undefined,
 ): SystemIndustryReadout {
-  const state = computeLabourState(buildings, population);
+  const parts = labourParts(buildings);
+  const state = labourStateFromParts(parts, population);
+  const pop = Math.max(0, population);
+  const labour: SystemLabour = {
+    workforce: { have: pop, need: parts.demand, fulfil: state.labourFulfil },
+    skill1: { have: parts.skill1Cap, need: parts.skill1Demand, fulfil: state.skill1Fulfil },
+    skill2: { have: parts.skill2Cap, need: parts.skill2Demand, fulfil: state.skill2Fulfil },
+  };
   const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
 
   // Per-building "in use" — the decay-relevant quantity (mirrors computeSystemDecay):
@@ -385,8 +464,9 @@ export function buildIndustryReadout(
   //    where effectiveFulfilment is the skill-gated ratio for the good's tier — a tier-1/2
   //    building that is headcount-full but skill-starved (no licensing academy) reads as idle too.
   // idleReason names the binding constraint so the panel can caption an idle row:
-  // "labour" when headcount itself is short, "skill" when a skill ceiling (no academy)
-  // drags effectiveFulfilment below the headcount gate, "selling" when output can't move.
+  // "labour" when headcount itself is short, "skill1"/"skill2" when a skill ceiling
+  // (no vocational school / research institute) drags effectiveFulfilment below the
+  // headcount gate, "selling" when output can't move.
   // outputUptake needs the maxStock band; without it (legacy callers) output sells
   // freely (uptake 1) so `used` falls back to the fulfilment-only figure.
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
@@ -394,7 +474,8 @@ export function buildIndustryReadout(
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
       const used = Math.max(0, population) / POP_CENTRE_DENSITY;
-      buildingEntries.push({ buildingType, tier: -1, count, used, idleReason: used < count ? "occupancy" : undefined });
+      const staffedFraction = count > 0 ? used / count : 0;
+      buildingEntries.push({ buildingType, tier: -1, count, used, staffedFraction, idleReason: used < count ? "occupancy" : undefined });
       continue;
     }
     const def = BUILDING_TYPES[buildingType];
@@ -411,13 +492,24 @@ export function buildIndustryReadout(
     }
     const fulfil = effectiveFulfilment(state, tier);
     const used = count * Math.min(fulfil, uptake);
+    // output = the real production rate this cycle: buildingProduction × inputGate (uptake is a
+    // selling/decay signal, not a production multiplier — see lib/tick/processors/economy.ts).
+    let output: number | undefined;
+    if (outputGood !== undefined) {
+      const production = buildingProduction(buildings, outputGood, state, yields);
+      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, minStockOf) : 1;
+      output = production * gate;
+    }
     let idleReason: IdleReason | undefined;
     if (used < count) {
       if (uptake < fulfil) idleReason = "selling";
-      else if (fulfil < state.labourFulfil) idleReason = "skill";
-      else idleReason = "labour";
+      else if (fulfil < state.labourFulfil) {
+        // A skill ceiling binds. Name the pool that is actually the min the tier draws on;
+        // on a tier-2 tie (neither academy) the lower grade (skill1) wins — it is the prerequisite.
+        idleReason = tier >= 2 && state.skill2Fulfil < state.skill1Fulfil ? "skill2" : "skill1";
+      } else idleReason = "labour";
     }
-    buildingEntries.push({ buildingType, outputGood, tier, count, used, idleReason });
+    buildingEntries.push({ buildingType, outputGood, tier, count, used, staffedFraction: fulfil, output, idleReason });
   }
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
 
@@ -449,6 +541,7 @@ export function buildIndustryReadout(
 
   return {
     labourFulfillment: state.labourFulfil,
+    labour,
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
   };

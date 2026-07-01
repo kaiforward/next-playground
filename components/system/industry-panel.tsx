@@ -13,15 +13,18 @@ import {
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
-import { buildingHealth, industryHealth } from "@/lib/engine/industry";
-import type { IndustryHealth, IdleReason, SystemIndustryReadout } from "@/lib/engine/industry";
-import type { QualityBandId } from "@/lib/types/game";
-import { formatMagnitude } from "@/lib/utils/format";
+import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
+import { buildingHealth, industryHealth, perGradeStaffing } from "@/lib/engine/industry";
+import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour } from "@/lib/engine/industry";
+import type { GoodTier, QualityBandId } from "@/lib/types/game";
+import { formatMagnitude, formatPeople } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { SegmentedControl } from "@/components/form/segmented-control";
+import { useIndustryDensity, type IndustryDensity } from "@/lib/hooks/use-industry-density";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 
@@ -35,15 +38,60 @@ const HEALTH: Record<IndustryHealth, { sys: string; row: string; badge: BadgeCol
 const IDLE_CAUSE: Record<IdleReason, string> = {
   occupancy: "low occupancy",
   labour: "labour short",
-  skill: "needs academy",
+  skill1: "needs vocational school",
+  skill2: "needs research institute",
   selling: "output not selling",
 };
+
+/** Trend glyph per health — shape-first (colourblind-safe), colour reinforces. */
+const HEALTH_GLYPH: Record<IndustryHealth, string> = {
+  thriving: "▲",
+  coasting: "▬",
+  declining: "▼",
+};
+
+/**
+ * The one at-a-glance state signal: a trend glyph coloured by health. Carries the health
+ * word as its accessible name, unless `decorative` — set that where the word is already
+ * adjacent visible text (e.g. the system Badge) so screen readers don't announce it twice.
+ */
+function HealthGlyph({ health, className = "", decorative = false }: { health: IndustryHealth; className?: string; decorative?: boolean }) {
+  return (
+    <span
+      aria-label={decorative ? undefined : HEALTH[health].sys}
+      aria-hidden={decorative || undefined}
+      title={HEALTH[health].sys}
+      className={`font-mono leading-none ${HEALTH[health].text} ${className}`}
+    >
+      {HEALTH_GLYPH[health]}
+    </span>
+  );
+}
+
+/** Labour-grade hues + names — distinct from health and from land (copper). Redundant U/T/E label at call sites. */
+const GRADE = {
+  unskilled: { bar: "bg-status-blue", text: "text-status-blue-light", tag: "U", name: "Unskilled" },
+  skill1: { bar: "bg-status-cyan", text: "text-status-cyan-light", tag: "T", name: "Technicians" },
+  skill2: { bar: "bg-status-purple", text: "text-status-purple-light", tag: "E", name: "Engineers" },
+} as const;
+
+/** Coarse 3-band health for a pool fulfil ratio — drives the % numeral colour on the Labour card. */
+function poolHealth(fulfil: number): IndustryHealth {
+  if (fulfil >= 0.999) return "thriving";
+  if (fulfil >= 0.5) return "coasting";
+  return "declining";
+}
 
 // Faded-copper hatch = "housing can still grow here"; faint light hatch = idle capacity.
 const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 2px, transparent 2px 6px)";
 const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(201,209,217,0.06) 4px 8px)";
 
 type BuildingEntry = SystemIndustryReadout["buildings"][number];
+
+/** Narrow a readout building's tier (GoodTier | -1, housing = -1) to a GoodTier for the producer-only staffing helpers. */
+function producerTier(b: BuildingEntry): GoodTier {
+  return b.tier === 1 ? 1 : b.tier === 2 ? 2 : 0;
+}
 
 /** Academy building types don't produce a good, so they're not in GOODS — name them explicitly. */
 const ACADEMY_LABELS: Record<string, string> = {
@@ -55,15 +103,6 @@ const ACADEMY_LABELS: Record<string, string> = {
 function label(id: string): string {
   if (id === HOUSING_TYPE) return "Housing";
   return ACADEMY_LABELS[id] ?? GOODS[id]?.name ?? id;
-}
-
-/** The honest verb for "in use" per pillar — drives the row's hover tooltip. Academies
- *  are tier 0 like extractors but are staffed like factories, not "worked". */
-function usedNoun(tier: number, isAcademy: boolean): string {
-  if (isAcademy) return "staffed";
-  if (tier === -1) return "occupied";
-  if (tier === 0) return "worked";
-  return "staffed";
 }
 
 function pct(value: number, total: number): number {
@@ -81,26 +120,109 @@ function LandBar({ segments }: { segments: Array<{ key: string; width: number; c
   );
 }
 
-/** One building: status dot · name (+ yield) · used/built bar · % · magnitude, with cause/needs lines. */
-function BuildingRow({
+/** Trailing numeric cluster widths — shared by the header and every row so they align as a table. */
+const COL = { staff: "w-10", used: "w-16", out: "w-14" };
+
+/** Column header labelling the trailing numbers so the block reads like a table. */
+function RowHeader({ showOutput }: { showOutput: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5 px-3 pb-1 pt-2 font-mono text-[9px] uppercase tracking-wider text-text-tertiary/70">
+      <span className="w-3 shrink-0" aria-hidden />
+      <span className="w-40 shrink-0" aria-hidden />
+      <span className="flex-1" aria-hidden />
+      <span className={`${COL.staff} text-right`}>staff</span>
+      <span className={`${COL.used} text-right`}>used/built</span>
+      {showOutput && <span className={`${COL.out} text-right`}>out/cyc</span>}
+    </div>
+  );
+}
+
+/** Rich per-building tooltip: header · description · per-grade filled/needed · footer. Producers get the grade split; housing/academies a lighter body. */
+function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
+  const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
+  const isProducer = b.outputGood !== undefined && !isAcademy && b.tier >= 0;
+  const goodTier = producerTier(b);
+  const grades = isProducer
+    ? perGradeStaffing(BUILDING_TYPES[b.buildingType]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }, b.count, goodTier, {
+        labourFulfil: labour.workforce.fulfil,
+        skill1Fulfil: labour.skill1.fulfil,
+        skill2Fulfil: labour.skill2.fulfil,
+      })
+    : [];
+  const wall = grades.find((g) => g.wall);
+  const tierLabel = b.tier >= 0 ? TIER_LABELS[goodTier] : undefined;
+
+  return (
+    <div className="space-y-1.5">
+      <p className="font-display text-[12px] font-semibold text-text-primary">{label(b.buildingType)}</p>
+      {(tierLabel || b.count > 0) && (
+        <p className="font-mono text-[10px] text-text-tertiary">
+          {tierLabel && !isAcademy ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
+        </p>
+      )}
+      <p className="text-[11px] leading-snug text-text-secondary">{describeBuilding(b.buildingType)}</p>
+
+      {isProducer && grades.length > 0 && (
+        <div className="space-y-0.5 border-t border-border/60 pt-1.5">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">staffing — filled / needed</p>
+          {grades.map((g) => (
+            <div key={g.grade} className="flex items-center gap-1.5">
+              <span aria-hidden className={`w-3 font-mono text-[9px] ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
+              <div className="relative h-1.5 flex-1 overflow-hidden border border-border bg-surface-active">
+                <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${Math.max(0, Math.min(100, g.fulfil * 100))}%` }} />
+              </div>
+              <span className={`w-[70px] text-right font-mono text-[10px] ${g.wall ? "text-status-red-light" : "text-text-secondary"}`}>
+                {formatMagnitude(g.filled)}/{formatMagnitude(g.needed)}{g.wall ? " ◄" : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isProducer && (
+        <p className="border-t border-border/60 pt-1.5 text-[11px] leading-snug text-text-tertiary">
+          Output <span className="font-mono text-text-secondary">{b.output !== undefined ? formatMagnitude(b.output) : "0"}</span>/cyc — staffing{" "}
+          <span className="font-mono text-text-secondary">{Math.round(b.staffedFraction * 100)}%</span>
+          {wall && wall.fulfil < 1 ? (
+            <>
+              , {GRADE[wall.grade].tag === "U" ? "unskilled workers" : GRADE[wall.grade].tag === "T" ? "technicians" : "engineers"} are the wall.
+              {wall.grade === "skill1" ? " Build a vocational school to license technician-grade work." : ""}
+              {wall.grade === "skill2" ? " Build a research institute to license engineer-grade work." : ""}
+            </>
+          ) : "."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** One building line: glyph · name (+yield) · staffing bar · staff% · used/built · output/cyc, with cause/needs lines. */
+function ProductionRow({
   b,
   unrest,
+  labour,
   yieldMult,
   yieldBand,
   supply,
+  density = "compact",
+  showOutput = false,
 }: {
   b: BuildingEntry;
   unrest: number;
+  labour: SystemLabour;
   yieldMult?: number;
   yieldBand?: QualityBandId;
   supply?: SystemIndustryReadout["supplyChain"][number];
+  density?: IndustryDensity;
+  showOutput?: boolean;
 }) {
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const meta = HEALTH[health];
-  const ratioPct = b.count > 0 ? (b.used / b.count) * 100 : 0;
+  const staffPct = Math.max(0, Math.min(100, b.staffedFraction * 100));
+  const usedDisplay = formatMagnitude(b.staffedFraction * b.count);
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
 
-  // Cause line — only for rows that aren't stable. Priority: over-capacity, then unrest, then the idle constraint.
+  // Cause line — only for rows that aren't stable. Priority: over-capacity, unrest, then the idle constraint.
   let cause: string | undefined;
   if (health !== "thriving") {
     if (b.used > b.count) cause = "over capacity";
@@ -108,37 +230,82 @@ function BuildingRow({
     else if (b.idleReason) cause = IDLE_CAUSE[b.idleReason];
   }
 
-  // Each recipe input as its own chip: ✓ when supplied, ⚠ + the throttle gate when short.
   const inputs = supply ? Object.keys(GOOD_RECIPES[supply.goodId] ?? {}) : [];
+
+  // Detailed density swaps the single health bar for per-grade micro-bars. Only producers/
+  // extractors reach the grade split (housing/academies are excluded by the guard), so
+  // producerTier narrows the readout's tier sentinel to a real GoodTier here.
+  const goodTier = producerTier(b);
+  const grades =
+    density === "detailed" && !isAcademy && b.tier >= 0
+      ? perGradeStaffing(BUILDING_TYPES[b.buildingType]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }, b.count, goodTier, {
+          labourFulfil: labour.workforce.fulfil,
+          skill1Fulfil: labour.skill1.fulfil,
+          skill2Fulfil: labour.skill2.fulfil,
+        })
+      : null;
 
   return (
     <div className="border-b border-border/40 px-3 py-1.5 last:border-b-0">
       <div className="flex items-center gap-2.5">
-        <span aria-hidden className={`h-1.5 w-1.5 shrink-0 ${meta.dot}`} />
-        <span className="flex min-w-[104px] items-center gap-1.5 text-sm text-text-primary">
-          {label(b.buildingType)}
-          {yieldMult !== undefined && (
-            <span className={`font-mono text-[10px] ${yieldBand ? QUALITY_BAND_TEXT[yieldBand] : "text-text-tertiary"}`}>
-              ×{yieldMult.toFixed(2)}
-            </span>
-          )}
+        <HealthGlyph health={health} className="w-3 shrink-0 text-center text-[10px]" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" className="flex w-40 shrink-0 items-center gap-1.5 text-left text-sm text-text-primary underline-offset-2 hover:underline">
+              {label(b.buildingType)}
+              {yieldMult !== undefined && (
+                <span className={`font-mono text-[10px] ${yieldBand ? QUALITY_BAND_TEXT[yieldBand] : "text-text-tertiary"}`}>
+                  ×{yieldMult.toFixed(2)}
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="w-64">
+            <BuildingTooltipBody b={b} labour={labour} />
+          </TooltipContent>
+        </Tooltip>
+
+        {grades ? (
+          <div className="flex flex-1 flex-col gap-0.5">
+            {grades.map((g) => (
+              <div key={g.grade} className="flex items-center gap-1.5">
+                <span aria-hidden className={`w-3 font-mono text-[9px] ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
+                <div
+                  role="progressbar"
+                  aria-valuenow={Math.round(g.fulfil * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${GRADE[g.grade].name}: ${Math.round(g.fulfil * 100)}% staffed`}
+                  className="relative h-2 flex-1 overflow-hidden border border-border bg-surface-active"
+                >
+                  <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${Math.max(0, Math.min(100, g.fulfil * 100))}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            role="progressbar"
+            aria-valuenow={Math.round(staffPct)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${label(b.buildingType)}: ${Math.round(staffPct)}% staffed`}
+            className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active"
+            style={{ backgroundImage: IDLE_HATCH }}
+          >
+            <div className={`absolute inset-y-0 left-0 ${meta.fill}`} style={{ width: `${staffPct}%` }} />
+          </div>
+        )}
+
+        <span className={`${COL.staff} text-right font-mono text-xs ${meta.text}`}>{Math.round(staffPct)}%</span>
+        <span className={`${COL.used} text-right font-mono text-[11px] text-text-secondary`}>
+          <span className="text-text-primary">{usedDisplay}</span>/{formatMagnitude(b.count)}
         </span>
-        <div
-          role="progressbar"
-          aria-valuenow={Math.round(ratioPct)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`${label(b.buildingType)}: ${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier, isAcademy)}`}
-          className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active"
-          style={{ backgroundImage: IDLE_HATCH }}
-          title={`${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier, isAcademy)}`}
-        >
-          <div className={`absolute inset-y-0 left-0 ${meta.fill}`} style={{ width: `${Math.min(100, ratioPct)}%` }} />
-        </div>
-        <span className={`w-9 text-right font-mono text-xs ${meta.text}`}>{Math.round(ratioPct)}%</span>
-        <span className="w-[52px] text-right font-mono text-[11px] text-text-secondary">
-          <span className="text-text-primary">{formatMagnitude(b.used)}</span>/{formatMagnitude(b.count)}
-        </span>
+        {showOutput && (
+          <span className={`${COL.out} text-right font-mono text-[11px] text-text-secondary`}>
+            {b.output !== undefined ? formatMagnitude(b.output) : "—"}
+          </span>
+        )}
       </div>
 
       {cause && (
@@ -189,22 +356,33 @@ function LegendTooltip() {
           <InfoIcon className="h-3.5 w-3.5" />
         </button>
       </TooltipTrigger>
-      <TooltipContent className="w-60 space-y-2">
+      <TooltipContent className="w-64 space-y-2">
         <div>
-          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Health — bar colour</p>
+          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Health — the glyph</p>
           <ul className="space-y-0.5 text-[11px] text-text-secondary">
-            <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-green align-middle" /> stable — in use, holding</li>
-            <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-amber align-middle" /> idle — slack past the deadband, slowly shrinking</li>
-            <li><span className="mr-1.5 inline-block h-2 w-2 bg-status-red align-middle" /> collapsing — unrest teardown, over-capacity, or can't sell</li>
+            <li><span aria-hidden className="mr-1.5 font-mono text-status-green-light">▲</span> thriving — in use, holding</li>
+            <li><span aria-hidden className="mr-1.5 font-mono text-status-amber-light">▬</span> coasting — slack past the deadband, slowly shrinking</li>
+            <li><span aria-hidden className="mr-1.5 font-mono text-status-red-light">▼</span> declining — unrest teardown, over-capacity, or can't sell</li>
           </ul>
-          <p className="mt-1 text-[11px] text-text-tertiary">Bar length = capacity in use (% + magnitude). Green holds below 100% — a little slack is normal.</p>
+        </div>
+        <div>
+          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Staffing bar</p>
+          <p className="text-[11px] text-text-secondary">Length = how staffed (the % beside it); hue = health. <span className="font-mono">used/built</span> is the staffed operating count; <span className="font-mono">out/cyc</span> is real output after input gates.</p>
+        </div>
+        <div>
+          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
+          <p className="text-[11px] text-text-secondary">
+            <span aria-hidden className="mr-1 inline-block h-2 w-2 bg-status-blue align-middle" />U unskilled &nbsp;
+            <span aria-hidden className="mr-1 inline-block h-2 w-2 bg-status-cyan align-middle" />T technician &nbsp;
+            <span aria-hidden className="mr-1 inline-block h-2 w-2 bg-status-purple align-middle" />E engineer
+          </p>
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Land bar</p>
           <ul className="space-y-0.5 text-[11px] text-text-secondary">
-            <li><span className="mr-1.5 inline-block h-2 w-3 bg-accent align-middle" /> housing &nbsp;<span className="mr-1.5 inline-block h-2 w-3 bg-accent-muted align-middle" /> factories</li>
-            <li><span className="mr-1.5 inline-block h-2 w-3 border border-border align-middle" style={{ backgroundImage: COPPER_HATCH }} /> housing can still grow here</li>
-            <li><span className="mr-1.5 inline-block h-2 w-3 border border-border bg-surface-active align-middle" /> factories only (beyond habitable)</li>
+            <li><span aria-hidden className="mr-1.5 inline-block h-2 w-3 bg-accent align-middle" /> housing &nbsp;<span aria-hidden className="mr-1.5 inline-block h-2 w-3 bg-accent-muted align-middle" /> factories</li>
+            <li><span aria-hidden className="mr-1.5 inline-block h-2 w-3 border border-border align-middle" style={{ backgroundImage: COPPER_HATCH }} /> housing can still grow here</li>
+            <li><span aria-hidden className="mr-1.5 inline-block h-2 w-3 border border-border bg-surface-active align-middle" /> factories only (beyond habitable)</li>
           </ul>
         </div>
       </TooltipContent>
@@ -212,14 +390,71 @@ function LegendTooltip() {
   );
 }
 
+type Grade = keyof typeof GRADE;
+
+/** One Labour-card row: grade bar (grade hue) + supply/demand numbers + health-coloured %. */
+function LabourRow({
+  title,
+  grade,
+  have,
+  need,
+  fulfil,
+  emptyCause,
+}: {
+  title: string;
+  grade: Grade;
+  have: number;
+  need: number;
+  fulfil: number;
+  emptyCause?: string;
+}) {
+  const health = poolHealth(fulfil);
+  const noCap = need > 0 && have <= 0;
+  return (
+    <div className="py-1">
+      <div className="flex items-center gap-2.5">
+        <span className={`flex w-[92px] shrink-0 items-center gap-1.5 text-sm text-text-primary`}>
+          <span aria-hidden className={`inline-flex h-3.5 w-3.5 items-center justify-center border border-border font-mono text-[9px] ${GRADE[grade].text}`}>
+            {GRADE[grade].tag}
+          </span>
+          {title}
+        </span>
+        <div className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active">
+          <div className={`absolute inset-y-0 left-0 ${GRADE[grade].bar}`} style={{ width: `${Math.min(100, Math.max(0, fulfil * 100))}%` }} />
+        </div>
+        <span className={`w-9 text-right font-mono text-xs ${HEALTH[health].text}`}>{Math.round(fulfil * 100)}%</span>
+        <span className="w-28 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-text-secondary">
+          <span className="text-text-primary">{formatPeople(have)}</span> / {formatPeople(need)}
+        </span>
+      </div>
+      {noCap && emptyCause && (
+        <p className="mt-0.5 ml-[102px] text-[11px] text-status-red-light">{emptyCause}</p>
+      )}
+    </div>
+  );
+}
+
+/** System-wide labour: workforce headcount + the two academy-licensed skill ceilings. */
+function LabourCard({ labour }: { labour: SystemLabour }) {
+  return (
+    <Card variant="bordered" padding="md">
+      <p className="mb-1 font-display text-[11px] font-semibold uppercase tracking-wider text-text-primary">Labour</p>
+      <LabourRow title="Workforce" grade="unskilled" have={labour.workforce.have} need={labour.workforce.need} fulfil={labour.workforce.fulfil} />
+      <LabourRow title="Technicians" grade="skill1" have={labour.skill1.have} need={labour.skill1.need} fulfil={labour.skill1.fulfil} emptyCause="No vocational school — technician-grade work can't run." />
+      <LabourRow title="Engineers" grade="skill2" have={labour.skill2.have} need={labour.skill2.need} fulfil={labour.skill2.fulfil} emptyCause="No research institute — engineer-grade work can't run." />
+    </Card>
+  );
+}
+
 export function IndustryPanel({ systemId }: { systemId: string }) {
   const data = useSystemIndustry(systemId);
+  const { density, setDensity } = useIndustryDensity();
 
   if (data.visibility === "unknown") {
     return <EmptyState message="Scan this system with a ship in range to survey its industry." />;
   }
 
-  const { space, deposits, labourFulfillment, buildings, supplyChain, unrest } = data;
+  const { space, deposits, labour, labourFulfillment, buildings, supplyChain, unrest } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -265,10 +500,23 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
       {/* System health strip */}
       <Card variant="bordered" padding="md">
         <div className="flex items-center gap-2.5">
-          <Badge color={HEALTH[sysHealth].badge}>{HEALTH[sysHealth].sys}</Badge>
+          <Badge color={HEALTH[sysHealth].badge}>
+            <HealthGlyph health={sysHealth} className="mr-1 text-xs" decorative />
+            {HEALTH[sysHealth].sys}
+          </Badge>
           <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
             <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
             <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
+            <SegmentedControl<IndustryDensity>
+              ariaLabel="Row density"
+              name="industryDensity"
+              value={density}
+              onChange={setDensity}
+              options={[
+                { value: "compact", label: "Compact" },
+                { value: "detailed", label: "Detailed" },
+              ]}
+            />
             <LegendTooltip />
           </span>
         </div>
@@ -279,6 +527,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         </p>
       </Card>
 
+      <LabourCard labour={labour} />
+
       {/* Deposit land — extractors */}
       {extractors.length > 0 && (
         <Card variant="bordered" padding="md">
@@ -288,10 +538,11 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
               { key: "worked", width: pct(space.depositWorked, space.deposit), className: "bg-accent-muted" },
             ]}
           />
-          <div className="mt-2.5 -mx-1">
+          <RowHeader showOutput />
+          <div className="mt-2.5">
             {extractors.map((b) => {
               const dep = yieldFor(b);
-              return <BuildingRow key={b.buildingType} b={b} unrest={unrest} yieldMult={dep?.yieldMult} yieldBand={dep?.band} />;
+              return <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} yieldMult={dep?.yieldMult} yieldBand={dep?.band} density={density} showOutput />;
             })}
           </div>
         </Card>
@@ -312,25 +563,26 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         {housing.length > 0 && (
           <>
             <RoleLabel>Housing</RoleLabel>
-            <div className="-mx-1">
-              {housing.map((b) => <BuildingRow key={b.buildingType} b={b} unrest={unrest} />)}
+            <div>
+              {housing.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
             </div>
           </>
         )}
         {academies.length > 0 && (
           <>
             <RoleLabel>Academies</RoleLabel>
-            <div className="-mx-1">
-              {academies.map((b) => <BuildingRow key={b.buildingType} b={b} unrest={unrest} />)}
+            <div>
+              {academies.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
             </div>
           </>
         )}
         {factories.length > 0 && (
           <>
             <RoleLabel>Production</RoleLabel>
-            <div className="-mx-1">
+            <RowHeader showOutput />
+            <div>
               {factories.map((b) => (
-                <BuildingRow key={b.buildingType} b={b} unrest={unrest} supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
+                <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} showOutput supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
               ))}
             </div>
           </>
