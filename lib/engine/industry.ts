@@ -121,6 +121,23 @@ export interface LabourParts {
   skill2Cap: number;
 }
 
+/** One supply-vs-demand labour pool for the Industry panel's Labour card. */
+export interface LabourPool {
+  /** Supply: population for workforce, licensed cap for skill pools. */
+  have: number;
+  /** Demand: Σ head count for workforce, Σ skill-grade demand for skill pools. */
+  need: number;
+  /** min(1, have / need) — 1 when nothing is demanded. */
+  fulfil: number;
+}
+
+/** The three system-wide labour pools, supply vs demand. */
+export interface SystemLabour {
+  workforce: LabourPool;
+  skill1: LabourPool;
+  skill2: LabourPool;
+}
+
 /**
  * Every labour demand/cap total for a system in ONE pass over its buildings. The
  * per-total helpers (labourDemand, skill1Demand, …) remain for callers that need a
@@ -281,6 +298,8 @@ export type IdleReason = "occupancy" | "labour" | "skill" | "selling";
 export interface SystemIndustryReadout {
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
   labourFulfillment: number;
+  /** The three system-wide labour pools (workforce/technician/engineer), supply vs demand. */
+  labour: SystemLabour;
   /**
    * One entry per building type with count > 0, sorted by tier ascending then buildingType.
    * `used` is the decay-relevant "in use" amount — occupancy for housing, staffed-and-selling
@@ -376,7 +395,14 @@ export function buildIndustryReadout(
   yields: ResourceVector,
   maxStockOf?: (goodId: string) => number | undefined,
 ): SystemIndustryReadout {
-  const state = computeLabourState(buildings, population);
+  const parts = labourParts(buildings);
+  const state = labourStateFromParts(parts, population);
+  const pop = Math.max(0, population);
+  const labour: SystemLabour = {
+    workforce: { have: pop, need: parts.demand, fulfil: state.labourFulfil },
+    skill1: { have: parts.skill1Cap, need: parts.skill1Demand, fulfil: state.skill1Fulfil },
+    skill2: { have: parts.skill2Cap, need: parts.skill2Demand, fulfil: state.skill2Fulfil },
+  };
   const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
 
   // Per-building "in use" — the decay-relevant quantity (mirrors computeSystemDecay):
@@ -449,6 +475,7 @@ export function buildIndustryReadout(
 
   return {
     labourFulfillment: state.labourFulfil,
+    labour,
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
   };

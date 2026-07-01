@@ -518,3 +518,34 @@ describe("skill gates", () => {
     expect(effectiveFulfilment(s, 2)).toBe(0.2);
   });
 });
+
+describe("buildIndustryReadout — labour block", () => {
+  const MIN = 5;
+  it("reports workforce/skill1/skill2 supply, demand and fulfil", () => {
+    // 3 electronics (tier-2: unskilled 30, skill1 20, skill2 10) + 1 school + 1 institute.
+    const buildings = { electronics: 3, vocational_school: 1, research_institute: 1 };
+    const pop = 100;
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+
+    const demand = labourDemand(buildings);
+    expect(readout.labour.workforce.have).toBeCloseTo(pop, 6);
+    expect(readout.labour.workforce.need).toBeCloseTo(demand, 6);
+    expect(readout.labour.workforce.fulfil).toBeCloseTo(labourFulfillment(pop, demand), 6);
+
+    expect(readout.labour.skill1.have).toBeCloseTo(skill1Cap(buildings), 6);
+    expect(readout.labour.skill1.need).toBeCloseTo(skill1Demand(buildings), 6);
+    expect(readout.labour.skill1.fulfil).toBeCloseTo(computeLabourState(buildings, pop).skill1Fulfil, 6);
+
+    expect(readout.labour.skill2.have).toBeCloseTo(skill2Cap(buildings), 6);
+    expect(readout.labour.skill2.need).toBeCloseTo(skill2Demand(buildings), 6);
+    expect(readout.labour.skill2.fulfil).toBeCloseTo(computeLabourState(buildings, pop).skill2Fulfil, 6);
+  });
+
+  it("a demand-with-zero-cap skill pool reads fulfil 0 (no academy)", () => {
+    const buildings = { metals: 2 }; // tier-1 needs skill1; no school built
+    const readout = buildIndustryReadout(buildings, 1000, {}, () => MIN, unitResourceVector());
+    expect(readout.labour.skill1.need).toBeGreaterThan(0);
+    expect(readout.labour.skill1.have).toBe(0);
+    expect(readout.labour.skill1.fulfil).toBe(0);
+  });
+});
