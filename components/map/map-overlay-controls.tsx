@@ -5,6 +5,7 @@ import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
 import { STABILITY_RAMP_STOPS } from "@/lib/utils/stability";
+import { POPULATION_RAMP_CSS } from "@/lib/utils/population";
 import { RadioGroup } from "@/components/form/radio-group";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import {
@@ -17,6 +18,7 @@ const MODE_LABELS: Record<MapMode, string> = {
   political: "Political",
   regions: "Regions",
   stability: "Stability",
+  population: "Population",
   none: "None",
 };
 
@@ -48,9 +50,15 @@ const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
 const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({
   value: m,
   label: MODE_LABELS[m],
-  // Stability's tint→meaning mapping isn't self-evident, so carry a hover/focus
-  // legend in a tooltip — matching the Overlays section, no permanent height.
-  tooltip: m === "stability" ? <StabilityRampLegend /> : undefined,
+  // Stability/Population tint→meaning mappings aren't self-evident, so carry a
+  // hover/focus legend in a tooltip — matching the Overlays section, no
+  // permanent height.
+  tooltip:
+    m === "stability" ? (
+      <StabilityRampLegend />
+    ) : m === "population" ? (
+      <PopulationRampLegend />
+    ) : undefined,
 }));
 
 interface MapOverlayControlsProps {
@@ -196,6 +204,30 @@ function StabilityRampLegend() {
         <span>Stable</span>
         <span>Strike</span>
       </div>
+    </div>
+  );
+}
+
+const POPULATION_RAMP = POPULATION_RAMP_CSS.join(", ");
+
+function PopulationRampLegend() {
+  return (
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Population
+      </h5>
+      <div
+        className="h-2 w-full"
+        style={{ background: `linear-gradient(to right, ${POPULATION_RAMP})` }}
+        aria-hidden
+      />
+      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>None</span>
+        <span>Highest</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+        Relative to the most populous system you can currently see.
+      </p>
     </div>
   );
 }

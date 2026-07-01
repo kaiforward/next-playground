@@ -25,6 +25,7 @@ import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { useStability } from "@/lib/hooks/use-stability";
+import { usePopulation } from "@/lib/hooks/use-population";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 import { useGoods } from "@/lib/hooks/use-goods";
@@ -68,6 +69,7 @@ export function StarMap({
     overlays.logistics,
   );
   const stabilityBySystem = useStability(mapMode === "stability");
+  const populationBySystem = usePopulation(mapMode === "population");
 
   // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
   // the player can currently sense. Topology (political/regions) stays public;
@@ -79,6 +81,16 @@ export function StarMap({
     }
     return gated;
   }, [stabilityBySystem, visibleSystemIds]);
+
+  // Population is also dynamic story state — same fog gate as stability. The
+  // relative ramp then normalises against the max of this visible set.
+  const visiblePopulation = useMemo(() => {
+    const gated = new Map<string, number>();
+    for (const [systemId, population] of populationBySystem) {
+      if (visibleSystemIds.has(systemId)) gated.set(systemId, population);
+    }
+    return gated;
+  }, [populationBySystem, visibleSystemIds]);
 
   // ── Live tick + in-transit marker selection ───────────────────
   const { currentTick } = useTickContext();
@@ -345,6 +357,7 @@ export function StarMap({
         selectedTransitId={selectedTransitId}
         onTransitClick={onTransitClick}
         stabilityBySystem={visibleStability}
+        populationBySystem={visiblePopulation}
       />
 
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}

@@ -365,6 +365,12 @@ export interface StabilityEntry {
   unrest: number;
 }
 
+/** Per-system population reading for the population choropleth overlay. */
+export interface PopulationEntry {
+  systemId: string;
+  population: number;
+}
+
 export interface UniverseData {
   regions: RegionInfo[];
   systems: StarSystemInfo[];
