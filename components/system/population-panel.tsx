@@ -53,7 +53,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
       <Card variant="bordered" padding="md">
         <SectionHeader as="h4" className="mb-1">Demand footprint</SectionHeader>
         <p className="mb-3 text-xs text-text-tertiary">
-          What these inhabitants consume each tick — this is what drives the system&apos;s market demand.
+          What these inhabitants consume each economic cycle — this is what drives the system&apos;s market demand.
         </p>
         {demand.length === 0 ? (
           <EmptyState message="No demand." />
@@ -62,7 +62,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
             {demand.map((d) => (
               <li key={d.goodId} className="flex items-center justify-between py-1.5 px-3 bg-surface">
                 <span className="text-sm text-text-primary">{d.goodName}</span>
-                <span className="text-sm font-mono text-text-secondary">{d.demandRate.toFixed(2)}/t</span>
+                <span className="text-sm font-mono text-text-secondary">{d.demandRate.toFixed(2)}/cyc</span>
               </li>
             ))}
           </ul>
