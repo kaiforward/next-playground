@@ -13,9 +13,9 @@ import {
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
-import { buildingHealth, industryHealth } from "@/lib/engine/industry";
+import { buildingHealth, industryHealth, perGradeStaffing } from "@/lib/engine/industry";
 import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour } from "@/lib/engine/industry";
-import type { QualityBandId } from "@/lib/types/game";
+import type { GoodTier, QualityBandId } from "@/lib/types/game";
 import { formatMagnitude } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
@@ -92,15 +92,6 @@ function label(id: string): string {
   return ACADEMY_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
-/** The honest verb for "in use" per pillar — drives the row's hover tooltip. Academies
- *  are tier 0 like extractors but are staffed like factories, not "worked". */
-function usedNoun(tier: number, isAcademy: boolean): string {
-  if (isAcademy) return "staffed";
-  if (tier === -1) return "occupied";
-  if (tier === 0) return "worked";
-  return "staffed";
-}
-
 function pct(value: number, total: number): number {
   return total > 0 ? (value / total) * 100 : 0;
 }
@@ -116,26 +107,51 @@ function LandBar({ segments }: { segments: Array<{ key: string; width: number; c
   );
 }
 
-/** One building: status dot · name (+ yield) · used/built bar · % · magnitude, with cause/needs lines. */
-function BuildingRow({
+/** Trailing numeric cluster widths — shared by the header and every row so they align as a table. */
+const COL = { staff: "w-9", used: "w-[52px]", out: "w-[60px]" };
+
+/** Column header labelling the trailing numbers so the block reads like a table. */
+function RowHeader({ showOutput }: { showOutput: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5 px-3 pb-1 font-mono text-[9px] uppercase tracking-wider text-text-tertiary/70">
+      <span className="w-3 shrink-0" aria-hidden />
+      <span className="min-w-[104px] flex-1">{" "}</span>
+      <span className={`${COL.staff} text-right`}>staff</span>
+      <span className={`${COL.used} text-right`}>used/built</span>
+      {showOutput && <span className={`${COL.out} text-right`}>out/cyc</span>}
+    </div>
+  );
+}
+
+type Density = "compact" | "detailed";
+
+/** One building line: glyph · name (+yield) · staffing bar · staff% · used/built · output/cyc, with cause/needs lines. */
+function ProductionRow({
   b,
   unrest,
+  labour,
   yieldMult,
   yieldBand,
   supply,
+  density = "compact",
+  showOutput = false,
 }: {
   b: BuildingEntry;
   unrest: number;
+  labour: SystemLabour;
   yieldMult?: number;
   yieldBand?: QualityBandId;
   supply?: SystemIndustryReadout["supplyChain"][number];
+  density?: Density;
+  showOutput?: boolean;
 }) {
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const meta = HEALTH[health];
-  const ratioPct = b.count > 0 ? (b.used / b.count) * 100 : 0;
+  const staffPct = Math.max(0, Math.min(100, b.staffedFraction * 100));
+  const usedDisplay = Math.round(b.staffedFraction * b.count);
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
 
-  // Cause line — only for rows that aren't stable. Priority: over-capacity, then unrest, then the idle constraint.
+  // Cause line — only for rows that aren't stable. Priority: over-capacity, unrest, then the idle constraint.
   let cause: string | undefined;
   if (health !== "thriving") {
     if (b.used > b.count) cause = "over capacity";
@@ -143,14 +159,26 @@ function BuildingRow({
     else if (b.idleReason) cause = IDLE_CAUSE[b.idleReason];
   }
 
-  // Each recipe input as its own chip: ✓ when supplied, ⚠ + the throttle gate when short.
   const inputs = supply ? Object.keys(GOOD_RECIPES[supply.goodId] ?? {}) : [];
+
+  // Detailed density: per-grade micro-bars in place of the single health bar (Phase 3).
+  // b.tier is a widened `number` on the readout (housing uses -1); the guard below only
+  // reaches here for producers/extractors, whose tier is always 0, 1, or 2.
+  const goodTier: GoodTier = b.tier === 1 ? 1 : b.tier === 2 ? 2 : 0;
+  const grades =
+    density === "detailed" && !isAcademy && b.tier >= 0
+      ? perGradeStaffing(BUILDING_TYPES[b.buildingType]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }, b.count, goodTier, {
+          labourFulfil: labour.workforce.fulfil,
+          skill1Fulfil: labour.skill1.fulfil,
+          skill2Fulfil: labour.skill2.fulfil,
+        })
+      : null;
 
   return (
     <div className="border-b border-border/40 px-3 py-1.5 last:border-b-0">
       <div className="flex items-center gap-2.5">
-        <span aria-hidden className={`h-1.5 w-1.5 shrink-0 ${meta.dot}`} />
-        <span className="flex min-w-[104px] items-center gap-1.5 text-sm text-text-primary">
+        <HealthGlyph health={health} className="w-3 shrink-0 text-center text-[10px]" />
+        <span className="flex min-w-[104px] flex-1 items-center gap-1.5 text-sm text-text-primary">
           {label(b.buildingType)}
           {yieldMult !== undefined && (
             <span className={`font-mono text-[10px] ${yieldBand ? QUALITY_BAND_TEXT[yieldBand] : "text-text-tertiary"}`}>
@@ -158,22 +186,41 @@ function BuildingRow({
             </span>
           )}
         </span>
-        <div
-          role="progressbar"
-          aria-valuenow={Math.round(ratioPct)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`${label(b.buildingType)}: ${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier, isAcademy)}`}
-          className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active"
-          style={{ backgroundImage: IDLE_HATCH }}
-          title={`${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier, isAcademy)}`}
-        >
-          <div className={`absolute inset-y-0 left-0 ${meta.fill}`} style={{ width: `${Math.min(100, ratioPct)}%` }} />
-        </div>
-        <span className={`w-9 text-right font-mono text-xs ${meta.text}`}>{Math.round(ratioPct)}%</span>
-        <span className="w-[52px] text-right font-mono text-[11px] text-text-secondary">
-          <span className="text-text-primary">{formatMagnitude(b.used)}</span>/{formatMagnitude(b.count)}
+
+        {grades ? (
+          <div className="flex flex-1 flex-col gap-0.5">
+            {grades.map((g) => (
+              <div key={g.grade} className="flex items-center gap-1.5">
+                <span aria-hidden className={`w-3 font-mono text-[9px] ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
+                <div className="relative h-2 flex-1 overflow-hidden border border-border bg-surface-active">
+                  <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${Math.max(0, Math.min(100, g.fulfil * 100))}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            role="progressbar"
+            aria-valuenow={Math.round(staffPct)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${label(b.buildingType)}: ${Math.round(staffPct)}% staffed`}
+            className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active"
+            style={{ backgroundImage: IDLE_HATCH }}
+          >
+            <div className={`absolute inset-y-0 left-0 ${meta.fill}`} style={{ width: `${staffPct}%` }} />
+          </div>
+        )}
+
+        <span className={`${COL.staff} text-right font-mono text-xs ${meta.text}`}>{Math.round(staffPct)}%</span>
+        <span className={`${COL.used} text-right font-mono text-[11px] text-text-secondary`}>
+          <span className="text-text-primary">{usedDisplay}</span>/{formatMagnitude(b.count)}
         </span>
+        {showOutput && (
+          <span className={`${COL.out} text-right font-mono text-[11px] text-text-secondary`}>
+            {b.output !== undefined ? formatMagnitude(b.output) : "—"}
+          </span>
+        )}
       </div>
 
       {cause && (
@@ -388,10 +435,11 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
               { key: "worked", width: pct(space.depositWorked, space.deposit), className: "bg-accent-muted" },
             ]}
           />
+          <RowHeader showOutput />
           <div className="mt-2.5 -mx-1">
             {extractors.map((b) => {
               const dep = yieldFor(b);
-              return <BuildingRow key={b.buildingType} b={b} unrest={unrest} yieldMult={dep?.yieldMult} yieldBand={dep?.band} />;
+              return <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} yieldMult={dep?.yieldMult} yieldBand={dep?.band} showOutput />;
             })}
           </div>
         </Card>
@@ -413,7 +461,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <>
             <RoleLabel>Housing</RoleLabel>
             <div className="-mx-1">
-              {housing.map((b) => <BuildingRow key={b.buildingType} b={b} unrest={unrest} />)}
+              {housing.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} />)}
             </div>
           </>
         )}
@@ -421,16 +469,17 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <>
             <RoleLabel>Academies</RoleLabel>
             <div className="-mx-1">
-              {academies.map((b) => <BuildingRow key={b.buildingType} b={b} unrest={unrest} />)}
+              {academies.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} />)}
             </div>
           </>
         )}
         {factories.length > 0 && (
           <>
             <RoleLabel>Production</RoleLabel>
+            <RowHeader showOutput />
             <div className="-mx-1">
               {factories.map((b) => (
-                <BuildingRow key={b.buildingType} b={b} unrest={unrest} supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
+                <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} showOutput supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
               ))}
             </div>
           </>
