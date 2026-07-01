@@ -315,8 +315,10 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     expect(housing.idleReason).toBe("occupancy");
   });
 
-  it("producer used = count × min(labourFulfillment, outputUptake); 'labour' when labour binds", () => {
-    const buildings = { metals: 4 };
+  it("producer used = count × min(effectiveFulfilment, outputUptake); 'labour' when headcount binds", () => {
+    // vocational_school licenses far more skill1 than 4 metals buildings demand (4×7=28 ≪ 150),
+    // so skill1Fulfil stays 1 regardless of headcount — isolates the headcount gate.
+    const buildings = { metals: 4, vocational_school: 1 };
     const demand = labourDemand(buildings);
     const pop = demand * 0.5; // labour fulfillment 0.5
     // stock at the floor → output sells freely (uptake ≈ 1), so labour is the binding constraint.
@@ -326,8 +328,20 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     expect(metals.idleReason).toBe("labour");
   });
 
+  it("'skill' when a tier-2 building is fully staffed but no academy licenses its skilled work", () => {
+    // electronics (tier-2) demands skill1 + skill2; no vocational_school/research_institute
+    // built → both skill ceilings are 0, dragging effectiveFulfilment below labourFulfil even
+    // though headcount is fully staffed. Stock at the floor keeps selling from confounding it.
+    const buildings = { electronics: 4 };
+    const pop = labourDemand(buildings); // headcount fully staffed
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const electronics = readout.buildings.find((b) => b.buildingType === "electronics")!;
+    expect(electronics.used).toBeLessThan(4);
+    expect(electronics.idleReason).toBe("skill");
+  });
+
   it("'selling' when output uptake binds (stock pinned at the ceiling)", () => {
-    const buildings = { metals: 4 };
+    const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings); // fully staffed
     // stock at the ceiling → output piling up (uptake ≈ 0), so selling is the binding constraint.
     const readout = buildIndustryReadout(buildings, pop, { metals: MAX }, () => MIN, unitResourceVector(), MAXBAND);
@@ -337,7 +351,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   });
 
   it("no idleReason when fully staffed and selling", () => {
-    const buildings = { metals: 4 };
+    const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
     const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
@@ -346,11 +360,11 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   });
 
   it("defaults output uptake to 1 when no maxStock band is supplied (sells freely)", () => {
-    const buildings = { metals: 4 };
+    const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
     const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
-    expect(metals.used).toBeCloseTo(4, 6); // uptake 1 → labour-only
+    expect(metals.used).toBeCloseTo(4, 6); // uptake 1, headcount + skill1 both fulfilled
   });
 });
 

@@ -233,7 +233,7 @@ export function inputDemandFromProduction(
 }
 
 /** Why a building's `used` sits below its `count` — the binding constraint for the idle caption. */
-export type IdleReason = "occupancy" | "labour" | "selling";
+export type IdleReason = "occupancy" | "labour" | "skill" | "selling";
 
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
@@ -339,10 +339,14 @@ export function buildIndustryReadout(
 
   // Per-building "in use" — the decay-relevant quantity (mirrors computeSystemDecay):
   //  - housing: occupancy = population / POP_CENTRE_DENSITY,
-  //  - producers: count × min(labourFulfillment, outputUptake) (staffed AND selling).
-  // idleReason names the binding constraint so the panel can caption an idle row.
+  //  - producers: count × min(effectiveFulfilment(tier), outputUptake) (staffed AND selling),
+  //    where effectiveFulfilment is the skill-gated ratio for the good's tier — a tier-1/2
+  //    building that is headcount-full but skill-starved (no licensing academy) reads as idle too.
+  // idleReason names the binding constraint so the panel can caption an idle row:
+  // "labour" when headcount itself is short, "skill" when a skill ceiling (no academy)
+  // drags effectiveFulfilment below the headcount gate, "selling" when output can't move.
   // outputUptake needs the maxStock band; without it (legacy callers) output sells
-  // freely (uptake 1) so `used` falls back to the labour-only figure.
+  // freely (uptake 1) so `used` falls back to the fulfilment-only figure.
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
   for (const [buildingType, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
@@ -363,9 +367,14 @@ export function buildIndustryReadout(
         uptake = outputUptake(stockOf(outputGood), minStockOf(outputGood), maxStock);
       }
     }
-    const used = count * Math.min(state.labourFulfil, uptake);
-    const idleReason: IdleReason | undefined =
-      used < count ? (uptake < state.labourFulfil ? "selling" : "labour") : undefined;
+    const fulfil = effectiveFulfilment(state, tier);
+    const used = count * Math.min(fulfil, uptake);
+    let idleReason: IdleReason | undefined;
+    if (used < count) {
+      if (uptake < fulfil) idleReason = "selling";
+      else if (fulfil < state.labourFulfil) idleReason = "skill";
+      else idleReason = "labour";
+    }
     buildingEntries.push({ buildingType, outputGood, tier, count, used, idleReason });
   }
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
