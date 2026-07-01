@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { allocateIndustry, type AllocateInput } from "@/lib/engine/industry-seed";
-import { labourDemand, housingPopCap } from "@/lib/engine/industry";
+import { labourDemand, housingPopCap, computeLabourState, buildingProduction } from "@/lib/engine/industry";
 import {
   HOUSING_TYPE,
   effectiveSpaceCost,
   POP_CENTRE_DENSITY,
   BUILDING_TYPES,
   PRODUCTION_BUILDING_TYPES,
+  VOCATIONAL_SCHOOL_TYPE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
@@ -14,6 +15,7 @@ import {
   emptyResourceVector,
   sumResourceVectors,
   RESOURCE_TYPES,
+  unitResourceVector,
 } from "@/lib/engine/resources";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { mulberry32 } from "@/lib/engine/universe-gen";
@@ -299,5 +301,23 @@ describe("allocateIndustry — yieldMult (best-quality-slots-first)", () => {
     if (placedOre > 0 && placedOre <= 10 + 1e-9) {
       expect(r.yieldMult.ore).toBeCloseTo(2.0, 6);
     }
+  });
+});
+
+describe("allocateIndustry — academies", () => {
+  it("seeds academies so seeded tier-1/2 industry actually produces", () => {
+    // Generously-sized system: rich multi-body input with ample general/habitable
+    // space so tier-1/2 factories are deterministically seeded (see richInput above —
+    // every tier-1 recipe's inputs are locally producible from these bodies' resources,
+    // and generalSpace is far larger than the factory budget needs).
+    const result = allocateIndustry(richInput(0.9), mulberry32(42));
+    const hasTier1or2 = Object.keys(result.buildings).some((t) => GOOD_TIER_BY_KEY[t] >= 1);
+    if (!hasTier1or2) return; // nothing to assert on a barren roll
+    expect(result.buildings[VOCATIONAL_SCHOOL_TYPE] ?? 0).toBeGreaterThan(0);
+    // A seeded tier-1 good must have non-zero production under the seeded academies + population.
+    const pop = result.popCap;
+    const state = computeLabourState(result.buildings, pop);
+    const tier1 = Object.keys(result.buildings).find((t) => GOOD_TIER_BY_KEY[t] === 1)!;
+    expect(buildingProduction(result.buildings, tier1, state, unitResourceVector())).toBeGreaterThan(0);
   });
 });
