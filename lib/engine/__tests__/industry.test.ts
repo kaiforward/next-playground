@@ -328,7 +328,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     expect(metals.idleReason).toBe("labour");
   });
 
-  it("'skill' when a tier-2 building is fully staffed but no academy licenses its skilled work", () => {
+  it("'skill1' when a tier-2 building is fully staffed but no academy licenses its skilled work", () => {
     // electronics (tier-2) demands skill1 + skill2; no vocational_school/research_institute
     // built → both skill ceilings are 0, dragging effectiveFulfilment below labourFulfil even
     // though headcount is fully staffed. Stock at the floor keeps selling from confounding it.
