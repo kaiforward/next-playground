@@ -576,3 +576,48 @@ describe("buildIndustryReadout — labour block", () => {
     expect(readout.labour.skill1.fulfil).toBe(0);
   });
 });
+
+describe("buildIndustryReadout — staffedFraction + output", () => {
+  const MIN = 5;
+  const MAXBAND = () => 100;
+
+  it("producer staffedFraction = effectiveFulfilment(tier), independent of selling", () => {
+    // fully staffed + licensed, but stock pinned at the ceiling (not selling).
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings);
+    const readout = buildIndustryReadout(buildings, pop, { metals: 100 }, () => MIN, unitResourceVector(), MAXBAND);
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.staffedFraction).toBeCloseTo(1, 6); // pure staffing full even though used (selling) is ~0
+    expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds uptake (unchanged)
+  });
+
+  it("housing staffedFraction = occupancy (used / count)", () => {
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
+    expect(housing.staffedFraction).toBeCloseTo(0.6, 6);
+  });
+
+  it("output = buildingProduction × inputGate (input-throttled reads low even when fully staffed)", () => {
+    const buildings = { metals: 3, vocational_school: 1 };
+    const pop = labourDemand(buildings);
+    // ore at floor → inputGate < 1; metals fully staffed.
+    const readout = buildIndustryReadout(buildings, pop, { ore: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    const gate = readout.supplyChain.find((e) => e.goodId === "metals")!.inputGate;
+    const gross = buildingProduction(buildings, "metals", computeLabourState(buildings, pop), unitResourceVector());
+    expect(gate).toBeLessThan(1);
+    expect(metals.output!).toBeCloseTo(gross * gate, 6);
+  });
+
+  it("output is 0 for a tier-1 good with no academy (skill-gated to zero)", () => {
+    const buildings = { metals: 4 }; // no school → skill1Fulfil 0 → production 0
+    const readout = buildIndustryReadout(buildings, labourDemand(buildings), { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    expect(readout.buildings.find((b) => b.buildingType === "metals")!.output).toBe(0);
+  });
+
+  it("housing and academies carry no output", () => {
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 3, vocational_school: 1 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    expect(readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!.output).toBeUndefined();
+    expect(readout.buildings.find((b) => b.buildingType === "vocational_school")!.output).toBeUndefined();
+  });
+});

@@ -308,7 +308,18 @@ export interface SystemIndustryReadout {
    * `used` is the decay-relevant "in use" amount — occupancy for housing, staffed-and-selling
    * for producers (≤ count, except housing overshoot). `idleReason` names the binding constraint.
    */
-  buildings: Array<{ buildingType: string; outputGood?: string; tier: number; count: number; used: number; idleReason?: IdleReason }>;
+  buildings: Array<{
+    buildingType: string;
+    outputGood?: string;
+    tier: number;
+    count: number;
+    used: number;
+    /** Pure-staffing ratio the panel bar shows: effectiveFulfilment(tier) for producers, occupancy for housing. */
+    staffedFraction: number;
+    /** Real production rate this cycle (buildingProduction × inputGate). Producers/extractors only. */
+    output?: number;
+    idleReason?: IdleReason;
+  }>;
   /** Produced goods that have a recipe. Sorted by inputGate ascending (most-throttled first). */
   supplyChain: Array<{ goodId: string; inputGate: number; throttledBy: string[] }>;
 }
@@ -424,7 +435,8 @@ export function buildIndustryReadout(
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
       const used = Math.max(0, population) / POP_CENTRE_DENSITY;
-      buildingEntries.push({ buildingType, tier: -1, count, used, idleReason: used < count ? "occupancy" : undefined });
+      const staffedFraction = count > 0 ? used / count : 0;
+      buildingEntries.push({ buildingType, tier: -1, count, used, staffedFraction, idleReason: used < count ? "occupancy" : undefined });
       continue;
     }
     const def = BUILDING_TYPES[buildingType];
@@ -441,6 +453,14 @@ export function buildIndustryReadout(
     }
     const fulfil = effectiveFulfilment(state, tier);
     const used = count * Math.min(fulfil, uptake);
+    // output = the real production rate this cycle: buildingProduction × inputGate (uptake is a
+    // selling/decay signal, not a production multiplier — see lib/tick/processors/economy.ts).
+    let output: number | undefined;
+    if (outputGood !== undefined) {
+      const production = buildingProduction(buildings, outputGood, state, yields);
+      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, minStockOf) : 1;
+      output = production * gate;
+    }
     let idleReason: IdleReason | undefined;
     if (used < count) {
       if (uptake < fulfil) idleReason = "selling";
@@ -450,7 +470,7 @@ export function buildIndustryReadout(
         idleReason = tier >= 2 && state.skill2Fulfil < state.skill1Fulfil ? "skill2" : "skill1";
       } else idleReason = "labour";
     }
-    buildingEntries.push({ buildingType, outputGood, tier, count, used, idleReason });
+    buildingEntries.push({ buildingType, outputGood, tier, count, used, staffedFraction: fulfil, output, idleReason });
   }
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
 
