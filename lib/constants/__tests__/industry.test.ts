@@ -61,3 +61,10 @@ describe("BUILDING_TYPES catalog", () => {
     expect(effectiveSpaceCost(HOUSING_TYPE)).toBe(BUILDING_TYPES[HOUSING_TYPE].spaceCost);
   });
 });
+
+describe("per-good space", () => {
+  it("the most-integrated tier-2 goods occupy more general space than a default factory", () => {
+    expect(effectiveSpaceCost("ship_frames")).toBeGreaterThan(effectiveSpaceCost("fuel"));
+    expect(effectiveSpaceCost("reactor_cores")).toBeGreaterThan(effectiveSpaceCost("metals"));
+  });
+});

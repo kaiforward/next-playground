@@ -112,6 +112,16 @@ export const OUTPUT_PER_UNIT: Record<string, number> = scaleRecord(
   Object.fromEntries(GOOD_NAMES.map((g) => [g, OUTPUT_OVERRIDES[g] ?? GOOD_PRODUCTION[g]?.coeff ?? 1])),
 );
 
+// ── Per-good general-space footprint (coarse first-cut; Task 8 calibrates) ──
+// Differentiates tier-1/2 factory footprints; default 1.0. Tier-0 extractor footprint stays
+// on the deposit-slot model (DEPOSIT_SLOT_FOOTPRINT), not spaceCost — see the S1 spec scope note.
+const SPACE_OVERRIDES: Record<string, number> = {
+  ship_frames: 4.0,
+  reactor_cores: 3.0,
+  machinery: 2.5,
+  weapons_systems: 2.5,
+};
+
 function buildProductionTypes(): Record<string, BuildingTypeDef> {
   const out: Record<string, BuildingTypeDef> = {};
   for (const goodId of GOOD_NAMES) {
@@ -121,7 +131,7 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
       outputGood: goodId,
       ...(recipe ? { inputs: recipe } : {}),
       ...(resource ? { resource } : {}),
-      spaceCost: DEFAULT_SPACE_COST,
+      spaceCost: SPACE_OVERRIDES[goodId] ?? DEFAULT_SPACE_COST,
       labour: labourFor(goodId),
       outputPerUnit: OUTPUT_PER_UNIT[goodId],
     };
