@@ -3,7 +3,13 @@
 import type { CSSProperties } from "react";
 import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { GOODS } from "@/lib/constants/goods";
-import { BUILDING_TYPES, HOUSING_TYPE } from "@/lib/constants/industry";
+import {
+  BUILDING_TYPES,
+  HOUSING_TYPE,
+  ACADEMY_TYPES,
+  VOCATIONAL_SCHOOL_TYPE,
+  RESEARCH_INSTITUTE_TYPE,
+} from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
@@ -29,6 +35,7 @@ const HEALTH: Record<IndustryHealth, { sys: string; row: string; badge: BadgeCol
 const IDLE_CAUSE: Record<IdleReason, string> = {
   occupancy: "low occupancy",
   labour: "labour short",
+  skill: "needs academy",
   selling: "output not selling",
 };
 
@@ -38,13 +45,22 @@ const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(20
 
 type BuildingEntry = SystemIndustryReadout["buildings"][number];
 
+/** Academy building types don't produce a good, so they're not in GOODS — name them explicitly. */
+const ACADEMY_LABELS: Record<string, string> = {
+  [VOCATIONAL_SCHOOL_TYPE]: "Vocational School",
+  [RESEARCH_INSTITUTE_TYPE]: "Research Institute",
+};
+
 /** Human-readable label for a building type or good id. */
 function label(id: string): string {
-  return id === HOUSING_TYPE ? "Housing" : (GOODS[id]?.name ?? id);
+  if (id === HOUSING_TYPE) return "Housing";
+  return ACADEMY_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
-/** The honest verb for "in use" per pillar — drives the row's hover tooltip. */
-function usedNoun(tier: number): string {
+/** The honest verb for "in use" per pillar — drives the row's hover tooltip. Academies
+ *  are tier 0 like extractors but are staffed like factories, not "worked". */
+function usedNoun(tier: number, isAcademy: boolean): string {
+  if (isAcademy) return "staffed";
   if (tier === -1) return "occupied";
   if (tier === 0) return "worked";
   return "staffed";
@@ -82,6 +98,7 @@ function BuildingRow({
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const meta = HEALTH[health];
   const ratioPct = b.count > 0 ? (b.used / b.count) * 100 : 0;
+  const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
 
   // Cause line — only for rows that aren't stable. Priority: over-capacity, then unrest, then the idle constraint.
   let cause: string | undefined;
@@ -111,10 +128,10 @@ function BuildingRow({
           aria-valuenow={Math.round(ratioPct)}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`${label(b.buildingType)}: ${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier)}`}
+          aria-label={`${label(b.buildingType)}: ${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier, isAcademy)}`}
           className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active"
           style={{ backgroundImage: IDLE_HATCH }}
-          title={`${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier)}`}
+          title={`${formatMagnitude(b.used)} of ${formatMagnitude(b.count)} ${usedNoun(b.tier, isAcademy)}`}
         >
           <div className={`absolute inset-y-0 left-0 ${meta.fill}`} style={{ width: `${Math.min(100, ratioPct)}%` }} />
         </div>
@@ -220,10 +237,13 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD })]++;
   }
 
-  // Group by land pool: deposit (tier 0 extractors) vs general (housing tier -1 + factories tier 1+).
-  const extractors = buildings.filter((b) => b.tier === 0);
+  // Group by land pool: deposit (tier-0 extractors, excluding academies — they're tier 0
+  // by data-model default but bill to general space, not a deposit slot) vs general
+  // (housing tier -1 + factories tier 1+ + academies).
+  const extractors = buildings.filter((b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType));
   const housing = buildings.filter((b) => b.tier === -1);
   const factories = buildings.filter((b) => b.tier >= 1);
+  const academies = buildings.filter((b) => ACADEMY_TYPES.includes(b.buildingType));
 
   const depositByResource = new Map(deposits.map((d) => [d.resource, d]));
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
@@ -279,7 +299,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
 
       {/* General land — housing + factories share the pool */}
       <Card variant="bordered" padding="md">
-        <PoolHeader title="General land" sub="housing + factories" used={space.generalUsed} total={space.general} />
+        <PoolHeader title="General land" sub="housing + factories + academies" used={space.generalUsed} total={space.general} />
         <LandBar
           segments={[
             { key: "housing", width: pct(space.habitableUsed, space.general), className: "bg-accent" },
@@ -294,6 +314,14 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             <RoleLabel>Housing</RoleLabel>
             <div className="-mx-1">
               {housing.map((b) => <BuildingRow key={b.buildingType} b={b} unrest={unrest} />)}
+            </div>
+          </>
+        )}
+        {academies.length > 0 && (
+          <>
+            <RoleLabel>Academies</RoleLabel>
+            <div className="-mx-1">
+              {academies.map((b) => <BuildingRow key={b.buildingType} b={b} unrest={unrest} />)}
             </div>
           </>
         )}

@@ -5,7 +5,8 @@ import type {
 import type { ResourceVector } from "@/lib/types/game";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
-import { labourDemand, labourFulfillment } from "@/lib/engine/industry";
+import { computeLabourState } from "@/lib/engine/industry";
+import type { LabourState } from "@/lib/engine/industry";
 import { resourceVectorFromColumns, unitResourceVector } from "@/lib/engine/resources";
 
 /**
@@ -89,23 +90,27 @@ export class PrismaPopulationWorld implements PopulationWorld {
       );
     }
 
-    // Cache fulfillment per system to avoid recomputing for every market.
-    const fulfillmentBySystem = new Map<string, number>();
+    // Cache labour state per system — shared across all of a system's markets, matching
+    // PrismaEconomyWorld.getMarketsForSystems. computeLabourState scans the whole building
+    // set, so recomputing it per market row would repeat that work ~once-per-good inside
+    // this tick's transaction.
+    const labourStateBySystem = new Map<string, LabourState>();
 
     const ids: string[] = [];
     const rates: number[] = [];
     for (const m of markets) {
-      const population = popBySystem.get(m.station.systemId);
+      const systemId = m.station.systemId;
+      const population = popBySystem.get(systemId);
       if (population == null) continue;
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-      const buildings = buildingsBySystem.get(m.station.systemId) ?? {};
-      const yields = yieldsBySystem.get(m.station.systemId) ?? unitResourceVector();
-      let fulfillment = fulfillmentBySystem.get(m.station.systemId);
-      if (fulfillment == null) {
-        fulfillment = labourFulfillment(population, labourDemand(buildings));
-        fulfillmentBySystem.set(m.station.systemId, fulfillment);
+      const buildings = buildingsBySystem.get(systemId) ?? {};
+      const yields = yieldsBySystem.get(systemId) ?? unitResourceVector();
+      let state = labourStateBySystem.get(systemId);
+      if (state === undefined) {
+        state = computeLabourState(buildings, population);
+        labourStateBySystem.set(systemId, state);
       }
-      const rate = totalDemandRateForGood(goodKey, population, buildings, fulfillment, yields);
+      const rate = totalDemandRateForGood(goodKey, population, buildings, yields, state);
       ids.push(m.id);
       rates.push(isFinite(rate) ? rate : 1);
     }

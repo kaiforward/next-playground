@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
-import { buildingProduction, labourFulfillment, labourDemand } from "@/lib/engine/industry";
+import { buildingProduction, computeLabourState } from "@/lib/engine/industry";
 import { makeResourceVector, unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { SimSystem, SimMarketEntry } from "@/lib/engine/simulator/types";
 
@@ -27,8 +27,8 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
     );
     const views = await world.getMarketsForSystems(["s1"]);
     const ore = views.find((v) => v.goodId === "ore")!;
-    const fulfillment = labourFulfillment(1000, labourDemand({ ore: 5 }));
-    expect(ore.baseProductionRate).toBeCloseTo(buildingProduction({ ore: 5 }, "ore", fulfillment, unitResourceVector()), 6);
+    const state = computeLabourState({ ore: 5 }, 1000);
+    expect(ore.baseProductionRate).toBeCloseTo(buildingProduction({ ore: 5 }, "ore", state, unitResourceVector()), 6);
   });
 
   it("produces nothing for a good with no buildings", async () => {
@@ -80,8 +80,9 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
 
   it("does not scale tier-1 output by tier-0 yields (yield term is tier-0 only)", async () => {
     // 'metals' is a tier-1 good; its production must be invariant to the ore yield.
+    // vocational_school licenses metals' skill1 demand (5×7=35 ≪ 150) so it isn't skill-gated.
     const metalsSys = (yields: ReturnType<typeof unitResourceVector>): SimSystem =>
-      sys({ economyType: "industrial", buildings: { metals: 5 }, yields });
+      sys({ economyType: "industrial", buildings: { metals: 5, vocational_school: 1 }, yields });
     const unitYield = new InMemoryEconomyWorld(
       { systems: [metalsSys(unitResourceVector())], markets: [market("metals")], modifiers: [] },
     );

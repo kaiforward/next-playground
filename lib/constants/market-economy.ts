@@ -7,11 +7,11 @@ import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { scaleValue } from "@/lib/constants/economy-scale";
 import {
   buildingProduction,
+  computeLabourState,
   facilityStorageForGood,
   inputDemandForGood,
-  labourDemand,
-  labourFulfillment,
 } from "@/lib/engine/industry";
+import type { LabourState } from "@/lib/engine/industry";
 import { GOODS } from "@/lib/constants/goods";
 import { marketBand } from "@/lib/engine/market-pricing";
 import type { GovernmentDefinition } from "@/lib/constants/government";
@@ -65,8 +65,10 @@ export function demandRateForGood(goodId: string, population: number): number {
  * Total days-of-supply demand denominator: civilian (population) + industrial
  * (production-input draw). The industrial term is capacity-based and stable —
  * it depends on the industrial base and labour ratio, not on this tick's stock.
- * `fulfillment` is the system-wide labour ratio
- * (`labourFulfillment(population, labourDemand(buildings))`).
+ * The labour state is skill-gated exactly like the tick's actual production — a
+ * tier-1/2 system with no academy correctly forecasts zero (not phantom) input
+ * demand. Callers rewriting every market of a system pass a precomputed
+ * `labourState` (computed once per system); otherwise it is derived here.
  * `yields` is the system's per-resource yield multiplier vector (pass unitResourceVector()
  * when real yields are not yet available).
  */
@@ -74,11 +76,12 @@ export function totalDemandRateForGood(
   goodId: string,
   population: number,
   buildings: Record<string, number>,
-  fulfillment: number,
   yields: ResourceVector,
+  labourState?: LabourState,
 ): number {
   const civilian = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
-  const industrial = inputDemandForGood(buildings, goodId, fulfillment, yields);
+  const state = labourState ?? computeLabourState(buildings, population);
+  const industrial = inputDemandForGood(buildings, goodId, state, yields);
   return Math.max(civilian + industrial, MIN_DEMAND);
 }
 
@@ -113,8 +116,8 @@ export function getInitialStock(
   population: number,
   goodId: string,
 ): number {
-  const fulfillment = labourFulfillment(population, labourDemand(buildings));
-  const production = buildingProduction(buildings, goodId, fulfillment, yields);
+  const state = computeLabourState(buildings, population);
+  const production = buildingProduction(buildings, goodId, state, yields);
   const consumption = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
 
   const demandRate = demandRateForGood(goodId, population);

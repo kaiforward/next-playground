@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { allocateIndustry, type AllocateInput } from "@/lib/engine/industry-seed";
-import { labourDemand, housingPopCap } from "@/lib/engine/industry";
+import { labourDemand, housingPopCap, computeLabourState, buildingProduction } from "@/lib/engine/industry";
 import {
   HOUSING_TYPE,
   effectiveSpaceCost,
   POP_CENTRE_DENSITY,
   BUILDING_TYPES,
   PRODUCTION_BUILDING_TYPES,
+  VOCATIONAL_SCHOOL_TYPE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
@@ -14,6 +15,7 @@ import {
   emptyResourceVector,
   sumResourceVectors,
   RESOURCE_TYPES,
+  unitResourceVector,
 } from "@/lib/engine/resources";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { mulberry32 } from "@/lib/engine/universe-gen";
@@ -299,5 +301,30 @@ describe("allocateIndustry — yieldMult (best-quality-slots-first)", () => {
     if (placedOre > 0 && placedOre <= 10 + 1e-9) {
       expect(r.yieldMult.ore).toBeCloseTo(2.0, 6);
     }
+  });
+});
+
+describe("allocateIndustry — academies", () => {
+  it("seeds academies so seeded tier-1/2 industry actually produces", () => {
+    // Property check across seeds (mirrors the staffing self-consistency loop): a rich,
+    // high-fill input seeds tier-1/2 factories, and every such roll must carry the
+    // academies that license them. `asserted` guards against a future seeding change
+    // silently no-opping the whole test (every roll barren → nothing asserted).
+    let asserted = 0;
+    for (let seed = 40; seed < 50; seed++) {
+      const result = allocateIndustry(richInput(0.9), mulberry32(seed));
+      const skilled = Object.keys(result.buildings).find((t) => (GOOD_TIER_BY_KEY[t] ?? -1) >= 1);
+      if (skilled === undefined) continue; // barren roll — nothing skill-gated to assert
+      asserted++;
+      // Tier-1/2 industry draws skill1 → a vocational school must have been seeded to license it.
+      expect(result.buildings[VOCATIONAL_SCHOOL_TYPE] ?? 0, `seed ${seed}`).toBeGreaterThan(0);
+      // …and that skill-gated good must actually produce under the seeded academies + population.
+      const state = computeLabourState(result.buildings, result.popCap);
+      expect(
+        buildingProduction(result.buildings, skilled, state, unitResourceVector()),
+        `seed ${seed}`,
+      ).toBeGreaterThan(0);
+    }
+    expect(asserted, "no seed produced tier-1/2 industry — assertions never ran").toBeGreaterThan(0);
   });
 });

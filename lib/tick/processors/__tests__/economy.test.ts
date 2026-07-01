@@ -350,10 +350,11 @@ describe("economy processor: supply-chain input-gating", () => {
    * system A's metals stock must exceed system B's because the input gate is
    * wide open for A but zero for B.
    *
-   * Each system has 2 metals buildings and 50 population (= labour demand at
-   * 25/building), so labourFulfillment = 1 and production is purely
-   * input-gated. No ore-producing buildings are included — ore stock is set
-   * directly and does not grow.
+   * Each system has 2 metals buildings + 1 vocational_school (licenses the
+   * metals buildings' skill1 demand: 2×7=14 ≪ 150, so metals isn't skill-gated)
+   * and 65 population (= labour demand at 25/metals-building + 15/school), so
+   * labourFulfillment = 1 and production is purely input-gated. No ore-producing
+   * buildings are included — ore stock is set directly and does not grow.
    */
   it("throttles metals production when local ore is scarce", async () => {
     // Active-production zone for metals: below the operating ceiling (targetStock × 1.3 ≈ 52)
@@ -368,12 +369,12 @@ describe("economy processor: supply-chain input-gating", () => {
         regionId: "r1",
         factionId: "f1",
         governmentType: "federation",
-        population: 50, // 2 buildings × 25 labourPerUnit = exactly 50 → fulfillment = 1
+        population: 65, // 2×25 (metals) + 1×15 (vocational_school) = exactly 65 → fulfillment = 1
         popCap: 200,
         traits: [],
         bodyDanger: 0,
         unrest: 0,
-        buildings: { metals: 2 }, // smelter only — no ore extractor
+        buildings: { metals: 2, vocational_school: 1 }, // smelter + academy — no ore extractor
         yields: unitResourceVector(),
         slotCap: emptyResourceVector(),
         generalSpace: 0,

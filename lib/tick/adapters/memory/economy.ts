@@ -5,7 +5,8 @@ import type {
 } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { labourDemand, labourFulfillment, buildingProduction } from "@/lib/engine/industry";
+import { computeLabourState, buildingProduction } from "@/lib/engine/industry";
+import type { LabourState } from "@/lib/engine/industry";
 import { toTraitId, toQualityTier } from "@/lib/types/guards";
 import type {
   SimMarketEntry,
@@ -48,18 +49,18 @@ export class InMemoryEconomyWorld implements EconomyWorld {
   getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
     const sysById = new Map(this.systems.map((s) => [s.id, s]));
     const wanted = new Set(systemIds);
-    const fulfillmentBySystem = new Map<string, number>();
+    const labourStateBySystem = new Map<string, LabourState>();
     const views: MarketView[] = [];
     for (const m of this.markets) {
       if (!wanted.has(m.systemId)) continue;
       const sys = sysById.get(m.systemId);
       if (!sys) continue;
-      let fulfillment = fulfillmentBySystem.get(sys.id);
-      if (fulfillment === undefined) {
-        fulfillment = labourFulfillment(sys.population, labourDemand(sys.buildings));
-        fulfillmentBySystem.set(sys.id, fulfillment);
+      let state = labourStateBySystem.get(sys.id);
+      if (state === undefined) {
+        state = computeLabourState(sys.buildings, sys.population);
+        labourStateBySystem.set(sys.id, state);
       }
-      const production = buildingProduction(sys.buildings, m.goodId, fulfillment, sys.yields);
+      const production = buildingProduction(sys.buildings, m.goodId, state, sys.yields);
       const consumption = consumptionRate(m.goodId, sys.population);
       views.push({
         id: `${m.systemId}|${m.goodId}`,

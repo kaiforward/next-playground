@@ -7,7 +7,17 @@ import {
   decayedCount,
   computeSystemDecay,
 } from "@/lib/engine/infrastructure-decay";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import {
+  HOUSING_TYPE,
+  POP_CENTRE_DENSITY,
+  BUILDING_TYPES,
+  labourTotal,
+  VOCATIONAL_SCHOOL_TYPE,
+  RESEARCH_INSTITUTE_TYPE,
+  SKILL1_PER_SCHOOL,
+} from "@/lib/constants/industry";
+
+const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
 
 const NO_DECAY = { disuseRate: 0, unrestRate: 0, unrestThreshold: 0.75 };
 
@@ -66,11 +76,11 @@ describe("computeSystemDecay", () => {
   });
 
   it("disuse-decays idle production toward used and shrinks popCap as excess housing rots", () => {
-    // 10 housing → popCap 200, but population 100 only fills 5 → housing rots toward 5.
-    // 10 'ore' extractors but labour only staffs half (uptake 1, labour 0.5) → used = 5.
+    // population = 4 × oreLabour → fulfillment 0.4 (10 ore extractors demand 10×oreLabour).
+    // 10 housing → popCap 200, but population only fills population/DENSITY < 10 → housing rots too.
     const input = {
       buildings: { [HOUSING_TYPE]: 10, ore: 10 },
-      population: 100, // labourDemand(ore:10) = 250 → fulfillment 0.4
+      population: 4 * ORE_LABOUR, // labourDemand(ore:10) = 10×oreLabour → fulfillment 0.4
       unrest: 0,
       outputUptake: () => 1,
     };
@@ -103,5 +113,29 @@ describe("computeSystemDecay", () => {
       NO_DECAY,
     );
     expect(result.newCounts).toEqual({});
+  });
+});
+
+describe("academy decay", () => {
+  const params = { disuseRate: 0.5, unrestRate: 0, unrestThreshold: 0.5 };
+  it("sheds a vocational school that licenses more than the system demands", () => {
+    // 2 schools license 2×SKILL1_PER_SCHOOL=300; one metals fab demands skill1 7 →
+    // used = 2×(7/300) = 0.046667; disuse 0.5·(2−0.046667) = 0.976667 → next 1.023333.
+    const buildings = { metals: 1, vocational_school: 2, housing: 100 };
+    const res = computeSystemDecay({ buildings, population: 100000, unrest: 0, outputUptake: () => 1 }, params);
+    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE]).toBeCloseTo(1.023333, 5);
+  });
+  it("does not shed a school whose licensing the system fully uses", () => {
+    // skill1 demand ≈ school cap: many fabs vs one school.
+    const fabs = Math.ceil(SKILL1_PER_SCHOOL / 7) + 5; // metals skill1 = 7
+    const buildings: Record<string, number> = { metals: fabs, vocational_school: 1, housing: 100000 };
+    const res = computeSystemDecay({ buildings, population: 100000, unrest: 0, outputUptake: () => 1 }, params);
+    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE] ?? 1).toBeGreaterThanOrEqual(1 - 1e-9);
+  });
+  it("fully decays an academy orphaned by collapsed industry (no skill demand)", () => {
+    // No tier-2 producers → skill2 demand 0 → used 0 → disuse 0.5·(1−0) = 0.5 → next 0.5.
+    const buildings = { research_institute: 1, housing: 10 };
+    const res = computeSystemDecay({ buildings, population: 100, unrest: 0, outputUptake: () => 1 }, params);
+    expect(res.newCounts[RESEARCH_INSTITUTE_TYPE]).toBeCloseTo(0.5, 6);
   });
 });

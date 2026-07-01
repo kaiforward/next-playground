@@ -24,10 +24,15 @@ import {
   BUILDING_TYPES,
   HOUSING_TYPE,
   PRODUCTION_BUILDING_TYPES,
+  ACADEMY_TYPES,
+  VOCATIONAL_SCHOOL_TYPE,
+  RESEARCH_INSTITUTE_TYPE,
+  SKILL1_PER_SCHOOL,
+  SKILL2_PER_INSTITUTE,
   effectiveSpaceCost,
   POP_CENTRE_DENSITY,
 } from "@/lib/constants/industry";
-import { labourDemand, housingPopCap } from "@/lib/engine/industry";
+import { labourDemand, housingPopCap, skill1Demand, skill2Demand } from "@/lib/engine/industry";
 import { RESOURCE_TYPES, emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 
@@ -65,6 +70,28 @@ const PRODUCTION_SHARE = 0.5;
 const MANUFACTURER_BASE_COUNT = 2;
 /** Per-extractor utilisation jitter band: slotCap × fill × [1 − e, 1 + e]. */
 const EXTRACTOR_JITTER = 0.15;
+
+/**
+ * Places one academy type sized to license `demand` units of skill capacity,
+ * capped by what's still affordable within the shared factory budget. Mutates
+ * `buildings` in place and returns the general space spent (0 if nothing placed).
+ */
+function placeAcademy(
+  buildings: Record<string, number>,
+  type: string,
+  demand: number,
+  perUnit: number,
+  budgetRemaining: number,
+): number {
+  if (demand <= 0) return 0;
+  const wanted = demand / perUnit;
+  const cost = effectiveSpaceCost(type);
+  const affordable = Math.max(0, budgetRemaining / cost);
+  const count = Math.min(wanted, affordable);
+  if (count <= 0) return 0;
+  buildings[type] = count;
+  return count * cost;
+}
 
 /**
  * Effective yield multiplier for one resource: the mean quality of the filled
@@ -148,6 +175,26 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
     }
   }
 
+  // ── 2.5) Academies — license the seeded skill demand so tier-1/2 factories can run. ──
+  // Sized to exactly cover the placed factories' skill draw; consume general space from the same
+  // factory budget. Without these, every seeded tier-1/2 building would produce nothing (caps start at 0).
+  const seededSkill1 = skill1Demand(buildings);
+  const seededSkill2 = skill2Demand(buildings);
+  factoryUsed += placeAcademy(
+    buildings,
+    VOCATIONAL_SCHOOL_TYPE,
+    seededSkill1,
+    SKILL1_PER_SCHOOL,
+    factoryBudget - factoryUsed,
+  );
+  factoryUsed += placeAcademy(
+    buildings,
+    RESEARCH_INSTITUTE_TYPE,
+    seededSkill2,
+    SKILL2_PER_INSTITUTE,
+    factoryBudget - factoryUsed,
+  );
+
   // ── 3) Population centres — full-fold, sized to staff ALL labour. ──
   // No body baseline: wanted = labourDemand / POP_CENTRE_DENSITY. Bounded by a seeded
   // fraction (SEED_HOUSING_FRACTION) of the habitable subset of space — so systems start
@@ -165,23 +212,26 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
 
   // ── 3b) Staffing self-consistency — never seed more industry than the population can staff. ──
   // The fraction-clamped housing fixes the labour budget (popCap = housing × POP_CENTRE_DENSITY).
-  // Scale every production building down proportionally so labourDemand ≤ popCap: a freshly seeded
-  // system is then fully staffable as its population matures, instead of carrying idle capacity that
-  // autonomic decay would immediately liquidate. The freed deposit/general space stays as headroom
-  // for later (SP5) faction build-out. Worlds with no habitable land (popCap 0) seed zero industry —
-  // extraction still needs a workforce housed locally. yieldMult below is left on the unscaled
-  // placement on purpose: it measures the worked deposit grade (a property of the ground), so the
-  // economy-type label stays independent of how much labour is available to staff the slots.
+  // Scale every production building AND academy down proportionally so labourDemand ≤ popCap: a
+  // freshly seeded system is then fully staffable as its population matures, instead of carrying
+  // idle capacity that autonomic decay would immediately liquidate. Academies scale alongside
+  // production so licensed skill capacity stays matched to the reduced skill demand — a factory
+  // scaled down draws less skill1/skill2, so the school/institute count that licenses it shrinks too.
+  // The freed deposit/general space stays as headroom for later (SP5) faction build-out. Worlds with
+  // no habitable land (popCap 0) seed zero industry — extraction still needs a workforce housed
+  // locally. yieldMult below is left on the unscaled placement on purpose: it measures the worked
+  // deposit grade (a property of the ground), so the economy-type label stays independent of how
+  // much labour is available to staff the slots.
   const staffBudget = housingPopCap(buildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR;
   const seededLabour = labourDemand(buildings);
   if (seededLabour > staffBudget) {
     const staffScale = staffBudget / seededLabour;
-    for (const goodId of PRODUCTION_BUILDING_TYPES) {
-      const count = buildings[goodId];
+    for (const type of [...PRODUCTION_BUILDING_TYPES, ...ACADEMY_TYPES]) {
+      const count = buildings[type];
       if (count === undefined || count <= 0) continue;
       const scaled = count * staffScale;
-      if (scaled > 0) buildings[goodId] = scaled;
-      else delete buildings[goodId];
+      if (scaled > 0) buildings[type] = scaled;
+      else delete buildings[type];
     }
   }
 

@@ -6,6 +6,12 @@ import {
   HOUSING_TYPE,
   sizeFactor,
   effectiveSpaceCost,
+  labourTotal,
+  ACADEMY_TYPES,
+  VOCATIONAL_SCHOOL_TYPE,
+  RESEARCH_INSTITUTE_TYPE,
+  SKILL1_PER_SCHOOL,
+  SKILL2_PER_INSTITUTE,
 } from "@/lib/constants/industry";
 
 describe("BUILDING_TYPES catalog", () => {
@@ -32,11 +38,11 @@ describe("BUILDING_TYPES catalog", () => {
     expect(housing.popProvided).toBeGreaterThan(0);
   });
 
-  it("gives every production type a positive spaceCost, labourPerUnit, outputPerUnit", () => {
+  it("gives every production type a positive spaceCost, labour total, outputPerUnit", () => {
     for (const type of PRODUCTION_BUILDING_TYPES) {
       const def = BUILDING_TYPES[type];
       expect(def.spaceCost, type).toBeGreaterThan(0);
-      expect(def.labourPerUnit ?? 0, type).toBeGreaterThan(0);
+      expect(labourTotal(def.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }), type).toBeGreaterThan(0);
       expect(def.outputPerUnit ?? 0, type).toBeGreaterThan(0);
     }
   });
@@ -58,5 +64,35 @@ describe("BUILDING_TYPES catalog", () => {
     expect(sizeFactor(-1)).toBe(0);
     expect(effectiveSpaceCost("ore")).toBe(BUILDING_TYPES["ore"].spaceCost);
     expect(effectiveSpaceCost(HOUSING_TYPE)).toBe(BUILDING_TYPES[HOUSING_TYPE].spaceCost);
+  });
+});
+
+describe("per-good space", () => {
+  it("every good with a per-good space override occupies more general space than a default factory", () => {
+    // fuel has no SPACE_OVERRIDES entry → default footprint; each overridden good exceeds it.
+    for (const good of ["ship_frames", "reactor_cores", "machinery", "weapons_systems"]) {
+      expect(effectiveSpaceCost(good), good).toBeGreaterThan(effectiveSpaceCost("fuel"));
+    }
+  });
+});
+
+describe("academies", () => {
+  it("are non-producing, unskilled-staffed, space-eating, skill-licensing buildings", () => {
+    for (const type of ACADEMY_TYPES) {
+      const def = BUILDING_TYPES[type];
+      expect(def, type).toBeDefined();
+      expect(def.outputGood, type).toBeUndefined();          // produce no good
+      expect(def.spaceCost, type).toBeGreaterThan(0);         // eat general space
+      const v = def.labour!;
+      expect(labourTotal(v), type).toBeGreaterThan(0);        // need staffing
+      expect(v.skill1, type).toBe(0);                         // staffed by unskilled only…
+      expect(v.skill2, type).toBe(0);                         // …no academy to staff an academy
+    }
+  });
+  it("each academy licenses exactly its own grade", () => {
+    expect(BUILDING_TYPES[VOCATIONAL_SCHOOL_TYPE].skill1Licensed).toBe(SKILL1_PER_SCHOOL);
+    expect(BUILDING_TYPES[VOCATIONAL_SCHOOL_TYPE].skill2Licensed ?? 0).toBe(0);
+    expect(BUILDING_TYPES[RESEARCH_INSTITUTE_TYPE].skill2Licensed).toBe(SKILL2_PER_INSTITUTE);
+    expect(BUILDING_TYPES[RESEARCH_INSTITUTE_TYPE].skill1Licensed ?? 0).toBe(0);
   });
 });

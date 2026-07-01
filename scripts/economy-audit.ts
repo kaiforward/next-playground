@@ -20,9 +20,8 @@ import { GOOD_NAME_TO_KEY, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
+  computeLabourState,
   inputDemandForGood,
-  labourDemand,
-  labourFulfillment,
 } from "@/lib/engine/industry";
 import { inputGate } from "@/lib/engine/supply-chain";
 import { marketBandForRow, midPriceAt, curveForGood } from "@/lib/engine/market-pricing";
@@ -188,8 +187,7 @@ async function main() {
       "yield",
     );
 
-    const dem = labourDemand(buildings);
-    const ful = labourFulfillment(sys.population, dem);
+    const state = computeLabourState(buildings, sys.population);
     const sMult = strikeMult(sys.unrest);
     const rates = capacityGoodRates(buildings, sys.population, yields);
     const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
@@ -214,7 +212,7 @@ async function main() {
 
       const cap = prodByKey.get(m.key) ?? 0;
       const civ = consByKey.get(m.key) ?? 0;
-      const ind = inputDemandForGood(buildings, m.key, ful, yields);
+      const ind = inputDemandForGood(buildings, m.key, state, yields);
       const gate = inputGate(m.key, cap, stockOf, minOf);
       a.prodCap += cap;
       a.prodGated += cap * gate * sMult;

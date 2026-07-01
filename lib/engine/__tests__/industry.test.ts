@@ -15,10 +15,15 @@ import {
   generalSpaceUsed,
   industryHealth,
   buildingHealth,
+  computeLabourState,
+  effectiveFulfilment,
+  skill1Demand,
+  skill2Demand,
+  skill1Cap,
+  skill2Cap,
 } from "@/lib/engine/industry";
-import type { IndustryHealth } from "@/lib/engine/industry";
+import type { IndustryHealth, LabourState } from "@/lib/engine/industry";
 import {
-  DEFAULT_LABOUR_PER_UNIT,
   DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
   OUTPUT_PER_UNIT,
@@ -27,18 +32,61 @@ import {
   PRODUCTION_STORAGE_PER_UNIT,
   POP_CENTRE_STORAGE,
   POP_CENTRE_STORAGE_DEFAULT,
+  BUILDING_TYPES,
+  PRODUCTION_BUILDING_TYPES,
+  labourTotal,
+  SKILL1_PER_SCHOOL,
+  SKILL2_PER_INSTITUTE,
+  INPUT_DEMAND_MULTIPLIER,
 } from "@/lib/constants/industry";
+import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
-describe("labourDemand", () => {
-  it("sums count × labourPerUnit across production types; housing demands none", () => {
-    const buildings = { ore: 4, metals: 2, [HOUSING_TYPE]: 10 };
-    expect(labourDemand(buildings)).toBeCloseTo(6 * DEFAULT_LABOUR_PER_UNIT, 6);
+/** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
+const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
+/** Half-staffed on headcount only; skill ceilings unconstrained. */
+const half: LabourState = { labourFulfil: 0.5, skill1Fulfil: 1, skill2Fulfil: 1 };
+
+describe("labour vector", () => {
+  it("every production type carries a 3-grade labour vector whose shares partition a positive total", () => {
+    for (const good of PRODUCTION_BUILDING_TYPES) {
+      const v = BUILDING_TYPES[good]?.labour;
+      expect(v, good).toBeDefined();
+      if (!v) continue;
+      expect(v.unskilled, good).toBeGreaterThanOrEqual(0);
+      expect(v.skill1, good).toBeGreaterThanOrEqual(0);
+      expect(v.skill2, good).toBeGreaterThanOrEqual(0);
+      expect(labourTotal(v), good).toBeGreaterThan(0);
+      expect(labourTotal(v), good).toBeCloseTo(v.unskilled + v.skill1 + v.skill2, 9);
+    }
   });
+
+  it("tier-0 extractors are unskilled-only; tier-2 draws all three grades", () => {
+    for (const good of PRODUCTION_BUILDING_TYPES) {
+      const v = BUILDING_TYPES[good]!.labour!;
+      if (GOOD_TIER_BY_KEY[good] === 0) {
+        expect(v.skill1, good).toBe(0);
+        expect(v.skill2, good).toBe(0);
+      }
+      if (GOOD_TIER_BY_KEY[good] === 2) {
+        expect(v.skill1, good).toBeGreaterThan(0);
+        expect(v.skill2, good).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("labourDemand sums labourTotal across production types; housing demands none", () => {
+    // ore tier-0 total 10, metals tier-1 total 25 → 5*10 + 2*25 = 100; housing adds 0.
+    const demand = labourDemand({ ore: 5, metals: 2, housing: 3 });
+    expect(demand).toBeCloseTo(5 * labourTotal(BUILDING_TYPES.ore!.labour!) + 2 * labourTotal(BUILDING_TYPES.metals!.labour!), 6);
+  });
+});
+
+describe("labourDemand", () => {
   it("ignores buildings with a non-positive count", () => {
-    expect(labourDemand({ ore: -2, metals: 3 })).toBeCloseTo(3 * DEFAULT_LABOUR_PER_UNIT, 6);
+    expect(labourDemand({ ore: -2, metals: 3 })).toBeCloseTo(3 * labourTotal(BUILDING_TYPES.metals!.labour!), 6);
   });
 });
 
@@ -64,25 +112,25 @@ describe("buildingProduction", () => {
   it("is count × outputPerUnit × fulfillment for the matching production type (unit yields)", () => {
     const buildings = { ore: 5 };
     const yields = unitResourceVector();
-    expect(buildingProduction(buildings, "ore", 1, yields)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"], 6);
-    expect(buildingProduction(buildings, "ore", 0.5, yields)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"] * 0.5, 6);
+    expect(buildingProduction(buildings, "ore", FULL, yields)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"], 6);
+    expect(buildingProduction(buildings, "ore", half, yields)).toBeCloseTo(5 * OUTPUT_PER_UNIT["ore"] * 0.5, 6);
   });
   it("is 0 for a good with no buildings", () => {
-    expect(buildingProduction({ ore: 5 }, "metals", 1, unitResourceVector())).toBe(0);
+    expect(buildingProduction({ ore: 5 }, "metals", FULL, unitResourceVector())).toBe(0);
   });
   it("multiplies tier-0 output by yields[resource] for ore (resource=ore)", () => {
     const buildings = { ore: 4 };
     const yields = makeResourceVector({ ore: 2.0 });
     // ore is tier-0; its resource is "ore"
-    const base = buildingProduction(buildings, "ore", 1, unitResourceVector());
-    const boosted = buildingProduction(buildings, "ore", 1, yields);
+    const base = buildingProduction(buildings, "ore", FULL, unitResourceVector());
+    const boosted = buildingProduction(buildings, "ore", FULL, yields);
     expect(boosted).toBeCloseTo(base * 2.0, 6);
   });
   it("tier-1 good (metals) is NOT affected by yields regardless of ore yield", () => {
     const buildings = { metals: 3 };
     const yields = makeResourceVector({ ore: 5.0 });
-    const base = buildingProduction(buildings, "metals", 1, unitResourceVector());
-    const withYield = buildingProduction(buildings, "metals", 1, yields);
+    const base = buildingProduction(buildings, "metals", FULL, unitResourceVector());
+    const withYield = buildingProduction(buildings, "metals", FULL, yields);
     expect(withYield).toBeCloseTo(base, 6);
   });
 });
@@ -108,24 +156,25 @@ describe("capacityGoodRates", () => {
 
 describe("inputDemandForGood", () => {
   it("computes ore demand from a smelter (metals) building", () => {
-    // metals recipe = { ore: 1 }. One metals building, fully staffed.
-    const buildings = { metals: 4 };
-    const pop = labourDemand(buildings); // exactly staffs them ⇒ fulfillment 1
-    const f = labourFulfillment(pop, labourDemand(buildings));
+    // metals recipe = { ore: 1 }. One metals building, fully staffed + fully licensed
+    // (one vocational_school easily covers 4 metals buildings' skill1 demand: 4×7=28 ≪ 150).
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings); // exactly staffs them ⇒ labourFulfil 1
+    const state = computeLabourState(buildings, pop);
     const yields = unitResourceVector();
-    const metalsCapacity = 4 * OUTPUT_PER_UNIT["metals"] * f;
-    const expectedOreDemand = metalsCapacity * GOOD_RECIPES["metals"]["ore"];
-    expect(inputDemandForGood(buildings, "ore", f, yields)).toBeCloseTo(expectedOreDemand, 6);
+    const metalsCapacity = 4 * OUTPUT_PER_UNIT["metals"] * effectiveFulfilment(state, GOOD_TIER_BY_KEY["metals"]);
+    const expectedOreDemand = metalsCapacity * GOOD_RECIPES["metals"]["ore"] * INPUT_DEMAND_MULTIPLIER;
+    expect(inputDemandForGood(buildings, "ore", state, yields)).toBeCloseTo(expectedOreDemand, 6);
   });
 
   it("returns 0 for a good nothing consumes as an input", () => {
-    expect(inputDemandForGood({ metals: 4 }, "luxuries", 1, unitResourceVector())).toBe(0);
+    expect(inputDemandForGood({ metals: 4 }, "luxuries", FULL, unitResourceVector())).toBe(0);
   });
 
   it("sums across multiple consumers of the same input", () => {
     // minerals feeds chemicals, alloys, components.
     const buildings = { chemicals: 2, alloys: 2, components: 2 };
-    const f = 1;
+    const f = FULL;
     const yields = unitResourceVector();
     const direct =
       inputDemandForGood({ chemicals: 2 }, "minerals", f, yields) +
@@ -141,14 +190,14 @@ describe("inputDemandFromProduction", () => {
     // good-for-good — same fulfillment/yields are baked into capacityGoodRates's production rates.
     const buildings = { metals: 4, alloys: 2 };
     const yields = unitResourceVector();
-    const pop = labourDemand(buildings); // population == labour demand ⇒ fulfillment 1
-    const f = labourFulfillment(pop, labourDemand(buildings));
+    const pop = labourDemand(buildings); // population == labour demand ⇒ labourFulfil 1
+    const state = computeLabourState(buildings, pop);
     const productionByGood = new Map(
       capacityGoodRates(buildings, pop, yields).map((g) => [g.goodId, g.production]),
     );
     for (const goodId of ["ore", "minerals", "luxuries"]) {
       expect(inputDemandFromProduction(goodId, productionByGood)).toBeCloseTo(
-        inputDemandForGood(buildings, goodId, f, yields),
+        inputDemandForGood(buildings, goodId, state, yields),
         6,
       );
     }
@@ -172,9 +221,11 @@ describe("generalSpaceUsed", () => {
 
 describe("buildIndustryReadout", () => {
   const MIN = 5;
-  // 3 metals buildings (recipe: { ore: 1 }), 5 housing.
-  const buildings = { metals: 3, [HOUSING_TYPE]: 5 };
-  // Population exactly staffs the metals buildings.
+  // 3 metals buildings (recipe: { ore: 1 }), 5 housing, 1 vocational_school (licenses the
+  // metals buildings' skill1 demand: 3×7=21 ≪ 150) so metals' tier-1 supply-chain isn't
+  // skill-gated to zero — these tests are about input-gate throttling, not skill-gating.
+  const buildings = { metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 };
+  // Population exactly staffs the metals buildings (+ the school).
   const pop = labourDemand(buildings);
 
   it("labourFulfillment matches the helper formula", () => {
@@ -214,7 +265,7 @@ describe("buildIndustryReadout", () => {
 
   it("supplyChain entry is unthrottled (inputGate === 1) when ore stock is ample", () => {
     // ore stock far above what 3 metals buildings can draw in one tick
-    const fullyStaffedProduction = buildingProduction(buildings, "metals", 1, unitResourceVector());
+    const fullyStaffedProduction = buildingProduction(buildings, "metals", FULL, unitResourceVector());
     const oreNeeded = fullyStaffedProduction * GOOD_RECIPES["metals"]["ore"];
     const marketStock = { ore: MIN + oreNeeded * 10 };
     const readout = buildIndustryReadout(buildings, pop, marketStock, () => MIN, unitResourceVector());
@@ -231,12 +282,15 @@ describe("buildIndustryReadout", () => {
 
   it("supplyChain is sorted by inputGate ascending (most-throttled first)", () => {
     // Two producers: metals (ore recipe, stock at floor) and fuel (gas recipe, ample gas).
-    const gasFuelProduction = buildingProduction({ fuel: 2 }, "fuel", 1, unitResourceVector());
+    // Both are tier-1 (skill1-gated); 1 vocational_school covers metals+fuel's combined
+    // skill1 demand (3×7 + 2×7 = 35 ≪ 150) so neither is skill-gated to zero.
+    const gasFuelProduction = buildingProduction({ fuel: 2 }, "fuel", FULL, unitResourceVector());
     const gasNeeded = gasFuelProduction * GOOD_RECIPES["fuel"]["gas"];
     const stock = { ore: MIN, gas: MIN + gasNeeded * 10 };
+    const sortBuildings = { metals: 3, fuel: 2, [HOUSING_TYPE]: 1, vocational_school: 1 };
     const readout = buildIndustryReadout(
-      { metals: 3, fuel: 2, [HOUSING_TYPE]: 1 },
-      pop + 2 * DEFAULT_LABOUR_PER_UNIT,
+      sortBuildings,
+      pop + 2 * labourTotal(BUILDING_TYPES.fuel!.labour!) + labourTotal(BUILDING_TYPES.vocational_school!.labour!),
       stock,
       () => MIN,
       unitResourceVector(),
@@ -261,8 +315,10 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     expect(housing.idleReason).toBe("occupancy");
   });
 
-  it("producer used = count × min(labourFulfillment, outputUptake); 'labour' when labour binds", () => {
-    const buildings = { metals: 4 };
+  it("producer used = count × min(effectiveFulfilment, outputUptake); 'labour' when headcount binds", () => {
+    // vocational_school licenses far more skill1 than 4 metals buildings demand (4×7=28 ≪ 150),
+    // so skill1Fulfil stays 1 regardless of headcount — isolates the headcount gate.
+    const buildings = { metals: 4, vocational_school: 1 };
     const demand = labourDemand(buildings);
     const pop = demand * 0.5; // labour fulfillment 0.5
     // stock at the floor → output sells freely (uptake ≈ 1), so labour is the binding constraint.
@@ -272,8 +328,20 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     expect(metals.idleReason).toBe("labour");
   });
 
+  it("'skill' when a tier-2 building is fully staffed but no academy licenses its skilled work", () => {
+    // electronics (tier-2) demands skill1 + skill2; no vocational_school/research_institute
+    // built → both skill ceilings are 0, dragging effectiveFulfilment below labourFulfil even
+    // though headcount is fully staffed. Stock at the floor keeps selling from confounding it.
+    const buildings = { electronics: 4 };
+    const pop = labourDemand(buildings); // headcount fully staffed
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const electronics = readout.buildings.find((b) => b.buildingType === "electronics")!;
+    expect(electronics.used).toBeLessThan(4);
+    expect(electronics.idleReason).toBe("skill");
+  });
+
   it("'selling' when output uptake binds (stock pinned at the ceiling)", () => {
-    const buildings = { metals: 4 };
+    const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings); // fully staffed
     // stock at the ceiling → output piling up (uptake ≈ 0), so selling is the binding constraint.
     const readout = buildIndustryReadout(buildings, pop, { metals: MAX }, () => MIN, unitResourceVector(), MAXBAND);
@@ -283,7 +351,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   });
 
   it("no idleReason when fully staffed and selling", () => {
-    const buildings = { metals: 4 };
+    const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
     const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
@@ -292,11 +360,11 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   });
 
   it("defaults output uptake to 1 when no maxStock band is supplied (sells freely)", () => {
-    const buildings = { metals: 4 };
+    const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
     const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
-    expect(metals.used).toBeCloseTo(4, 6); // uptake 1 → labour-only
+    expect(metals.used).toBeCloseTo(4, 6); // uptake 1, headcount + skill1 both fulfilled
   });
 });
 
@@ -408,5 +476,45 @@ describe("summariseDeposits", () => {
   });
   it("excludes resources with no deposit slots", () => {
     expect(summariseDeposits(emptyResourceVector(), emptyResourceVector(), unitResourceVector())).toEqual([]);
+  });
+});
+
+describe("skill gates", () => {
+  const huge = 10_000_000; // population large enough that labourFulfil = 1
+
+  it("a frontier world with no academies cannot run any tier-1+ production", () => {
+    const buildings = { metals: 2, electronics: 2, ore: 2, components: 2 };
+    const state = computeLabourState(buildings, huge);
+    expect(state.skill1Fulfil).toBe(0);
+    expect(state.skill2Fulfil).toBe(0);
+    expect(buildingProduction(buildings, "metals", state, unitResourceVector())).toBe(0);      // tier-1 gated by skill1
+    expect(buildingProduction(buildings, "electronics", state, unitResourceVector())).toBe(0); // tier-2 gated by skill1+2
+    expect(buildingProduction(buildings, "ore", state, unitResourceVector())).toBeGreaterThan(0); // tier-0 ungated
+  });
+
+  it("schools without an institute run tier-1 but still block tier-2", () => {
+    // enough schools to license the skill1 demand, zero institutes.
+    const buildings = { metals: 1, electronics: 1, components: 1, vocational_school: 5 };
+    const state = computeLabourState(buildings, huge);
+    expect(state.skill1Fulfil).toBe(1);
+    expect(state.skill2Fulfil).toBe(0);
+    expect(buildingProduction(buildings, "metals", state, unitResourceVector())).toBeGreaterThan(0);
+    expect(buildingProduction(buildings, "electronics", state, unitResourceVector())).toBe(0);
+  });
+
+  it("skill demand sums shares across all goods; cap sums academy licensing", () => {
+    const buildings = { metals: 2, electronics: 3, vocational_school: 2, research_institute: 1 };
+    // metals skill1 7×2=14; electronics tier-2 default skill1 20×3=60 → 74
+    expect(skill1Demand(buildings)).toBeCloseTo(2 * 7 + 3 * 20, 6);
+    expect(skill2Demand(buildings)).toBeCloseTo(3 * 10, 6);
+    expect(skill1Cap(buildings)).toBeCloseTo(2 * SKILL1_PER_SCHOOL, 6);
+    expect(skill2Cap(buildings)).toBeCloseTo(1 * SKILL2_PER_INSTITUTE, 6);
+  });
+
+  it("effectiveFulfilment applies the tier-appropriate pools", () => {
+    const s = { labourFulfil: 0.9, skill1Fulfil: 0.5, skill2Fulfil: 0.2 };
+    expect(effectiveFulfilment(s, 0)).toBe(0.9);
+    expect(effectiveFulfilment(s, 1)).toBe(0.5);
+    expect(effectiveFulfilment(s, 2)).toBe(0.2);
   });
 });

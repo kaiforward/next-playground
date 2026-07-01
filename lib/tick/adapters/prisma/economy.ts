@@ -7,7 +7,8 @@ import type {
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { labourDemand, labourFulfillment, buildingProduction } from "@/lib/engine/industry";
+import { computeLabourState, buildingProduction } from "@/lib/engine/industry";
+import type { LabourState } from "@/lib/engine/industry";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import type { ResourceVector } from "@/lib/types/game";
 import {
@@ -67,20 +68,20 @@ export class PrismaEconomyWorld implements EconomyWorld {
       map[b.buildingType] = b.count;
       buildingsBySystem.set(b.systemId, map);
     }
-    // Cache labour fulfillment + per-resource yields per system — shared across
+    // Cache labour state + per-resource yields per system — shared across
     // all goods in the system. Yields come from the already-loaded yield*
     // columns on the included system row (no extra query).
-    const fulfillmentBySystem = new Map<string, number>();
+    const labourStateBySystem = new Map<string, LabourState>();
     const yieldsBySystem = new Map<string, ResourceVector>();
 
     return rows.map((m) => {
       const sys = m.station.system;
 
       const buildings = buildingsBySystem.get(sys.id) ?? {};
-      let fulfillment = fulfillmentBySystem.get(sys.id);
-      if (fulfillment === undefined) {
-        fulfillment = labourFulfillment(sys.population, labourDemand(buildings));
-        fulfillmentBySystem.set(sys.id, fulfillment);
+      let state = labourStateBySystem.get(sys.id);
+      if (state === undefined) {
+        state = computeLabourState(buildings, sys.population);
+        labourStateBySystem.set(sys.id, state);
       }
       let yields = yieldsBySystem.get(sys.id);
       if (yields === undefined) {
@@ -96,7 +97,7 @@ export class PrismaEconomyWorld implements EconomyWorld {
       }
 
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-      const production = buildingProduction(buildings, goodKey, fulfillment, yields);
+      const production = buildingProduction(buildings, goodKey, state, yields);
       const consumption = consumptionRate(goodKey, sys.population);
 
       // Every seeded system has a non-null factionId. The `?? "frontier"`

@@ -1,10 +1,13 @@
 # Economy Specialisation — Forced Trade Gradients via Industry Differentiation
 
-> **Status:** Designed, not built — created 2026-06-30 (brainstorm). Sits inside **SP5 autonomic-light**,
-> and **expands the roadmap's narrow "2a — preserve a spread" item** (in
-> [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from "build/decay pacing"
-> into a real structural-specialisation track. Decomposes into ordered stages, each its own spec → plan →
-> build. Authoritative sequence in [economy-simulation-vision.md](./economy-simulation-vision.md) §13.
+> **Status:** Track designed 2026-06-30 (brainstorm); **stage S1 (skill-tiered labour) shipped** — its
+> as-built functional spec now lives in
+> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md). Stages **S2–S4 remain
+> planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
+> spread" item** (in [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from
+> "build/decay pacing" into a real structural-specialisation track. Decomposes into **four** ordered
+> stages, each its own spec → plan → build. Authoritative sequence in
+> [economy-simulation-vision.md](./economy-simulation-vision.md) §13.
 
 ## Headline
 
@@ -77,19 +80,26 @@ Decisions recorded so they aren't re-litigated:
 
 **Mode 1 — Breadth (forcing specialisation):**
 
-- **Per-good labour cost** — `labourPerUnit` varies by good (and therefore tier). Advanced manufacturing
-  is labour-intensive; extraction/automated processing is light. *(Merges the earlier "tier-scaled
-  labour" + "per-good labour" — per-good subsumes tier-scaling; you just set the numbers.)*
+- **Skill-tiered labour vector** — a good's `labourPerUnit` becomes a per-good 3-vector
+  `(unskilled, skill1, skill2)` that *partitions* its head count (it does not add to it). Advanced
+  manufacturing is both labour-intensive *and* skill-intensive; extraction/automated processing is light
+  and unskilled. *(Folds three earlier levers into one model, co-built and co-calibrated in S1: "tier-scaled
+  labour" + "per-good labour" + the standalone "skilled labour" stage. Per-good subsumes tier-scaling; the
+  skill partition + academy gates subsume the separate skilled-labour stage — see
+  [the merged factor model](#skill-tiered-labour-the-merged-factor-model). The "scalar-proxy" skilled
+  stopgap once floated is dropped.)*
 - **Per-good space cost** — `spaceCost` varies by good. Shipyards/foundries are *enormous*; a gas
-  harvester is sparse. You physically can't fit the whole tier-2 basket on one body.
+  harvester is sparse. You physically can't fit the whole tier-2 basket on one body. *(Scope: this
+  differentiates **general-space** footprints — tier-1/2 factories + housing, the land industry and
+  population compete for. Tier-0 extractor footprint stays on the deposit-slot model
+  (`DEPOSIT_SLOT_FOOTPRINT`); making deposit footprints per-good is a deeper substrate change, out of
+  S1.)*
 - **Specialisation complexes** (anchor buildings) — *see [its section](#specialisation-complexes-anchor-buildings)*.
   *(This is the chosen lever for manufacturing comparative advantage. It supersedes two earlier ideas:
   (a) **trait affinity for tier-1 goods** — dropped, because no physical trait sensibly "makes
   electronics better"; and (b) **continuous economies-of-scale** — the anchor IS economies-of-scale, done
   as a discrete, hard-capped, self-limiting building rather than a runaway-prone marginal-efficiency
   curve. We build the anchor, not the continuous version.)*
-- **Skilled labour (infrastructural)** — *see [its section](#skilled-labour-infrastructural)*. The
-  development-axis endowment gate. *(Supersedes the "scalar-proxy" stopgap I floated — dropped.)*
 
 **Mode 2 — Volume (over-capacity):**
 
@@ -132,65 +142,158 @@ prevent monopoly runaway), legible, and built by the autonomic planner with no a
 **Cost in the agency-free near-term** is paid in **space + the cap** (you give up breadth), not credits —
 the *capital* cost arrives later with the treasury (full SP5 agency). The tradeoff already bites without it.
 
-## Skilled labour (infrastructural)
+## Skill-tiered labour (the merged factor model)
 
-Manufacturing's development-axis endowment gate, delivered through an **industry "academy / development"
-building** — no faction-facility dependency. Population stays a **single scalar**; the academy raises the
-ceiling on *how much skilled work that population is allowed to perform* — the pops themselves are
-unchanged.
+> **This is S1 — ✅ shipped.** The as-built functional spec lives in
+> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md); this section is kept as
+> the design rationale. It folds together what were three separate levers — per-good labour, per-good space, and
+> the standalone skilled-labour stage — because they are **the same factor equation** and must be
+> calibrated as one. Shipping per-good labour first and *then* layering skilled gates on would re-derive
+> every staffing number and rebuild the labour model from scalar into vector; merging avoids that churn.
+> The magnitudes here are coarse first-cut anyway — the real calibration is **one pass once the whole
+> structural track is in**, per the coarse-health-calibration principle. Numbers are perishable; the
+> *structure* is what we're committing to.
+
+**Labour is a per-good 3-vector that partitions the head count.** A good's staffing requirement is split
+across skill grades — it is *not* topped up with extra heads. A 1000-head fab is 1000 people composed as
+(say) 600 unskilled / 300 technicians / 100 engineers, not 1000 + 300 + 100:
+
+- **Tier-0** (extraction / automated processing) — unskilled only.
+- **Tier-1** (basic manufacturing) — mostly unskilled + a technician (skill-1) share.
+- **Tier-2** (advanced manufacturing) — unskilled + technicians (skill-1) + engineers (skill-2).
+
+Population stays a **single scalar** (the vision §4 keystone — population is a magnitude, not a roster of
+people). Skill is **not** a kind of person; two **academy buildings** raise a *ceiling* on how much of the
+existing labour may perform at each grade.
 
 ```
-skilledDemand = Σ count_b × skilledLabourPerUnit_b     // ~0 for tier-0/1, high for tier-2
-skilledCap    = Σ academies × SKILLED_PER_ACADEMY      // "X pops may act as skilled"
-skilledFulfil = min(1, skilledCap / skilledDemand)     // pure infra gate — population-independent
+// per good, labour PARTITIONS the head count (the three shares sum to the total):
+labour_b = (unskilled_b, skill1_b, skill2_b),   Σ = labourPerUnit_b
 
-labourDemand  = Σ count_b × labourPerUnit_b            // UNCHANGED: the heads still must exist
-labourFulfil  = min(1, population / labourDemand)       // UNCHANGED headcount gate
+// 1. Headcount gate — ONE aggregate gate. The bodies must physically exist.
+labourDemand = Σ count_b × labourPerUnit_b            // = Σ over every good's full vector
+labourFulfil = min(1, population / labourDemand)      // UNCHANGED from the scalar model
 
-// a skilled good needs BOTH gates; tier-0/1 only need labourFulfil:
-output_skilled = count × outputPerUnit × min(labourFulfil, skilledFulfil) × yield
+// 2. Skill-ceiling gates — per level. Academies license how much labour may work at each grade.
+skill1Demand = Σ count_b × skill1_b
+skill2Demand = Σ count_b × skill2_b
+skill1Cap    = Σ vocationalSchools  × SKILL1_PER_SCHOOL      // "this much technician-grade work is licensed"
+skill2Cap    = Σ researchInstitutes × SKILL2_PER_INSTITUTE   // "this much engineer-grade work is licensed"
+skill1Fulfil = min(1, skill1Cap / skill1Demand)
+skill2Fulfil = min(1, skill2Cap / skill2Demand)
+
+// each good is gated by ALL pools it draws on:
+output_b = count × outputPerUnit × min(labourFulfil, skill1Fulfil?, skill2Fulfil?) × yield × anchorBuff
+//   tier-0: labourFulfil only  |  tier-1: + skill1Fulfil  |  tier-2: + skill1Fulfil + skill2Fulfil
 ```
 
-A frontier world with the population and the space but **no academies** has `skilledFulfil = 0` → it
-physically cannot run high tech, no matter how big it grows. The academy is itself a building: it eats
-general space and must be staffed (adds to `labourDemand`), so becoming a tech hub costs space + pop on
-academies *and* tech labs → you can't also be broad → you import the rest. No extra population clamp is
-needed — `labourFulfil` already throttles output if you lack the heads to fill academy-unlocked slots, so
-`skilledCap` is purely an additional ceiling and the two gates compose.
+**Two academy buildings, one per grade** — a **vocational school** (licenses skill-1) and a **research
+institute** (licenses skill-2). Each is a building: it eats general space and draws *unskilled* headcount
+to run (adds to `labourDemand`), and it raises its pool's ceiling. They do **not** require skilled labour
+to staff — otherwise you'd need an academy to staff an academy. Instructors are abstracted into the
+licensing function. (One academy type per grade; no finer split — there isn't a more interesting cut.)
 
-*(v1 simplest: a skilled good's whole labour is "skilled." Splitting each building into general + skilled
-portions is a later additive nuance, not a rework.)*
+**Academies decay toward skill demand.** Like every building, an academy rots toward what it actually
+serves: its `used = count × min(1, skillDemand / skillCap)` (skill-1 demand for a vocational school,
+skill-2 for a research institute). An academy licensing more skilled work than the system demands sheds
+the excess; one orphaned by a contracted hub (`skillDemand → 0`) decays away entirely. Same single decay
+rule as production and housing — it keeps academies concentrated at genuine hubs and reinforces the
+concentration moat.
 
-**Demographic skilled labour is recorded as a possible future layer, not superseded.** Modelling skill as
-a *kind of person* (population becomes a vector; skilled workers **migrate to jobs**) is evocative but
-fights the vision's §4 keystone (population is a scaled magnitude, not individuals) and touches every pop
-subsystem. The infrastructural model is a **different, self-consistent endpoint** — *not* a worse version
-of demographic — and skilled-migration can layer on later as its own feature if we ever want it. Decision
-deferred deliberately; infrastructural ships now.
+**The development ladder falls out for free.** Because tier-2 goods draw skill-1 labour too (a fab needs
+technicians, not just engineers), a system cannot run tier-2 without *both* a research institute and the
+vocational capacity its technician share demands. No explicit "institute requires school" prerequisite is
+needed — the ladder emerges from the partition. A frontier world with population and space but **no
+academies** has `skill1Fulfil = skill2Fulfil = 0` → it physically cannot run manufacturing, no matter how
+big it grows. Becoming a tech hub costs space + pop on *both* academy tiers *and* the labs → you can't also
+be broad → you import the rest.
+
+### Build-planner valuation — the academy as a buildable labour gate
+
+The autonomic build planner (`lib/engine/directed-build.ts`) only builds capacity that serves a *reachable
+structural deficit of a good*, gated by `min(space, served-demand, budget, labour)`. An academy produces no
+good, so under the planner as-is it would **never be built** — and the skill gates would then silently
+suppress tier-1/tier-2 *everywhere* (every world becomes a frontier world). So the academy needs a valuation.
+
+The fix is that **the skilled gate is a *buildable* labour gate.** The planner already caps a build by spare
+labour; the only difference is that when *labour* binds you cannot fix it (you cannot manufacture people),
+but when a *skill ceiling* binds you can — build an academy. So:
+
+- When the industry pass commits to a skill-gated good to serve a deficit and the skill ceiling is the
+  binding cap, it **builds the academies needed to lift that ceiling first, charged to the same
+  opportunity** — spending budget + space + the academies' own unskilled staffing — then builds the
+  production with what's left.
+- The academy is therefore valued **transitively**: its worth is exactly the suppressed deficit-serving
+  output it unblocks. This preserves the planner's invariant (every build traces to a reachable structural
+  deficit) — **no speculative academies**.
+- It **self-paces across cycles**: the per-cycle build budget naturally splits between academies and
+  factories, and the working-copy mutation means once an institute is up, the next skill-good opportunity
+  at that site sees the raised ceiling.
+
+*Not a proactive academy pass (like housing).* Housing is proactive because population is a slow logistic
+you must lead — build ahead and bet the people come. Academy demand isn't speculative; it *is* the deficit,
+already known. A proactive pass would build institutes at systems that may never use them and need its own
+gate that just re-derives the deficit reasoning the industry pass already has. Demand-pulled co-build is
+strictly better.
+
+**Concentration moat (coarse-calibration, not core mechanic).** Opportunities rank by `served ÷ route
+cost`. A skilled build that *also* needs new institutes is genuinely more expensive than an unskilled one
+serving the same deficit; folding that overhead into the score lets a system that **already paid** the
+academy cost out-compete a greenfield one. Skilled industry then *concentrates* at systems that sank the
+cost — the academy sunk-cost becomes a comparative-advantage moat that stacks with S2's anchor space-cap
+moat. The system that has paid for institutes *and* an electronics complex becomes *the* regional
+electronics hub and physically can't also be broad. That's the specialisation the track is chasing, falling
+out of the planner mechanics — but it's a scoring refinement to settle during calibration, not the core.
+
+**Demographic skilled labour stays a deferred alternative, not superseded.** The labour vector here is
+*per-good* (each good's staffing requirement is split across grades); **population itself stays one
+scalar** — don't conflate the two vectors. Modelling skill as a *kind of person* (population becomes a
+vector; skilled workers **migrate to jobs**) is evocative but fights the vision's §4 keystone (population
+is a scaled magnitude, not individuals) and touches every pop subsystem. The infrastructural model is a
+**different, self-consistent endpoint** — *not* a worse version of demographic — and skilled-migration can
+layer on later as its own feature if we ever want it. Decision deferred deliberately; infrastructural ships
+now.
 
 ## Staged decomposition
 
 Each stage is its own spec → plan → build, ordered for reviewability. All agency-free. The guardrails
 stage is **last** so we tune diffusion/decay against the *real* gradient the structural stages create
-(the roadmap's original "2a build/decay pacing" is folded into S5).
+(the roadmap's original "2a build/decay pacing" is folded into S4).
 
 | Stage | Lever(s) | Failure mode | Needs agency? |
 |---|---|---|---|
-| **S1** | Per-good **labour + space** cost; amplify input-demand magnitude | Breadth (factor scarcity) | No |
+| **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
 | **S2** | **Specialisation complexes** (manufacturing CA + economies-of-scale) | Breadth (comparative advantage) | No |
-| **S3** | **Skilled labour via industry** (academy → skilled pool gates tier-2) | Breadth (development endowment gate) | No |
-| **S4** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
-| **S5** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
+| **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
+| **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
+
+> **Interstitial — Economy UI legibility (quick wins), between S1 and S2.** S1 made the mechanics deep
+> (skill tiers, academy licensing, per-good labour composition) but the Industry/system screens still show
+> numbers without the *why*. Before S2, a focused UI pass: surface the **system's skilled-labour pools**
+> (skill-1/skill-2 supply vs demand), each factory's **staffing usage** (which pool is binding — the data is
+> already in `buildIndustryReadout` via `effectiveFulfilment`/`idleReason`), and **short "what it does"
+> descriptions** for buildings, especially academies. Reuses the existing `Tooltip`. The ambitious
+> **Paradox-style nested/pinnable deep-tooltip system** (rich-tooltip infra + a cross-linking concept
+> glossary) is a SEPARATE, larger project deferred until after the full sX economy track. Both get a
+> collaborative HTML-prototype design pass before build. Tracked in `docs/BACKLOG.md`.
+
+> **S1 absorbs the old standalone "skilled labour" stage** (was S3). Per-good labour, per-good space, and
+> skilled labour are the same factor equation and must be calibrated jointly — see
+> [the merged factor model](#skill-tiered-labour-the-merged-factor-model). Splitting them would re-derive
+> every staffing number when the skill gates land. The build *can* still ship as 2 reviewable PRs inside
+> S1 (the labour vector + per-good costs, then the academies + live gates), with the single coarse
+> calibration run after both.
 
 First-cut shape (first-draft, simulator-calibrated — only relative shape matters):
 
-- **Labour:** tier-0 light, tier-2 heavy (e.g. ~10 → ~25 → ~60). Per-good within tier where it reads true
-  (labour-heavy textiles/consumer-goods/luxuries vs automated refining).
+- **Labour vector:** tier-0 light + all-unskilled; tier-2 heavy across all three grades (e.g. total head
+  count ~10 → ~25 → ~60, with the skill1/skill2 shares rising by tier). Per-good within tier where it reads
+  true (labour-heavy textiles/consumer-goods/luxuries vs automated refining).
 - **Space:** extraction/processing modest; the most-integrated tier-2 (shipyards, foundries) large.
-- **Anchor buff & cap:** a meaningful multiplier (enough to make concentration clearly worth the space),
-  cap 1–2 per system.
-- **Skilled:** `SKILLED_PER_ACADEMY` and tier-2 `skilledLabourPerUnit` set so a tech hub needs a real
-  academy investment a frontier world can't casually match.
+- **Skilled:** `SKILL1_PER_SCHOOL`, `SKILL2_PER_INSTITUTE`, and the per-good skill shares set so a tech hub
+  needs a real academy investment a frontier world can't casually match.
+- **Anchor buff & cap (S2):** a meaningful multiplier (enough to make concentration clearly worth the
+  space), cap 1–2 per system.
 
 **Genuinely deferred (downstream — this track feeds them, unchanged in sequence):** full faction agency
 (treasury / doctrine-weighted build / directed-logistics orders), the contract-model rework, ship
@@ -208,21 +311,30 @@ economies-of-scale are captured above as explicitly-not-now.
   pre-builds the substrate full faction agency (§12) will later *decide* over.
 - **[negative-space-economy.md](./negative-space-economy.md)** — refined: negative space = locally-unmet
   demand, produced by forced specialisation, not a flat over-supplied world.
-- **Live code touched:** `lib/constants/industry.ts` (per-good labour/space, academy + anchor building
-  types), `lib/constants/physical-economy.ts` (demand concentration), `lib/engine/industry.ts` (skilled
-  fulfilment gate), the autonomic build planner (value the new building types), and the diffusion/decay
-  constants (S5 guardrails).
+- **Live code touched:** `lib/constants/industry.ts` (per-good labour **vector** + space, vocational-school
+  + research-institute + anchor building types), `lib/engine/industry.ts` (`skill1Fulfil`/`skill2Fulfil`
+  gates folded into `buildingProduction`), `lib/engine/directed-build.ts` (the autonomic build planner —
+  academy as a buildable labour gate, transitively co-built against the deficit it unblocks),
+  `lib/engine/industry-seed.ts` (seed academies sized to seeded skill demand so seeded tier-1/2 can run),
+  `lib/engine/infrastructure-decay.ts` (academy decay toward skill demand, S1),
+  `lib/constants/physical-economy.ts` (demand concentration, S3), and the diffusion/decay constants
+  (S4 guardrails).
 
 ## Open questions (deferred to per-stage specs)
 
-- **All magnitudes** — labour/space per good, anchor buff + cap, `SKILLED_PER_ACADEMY`, tier-2
-  `skilledLabourPerUnit`, decay/diffusion constants. Validated via `npm run simulate` + `audit:economy`,
-  cross-checked against the real 10k DB at maturity (~tick 6000).
+- **All magnitudes** — per-good labour vector (the unskilled/skill1/skill2 shares) + space, anchor buff +
+  cap, `SKILL1_PER_SCHOOL` / `SKILL2_PER_INSTITUTE`, decay/diffusion constants. Coarse first-cut now;
+  validated via `npm run simulate` + `audit:economy` and cross-checked against the real 10k DB at maturity
+  (~tick 6000) in one calibration pass once the structural track is in.
+- **Per-good skill shares** — how each tier-1/tier-2 good's head count splits across grades. Coarse by tier
+  to start, refined per-good only where it reads true (a fab is engineer-heavy; a textile mill
+  technician-light).
 - **Anchor granularity** — per-good complexes vs per-good-group (e.g. one "Heavy Industry" complex
-  buffing the metals chain). Group is fewer building types; per-good is finer specialisation.
-- **Academy generality** — one academy type feeding a single skilled pool, vs multiple skill domains.
-  Start with one pool.
-- **Build-planner valuation of buffs** — how the autonomic planner scores an anchor's yield multiplier
-  against plain capacity. Settle in S2.
+  buffing the metals chain). Group is fewer building types; per-good is finer specialisation. (S2.)
+- **Anchor buff valuation** — how the autonomic planner scores an anchor's yield multiplier against plain
+  capacity. Settle in S2. *(The academy's valuation is already settled — see
+  [the merged factor model](#skill-tiered-labour-the-merged-factor-model): a buildable labour gate,
+  transitively co-built. The open piece is whether to fold the academy's build overhead into opportunity
+  scoring for the concentration moat, or leave that to calibration.)*
 - **Demand-concentration basis** — what "system character" is computed from (built profile, population,
-  tier mix) without re-introducing economy-type tables.
+  tier mix) without re-introducing economy-type tables. (S3.)

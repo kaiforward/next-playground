@@ -14,13 +14,62 @@
  * bound). Recipe `inputs` are inert here — input-gating arrives with the
  * supply-chain cascade.
  */
-import type { ResourceType } from "@/lib/types/game";
-import { GOOD_NAMES } from "@/lib/constants/goods";
+import type { ResourceType, GoodTier } from "@/lib/types/game";
+import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { scaleValue, scaleRecord } from "@/lib/constants/economy-scale";
 
 export const HOUSING_TYPE = "housing";
+export const VOCATIONAL_SCHOOL_TYPE = "vocational_school";
+export const RESEARCH_INSTITUTE_TYPE = "research_institute";
+/** The two academy building type ids, in grade order. */
+export const ACADEMY_TYPES: string[] = [VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE];
+
+// ── Academy licensing (coarse first-cut; tune against sim equilibrium) ──
+// One academy licenses this much skilled-grade work system-wide; large enough that one
+// academy serves several factories, so academies are lumpy/concentrated, not per-factory.
+export const SKILL1_PER_SCHOOL = 150;
+export const SKILL2_PER_INSTITUTE = 90;
+
+/** Magnitude knob on recipe input-demand draws; neutral (1.0) until calibrated against sim equilibrium. */
+export const INPUT_DEMAND_MULTIPLIER = 1.0;
+
+/** Per-good labour requirement, partitioned across skill grades. The three shares SUM to the head count. */
+export interface LabourVector {
+  /** Tier-0-grade workers — no academy gate. */
+  unskilled: number;
+  /** Technician-grade work, licensed by vocational schools. */
+  skill1: number;
+  /** Engineer-grade work, licensed by research institutes. */
+  skill2: number;
+}
+
+/** Total head count one building of this good demands (the partition's sum). */
+export function labourTotal(v: LabourVector): number {
+  return v.unskilled + v.skill1 + v.skill2;
+}
+
+// ── Labour vectors (coarse first-cut; tune against sim equilibrium) ──
+// Per-tier default partition; advanced manufacturing is both labour- and skill-heavier.
+const LABOUR_BY_TIER: Record<GoodTier, LabourVector> = {
+  0: { unskilled: 10, skill1: 0, skill2: 0 },
+  1: { unskilled: 18, skill1: 7, skill2: 0 },
+  2: { unskilled: 30, skill1: 20, skill2: 10 },
+};
+// Per-good overrides where the partition reads differently (only a few; rest = tier default).
+const LABOUR_OVERRIDES: Record<string, LabourVector> = {
+  // Most-integrated tier-2 — engineer- and labour-heavy.
+  ship_frames: { unskilled: 35, skill1: 25, skill2: 20 },
+  reactor_cores: { unskilled: 30, skill1: 22, skill2: 18 },
+  weapons_systems: { unskilled: 30, skill1: 22, skill2: 16 },
+  // Labour-heavy, low-skill tier-1.
+  consumer_goods: { unskilled: 28, skill1: 8, skill2: 0 },
+};
+
+function labourFor(goodId: string): LabourVector {
+  return LABOUR_OVERRIDES[goodId] ?? LABOUR_BY_TIER[GOOD_TIER_BY_KEY[goodId] ?? 0];
+}
 
 export interface BuildingTypeDef {
   /** Good this type produces (=== type id in this model). Undefined for housing. */
@@ -31,20 +80,22 @@ export interface BuildingTypeDef {
   resource?: ResourceType;
   /** Build-space units one building occupies. */
   spaceCost: number;
-  /** Population needed to fully staff one building. Production types only. */
-  labourPerUnit?: number;
+  /** Skill-partitioned population to fully staff one building. Production types + academies. */
+  labour?: LabourVector;
   /** Output units one building yields at full labour (and inputs). Production types only. */
   outputPerUnit?: number;
   /** popCap added per building. Housing only. */
   popProvided?: number;
+  /** skill-1 work this building licenses system-wide. Vocational school only. */
+  skill1Licensed?: number;
+  /** skill-2 work this building licenses system-wide. Research institute only. */
+  skill2Licensed?: number;
 }
 
 // ── Build-space knobs (first-draft; simulator-calibrated) ──
 /** Default build-space footprint of one building. */
 export const DEFAULT_SPACE_COST = 1.0;
-/** Default population to fully staff one production building. */
-export const DEFAULT_LABOUR_PER_UNIT = 25;
-/** popCap one population-centre building provides. Below labourPerUnit by design — pop-centres alone can't staff the industry they enable, forcing a mixed build-out. */
+/** popCap one population-centre building provides. Below a building's labour total by design — pop-centres alone can't staff the industry they enable, forcing a mixed build-out. */
 export const POP_CENTRE_DENSITY = 20;
 
 /**
@@ -78,6 +129,17 @@ export const OUTPUT_PER_UNIT: Record<string, number> = scaleRecord(
   Object.fromEntries(GOOD_NAMES.map((g) => [g, OUTPUT_OVERRIDES[g] ?? GOOD_PRODUCTION[g]?.coeff ?? 1])),
 );
 
+// ── Per-good general-space footprint (coarse first-cut; tune against sim equilibrium) ──
+// Differentiates tier-1/2 factory footprints; default 1.0. Tier-0 extractor footprint stays
+// on the deposit-slot model (DEPOSIT_SLOT_FOOTPRINT), not spaceCost — extractor count is
+// capped by deposits, not general build-space.
+const SPACE_OVERRIDES: Record<string, number> = {
+  ship_frames: 4.0,
+  reactor_cores: 3.0,
+  machinery: 2.5,
+  weapons_systems: 2.5,
+};
+
 function buildProductionTypes(): Record<string, BuildingTypeDef> {
   const out: Record<string, BuildingTypeDef> = {};
   for (const goodId of GOOD_NAMES) {
@@ -87,8 +149,8 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
       outputGood: goodId,
       ...(recipe ? { inputs: recipe } : {}),
       ...(resource ? { resource } : {}),
-      spaceCost: DEFAULT_SPACE_COST,
-      labourPerUnit: DEFAULT_LABOUR_PER_UNIT,
+      spaceCost: SPACE_OVERRIDES[goodId] ?? DEFAULT_SPACE_COST,
+      labour: labourFor(goodId),
       outputPerUnit: OUTPUT_PER_UNIT[goodId],
     };
   }
@@ -98,6 +160,16 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
 export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
   ...buildProductionTypes(),
   [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: POP_CENTRE_DENSITY },
+  [VOCATIONAL_SCHOOL_TYPE]: {
+    spaceCost: 1.5,
+    labour: { unskilled: 15, skill1: 0, skill2: 0 },
+    skill1Licensed: SKILL1_PER_SCHOOL,
+  },
+  [RESEARCH_INSTITUTE_TYPE]: {
+    spaceCost: 2.0,
+    labour: { unskilled: 20, skill1: 0, skill2: 0 },
+    skill2Licensed: SKILL2_PER_INSTITUTE,
+  },
 };
 
 /** The 26 production building type ids (good ids), in canonical good order. */

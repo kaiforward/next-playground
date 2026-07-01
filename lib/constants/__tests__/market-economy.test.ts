@@ -11,9 +11,13 @@ import {
 import { GOVERNMENT_TYPES } from "../government";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { inputDemandForGood, facilityStorageForGood } from "@/lib/engine/industry";
+import type { LabourState } from "@/lib/engine/industry";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
+
+/** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
+const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
 
 describe("demandRateForGood", () => {
   it("returns per-capita-need × population for a populated system", () => {
@@ -38,21 +42,25 @@ describe("demandRateForGood", () => {
 
 describe("totalDemandRateForGood", () => {
   it("equals civilian demand when no buildings consume the good", () => {
-    expect(totalDemandRateForGood("ore", 1000, {}, 1, unitResourceVector())).toBeCloseTo(demandRateForGood("ore", 1000), 6);
+    expect(totalDemandRateForGood("ore", 1000, {}, unitResourceVector())).toBeCloseTo(demandRateForGood("ore", 1000), 6);
   });
 
   it("adds the production-input draw on top of civilian demand", () => {
     // 10 metals buildings draw ore (recipe { ore: 1 }) → a non-zero industrial term.
-    const buildings = { metals: 10 };
-    const industrial = inputDemandForGood(buildings, "ore", 1, unitResourceVector());
+    // metals is skill1-gated (tier 1); a vocational_school licenses the skill1 pool
+    // so this system's real (computeLabourState-derived) state is fully staffed,
+    // matching FULL — otherwise totalDemandRateForGood's internal skill gate would
+    // zero the forecast out from under this test.
+    const buildings = { metals: 10, vocational_school: 1 };
+    const industrial = inputDemandForGood(buildings, "ore", FULL, unitResourceVector());
     expect(industrial).toBeGreaterThan(0);
-    const total = totalDemandRateForGood("ore", 1000, buildings, 1, unitResourceVector());
+    const total = totalDemandRateForGood("ore", 1000, buildings, unitResourceVector());
     expect(total).toBeCloseTo(demandRateForGood("ore", 1000) + industrial, 6);
     expect(total).toBeGreaterThan(demandRateForGood("ore", 1000));
   });
 
   it("floors at MIN_DEMAND when both civilian and industrial demand are zero", () => {
-    expect(totalDemandRateForGood("not_a_good", 0, {}, 1, unitResourceVector())).toBe(MIN_DEMAND);
+    expect(totalDemandRateForGood("not_a_good", 0, {}, unitResourceVector())).toBe(MIN_DEMAND);
   });
 });
 

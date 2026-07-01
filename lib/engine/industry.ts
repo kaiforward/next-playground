@@ -2,15 +2,19 @@
  * Pure capacity-driven production math — zero DB dependency.
  *
  * Production derives from the built industrial base:
- *   production_g = Σ_{t: outputGood_t = g} count_t × outputPerUnit_t × labourFulfillment × yieldMult
+ *   production_g = Σ_{t: outputGood_t = g} count_t × outputPerUnit_t × effectiveFulfilment(tier_g) × yieldMult
  * where yieldMult = yields[resource] for tier-0 goods, 1 for tier-1+.
- * Labour is a single system-wide ratio (uniform proportional allocation):
- *   labourFulfillment = min(1, population / Σ count_t × labourPerUnit_t)
+ * Labour is a system-wide `LabourState` (uniform proportional allocation) split into
+ * a headcount gate and two skill-ceiling gates:
+ *   labourFulfil = min(1, population / Σ count_t × labourTotal_t)
+ *   skill1Fulfil = min(1, skill1Cap / skill1Demand); skill2Fulfil analogous
+ * `effectiveFulfilment` picks the pools a good's tier actually draws on (tier-0:
+ * labourFulfil only; tier-1: + skill1Fulfil; tier-2: + skill2Fulfil).
  * Input-gating (the recipe `inputs`) is not applied here — that is the
  * supply-chain cascade. The same functions feed the live tick, the simulator,
  * and the substrate read service.
  */
-import type { QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
+import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -25,6 +29,8 @@ import {
   POP_CENTRE_STORAGE_DEFAULT,
   IDLE_COASTING_FRACTION,
   IDLE_COLLAPSING_FRACTION,
+  labourTotal,
+  INPUT_DEMAND_MULTIPLIER,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -33,13 +39,13 @@ import { outputUptake } from "@/lib/engine/tick";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
-/** Σ count × labourPerUnit across production types. Housing demands no labour. */
+/** Σ count × labourTotal across types that demand labour (production + academies). Housing demands none. */
 export function labourDemand(buildings: Record<string, number>): number {
   let demand = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
-    const labour = BUILDING_TYPES[type]?.labourPerUnit;
-    if (labour) demand += count * labour;
+    const labour = BUILDING_TYPES[type]?.labour;
+    if (labour) demand += count * labourTotal(labour);
   }
   return demand;
 }
@@ -48,6 +54,119 @@ export function labourDemand(buildings: Record<string, number>): number {
 export function labourFulfillment(population: number, demand: number): number {
   if (demand <= 0) return 1;
   return Math.min(1, Math.max(0, population) / demand);
+}
+
+/** System-wide labour fulfilment, split into the headcount gate and the two skill-ceiling gates. */
+export interface LabourState {
+  /** min(1, population / Σ labour totals) — the headcount gate (unchanged). */
+  labourFulfil: number;
+  /** min(1, skill1Cap / skill1Demand) — technician licensing. 1 when nothing demands skill-1. */
+  skill1Fulfil: number;
+  /** min(1, skill2Cap / skill2Demand) — engineer licensing. 1 when nothing demands skill-2. */
+  skill2Fulfil: number;
+}
+
+/** Σ count × labour.skill1 across all buildings. */
+export function skill1Demand(buildings: Record<string, number>): number {
+  let d = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    const v = BUILDING_TYPES[type]?.labour;
+    if (v) d += count * v.skill1;
+  }
+  return d;
+}
+/** Σ count × labour.skill2 across all buildings. */
+export function skill2Demand(buildings: Record<string, number>): number {
+  let d = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    const v = BUILDING_TYPES[type]?.labour;
+    if (v) d += count * v.skill2;
+  }
+  return d;
+}
+/** Σ vocational_school × SKILL1_PER_SCHOOL (read from skill1Licensed). */
+export function skill1Cap(buildings: Record<string, number>): number {
+  let c = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    c += count * (BUILDING_TYPES[type]?.skill1Licensed ?? 0);
+  }
+  return c;
+}
+/** Σ research_institute × SKILL2_PER_INSTITUTE (read from skill2Licensed). */
+export function skill2Cap(buildings: Record<string, number>): number {
+  let c = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    c += count * (BUILDING_TYPES[type]?.skill2Licensed ?? 0);
+  }
+  return c;
+}
+
+/** One ratio in [0,1]: cap/demand, or 1 when nothing is demanded. */
+function poolFulfil(cap: number, demand: number): number {
+  if (demand <= 0) return 1;
+  return Math.min(1, Math.max(0, cap) / demand);
+}
+
+/** Headcount demand + skill demand/cap totals for one system. */
+export interface LabourParts {
+  /** Σ count × labourTotal — the headcount demand. */
+  demand: number;
+  skill1Demand: number;
+  skill1Cap: number;
+  skill2Demand: number;
+  skill2Cap: number;
+}
+
+/**
+ * Every labour demand/cap total for a system in ONE pass over its buildings. The
+ * per-total helpers (labourDemand, skill1Demand, …) remain for callers that need a
+ * single figure; this is the batched path for the hot callers that need all of them
+ * at once (computeLabourState, computeSystemDecay).
+ */
+export function labourParts(buildings: Record<string, number>): LabourParts {
+  let demand = 0;
+  let s1d = 0;
+  let s1c = 0;
+  let s2d = 0;
+  let s2c = 0;
+  for (const [type, count] of Object.entries(buildings)) {
+    if (count <= 0) continue;
+    const def = BUILDING_TYPES[type];
+    const v = def?.labour;
+    if (v) {
+      demand += count * labourTotal(v);
+      s1d += count * v.skill1;
+      s2d += count * v.skill2;
+    }
+    s1c += count * (def?.skill1Licensed ?? 0);
+    s2c += count * (def?.skill2Licensed ?? 0);
+  }
+  return { demand, skill1Demand: s1d, skill1Cap: s1c, skill2Demand: s2d, skill2Cap: s2c };
+}
+
+/** Derive the three-part labour state from precomputed parts. */
+export function labourStateFromParts(parts: LabourParts, population: number): LabourState {
+  return {
+    labourFulfil: labourFulfillment(population, parts.demand),
+    skill1Fulfil: poolFulfil(parts.skill1Cap, parts.skill1Demand),
+    skill2Fulfil: poolFulfil(parts.skill2Cap, parts.skill2Demand),
+  };
+}
+
+/** Compute the three-part labour state for one system once; reuse across its goods. */
+export function computeLabourState(buildings: Record<string, number>, population: number): LabourState {
+  return labourStateFromParts(labourParts(buildings), population);
+}
+
+/** Effective staffing ratio for a good of `tier`: each tier min()s only the pools it draws on. */
+export function effectiveFulfilment(state: LabourState, tier: GoodTier): number {
+  if (tier <= 0) return state.labourFulfil;
+  if (tier === 1) return Math.min(state.labourFulfil, state.skill1Fulfil);
+  return Math.min(state.labourFulfil, state.skill1Fulfil, state.skill2Fulfil);
 }
 
 /**
@@ -80,9 +199,10 @@ export function housingPopCap(buildings: Record<string, number>): number {
 export function buildingProduction(
   buildings: Record<string, number>,
   goodId: string,
-  fulfillment: number,
+  state: LabourState,
   yields: ResourceVector,
 ): number {
+  const fulfillment = effectiveFulfilment(state, GOOD_TIER_BY_KEY[goodId] ?? 0);
   let rate = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
@@ -109,11 +229,11 @@ export function capacityGoodRates(
   population: number,
   yields: ResourceVector,
 ): SubstrateGoodRate[] {
-  const fulfillment = labourFulfillment(population, labourDemand(buildings));
+  const state = computeLabourState(buildings, population);
   const pop = Math.max(0, population);
   return GOOD_NAMES.map((goodId) => ({
     goodId,
-    production: buildingProduction(buildings, goodId, fulfillment, yields),
+    production: buildingProduction(buildings, goodId, state, yields),
     consumption: (GOOD_CONSUMPTION[goodId] ?? 0) * pop,
   }));
 }
@@ -122,27 +242,26 @@ export function capacityGoodRates(
  * Production-input demand on `goodId` from the local industrial base: the total
  * desired (uncapped) draw of `goodId` across every building type that consumes
  * it. Capacity-based — the stable pricing-reference term folded into demandRate.
- * `fulfillment` is the system-wide labour ratio
- * (`labourFulfillment(population, labourDemand(buildings))`).
+ * `state` is the system-wide labour state (`computeLabourState(buildings, population)`).
  */
 export function inputDemandForGood(
   buildings: Record<string, number>,
   goodId: string,
-  fulfillment: number,
+  state: LabourState,
   yields: ResourceVector,
 ): number {
   let demand = 0;
   for (const consumer of GOOD_RECIPE_CONSUMERS[goodId] ?? []) {
-    demand += buildingProduction(buildings, consumer.goodId, fulfillment, yields) * consumer.perOutput;
+    demand += buildingProduction(buildings, consumer.goodId, state, yields) * consumer.perOutput;
   }
-  return demand;
+  return demand * INPUT_DEMAND_MULTIPLIER;
 }
 
 /**
  * Same production-input demand as `inputDemandForGood`, but reading each consumer good's
  * production from a precomputed per-good map instead of recomputing `buildingProduction`.
  * Use when the production rates are already in hand (e.g. from `capacityGoodRates`): a consumer's
- * production from that map is identical to `buildingProduction(...)` at the same fulfillment/yields.
+ * production from that map is identical to `buildingProduction(...)` at the same state/yields.
  */
 export function inputDemandFromProduction(
   goodId: string,
@@ -152,11 +271,11 @@ export function inputDemandFromProduction(
   for (const consumer of GOOD_RECIPE_CONSUMERS[goodId] ?? []) {
     demand += (productionByGood.get(consumer.goodId) ?? 0) * consumer.perOutput;
   }
-  return demand;
+  return demand * INPUT_DEMAND_MULTIPLIER;
 }
 
 /** Why a building's `used` sits below its `count` — the binding constraint for the idle caption. */
-export type IdleReason = "occupancy" | "labour" | "selling";
+export type IdleReason = "occupancy" | "labour" | "skill" | "selling";
 
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
@@ -257,16 +376,19 @@ export function buildIndustryReadout(
   yields: ResourceVector,
   maxStockOf?: (goodId: string) => number | undefined,
 ): SystemIndustryReadout {
-  const demand = labourDemand(buildings);
-  const fulfillment = labourFulfillment(population, demand);
+  const state = computeLabourState(buildings, population);
   const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
 
   // Per-building "in use" — the decay-relevant quantity (mirrors computeSystemDecay):
   //  - housing: occupancy = population / POP_CENTRE_DENSITY,
-  //  - producers: count × min(labourFulfillment, outputUptake) (staffed AND selling).
-  // idleReason names the binding constraint so the panel can caption an idle row.
+  //  - producers: count × min(effectiveFulfilment(tier), outputUptake) (staffed AND selling),
+  //    where effectiveFulfilment is the skill-gated ratio for the good's tier — a tier-1/2
+  //    building that is headcount-full but skill-starved (no licensing academy) reads as idle too.
+  // idleReason names the binding constraint so the panel can caption an idle row:
+  // "labour" when headcount itself is short, "skill" when a skill ceiling (no academy)
+  // drags effectiveFulfilment below the headcount gate, "selling" when output can't move.
   // outputUptake needs the maxStock band; without it (legacy callers) output sells
-  // freely (uptake 1) so `used` falls back to the labour-only figure.
+  // freely (uptake 1) so `used` falls back to the fulfilment-only figure.
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
   for (const [buildingType, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
@@ -277,7 +399,7 @@ export function buildIndustryReadout(
     }
     const def = BUILDING_TYPES[buildingType];
     const outputGood = def?.outputGood;
-    const tier: number = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
+    const tier: GoodTier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
     // Output uptake needs the market band; a good with no band (no market row, or a
     // legacy caller without maxStockOf) sells freely (uptake 1) → labour-only `used`.
     let uptake = 1;
@@ -287,9 +409,14 @@ export function buildIndustryReadout(
         uptake = outputUptake(stockOf(outputGood), minStockOf(outputGood), maxStock);
       }
     }
-    const used = count * Math.min(fulfillment, uptake);
-    const idleReason: IdleReason | undefined =
-      used < count ? (uptake < fulfillment ? "selling" : "labour") : undefined;
+    const fulfil = effectiveFulfilment(state, tier);
+    const used = count * Math.min(fulfil, uptake);
+    let idleReason: IdleReason | undefined;
+    if (used < count) {
+      if (uptake < fulfil) idleReason = "selling";
+      else if (fulfil < state.labourFulfil) idleReason = "skill";
+      else idleReason = "labour";
+    }
     buildingEntries.push({ buildingType, outputGood, tier, count, used, idleReason });
   }
   buildingEntries.sort((a, b) => a.tier - b.tier || a.buildingType.localeCompare(b.buildingType));
@@ -305,7 +432,7 @@ export function buildIndustryReadout(
     const recipe = GOOD_RECIPES[goodId];
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
-    const effectiveProduction = buildingProduction(buildings, goodId, fulfillment, yields);
+    const effectiveProduction = buildingProduction(buildings, goodId, state, yields);
     const gate = inputGate(goodId, effectiveProduction, stockOf, minStockOf);
 
     const throttledBy: string[] = [];
@@ -321,7 +448,7 @@ export function buildIndustryReadout(
   supplyChainEntries.sort((a, b) => a.inputGate - b.inputGate);
 
   return {
-    labourFulfillment: fulfillment,
+    labourFulfillment: state.labourFulfil,
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
   };
