@@ -291,8 +291,11 @@ export function inputDemandFromProduction(
   return demand * INPUT_DEMAND_MULTIPLIER;
 }
 
-/** Why a building's `used` sits below its `count` — the binding constraint for the idle caption. */
-export type IdleReason = "occupancy" | "labour" | "skill" | "selling";
+/**
+ * Why a building's `used` sits below its `count` — the binding constraint for the idle caption.
+ * "skill1" names the vocational school (technicians), "skill2" the research institute (engineers).
+ */
+export type IdleReason = "occupancy" | "labour" | "skill1" | "skill2" | "selling";
 
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
@@ -411,8 +414,9 @@ export function buildIndustryReadout(
   //    where effectiveFulfilment is the skill-gated ratio for the good's tier — a tier-1/2
   //    building that is headcount-full but skill-starved (no licensing academy) reads as idle too.
   // idleReason names the binding constraint so the panel can caption an idle row:
-  // "labour" when headcount itself is short, "skill" when a skill ceiling (no academy)
-  // drags effectiveFulfilment below the headcount gate, "selling" when output can't move.
+  // "labour" when headcount itself is short, "skill1"/"skill2" when a skill ceiling
+  // (no vocational school / research institute) drags effectiveFulfilment below the
+  // headcount gate, "selling" when output can't move.
   // outputUptake needs the maxStock band; without it (legacy callers) output sells
   // freely (uptake 1) so `used` falls back to the fulfilment-only figure.
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
@@ -440,8 +444,11 @@ export function buildIndustryReadout(
     let idleReason: IdleReason | undefined;
     if (used < count) {
       if (uptake < fulfil) idleReason = "selling";
-      else if (fulfil < state.labourFulfil) idleReason = "skill";
-      else idleReason = "labour";
+      else if (fulfil < state.labourFulfil) {
+        // A skill ceiling binds. Name the pool that is actually the min the tier draws on;
+        // on a tier-2 tie (neither academy) the lower grade (skill1) wins — it is the prerequisite.
+        idleReason = tier >= 2 && state.skill2Fulfil < state.skill1Fulfil ? "skill2" : "skill1";
+      } else idleReason = "labour";
     }
     buildingEntries.push({ buildingType, outputGood, tier, count, used, idleReason });
   }

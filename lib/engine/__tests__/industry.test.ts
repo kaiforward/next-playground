@@ -337,7 +337,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
     const electronics = readout.buildings.find((b) => b.buildingType === "electronics")!;
     expect(electronics.used).toBeLessThan(4);
-    expect(electronics.idleReason).toBe("skill");
+    expect(electronics.idleReason).toBe("skill1"); // neither academy → lower grade wins the tie
   });
 
   it("'selling' when output uptake binds (stock pinned at the ceiling)", () => {
@@ -365,6 +365,33 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4, 6); // uptake 1, headcount + skill1 both fulfilled
+  });
+});
+
+describe("buildIndustryReadout — skill idle reason split", () => {
+  const MIN = 5;
+  const MAXBAND = () => 100;
+
+  it("'skill1' when a tier-1 good is fully staffed but no school licenses it", () => {
+    const buildings = { metals: 4 }; // tier-1 needs skill1; no vocational_school
+    const pop = labourDemand(buildings); // headcount fully staffed
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    expect(readout.buildings.find((b) => b.buildingType === "metals")!.idleReason).toBe("skill1");
+  });
+
+  it("'skill2' when a tier-2 good has skill1 licensed but no institute", () => {
+    // enough schools to cover skill1 demand, zero institutes → skill2 is the binding pool.
+    const buildings = { electronics: 1, vocational_school: 5 };
+    const pop = labourDemand(buildings);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    expect(readout.buildings.find((b) => b.buildingType === "electronics")!.idleReason).toBe("skill2");
+  });
+
+  it("'skill1' on a tier-2 good with neither academy (lower grade wins the tie)", () => {
+    const buildings = { electronics: 4 }; // skill1Fulfil === skill2Fulfil === 0
+    const pop = labourDemand(buildings);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    expect(readout.buildings.find((b) => b.buildingType === "electronics")!.idleReason).toBe("skill1");
   });
 });
 
