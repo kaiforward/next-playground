@@ -14,7 +14,7 @@ import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import { buildingHealth, industryHealth } from "@/lib/engine/industry";
-import type { IndustryHealth, IdleReason, SystemIndustryReadout } from "@/lib/engine/industry";
+import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour } from "@/lib/engine/industry";
 import type { QualityBandId } from "@/lib/types/game";
 import { formatMagnitude } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
@@ -58,6 +58,20 @@ function HealthGlyph({ health, className = "" }: { health: IndustryHealth; class
       {HEALTH_GLYPH[health]}
     </span>
   );
+}
+
+/** Labour-grade hues — distinct from health and from land (copper). Redundant U/T/E label at call sites. */
+const GRADE = {
+  unskilled: { bar: "bg-status-blue", text: "text-status-blue-light", tag: "U" },
+  skill1: { bar: "bg-status-cyan", text: "text-status-cyan-light", tag: "T" },
+  skill2: { bar: "bg-status-purple", text: "text-status-purple-light", tag: "E" },
+} as const;
+
+/** Coarse 3-band health for a pool fulfil ratio — drives the % numeral colour on the Labour card. */
+function poolHealth(fulfil: number): IndustryHealth {
+  if (fulfil >= 0.999) return "thriving";
+  if (fulfil >= 0.5) return "coasting";
+  return "declining";
 }
 
 // Faded-copper hatch = "housing can still grow here"; faint light hatch = idle capacity.
@@ -233,6 +247,66 @@ function LegendTooltip() {
   );
 }
 
+type Grade = keyof typeof GRADE;
+
+/** One Labour-card row: grade bar (grade hue) + supply/demand numbers + health-coloured %. */
+function LabourRow({
+  title,
+  grade,
+  have,
+  need,
+  fulfil,
+  supplyNoun,
+  demandNoun,
+  emptyCause,
+}: {
+  title: string;
+  grade: Grade;
+  have: number;
+  need: number;
+  fulfil: number;
+  supplyNoun: string;
+  demandNoun: string;
+  emptyCause?: string;
+}) {
+  const health = poolHealth(fulfil);
+  const noCap = need > 0 && have <= 0;
+  return (
+    <div className="py-1">
+      <div className="flex items-center gap-2.5">
+        <span className={`flex w-[92px] shrink-0 items-center gap-1.5 text-sm text-text-primary`}>
+          <span aria-hidden className={`inline-flex h-3.5 w-3.5 items-center justify-center border border-border font-mono text-[9px] ${GRADE[grade].text}`}>
+            {GRADE[grade].tag}
+          </span>
+          {title}
+        </span>
+        <div className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active">
+          <div className={`absolute inset-y-0 left-0 ${GRADE[grade].bar}`} style={{ width: `${Math.min(100, Math.max(0, fulfil * 100))}%` }} />
+        </div>
+        <span className={`w-9 text-right font-mono text-xs ${HEALTH[health].text}`}>{Math.round(fulfil * 100)}%</span>
+        <span className="w-[104px] text-right font-mono text-[11px] text-text-secondary">
+          <span className="text-text-primary">{formatMagnitude(have)}</span> {supplyNoun} / {formatMagnitude(need)} {demandNoun}
+        </span>
+      </div>
+      {noCap && emptyCause && (
+        <p className="mt-0.5 ml-[102px] text-[11px] text-status-red-light">{emptyCause}</p>
+      )}
+    </div>
+  );
+}
+
+/** System-wide labour: workforce headcount + the two academy-licensed skill ceilings. */
+function LabourCard({ labour }: { labour: SystemLabour }) {
+  return (
+    <Card variant="bordered" padding="md">
+      <p className="mb-1 font-display text-[11px] font-semibold uppercase tracking-wider text-text-primary">Labour</p>
+      <LabourRow title="Workforce" grade="unskilled" have={labour.workforce.have} need={labour.workforce.need} fulfil={labour.workforce.fulfil} supplyNoun="pop" demandNoun="jobs" />
+      <LabourRow title="Technicians" grade="skill1" have={labour.skill1.have} need={labour.skill1.need} fulfil={labour.skill1.fulfil} supplyNoun="lic" demandNoun="req" emptyCause="No vocational school — technician-grade work can't run." />
+      <LabourRow title="Engineers" grade="skill2" have={labour.skill2.have} need={labour.skill2.need} fulfil={labour.skill2.fulfil} supplyNoun="lic" demandNoun="req" emptyCause="No research institute — engineer-grade work can't run." />
+    </Card>
+  );
+}
+
 export function IndustryPanel({ systemId }: { systemId: string }) {
   const data = useSystemIndustry(systemId);
 
@@ -240,7 +314,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     return <EmptyState message="Scan this system with a ship in range to survey its industry." />;
   }
 
-  const { space, deposits, labourFulfillment, buildings, supplyChain, unrest } = data;
+  const { space, deposits, labour, labourFulfillment, buildings, supplyChain, unrest } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -302,6 +376,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <span className="text-status-red-light">{tally.declining} collapsing</span>
         </p>
       </Card>
+
+      <LabourCard labour={labour} />
 
       {/* Deposit land — extractors */}
       {extractors.length > 0 && (
