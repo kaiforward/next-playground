@@ -35,7 +35,8 @@ const HEALTH: Record<IndustryHealth, { sys: string; row: string; badge: BadgeCol
 const IDLE_CAUSE: Record<IdleReason, string> = {
   occupancy: "low occupancy",
   labour: "labour short",
-  skill: "needs academy",
+  skill1: "needs vocational school",
+  skill2: "needs research institute",
   selling: "output not selling",
 };
 
