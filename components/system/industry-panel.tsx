@@ -17,7 +17,7 @@ import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descript
 import { buildingHealth, industryHealth, perGradeStaffing } from "@/lib/engine/industry";
 import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour } from "@/lib/engine/industry";
 import type { GoodTier, QualityBandId } from "@/lib/types/game";
-import { formatMagnitude } from "@/lib/utils/format";
+import { formatMagnitude, formatPeople } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -111,14 +111,15 @@ function LandBar({ segments }: { segments: Array<{ key: string; width: number; c
 }
 
 /** Trailing numeric cluster widths — shared by the header and every row so they align as a table. */
-const COL = { staff: "w-9", used: "w-[52px]", out: "w-[60px]" };
+const COL = { staff: "w-10", used: "w-16", out: "w-14" };
 
 /** Column header labelling the trailing numbers so the block reads like a table. */
 function RowHeader({ showOutput }: { showOutput: boolean }) {
   return (
-    <div className="flex items-center gap-2.5 px-3 pb-1 font-mono text-[9px] uppercase tracking-wider text-text-tertiary/70">
+    <div className="flex items-center gap-2.5 px-3 pb-1 pt-2 font-mono text-[9px] uppercase tracking-wider text-text-tertiary/70">
       <span className="w-3 shrink-0" aria-hidden />
-      <span className="min-w-[104px] flex-1">{" "}</span>
+      <span className="w-40 shrink-0" aria-hidden />
+      <span className="flex-1" aria-hidden />
       <span className={`${COL.staff} text-right`}>staff</span>
       <span className={`${COL.used} text-right`}>used/built</span>
       {showOutput && <span className={`${COL.out} text-right`}>out/cyc</span>}
@@ -208,7 +209,7 @@ function ProductionRow({
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const meta = HEALTH[health];
   const staffPct = Math.max(0, Math.min(100, b.staffedFraction * 100));
-  const usedDisplay = Math.round(b.staffedFraction * b.count);
+  const usedDisplay = formatMagnitude(b.staffedFraction * b.count);
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
 
   // Cause line — only for rows that aren't stable. Priority: over-capacity, unrest, then the idle constraint.
@@ -240,7 +241,7 @@ function ProductionRow({
         <HealthGlyph health={health} className="w-3 shrink-0 text-center text-[10px]" />
         <Tooltip>
           <TooltipTrigger asChild>
-            <button type="button" className="flex min-w-[104px] flex-1 items-center gap-1.5 text-left text-sm text-text-primary underline-offset-2 hover:underline">
+            <button type="button" className="flex w-40 shrink-0 items-center gap-1.5 text-left text-sm text-text-primary underline-offset-2 hover:underline">
               {label(b.buildingType)}
               {yieldMult !== undefined && (
                 <span className={`font-mono text-[10px] ${yieldBand ? QUALITY_BAND_TEXT[yieldBand] : "text-text-tertiary"}`}>
@@ -381,8 +382,6 @@ function LabourRow({
   have,
   need,
   fulfil,
-  supplyNoun,
-  demandNoun,
   emptyCause,
 }: {
   title: string;
@@ -390,8 +389,6 @@ function LabourRow({
   have: number;
   need: number;
   fulfil: number;
-  supplyNoun: string;
-  demandNoun: string;
   emptyCause?: string;
 }) {
   const health = poolHealth(fulfil);
@@ -409,8 +406,8 @@ function LabourRow({
           <div className={`absolute inset-y-0 left-0 ${GRADE[grade].bar}`} style={{ width: `${Math.min(100, Math.max(0, fulfil * 100))}%` }} />
         </div>
         <span className={`w-9 text-right font-mono text-xs ${HEALTH[health].text}`}>{Math.round(fulfil * 100)}%</span>
-        <span className="w-[104px] text-right font-mono text-[11px] text-text-secondary">
-          <span className="text-text-primary">{formatMagnitude(have)}</span> {supplyNoun} / {formatMagnitude(need)} {demandNoun}
+        <span className="w-28 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-text-secondary">
+          <span className="text-text-primary">{formatPeople(have)}</span> / {formatPeople(need)}
         </span>
       </div>
       {noCap && emptyCause && (
@@ -425,9 +422,9 @@ function LabourCard({ labour }: { labour: SystemLabour }) {
   return (
     <Card variant="bordered" padding="md">
       <p className="mb-1 font-display text-[11px] font-semibold uppercase tracking-wider text-text-primary">Labour</p>
-      <LabourRow title="Workforce" grade="unskilled" have={labour.workforce.have} need={labour.workforce.need} fulfil={labour.workforce.fulfil} supplyNoun="pop" demandNoun="jobs" />
-      <LabourRow title="Technicians" grade="skill1" have={labour.skill1.have} need={labour.skill1.need} fulfil={labour.skill1.fulfil} supplyNoun="lic" demandNoun="req" emptyCause="No vocational school — technician-grade work can't run." />
-      <LabourRow title="Engineers" grade="skill2" have={labour.skill2.have} need={labour.skill2.need} fulfil={labour.skill2.fulfil} supplyNoun="lic" demandNoun="req" emptyCause="No research institute — engineer-grade work can't run." />
+      <LabourRow title="Workforce" grade="unskilled" have={labour.workforce.have} need={labour.workforce.need} fulfil={labour.workforce.fulfil} />
+      <LabourRow title="Technicians" grade="skill1" have={labour.skill1.have} need={labour.skill1.need} fulfil={labour.skill1.fulfil} emptyCause="No vocational school — technician-grade work can't run." />
+      <LabourRow title="Engineers" grade="skill2" have={labour.skill2.have} need={labour.skill2.need} fulfil={labour.skill2.fulfil} emptyCause="No research institute — engineer-grade work can't run." />
     </Card>
   );
 }
@@ -525,7 +522,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             ]}
           />
           <RowHeader showOutput />
-          <div className="mt-2.5 -mx-1">
+          <div className="mt-2.5">
             {extractors.map((b) => {
               const dep = yieldFor(b);
               return <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} yieldMult={dep?.yieldMult} yieldBand={dep?.band} density={density} showOutput />;
@@ -549,7 +546,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         {housing.length > 0 && (
           <>
             <RoleLabel>Housing</RoleLabel>
-            <div className="-mx-1">
+            <div>
               {housing.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
             </div>
           </>
@@ -557,7 +554,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         {academies.length > 0 && (
           <>
             <RoleLabel>Academies</RoleLabel>
-            <div className="-mx-1">
+            <div>
               {academies.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
             </div>
           </>
@@ -566,7 +563,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <>
             <RoleLabel>Production</RoleLabel>
             <RowHeader showOutput />
-            <div className="-mx-1">
+            <div>
               {factories.map((b) => (
                 <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} showOutput supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
               ))}

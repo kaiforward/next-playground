@@ -65,3 +65,17 @@ export function formatHeadcountShort(pop: number): string {
     maximumFractionDigits: 1,
   }).format(people);
 }
+
+/**
+ * Compact people count from an abstract population Float WITHOUT the whole-unit
+ * pre-round formatHeadcountShort does — so sub-million quantities keep K precision:
+ * 198 -> "198M", 3.8 -> "3.8M", 0.98 -> "980K", 0.011 -> "11K". Use where small
+ * magnitudes matter (e.g. the Labour card's skill pools, which are often < 1 unit).
+ */
+export function formatPeople(pop: number): string {
+  if (pop <= 0) return "0";
+  return new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumSignificantDigits: 3,
+  }).format(pop * PEOPLE_PER_UNIT);
+}
