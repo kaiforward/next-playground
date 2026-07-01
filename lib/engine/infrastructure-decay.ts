@@ -11,14 +11,35 @@
  *    use — the infrastructure mirror of the population decline term, the snowball.
  *
  * "Used" depends on the building's role:
- *  - housing  → occupancy: population / POP_CENTRE_DENSITY (units the pop fills).
- *  - production → staffed AND selling: count × min(labourFulfillment, outputUptake).
+ *  - housing            → occupancy: population / POP_CENTRE_DENSITY (units the pop fills).
+ *  - vocational_school / research_institute → how much of its OWN licensed skill
+ *    capacity the system's skill demand actually draws on: count × min(1, skillDemand/skillCap).
+ *    An academy licensing more than the system needs reads as idle and sheds, same
+ *    as an over-built factory.
+ *  - production (everything else) → staffed AND selling: count × min(effectiveFulfilment, outputUptake),
+ *    where effectiveFulfilment is the skill-gated ratio for the good's tier — a
+ *    tier-1/2 building that is headcount-full but skill-starved reads as idle too.
  *
  * Decay is downward-only and floored at 0. Growth is deliberately excluded — that
  * is a deliberate, treasury-funded decision and belongs to SP5.
  */
-import { labourDemand, labourFulfillment, housingPopCap } from "@/lib/engine/industry";
-import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import {
+  computeLabourState,
+  effectiveFulfilment,
+  housingPopCap,
+  skill1Cap,
+  skill1Demand,
+  skill2Cap,
+  skill2Demand,
+} from "@/lib/engine/industry";
+import {
+  BUILDING_TYPES,
+  HOUSING_TYPE,
+  POP_CENTRE_DENSITY,
+  RESEARCH_INSTITUTE_TYPE,
+  VOCATIONAL_SCHOOL_TYPE,
+} from "@/lib/constants/industry";
+import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 
 export interface DecayParams {
@@ -76,12 +97,17 @@ export function decayedCount(count: number, used: number, unrest: number, params
 
 /**
  * Decay one system's whole built base. Returns only the building types whose count
- * actually fell (so writes stay minimal) plus the recomputed popCap. Labour is the
- * existing system-wide ratio; uptake is per produced good (1 when not staffed/produced).
+ * actually fell (so writes stay minimal) plus the recomputed popCap. Labour state is
+ * computed once and reused across every building (the headcount gate + two skill-ceiling
+ * gates); uptake is per produced good (1 when not staffed/produced).
  */
 export function computeSystemDecay(input: SystemDecayInput, params: DecayParams): SystemDecayResult {
   const { buildings, population, unrest } = input;
-  const fulfillment = labourFulfillment(population, labourDemand(buildings));
+  const state = computeLabourState(buildings, population);
+  const s1d = skill1Demand(buildings);
+  const s1c = skill1Cap(buildings);
+  const s2d = skill2Demand(buildings);
+  const s2c = skill2Cap(buildings);
 
   const newCounts: Record<string, number> = {};
   for (const [type, count] of Object.entries(buildings)) {
@@ -89,10 +115,18 @@ export function computeSystemDecay(input: SystemDecayInput, params: DecayParams)
     let used: number;
     if (type === HOUSING_TYPE) {
       used = housingUsed(population);
+    } else if (type === VOCATIONAL_SCHOOL_TYPE) {
+      // Academy's own "used" is the inverse ratio of production fulfilment: how much
+      // of ITS licensed capacity the system's skill-1 demand actually draws on.
+      used = count * (s1c > 0 ? Math.min(1, s1d / s1c) : 0);
+    } else if (type === RESEARCH_INSTITUTE_TYPE) {
+      used = count * (s2c > 0 ? Math.min(1, s2d / s2c) : 0);
     } else {
       const outputGood = BUILDING_TYPES[type]?.outputGood;
       const uptake = outputGood !== undefined ? input.outputUptake(outputGood) : 1;
-      used = productionUsed(count, fulfillment, uptake);
+      const tier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
+      const fulfil = effectiveFulfilment(state, tier);
+      used = productionUsed(count, fulfil, uptake);
     }
     const next = decayedCount(count, used, unrest, params);
     if (next < count) newCounts[type] = next;

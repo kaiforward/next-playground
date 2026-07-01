@@ -7,7 +7,15 @@ import {
   decayedCount,
   computeSystemDecay,
 } from "@/lib/engine/infrastructure-decay";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY, BUILDING_TYPES, labourTotal } from "@/lib/constants/industry";
+import {
+  HOUSING_TYPE,
+  POP_CENTRE_DENSITY,
+  BUILDING_TYPES,
+  labourTotal,
+  VOCATIONAL_SCHOOL_TYPE,
+  RESEARCH_INSTITUTE_TYPE,
+  SKILL1_PER_SCHOOL,
+} from "@/lib/constants/industry";
 
 const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
 
@@ -105,5 +113,27 @@ describe("computeSystemDecay", () => {
       NO_DECAY,
     );
     expect(result.newCounts).toEqual({});
+  });
+});
+
+describe("academy decay", () => {
+  const params = { disuseRate: 0.5, unrestRate: 0, unrestThreshold: 0.5 };
+  it("sheds a vocational school that licenses more than the system demands", () => {
+    // 2 schools license 2×SKILL1_PER_SCHOOL; demand from one metals fab (skill1 7) is tiny → mostly idle.
+    const buildings = { metals: 1, vocational_school: 2, housing: 100 };
+    const res = computeSystemDecay({ buildings, population: 100000, unrest: 0, outputUptake: () => 1 }, params);
+    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE]).toBeLessThan(2);
+  });
+  it("does not shed a school whose licensing the system fully uses", () => {
+    // skill1 demand ≈ school cap: many fabs vs one school.
+    const fabs = Math.ceil(SKILL1_PER_SCHOOL / 7) + 5; // metals skill1 = 7
+    const buildings: Record<string, number> = { metals: fabs, vocational_school: 1, housing: 100000 };
+    const res = computeSystemDecay({ buildings, population: 100000, unrest: 0, outputUptake: () => 1 }, params);
+    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE] ?? 1).toBeGreaterThanOrEqual(1 - 1e-9);
+  });
+  it("fully decays an academy orphaned by collapsed industry (no skill demand)", () => {
+    const buildings = { research_institute: 1, housing: 10 };
+    const res = computeSystemDecay({ buildings, population: 100, unrest: 0, outputUptake: () => 1 }, params);
+    expect(res.newCounts[RESEARCH_INSTITUTE_TYPE]).toBeLessThan(1);
   });
 });
