@@ -262,6 +262,16 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 | **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
 
+> **Interstitial — Economy UI legibility (quick wins), between S1 and S2.** S1 made the mechanics deep
+> (skill tiers, academy licensing, per-good labour composition) but the Industry/system screens still show
+> numbers without the *why*. Before S2, a focused UI pass: surface the **system's skilled-labour pools**
+> (skill-1/skill-2 supply vs demand), each factory's **staffing usage** (which pool is binding — the data is
+> already in `buildIndustryReadout` via `effectiveFulfilment`/`idleReason`), and **short "what it does"
+> descriptions** for buildings, especially academies. Reuses the existing `Tooltip`. The ambitious
+> **Paradox-style nested/pinnable deep-tooltip system** (rich-tooltip infra + a cross-linking concept
+> glossary) is a SEPARATE, larger project deferred until after the full sX economy track. Both get a
+> collaborative HTML-prototype design pass before build. Tracked in `docs/BACKLOG.md`.
+
 > **S1 absorbs the old standalone "skilled labour" stage** (was S3). Per-good labour, per-good space, and
 > skilled labour are the same factor equation and must be calibrated jointly — see
 > [the merged factor model](#skill-tiered-labour-the-merged-factor-model). Splitting them would re-derive
