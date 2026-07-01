@@ -11,9 +11,13 @@ import {
 import { GOVERNMENT_TYPES } from "../government";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { inputDemandForGood, facilityStorageForGood } from "@/lib/engine/industry";
+import type { LabourState } from "@/lib/engine/industry";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
+
+/** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
+const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
 
 describe("demandRateForGood", () => {
   it("returns per-capita-need × population for a populated system", () => {
@@ -44,7 +48,7 @@ describe("totalDemandRateForGood", () => {
   it("adds the production-input draw on top of civilian demand", () => {
     // 10 metals buildings draw ore (recipe { ore: 1 }) → a non-zero industrial term.
     const buildings = { metals: 10 };
-    const industrial = inputDemandForGood(buildings, "ore", 1, unitResourceVector());
+    const industrial = inputDemandForGood(buildings, "ore", FULL, unitResourceVector());
     expect(industrial).toBeGreaterThan(0);
     const total = totalDemandRateForGood("ore", 1000, buildings, 1, unitResourceVector());
     expect(total).toBeCloseTo(demandRateForGood("ore", 1000) + industrial, 6);
