@@ -40,6 +40,26 @@ const IDLE_CAUSE: Record<IdleReason, string> = {
   selling: "output not selling",
 };
 
+/** Trend glyph per health — shape-first (colourblind-safe), colour reinforces. */
+const HEALTH_GLYPH: Record<IndustryHealth, string> = {
+  thriving: "▲",
+  coasting: "▬",
+  declining: "▼",
+};
+
+/** The one at-a-glance state signal: a trend glyph coloured by health. */
+function HealthGlyph({ health, className = "" }: { health: IndustryHealth; className?: string }) {
+  return (
+    <span
+      aria-label={HEALTH[health].sys}
+      title={HEALTH[health].sys}
+      className={`font-mono leading-none ${HEALTH[health].text} ${className}`}
+    >
+      {HEALTH_GLYPH[health]}
+    </span>
+  );
+}
+
 // Faded-copper hatch = "housing can still grow here"; faint light hatch = idle capacity.
 const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 2px, transparent 2px 6px)";
 const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(201,209,217,0.06) 4px 8px)";
@@ -266,7 +286,10 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
       {/* System health strip */}
       <Card variant="bordered" padding="md">
         <div className="flex items-center gap-2.5">
-          <Badge color={HEALTH[sysHealth].badge}>{HEALTH[sysHealth].sys}</Badge>
+          <Badge color={HEALTH[sysHealth].badge}>
+            <HealthGlyph health={sysHealth} className="mr-1 text-xs" />
+            {HEALTH[sysHealth].sys}
+          </Badge>
           <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
             <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
             <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
