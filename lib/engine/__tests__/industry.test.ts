@@ -22,8 +22,10 @@ import {
   skill1Cap,
   skill2Cap,
   perGradeStaffing,
+  computeLabourAllocation,
+  skillLicensing,
 } from "@/lib/engine/industry";
-import type { IndustryHealth, LabourState, GradeStaffing } from "@/lib/engine/industry";
+import type { IndustryHealth, LabourState, GradeStaffing, LabourParts } from "@/lib/engine/industry";
 import {
   DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
@@ -656,5 +658,90 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     const readout = buildIndustryReadout({ [HOUSING_TYPE]: 3, vocational_school: 1 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
     expect(readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!.output).toBeUndefined();
     expect(readout.buildings.find((b) => b.buildingType === "vocational_school")!.output).toBeUndefined();
+  });
+});
+
+describe("computeLabourAllocation", () => {
+  // parts: demand is total heads (unskilled + skill1 + skill2); unskilled jobs are the remainder.
+  const parts = (p: Partial<LabourParts>): LabourParts => ({
+    demand: 0, skill1Demand: 0, skill1Cap: 0, skill2Demand: 0, skill2Cap: 0, ...p,
+  });
+
+  it("decomposes a labour-surplus system into disjoint role buckets + unemployed summing to population", () => {
+    // unskilled jobs = 177 - 26 - 11 = 140; caps exceed skill demand (idle seats live in skillLicensing).
+    const a = computeLabourAllocation(
+      parts({ demand: 177, skill1Demand: 26, skill1Cap: 27, skill2Demand: 11, skill2Cap: 11.5 }),
+      183,
+    );
+    expect(a.population).toBe(183);
+    expect(a.unskilled).toBeCloseTo(140, 6);
+    expect(a.technicians).toBeCloseTo(26, 6);
+    expect(a.engineers).toBeCloseTo(11, 6);
+    expect(a.unemployed).toBeCloseTo(6, 6);
+    expect(a.unskilled + a.technicians + a.engineers + a.unemployed).toBeCloseTo(183, 6);
+  });
+
+  it("puts the whole population in unemployed when nothing demands labour", () => {
+    const a = computeLabourAllocation(parts({ demand: 0 }), 100);
+    expect(a).toEqual({ population: 100, unskilled: 0, technicians: 0, engineers: 0, unemployed: 100 });
+  });
+
+  it("caps a skilled bucket at its licence ceiling — unlicensable jobs don't become skilled workers", () => {
+    // skill2Cap 12 < skill2Demand 20: only 12 engineers exist; the 8 unlicensed jobs stay unfilled.
+    const a = computeLabourAllocation(
+      parts({ demand: 100, skill1Demand: 20, skill1Cap: 20, skill2Demand: 20, skill2Cap: 12 }),
+      200,
+    );
+    expect(a.engineers).toBeCloseTo(12, 6);
+    expect(a.technicians).toBeCloseTo(20, 6);
+    expect(a.unskilled).toBeCloseTo(60, 6); // unskilled jobs = 100 - 20 - 20 = 60
+    expect(a.unemployed).toBeCloseTo(108, 6);
+  });
+
+  it("fills scarce population skilled-first so segments never exceed population", () => {
+    // pop 50 < total heads 100: engineers (20) + technicians (20) exhaust 40, unskilled gets the last 10, none idle.
+    const a = computeLabourAllocation(
+      parts({ demand: 100, skill1Demand: 20, skill1Cap: 20, skill2Demand: 20, skill2Cap: 20 }),
+      50,
+    );
+    expect(a.engineers).toBeCloseTo(20, 6);
+    expect(a.technicians).toBeCloseTo(20, 6);
+    expect(a.unskilled).toBeCloseTo(10, 6);
+    expect(a.unemployed).toBe(0);
+    expect(a.unskilled + a.technicians + a.engineers).toBeCloseTo(50, 6);
+  });
+
+  it("treats a non-positive population as fully empty", () => {
+    expect(computeLabourAllocation(parts({ demand: 50, skill1Demand: 10, skill1Cap: 10 }), 0))
+      .toEqual({ population: 0, unskilled: 0, technicians: 0, engineers: 0, unemployed: 0 });
+  });
+});
+
+describe("skillLicensing", () => {
+  it("shows idle academy seats when licences exceed jobs — bar fills to working over the full ceiling", () => {
+    const l = skillLicensing(11.5, 11);
+    expect(l).toMatchObject({ jobs: 11, licensed: 11.5, working: 11, idleSeats: 0.5, unlicensedJobs: 0, full: 11.5 });
+  });
+
+  it("reads fully matched when licences equal jobs", () => {
+    expect(skillLicensing(18, 18)).toMatchObject({ working: 18, idleSeats: 0, unlicensedJobs: 0, full: 18 });
+  });
+
+  it("flags unlicensed jobs when the academy is the wall — full width is the jobs, not the licences", () => {
+    const l = skillLicensing(6, 9);
+    expect(l).toMatchObject({ working: 6, idleSeats: 0, unlicensedJobs: 3, full: 9 });
+  });
+});
+
+describe("buildIndustryReadout labourAllocation", () => {
+  const MIN = 5;
+  const MAXBAND = () => 100;
+
+  it("surfaces the population decomposition alongside the labour pools", () => {
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    // Housing-only system: no jobs, so everyone is unemployed and the buckets are empty.
+    expect(readout.labourAllocation).toEqual({
+      population: 100, unskilled: 0, technicians: 0, engineers: 0, unemployed: 100,
+    });
   });
 });

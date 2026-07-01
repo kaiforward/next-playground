@@ -14,8 +14,8 @@ import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
-import { buildingHealth, industryHealth, perGradeStaffing } from "@/lib/engine/industry";
-import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour } from "@/lib/engine/industry";
+import { buildingHealth, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
+import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation } from "@/lib/engine/industry";
 import type { GoodTier, QualityBandId } from "@/lib/types/game";
 import { formatMagnitude, formatPeople } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
@@ -75,16 +75,11 @@ const GRADE = {
   skill2: { bar: "bg-status-purple", text: "text-status-purple-light", tag: "E", name: "Engineers" },
 } as const;
 
-/** Coarse 3-band health for a pool fulfil ratio — drives the % numeral colour on the Labour card. */
-function poolHealth(fulfil: number): IndustryHealth {
-  if (fulfil >= 0.999) return "thriving";
-  if (fulfil >= 0.5) return "coasting";
-  return "declining";
-}
-
 // Faded-copper hatch = "housing can still grow here"; faint light hatch = idle capacity.
 const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 2px, transparent 2px 6px)";
 const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(201,209,217,0.06) 4px 8px)";
+// Red hatch = skill jobs no academy can license (the licensing wall) — distinct from faint idle-seat hatch.
+const GAP_HATCH = "repeating-linear-gradient(135deg, rgba(240,97,109,0.45) 0 4px, transparent 4px 8px)";
 
 type BuildingEntry = SystemIndustryReadout["buildings"][number];
 
@@ -390,58 +385,107 @@ function LegendTooltip() {
   );
 }
 
-type Grade = keyof typeof GRADE;
-
-/** One Labour-card row: grade bar (grade hue) + supply/demand numbers + health-coloured %. */
-function LabourRow({
-  title,
-  grade,
-  have,
-  need,
-  fulfil,
-  emptyCause,
-}: {
-  title: string;
-  grade: Grade;
-  have: number;
-  need: number;
-  fulfil: number;
-  emptyCause?: string;
-}) {
-  const health = poolHealth(fulfil);
-  const noCap = need > 0 && have <= 0;
+/**
+ * One skilled grade's licensing row: tag · name · a bar whose full width is max(licensed, jobs) —
+ * the filled part is `working = min(licensed, jobs)`, the tail is faint idle seats (over-provisioned)
+ * or a red unlicensed-jobs gap (the academy is the wall). Numbers read working / licensed, or
+ * working / jobs when the academy is short. Mirrors the per-building "needs …" caption.
+ */
+function LicensingRow({ grade, pool, buildHint }: { grade: "skill1" | "skill2"; pool: LabourPool; buildHint: string }) {
+  const l = skillLicensing(pool.have, pool.need);
+  const meta = GRADE[grade];
+  const bottleneck = l.unlicensedJobs > 0;
+  const workingPct = l.full > 0 ? (l.working / l.full) * 100 : 0;
+  const tailPct = l.full > 0 ? (Math.max(l.idleSeats, l.unlicensedJobs) / l.full) * 100 : 0;
   return (
     <div className="py-1">
       <div className="flex items-center gap-2.5">
-        <span className={`flex w-[92px] shrink-0 items-center gap-1.5 text-sm text-text-primary`}>
-          <span aria-hidden className={`inline-flex h-3.5 w-3.5 items-center justify-center border border-border font-mono text-[9px] ${GRADE[grade].text}`}>
-            {GRADE[grade].tag}
-          </span>
-          {title}
-        </span>
-        <div className="relative h-3.5 flex-1 overflow-hidden border border-border bg-surface-active">
-          <div className={`absolute inset-y-0 left-0 ${GRADE[grade].bar}`} style={{ width: `${Math.min(100, Math.max(0, fulfil * 100))}%` }} />
+        <span aria-hidden className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center border border-border font-mono text-[9px] ${meta.text}`}>{meta.tag}</span>
+        <span className="w-[88px] shrink-0 text-sm text-text-primary">{meta.name}</span>
+        <div
+          role="img"
+          aria-label={`${meta.name}: ${formatPeople(l.working)} working of ${bottleneck ? `${formatPeople(l.jobs)} jobs, ${formatPeople(l.licensed)} licensed` : `${formatPeople(l.licensed)} licensed`}`}
+          className="flex h-3.5 flex-1 overflow-hidden border border-border bg-surface-active"
+        >
+          <div className={meta.bar} style={{ width: `${workingPct}%` }} />
+          <div className="border-l border-background" style={{ width: `${tailPct}%`, backgroundImage: bottleneck ? GAP_HATCH : IDLE_HATCH }} />
         </div>
-        <span className={`w-9 text-right font-mono text-xs ${HEALTH[health].text}`}>{Math.round(fulfil * 100)}%</span>
-        <span className="w-28 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-text-secondary">
-          <span className="text-text-primary">{formatPeople(have)}</span> / {formatPeople(need)}
+        <span className="w-32 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-text-secondary">
+          <span className="text-text-primary">{formatPeople(l.working)}</span>
+          {bottleneck ? <> / {formatPeople(l.jobs)} jobs</> : <> / {formatPeople(l.licensed)} lic.</>}
         </span>
       </div>
-      {noCap && emptyCause && (
-        <p className="mt-0.5 ml-[102px] text-[11px] text-status-red-light">{emptyCause}</p>
+      {(bottleneck || l.idleSeats > 0) && (
+        <p className={`mt-0.5 ml-[26px] text-[11px] ${bottleneck ? "text-status-red-light" : "text-text-tertiary"}`}>
+          {bottleneck
+            ? `${formatPeople(l.unlicensedJobs)} jobs unlicensed — ${buildHint}`
+            : `${formatPeople(l.idleSeats)} idle licence seats`}
+        </p>
       )}
     </div>
   );
 }
 
-/** System-wide labour: workforce headcount + the two academy-licensed skill ceilings. */
-function LabourCard({ labour }: { labour: SystemLabour }) {
+/**
+ * System-wide labour: the population decomposed into what it is actually doing — disjoint
+ * role buckets (unskilled / technicians / engineers) + unemployed, one bar summing to the
+ * population — then per-skill academy licensing (working vs licensed seats). The old three
+ * overlapping supply/demand bars double-counted skilled heads inside a grand "workforce" total
+ * and pinned skill rows at 100% (hiding idle licensing); this reads honestly instead.
+ */
+function LabourCard({ labour, allocation }: { labour: SystemLabour; allocation: LabourAllocation }) {
+  const pop = Math.max(0, allocation.population);
+  const jobs = allocation.unskilled + allocation.technicians + allocation.engineers;
+  const pct = (v: number) => (pop > 0 ? (v / pop) * 100 : 0);
+  const working = [
+    { key: "unskilled", label: "Unskilled", bar: GRADE.unskilled.bar, value: allocation.unskilled },
+    { key: "skill1", label: "Technicians", bar: GRADE.skill1.bar, value: allocation.technicians },
+    { key: "skill2", label: "Engineers", bar: GRADE.skill2.bar, value: allocation.engineers },
+  ] as const;
+  const hasSkill = labour.skill1.have > 0 || labour.skill1.need > 0 || labour.skill2.have > 0 || labour.skill2.need > 0;
+
   return (
     <Card variant="bordered" padding="md">
-      <p className="mb-1 font-display text-[11px] font-semibold uppercase tracking-wider text-text-primary">Labour</p>
-      <LabourRow title="Workforce" grade="unskilled" have={labour.workforce.have} need={labour.workforce.need} fulfil={labour.workforce.fulfil} />
-      <LabourRow title="Technicians" grade="skill1" have={labour.skill1.have} need={labour.skill1.need} fulfil={labour.skill1.fulfil} emptyCause="No vocational school — technician-grade work can't run." />
-      <LabourRow title="Engineers" grade="skill2" have={labour.skill2.have} need={labour.skill2.need} fulfil={labour.skill2.fulfil} emptyCause="No research institute — engineer-grade work can't run." />
+      <div className="mb-2 flex items-baseline gap-2">
+        <p className="font-display text-[11px] font-semibold uppercase tracking-wider text-text-primary">Labour</p>
+        <span className="ml-auto font-mono text-[10px] text-text-tertiary">
+          <span className="text-text-secondary">{formatPeople(pop)}</span> pop · {formatPeople(jobs)} jobs ·{" "}
+          <span className="text-accent">{formatPeople(allocation.unemployed)} unemployed</span>
+        </span>
+      </div>
+
+      {/* Population decomposition — one bar, disjoint buckets, sums to population. */}
+      <div
+        role="img"
+        aria-label={`Population ${formatPeople(pop)}: ${working.map((w) => `${formatPeople(w.value)} ${w.label.toLowerCase()}`).join(", ")}, ${formatPeople(allocation.unemployed)} unemployed`}
+        className="flex h-4 overflow-hidden border border-border bg-surface-active"
+      >
+        {working.map((w) => <div key={w.key} className={w.bar} style={{ width: `${pct(w.value)}%` }} />)}
+        <div className="border-l border-background" style={{ width: `${pct(allocation.unemployed)}%`, backgroundImage: IDLE_HATCH }} />
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 font-mono text-[10px] text-text-secondary">
+        {working.map((w) => (
+          <span key={w.key} className="inline-flex items-center gap-1.5">
+            <span aria-hidden className={`inline-block h-2 w-2 ${w.bar}`} />
+            {w.label} <span className="text-text-primary">{formatPeople(w.value)}</span>
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="inline-block h-2 w-2 border border-border" style={{ backgroundImage: IDLE_HATCH }} />
+          Unemployed <span className="text-text-primary">{formatPeople(allocation.unemployed)}</span>
+        </span>
+      </div>
+
+      {/* Skill licensing — only when the system draws on (or has licensed) skilled labour. */}
+      {hasSkill && (
+        <>
+          <div className="my-2.5 h-px bg-border" />
+          <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">Skill licensing — working / licensed seats</p>
+          <LicensingRow grade="skill1" pool={labour.skill1} buildHint="build a vocational school" />
+          <LicensingRow grade="skill2" pool={labour.skill2} buildHint="build a research institute" />
+        </>
+      )}
     </Card>
   );
 }
@@ -454,7 +498,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     return <EmptyState message="Scan this system with a ship in range to survey its industry." />;
   }
 
-  const { space, deposits, labour, labourFulfillment, buildings, supplyChain, unrest } = data;
+  const { space, deposits, labour, labourAllocation, labourFulfillment, buildings, supplyChain, unrest } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -527,7 +571,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         </p>
       </Card>
 
-      <LabourCard labour={labour} />
+      <LabourCard labour={labour} allocation={labourAllocation} />
 
       {/* Deposit land — extractors */}
       {extractors.length > 0 && (
