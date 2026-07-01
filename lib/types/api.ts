@@ -27,6 +27,7 @@ import type {
   GoodTier,
   BodyArchetypeId,
   StabilityEntry,
+  PopulationEntry,
   ResourceVector,
 } from "./game";
 import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
@@ -64,6 +65,7 @@ export interface TradeFlowEdges {
 }
 export type TradeFlowResponse = ApiResponse<TradeFlowEdges>;
 export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
+export type PopulationResponse = ApiResponse<{ systems: PopulationEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
   systemId: string;

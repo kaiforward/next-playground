@@ -31,6 +31,8 @@ export const queryKeys = {
   dynamicVisible: ["dynamicVisible"] as const,
   // All-systems stability (tick-scoped — badge + map choropleth)
   stability: ["stability"] as const,
+  // All-systems population (tick-scoped — map choropleth)
+  populationMap: ["populationMap"] as const,
   // Trade flow overlay (tick-scoped, gated by overlay toggle)
   tradeFlow: ["tradeFlow"] as const,
   // Per-system physical substrate (Astrography panel) — static, not tick-scoped.

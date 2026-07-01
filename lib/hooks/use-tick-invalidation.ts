@@ -31,6 +31,7 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.marketAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
         queryClient.invalidateQueries({ queryKey: queryKeys.stability });
+        queryClient.invalidateQueries({ queryKey: queryKeys.populationMap });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemPopulationAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemIndustryAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemLogisticsAll });
