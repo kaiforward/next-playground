@@ -21,6 +21,19 @@ import { GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { scaleValue, scaleRecord } from "@/lib/constants/economy-scale";
 
 export const HOUSING_TYPE = "housing";
+export const VOCATIONAL_SCHOOL_TYPE = "vocational_school";
+export const RESEARCH_INSTITUTE_TYPE = "research_institute";
+/** The two academy building type ids, in grade order. */
+export const ACADEMY_TYPES: string[] = [VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE];
+
+// ── Academy licensing (coarse first-cut; Task 8 calibrates) ──
+// One academy licenses this much skilled-grade work system-wide; large enough that one
+// academy serves several factories, so academies are lumpy/concentrated, not per-factory.
+export const SKILL1_PER_SCHOOL = 150;
+export const SKILL2_PER_INSTITUTE = 90;
+
+/** Magnitude knob on recipe input-demand draws (S1 wires it; value stays neutral until Task 8 calibration). */
+export const INPUT_DEMAND_MULTIPLIER = 1.0;
 
 /** Per-good labour requirement, partitioned across skill grades. The three shares SUM to the head count. */
 export interface LabourVector {
@@ -73,6 +86,10 @@ export interface BuildingTypeDef {
   outputPerUnit?: number;
   /** popCap added per building. Housing only. */
   popProvided?: number;
+  /** skill-1 work this building licenses system-wide. Vocational school only. */
+  skill1Licensed?: number;
+  /** skill-2 work this building licenses system-wide. Research institute only. */
+  skill2Licensed?: number;
 }
 
 // ── Build-space knobs (first-draft; simulator-calibrated) ──
@@ -142,6 +159,16 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
 export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
   ...buildProductionTypes(),
   [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: POP_CENTRE_DENSITY },
+  [VOCATIONAL_SCHOOL_TYPE]: {
+    spaceCost: 1.5,
+    labour: { unskilled: 15, skill1: 0, skill2: 0 },
+    skill1Licensed: SKILL1_PER_SCHOOL,
+  },
+  [RESEARCH_INSTITUTE_TYPE]: {
+    spaceCost: 2.0,
+    labour: { unskilled: 20, skill1: 0, skill2: 0 },
+    skill2Licensed: SKILL2_PER_INSTITUTE,
+  },
 };
 
 /** The 26 production building type ids (good ids), in canonical good order. */
