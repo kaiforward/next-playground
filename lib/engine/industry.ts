@@ -31,6 +31,7 @@ import {
   IDLE_COLLAPSING_FRACTION,
   labourTotal,
   INPUT_DEMAND_MULTIPLIER,
+  type LabourVector,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -184,6 +185,43 @@ export function effectiveFulfilment(state: LabourState, tier: GoodTier): number 
   if (tier <= 0) return state.labourFulfil;
   if (tier === 1) return Math.min(state.labourFulfil, state.skill1Fulfil);
   return Math.min(state.labourFulfil, state.skill1Fulfil, state.skill2Fulfil);
+}
+
+/** One grade's staffing for a building: how many workers it needs, how many are filled, and whether it is the wall. */
+export interface GradeStaffing {
+  grade: "unskilled" | "skill1" | "skill2";
+  /** built × the grade's share of the labour vector. */
+  needed: number;
+  /** needed × the grade's system-wide fulfilment. */
+  filled: number;
+  /** The grade's system-wide fulfilment ratio in [0,1]. */
+  fulfil: number;
+  /** True on the binding grade (the min fulfil among the grades the tier draws on). */
+  wall: boolean;
+}
+
+/**
+ * Per-grade staffing for one building type, derived from its static labour vector, its built
+ * count and the system labour state. Emits only the grades the good's tier draws on
+ * (tier-0 → unskilled; tier-1 → +skill1; tier-2 → +skill2). Pure — the same values feed the
+ * Detailed micro-bars and the tooltip. `wall` marks the grade whose fulfil is the effective min.
+ */
+export function perGradeStaffing(
+  labour: LabourVector,
+  built: number,
+  tier: GoodTier,
+  state: LabourState,
+): GradeStaffing[] {
+  const rows: GradeStaffing[] = [
+    { grade: "unskilled", needed: built * labour.unskilled, fulfil: state.labourFulfil, filled: 0, wall: false },
+  ];
+  if (tier >= 1) rows.push({ grade: "skill1", needed: built * labour.skill1, fulfil: state.skill1Fulfil, filled: 0, wall: false });
+  if (tier >= 2) rows.push({ grade: "skill2", needed: built * labour.skill2, fulfil: state.skill2Fulfil, filled: 0, wall: false });
+  for (const r of rows) r.filled = r.needed * r.fulfil;
+  let wall = rows[0];
+  for (const r of rows) if (r.fulfil < wall.fulfil) wall = r;
+  wall.wall = true;
+  return rows;
 }
 
 /**

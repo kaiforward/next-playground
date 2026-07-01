@@ -21,8 +21,9 @@ import {
   skill2Demand,
   skill1Cap,
   skill2Cap,
+  perGradeStaffing,
 } from "@/lib/engine/industry";
-import type { IndustryHealth, LabourState } from "@/lib/engine/industry";
+import type { IndustryHealth, LabourState, GradeStaffing } from "@/lib/engine/industry";
 import {
   DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
@@ -428,6 +429,35 @@ describe("buildingHealth (per-building)", () => {
   });
   it("is 'thriving' when nothing is built (no base to decay)", () => {
     expect(buildingHealth({ used: 0, built: 0, unrest: 1, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving");
+  });
+});
+
+describe("perGradeStaffing", () => {
+  const V = BUILDING_TYPES.electronics!.labour!; // tier-2: unskilled 30, skill1 20, skill2 10
+
+  it("emits only the grades the tier draws on", () => {
+    const s: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
+    expect(perGradeStaffing(BUILDING_TYPES.ore!.labour!, 2, 0, s).map((g) => g.grade)).toEqual(["unskilled"]);
+    expect(perGradeStaffing(BUILDING_TYPES.metals!.labour!, 2, 1, s).map((g) => g.grade)).toEqual(["unskilled", "skill1"]);
+    expect(perGradeStaffing(V, 2, 2, s).map((g) => g.grade)).toEqual(["unskilled", "skill1", "skill2"]);
+  });
+
+  it("needed = built × vector share; filled = needed × grade fulfil", () => {
+    const s: LabourState = { labourFulfil: 0.5, skill1Fulfil: 0.25, skill2Fulfil: 1 };
+    const rows: GradeStaffing[] = perGradeStaffing(V, 3, 2, s);
+    const u = rows.find((r) => r.grade === "unskilled")!;
+    const t = rows.find((r) => r.grade === "skill1")!;
+    expect(u.needed).toBeCloseTo(3 * 30, 6);
+    expect(u.filled).toBeCloseTo(3 * 30 * 0.5, 6);
+    expect(t.needed).toBeCloseTo(3 * 20, 6);
+    expect(t.filled).toBeCloseTo(3 * 20 * 0.25, 6);
+  });
+
+  it("flags the binding (min-fulfil) grade as the wall", () => {
+    const s: LabourState = { labourFulfil: 0.9, skill1Fulfil: 0.25, skill2Fulfil: 0.6 };
+    const rows: GradeStaffing[] = perGradeStaffing(V, 1, 2, s);
+    expect(rows.find((r) => r.wall)!.grade).toBe("skill1");
+    expect(rows.filter((r) => r.wall)).toHaveLength(1);
   });
 });
 
