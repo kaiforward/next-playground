@@ -55,6 +55,7 @@ import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
+import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 
 /** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
 const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
@@ -163,6 +164,20 @@ describe("capacityGoodRates", () => {
     const oreBase = base.find((r) => r.goodId === "ore")!.production;
     const oreBoosted = boosted.find((r) => r.goodId === "ore")!.production;
     expect(oreBoosted).toBeCloseTo(oreBase * 3.0, 6);
+  });
+
+  it("a developed system consumes more basket goods than an academy-less one at equal population", () => {
+    // electronics factories demand skilled heads; academies licence them.
+    const developed = { electronics: 6, vocational_school: 3, research_institute: 2 };
+    const frontier = {};
+    const pop = 2000;
+    const devRates = capacityGoodRates(developed, pop, unitResourceVector());
+    const froRates = capacityGoodRates(frontier, pop, unitResourceVector());
+    const get = (rates: SubstrateGoodRate[], id: string) => rates.find((r) => r.goodId === id)!;
+    expect(get(devRates, "luxuries").consumption).toBeGreaterThan(get(froRates, "luxuries").consumption);
+    expect(get(devRates, "consumer_goods").consumption).toBeGreaterThan(get(froRates, "consumer_goods").consumption);
+    // non-basket goods stay population-only
+    expect(get(devRates, "food").consumption).toBeCloseTo(get(froRates, "food").consumption, 10);
   });
 });
 

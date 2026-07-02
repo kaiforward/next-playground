@@ -16,6 +16,7 @@
  */
 import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { CivilianDemandBasis, SubstrateGoodRate } from "@/lib/engine/physical-economy";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
@@ -407,7 +408,8 @@ export function buildingProduction(
 /**
  * Per-good production + consumption for one system from its industrial base.
  * The read-service shape (one `SubstrateGoodRate` per good), capacity-driven on
- * the production axis; consumption stays perCapitaNeed × population.
+ * the production axis; consumption is the civilian demand basis (per-capita
+ * baseline + per-grade skilled baskets — see consumptionRate).
  * Tier-0 production is multiplied by `yields[resource]`.
  */
 export function capacityGoodRates(
@@ -415,12 +417,11 @@ export function capacityGoodRates(
   population: number,
   yields: ResourceVector,
 ): SubstrateGoodRate[] {
-  const state = computeLabourState(buildings, population);
-  const pop = Math.max(0, population);
+  const snap = computeSystemLabourSnapshot(buildings, population);
   return GOOD_NAMES.map((goodId) => ({
     goodId,
-    production: buildingProduction(buildings, goodId, state, yields),
-    consumption: (GOOD_CONSUMPTION[goodId] ?? 0) * pop,
+    production: buildingProduction(buildings, goodId, snap.state, yields),
+    consumption: consumptionRate(goodId, snap.basis),
   }));
 }
 
