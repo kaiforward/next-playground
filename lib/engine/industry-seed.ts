@@ -31,8 +31,19 @@ import {
   SKILL2_PER_INSTITUTE,
   effectiveSpaceCost,
   POP_CENTRE_DENSITY,
+  SPECIALISATION_FAMILIES,
+  COMPLEX_TYPES,
+  ANCHOR_CAP,
+  ANCHOR_RATED_COVERAGE,
+  ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
-import { labourDemand, housingPopCap, skill1Demand, skill2Demand } from "@/lib/engine/industry";
+import {
+  labourDemand,
+  housingPopCap,
+  skill1Demand,
+  skill2Demand,
+  familyThroughput,
+} from "@/lib/engine/industry";
 import { RESOURCE_TYPES, emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 
@@ -195,6 +206,25 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
     factoryBudget - factoryUsed,
   );
 
+  // ── 2.6) Specialisation complex — the dominant family's anchor. ──
+  // Pick the family this system produces most of; if its factory throughput clears the amortisation
+  // floor, place its complex (sized to its rated coverage, capped) from the same factory budget, so a
+  // matured galaxy opens already specialised. The complex draws unskilled labour, so it flows through
+  // the staffing self-consistency pass below like a factory.
+  let bestFamily = SPECIALISATION_FAMILIES[0];
+  let bestThroughput = 0;
+  for (const f of SPECIALISATION_FAMILIES) {
+    const t = familyThroughput(buildings, f);
+    if (t > bestThroughput) { bestThroughput = t; bestFamily = f; }
+  }
+  if (bestThroughput >= ANCHOR_MIN_THROUGHPUT) {
+    const wanted = Math.min(ANCHOR_CAP, bestThroughput / ANCHOR_RATED_COVERAGE);
+    const cost = effectiveSpaceCost(bestFamily.complexType);
+    const affordable = Math.max(0, (factoryBudget - factoryUsed) / cost);
+    const count = Math.min(wanted, affordable);
+    if (count > 0) { buildings[bestFamily.complexType] = count; factoryUsed += count * cost; }
+  }
+
   // ── 3) Population centres — full-fold, sized to staff ALL labour. ──
   // No body baseline: wanted = labourDemand / POP_CENTRE_DENSITY. Bounded by a seeded
   // fraction (SEED_HOUSING_FRACTION) of the habitable subset of space — so systems start
@@ -212,21 +242,23 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
 
   // ── 3b) Staffing self-consistency — never seed more industry than the population can staff. ──
   // The fraction-clamped housing fixes the labour budget (popCap = housing × POP_CENTRE_DENSITY).
-  // Scale every production building AND academy down proportionally so labourDemand ≤ popCap: a
-  // freshly seeded system is then fully staffable as its population matures, instead of carrying
-  // idle capacity that autonomic decay would immediately liquidate. Academies scale alongside
-  // production so licensed skill capacity stays matched to the reduced skill demand — a factory
-  // scaled down draws less skill1/skill2, so the school/institute count that licenses it shrinks too.
-  // The freed deposit/general space stays as headroom for later (SP5) faction build-out. Worlds with
-  // no habitable land (popCap 0) seed zero industry — extraction still needs a workforce housed
-  // locally. yieldMult below is left on the unscaled placement on purpose: it measures the worked
-  // deposit grade (a property of the ground), so the economy-type label stays independent of how
-  // much labour is available to staff the slots.
+  // Scale every production building, academy, and specialisation complex down proportionally so
+  // labourDemand ≤ popCap: a freshly seeded system is then fully staffable as its population
+  // matures, instead of carrying idle capacity that autonomic decay would immediately liquidate.
+  // Academies scale alongside production so licensed skill capacity stays matched to the reduced
+  // skill demand — a factory scaled down draws less skill1/skill2, so the school/institute count
+  // that licenses it shrinks too. The complex scales alongside for the same reason: an anchor
+  // sized to a throughput that no longer exists would otherwise sit idle. The freed deposit/general
+  // space stays as headroom for later (SP5) faction build-out. Worlds with no habitable land
+  // (popCap 0) seed zero industry — extraction still needs a workforce housed locally. yieldMult
+  // below is left on the unscaled placement on purpose: it measures the worked deposit grade (a
+  // property of the ground), so the economy-type label stays independent of how much labour is
+  // available to staff the slots.
   const staffBudget = housingPopCap(buildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR;
   const seededLabour = labourDemand(buildings);
   if (seededLabour > staffBudget) {
     const staffScale = staffBudget / seededLabour;
-    for (const type of [...PRODUCTION_BUILDING_TYPES, ...ACADEMY_TYPES]) {
+    for (const type of [...PRODUCTION_BUILDING_TYPES, ...ACADEMY_TYPES, ...COMPLEX_TYPES]) {
       const count = buildings[type];
       if (count === undefined || count <= 0) continue;
       const scaled = count * staffScale;

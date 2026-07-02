@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GOOD_NAMES } from "@/lib/constants/goods";
+import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES,
   PRODUCTION_BUILDING_TYPES,
@@ -12,6 +12,12 @@ import {
   RESEARCH_INSTITUTE_TYPE,
   SKILL1_PER_SCHOOL,
   SKILL2_PER_INSTITUTE,
+  SPECIALISATION_FAMILIES,
+  FAMILY_BY_GOOD,
+  COMPLEX_BY_TYPE,
+  COMPLEX_TYPES,
+  ANCHOR_FOOTPRINT,
+  ANCHOR_UNSKILLED_LABOUR,
 } from "@/lib/constants/industry";
 
 describe("BUILDING_TYPES catalog", () => {
@@ -94,5 +100,33 @@ describe("academies", () => {
     expect(BUILDING_TYPES[VOCATIONAL_SCHOOL_TYPE].skill2Licensed ?? 0).toBe(0);
     expect(BUILDING_TYPES[RESEARCH_INSTITUTE_TYPE].skill2Licensed).toBe(SKILL2_PER_INSTITUTE);
     expect(BUILDING_TYPES[RESEARCH_INSTITUTE_TYPE].skill1Licensed ?? 0).toBe(0);
+  });
+});
+
+describe("specialisation families", () => {
+  it("partition every tier-1+ good into exactly one family", () => {
+    const tier1plus = GOOD_NAMES.filter((g) => (GOOD_TIER_BY_KEY[g] ?? 0) >= 1);
+    // every tier-1+ good has a family
+    for (const g of tier1plus) expect(FAMILY_BY_GOOD[g], `${g} has a family`).toBeDefined();
+    // no tier-0 good has a family
+    for (const g of GOOD_NAMES.filter((g) => GOOD_TIER_BY_KEY[g] === 0)) {
+      expect(FAMILY_BY_GOOD[g], `${g} is un-familied`).toBeUndefined();
+    }
+    // families are disjoint and cover all 18 tier-1+ goods exactly once
+    const all = SPECIALISATION_FAMILIES.flatMap((f) => f.goods);
+    expect(new Set(all).size).toBe(all.length); // no dupes
+    expect(all.length).toBe(tier1plus.length);
+  });
+
+  it("register five complex building types with the anchor footprint + unskilled staffing", () => {
+    expect(COMPLEX_TYPES.length).toBe(5);
+    for (const f of SPECIALISATION_FAMILIES) {
+      expect(COMPLEX_BY_TYPE[f.complexType]).toBe(f);
+      const def = BUILDING_TYPES[f.complexType];
+      expect(def?.spaceCost).toBe(ANCHOR_FOOTPRINT);
+      expect(def?.labour).toEqual({ unskilled: ANCHOR_UNSKILLED_LABOUR, skill1: 0, skill2: 0 });
+      expect(def?.outputGood).toBeUndefined(); // produces no good
+      expect(def?.resource).toBeUndefined();   // not an extractor → bills to general space
+    }
   });
 });

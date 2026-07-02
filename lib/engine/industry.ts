@@ -31,7 +31,12 @@ import {
   IDLE_COLLAPSING_FRACTION,
   labourTotal,
   INPUT_DEMAND_MULTIPLIER,
+  FAMILY_BY_GOOD,
+  OUTPUT_PER_UNIT,
+  COMPLEX_BY_TYPE,
+  ANCHOR_RATED_COVERAGE,
   type LabourVector,
+  type SpecialisationFamily,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -315,6 +320,42 @@ export function housingPopCap(buildings: Record<string, number>): number {
 }
 
 /**
+ * Yield multiplier a system's specialisation complex grants to `goodId`. 1 for un-familied
+ * (tier-0) goods and for families whose complex is absent. Scales linearly with the complex's
+ * count in [0,1], reaching the family's full multiplier at count = 1 (the cap) — never beyond.
+ * Derived from `buildings`, so it needs no new production-signature.
+ */
+export function familyAnchorBuff(buildings: Record<string, number>, goodId: string): number {
+  const family = FAMILY_BY_GOOD[goodId];
+  if (!family) return 1;
+  const count = buildings[family.complexType] ?? 0;
+  if (count <= 0) return 1;
+  return 1 + (family.buffMult - 1) * Math.min(1, count);
+}
+
+/**
+ * The unbuffed output capacity a system's built factories give a family — Σ over the family's
+ * goods of count × outputPerUnit. The stable, built-base-driven "demand" a complex is measured
+ * against (mirrors an academy's skill demand); independent of staffing/selling swings.
+ */
+export function familyThroughput(buildings: Record<string, number>, family: SpecialisationFamily): number {
+  let t = 0;
+  for (const g of family.goods) t += (buildings[g] ?? 0) * (OUTPUT_PER_UNIT[g] ?? 0);
+  return t;
+}
+
+/**
+ * A specialisation complex's in-use units = min(count, throughput / rated) — how much of its rated
+ * family coverage the built factories actually draw. Thriving family → used ≈ count (holds at cap);
+ * orphaned family (throughput → 0) → used → 0 (rots away). The complex analogue of an academy's
+ * count × min(1, demand/cap).
+ */
+export function complexUsed(count: number, throughput: number, rated: number): number {
+  if (count <= 0) return 0;
+  return Math.min(count, rated > 0 ? throughput / rated : 0);
+}
+
+/**
  * Capacity-driven production rate for one good. Sums every production type
  * whose outputGood matches (1:1 today, many-to-one ready).
  * Tier-0 goods are multiplied by `yields[resource]`; tier-1+ goods use ×1.
@@ -338,7 +379,7 @@ export function buildingProduction(
   // the `GOOD_TIER_BY_KEY[goodId] === 0` check is a safety belt against future schema drift.
   const resource = GOOD_PRODUCTION[goodId]?.resource;
   const yieldMult = (resource !== undefined && GOOD_TIER_BY_KEY[goodId] === 0) ? yields[resource] : 1;
-  return rate * yieldMult;
+  return rate * yieldMult * familyAnchorBuff(buildings, goodId);
 }
 
 /**
@@ -546,6 +587,14 @@ export function buildIndustryReadout(
       const used = Math.max(0, population) / POP_CENTRE_DENSITY;
       const staffedFraction = count > 0 ? used / count : 0;
       buildingEntries.push({ buildingType, tier: -1, count, used, staffedFraction, idleReason: used < count ? "occupancy" : undefined });
+      continue;
+    }
+    if (COMPLEX_BY_TYPE[buildingType]) {
+      // A complex produces no good of its own — its "used" is family-utilisation
+      // (built factories vs rated coverage), not labour/selling like a producer.
+      const used = complexUsed(count, familyThroughput(buildings, COMPLEX_BY_TYPE[buildingType]), ANCHOR_RATED_COVERAGE);
+      const staffedFraction = count > 0 ? used / count : 0;
+      buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
       continue;
     }
     const def = BUILDING_TYPES[buildingType];

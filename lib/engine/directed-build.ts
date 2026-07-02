@@ -16,9 +16,13 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY,
   VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, SKILL1_PER_SCHOOL, SKILL2_PER_INSTITUTE, labourTotal,
+  FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
-import { labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap } from "@/lib/engine/industry";
+import {
+  labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
+  familyAnchorBuff, familyThroughput,
+} from "@/lib/engine/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
 export interface BuildGoodState {
@@ -295,6 +299,37 @@ function academyLift(
 }
 
 /**
+ * Plan the specialisation complex a site should co-build to anchor `goodId`'s family, given the
+ * `prodUnits` of it committed this opportunity. Zero lift when: the good is un-familied, the site
+ * already holds a complex (cap 1, any family), or the projected family throughput (existing family
+ * factories + this build's UNBUFFED output capacity) is below the amortisation floor. Sized to the
+ * complex's rated coverage, capped.
+ */
+function complexLift(
+  site: BuildSystemState,
+  goodId: string,
+  prodUnits: number,
+): { complexType?: string; count: number; space: number; units: number; unskilled: number } {
+  const zero = { count: 0, space: 0, units: 0, unskilled: 0 };
+  const family = FAMILY_BY_GOOD[goodId];
+  if (!family) return zero;
+  let existing = 0;
+  for (const t of COMPLEX_TYPES) existing += site.buildings[t] ?? 0;
+  if (existing >= ANCHOR_CAP) return zero;
+  const projected = familyThroughput(site.buildings, family) + prodUnits * (OUTPUT_PER_UNIT[goodId] ?? 0);
+  if (projected < ANCHOR_MIN_THROUGHPUT) return zero;
+  const count = Math.min(ANCHOR_CAP - existing, projected / ANCHOR_RATED_COVERAGE);
+  if (count <= 0) return zero;
+  return {
+    complexType: family.complexType,
+    count,
+    space: count * effectiveSpaceCost(family.complexType),
+    units: count,
+    unskilled: count * unskilledPerUnit(family.complexType),
+  };
+}
+
+/**
  * Greedy demand-pulled build planner for ONE faction's systems. Budget = Σ system
  * generation, spent as building units. For each structural-gap good, score candidate
  * sites by the reachable structural demand they can serve (capacity-bounded,
@@ -367,8 +402,8 @@ export function planFactionBuilds(
   // the planner near-linear in the faction's system count.
   const opportunities: BuildOpportunity[] = [];
   for (const [goodId, deficitMap] of remainingByGood) {
-    const perUnit = OUTPUT_PER_UNIT[goodId] ?? 0;
-    if (perUnit <= 0) continue;
+    const baseUnit = OUTPUT_PER_UNIT[goodId] ?? 0;
+    if (baseUnit <= 0) continue;
     const isTier0 = GOOD_TIER_BY_KEY[goodId] === 0;
     const deficitSystemIds = [...deficitMap.keys()];
 
@@ -382,6 +417,10 @@ export function planFactionBuilds(
         .filter((r): r is { sysId: string; cost: number } => r.cost !== null && r.cost > 0)
         .sort((a, b) => a.cost - b.cost);
       if (reachable.length === 0) continue;
+
+      // Score family goods at their buffed per-unit so a seeded-complex site already ranks
+      // higher (the snowball): buffed output means more served demand per unit of capacity.
+      const perUnit = baseUnit * familyAnchorBuff(site.buildings, goodId);
 
       // Score: allocate this site's output capacity to its reachable deficits,
       // nearest-first, summing served ÷ route cost (capacity + proximity). Ordering only.
@@ -443,7 +482,11 @@ export function planFactionBuilds(
     // schools/institutes that lift its ceiling, charged to the SAME budget/space/spare-labour
     // pool as the production itself. Iterate to convergence: each shrink of wantUnits shrinks the
     // academy lift it requires, which may relax the gate that shrank it.
-    let lift = academyLift(site, opp.goodId, wantUnits);
+    // Buffed output per unit against the live working copy (reflects any complex already here).
+    const perUnit = (OUTPUT_PER_UNIT[opp.goodId] ?? 0) * familyAnchorBuff(site.buildings, opp.goodId);
+
+    let aLift = academyLift(site, opp.goodId, wantUnits);
+    let cLift = complexLift(site, opp.goodId, wantUnits);
     const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
     // Tier-0 extractors sit on dedicated deposit slots, not general space (mirrors generalSpaceUsed).
     const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
@@ -452,18 +495,19 @@ export function planFactionBuilds(
     // (schools/institutes draw no skill labour, so their labourTotal equals their unskilled share).
     const prodLabourPerUnit = labourTotal(BUILDING_TYPES[opp.goodId]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 });
 
-    // Shrink wantUnits until production + lift fit budget, space, and spare labour.
+    // Shrink wantUnits until production + academy lift + complex lift fit budget, space, and spare labour.
     for (let guard = 0; guard < 8 && wantUnits > 0; guard++) {
-      const totalBudget = wantUnits + lift.units;
-      const totalSpace = wantUnits * prodSpacePerUnit + lift.space;
-      const totalLabour = wantUnits * prodLabourPerUnit + lift.unskilled;
+      const totalBudget = wantUnits + aLift.units + cLift.units;
+      const totalSpace = wantUnits * prodSpacePerUnit + aLift.space + cLift.space;
+      const totalLabour = wantUnits * prodLabourPerUnit + aLift.unskilled + cLift.unskilled;
       const overBudget = totalBudget > budget ? budget / totalBudget : 1;
       const overSpace = totalSpace > remainingGeneral && totalSpace > 0 ? remainingGeneral / totalSpace : 1;
       const overLabour = totalLabour > spareLabour && totalLabour > 0 ? spareLabour / totalLabour : 1;
       const shrink = Math.min(overBudget, overSpace, overLabour);
       if (shrink >= 1) break;
       wantUnits *= shrink;
-      lift = academyLift(site, opp.goodId, wantUnits);
+      aLift = academyLift(site, opp.goodId, wantUnits);
+      cLift = complexLift(site, opp.goodId, wantUnits);
     }
     if (wantUnits <= 0) continue;
 
@@ -473,20 +517,21 @@ export function planFactionBuilds(
     // fit ratios once more; if still short, apply the shrink and recompute the academy lift. If
     // it STILL violates a constraint, skip the opportunity rather than emit an over-commit.
     {
-      const totalBudget = wantUnits + lift.units;
-      const totalSpace = wantUnits * prodSpacePerUnit + lift.space;
-      const totalLabour = wantUnits * prodLabourPerUnit + lift.unskilled;
+      const totalBudget = wantUnits + aLift.units + cLift.units;
+      const totalSpace = wantUnits * prodSpacePerUnit + aLift.space + cLift.space;
+      const totalLabour = wantUnits * prodLabourPerUnit + aLift.unskilled + cLift.unskilled;
       const overBudget = totalBudget > budget ? budget / totalBudget : 1;
       const overSpace = totalSpace > remainingGeneral && totalSpace > 0 ? remainingGeneral / totalSpace : 1;
       const overLabour = totalLabour > spareLabour && totalLabour > 0 ? spareLabour / totalLabour : 1;
       const finalShrink = Math.min(overBudget, overSpace, overLabour);
       if (finalShrink < 1) {
         wantUnits *= finalShrink;
-        lift = academyLift(site, opp.goodId, wantUnits);
+        aLift = academyLift(site, opp.goodId, wantUnits);
+        cLift = complexLift(site, opp.goodId, wantUnits);
         const EPS = 1e-6;
-        const recheckBudget = wantUnits + lift.units;
-        const recheckSpace = wantUnits * prodSpacePerUnit + lift.space;
-        const recheckLabour = wantUnits * prodLabourPerUnit + lift.unskilled;
+        const recheckBudget = wantUnits + aLift.units + cLift.units;
+        const recheckSpace = wantUnits * prodSpacePerUnit + aLift.space + cLift.space;
+        const recheckLabour = wantUnits * prodLabourPerUnit + aLift.unskilled + cLift.unskilled;
         if (recheckBudget > budget + EPS || recheckSpace > remainingGeneral + EPS || recheckLabour > spareLabour + EPS) {
           continue; // truly pathological — skip rather than emit an over-commit
         }
@@ -494,11 +539,17 @@ export function planFactionBuilds(
     }
     if (wantUnits <= 0) continue;
 
-    // Apply academies first (raises the ceiling on the working copy), then the production — so a
-    // later opportunity at the same site sees the raised ceiling (academyLift returns 0 once covered).
+    // Apply the complex first (any later opportunity at this site sees the buff it grants), then
+    // academies (raises the ceiling on the working copy), then the production.
+    if (cLift.complexType && cLift.count > 0) {
+      site.buildings[cLift.complexType] = (site.buildings[cLift.complexType] ?? 0) + cLift.count;
+      builds.push({ systemId: site.systemId, buildingType: cLift.complexType, count: cLift.count });
+      budget -= cLift.count;
+    }
+
     for (const [type, count] of [
-      [VOCATIONAL_SCHOOL_TYPE, lift.schools] as const,
-      [RESEARCH_INSTITUTE_TYPE, lift.institutes] as const,
+      [VOCATIONAL_SCHOOL_TYPE, aLift.schools] as const,
+      [RESEARCH_INSTITUTE_TYPE, aLift.institutes] as const,
     ]) {
       if (count <= 0) continue;
       site.buildings[type] = (site.buildings[type] ?? 0) + count;
@@ -511,7 +562,7 @@ export function planFactionBuilds(
     budget -= wantUnits;
 
     // Decrement the served structural demand (nearest-first) so later opportunities don't re-target it.
-    let producedOutput = wantUnits * opp.perUnit;
+    let producedOutput = wantUnits * perUnit;
     for (const r of opp.reachable) {
       if (producedOutput <= 0) break;
       const short = deficitMap.get(r.sysId) ?? 0;

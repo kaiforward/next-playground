@@ -263,7 +263,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 | Stage | Lever(s) | Failure mode | Needs agency? |
 |---|---|---|---|
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
-| **S2** | **Specialisation complexes** (manufacturing CA + economies-of-scale) | Breadth (comparative advantage) | No |
+| **S2** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](./economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
 | **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
 
@@ -300,6 +300,47 @@ First-cut shape (first-draft, simulator-calibrated — only relative shape matte
 re-pricing, events, war. None of the near-term stages is a worse-version of these — they're different
 layers that sit on the gradient we're building. Demographic skilled labour and continuous
 economies-of-scale are captured above as explicitly-not-now.
+
+## S2 first-cut findings — 2026-07-02 sim (calibration inputs)
+
+First structural validation of the S2 complexes against the pre-complex baseline
+(`infra-trajectory-*`, 600 systems, seed 42, no overrides). **The structure works; the
+magnitudes are too weak — concrete inputs for the joint S1–S4 calibration pass:**
+
+**It arrests the maturity-flattening (the whole point of the track).** The baseline spread
+flattens as the galaxy matures (price/base p90 1.91→1.70, expensive-fraction 41.5%→37.0%
+from 4000→8000 ticks). With complexes the mature (8000-tick) spread holds wider — p90
+**1.79**, expensive **39%**, median 1.00 (vs 0.98), less universal glut (cheap 38.7%→36%).
+The effect is ~nil at 4000 ticks and clear at 8000 — it *grows* with maturity, as intended.
+
+**Systems do specialise, but only where a complex anchors, and only modestly.** Measuring
+complex-holders' avg family throughput ÷ all-systems' avg (t=0 seed → t=8000 final):
+- **Heavy Industry** (11→13 complexes): ratio 2.7×→**3.5×** — the emergent snowball fires
+  (holders concentrate harder, galaxy average *falls*, +2 complexes self-build over the run).
+- **Chemicals** (15→16): 2.3×→2.4× — flat (holders and galaxy grow ~together).
+- **Electronics / Armaments**: **never anchor** (0 complexes — no system clears
+  `ANCHOR_MIN_THROUGHPUT`), and they *de-concentrate* over time (top-5% share 83%→40%,
+  57%→41%). Un-anchored families spreading out is the counterfactual that proves the anchor
+  is what holds concentration.
+
+**Calibration levers this surfaces (record for the joint pass — do NOT tune in isolation):**
+1. **`ANCHOR_MIN_THROUGHPUT` is too high.** Electronics/armaments are naturally niche
+   (already the most concentrated goods) yet never clear the floor, so the one lever meant to
+   anchor them never fires. Lower it, or make it *per-family / relative to the family's
+   galaxy-wide throughput* rather than an absolute (`scaleValue(10)`).
+2. **Buff (`buffMult` 1.4–1.5) and/or footprint too small for a strong snowball.** Seeded
+   complexes come out fractional (0.01–0.31 units) because the seeder charges them to the
+   *leftover* factory budget after factories + academies, so the yield lift — and the
+   build-planner snowball it drives — is shallow. Strengthen the buff and/or the seed/build
+   sizing so a complex is a decisive, mostly-whole commitment.
+3. **Complex drifts off its family.** Dominant-family match falls (Heavy 100%→85%, Chem
+   100%→69%) as the world evolves around a once-placed complex. Acceptable, but confirm the
+   decay-toward-throughput actually rots genuinely-orphaned complexes (appears to; not
+   separately measured).
+
+Health held throughout (greedy ≫ random, no NaN/runaway). Single-seed deterministic A/B —
+directional evidence, not multi-seed robustness. Raw runs saved to
+`experiments/s2-complexes-{4000,8000}-*.json` (git-ignored).
 
 ## Relationship to existing docs
 

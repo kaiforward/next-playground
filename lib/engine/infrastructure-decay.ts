@@ -19,6 +19,9 @@
  *  - production (everything else) → staffed AND selling: count × min(effectiveFulfilment, outputUptake),
  *    where effectiveFulfilment is the skill-gated ratio for the good's tier — a
  *    tier-1/2 building that is headcount-full but skill-starved reads as idle too.
+ *  - specialisation complex → how much of its rated family coverage the built
+ *    factories draw: min(count, familyThroughput/ratedCoverage). Orphaned by a
+ *    collapsed family (throughput → 0) → used → 0 → rots away like an idle academy.
  *
  * Decay is downward-only and floored at 0. Growth is deliberately excluded — that
  * is a deliberate, treasury-funded decision and belongs to SP5.
@@ -28,6 +31,8 @@ import {
   housingPopCap,
   labourParts,
   labourStateFromParts,
+  familyThroughput,
+  complexUsed,
 } from "@/lib/engine/industry";
 import {
   BUILDING_TYPES,
@@ -35,6 +40,8 @@ import {
   POP_CENTRE_DENSITY,
   RESEARCH_INSTITUTE_TYPE,
   VOCATIONAL_SCHOOL_TYPE,
+  COMPLEX_BY_TYPE,
+  ANCHOR_RATED_COVERAGE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -117,6 +124,10 @@ export function computeSystemDecay(input: SystemDecayInput, params: DecayParams)
       used = count * (parts.skill1Cap > 0 ? Math.min(1, parts.skill1Demand / parts.skill1Cap) : 0);
     } else if (type === RESEARCH_INSTITUTE_TYPE) {
       used = count * (parts.skill2Cap > 0 ? Math.min(1, parts.skill2Demand / parts.skill2Cap) : 0);
+    } else if (COMPLEX_BY_TYPE[type]) {
+      // A complex's used = how much of its rated family coverage the built factories draw.
+      // Orphaned (family gone) → used 0 → rots away, freeing the space + the cap slot.
+      used = complexUsed(count, familyThroughput(buildings, COMPLEX_BY_TYPE[type]), ANCHOR_RATED_COVERAGE);
     } else {
       const outputGood = BUILDING_TYPES[type]?.outputGood;
       const uptake = outputGood !== undefined ? input.outputUptake(outputGood) : 1;
