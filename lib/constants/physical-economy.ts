@@ -6,7 +6,9 @@
  * industry.ts); `resource` marks the tier-0 deposit a good extracts (which
  * deposit caps its extractor count and whose yield multiplier weights its
  * output). Tier-1/2 goods are labour-only (space/labour-bound, no deposit gate).
- * Consumption is universal and population-scaled: perCapitaNeed × population.
+ * Consumption is civilian demand: a per-capita baseline (perCapitaNeed × population)
+ * plus skilled baskets added on top for skilled work performed (see
+ * SKILL1_CONSUMPTION/SKILL2_CONSUMPTION below).
  *
  * All magnitudes are first-draft and calibrated via the simulator; only their
  * relative shape matters here (higher tier → smaller coeff and smaller need).

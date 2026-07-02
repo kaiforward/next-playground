@@ -41,7 +41,7 @@ export interface MarketSnapshot {
   stock: number;
   /** Stored pricing-anchor multiplier (1 = none). */
   anchorMult: number;
-  /** Days-of-supply pricing denominator (perCapitaNeed × population, floored). */
+  /** Days-of-supply pricing denominator (civilian demand — per-capita baseline + skilled baskets — floored). */
   demandRate: number;
   priceFloor: number;
   priceCeiling: number;

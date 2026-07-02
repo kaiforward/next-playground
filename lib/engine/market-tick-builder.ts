@@ -29,7 +29,7 @@ export interface ResolvedMarketTick {
 export interface MarketTickInput {
   goodId: string;
   stock: number;
-  /** Stored local demand rate (perCapitaNeed × population, floored at seed). */
+  /** Stored local demand rate (civilian demand — per-capita baseline + skilled baskets — floored at seed). */
   demandRate: number;
   /** Built infrastructure storage capacity from StationMarket.storageCapacity. */
   storageCapacity: number;
