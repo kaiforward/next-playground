@@ -7,7 +7,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { PopulationSummary } from "@/components/system/population-summary";
 
 /** Composition rows in display order — only non-zero terms are shown. */
@@ -99,11 +99,9 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
             {demand.map((d) => (
               <li key={d.goodId} className="flex items-center justify-between py-1.5 px-3 bg-surface">
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="text-left text-sm text-text-primary underline-offset-2 hover:underline">
-                      {d.goodName}
-                    </button>
-                  </TooltipTrigger>
+                  <TooltipTriggerLabel className="text-sm text-text-primary">
+                    {d.goodName}
+                  </TooltipTriggerLabel>
                   <TooltipContent className="w-52">
                     <DemandBreakdownBody breakdown={d.breakdown} demandRate={d.demandRate} />
                   </TooltipContent>
