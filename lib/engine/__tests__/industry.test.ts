@@ -800,3 +800,13 @@ describe("familyThroughput / complexUsed", () => {
     expect(complexUsed(1, 0, ANCHOR_RATED_COVERAGE)).toBe(0);
   });
 });
+
+describe("buildIndustryReadout — complex row", () => {
+  it("emits a complex entry with family-utilisation used (not labour-based)", () => {
+    const buildings = { [HEAVY_INDUSTRY_COMPLEX]: 1 }; // orphaned: no metals factories
+    const r = buildIndustryReadout(buildings, 1e9, {}, () => 0, unitResourceVector());
+    const row = r.buildings.find((b) => b.buildingType === HEAVY_INDUSTRY_COMPLEX)!;
+    expect(row.used).toBe(0);            // orphaned → 0, despite population being huge
+    expect(row.output).toBeUndefined();  // produces no good
+  });
+});

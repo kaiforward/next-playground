@@ -33,6 +33,8 @@ import {
   INPUT_DEMAND_MULTIPLIER,
   FAMILY_BY_GOOD,
   OUTPUT_PER_UNIT,
+  COMPLEX_BY_TYPE,
+  ANCHOR_RATED_COVERAGE,
   type LabourVector,
   type SpecialisationFamily,
 } from "@/lib/constants/industry";
@@ -585,6 +587,14 @@ export function buildIndustryReadout(
       const used = Math.max(0, population) / POP_CENTRE_DENSITY;
       const staffedFraction = count > 0 ? used / count : 0;
       buildingEntries.push({ buildingType, tier: -1, count, used, staffedFraction, idleReason: used < count ? "occupancy" : undefined });
+      continue;
+    }
+    if (COMPLEX_BY_TYPE[buildingType]) {
+      // A complex produces no good of its own — its "used" is family-utilisation
+      // (built factories vs rated coverage), not labour/selling like a producer.
+      const used = complexUsed(count, familyThroughput(buildings, COMPLEX_BY_TYPE[buildingType]), ANCHOR_RATED_COVERAGE);
+      const staffedFraction = count > 0 ? used / count : 0;
+      buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
       continue;
     }
     const def = BUILDING_TYPES[buildingType];

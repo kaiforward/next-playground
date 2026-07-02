@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { BUILDING_DESCRIPTIONS, TIER_LABELS, describeBuilding } from "@/lib/constants/building-descriptions";
-import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE } from "@/lib/constants/industry";
+import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES } from "@/lib/constants/industry";
 import { GOODS } from "@/lib/constants/goods";
 
 describe("building descriptions", () => {
@@ -26,5 +26,13 @@ describe("building descriptions", () => {
     expect(describeBuilding(VOCATIONAL_SCHOOL_TYPE)).toBe(BUILDING_DESCRIPTIONS[VOCATIONAL_SCHOOL_TYPE]);
     expect(describeBuilding("ore")).toBe(GOODS.ore.description);
     expect(describeBuilding("nonexistent-good")).toBe("");
+  });
+});
+
+describe("complex descriptions", () => {
+  it("gives every complex bespoke non-empty copy", () => {
+    for (const t of COMPLEX_TYPES) {
+      expect(describeBuilding(t).length, `${t} has copy`).toBeGreaterThan(20);
+    }
   });
 });
