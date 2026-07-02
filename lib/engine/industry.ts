@@ -31,6 +31,7 @@ import {
   IDLE_COLLAPSING_FRACTION,
   labourTotal,
   INPUT_DEMAND_MULTIPLIER,
+  FAMILY_BY_GOOD,
   type LabourVector,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -315,6 +316,20 @@ export function housingPopCap(buildings: Record<string, number>): number {
 }
 
 /**
+ * Yield multiplier a system's specialisation complex grants to `goodId`. 1 for un-familied
+ * (tier-0) goods and for families whose complex is absent. Scales linearly with the complex's
+ * count in [0,1], reaching the family's full multiplier at count = 1 (the cap) — never beyond.
+ * Derived from `buildings`, so it needs no new production-signature.
+ */
+export function familyAnchorBuff(buildings: Record<string, number>, goodId: string): number {
+  const family = FAMILY_BY_GOOD[goodId];
+  if (!family) return 1;
+  const count = buildings[family.complexType] ?? 0;
+  if (count <= 0) return 1;
+  return 1 + (family.buffMult - 1) * Math.min(1, count);
+}
+
+/**
  * Capacity-driven production rate for one good. Sums every production type
  * whose outputGood matches (1:1 today, many-to-one ready).
  * Tier-0 goods are multiplied by `yields[resource]`; tier-1+ goods use ×1.
@@ -338,7 +353,7 @@ export function buildingProduction(
   // the `GOOD_TIER_BY_KEY[goodId] === 0` check is a safety belt against future schema drift.
   const resource = GOOD_PRODUCTION[goodId]?.resource;
   const yieldMult = (resource !== undefined && GOOD_TIER_BY_KEY[goodId] === 0) ? yields[resource] : 1;
-  return rate * yieldMult;
+  return rate * yieldMult * familyAnchorBuff(buildings, goodId);
 }
 
 /**

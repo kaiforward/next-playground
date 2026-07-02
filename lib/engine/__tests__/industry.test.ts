@@ -24,6 +24,7 @@ import {
   perGradeStaffing,
   computeLabourAllocation,
   skillLicensing,
+  familyAnchorBuff,
 } from "@/lib/engine/industry";
 import type { IndustryHealth, LabourState, GradeStaffing, LabourParts } from "@/lib/engine/industry";
 import {
@@ -46,6 +47,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
 
 /** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
 const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
@@ -743,5 +745,35 @@ describe("buildIndustryReadout labourAllocation", () => {
     expect(readout.labourAllocation).toEqual({
       population: 100, unskilled: 0, technicians: 0, engineers: 0, unemployed: 100,
     });
+  });
+});
+
+describe("familyAnchorBuff", () => {
+  it("is 1 for a tier-0 (un-familied) good regardless of complexes", () => {
+    expect(familyAnchorBuff({ [HEAVY_INDUSTRY_COMPLEX]: 1 }, "water")).toBe(1);
+  });
+  it("is 1 when the family's complex is absent", () => {
+    expect(familyAnchorBuff({ metals: 5 }, "metals")).toBe(1);
+  });
+  it("reaches the family's full multiplier at count = 1, scaling linearly below", () => {
+    expect(familyAnchorBuff({ [HEAVY_INDUSTRY_COMPLEX]: 1 }, "metals")).toBeCloseTo(1.4);
+    expect(familyAnchorBuff({ [HEAVY_INDUSTRY_COMPLEX]: 0.5 }, "metals")).toBeCloseTo(1.2);
+  });
+  it("caps at count = 1 (never runs away)", () => {
+    expect(familyAnchorBuff({ [HEAVY_INDUSTRY_COMPLEX]: 3 }, "metals")).toBeCloseTo(1.4);
+  });
+});
+
+describe("buildingProduction with a complex", () => {
+  it("multiplies a family good's output by the buff", () => {
+    const base = buildingProduction({ metals: 2 }, "metals", FULL, unitResourceVector());
+    const buffed = buildingProduction({ metals: 2, [HEAVY_INDUSTRY_COMPLEX]: 1 }, "metals", FULL, unitResourceVector());
+    expect(buffed / base).toBeCloseTo(1.4);
+  });
+  it("flows into input-demand (a buffed consumer draws more of its input)", () => {
+    // metals ← ore; a Heavy complex buffs metals output → ore input-demand rises in step.
+    const base = inputDemandForGood({ metals: 2 }, "ore", FULL, unitResourceVector());
+    const buffed = inputDemandForGood({ metals: 2, [HEAVY_INDUSTRY_COMPLEX]: 1 }, "ore", FULL, unitResourceVector());
+    expect(buffed / base).toBeCloseTo(1.4);
   });
 });
