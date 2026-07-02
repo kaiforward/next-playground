@@ -267,7 +267,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
 | **S2 ✅ shipped** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](../active/gameplay/economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
 | **S3 ✅ shipped** | **Development-tiered civilian demand** (skilled-work share shifts the basket up-tier) — spec: [economy-specialisation-s3-demand.md](../active/gameplay/economy-specialisation-s3-demand.md) | Flat demand | No |
-| **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
+| **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction + the joint S1–S4 calibration pass — working spec: [economy-specialisation-s4-guardrails.md](./economy-specialisation-s4-guardrails.md) | Volume + Diffusion | No |
 
 > **Interstitial — Economy UI legibility (quick wins), between S1 and S2.** S1 made the mechanics deep
 > (skill tiers, academy licensing, per-good labour composition) but the Industry/system screens still show
