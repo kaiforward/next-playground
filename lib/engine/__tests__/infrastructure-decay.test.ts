@@ -15,6 +15,9 @@ import {
   VOCATIONAL_SCHOOL_TYPE,
   RESEARCH_INSTITUTE_TYPE,
   SKILL1_PER_SCHOOL,
+  HEAVY_INDUSTRY_COMPLEX,
+  ANCHOR_RATED_COVERAGE,
+  OUTPUT_PER_UNIT,
 } from "@/lib/constants/industry";
 
 const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
@@ -137,5 +140,29 @@ describe("academy decay", () => {
     const buildings = { research_institute: 1, housing: 10 };
     const res = computeSystemDecay({ buildings, population: 100, unrest: 0, outputUptake: () => 1 }, params);
     expect(res.newCounts[RESEARCH_INSTITUTE_TYPE]).toBeCloseTo(0.5, 6);
+  });
+});
+
+const COMPLEX_PARAMS = { disuseRate: 0.1, unrestRate: 0, unrestThreshold: 0.6 };
+const noUptake = () => 1;
+
+describe("complex decay", () => {
+  it("holds a complex serving a thriving family (used ≈ count)", () => {
+    // metals throughput well above rated coverage → complex fully used → no decay.
+    const metals = (ANCHOR_RATED_COVERAGE * 2) / (OUTPUT_PER_UNIT.metals ?? 1);
+    const buildings = { metals, [HEAVY_INDUSTRY_COMPLEX]: 1 };
+    const { newCounts } = computeSystemDecay(
+      { buildings, population: 1e9, unrest: 0, outputUptake: noUptake },
+      COMPLEX_PARAMS,
+    );
+    expect(newCounts[HEAVY_INDUSTRY_COMPLEX]).toBeUndefined(); // did not decay
+  });
+  it("rots an orphaned complex (no family factories left) toward 0", () => {
+    const buildings = { [HEAVY_INDUSTRY_COMPLEX]: 1 };
+    const { newCounts } = computeSystemDecay(
+      { buildings, population: 1e9, unrest: 0, outputUptake: noUptake },
+      COMPLEX_PARAMS,
+    );
+    expect(newCounts[HEAVY_INDUSTRY_COMPLEX]).toBeLessThan(1); // decayed (used = 0 → full disuse gap)
   });
 });

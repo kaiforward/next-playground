@@ -32,7 +32,9 @@ import {
   labourTotal,
   INPUT_DEMAND_MULTIPLIER,
   FAMILY_BY_GOOD,
+  OUTPUT_PER_UNIT,
   type LabourVector,
+  type SpecialisationFamily,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -327,6 +329,28 @@ export function familyAnchorBuff(buildings: Record<string, number>, goodId: stri
   const count = buildings[family.complexType] ?? 0;
   if (count <= 0) return 1;
   return 1 + (family.buffMult - 1) * Math.min(1, count);
+}
+
+/**
+ * The unbuffed output capacity a system's built factories give a family — Σ over the family's
+ * goods of count × outputPerUnit. The stable, built-base-driven "demand" a complex is measured
+ * against (mirrors an academy's skill demand); independent of staffing/selling swings.
+ */
+export function familyThroughput(buildings: Record<string, number>, family: SpecialisationFamily): number {
+  let t = 0;
+  for (const g of family.goods) t += (buildings[g] ?? 0) * (OUTPUT_PER_UNIT[g] ?? 0);
+  return t;
+}
+
+/**
+ * A specialisation complex's in-use units = min(count, throughput / rated) — how much of its rated
+ * family coverage the built factories actually draw. Thriving family → used ≈ count (holds at cap);
+ * orphaned family (throughput → 0) → used → 0 (rots away). The complex analogue of an academy's
+ * count × min(1, demand/cap).
+ */
+export function complexUsed(count: number, throughput: number, rated: number): number {
+  if (count <= 0) return 0;
+  return Math.min(count, rated > 0 ? throughput / rated : 0);
 }
 
 /**

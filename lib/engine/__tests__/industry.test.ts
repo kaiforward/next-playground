@@ -25,6 +25,8 @@ import {
   computeLabourAllocation,
   skillLicensing,
   familyAnchorBuff,
+  familyThroughput,
+  complexUsed,
 } from "@/lib/engine/industry";
 import type { IndustryHealth, LabourState, GradeStaffing, LabourParts } from "@/lib/engine/industry";
 import {
@@ -42,6 +44,8 @@ import {
   SKILL1_PER_SCHOOL,
   SKILL2_PER_INSTITUTE,
   INPUT_DEMAND_MULTIPLIER,
+  SPECIALISATION_FAMILIES,
+  ANCHOR_RATED_COVERAGE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -775,5 +779,24 @@ describe("buildingProduction with a complex", () => {
     const base = inputDemandForGood({ metals: 2 }, "ore", FULL, unitResourceVector());
     const buffed = inputDemandForGood({ metals: 2, [HEAVY_INDUSTRY_COMPLEX]: 1 }, "ore", FULL, unitResourceVector());
     expect(buffed / base).toBeCloseTo(1.4);
+  });
+});
+
+const HEAVY = SPECIALISATION_FAMILIES.find((f) => f.complexType === HEAVY_INDUSTRY_COMPLEX)!;
+
+describe("familyThroughput / complexUsed", () => {
+  it("sums the family's factory output capacity (unbuffed)", () => {
+    const one = familyThroughput({ metals: 1 }, HEAVY);
+    expect(familyThroughput({ metals: 2 }, HEAVY)).toBeCloseTo(2 * one);
+    expect(familyThroughput({}, HEAVY)).toBe(0);
+  });
+  it("holds a complex fully used when throughput ≥ its rated coverage", () => {
+    expect(complexUsed(1, ANCHOR_RATED_COVERAGE * 2, ANCHOR_RATED_COVERAGE)).toBeCloseTo(1);
+  });
+  it("drops a complex's used toward throughput/rated when the family is thin", () => {
+    expect(complexUsed(1, ANCHOR_RATED_COVERAGE * 0.25, ANCHOR_RATED_COVERAGE)).toBeCloseTo(0.25);
+  });
+  it("is 0 for an orphaned complex (no family production)", () => {
+    expect(complexUsed(1, 0, ANCHOR_RATED_COVERAGE)).toBe(0);
   });
 });
