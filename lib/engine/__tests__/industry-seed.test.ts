@@ -8,6 +8,7 @@ import {
   BUILDING_TYPES,
   PRODUCTION_BUILDING_TYPES,
   VOCATIONAL_SCHOOL_TYPE,
+  COMPLEX_TYPES,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
@@ -45,6 +46,22 @@ function richInput(fill: number): AllocateInput {
   ];
   const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
   return { bodies, slotCap, generalSpace: 200, habitableSpace: 120, fill };
+}
+
+/** A large, deposit-rich, fully-filled system — seeds a broad heavy chain that clears the specialisation throughput floor. */
+function bigDepositRichInput(): AllocateInput {
+  const bodies = [
+    body({ ore: 60, minerals: 60, arable: 20, water: 15, gas: 10, biomass: 10, radioactive: 5 }, 1.2),
+  ];
+  const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
+  return { bodies, slotCap, generalSpace: 5000, habitableSpace: 4000, fill: 1 };
+}
+
+/** A minimal frontier system — too little deposit/space/development for any family to clear the throughput floor. */
+function tinyInput(): AllocateInput {
+  const bodies = [body({ ore: 1, minerals: 1 }, 1.0)];
+  const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
+  return { bodies, slotCap, generalSpace: 5, habitableSpace: 3, fill: 0.05 };
 }
 
 /** Sum extractor counts (tier-0 goods with a resource) per resource. */
@@ -326,5 +343,21 @@ describe("allocateIndustry — academies", () => {
       ).toBeGreaterThan(0);
     }
     expect(asserted, "no seed produced tier-1/2 industry — assertions never ran").toBeGreaterThan(0);
+  });
+});
+
+describe("allocateIndustry — specialisation complexes", () => {
+  it("seeds a specialisation complex at a developed system's dominant family", () => {
+    // A large, deposit-rich, high-fill system seeds a broad heavy chain → clears the throughput floor.
+    const result = allocateIndustry(bigDepositRichInput(), mulberry32(42));
+    const complexes = COMPLEX_TYPES.filter((t) => (result.buildings[t] ?? 0) > 0);
+    expect(complexes.length).toBeLessThanOrEqual(1); // cap: at most one, of one family
+    expect(complexes.length).toBe(1); // developed system → one seeded
+  });
+
+  it("seeds no complex on a thin frontier system (below the throughput floor)", () => {
+    const result = allocateIndustry(tinyInput(), mulberry32(7));
+    const complexes = COMPLEX_TYPES.filter((t) => (result.buildings[t] ?? 0) > 0);
+    expect(complexes.length).toBe(0);
   });
 });
