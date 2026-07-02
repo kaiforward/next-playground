@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
+import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT } from "@/lib/constants/industry";
 import { labourDemand } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
@@ -707,6 +707,31 @@ function tinyHeavyDeficitScenario(): BuildSystemState[] {
   return systems;
 }
 
+// A single producer site (B) that locally produces both ore and gas, making it capable of
+// serving TWO structural deficits in DIFFERENT specialisation families: metals (heavy industry)
+// and fuel (chemicals). Each deficit is sized so its own committed production clears
+// ANCHOR_MIN_THROUGHPUT (and saturates ANCHOR_RATED_COVERAGE) on its own — i.e. without the
+// cross-family anchor cap, the planner would want to co-build a complex for BOTH families here.
+function crossFamilyDeficitScenario(): BuildSystemState[] {
+  const deficitMetals: BuildSystemState = {
+    systemId: "A", factionId: "f1", population: 0, unrest: 0, buildings: {},
+    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    goods: [{ goodId: "metals", stock: 1, targetStock: 30, demand: 5 }],
+  };
+  const deficitFuel: BuildSystemState = {
+    systemId: "C", factionId: "f1", population: 0, unrest: 0, buildings: {},
+    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    goods: [{ goodId: "fuel", stock: 1, targetStock: 30, demand: 5 }],
+  };
+  const producer: BuildSystemState = {
+    systemId: "B", factionId: "f1", population: 5000, unrest: 0,
+    buildings: { ore: 5, gas: 5 },
+    slotCap: emptyResourceVector(), generalSpace: 500, habitableSpace: 0,
+    goods: [],
+  };
+  return [deficitMetals, deficitFuel, producer];
+}
+
 describe("complex co-build", () => {
   it("co-builds a family complex at a site serving a large family deficit", () => {
     const builds = planFactionBuilds(heavyDeficitScenario(), reachable);
@@ -720,5 +745,25 @@ describe("complex co-build", () => {
   it("does not co-build a complex for a tiny family deficit (below the throughput floor)", () => {
     const builds = planFactionBuilds(tinyHeavyDeficitScenario(), reachable);
     expect(builds.some((b) => COMPLEX_TYPES.includes(b.buildingType))).toBe(false);
+    // The floor (not a lack of production) is what suppressed the complex — metals still builds.
+    expect(builds.some((b) => b.buildingType === "metals" && b.count > 0)).toBe(true);
+  });
+
+  it("caps the complex across families — a second family's opportunity at the same site gets zero lift", () => {
+    const builds = planFactionBuilds(crossFamilyDeficitScenario(), reachable);
+
+    // Both goods independently clear the throughput floor — proving the CAP, not the floor, is
+    // what suppresses the second complex.
+    const metalsUnits = countFor(builds, "B", "metals");
+    const fuelUnits = countFor(builds, "B", "fuel");
+    expect(metalsUnits * OUTPUT_PER_UNIT.metals).toBeGreaterThanOrEqual(ANCHOR_MIN_THROUGHPUT);
+    expect(fuelUnits * OUTPUT_PER_UNIT.fuel).toBeGreaterThanOrEqual(ANCHOR_MIN_THROUGHPUT);
+
+    // Yet the anchor cap (1, accumulated across ALL complex types at the site) holds across both
+    // families' opportunities, and only one distinct complex type is ever built.
+    const complexBuilds = builds.filter((b) => COMPLEX_TYPES.includes(b.buildingType));
+    const total = complexBuilds.reduce((s, b) => s + b.count, 0);
+    expect(total).toBeLessThanOrEqual(1);
+    expect(new Set(complexBuilds.map((b) => b.buildingType)).size).toBeLessThanOrEqual(1);
   });
 });
