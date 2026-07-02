@@ -18,8 +18,14 @@ const BREAKDOWN_ROWS: Array<{ key: keyof ConsumptionBreakdown; label: string }> 
 ];
 
 /** Demand-composition tooltip body: which contributors make up this good's demand rate. */
-function DemandBreakdownBody({ breakdown }: { breakdown: ConsumptionBreakdown }) {
+function DemandBreakdownBody({ breakdown, demandRate }: { breakdown: ConsumptionBreakdown; demandRate: number }) {
   const rows = BREAKDOWN_ROWS.filter((r) => breakdown[r.key] > 0);
+  // demandRate is floored at a minimum tradeable demand server-side, so on tiny
+  // systems the terms can sum below it (or all be zero). Name the floor rather
+  // than showing a breakdown that doesn't add up — the scaled floor constant is
+  // server-only, so the gap is detected from the served numbers.
+  const sum = breakdown.base + breakdown.technicians + breakdown.engineers;
+  const floored = demandRate - sum > demandRate * 1e-6;
   return (
     <div className="space-y-0.5">
       {rows.map((r) => (
@@ -28,6 +34,13 @@ function DemandBreakdownBody({ breakdown }: { breakdown: ConsumptionBreakdown })
           <span className="font-mono text-[10px] text-text-primary">{breakdown[r.key].toFixed(2)}/cyc</span>
         </div>
       ))}
+      {floored && (
+        <p className="text-[10px] text-text-tertiary">
+          {rows.length === 0
+            ? "No local consumption — the shown rate is the market's minimum tradeable demand."
+            : "Consumption is below the market's minimum tradeable demand; the shown rate is that floor."}
+        </p>
+      )}
     </div>
   );
 }
@@ -92,7 +105,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="w-52">
-                    <DemandBreakdownBody breakdown={d.breakdown} />
+                    <DemandBreakdownBody breakdown={d.breakdown} demandRate={d.demandRate} />
                   </TooltipContent>
                 </Tooltip>
                 <span className="text-sm font-mono text-text-secondary">{d.demandRate.toFixed(2)}/cyc</span>

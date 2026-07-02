@@ -9,6 +9,7 @@ vi.mock("@/lib/prisma", () => ({ prisma }));
 
 const { getSystemPopulation } = await import("@/lib/services/system-population");
 const { invalidateVisibilityCache } = await import("@/lib/services/visibility-cache");
+const { invalidateAdjacencyCache } = await import("@/lib/services/adjacency");
 
 describe("getSystemPopulation (integration)", () => {
   let universe: TestUniverse;
@@ -19,6 +20,7 @@ describe("getSystemPopulation (integration)", () => {
   beforeEach(async () => {
     universe = await seedTestUniverse(prisma);
     player = await createTestPlayer(prisma, { credits: 1000 });
+    invalidateAdjacencyCache();
     invalidateVisibilityCache(player.playerId);
 
     // Place a ship at the agricultural system so it becomes visible.
@@ -68,6 +70,33 @@ describe("getSystemPopulation (integration)", () => {
     // goodName resolves the real display name via the GOODS lookup, not the raw-id
     // fallback (`?? e.goodId`). At population 400 water/food (highest per-capita) lead.
     expect(["Water", "Food"]).toContain(data.demand[0].goodName);
+    // Each entry carries its consumption breakdown; for the top good (well above
+    // the MIN_DEMAND floor) the terms sum to the demandRate exactly.
+    const top = data.demand[0];
+    expect(top.breakdown.base).toBeGreaterThan(0);
+    expect(top.breakdown.base + top.breakdown.technicians + top.breakdown.engineers).toBeCloseTo(top.demandRate, 6);
+  });
+
+  it("reflects skilled work in the demand breakdown", async () => {
+    // Give the system technician jobs (metals is skill1-gated) plus the licence
+    // to work them (vocational_school): the service's building-derived basis must
+    // surface a technician term for a skill1-basket good.
+    await prisma.systemBuilding.upsert({
+      where: { systemId_buildingType: { systemId: system.id, buildingType: "metals" } },
+      create: { systemId: system.id, buildingType: "metals", count: 3 },
+      update: { count: 3 },
+    });
+    await prisma.systemBuilding.upsert({
+      where: { systemId_buildingType: { systemId: system.id, buildingType: "vocational_school" } },
+      create: { systemId: system.id, buildingType: "vocational_school", count: 1 },
+      update: { count: 1 },
+    });
+
+    const data = await getSystemPopulation(player.playerId, system.id);
+    expect(data.visibility).toBe("visible");
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    const consumerGoods = data.demand.find((d) => d.goodId === "consumer_goods")!;
+    expect(consumerGoods.breakdown.technicians).toBeGreaterThan(0);
   });
 
   it("returns { visibility: 'unknown' } for an unsurveyed system", async () => {

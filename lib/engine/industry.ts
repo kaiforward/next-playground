@@ -573,6 +573,10 @@ function skillBasketEntries(consumption: Record<string, number>): SkillBasketEnt
     .sort((a, b) => b.perHead - a.perHead);
 }
 
+/** The per-grade basket catalogues are argument-independent — computed once, shared by every readout. */
+const TECHNICIAN_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL1_CONSUMPTION);
+const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTION);
+
 /**
  * Builds an industry readout for one system from its current industrial base and
  * market stock. Pure — no DB dependency. Reuses the existing helpers for all
@@ -708,8 +712,8 @@ export function buildIndustryReadout(
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
     skillBaskets: {
-      technicians: skillBasketEntries(SKILL1_CONSUMPTION),
-      engineers: skillBasketEntries(SKILL2_CONSUMPTION),
+      technicians: TECHNICIAN_BASKET,
+      engineers: ENGINEER_BASKET,
     },
   };
 }

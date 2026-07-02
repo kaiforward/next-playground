@@ -509,7 +509,7 @@ function LabourCard({
 }: {
   labour: SystemLabour;
   allocation: LabourAllocation;
-  skillBaskets: { technicians: SkillBasketEntry[]; engineers: SkillBasketEntry[] };
+  skillBaskets: SystemIndustryReadout["skillBaskets"];
 }) {
   const pop = Math.max(0, allocation.population);
   const jobs = allocation.unskilled + allocation.technicians + allocation.engineers;
