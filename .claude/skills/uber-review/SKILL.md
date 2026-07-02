@@ -456,9 +456,11 @@ Optional, human-gated, and **only** in PR mode. The review pipeline itself never
 
 2. **Re-verify.** Run the project's checks and confirm they pass before claiming done: `tsc` clean and the relevant test suites green (`npx vitest run` for unit; add integration if the change touches the live DB path). Quote the actual output — never assert "tests pass" without running them.
 
-3. **Pause for a human sanity-check — REQUIRED.** Stop and ask the user to confirm before merging. Explicitly call out anything the review and its agents **cannot** validate — UI/visual changes, interaction or animation behaviour, anything that needs a running app or a human eye — and request an explicit go-ahead. Do not merge on implied approval.
+3. **Complete the feature's doc lifecycle on the branch** (when the PR ships a feature). Promote its spec `docs/planned/` → `docs/active/` with an as-built status header, tick the umbrella/roadmap doc, update `docs/SPEC.md`, and DELETE the `docs/build-plans/` entry — as commit(s) on this same branch, so one squash-merge lands code + docs atomically. Never leave the doc shuffle for a post-merge docs-only PR.
 
-4. **Only after the user confirms**, finish the merge:
+4. **Pause for a human sanity-check — REQUIRED.** Stop and ask the user to confirm before merging. Explicitly call out anything the review and its agents **cannot** validate — UI/visual changes, interaction or animation behaviour, anything that needs a running app or a human eye — and request an explicit go-ahead. Do not merge on implied approval.
+
+5. **Only after the user confirms**, finish the merge:
    - Commit the fixes to the PR branch and push.
    - Squash-merge into the base branch with a **clean, atomic, feature-describing** commit message — a concise subject plus a `--body-file` body describing *what the feature does*. No "address review feedback", no merge/PR-plumbing noise, no implementation-detail changelog (per the clean-history convention).
    - Fast-forward the local base branch to the merged commit.
