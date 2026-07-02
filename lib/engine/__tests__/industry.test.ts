@@ -56,6 +56,7 @@ import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
+import { SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 
 /** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
 const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
@@ -767,6 +768,34 @@ describe("buildIndustryReadout labourAllocation", () => {
     expect(readout.labourAllocation).toEqual({
       population: 100, unskilled: 0, technicians: 0, engineers: 0, unemployed: 100,
     });
+  });
+});
+
+describe("buildIndustryReadout skillBaskets", () => {
+  const MIN = 5;
+  const MAXBAND = () => 100;
+
+  it("technicians and engineers baskets are non-empty, sorted descending by perHead, and drawn from the matching constant", () => {
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const { technicians, engineers } = readout.skillBaskets;
+
+    expect(technicians.length).toBeGreaterThan(0);
+    expect(engineers.length).toBeGreaterThan(0);
+
+    for (const entries of [technicians, engineers]) {
+      for (let i = 1; i < entries.length; i++) {
+        expect(entries[i].perHead).toBeLessThanOrEqual(entries[i - 1].perHead);
+      }
+    }
+
+    for (const entry of technicians) expect(SKILL1_CONSUMPTION[entry.goodId]).toBe(entry.perHead);
+    for (const entry of engineers) expect(SKILL2_CONSUMPTION[entry.goodId]).toBe(entry.perHead);
+  });
+
+  it("skillBaskets are the same for every readout (static per-grade catalogue, not system-dependent)", () => {
+    const a = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const b = buildIndustryReadout({ metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 }, 1000, {}, () => MIN, unitResourceVector(), MAXBAND);
+    expect(a.skillBaskets).toEqual(b.skillBaskets);
   });
 });
 

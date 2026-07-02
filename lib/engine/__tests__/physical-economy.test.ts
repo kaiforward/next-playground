@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { consumptionRate } from "../physical-economy";
+import { consumptionRate, consumptionBreakdown } from "../physical-economy";
 import type { CivilianDemandBasis } from "../physical-economy";
 import {
   GOOD_CONSUMPTION,
@@ -51,5 +51,53 @@ describe("consumptionRate", () => {
     const base = consumptionRate("food", popOnly(1000));
     const skilled = consumptionRate("food", { population: 1000, technicians: 200, engineers: 40 });
     expect(skilled).toBeCloseTo(base, 10);
+  });
+});
+
+describe("consumptionBreakdown", () => {
+  it("terms sum to consumptionRate for a basket good with a mixed basis", () => {
+    const basis: CivilianDemandBasis = { population: 1000, technicians: 100, engineers: 40 };
+    const breakdown = consumptionBreakdown("luxuries", basis);
+    expect(breakdown.base + breakdown.technicians + breakdown.engineers).toBeCloseTo(
+      consumptionRate("luxuries", basis),
+      10,
+    );
+  });
+
+  it("terms sum to consumptionRate for a non-basket good", () => {
+    const basis: CivilianDemandBasis = { population: 1000, technicians: 100, engineers: 40 };
+    const breakdown = consumptionBreakdown("food", basis);
+    expect(breakdown.base + breakdown.technicians + breakdown.engineers).toBeCloseTo(
+      consumptionRate("food", basis),
+      10,
+    );
+    expect(breakdown.technicians).toBe(0);
+    expect(breakdown.engineers).toBe(0);
+  });
+
+  it("splits each term correctly for a basket good", () => {
+    const basis: CivilianDemandBasis = { population: 1000, technicians: 100, engineers: 40 };
+    const breakdown = consumptionBreakdown("consumer_goods", basis);
+    expect(breakdown.base).toBeCloseTo(GOOD_CONSUMPTION.consumer_goods * 1000, 10);
+    expect(breakdown.technicians).toBeCloseTo(SKILL1_CONSUMPTION.consumer_goods * 100, 10);
+    expect(breakdown.engineers).toBeCloseTo(SKILL2_CONSUMPTION.consumer_goods * 40, 10);
+  });
+
+  it("zero-skill basis yields zero technicians/engineers terms", () => {
+    const breakdown = consumptionBreakdown("luxuries", popOnly(1000));
+    expect(breakdown.technicians).toBe(0);
+    expect(breakdown.engineers).toBe(0);
+  });
+
+  it("clamps negative population and skilled counts to zero, like consumptionRate", () => {
+    const breakdown = consumptionBreakdown("consumer_goods", { population: -100, technicians: -5, engineers: -5 });
+    expect(breakdown.base).toBe(0);
+    expect(breakdown.technicians).toBe(0);
+    expect(breakdown.engineers).toBe(0);
+  });
+
+  it("returns all-zero terms for unknown goods", () => {
+    const breakdown = consumptionBreakdown("not_a_good", { population: 1000, technicians: 100, engineers: 50 });
+    expect(breakdown).toEqual({ base: 0, technicians: 0, engineers: 0 });
   });
 });

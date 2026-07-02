@@ -17,7 +17,7 @@
 import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { CivilianDemandBasis, SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
+import { GOOD_CONSUMPTION, GOOD_PRODUCTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES,
@@ -467,6 +467,12 @@ export function inputDemandFromProduction(
  */
 export type IdleReason = "occupancy" | "labour" | "skill1" | "skill2" | "selling";
 
+/** One per-head basket entry — a good a skilled grade consumes on top of the base need. */
+export interface SkillBasketEntry {
+  goodId: string;
+  perHead: number;
+}
+
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
@@ -495,6 +501,13 @@ export interface SystemIndustryReadout {
   }>;
   /** Produced goods that have a recipe. Sorted by inputGate ascending (most-throttled first). */
   supplyChain: Array<{ goodId: string; inputGate: number; throttledBy: string[] }>;
+  /**
+   * SKILL1_CONSUMPTION/SKILL2_CONSUMPTION as display-ready entries, each sorted by
+   * perHead descending. The same catalogue for every system (skilled-grade baskets
+   * don't vary by system) — served here so the client never imports the scaled
+   * constants directly (they're server-only, see ECONOMY_SCALE).
+   */
+  skillBaskets: { technicians: SkillBasketEntry[]; engineers: SkillBasketEntry[] };
 }
 
 /** Coarse industry health read, derived from the decay-loop quantities. */
@@ -551,6 +564,13 @@ export function buildingHealth(input: BuildingHealthInput): IndustryHealth {
   if (idle >= IDLE_COLLAPSING_FRACTION) return "declining";
   if (idle >= IDLE_COASTING_FRACTION) return "coasting";
   return "thriving";
+}
+
+/** Turn a per-head consumption constant into display-ready basket entries, richest first. */
+function skillBasketEntries(consumption: Record<string, number>): SkillBasketEntry[] {
+  return Object.entries(consumption)
+    .map(([goodId, perHead]) => ({ goodId, perHead }))
+    .sort((a, b) => b.perHead - a.perHead);
 }
 
 /**
@@ -687,6 +707,10 @@ export function buildIndustryReadout(
     labourAllocation: computeLabourAllocation(parts, population),
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
+    skillBaskets: {
+      technicians: skillBasketEntries(SKILL1_CONSUMPTION),
+      engineers: skillBasketEntries(SKILL2_CONSUMPTION),
+    },
   };
 }
 

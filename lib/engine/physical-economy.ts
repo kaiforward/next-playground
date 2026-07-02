@@ -27,13 +27,26 @@ export interface CivilianDemandBasis {
   engineers: number;
 }
 
+/** The three additive terms of consumptionRate, separated for display. */
+export interface ConsumptionBreakdown {
+  base: number;
+  technicians: number;
+  engineers: number;
+}
+
+/** consumptionRate split into its per-capita baseline and per-grade basket terms. */
+export function consumptionBreakdown(goodId: string, basis: CivilianDemandBasis): ConsumptionBreakdown {
+  return {
+    base: (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.population),
+    technicians: (SKILL1_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.technicians),
+    engineers: (SKILL2_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.engineers),
+  };
+}
+
 /** Civilian consumption rate: per-capita baseline + additive per-grade baskets. */
 export function consumptionRate(goodId: string, basis: CivilianDemandBasis): number {
-  return (
-    (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.population) +
-    (SKILL1_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.technicians) +
-    (SKILL2_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.engineers)
-  );
+  const { base, technicians, engineers } = consumptionBreakdown(goodId, basis);
+  return base + technicians + engineers;
 }
 
 /** Per-good production/consumption snapshot for one system — the read-service shape. */

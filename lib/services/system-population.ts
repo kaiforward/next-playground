@@ -4,6 +4,7 @@ import { getPlayerVisibility } from "@/lib/services/visibility-cache";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { demandFootprint } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { consumptionBreakdown } from "@/lib/engine/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 import type { SystemPopulationData } from "@/lib/types/api";
 
@@ -43,6 +44,7 @@ export async function getSystemPopulation(
     goodId: e.goodId,
     goodName: GOODS[e.goodId]?.name ?? e.goodId,
     demandRate: e.demandRate,
+    breakdown: consumptionBreakdown(e.goodId, basis),
   }));
 
   return {
