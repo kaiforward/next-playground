@@ -1,7 +1,7 @@
 "use client";
 
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { forwardRef } from "react";
+import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { twMerge } from "tailwind-merge";
 
 /**
@@ -18,6 +18,32 @@ import { twMerge } from "tailwind-merge";
 export const TooltipProvider = TooltipPrimitive.Provider;
 export const Tooltip = TooltipPrimitive.Root;
 export const TooltipTrigger = TooltipPrimitive.Trigger;
+
+/**
+ * Trigger for a plain-text label whose tooltip is the payload (good names,
+ * building names, labour chips, prose keywords). Carries the app-wide
+ * "tooltip here" affordance — dotted underline, solid on hover — baked in so
+ * panels can't drift; pass `className` for layout only, never decoration.
+ * Controls with supplemental legend tooltips (checkboxes, segments, radios)
+ * use the bare `TooltipTrigger` and stay unmarked — see theme.md.
+ */
+export function TooltipTriggerLabel({
+  className = "",
+  ...props
+}: ComponentPropsWithoutRef<"button">) {
+  return (
+    <TooltipPrimitive.Trigger asChild>
+      <button
+        type="button"
+        className={twMerge(
+          "text-left underline decoration-dotted decoration-1 decoration-text-tertiary/75 underline-offset-[3px] hover:decoration-solid hover:decoration-text-secondary",
+          className,
+        )}
+        {...props}
+      />
+    </TooltipPrimitive.Trigger>
+  );
+}
 
 export const TooltipContent = forwardRef<
   HTMLDivElement,

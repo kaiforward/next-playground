@@ -24,7 +24,7 @@ import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { SegmentedControl } from "@/components/form/segmented-control";
 import { useIndustryDensity, type IndustryDensity } from "@/lib/hooks/use-industry-density";
 
@@ -269,16 +269,14 @@ function ProductionRow({
       <div className="flex items-center gap-2.5">
         <HealthGlyph health={health} className="w-3 shrink-0 text-center text-[10px]" />
         <Tooltip>
-          <TooltipTrigger asChild>
-            <button type="button" className="flex w-40 shrink-0 items-center gap-1.5 text-left text-sm text-text-primary underline-offset-2 hover:underline">
-              {label(b.buildingType)}
-              {yieldMult !== undefined && (
-                <span className={`font-mono text-[10px] ${yieldBand ? QUALITY_BAND_TEXT[yieldBand] : "text-text-tertiary"}`}>
-                  ×{yieldMult.toFixed(2)}
-                </span>
-              )}
-            </button>
-          </TooltipTrigger>
+          <TooltipTriggerLabel className="flex w-40 shrink-0 items-center gap-1.5 text-sm text-text-primary">
+            {label(b.buildingType)}
+            {yieldMult !== undefined && (
+              <span className={`font-mono text-[10px] ${yieldBand ? QUALITY_BAND_TEXT[yieldBand] : "text-text-tertiary"}`}>
+                ×{yieldMult.toFixed(2)}
+              </span>
+            )}
+          </TooltipTriggerLabel>
           <TooltipContent className="w-64">
             <BuildingTooltipBody b={b} labour={labour} />
           </TooltipContent>
@@ -543,18 +541,25 @@ function LabourCard({
 
       <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 font-mono text-[10px] text-text-secondary">
         {working.map((w) => {
+          // Chip layout classes sit on the trigger itself: an underline on a
+          // wrapper never paints inside an atomic inline-flex child, and the
+          // inline-block swatch is skipped so only the text gets the dots.
           const chip = (
-            <span className="inline-flex items-center gap-1.5">
+            <>
               <span aria-hidden className={`inline-block h-2 w-2 ${w.bar}`} />
-              {w.label} <span className="text-text-primary">{formatPeople(w.value)}</span>
-            </span>
+              <span>
+                {w.label} <span className="text-text-primary">{formatPeople(w.value)}</span>
+              </span>
+            </>
           );
-          if (!w.basket) return <span key={w.key}>{chip}</span>;
+          if (!w.basket) {
+            return (
+              <span key={w.key} className="inline-flex items-center gap-1.5">{chip}</span>
+            );
+          }
           return (
             <Tooltip key={w.key}>
-              <TooltipTrigger asChild>
-                <button type="button" className="underline-offset-2 hover:underline">{chip}</button>
-              </TooltipTrigger>
+              <TooltipTriggerLabel className="inline-flex items-center gap-1.5">{chip}</TooltipTriggerLabel>
               <TooltipContent className="w-56">
                 <BasketTooltipBody grade={w.key} basket={w.basket} />
               </TooltipContent>

@@ -194,6 +194,15 @@ Key-value display with a dotted border leader between label and value. Wrap in `
 
 Filter chips use `rounded-full` (pill shape) with accent tint when active. This is the intentional exception to the no-rounding rule.
 
+### Tooltip affordance (`components/ui/tooltip.tsx`)
+
+Any plain text whose tooltip is the payload — good names, building names, labour chips, keywords in descriptions — is marked with a **dotted underline** (`decoration-text-tertiary/75`, offset 3px) that turns solid on hover. Text colour stays untouched, so panel colour-coding (chip grades, yield gold) survives. Use `TooltipTriggerLabel`, which bakes the affordance in; pass `className` for layout only, never decoration.
+
+Two deliberate boundaries:
+
+- **Controls stay unmarked.** Checkboxes, segmented controls, radio rows, bars, and icon buttons whose tooltips are supplemental legends use the bare `TooltipTrigger` — they already read as interactive, and a dotted underline would misread.
+- **Copper is reserved.** Dotted grey means "explanation, not navigation" (the web `<abbr>` convention); coloured/underlined text in a browser promises a link. A copper treatment is deliberately held back as the future second tier for glossary-backed concept links (the planned deep-tooltip system).
+
 ---
 
 ## Icon Sizing
@@ -217,3 +226,4 @@ Lucide icons default to 24x24. Size them explicitly for context:
 - **No raw `<input>` or `<select>`** — use form components from `components/form/`
 - **No inline progress bars** — use `ProgressBar` component with appropriate color/size
 - **No unsized lucide icons in buttons** — always set explicit `w-*` / `h-*` classes
+- **No unmarked text tooltips, no ad-hoc trigger styling** — text labels carrying a tooltip use `TooltipTriggerLabel` (dotted-underline affordance), never a hand-styled `TooltipTrigger` + `hover:underline`
