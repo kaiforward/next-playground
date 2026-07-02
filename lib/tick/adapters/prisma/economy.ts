@@ -7,8 +7,8 @@ import type {
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { computeLabourState, buildingProduction } from "@/lib/engine/industry";
-import type { LabourState } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot, buildingProduction } from "@/lib/engine/industry";
+import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import type { ResourceVector } from "@/lib/types/game";
 import {
@@ -68,20 +68,21 @@ export class PrismaEconomyWorld implements EconomyWorld {
       map[b.buildingType] = b.count;
       buildingsBySystem.set(b.systemId, map);
     }
-    // Cache labour state + per-resource yields per system — shared across
-    // all goods in the system. Yields come from the already-loaded yield*
-    // columns on the included system row (no extra query).
-    const labourStateBySystem = new Map<string, LabourState>();
+    // Cache the labour snapshot (fulfilment state + civilian demand basis) +
+    // per-resource yields per system — shared across all goods in the system.
+    // Yields come from the already-loaded yield* columns on the included
+    // system row (no extra query).
+    const labourBySystem = new Map<string, SystemLabourSnapshot>();
     const yieldsBySystem = new Map<string, ResourceVector>();
 
     return rows.map((m) => {
       const sys = m.station.system;
 
       const buildings = buildingsBySystem.get(sys.id) ?? {};
-      let state = labourStateBySystem.get(sys.id);
-      if (state === undefined) {
-        state = computeLabourState(buildings, sys.population);
-        labourStateBySystem.set(sys.id, state);
+      let snap = labourBySystem.get(sys.id);
+      if (snap === undefined) {
+        snap = computeSystemLabourSnapshot(buildings, sys.population);
+        labourBySystem.set(sys.id, snap);
       }
       let yields = yieldsBySystem.get(sys.id);
       if (yields === undefined) {
@@ -97,8 +98,8 @@ export class PrismaEconomyWorld implements EconomyWorld {
       }
 
       const goodKey = GOOD_NAME_TO_KEY.get(m.good.name) ?? m.good.name;
-      const production = buildingProduction(buildings, goodKey, state, yields);
-      const consumption = consumptionRate(goodKey, sys.population);
+      const production = buildingProduction(buildings, goodKey, snap.state, yields);
+      const consumption = consumptionRate(goodKey, snap.basis);
 
       // Every seeded system has a non-null factionId. The `?? "frontier"`
       // fallback covers the only legitimate gap: a system the adapter sees

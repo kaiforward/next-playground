@@ -15,7 +15,7 @@
  * and the substrate read service.
  */
 import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
-import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
+import type { CivilianDemandBasis, SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
@@ -223,6 +223,28 @@ export function computeLabourAllocation(parts: LabourParts, population: number):
   const unskilled = Math.min(unskilledJobs, pool);
   pool -= unskilled;
   return { population: Math.max(0, population), unskilled, technicians, engineers, unemployed: pool };
+}
+
+/**
+ * Per-system labour snapshot shared across all of a system's goods: the
+ * production fulfilment gates plus the civilian demand basis, derived from one
+ * labourParts pass. Cache one per system and reuse across its goods — the
+ * pattern every tick adapter and the seed path follow.
+ */
+export interface SystemLabourSnapshot {
+  state: LabourState;
+  basis: CivilianDemandBasis;
+}
+
+export function computeSystemLabourSnapshot(
+  buildings: Record<string, number>,
+  population: number,
+): SystemLabourSnapshot {
+  const parts = labourParts(buildings);
+  return {
+    state: labourStateFromParts(parts, population),
+    basis: computeLabourAllocation(parts, population),
+  };
 }
 
 /** One skilled grade's academy-licensing state for the Labour card — working vs licensed seats vs jobs. */

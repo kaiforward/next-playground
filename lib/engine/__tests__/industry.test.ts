@@ -27,6 +27,9 @@ import {
   familyAnchorBuff,
   familyThroughput,
   complexUsed,
+  computeSystemLabourSnapshot,
+  labourParts,
+  labourStateFromParts,
 } from "@/lib/engine/industry";
 import type { IndustryHealth, LabourState, GradeStaffing, LabourParts } from "@/lib/engine/industry";
 import {
@@ -798,6 +801,19 @@ describe("familyThroughput / complexUsed", () => {
   });
   it("is 0 for an orphaned complex (no family production)", () => {
     expect(complexUsed(1, 0, ANCHOR_RATED_COVERAGE)).toBe(0);
+  });
+});
+
+describe("computeSystemLabourSnapshot", () => {
+  it("bundles the same state and allocation the standalone helpers produce", () => {
+    const buildings = { electronics: 4, vocational_school: 2, research_institute: 1 };
+    const snap = computeSystemLabourSnapshot(buildings, 500);
+    const parts = labourParts(buildings);
+    expect(snap.state).toEqual(labourStateFromParts(parts, 500));
+    const alloc = computeLabourAllocation(parts, 500);
+    expect(snap.basis.population).toBe(alloc.population);
+    expect(snap.basis.technicians).toBe(alloc.technicians);
+    expect(snap.basis.engineers).toBe(alloc.engineers);
   });
 });
 
