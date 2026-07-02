@@ -265,7 +265,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 |---|---|---|---|
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
 | **S2 ✅ shipped** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](../active/gameplay/economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
-| **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
+| **S3** | **Development-tiered civilian demand** (skilled-work share shifts the basket up-tier) — spec: [economy-specialisation-s3-demand.md](./economy-specialisation-s3-demand.md) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
 
 > **Interstitial — Economy UI legibility (quick wins), between S1 and S2.** S1 made the mechanics deep
@@ -378,5 +378,8 @@ directional evidence, not multi-seed robustness. Raw runs saved to
   [the merged factor model](#skill-tiered-labour-the-merged-factor-model): a buildable labour gate,
   transitively co-built. The open piece is whether to fold the academy's build overhead into opportunity
   scoring for the concentration moat, or leave that to calibration.)*
-- **Demand-concentration basis** — what "system character" is computed from (built profile, population,
-  tier mix) without re-introducing economy-type tables. (S3.)
+- ~~**Demand-concentration basis**~~ — RESOLVED 2026-07-02: skilled work *performed*
+  (`computeLabourAllocation` technicians/engineers), per-grade additive baskets. Not the built
+  production profile — pops don't consume more of what their system makes; the built-profile→demand
+  link is the (existing) industrial input-demand channel. See
+  [economy-specialisation-s3-demand.md](./economy-specialisation-s3-demand.md).
