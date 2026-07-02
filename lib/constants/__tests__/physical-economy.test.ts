@@ -3,6 +3,8 @@ import {
   GOOD_PRODUCTION,
   GOOD_CONSUMPTION,
   LABOUR_HALF_POP,
+  SKILL1_CONSUMPTION,
+  SKILL2_CONSUMPTION,
 } from "../physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "../goods";
 import { RESOURCE_TYPES } from "@/lib/engine/resources";
@@ -58,5 +60,28 @@ describe("resource-driven vs labour-only split", () => {
 describe("LABOUR_HALF_POP", () => {
   it("is a positive population magnitude", () => {
     expect(LABOUR_HALF_POP).toBeGreaterThan(0);
+  });
+});
+
+describe("skill consumption baskets", () => {
+  it("every basket good is a base-consumed good (POP_CENTRE_STORAGE flag + demandFootprint filter rely on this)", () => {
+    for (const basket of [SKILL1_CONSUMPTION, SKILL2_CONSUMPTION]) {
+      for (const goodId of Object.keys(basket)) {
+        expect(GOOD_CONSUMPTION[goodId], goodId).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("all basket needs are positive", () => {
+    for (const basket of [SKILL1_CONSUMPTION, SKILL2_CONSUMPTION]) {
+      for (const [goodId, need] of Object.entries(basket)) {
+        expect(need, goodId).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("luxuries are engineer-exclusive (the top-of-ladder signal)", () => {
+    expect(SKILL1_CONSUMPTION.luxuries).toBeUndefined();
+    expect(SKILL2_CONSUMPTION.luxuries).toBeGreaterThan(0);
   });
 });
