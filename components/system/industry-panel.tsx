@@ -16,7 +16,7 @@ import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
-import { buildingHealth, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
+import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
 import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation } from "@/lib/engine/industry";
 import type { GoodTier, QualityBandId } from "@/lib/types/game";
 import { formatMagnitude, formatPeople } from "@/lib/utils/format";
@@ -142,6 +142,7 @@ function RowHeader({ showOutput }: { showOutput: boolean }) {
 /** Rich per-building tooltip: header · description · per-grade filled/needed · footer. Producers get the grade split; housing/academies a lighter body. */
 function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
+  const isComplex = COMPLEX_TYPES.includes(b.buildingType);
   const isProducer = b.outputGood !== undefined && !isAcademy && b.tier >= 0;
   const goodTier = producerTier(b);
   const grades = isProducer
@@ -153,16 +154,32 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
     : [];
   const wall = grades.find((g) => g.wall);
   const tierLabel = b.tier >= 0 ? TIER_LABELS[goodTier] : undefined;
+  const complexFamily = isComplex ? COMPLEX_BY_TYPE[b.buildingType] : undefined;
+  // The buff depends only on this complex's own count (linear below one full complex), so a
+  // single-entry record reads the same strength the production engine applies.
+  const familyBuff = complexFamily ? familyAnchorBuff({ [b.buildingType]: b.count }, complexFamily.goods[0] ?? "") : 1;
 
   return (
     <div className="space-y-1.5">
       <p className="font-display text-[12px] font-semibold text-text-primary">{label(b.buildingType)}</p>
       {(tierLabel || b.count > 0) && (
         <p className="font-mono text-[10px] text-text-tertiary">
-          {tierLabel && !isAcademy ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
+          {tierLabel && !isAcademy && !isComplex ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
         </p>
       )}
       <p className="text-[11px] leading-snug text-text-secondary">{describeBuilding(b.buildingType)}</p>
+
+      {complexFamily && (
+        <div className="space-y-0.5 border-t border-border/60 pt-1.5">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">
+            family yield — <span className="text-text-secondary">×{Number(familyBuff.toFixed(2))}</span>
+            {b.count < 1 ? ` of ×${complexFamily.buffMult} at full strength` : ""}
+          </p>
+          <p className="text-[11px] leading-snug text-text-secondary">
+            {complexFamily.goods.map((g) => GOODS[g]?.name ?? g).join(" · ")}
+          </p>
+        </div>
+      )}
 
       {isProducer && grades.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
@@ -348,6 +365,31 @@ function PoolHeader({ title, sub, used, total }: { title: string; sub: string; u
 
 function RoleLabel({ children }: { children: string }) {
   return <p className="px-3 pb-0.5 pt-2 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">{children}</p>;
+}
+
+/** A labelled group of simple building rows (no output column) — housing, academies, complexes. */
+function BuildingGroup({
+  title,
+  buildings,
+  unrest,
+  labour,
+  density,
+}: {
+  title: string;
+  buildings: BuildingEntry[];
+  unrest: number;
+  labour: SystemLabour;
+  density: IndustryDensity;
+}) {
+  if (buildings.length === 0) return null;
+  return (
+    <>
+      <RoleLabel>{title}</RoleLabel>
+      <div>
+        {buildings.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
+      </div>
+    </>
+  );
 }
 
 function LegendTooltip() {
@@ -614,30 +656,9 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           ]}
         />
 
-        {housing.length > 0 && (
-          <>
-            <RoleLabel>Housing</RoleLabel>
-            <div>
-              {housing.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
-            </div>
-          </>
-        )}
-        {academies.length > 0 && (
-          <>
-            <RoleLabel>Academies</RoleLabel>
-            <div>
-              {academies.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
-            </div>
-          </>
-        )}
-        {complexes.length > 0 && (
-          <>
-            <RoleLabel>Specialisation</RoleLabel>
-            <div>
-              {complexes.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
-            </div>
-          </>
-        )}
+        <BuildingGroup title="Housing" buildings={housing} unrest={unrest} labour={labour} density={density} />
+        <BuildingGroup title="Academies" buildings={academies} unrest={unrest} labour={labour} density={density} />
+        <BuildingGroup title="Specialisation" buildings={complexes} unrest={unrest} labour={labour} density={density} />
         {factories.length > 0 && (
           <>
             <RoleLabel>Production</RoleLabel>

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT } from "@/lib/constants/industry";
+import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, ANCHOR_FOOTPRINT, effectiveSpaceCost } from "@/lib/constants/industry";
 import { labourDemand } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
@@ -732,7 +732,43 @@ function crossFamilyDeficitScenario(): BuildSystemState[] {
   return [deficitMetals, deficitFuel, producer];
 }
 
+// Two producers with identical space-bound metals capacity; C already carries the heavy-industry
+// complex (its footprint pre-paid in extra general space so remaining capacity matches B's). The
+// shortfall sits between B's unbuffed reach (1.0×) and C's buffed reach (1.4×), so both sites are
+// capacity-limited at score time and C's buffed per-unit must rank it first.
+function anchoredVsGreenfieldScenario(): BuildSystemState[] {
+  const capUnits = 20;
+  const space = capUnits * effectiveSpaceCost("metals");
+  const shortfall = capUnits * OUTPUT_PER_UNIT.metals * 1.15;
+  const deficit: BuildSystemState = {
+    systemId: "A", factionId: "f1", population: 0, unrest: 0, buildings: {},
+    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    goods: [{ goodId: "metals", stock: 0, targetStock: shortfall, demand: 5 }],
+  };
+  const greenfield: BuildSystemState = {
+    systemId: "B", factionId: "f1", population: 5000, unrest: 0,
+    buildings: { ore: 5 },
+    slotCap: emptyResourceVector(), generalSpace: space, habitableSpace: 0,
+    goods: [],
+  };
+  const anchored: BuildSystemState = {
+    systemId: "C", factionId: "f1", population: 5000, unrest: 0,
+    buildings: { ore: 5, [HEAVY_INDUSTRY_COMPLEX]: 1 },
+    slotCap: emptyResourceVector(), generalSpace: space + ANCHOR_FOOTPRINT, habitableSpace: 0,
+    goods: [],
+  };
+  return [deficit, greenfield, anchored];
+}
+
 describe("complex co-build", () => {
+  it("routes family production to the site already carrying the complex (the snowball)", () => {
+    const builds = planFactionBuilds(anchoredVsGreenfieldScenario(), reachable);
+    const atAnchored = countFor(builds, "C", "metals");
+    const atGreenfield = countFor(builds, "B", "metals");
+    expect(atAnchored).toBeGreaterThan(0);
+    expect(atAnchored).toBeGreaterThan(atGreenfield);
+  });
+
   it("co-builds a family complex at a site serving a large family deficit", () => {
     const builds = planFactionBuilds(heavyDeficitScenario(), reachable);
     const complex = builds.find((b) => COMPLEX_TYPES.includes(b.buildingType));
