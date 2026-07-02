@@ -32,6 +32,68 @@ export const ACADEMY_TYPES: string[] = [VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITU
 export const SKILL1_PER_SCHOOL = 150;
 export const SKILL2_PER_INSTITUTE = 90;
 
+// ── Specialisation complexes (family production anchors) ──
+export const HEAVY_INDUSTRY_COMPLEX = "heavy_industry_complex";
+export const CHEMICALS_COMPLEX = "chemicals_complex";
+export const ELECTRONICS_COMPLEX = "electronics_complex";
+export const ARMAMENTS_COMPLEX = "armaments_complex";
+export const CONSUMER_COMPLEX = "consumer_complex";
+
+/** A production family and the anchor complex that buffs it. */
+export interface SpecialisationFamily {
+  /** Complex building-type id for this family. */
+  complexType: string;
+  /** Display name of the complex. */
+  label: string;
+  /** Tier-1+ goods this complex buffs (a partition — each good in exactly one family). */
+  goods: string[];
+  /** Full yield multiplier at complex count = 1 (per-family weighted so families balance). */
+  buffMult: number;
+}
+
+/** The five vertical production families. Buff multipliers are lighter on the heavyweight families. */
+export const SPECIALISATION_FAMILIES: SpecialisationFamily[] = [
+  { complexType: HEAVY_INDUSTRY_COMPLEX, label: "Heavy Industry Complex", buffMult: 1.4,
+    goods: ["metals", "alloys", "hull_plating", "components", "machinery", "ship_frames"] },
+  { complexType: CHEMICALS_COMPLEX, label: "Chemical Combine", buffMult: 1.5,
+    goods: ["fuel", "chemicals", "polymers", "medicine"] },
+  { complexType: ELECTRONICS_COMPLEX, label: "Electronics Complex", buffMult: 1.5,
+    goods: ["electronics", "targeting_arrays"] },
+  { complexType: ARMAMENTS_COMPLEX, label: "Armaments Complex", buffMult: 1.4,
+    goods: ["munitions", "weapons", "weapons_systems", "reactor_cores"] },
+  { complexType: CONSUMER_COMPLEX, label: "Consumer Works", buffMult: 1.5,
+    goods: ["consumer_goods", "luxuries"] },
+];
+
+/** good id → its family. Un-familied (tier-0) goods return undefined. */
+export const FAMILY_BY_GOOD: Record<string, SpecialisationFamily> = (() => {
+  const out: Record<string, SpecialisationFamily> = {};
+  for (const f of SPECIALISATION_FAMILIES) for (const g of f.goods) out[g] = f;
+  return out;
+})();
+
+/** complex building-type id → its family. */
+export const COMPLEX_BY_TYPE: Record<string, SpecialisationFamily> = (() => {
+  const out: Record<string, SpecialisationFamily> = {};
+  for (const f of SPECIALISATION_FAMILIES) out[f.complexType] = f;
+  return out;
+})();
+
+/** The five complex building type ids. */
+export const COMPLEX_TYPES: string[] = SPECIALISATION_FAMILIES.map((f) => f.complexType);
+
+// ── Anchor knobs (coarse first-cut; tune against sim equilibrium) ──
+/** General-space footprint of one full complex (count = 1) — the largest building type; a shipyard is 4.0. */
+export const ANCHOR_FOOTPRINT = 8;
+/** Modest unskilled head count one full complex draws to run (like an academy). */
+export const ANCHOR_UNSKILLED_LABOUR = 12;
+/** Max complexes per system, total across all families ("one industrial identity"). */
+export const ANCHOR_CAP = 1;
+/** Family output throughput one full complex is rated to buff — sets decay `used` + the planner's amortisation. */
+export const ANCHOR_RATED_COVERAGE = scaleValue(20);
+/** Seed/build a complex only where projected family throughput reaches this floor (amortisation). */
+export const ANCHOR_MIN_THROUGHPUT = scaleValue(10);
+
 /** Magnitude knob on recipe input-demand draws; neutral (1.0) until calibrated against sim equilibrium. */
 export const INPUT_DEMAND_MULTIPLIER = 1.0;
 
@@ -157,8 +219,20 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
   return out;
 }
 
+function buildComplexTypes(): Record<string, BuildingTypeDef> {
+  const out: Record<string, BuildingTypeDef> = {};
+  for (const f of SPECIALISATION_FAMILIES) {
+    out[f.complexType] = {
+      spaceCost: ANCHOR_FOOTPRINT,
+      labour: { unskilled: ANCHOR_UNSKILLED_LABOUR, skill1: 0, skill2: 0 },
+    };
+  }
+  return out;
+}
+
 export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
   ...buildProductionTypes(),
+  ...buildComplexTypes(),
   [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: POP_CENTRE_DENSITY },
   [VOCATIONAL_SCHOOL_TYPE]: {
     spaceCost: 1.5,
