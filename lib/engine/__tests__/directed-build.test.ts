@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE } from "@/lib/constants/industry";
+import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
 import { labourDemand } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
@@ -678,5 +678,47 @@ describe("academy co-build", () => {
     const site = systems.find((s) => s.systemId === "B")!;
     const finalBuildings = applyBuilds(site.buildings, builds, "B");
     expect(labourDemand(finalBuildings)).toBeLessThanOrEqual(site.population + 1e-9);
+  });
+});
+
+// Metals (tier-1, recipe { ore }, heavy-industry family) is a structural deficit at neighbour A;
+// site B has ample population and general space, and locally produces ore (its recipe input).
+function heavyDeficitScenario(): BuildSystemState[] {
+  const deficit: BuildSystemState = {
+    systemId: "A", factionId: "f1", population: 0, unrest: 0, buildings: {},
+    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    goods: [{ goodId: "metals", stock: 1, targetStock: 1000, demand: 500 }],
+  };
+  const producer: BuildSystemState = {
+    systemId: "B", factionId: "f1", population: 5000, unrest: 0,
+    buildings: { ore: 5 },
+    slotCap: emptyResourceVector(), generalSpace: 500, habitableSpace: 0,
+    goods: [],
+  };
+  return [deficit, producer];
+}
+
+// Same shape, but a shortfall small enough that committed metals output stays below the
+// throughput floor (ANCHOR_MIN_THROUGHPUT) — no complex should co-build.
+function tinyHeavyDeficitScenario(): BuildSystemState[] {
+  const systems = heavyDeficitScenario();
+  const deficit = systems.find((s) => s.systemId === "A")!;
+  deficit.goods = [{ goodId: "metals", stock: 7, targetStock: 10, demand: 5 }];
+  return systems;
+}
+
+describe("complex co-build", () => {
+  it("co-builds a family complex at a site serving a large family deficit", () => {
+    const builds = planFactionBuilds(heavyDeficitScenario(), reachable);
+    const complex = builds.find((b) => COMPLEX_TYPES.includes(b.buildingType));
+    expect(complex?.buildingType).toBe(HEAVY_INDUSTRY_COMPLEX);
+    // never more than the cap
+    const total = builds.filter((b) => COMPLEX_TYPES.includes(b.buildingType)).reduce((s, b) => s + b.count, 0);
+    expect(total).toBeLessThanOrEqual(1);
+  });
+
+  it("does not co-build a complex for a tiny family deficit (below the throughput floor)", () => {
+    const builds = planFactionBuilds(tinyHeavyDeficitScenario(), reachable);
+    expect(builds.some((b) => COMPLEX_TYPES.includes(b.buildingType))).toBe(false);
   });
 });
