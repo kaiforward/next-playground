@@ -8,6 +8,15 @@
  */
 @source not "../docs";
 
+/*
+ * Tailwind v4 gates `hover:` utilities behind `@media (hover: hover)`, trusting
+ * the browser's pointer-capability report. Edge (observed on Windows 11) can
+ * report no hover-capable pointer even with a mouse attached, silently killing
+ * every hover style while real `:hover` still fires. The game is mouse-first,
+ * so bind the variant to plain `:hover` instead of the media query.
+ */
+@custom-variant hover (&:hover);
+
 @theme inline {
   /* Fonts */
   --font-sans: var(--font-geist), "Geist", system-ui, sans-serif;
