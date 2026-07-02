@@ -14,7 +14,7 @@ import {
 import { toGovernmentType } from "@/lib/types/guards";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
-import { facilityStorageForGood } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot, facilityStorageForGood } from "@/lib/engine/industry";
 import type { SimConstants } from "./constants";
 import type {
   SimWorld,
@@ -101,6 +101,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
   const goodEntries = Object.entries(GOODS);
 
   for (const sys of systems) {
+    const demandBasis = computeSystemLabourSnapshot(sys.buildings, sys.population).basis;
     for (const [goodKey, goodDef] of goodEntries) {
       const goodConst = constants.goods[goodKey];
 
@@ -113,7 +114,7 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
         basePrice,
         stock: getInitialStock(sys.buildings, sys.yields, sys.population, goodKey),
         anchorMult: 1,
-        demandRate: demandRateForGood(goodKey, sys.population),
+        demandRate: demandRateForGood(goodKey, demandBasis),
         priceFloor: goodConst?.priceFloor ?? goodDef.priceFloor,
         priceCeiling: goodConst?.priceCeiling ?? goodDef.priceCeiling,
         storageCapacity: facilityStorageForGood(sys.buildings, goodKey),

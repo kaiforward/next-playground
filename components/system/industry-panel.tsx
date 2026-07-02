@@ -17,7 +17,7 @@ import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
 import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
 import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
-import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation } from "@/lib/engine/industry";
+import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry } from "@/lib/engine/industry";
 import type { GoodTier, QualityBandId } from "@/lib/types/game";
 import { formatMagnitude, formatPeople } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
@@ -475,6 +475,26 @@ function LicensingRow({ grade, pool, buildHint }: { grade: "skill1" | "skill2"; 
   );
 }
 
+/** Skilled-grade basket tooltip body: lead-in line + per-good per-head rate, richest first. */
+function BasketTooltipBody({ grade, basket }: { grade: "skill1" | "skill2"; basket: SkillBasketEntry[] }) {
+  const noun = grade === "skill1" ? "technician" : "engineer";
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] leading-snug text-text-secondary">Each {noun} adds demand for:</p>
+      <div className="space-y-0.5">
+        {basket.map((entry) => (
+          <div key={entry.goodId} className="flex items-center justify-between gap-3">
+            <span className="text-[11px] text-text-primary">{label(entry.goodId)}</span>
+            {/* Fixed decimals, not formatMagnitude — per-head rates sit below its 0.1 cutoff at
+                ECONOMY_SCALE=1, which would collapse every row to "<0.1". */}
+            <span className="font-mono text-[10px] text-text-secondary">{entry.perHead.toFixed(3)}/cyc</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * System-wide labour: the population decomposed into what it is actually doing — disjoint
  * role buckets (unskilled / technicians / engineers) + unemployed, one bar summing to the
@@ -482,14 +502,22 @@ function LicensingRow({ grade, pool, buildHint }: { grade: "skill1" | "skill2"; 
  * overlapping supply/demand bars double-counted skilled heads inside a grand "workforce" total
  * and pinned skill rows at 100% (hiding idle licensing); this reads honestly instead.
  */
-function LabourCard({ labour, allocation }: { labour: SystemLabour; allocation: LabourAllocation }) {
+function LabourCard({
+  labour,
+  allocation,
+  skillBaskets,
+}: {
+  labour: SystemLabour;
+  allocation: LabourAllocation;
+  skillBaskets: SystemIndustryReadout["skillBaskets"];
+}) {
   const pop = Math.max(0, allocation.population);
   const jobs = allocation.unskilled + allocation.technicians + allocation.engineers;
   const pct = (v: number) => (pop > 0 ? (v / pop) * 100 : 0);
   const working = [
-    { key: "unskilled", label: "Unskilled", bar: GRADE.unskilled.bar, value: allocation.unskilled },
-    { key: "skill1", label: "Technicians", bar: GRADE.skill1.bar, value: allocation.technicians },
-    { key: "skill2", label: "Engineers", bar: GRADE.skill2.bar, value: allocation.engineers },
+    { key: "unskilled", label: "Unskilled", bar: GRADE.unskilled.bar, value: allocation.unskilled, basket: undefined },
+    { key: "skill1", label: "Technicians", bar: GRADE.skill1.bar, value: allocation.technicians, basket: skillBaskets.technicians },
+    { key: "skill2", label: "Engineers", bar: GRADE.skill2.bar, value: allocation.engineers, basket: skillBaskets.engineers },
   ] as const;
   const hasSkill = labour.skill1.have > 0 || labour.skill1.need > 0 || labour.skill2.have > 0 || labour.skill2.need > 0;
 
@@ -514,12 +542,25 @@ function LabourCard({ labour, allocation }: { labour: SystemLabour; allocation: 
       </div>
 
       <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 font-mono text-[10px] text-text-secondary">
-        {working.map((w) => (
-          <span key={w.key} className="inline-flex items-center gap-1.5">
-            <span aria-hidden className={`inline-block h-2 w-2 ${w.bar}`} />
-            {w.label} <span className="text-text-primary">{formatPeople(w.value)}</span>
-          </span>
-        ))}
+        {working.map((w) => {
+          const chip = (
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden className={`inline-block h-2 w-2 ${w.bar}`} />
+              {w.label} <span className="text-text-primary">{formatPeople(w.value)}</span>
+            </span>
+          );
+          if (!w.basket) return <span key={w.key}>{chip}</span>;
+          return (
+            <Tooltip key={w.key}>
+              <TooltipTrigger asChild>
+                <button type="button" className="underline-offset-2 hover:underline">{chip}</button>
+              </TooltipTrigger>
+              <TooltipContent className="w-56">
+                <BasketTooltipBody grade={w.key} basket={w.basket} />
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden className="inline-block h-2 w-2 border border-border" style={{ backgroundImage: IDLE_HATCH }} />
           Unemployed <span className="text-text-primary">{formatPeople(allocation.unemployed)}</span>
@@ -547,7 +588,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     return <EmptyState message="Scan this system with a ship in range to survey its industry." />;
   }
 
-  const { space, deposits, labour, labourAllocation, labourFulfillment, buildings, supplyChain, unrest } = data;
+  const { space, deposits, labour, labourAllocation, labourFulfillment, buildings, supplyChain, unrest, skillBaskets } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -623,7 +664,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         </p>
       </Card>
 
-      <LabourCard labour={labour} allocation={labourAllocation} />
+      <LabourCard labour={labour} allocation={labourAllocation} skillBaskets={skillBaskets} />
 
       {/* Deposit land — extractors */}
       {extractors.length > 0 && (

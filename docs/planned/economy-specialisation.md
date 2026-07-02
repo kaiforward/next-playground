@@ -265,7 +265,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 |---|---|---|---|
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
 | **S2 ✅ shipped** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](../active/gameplay/economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
-| **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
+| **S3** | **Development-tiered civilian demand** (skilled-work share shifts the basket up-tier) — spec: [economy-specialisation-s3-demand.md](./economy-specialisation-s3-demand.md) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
 
 > **Interstitial — Economy UI legibility (quick wins), between S1 and S2.** S1 made the mechanics deep
@@ -343,6 +343,58 @@ Health held throughout (greedy ≫ random, no NaN/runaway). Single-seed determin
 directional evidence, not multi-seed robustness. Raw runs saved to
 `experiments/s2-complexes-{4000,8000}-*.json` (git-ignored).
 
+## S3 first-cut findings — 2026-07-02 sim (calibration inputs)
+
+Structural validation of development-tiered civilian demand against the S2 baseline
+(`s2-complexes-*`, 600 systems, seed 42, no overrides — S3 runs saved as
+`experiments/s3-demand-{4000,8000}-*.json`, git-ignored). **The demand side now does what the
+supply side (S2) does: it concentrates at developed systems, and the two stack — concrete
+inputs for the joint S1–S4 calibration pass:**
+
+**It widens the spread further, at both ages.** On top of S2's arrest of the maturity-flattening,
+S3 pushes the spread out: 4000 ticks p90 1.93→**2.11**, expensive 41.2%→**45.6%**; mature 8000
+ticks p90 1.79→**1.97**, expensive 39.4%→**43.5%**, median 1.00→1.03, cheap 36.5%→34.3%. Every
+discretionary good's cross-system price dispersion rises (8000t avgStdDev: luxuries 81.8→86.5,
+consumer_goods 20.5→24.7, electronics 48.4→51.4, medicine 32.4→34.9, textiles 11.3→13.0). Bots
+get richer on the extra structure (optimal 3.87M→5.01M, greedy 2.37M→2.89M) with health intact.
+
+**Discretionary prices do track skilled work — where hubs can't self-supply.** At t=8000
+(12.5K technician + 3.6K engineer heads worked galaxy-wide; top-5% hubs vs 187 zero-skill
+frontier systems):
+- **Luxuries is the flagship**: corr(skilled, price/base) 0.26; hubs average **1.69×** base vs
+  frontier 1.25×, and hubs are **net importers** (top-20 skilled systems: production 19.3 vs
+  civilian draw 25.2, 11/20 in deficit). The engineer-exclusive good becomes the import magnet
+  the spec wanted — dear exactly where the engineers are.
+- **Textiles** mirrors it (corr 0.26; hub 1.42× vs frontier 0.95×) — a tier-0 good hubs don't
+  bother producing.
+- **Consumer goods / medicine** correlate weakly (0.17 / 0.02) because hubs largely self-supply
+  them (net +30.9 / +15.6 across the top 20) — the industry that employs the skilled heads also
+  feeds their basket. Demand and supply co-locate, so the signal shows up as volume, not price.
+- **Electronics is fully washed out** (corr 0.02, hub 1.56× = frontier 1.56×): it is
+  simultaneously the archetypal hub *product* and a basket good. Expected, not a defect.
+
+**Electronics nearly anchors now — the S2 lever is confirmed and quantified.** S2 found
+electronics/armaments never clear `ANCHOR_MIN_THROUGHPUT` (10). With S3's extra electronics
+demand pulling production up, the top electronics system reaches throughput **9.75** — a
+whisker under the floor (armaments top 6.39; both still 0 complexes at t=8000). The S2
+calibration lever ("floor too high / make it per-family") now has a magnitude: electronics
+needs only a ~3% lower floor (or any buff/coeff nudge) to start anchoring, and S3-side basket
+weights push in the same direction. Do this in the joint pass, not in isolation.
+
+**Calibration levers this surfaces (for the joint S1–S4 pass):**
+1. **Basket sizing is directionally right, modest in magnitude.** Hub discretionary premiums
+   are ~1.3-1.7× where visible; the skilled population share came out ~20% technicians / ~6%
+   engineers of total population (comment targeted ~15%/4% at mature hubs) — recheck the
+   per-head needs against the realised share when tuning.
+2. **Luxuries works as designed; consider whether consumer_goods should stay hub-self-suppliable.**
+   If the calibration pass wants more demand-led trade, shifting basket weight toward goods hubs
+   *don't* make (or raising luxuries' weight) buys more than raising self-supplied baskets.
+3. **Electronics anchor floor** — see above; one small nudge away from firing.
+
+Health held throughout (greedy ≫ random — 2.89M vs 120 at 8000t; no NaN/runaway; floor/ceiling
+pins comparable to baseline). Single-seed deterministic A/B — directional evidence, not
+multi-seed robustness.
+
 ## Relationship to existing docs
 
 - **[economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)** — this **expands its
@@ -378,5 +430,8 @@ directional evidence, not multi-seed robustness. Raw runs saved to
   [the merged factor model](#skill-tiered-labour-the-merged-factor-model): a buildable labour gate,
   transitively co-built. The open piece is whether to fold the academy's build overhead into opportunity
   scoring for the concentration moat, or leave that to calibration.)*
-- **Demand-concentration basis** — what "system character" is computed from (built profile, population,
-  tier mix) without re-introducing economy-type tables. (S3.)
+- ~~**Demand-concentration basis**~~ — RESOLVED 2026-07-02: skilled work *performed*
+  (`computeLabourAllocation` technicians/engineers), per-grade additive baskets. Not the built
+  production profile — pops don't consume more of what their system makes; the built-profile→demand
+  link is the (existing) industrial input-demand channel. See
+  [economy-specialisation-s3-demand.md](./economy-specialisation-s3-demand.md).

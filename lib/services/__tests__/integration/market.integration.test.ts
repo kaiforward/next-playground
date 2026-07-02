@@ -85,7 +85,9 @@ describe("executeTrade (integration) — floored stock in buy-cap error", () => 
     //   buyable = floor(51.8 - 32) = floor(19.8) = 19  (floored integer)
     // The error must show the integer (19), never the raw float (19.8).
     const AGRI_POPULATION = 400;
-    const foodDemandRate = demandRateForGood("food", AGRI_POPULATION);
+    // Food is non-basket, so the population-only basis matches the seeded agri
+    // system's actual (possibly technician-bearing) demand basis for this good.
+    const foodDemandRate = demandRateForGood("food", { population: AGRI_POPULATION, technicians: 0, engineers: 0 });
     const foodGood = GOODS["food"];
     const band = marketBand({
       demandRate: foodDemandRate,

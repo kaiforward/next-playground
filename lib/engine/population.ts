@@ -20,7 +20,7 @@ import { clamp } from "@/lib/utils/math";
 export interface GoodSatisfaction {
   /** delivered / demanded in [0,1]; 1 = well-fed, 0 = floor-pinned. */
   satisfaction: number;
-  /** demanded_g = perCapitaNeed × population — the demand-share weight. */
+  /** demanded_g = civilian demand (per-capita baseline + skilled baskets) — the demand-share weight. */
   demanded: number;
 }
 

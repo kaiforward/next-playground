@@ -26,6 +26,19 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
+- **[S] Tooltip affordance convention (app-wide)** — It's currently invisible which labels carry a tooltip;
+  hover discovery is luck. Pick ONE affordance (dotted underline is the Paradox/web convention; alternative:
+  a distinct text color) and apply it consistently to every `TooltipTrigger` label across the app — likely a
+  shared trigger-label style baked into `components/ui/tooltip.tsx` so panels can't drift. Surfaced during the
+  S3 smoke (labour-basket + demand-composition tooltips landed well but are undiscoverable). Small, but gets a
+  quick collaborative design look (affordance choice + how it sits with the Foundry theme) before rollout.
+  First step toward, and independent of, the deep-tooltip system below.
+- **[L] Paradox-style nested/pinnable deep tooltips** — Rich-tooltip infrastructure in the spirit of
+  Stellaris / EU5 / Victoria: tooltips whose terms are themselves hoverable (nested), pinnable for comparison,
+  backed by a cross-linking concept glossary so any mechanic term (labour grade, basket, anchor, fulfilment)
+  explains itself anywhere it appears. Deferred until after the full sX economy track (per
+  `docs/planned/economy-specialisation.md` interstitial note); needs a real design doc + collaborative
+  HTML-prototype pass. The affordance convention above ships first and independently.
 - **[M] Decouple reputation reward from market price** — Favourable rep multipliers act as a negative spread; to avoid reopening the instant-resell exploit they're capped at ±2% (almost cosmetic). Move the real reputation reward off the price spread entirely: reduced taxes/tariffs/docking fees, access to restricted goods or higher quantity caps, better mission rewards. Then rep can be impactful without threatening the no-instant-resell-profit invariant. See `lib/constants/reputation.ts` and the anti-arbitrage test in its `__tests__`.
 - **[M] Reversion rate tuning** — Current 5% base reversion may be too aggressive. Slower reversion means player trades leave a bigger, longer-lasting mark. Per-good rates now in place — see simulator metrics for balance data.
 

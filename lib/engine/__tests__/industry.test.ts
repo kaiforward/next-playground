@@ -27,6 +27,9 @@ import {
   familyAnchorBuff,
   familyThroughput,
   complexUsed,
+  computeSystemLabourSnapshot,
+  labourParts,
+  labourStateFromParts,
 } from "@/lib/engine/industry";
 import type { IndustryHealth, LabourState, GradeStaffing, LabourParts } from "@/lib/engine/industry";
 import {
@@ -52,6 +55,8 @@ import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
+import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
+import { SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 
 /** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
 const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
@@ -160,6 +165,20 @@ describe("capacityGoodRates", () => {
     const oreBase = base.find((r) => r.goodId === "ore")!.production;
     const oreBoosted = boosted.find((r) => r.goodId === "ore")!.production;
     expect(oreBoosted).toBeCloseTo(oreBase * 3.0, 6);
+  });
+
+  it("a developed system consumes more basket goods than an academy-less one at equal population", () => {
+    // electronics factories demand skilled heads; academies licence them.
+    const developed = { electronics: 6, vocational_school: 3, research_institute: 2 };
+    const frontier = {};
+    const pop = 2000;
+    const devRates = capacityGoodRates(developed, pop, unitResourceVector());
+    const froRates = capacityGoodRates(frontier, pop, unitResourceVector());
+    const get = (rates: SubstrateGoodRate[], id: string) => rates.find((r) => r.goodId === id)!;
+    expect(get(devRates, "luxuries").consumption).toBeGreaterThan(get(froRates, "luxuries").consumption);
+    expect(get(devRates, "consumer_goods").consumption).toBeGreaterThan(get(froRates, "consumer_goods").consumption);
+    // non-basket goods stay population-only
+    expect(get(devRates, "food").consumption).toBeCloseTo(get(froRates, "food").consumption, 10);
   });
 });
 
@@ -752,6 +771,34 @@ describe("buildIndustryReadout labourAllocation", () => {
   });
 });
 
+describe("buildIndustryReadout skillBaskets", () => {
+  const MIN = 5;
+  const MAXBAND = () => 100;
+
+  it("technicians and engineers baskets are non-empty, sorted descending by perHead, and drawn from the matching constant", () => {
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const { technicians, engineers } = readout.skillBaskets;
+
+    expect(technicians.length).toBeGreaterThan(0);
+    expect(engineers.length).toBeGreaterThan(0);
+
+    for (const entries of [technicians, engineers]) {
+      for (let i = 1; i < entries.length; i++) {
+        expect(entries[i].perHead).toBeLessThanOrEqual(entries[i - 1].perHead);
+      }
+    }
+
+    for (const entry of technicians) expect(SKILL1_CONSUMPTION[entry.goodId]).toBe(entry.perHead);
+    for (const entry of engineers) expect(SKILL2_CONSUMPTION[entry.goodId]).toBe(entry.perHead);
+  });
+
+  it("skillBaskets are the same for every readout (static per-grade catalogue, not system-dependent)", () => {
+    const a = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const b = buildIndustryReadout({ metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 }, 1000, {}, () => MIN, unitResourceVector(), MAXBAND);
+    expect(a.skillBaskets).toEqual(b.skillBaskets);
+  });
+});
+
 describe("familyAnchorBuff", () => {
   it("is 1 for a tier-0 (un-familied) good regardless of complexes", () => {
     expect(familyAnchorBuff({ [HEAVY_INDUSTRY_COMPLEX]: 1 }, "water")).toBe(1);
@@ -798,6 +845,19 @@ describe("familyThroughput / complexUsed", () => {
   });
   it("is 0 for an orphaned complex (no family production)", () => {
     expect(complexUsed(1, 0, ANCHOR_RATED_COVERAGE)).toBe(0);
+  });
+});
+
+describe("computeSystemLabourSnapshot", () => {
+  it("bundles the same state and allocation the standalone helpers produce", () => {
+    const buildings = { electronics: 4, vocational_school: 2, research_institute: 1 };
+    const snap = computeSystemLabourSnapshot(buildings, 500);
+    const parts = labourParts(buildings);
+    expect(snap.state).toEqual(labourStateFromParts(parts, 500));
+    const alloc = computeLabourAllocation(parts, 500);
+    expect(snap.basis.population).toBe(alloc.population);
+    expect(snap.basis.technicians).toBe(alloc.technicians);
+    expect(snap.basis.engineers).toBe(alloc.engineers);
   });
 });
 

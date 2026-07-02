@@ -15,8 +15,9 @@
  * and the substrate read service.
  */
 import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
-import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
-import { GOOD_CONSUMPTION, GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
+import type { CivilianDemandBasis, SubstrateGoodRate } from "@/lib/engine/physical-economy";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import { GOOD_CONSUMPTION, GOOD_PRODUCTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES,
@@ -225,6 +226,28 @@ export function computeLabourAllocation(parts: LabourParts, population: number):
   return { population: Math.max(0, population), unskilled, technicians, engineers, unemployed: pool };
 }
 
+/**
+ * Per-system labour snapshot shared across all of a system's goods: the
+ * production fulfilment gates plus the civilian demand basis, derived from one
+ * labourParts pass. Cache one per system and reuse across its goods — the
+ * pattern every tick adapter and the seed path follow.
+ */
+export interface SystemLabourSnapshot {
+  state: LabourState;
+  basis: CivilianDemandBasis;
+}
+
+export function computeSystemLabourSnapshot(
+  buildings: Record<string, number>,
+  population: number,
+): SystemLabourSnapshot {
+  const parts = labourParts(buildings);
+  return {
+    state: labourStateFromParts(parts, population),
+    basis: computeLabourAllocation(parts, population),
+  };
+}
+
 /** One skilled grade's academy-licensing state for the Labour card — working vs licensed seats vs jobs. */
 export interface SkillLicensing {
   /** Skill-grade jobs the built base demands. */
@@ -385,7 +408,8 @@ export function buildingProduction(
 /**
  * Per-good production + consumption for one system from its industrial base.
  * The read-service shape (one `SubstrateGoodRate` per good), capacity-driven on
- * the production axis; consumption stays perCapitaNeed × population.
+ * the production axis; consumption is the civilian demand basis (per-capita
+ * baseline + per-grade skilled baskets — see consumptionRate).
  * Tier-0 production is multiplied by `yields[resource]`.
  */
 export function capacityGoodRates(
@@ -393,12 +417,11 @@ export function capacityGoodRates(
   population: number,
   yields: ResourceVector,
 ): SubstrateGoodRate[] {
-  const state = computeLabourState(buildings, population);
-  const pop = Math.max(0, population);
+  const snap = computeSystemLabourSnapshot(buildings, population);
   return GOOD_NAMES.map((goodId) => ({
     goodId,
-    production: buildingProduction(buildings, goodId, state, yields),
-    consumption: (GOOD_CONSUMPTION[goodId] ?? 0) * pop,
+    production: buildingProduction(buildings, goodId, snap.state, yields),
+    consumption: consumptionRate(goodId, snap.basis),
   }));
 }
 
@@ -444,6 +467,12 @@ export function inputDemandFromProduction(
  */
 export type IdleReason = "occupancy" | "labour" | "skill1" | "skill2" | "selling";
 
+/** One per-head basket entry — a good a skilled grade consumes on top of the base need. */
+export interface SkillBasketEntry {
+  goodId: string;
+  perHead: number;
+}
+
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
@@ -472,6 +501,13 @@ export interface SystemIndustryReadout {
   }>;
   /** Produced goods that have a recipe. Sorted by inputGate ascending (most-throttled first). */
   supplyChain: Array<{ goodId: string; inputGate: number; throttledBy: string[] }>;
+  /**
+   * SKILL1_CONSUMPTION/SKILL2_CONSUMPTION as display-ready entries, each sorted by
+   * perHead descending. The same catalogue for every system (skilled-grade baskets
+   * don't vary by system) — served here so the client never imports the scaled
+   * constants directly (they're server-only, see ECONOMY_SCALE).
+   */
+  skillBaskets: { technicians: SkillBasketEntry[]; engineers: SkillBasketEntry[] };
 }
 
 /** Coarse industry health read, derived from the decay-loop quantities. */
@@ -529,6 +565,17 @@ export function buildingHealth(input: BuildingHealthInput): IndustryHealth {
   if (idle >= IDLE_COASTING_FRACTION) return "coasting";
   return "thriving";
 }
+
+/** Turn a per-head consumption constant into display-ready basket entries, richest first. */
+function skillBasketEntries(consumption: Record<string, number>): SkillBasketEntry[] {
+  return Object.entries(consumption)
+    .map(([goodId, perHead]) => ({ goodId, perHead }))
+    .sort((a, b) => b.perHead - a.perHead);
+}
+
+/** The per-grade basket catalogues are argument-independent — computed once, shared by every readout. */
+const TECHNICIAN_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL1_CONSUMPTION);
+const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTION);
 
 /**
  * Builds an industry readout for one system from its current industrial base and
@@ -664,6 +711,10 @@ export function buildIndustryReadout(
     labourAllocation: computeLabourAllocation(parts, population),
     buildings: buildingEntries,
     supplyChain: supplyChainEntries,
+    skillBaskets: {
+      technicians: TECHNICIAN_BASKET,
+      engineers: ENGINEER_BASKET,
+    },
   };
 }
 
