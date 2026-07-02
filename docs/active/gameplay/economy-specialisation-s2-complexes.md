@@ -1,12 +1,12 @@
 # Economy Specialisation S2 — Specialisation Complexes
 
-> **Status: Planned** — stage **S2** of the four-stage Economy Specialisation track. Sits inside **SP5
+> **Status: Shipped** — stage **S2** of the four-stage Economy Specialisation track. Sits inside **SP5
 > autonomic-light**: every lever works *through* the existing autonomic build planner and physical-economy
 > tick — **no faction-agency dependency** (no treasury, doctrine-weighted build, or directed-logistics
 > orders). Track umbrella + the other stages live in
-> [economy-specialisation.md (planned)](./economy-specialisation.md); S1 (shipped) is
-> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md); roadmap home is
-> [economy-simulation-vision.md](./economy-simulation-vision.md) §13.
+> [economy-specialisation.md (planned)](../../planned/economy-specialisation.md); S1 (shipped) is
+> [economy-specialisation.md (active)](./economy-specialisation.md); roadmap home is
+> [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13.
 
 ---
 
@@ -275,17 +275,17 @@ discrete capped complex *is* economies-of-scale, without the runaway curve).
 
 ## Relationship to existing docs
 
-- **[economy-specialisation.md (planned)](./economy-specialisation.md)** — this is the detailed spec for the
+- **[economy-specialisation.md (planned)](../../planned/economy-specialisation.md)** — this is the detailed spec for the
   **S2** row of that umbrella's staged decomposition; realises its "Specialisation complexes (anchor
   buildings)" section.
-- **[economy-specialisation.md (active, S1)](../active/gameplay/economy-specialisation.md)** — S2 builds on
+- **[economy-specialisation.md (active, S1)](./economy-specialisation.md)** — S2 builds on
   S1's academy co-build (`academyLift`) and skill-gated production, and stacks its concentration moat on S1's
   academy sunk-cost moat.
-- **[economy-simulation-vision.md](./economy-simulation-vision.md)** — realises §8 (industrialise-vs-feed
+- **[economy-simulation-vision.md](../../planned/economy-simulation-vision.md)** — realises §8 (industrialise-vs-feed
   pull) and §11 (regional specialisation) at the baseline; pre-builds the substrate full faction agency (§12)
   will later *decide* over.
 
-## Open questions (deferred to the build plan / calibration)
+## Open questions (deferred to the S1–S4 calibration pass)
 
 - **All magnitudes** — `B` + per-family weighting, footprint, `R`, the complex's unskilled staffing. Coarse
   first-cut now; validated in the single S1–S4 calibration pass (`npm run simulate` + `audit:economy`,

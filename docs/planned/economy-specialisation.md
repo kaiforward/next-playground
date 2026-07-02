@@ -1,9 +1,10 @@
 # Economy Specialisation — Forced Trade Gradients via Industry Differentiation
 
-> **Status:** Track designed 2026-06-30 (brainstorm); **stage S1 (skill-tiered labour) shipped** — its
-> as-built functional spec now lives in
-> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md). Stages **S2–S4 remain
-> planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
+> **Status:** Track designed 2026-06-30 (brainstorm); **stages S1 (skill-tiered labour) and S2
+> (specialisation complexes) shipped** — as-built functional specs live in
+> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md) and
+> [economy-specialisation-s2-complexes.md (active)](../active/gameplay/economy-specialisation-s2-complexes.md).
+> Stages **S3–S4 remain planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
 > spread" item** (in [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from
 > "build/decay pacing" into a real structural-specialisation track. Decomposes into **four** ordered
 > stages, each its own spec → plan → build. Authoritative sequence in
@@ -263,7 +264,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 | Stage | Lever(s) | Failure mode | Needs agency? |
 |---|---|---|---|
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
-| **S2** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](./economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
+| **S2 ✅ shipped** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](../active/gameplay/economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
 | **S3** | **Demand concentration** (civilian consumption by system character) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
 
