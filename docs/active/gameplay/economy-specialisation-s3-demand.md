@@ -1,9 +1,12 @@
-# S3 — Development-Tiered Civilian Demand (Demand Concentration)
+# Economy Specialisation S3 — Development-Tiered Civilian Demand
 
-> **Status:** Designed 2026-07-02 (brainstorm). Stage 3 of the economy-specialisation track —
-> see [economy-specialisation.md](./economy-specialisation.md) for the umbrella (S1 ✅, S2 ✅,
-> **S3 this spec**, S4 guardrails). Agency-free; works entirely through the existing labour
-> readout and physical-economy tick.
+> **Status: Shipped** — stage **S3** of the four-stage Economy Specialisation track. Sits inside **SP5
+> autonomic-light**: agency-free, works entirely through the existing labour readout and
+> physical-economy tick. Track umbrella + the remaining stage (S4 guardrails) live in
+> [economy-specialisation.md (planned)](../../planned/economy-specialisation.md); S1 (shipped) is
+> [economy-specialisation.md (active)](./economy-specialisation.md), S2 (shipped) is
+> [economy-specialisation-s2-complexes.md (active)](./economy-specialisation-s2-complexes.md); roadmap
+> home is [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13.
 
 ## Headline
 
@@ -82,9 +85,11 @@ perishable).
 ## Threading (the five call sites)
 
 1. **`consumptionRate()`** (`lib/engine/physical-economy.ts`) — the chokepoint. Signature grows
-   from `(goodId, population)` to a demand basis `{ population, technicians, engineers }`.
-2. **Tick adapters** (`lib/tick/adapters/prisma/economy.ts` + `memory/economy.ts`) — compute
-   `computeLabourAllocation` once per system, pass the basis. Live and sim stay identical.
+   from `(goodId, population)` to a demand basis `{ population, technicians, engineers }`
+   (`CivilianDemandBasis`); `consumptionBreakdown()` exposes the three terms for display.
+2. **Tick adapters** (`lib/tick/adapters/prisma/*` + `memory/*`, economy + population) — the
+   one-pass `computeSystemLabourSnapshot` (`lib/engine/industry.ts`) bundles `LabourState` +
+   basis, computed once per system. Live and sim stay identical.
 3. **`capacityGoodRates`** (`lib/engine/industry.ts` readout) — already has buildings +
    population; same allocation, same formula.
 4. **Pricing + satisfaction** — the `demandRate` civilian term (`lib/constants/market-economy.ts`)
@@ -118,13 +123,19 @@ perishable).
   dissatisfaction feed unrest) and fast-moving where S3 wants durable gradients. The events
   layer can revisit (e.g. munitions demand under unrest). "Consumption is never suppressed —
   people still eat" stays.
-- **UI** — numbers flow through existing readouts (Labour card already shows
-  technicians/engineers); demand legibility belongs to the economy-UI interstitial pass.
+- **UI** — mostly deferred to the economy-UI interstitial pass, but two legibility tooltips
+  shipped with S3: the Labour card's Technicians/Engineers chips list each grade's consumption
+  basket, and each Population-panel demand row gets a base/technicians/engineers composition
+  tooltip (naming the `MIN_DEMAND` floor when the terms sum below the shown rate). Basket values
+  arrive via server-resolved API data — `ECONOMY_SCALE` stays server-only.
 
-## Sim validation (structural, S2-style)
+## Sim validation (structural, S2-style) — PASSED 2026-07-02
 
-Single-seed A/B vs pre-S3 baseline at 4000/8000 ticks: mature price spread (p90,
-expensive-fraction) should widen or hold vs S2; discretionary goods' price dispersion should
-correlate with skilled-work concentration; coarse health bar holds (no NaN/runaway/pinning,
-greedy ≫ random). Record findings as calibration inputs for S4 — do not tune S3 constants in
-isolation.
+Single-seed A/B vs pre-S3 baseline at 4000/8000 ticks: the mature price spread widened on top
+of S2's flattening-arrest (8000t p90 1.79→1.97, expensive fraction 39.4%→43.5%), luxuries
+confirmed as the hub import magnet (top skilled hubs are net importers), and the coarse health
+bar held (no NaN/runaway/pinning, greedy ≫ random). Full findings + the quantified S4 levers
+(notably the electronics anchor sitting a whisker under `ANCHOR_MIN_THROUGHPUT`) are recorded
+in the umbrella's "S3 first-cut findings" section
+([economy-specialisation.md (planned)](../../planned/economy-specialisation.md)) — S3 constants
+are deliberately not tuned in isolation.

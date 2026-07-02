@@ -1,10 +1,11 @@
 # Economy Specialisation — Forced Trade Gradients via Industry Differentiation
 
-> **Status:** Track designed 2026-06-30 (brainstorm); **stages S1 (skill-tiered labour) and S2
-> (specialisation complexes) shipped** — as-built functional specs live in
-> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md) and
-> [economy-specialisation-s2-complexes.md (active)](../active/gameplay/economy-specialisation-s2-complexes.md).
-> Stages **S3–S4 remain planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
+> **Status:** Track designed 2026-06-30 (brainstorm); **stages S1 (skill-tiered labour), S2
+> (specialisation complexes) and S3 (development-tiered demand) shipped** — as-built functional specs live in
+> [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md),
+> [economy-specialisation-s2-complexes.md (active)](../active/gameplay/economy-specialisation-s2-complexes.md) and
+> [economy-specialisation-s3-demand.md (active)](../active/gameplay/economy-specialisation-s3-demand.md).
+> Stage **S4 remains planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
 > spread" item** (in [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from
 > "build/decay pacing" into a real structural-specialisation track. Decomposes into **four** ordered
 > stages, each its own spec → plan → build. Authoritative sequence in
@@ -265,7 +266,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 |---|---|---|---|
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
 | **S2 ✅ shipped** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](../active/gameplay/economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
-| **S3** | **Development-tiered civilian demand** (skilled-work share shifts the basket up-tier) — spec: [economy-specialisation-s3-demand.md](./economy-specialisation-s3-demand.md) | Flat demand | No |
+| **S3 ✅ shipped** | **Development-tiered civilian demand** (skilled-work share shifts the basket up-tier) — spec: [economy-specialisation-s3-demand.md](../active/gameplay/economy-specialisation-s3-demand.md) | Flat demand | No |
 | **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
 
 > **Interstitial — Economy UI legibility (quick wins), between S1 and S2.** S1 made the mechanics deep
@@ -434,4 +435,4 @@ multi-seed robustness.
   (`computeLabourAllocation` technicians/engineers), per-grade additive baskets. Not the built
   production profile — pops don't consume more of what their system makes; the built-profile→demand
   link is the (existing) industrial input-demand channel. See
-  [economy-specialisation-s3-demand.md](./economy-specialisation-s3-demand.md).
+  [economy-specialisation-s3-demand.md](../active/gameplay/economy-specialisation-s3-demand.md).
