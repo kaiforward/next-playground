@@ -9,6 +9,8 @@ import {
   ACADEMY_TYPES,
   VOCATIONAL_SCHOOL_TYPE,
   RESEARCH_INSTITUTE_TYPE,
+  COMPLEX_TYPES,
+  COMPLEX_BY_TYPE,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
@@ -94,10 +96,15 @@ const ACADEMY_LABELS: Record<string, string> = {
   [RESEARCH_INSTITUTE_TYPE]: "Research Institute",
 };
 
+/** Complex building types aren't in GOODS either — name them from the family catalog. */
+const COMPLEX_LABELS: Record<string, string> = Object.fromEntries(
+  COMPLEX_TYPES.map((t) => [t, COMPLEX_BY_TYPE[t].label]),
+);
+
 /** Human-readable label for a building type or good id. */
 function label(id: string): string {
   if (id === HOUSING_TYPE) return "Housing";
-  return ACADEMY_LABELS[id] ?? GOODS[id]?.name ?? id;
+  return ACADEMY_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
 function pct(value: number, total: number): number {
@@ -228,11 +235,11 @@ function ProductionRow({
   const inputs = supply ? Object.keys(GOOD_RECIPES[supply.goodId] ?? {}) : [];
 
   // Detailed density swaps the single health bar for per-grade micro-bars. Only producers/
-  // extractors reach the grade split (housing/academies are excluded by the guard), so
-  // producerTier narrows the readout's tier sentinel to a real GoodTier here.
+  // extractors reach the grade split (housing/academies/complexes are excluded by the guard),
+  // so producerTier narrows the readout's tier sentinel to a real GoodTier here.
   const goodTier = producerTier(b);
   const grades =
-    density === "detailed" && !isAcademy && b.tier >= 0
+    density === "detailed" && !isAcademy && !COMPLEX_TYPES.includes(b.buildingType) && b.tier >= 0
       ? perGradeStaffing(BUILDING_TYPES[b.buildingType]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 }, b.count, goodTier, {
           labourFulfil: labour.workforce.fulfil,
           skill1Fulfil: labour.skill1.fulfil,
@@ -516,13 +523,16 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD })]++;
   }
 
-  // Group by land pool: deposit (tier-0 extractors, excluding academies — they're tier 0
-  // by data-model default but bill to general space, not a deposit slot) vs general
-  // (housing tier -1 + factories tier 1+ + academies).
-  const extractors = buildings.filter((b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType));
+  // Group by land pool: deposit (tier-0 extractors, excluding academies and complexes —
+  // they're tier 0 by data-model default but bill to general space, not a deposit slot)
+  // vs general (housing tier -1 + factories tier 1+ + academies + complexes).
+  const extractors = buildings.filter(
+    (b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType) && !COMPLEX_TYPES.includes(b.buildingType),
+  );
   const housing = buildings.filter((b) => b.tier === -1);
   const factories = buildings.filter((b) => b.tier >= 1);
   const academies = buildings.filter((b) => ACADEMY_TYPES.includes(b.buildingType));
+  const complexes = buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType));
 
   const depositByResource = new Map(deposits.map((d) => [d.resource, d]));
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
@@ -594,7 +604,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
 
       {/* General land — housing + factories share the pool */}
       <Card variant="bordered" padding="md">
-        <PoolHeader title="General land" sub="housing + factories + academies" used={space.generalUsed} total={space.general} />
+        <PoolHeader title="General land" sub="housing + factories + academies + complexes" used={space.generalUsed} total={space.general} />
         <LandBar
           segments={[
             { key: "housing", width: pct(space.habitableUsed, space.general), className: "bg-accent" },
@@ -617,6 +627,14 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             <RoleLabel>Academies</RoleLabel>
             <div>
               {academies.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
+            </div>
+          </>
+        )}
+        {complexes.length > 0 && (
+          <>
+            <RoleLabel>Specialisation</RoleLabel>
+            <div>
+              {complexes.map((b) => <ProductionRow key={b.buildingType} b={b} unrest={unrest} labour={labour} density={density} />)}
             </div>
           </>
         )}
