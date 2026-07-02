@@ -58,6 +58,13 @@ function quantile(arr: number[], q: number): number {
   const s = [...arr].sort((a, b) => a - b);
   return s[Math.min(s.length - 1, Math.floor(q * s.length))];
 }
+// spread-free min/max — Math.min(...arr) blows the call stack on large tables
+function arrMin(arr: number[], empty = 0): number {
+  return arr.reduce((m, x) => (x < m ? x : m), arr.length ? Infinity : empty);
+}
+function arrMax(arr: number[], empty = 0): number {
+  return arr.reduce((m, x) => (x > m ? x : m), arr.length ? -Infinity : empty);
+}
 
 interface MarketRow {
   key: string;
@@ -263,7 +270,7 @@ async function main() {
   L.push(`  ~0 pop systems: ${nZeroPop} (${pct(nZeroPop, systems.length)})  | per-system util median ${(median(utils) * 100).toFixed(0)}%  p10 ${(quantile(utils, 0.1) * 100).toFixed(0)}%  p90 ${(quantile(utils, 0.9) * 100).toFixed(0)}%`);
   L.push(``);
   L.push(`POPULATION HEALTH (unrest = integral of dissatisfaction; strike threshold ${STRIKE_PARAMS.threshold})`);
-  L.push(`  unrest: mean ${meanUnrest.toFixed(3)}  median ${median(unrests).toFixed(3)}  p90 ${quantile(unrests, 0.9).toFixed(3)}  p99 ${quantile(unrests, 0.99).toFixed(3)}  max ${Math.max(...unrests).toFixed(3)}`);
+  L.push(`  unrest: mean ${meanUnrest.toFixed(3)}  median ${median(unrests).toFixed(3)}  p90 ${quantile(unrests, 0.9).toFixed(3)}  p99 ${quantile(unrests, 0.99).toFixed(3)}  max ${arrMax(unrests).toFixed(3)}`);
   L.push(`  calm (<0.2): ${nCalm} (${pct(nCalm, systems.length)})   elevated (0.2–0.65): ${nElevated} (${pct(nElevated, systems.length)})   STRIKING (>=0.65): ${nStriking} (${pct(nStriking, systems.length)})`);
   L.push(``);
   L.push(`  SATISFACTION (= √((stock−min)/(target−min)), the consume self-limiting factor — reaches 1.0 at the days-of-supply ANCHOR):`);
@@ -332,8 +339,8 @@ async function main() {
   const flows = await prisma.tradeFlow.findMany({
     select: { tick: true, fromSystemId: true, toSystemId: true, goodId: true, quantity: true, flowType: true },
   });
-  const tickMin = Math.min(...flows.map((x) => x.tick));
-  const tickMax = Math.max(...flows.map((x) => x.tick));
+  const tickMin = arrMin(flows.map((x) => x.tick));
+  const tickMax = arrMax(flows.map((x) => x.tick));
   L.push(`================ TRADE FLOWS (window ticks ${tickMin}–${tickMax}, ${tickMax - tickMin} ticks) ================`);
   let mktN = 0, mktQ = 0, logN = 0, logQ = 0;
   const inQty = new Map<string, number>();
@@ -356,7 +363,7 @@ async function main() {
   L.push(`  total ${flows.length}  | MARKET ${mktN} rows ${f(mktQ, 0)}u (avg ${(mktQ / Math.max(1, mktN)).toFixed(1)})  | LOGISTICS ${logN} rows ${f(logQ, 0)}u (avg ${(logQ / Math.max(1, logN)).toFixed(1)})`);
   const logSizes = flows.filter((x) => x.flowType === "logistics").map((x) => x.quantity);
   const mktSizes = flows.filter((x) => x.flowType !== "logistics").map((x) => x.quantity);
-  L.push(`  flow size — logistics: median ${median(logSizes)} p90 ${quantile(logSizes, 0.9)} p99 ${quantile(logSizes, 0.99)} max ${Math.max(0, ...logSizes)}  |  market: median ${median(mktSizes)} p99 ${quantile(mktSizes, 0.99)} max ${Math.max(0, ...mktSizes)}`);
+  L.push(`  flow size — logistics: median ${median(logSizes)} p90 ${quantile(logSizes, 0.9)} p99 ${quantile(logSizes, 0.99)} max ${arrMax(logSizes)}  |  market: median ${median(mktSizes)} p99 ${quantile(mktSizes, 0.99)} max ${arrMax(mktSizes)}`);
 
   // Concern 2: single-delivery overshoot vs recipient anchor
   const ratios: number[] = [];
@@ -368,7 +375,7 @@ async function main() {
     ratioN++; ratios.push(fl.quantity / tgt);
     if (fl.quantity >= tgt) overAnchor++;
   }
-  L.push(`  [concern 2] single logistics delivery as fraction of recipient anchor: median ${median(ratios).toFixed(2)} p90 ${quantile(ratios, 0.9).toFixed(2)} max ${Math.max(0, ...ratios).toFixed(2)}`);
+  L.push(`  [concern 2] single logistics delivery as fraction of recipient anchor: median ${median(ratios).toFixed(2)} p90 ${quantile(ratios, 0.9).toFixed(2)} max ${arrMax(ratios).toFixed(2)}`);
   L.push(`             deliveries >= recipient's WHOLE anchor in one shot: ${overAnchor}/${ratioN} (${pct(overAnchor, ratioN)})`);
 
   // Concern 3: same system both source & sink for same good
