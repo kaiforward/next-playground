@@ -23,9 +23,15 @@ function scenario(mods: Awaited<ReturnType<typeof loadAtScale>>) {
   const pop = 1000;
   const buildings: Record<string, number> = { food: 10, [industryConsts.HOUSING_TYPE]: 5 };
 
-  const demandFood = market.demandRateForGood("food", pop);             // need-driven
-  const demandFloored = market.demandRateForGood("ship_frames", 1);     // MIN_DEMAND-floored
+  const popOnly = { population: pop, technicians: 0, engineers: 0 };
+  const demandFood = market.demandRateForGood("food", popOnly);             // need-driven
+  const demandFloored = market.demandRateForGood("ship_frames", { population: 1, technicians: 0, engineers: 0 }); // MIN_DEMAND-floored
   const storageCapacity = industryEngine.facilityStorageForGood(buildings, "food");
+
+  // Basket-good demand with skilled work: luxuries scale through consumptionRate's
+  // SKILL2_CONSUMPTION term, which rides ECONOMY_SCALE the same as GOOD_CONSUMPTION
+  // (both flow through scaleRecord).
+  const demandLuxuriesSkilled = market.demandRateForGood("luxuries", { population: pop, technicians: 0, engineers: 200 });
 
   const band = pricing.marketBand({
     demandRate: demandFood,
@@ -42,6 +48,7 @@ function scenario(mods: Awaited<ReturnType<typeof loadAtScale>>) {
   return {
     demandFood,
     demandFloored,
+    demandLuxuriesSkilled,
     storageCapacity,
     targetStock: band.targetStock,
     maxStock: band.maxStock,
@@ -78,6 +85,7 @@ describe("ECONOMY_SCALE invariance", () => {
 
     expect(x10.demandFood).toBeCloseTo(base.demandFood * 10);     // GOOD_CONSUMPTION rides S
     expect(x10.demandFloored).toBeCloseTo(base.demandFloored * 10); // MIN_DEMAND floor rides S
+    expect(x10.demandLuxuriesSkilled).toBeCloseTo(base.demandLuxuriesSkilled * 10); // SKILL2_CONSUMPTION basket rides S
     expect(x10.storageCapacity).toBeCloseTo(base.storageCapacity * 10);
     expect(x10.targetStock).toBeCloseTo(base.targetStock * 10);
     expect(x10.maxStock).toBeCloseTo(base.maxStock * 10);

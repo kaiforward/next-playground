@@ -10,6 +10,7 @@ import { getInitialStock, demandRateForGood } from "@/lib/constants/market-econo
 import { makeResourceVector, emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { Doctrine, GovernmentType, ResourceVector } from "@/lib/types/game";
 import { allocateIndustry } from "@/lib/engine/industry-seed";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -302,14 +303,15 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
     { stationId: techStation.id, buildings: techAllocation.buildings, yieldMult: unitResourceVector(), population: techSubstrate.population },
   ];
 
-  const marketData = stationSystems.flatMap(({ stationId, buildings, yieldMult, population }) =>
-    Object.keys(GOODS).map((key) => ({
+  const marketData = stationSystems.flatMap(({ stationId, buildings, yieldMult, population }) => {
+    const demandBasis = computeSystemLabourSnapshot(buildings, population).basis;
+    return Object.keys(GOODS).map((key) => ({
       stationId,
       goodId: goodIds[key],
       stock: getInitialStock(buildings, yieldMult, population, key),
-      demandRate: demandRateForGood(key, population),
-    })),
-  );
+      demandRate: demandRateForGood(key, demandBasis),
+    }));
+  });
   await prisma.stationMarket.createMany({ data: marketData });
 
   return {

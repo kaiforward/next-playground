@@ -3,6 +3,7 @@ import { ServiceError } from "@/lib/services/errors";
 import { getPlayerVisibility } from "@/lib/services/visibility-cache";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { demandFootprint } from "@/lib/constants/market-economy";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { GOODS } from "@/lib/constants/goods";
 import type { SystemPopulationData } from "@/lib/types/api";
 
@@ -21,15 +22,24 @@ export async function getSystemPopulation(
     getPlayerVisibility(playerId),
     prisma.starSystem.findUnique({
       where: { id: systemId },
-      select: { population: true, popCap: true, unrest: true },
+      select: {
+        population: true,
+        popCap: true,
+        unrest: true,
+        buildings: { select: { buildingType: true, count: true } },
+      },
     }),
   ]);
 
   if (!system) throw new ServiceError("System not found.", 404);
   if (!visibleSet.has(systemId)) return { visibility: "unknown" };
 
+  const buildings: Record<string, number> = {};
+  for (const b of system.buildings) buildings[b.buildingType] = b.count;
+  const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
+
   // Full consumption footprint (already filtered to consumed goods, demand-sorted).
-  const demand = demandFootprint(system.population).map((e) => ({
+  const demand = demandFootprint(basis).map((e) => ({
     goodId: e.goodId,
     goodName: GOODS[e.goodId]?.name ?? e.goodId,
     demandRate: e.demandRate,

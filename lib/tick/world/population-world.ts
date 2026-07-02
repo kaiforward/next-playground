@@ -24,7 +24,7 @@ export interface PopulationWorld {
   getPopulationState(systemIds: string[]): Promise<PopulationStateView[]>;
   /** Bulk-write population + unrest. */
   applyPopulationUpdates(updates: PopulationUpdate[]): Promise<void>;
-  /** Recompute demandRate = demandRateForGood(good, population) for those systems' markets. */
+  /** Recompute demandRate from the civilian demand basis (population + skilled work) plus industrial input draw, for those systems' markets. */
   rewriteDemandRates(pops: Array<{ systemId: string; population: number }>): Promise<void>;
 }
 

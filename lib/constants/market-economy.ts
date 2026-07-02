@@ -8,10 +8,13 @@ import { scaleValue } from "@/lib/constants/economy-scale";
 import {
   buildingProduction,
   computeLabourState,
+  computeSystemLabourSnapshot,
   facilityStorageForGood,
   inputDemandForGood,
 } from "@/lib/engine/industry";
 import type { LabourState } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 import { marketBand } from "@/lib/engine/market-pricing";
 import type { GovernmentDefinition } from "@/lib/constants/government";
@@ -52,17 +55,17 @@ export const SEED_COVER_MIN = 0.5;
 export const SEED_COVER_MAX = 1.5;
 
 /**
- * Days-of-supply demand denominator for one good: max(perCapitaNeed × population,
- * MIN_DEMAND). Population-only (consumption ignores the resource vector), so it is
- * the formula the population processor uses to rewrite demandRate as population moves.
+ * Days-of-supply demand denominator for one good: max(civilian consumption,
+ * MIN_DEMAND). Civilian-only (base per-capita + skilled baskets — see
+ * consumptionRate); the population processor recomputes it as population and
+ * the labour allocation move.
  */
-export function demandRateForGood(goodId: string, population: number): number {
-  const need = GOOD_CONSUMPTION[goodId] ?? 0;
-  return Math.max(need * Math.max(0, population), MIN_DEMAND);
+export function demandRateForGood(goodId: string, basis: CivilianDemandBasis): number {
+  return Math.max(consumptionRate(goodId, basis), MIN_DEMAND);
 }
 
 /**
- * Total days-of-supply demand denominator: civilian (population) + industrial
+ * Total days-of-supply demand denominator: civilian (demand basis) + industrial
  * (production-input draw). The industrial term is capacity-based and stable —
  * it depends on the industrial base and labour ratio, not on this tick's stock.
  * The labour state is skill-gated exactly like the tick's actual production — a
@@ -74,27 +77,28 @@ export function demandRateForGood(goodId: string, population: number): number {
  */
 export function totalDemandRateForGood(
   goodId: string,
-  population: number,
+  basis: CivilianDemandBasis,
   buildings: Record<string, number>,
   yields: ResourceVector,
   labourState?: LabourState,
 ): number {
-  const civilian = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
-  const state = labourState ?? computeLabourState(buildings, population);
+  const civilian = consumptionRate(goodId, basis);
+  const state = labourState ?? computeLabourState(buildings, basis.population);
   const industrial = inputDemandForGood(buildings, goodId, state, yields);
   return Math.max(civilian + industrial, MIN_DEMAND);
 }
 
 /**
- * Per-good demand a population of this size generates, descending by magnitude —
- * the consumption footprint that drives each market's demandRate. Only goods with
- * a positive per-capita need appear; each entry equals demandRateForGood (so it
- * floors at MIN_DEMAND). Pure, population-only — matches demandRateForGood.
+ * Per-good demand a system's civilian demand basis generates, descending by
+ * magnitude — the consumption footprint that drives each market's demandRate.
+ * Only goods with a positive per-capita need appear; each entry equals
+ * demandRateForGood (so it floors at MIN_DEMAND). Pure — driven by the civilian
+ * demand basis — matches demandRateForGood.
  */
-export function demandFootprint(population: number): Array<{ goodId: string; demandRate: number }> {
+export function demandFootprint(basis: CivilianDemandBasis): Array<{ goodId: string; demandRate: number }> {
   return Object.keys(GOOD_CONSUMPTION)
     .filter((goodId) => GOOD_CONSUMPTION[goodId] > 0)
-    .map((goodId) => ({ goodId, demandRate: demandRateForGood(goodId, population) }))
+    .map((goodId) => ({ goodId, demandRate: demandRateForGood(goodId, basis) }))
     .sort((a, b) => b.demandRate - a.demandRate);
 }
 
@@ -116,11 +120,11 @@ export function getInitialStock(
   population: number,
   goodId: string,
 ): number {
-  const state = computeLabourState(buildings, population);
-  const production = buildingProduction(buildings, goodId, state, yields);
-  const consumption = (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, population);
+  const snap = computeSystemLabourSnapshot(buildings, population);
+  const production = buildingProduction(buildings, goodId, snap.state, yields);
+  const consumption = consumptionRate(goodId, snap.basis);
 
-  const demandRate = demandRateForGood(goodId, population);
+  const demandRate = demandRateForGood(goodId, snap.basis);
   const g = GOODS[goodId];
   const band = g
     ? marketBand({

@@ -4,9 +4,17 @@ import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
+import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 } };
+
+/** A demand basis with no skilled work — matches these fixtures' academy-free systems. */
+const popOnly = (population: number): CivilianDemandBasis => ({
+  population,
+  technicians: 0,
+  engineers: 0,
+});
 
 function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): SimSystem {
   return {
@@ -42,7 +50,7 @@ describe("population processor", () => {
     expect(a.population).toBeCloseTo(499, 6);
     const m = world.markets.find((mm) => mm.systemId === "a")!;
     // demandRate = civilian-only floor for food at pop 499 (no production-input draw here).
-    expect(m.demandRate).toBeCloseTo(demandRateForGood("food", 499), 5);
+    expect(m.demandRate).toBeCloseTo(demandRateForGood("food", popOnly(499)), 5);
   });
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's
@@ -63,9 +71,11 @@ describe("population processor", () => {
     const oreMarket = world.markets.find((m) => m.systemId === "s" && m.goodId === "ore")!;
     const afterPop = world.systems.find((s) => s.id === "s")!.population;
 
-    // Ore has no per-capita need, so civilian-only gives MIN_DEMAND.
-    const civilianOnly = demandRateForGood("ore", afterPop);
-    const withIndustrial = totalDemandRateForGood("ore", afterPop, buildings, unitResourceVector());
+    // Ore has no per-capita need, so civilian-only gives MIN_DEMAND. Ore is also not a
+    // basket good, so the population-only basis matches the system's real (technician-
+    // bearing) basis for this good.
+    const civilianOnly = demandRateForGood("ore", popOnly(afterPop));
+    const withIndustrial = totalDemandRateForGood("ore", popOnly(afterPop), buildings, unitResourceVector());
 
     // The smelter's ore draw must push the rate above the civilian-only floor.
     expect(withIndustrial).toBeGreaterThan(civilianOnly);

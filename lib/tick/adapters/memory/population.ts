@@ -4,8 +4,8 @@ import type {
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 import type { ResourceVector } from "@/lib/types/game";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
-import { computeLabourState } from "@/lib/engine/industry";
-import type { LabourState } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { unitResourceVector } from "@/lib/engine/resources";
 
 /** In-memory adapter for the population processor (sim + unit tests). */
@@ -52,20 +52,20 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       buildingsBySystemId.set(s.id, s.buildings);
       yieldsBySystemId.set(s.id, s.yields);
     }
-    // Cache labour state per system — shared across all of a system's markets (mirrors the
-    // prisma adapter); computeLabourState scans the whole building set.
-    const labourStateBySystem = new Map<string, LabourState>();
+    // Cache the labour snapshot per system — shared across all of a system's markets
+    // (mirrors the prisma adapter); computeSystemLabourSnapshot scans the whole building set.
+    const labourBySystem = new Map<string, SystemLabourSnapshot>();
     this.markets = this.markets.map((m) => {
       const population = popBySystem.get(m.systemId);
       if (population == null) return m;
       const buildings = buildingsBySystemId.get(m.systemId) ?? {};
       const yields = yieldsBySystemId.get(m.systemId) ?? unitResourceVector();
-      let state = labourStateBySystem.get(m.systemId);
-      if (state === undefined) {
-        state = computeLabourState(buildings, population);
-        labourStateBySystem.set(m.systemId, state);
+      let snap = labourBySystem.get(m.systemId);
+      if (snap === undefined) {
+        snap = computeSystemLabourSnapshot(buildings, population);
+        labourBySystem.set(m.systemId, snap);
       }
-      return { ...m, demandRate: totalDemandRateForGood(m.goodId, population, buildings, yields, state) };
+      return { ...m, demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state) };
     });
     return Promise.resolve();
   }
