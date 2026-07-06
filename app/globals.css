@@ -19,7 +19,7 @@
 
 @theme inline {
   /* Fonts */
-  --font-sans: var(--font-geist), "Geist", system-ui, sans-serif;
+  --font-sans: var(--font-geist-sans), "Geist", system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), "Geist Mono", monospace;
   --font-display: var(--font-chakra), "Chakra Petch", sans-serif;
 

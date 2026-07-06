@@ -1,12 +1,9 @@
 // Shared game types — no Prisma dependency, importable everywhere
 
-import type { ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
-import type { ModuleId } from "@/lib/constants/modules";
-import type { MissionType, StatGateKey } from "@/lib/constants/missions";
-import type { EnemyTier } from "@/lib/constants/combat";
+import type { ShipSize, ShipRole } from "@/lib/constants/ships";
 import type { EventTypeId } from "@/lib/constants/events";
 
-export type { ShipSize, ShipRole, UpgradeSlotType };
+export type { ShipSize, ShipRole };
 
 export type EconomyType =
   | "agricultural"
@@ -120,16 +117,7 @@ export type Doctrine =
 
 export type FactionStatus = "dominant" | "major" | "regional" | "minor";
 
-export type ReputationStanding =
-  | "champion"
-  | "trusted"
-  | "neutral"
-  | "distrusted"
-  | "hostile";
-
 export type GoodTier = 0 | 1 | 2;
-
-export type Hazard = "none" | "low" | "high";
 
 export interface RegionInfo {
   id: string;
@@ -173,23 +161,7 @@ export interface DynamicTileSystem {
   danger: number;
 }
 
-export type TradeType = "buy" | "sell";
-
 export type ShipStatus = "docked" | "in_transit";
-
-export interface UpgradeSlotState {
-  id: string;
-  slotType: UpgradeSlotType;
-  slotIndex: number;
-  moduleId: ModuleId | null;
-  moduleTier: number | null;
-}
-
-export interface ShipActiveMission {
-  id: string;
-  type: MissionType;
-  status: OpMissionStatus;
-}
 
 export interface ShipState {
   id: string;
@@ -199,7 +171,6 @@ export interface ShipState {
   role: ShipRole;
   fuel: number;
   maxFuel: number;
-  cargoMax: number;
   speed: number;
   hullMax: number;
   hullCurrent: number;
@@ -211,8 +182,6 @@ export interface ShipState {
   sensors: number;
   crewCapacity: number;
   disabled: boolean;
-  cargo: CargoItemState[];
-  upgradeSlots: UpgradeSlotState[];
   status: ShipStatus;
   systemId: string;
   system: StarSystemInfo;
@@ -220,26 +189,6 @@ export interface ShipState {
   destinationSystem: StarSystemInfo | null;
   departureTick: number | null;
   arrivalTick: number | null;
-  convoyId: string | null;
-  activeMission: ShipActiveMission | null;
-}
-
-export type ConvoyStatus = "docked" | "in_transit";
-
-export interface ConvoyState {
-  id: string;
-  playerId: string;
-  name: string | null;
-  systemId: string;
-  system: StarSystemInfo;
-  status: ConvoyStatus;
-  destinationSystemId: string | null;
-  destinationSystem: StarSystemInfo | null;
-  departureTick: number | null;
-  arrivalTick: number | null;
-  members: ShipState[];
-  combinedCargoMax: number;
-  combinedCargoUsed: number;
 }
 
 export interface FleetState {
@@ -253,12 +202,6 @@ export interface GameWorldState {
   currentTick: number;
   tickRate: number;
   startingSystemId: string | null;
-}
-
-export interface CargoItemState {
-  goodId: string;
-  goodName: string;
-  quantity: number;
 }
 
 export interface SystemTraitInfo {
@@ -348,17 +291,6 @@ export interface MarketComparisonEntry {
   stock: number;
 }
 
-export interface TradeHistoryEntry {
-  id: string;
-  stationId: string;
-  goodId: string;
-  goodName: string;
-  price: number;
-  quantity: number;
-  type: TradeType;
-  createdAt: string;
-}
-
 /** Per-system unrest reading for the stability choropleth overlay. */
 export interface StabilityEntry {
   systemId: string;
@@ -427,150 +359,3 @@ export interface ActiveEvent {
   severity: number;
 }
 
-// ── Trade mission types ─────────────────────────────────────────
-
-export interface TradeMissionInfo {
-  id: string;
-  systemId: string;
-  systemName: string;
-  destinationId: string;
-  destinationName: string;
-  goodId: string;
-  goodName: string;
-  quantity: number;
-  reward: number;
-  estimatedGoodsValue: number;
-  deadlineTick: number;
-  ticksRemaining: number;
-  hops: number;
-  isImport: boolean;
-  isExport: boolean;
-  eventId: string | null;
-  playerId: string | null;
-  acceptedAtTick: number | null;
-}
-
-// ── Operational mission types ────────────────────────────────────
-
-export type OpMissionStatus = "available" | "accepted" | "in_progress" | "completed" | "failed";
-
-export interface MissionInfo {
-  id: string;
-  type: MissionType;
-  systemId: string;
-  systemName: string;
-  targetSystemId: string;
-  targetSystemName: string;
-  reward: number;
-  deadlineTick: number;
-  ticksRemaining: number;
-  durationTicks: number | null;
-  enemyTier: EnemyTier | null;
-  statRequirements: Partial<Record<StatGateKey, number>>;
-  status: OpMissionStatus;
-  playerId: string | null;
-  shipId: string | null;
-  acceptedAtTick: number | null;
-  startedAtTick: number | null;
-  completedAtTick: number | null;
-}
-
-// ── Battle types ────────────────────────────────────────────────
-
-export type BattleStatus =
-  | "active"
-  | "player_victory"
-  | "player_defeat"
-  | "player_retreat"
-  | "enemy_retreat";
-
-export interface BattleRoundResult {
-  round: number;
-  playerDamageDealt: number;
-  enemyDamageDealt: number;
-  playerStrengthAfter: number;
-  enemyStrengthAfter: number;
-  playerMoraleAfter: number;
-  enemyMoraleAfter: number;
-}
-
-export interface BattleInfo {
-  id: string;
-  type: string;
-  systemId: string;
-  systemName: string;
-  missionId: string | null;
-  shipId: string | null;
-  shipName: string | null;
-  status: BattleStatus;
-  playerStrength: number;
-  playerMorale: number;
-  playerMaxStrength: number;
-  enemyStrength: number;
-  enemyMorale: number;
-  enemyMaxStrength: number;
-  enemyType: string;
-  enemyTier: EnemyTier;
-  roundsCompleted: number;
-  roundHistory: BattleRoundResult[];
-  createdAtTick: number;
-  resolvedAtTick: number | null;
-}
-
-export interface BattleShipStats {
-  hullMax: number;
-  hullCurrent: number;
-  shieldMax: number;
-  shieldCurrent: number;
-  firepower: number;
-  evasion: number;
-}
-
-export interface BattleDetailInfo extends BattleInfo {
-  shipStats: BattleShipStats | null;
-}
-
-// ── Price history types ─────────────────────────────────────────
-
-export interface PriceSnapshotPoint {
-  tick: number;
-  price: number;
-}
-
-export interface SystemPriceHistory {
-  goodId: string;
-  goodName: string;
-  points: PriceSnapshotPoint[];
-}
-
-// ── Notification types ──────────────────────────────────────────
-
-export type NotificationType =
-  | "ship_arrived"
-  | "ship_damaged"
-  | "ship_disabled"
-  | "mission_completed"
-  | "mission_expired"
-  | "battle_round"
-  | "battle_won"
-  | "battle_lost"
-  | "cargo_lost"
-  | "hazard_incident"
-  | "import_duty"
-  | "contraband_seized";
-
-export interface EntityRef {
-  id: string;
-  label: string;
-}
-
-/** Server-persisted notification (returned from API). */
-export interface PlayerNotificationInfo {
-  id: string;
-  type: NotificationType;
-  message: string;
-  refs: Partial<Record<string, EntityRef>>;
-  tick: number;
-  read: boolean;
-  createdAt: string;
-}

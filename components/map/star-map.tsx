@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
-import type { AtlasData, UniverseData, StarSystemInfo, ShipState, ConvoyState, ActiveEvent } from "@/lib/types/game";
-import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
+import type { AtlasData, UniverseData, StarSystemInfo, ShipState, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { CompactTransitCard } from "@/components/map/compact-transit-card";
@@ -35,11 +34,8 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 interface StarMapProps {
   atlas: AtlasData;
   ships: ShipState[];
-  convoys: ConvoyState[];
   onNavigateShip: (shipId: string, route: string[]) => Promise<void>;
-  onNavigateConvoy?: (convoyId: string, route: string[]) => Promise<void>;
   initialSelectedShipId?: string;
-  initialSelectedConvoyId?: string;
   initialSelectedSystemId?: string;
   events?: ActiveEvent[];
 }
@@ -47,11 +43,8 @@ interface StarMapProps {
 export function StarMap({
   atlas,
   ships,
-  convoys,
   onNavigateShip,
-  onNavigateConvoy,
   initialSelectedShipId,
-  initialSelectedConvoyId,
   initialSelectedSystemId,
   events = [],
 }: StarMapProps) {
@@ -196,9 +189,7 @@ export function StarMap({
   // ── View state (selection, session persistence) ────────────────
   const view = useMapViewState({
     universe,
-    initialSelectedSystemId: initialSelectedSystemId ?? (initialSelectedConvoyId
-      ? convoys.find((c) => c.id === initialSelectedConvoyId)?.systemId
-      : undefined),
+    initialSelectedSystemId,
   });
 
   // ── Navigation state ──────────────────────────────────────────
@@ -206,7 +197,6 @@ export function StarMap({
     connections: allConnections,
     systems: universe.systems,
     onNavigateShip,
-    onNavigateConvoy,
   });
 
   const { mode } = navigation;
@@ -220,7 +210,6 @@ export function StarMap({
   const mapData = useMapData({
     universe,
     ships,
-    convoys,
     events,
     visibleSystemIds,
     dynamicSystems,
@@ -244,28 +233,17 @@ export function StarMap({
     ? Math.max(0, selectedTransit.arrivalTick - currentTick)
     : 0;
 
-  // ── Auto-select ship/convoy from URL query param on mount ────────
+  // ── Auto-select ship from URL query param on mount ───────────────
   useEffect(() => {
     if (!initialSelectedShipId) return;
     const ship = ships.find(
       (s) => s.id === initialSelectedShipId && s.status === "docked",
     );
     if (ship) {
-      navigation.selectUnit(shipToNavigableUnit(ship));
+      navigation.selectShip(ship);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSelectedShipId]);
-
-  useEffect(() => {
-    if (!initialSelectedConvoyId) return;
-    const convoy = convoys.find(
-      (c) => c.id === initialSelectedConvoyId && c.status === "docked",
-    );
-    if (convoy) {
-      navigation.selectUnit(convoyToNavigableUnit(convoy));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSelectedConvoyId]);
 
   // ── Destructure stable references for callback deps ──────────
   const {
@@ -284,10 +262,10 @@ export function StarMap({
       // unit_selected and route_preview so the player can freely re-pick a
       // destination (re-previewing the route) until they confirm.
       if (mode.phase === "unit_selected" || mode.phase === "route_preview") {
-        if (!mode.reachable.has(system.id) && system.id !== mode.unit.systemId) {
+        if (!mode.reachable.has(system.id) && system.id !== mode.ship.systemId) {
           return;
         }
-        if (system.id === mode.unit.systemId) {
+        if (system.id === mode.ship.systemId) {
           navigation.cancel();
           return;
         }
@@ -390,10 +368,7 @@ export function StarMap({
           <div className="flex items-center gap-3 rounded-lg border border-cyan-500/30 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
             <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
             <span className="text-sm text-text-primary">
-              Select a destination for <span className="font-semibold text-cyan-300">{mode.unit.name}</span>
-              {mode.unit.kind === "convoy" && (
-                <span className="text-cyan-300/60 ml-1">({mode.unit.convoy.members.length} ships)</span>
-              )}
+              Select a destination for <span className="font-semibold text-cyan-300">{mode.ship.name}</span>
             </span>
             <Button
               variant="ghost"
@@ -410,7 +385,7 @@ export function StarMap({
       {/* Route preview panel */}
       {mode.phase === "route_preview" && (
         <RoutePreviewPanel
-          unit={mode.unit}
+          ship={mode.ship}
           destination={mode.destination}
           route={mode.route}
           connections={allConnections}
@@ -435,14 +410,13 @@ export function StarMap({
         <SystemDetailPanel
           system={selectedSystem}
           shipsHere={mapData.shipsAtSelected}
-          convoysHere={mapData.convoysAtSelected}
           regionName={mapData.selectedRegionName}
           factionName={mapData.selectedFactionName}
           gatewayTargetRegions={mapData.selectedGatewayTargets}
           activeEvents={mapData.eventsAtSelected}
           visibility={mapData.selectedVisibility}
           onClose={closeSystem}
-          onNavigateUnit={navigation.selectUnit}
+          onNavigateShip={navigation.selectShip}
         />
       )}
 

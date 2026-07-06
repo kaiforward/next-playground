@@ -5,11 +5,12 @@
 > [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md),
 > [economy-specialisation-s2-complexes.md (active)](../active/gameplay/economy-specialisation-s2-complexes.md) and
 > [economy-specialisation-s3-demand.md (active)](../active/gameplay/economy-specialisation-s3-demand.md).
-> Stage **S4 remains planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
-> spread" item** (in [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from
-> "build/decay pacing" into a real structural-specialisation track. Decomposes into **four** ordered
-> stages, each its own spec → plan → build. Authoritative sequence in
-> [economy-simulation-vision.md](./economy-simulation-vision.md) §13.
+> Stage **S4 remains planned but is PAUSED by the grand-strategy pivot** — its calibration pass resumes
+> inside pivot Phase 4; see [grand-strategy-vision.md](./grand-strategy-vision.md) and the status note in
+> [economy-specialisation-s4-guardrails.md](./economy-specialisation-s4-guardrails.md). Originally expanded
+> the trade-rework's "2a — preserve a spread" item (that doc is deleted with the pivot — player arbitrage is
+> retired; the spread survives as an economy-health concern). The old authoritative sequence
+> (economy-simulation-vision.md §13) is superseded by the pivot's phasing.
 
 ## Headline
 
@@ -267,7 +268,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 | **S1 ✅ shipped** | **Skill-tiered labour vector** (per-good unskilled+skill1+skill2) + **per-good space** + **academies** (vocational school + research institute) + amplify input-demand magnitude | Breadth (factor scarcity + development endowment gate) | No |
 | **S2 ✅ shipped** | **Specialisation complexes** (manufacturing CA + economies-of-scale) — spec: [economy-specialisation-s2-complexes.md](../active/gameplay/economy-specialisation-s2-complexes.md) | Breadth (comparative advantage) | No |
 | **S3 ✅ shipped** | **Development-tiered civilian demand** (skilled-work share shifts the basket up-tier) — spec: [economy-specialisation-s3-demand.md](../active/gameplay/economy-specialisation-s3-demand.md) | Flat demand | No |
-| **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction | Volume + Diffusion | No |
+| **S4** | **Guardrails & tuning** — build-pacing, tier-scaled decay, diffusion friction + the joint S1–S4 calibration pass — working spec: [economy-specialisation-s4-guardrails.md](./economy-specialisation-s4-guardrails.md) | Volume + Diffusion | No |
 
 > **Interstitial — Economy UI legibility (quick wins), between S1 and S2.** S1 made the mechanics deep
 > (skill tiers, academy licensing, per-good labour composition) but the Industry/system screens still show
@@ -398,9 +399,9 @@ multi-seed robustness.
 
 ## Relationship to existing docs
 
-- **[economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)** — this **expands its
-  "2a — preserve a spread" item** from build/decay pacing into the full structural track. The contract-model
-  rework (its sub-project 3) depends on the spread this track creates.
+- **economy-scaling-and-trade-rework.md** (deleted with the grand-strategy pivot; git history) — this
+  expanded its "2a — preserve a spread" item from build/decay pacing into the full structural track. Its
+  contract-model rework is retired; the maturity-spread finding is carried in the S4 guardrails doc.
 - **[economy-simulation-vision.md](./economy-simulation-vision.md)** — realises §8 (build space, the
   industrialize-vs-feed pull) and §11 (regional specialisation, need-cascades) at the baseline level, and
   pre-builds the substrate full faction agency (§12) will later *decide* over.

@@ -14,48 +14,48 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 Deep, liquid markets, thin per-unit margin. High population-driven demand gives them the deepest days-of-supply cover, so large trades barely move price. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these. Each tier-0 good is **extracted** from a body resource deposit (no recipe) — Water/Gas/Ore/Minerals/Biomass/Radioactives map 1:1 to their resource; Food and Textiles both come from the `arable` resource.
 
-| Good | Base Price | Volatility | Hazard | Price Range |
-|---|---|---|---|---|
-| Water | 25 | 0.5 | none | 0.5x-2.0x |
-| Food | 30 | 0.7 | none | 0.5x-2.0x |
-| Gas | 30 | 0.7 | none | 0.5x-2.0x |
-| Biomass | 32 | 0.6 | none | 0.5x-2.0x |
-| Ore | 35 | 0.6 | none | 0.5x-2.0x |
-| Textiles | 35 | 0.8 | none | 0.5x-2.0x |
-| Minerals | 40 | 0.8 | none | 0.5x-2.0x |
-| Radioactives | 50 | 1.2 | high | 0.5x-2.0x |
+| Good | Base Price | Volatility | Price Range |
+|---|---|---|---|
+| Water | 25 | 0.5 | 0.5x-2.0x |
+| Food | 30 | 0.7 | 0.5x-2.0x |
+| Gas | 30 | 0.7 | 0.5x-2.0x |
+| Biomass | 32 | 0.6 | 0.5x-2.0x |
+| Ore | 35 | 0.6 | 0.5x-2.0x |
+| Textiles | 35 | 0.8 | 0.5x-2.0x |
+| Minerals | 40 | 0.8 | 0.5x-2.0x |
+| Radioactives | 50 | 1.2 | 0.5x-2.0x |
 
 ### Tier 1 — Processed Goods (10)
 
 Medium-depth markets, moderate per-unit margin. Lower per-capita demand than staples → shallower cover → price reacts more to each trade. Better margin but needs more capital. Mid-game income. Each is manufactured from a recipe of tier-0 (and one tier-1) inputs.
 
-| Good | Base Price | Volatility | Hazard | Price Range | Inputs (per output) |
-|---|---|---|---|---|---|
-| Fuel | 35 | 1.0 | low | 0.5x-2.5x | Gas 1 |
-| Metals | 45 | 0.8 | none | 0.5x-2.5x | Ore 1 |
-| Polymers | 48 | 0.7 | none | 0.5x-2.5x | Gas 0.5, Biomass 0.5 |
-| Chemicals | 55 | 1.2 | low | 0.5x-2.5x | Gas 0.5, Minerals 0.5 |
-| Consumer Goods | 55 | 0.6 | none | 0.5x-2.5x | Textiles 0.5, Polymers 0.5 |
-| Alloys | 60 | 0.8 | none | 0.5x-2.5x | Metals 0.6, Minerals 0.4 |
-| Medicine | 65 | 1.5 | none | 0.5x-2.5x | Biomass 0.5, Chemicals 0.5 |
-| Components | 70 | 0.9 | none | 0.5x-2.5x | Minerals 0.5, Metals 0.5 |
-| Hull Plating* | 70 | 0.9 | none | 0.5x-2.5x | Metals 0.5, Alloys 0.5 |
-| Munitions* | 75 | 1.3 | low | 0.5x-2.5x | Metals 0.5, Chemicals 0.5 |
+| Good | Base Price | Volatility | Price Range | Inputs (per output) |
+|---|---|---|---|---|
+| Fuel | 35 | 1.0 | 0.5x-2.5x | Gas 1 |
+| Metals | 45 | 0.8 | 0.5x-2.5x | Ore 1 |
+| Polymers | 48 | 0.7 | 0.5x-2.5x | Gas 0.5, Biomass 0.5 |
+| Chemicals | 55 | 1.2 | 0.5x-2.5x | Gas 0.5, Minerals 0.5 |
+| Consumer Goods | 55 | 0.6 | 0.5x-2.5x | Textiles 0.5, Polymers 0.5 |
+| Alloys | 60 | 0.8 | 0.5x-2.5x | Metals 0.6, Minerals 0.4 |
+| Medicine | 65 | 1.5 | 0.5x-2.5x | Biomass 0.5, Chemicals 0.5 |
+| Components | 70 | 0.9 | 0.5x-2.5x | Minerals 0.5, Metals 0.5 |
+| Hull Plating* | 70 | 0.9 | 0.5x-2.5x | Metals 0.5, Alloys 0.5 |
+| Munitions* | 75 | 1.3 | 0.5x-2.5x | Metals 0.5, Chemicals 0.5 |
 
 ### Tier 2 — Advanced Goods (8)
 
 Thin, scarce markets, high per-unit price swing. Lowest per-capita demand → shallowest cover → a small trade swings price hard. Highest absolute margin per unit but can't fill cargo from one system. Late-game income — needs big capital AND multi-system routes.
 
-| Good | Base Price | Volatility | Hazard | Price Range | Inputs (per output) |
-|---|---|---|---|---|---|
-| Electronics | 80 | 1.0 | none | 0.5x-3.0x | Components 0.6, Chemicals 0.4 |
-| Machinery | 100 | 0.8 | none | 0.5x-3.0x | Metals 0.5, Components 0.5 |
-| Weapons* | 120 | 2.0 | high | 0.5x-3.0x | Metals 0.4, Chemicals 0.3, Munitions 0.3 |
-| Targeting Arrays* | 140 | 1.0 | none | 0.5x-3.0x | Electronics 0.6, Components 0.4 |
-| Luxuries | 150 | 1.8 | none | 0.5x-3.0x | Consumer Goods 0.5, Electronics 0.5 |
-| Weapons Systems* | 160 | 1.5 | high | 0.5x-3.0x | Electronics 0.4, Munitions 0.3, Hull Plating 0.3 |
-| Reactor Cores* | 170 | 1.2 | high | 0.5x-3.0x | Radioactives 0.4, Alloys 0.3, Components 0.3 |
-| Ship Frames* | 180 | 1.0 | none | 0.5x-3.0x | Hull Plating 0.4, Alloys 0.3, Components 0.3 |
+| Good | Base Price | Volatility | Price Range | Inputs (per output) |
+|---|---|---|---|---|
+| Electronics | 80 | 1.0 | 0.5x-3.0x | Components 0.6, Chemicals 0.4 |
+| Machinery | 100 | 0.8 | 0.5x-3.0x | Metals 0.5, Components 0.5 |
+| Weapons* | 120 | 2.0 | 0.5x-3.0x | Metals 0.4, Chemicals 0.3, Munitions 0.3 |
+| Targeting Arrays* | 140 | 1.0 | 0.5x-3.0x | Electronics 0.6, Components 0.4 |
+| Luxuries | 150 | 1.8 | 0.5x-3.0x | Consumer Goods 0.5, Electronics 0.5 |
+| Weapons Systems* | 160 | 1.5 | 0.5x-3.0x | Electronics 0.4, Munitions 0.3, Hull Plating 0.3 |
+| Reactor Cores* | 170 | 1.2 | 0.5x-3.0x | Radioactives 0.4, Alloys 0.3, Components 0.3 |
+| Ship Frames* | 180 | 1.0 | 0.5x-3.0x | Hull Plating 0.4, Alloys 0.3, Components 0.3 |
 
 \* **Military-tagged** dual-use goods. They trade on the open market with ordinary civilian demand today; a strategic war-demand channel (and the tier-3 non-market military *assets* they feed) is planned for the faction-agency and war layers. **Bottleneck goods** — Components (5 downstream recipes), Metals (near-universal), Alloys, and Electronics — sit on the most chains, so a shortage in one cascades widest.
 
@@ -143,23 +143,21 @@ At seed/reset time each market's starting stock is **cover-based** (`getInitialS
 
 All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-| Government | Volatility | Eq. Spread | Tax | Inspection | Danger | Contraband | Taxed goods | Consumption boosts |
-|---|---|---|---|---|---|---|---|---|
-| Federation | 0.8× | -10% | 12% | 1.2× | 0.00 | weapons | chemicals | medicine |
-| Corporate | 0.9× | -5% | 10% | 0.8× | 0.02 | — | — | luxuries |
-| Authoritarian | 0.7× | -15% | 15% | 1.5× | 0.00 | weapons, chemicals | — | weapons, fuel |
-| Frontier | 1.5× | +20% | 0% | 0.0× | 0.10 | — | — | — |
-| Cooperative | 0.7× | -10% | 10% | 1.0× | 0.00 | luxuries | — | food, medicine |
-| Technocratic | 1.0× | +5% | 8% | 0.6× | 0.01 | — | water, food | electronics |
-| Militarist | 1.3× | +10% | 10% | 1.3× | 0.05 | — | electronics, machinery | weapons, fuel, machinery |
-| Theocratic | 0.8× | -5% | 10% | 1.4× | 0.03 | weapons, chemicals, luxuries | — | food, medicine, textiles |
+| Government | Volatility | Eq. Spread | Danger | Consumption boosts |
+|---|---|---|---|---|
+| Federation | 0.8× | -10% | 0.00 | medicine |
+| Corporate | 0.9× | -5% | 0.02 | luxuries |
+| Authoritarian | 0.7× | -15% | 0.00 | weapons, fuel |
+| Frontier | 1.5× | +20% | 0.10 | — |
+| Cooperative | 0.7× | -10% | 0.00 | food, medicine |
+| Technocratic | 1.0× | +5% | 0.01 | electronics |
+| Militarist | 1.3× | +10% | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.8× | -5% | 0.03 | food, medicine, textiles |
 
 ### Government Effects on Gameplay
 - **Volatility modifier**: Scales price-noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
 - **Spread modifier** (`equilibriumSpreadPct`): Scales the **bid-ask half-spread** `s` — the gap between buy and sell price. Frontier widens it (+20% → bigger round-trip cost / wider quotes), authoritarian tightens it (-15%). Replaces the legacy supply/demand-band spread now that there is a single stock value.
-- **Tax rate**: Fraction of taxed goods seized on arrival (import duty).
-- **Danger baseline**: Added to all event-based danger. Frontier adds 10% base cargo loss risk.
-- **Contraband**: Goods inspected and confiscated if caught. Inspection chance varies by government (0% frontier to 37.5% authoritarian).
+- **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
 - **Consumption boosts**: Extra consumption per tick for specific goods (e.g., authoritarian +1 weapons consumption) — drains stock faster, raising price.
 
 ---
@@ -260,7 +258,7 @@ Events can shift a good's **pricing reference** (the anchor) — the stock level
 - `goodId: null` — applies to all goods at the target station; setting a specific `goodId` targets one good only
 - Multiple active shifts on the same good **compound** (multiply together)
 
-**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same shard cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — player trade, convoy, missions, market display, cross-system comparison, price-history snapshots, and trade-flow gradient.
+**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same shard cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — market display, cross-system comparison, and trade-flow gradient.
 
 **Safety cap**: `anchorMult` is clamped to **[0.1, 4.0]** — a single good can at most become 4× as expensive (or 10× as cheap) via anchor shift.
 
@@ -334,41 +332,16 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                growth/decline, migration, demandRate rewrite
 3  Disruptions (events)        shocks + modifiers temporarily change how
                                layer 2 behaves
-4  Player agency (real-time)   trading on the edge-flow background
 ```
 
 Edge-flow mechanics are detailed in [trade-simulation.md](./trade-simulation.md); this is just where it sits in the tick.
 
 ---
 
-## Ship Prices & Progression
-
-Ship prices are calibrated relative to trade margins to create a multi-stage progression:
-
-| Ship | Price | Cargo | Role |
-|---|---|---|---|
-| Shuttle | 0 (starter) | 50 | Early T0 trading |
-| Light Freighter | 25,000 | 80 | Upgraded T0/early T1 |
-| Scout Skiff | 20,000 | 10 | Exploration |
-| Interceptor | 35,000 | 15 | Combat |
-| Bulk Freighter | 120,000 | 200 | Serious T1/T2 hauling |
-| Corvette | 150,000 | 40 | Combat + opportunistic trade |
-| Blockade Runner | 175,000 | 60 | Smuggling |
-| Survey Vessel | 90,000 | 50 | Support |
-| Heavy Freighter | 350,000 | 400 | Endgame hauling |
-| Frigate | 450,000 | 30 | Fleet escort |
-| Stealth Transport | 400,000 | 150 | Covert hauling |
-| Command Vessel | 500,000 | 80 | Endgame support |
-
-With T0 margins of ~5cr/unit and 50 cargo, a shuttle earns a few hundred cr/trip. Mixing in T1/T2 goods as capital grows shortens the climb to the next ship significantly.
-
----
-
 ## System Interactions
 
-- **Events** inject economic shocks — one-time stock jolts (immediate stock deltas), rate multipliers (production/consumption scale), and **anchor shifts** (the sustained price lever: multiply a good's per-system pricing reference for the event's duration, raising or lowering where "mid price = base price" sits). Anchor shifts and stock shocks are distinct: a shock moves stock immediately; an anchor shift changes *what price a given stock level reads as* for as long as the event is active. Both are live every tick across all read paths (player trade, convoy, missions, price history snapshots, trade-flow gradient). (see [events.md](./events.md))
-- **Trade missions** are generated from price extremes — high prices spawn import missions, low prices spawn export missions (see [trading.md](./trading.md))
-- **Navigation danger** is partly driven by government danger baseline — affects cargo loss on arrival (see [navigation.md](./navigation.md))
+- **Events** inject economic shocks — one-time stock jolts (immediate stock deltas), rate multipliers (production/consumption scale), and **anchor shifts** (the sustained price lever: multiply a good's per-system pricing reference for the event's duration, raising or lowering where "mid price = base price" sits). Anchor shifts and stock shocks are distinct: a shock moves stock immediately; an anchor shift changes *what price a given stock level reads as* for as long as the event is active. Both are live every tick across all read paths (market display, trade-flow gradient). (see [events.md](./events.md))
+- **Navigation danger** is partly driven by government danger baseline — a readout-only world attribute since the teardown (see [navigation.md](./navigation.md))
 - **Faction system** (planned) will add faction-specific economic modifiers and war-driven market disruption (see [faction-system.md](./faction-system.md))
 
 ---

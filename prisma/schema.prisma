@@ -89,14 +89,8 @@ model Player {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ships              Ship[]
-  convoys            Convoy[]
-  tradeMissions      TradeMission[]
-  missions           Mission[]
-  notifications      PlayerNotification[]
-  npcVisits          NpcVisit[]
-  factionReputations PlayerFactionReputation[]
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ships     Ship[]
 }
 
 model Ship {
@@ -106,7 +100,6 @@ model Ship {
   shipType            String   @default("shuttle")
   fuel                Float    @default(100)
   maxFuel             Float    @default(100)
-  cargoMax            Int      @default(50)
   speed               Int      @default(5)
   hullMax             Int      @default(40)
   hullCurrent         Int      @default(40)
@@ -129,68 +122,8 @@ model Ship {
   player       Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   system       StarSystem        @relation("ShipCurrentSystem", fields: [systemId], references: [id])
   destination  StarSystem?       @relation("ShipDestination", fields: [destinationSystemId], references: [id])
-  cargo        CargoItem[]
-  upgradeSlots ShipUpgradeSlot[]
-  convoyMember ConvoyMember?
-  missions     Mission[]
-  battles      Battle[]
 
   @@index([playerId])
-}
-
-model ShipUpgradeSlot {
-  id         String  @id @default(cuid())
-  shipId     String
-  slotType   String // "engine" | "cargo" | "defence" | "systems"
-  slotIndex  Int // 0-based index within slotType
-  moduleId   String? // null = empty slot
-  moduleTier Int? // null = empty slot
-
-  ship Ship @relation(fields: [shipId], references: [id], onDelete: Cascade)
-
-  @@unique([shipId, slotType, slotIndex])
-  @@index([shipId])
-}
-
-model Convoy {
-  id                  String   @id @default(cuid())
-  playerId            String
-  name                String?
-  systemId            String
-  status              String   @default("docked") // "docked" | "in_transit"
-  destinationSystemId String?
-  departureTick       Int?
-  arrivalTick         Int?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  player      Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  system      StarSystem     @relation("ConvoyCurrentSystem", fields: [systemId], references: [id])
-  destination StarSystem?    @relation("ConvoyDestination", fields: [destinationSystemId], references: [id])
-  members     ConvoyMember[]
-
-  @@index([playerId])
-}
-
-model ConvoyMember {
-  id       String @id @default(cuid())
-  convoyId String
-  shipId   String @unique // a ship can only be in one convoy
-
-  convoy Convoy @relation(fields: [convoyId], references: [id], onDelete: Cascade)
-  ship   Ship   @relation(fields: [shipId], references: [id], onDelete: Cascade)
-}
-
-model CargoItem {
-  id       String @id @default(cuid())
-  shipId   String
-  goodId   String
-  quantity Int
-
-  ship Ship @relation(fields: [shipId], references: [id], onDelete: Cascade)
-  good Good @relation(fields: [goodId], references: [id])
-
-  @@unique([shipId, goodId])
 }
 
 model StarSystem {
@@ -237,17 +170,9 @@ model StarSystem {
   buildings         SystemBuilding[]
   ships             Ship[]             @relation("ShipCurrentSystem")
   incomingShips     Ship[]             @relation("ShipDestination")
-  convoys           Convoy[]           @relation("ConvoyCurrentSystem")
-  incomingConvoys   Convoy[]           @relation("ConvoyDestination")
   connectionsFrom   SystemConnection[] @relation("FromSystem")
   connectionsTo     SystemConnection[] @relation("ToSystem")
   events            GameEvent[]
-  priceHistory      PriceHistory?
-  missionsPosted    TradeMission[]     @relation("MissionBoard")
-  missionsTargeting TradeMission[]     @relation("MissionDest")
-  missions          Mission[]          @relation("MissionSystem")
-  missionTargets    Mission[]          @relation("MissionTarget")
-  battles           Battle[]
   tradeFlowsFrom    TradeFlow[]        @relation("TradeFlowsFrom")
   tradeFlowsTo      TradeFlow[]        @relation("TradeFlowsTo")
 
@@ -327,7 +252,6 @@ model Station {
 
   system  StarSystem      @relation(fields: [systemId], references: [id])
   markets StationMarket[]
-  trades  TradeHistory[]
 }
 
 model Good {
@@ -339,14 +263,10 @@ model Good {
   volume       Int    @default(1)
   mass         Float  @default(1.0)
   volatility   Float  @default(1.0)
-  hazard       String @default("none")
   priceFloor   Float  @default(0.2)
   priceCeiling Float  @default(5.0)
 
-  cargoItems    CargoItem[]
   markets       StationMarket[]
-  trades        TradeHistory[]
-  tradeMissions TradeMission[]
 }
 
 // Stock-based economy: a single `stock` axis replaced the legacy
@@ -373,30 +293,6 @@ model StationMarket {
   good    Good    @relation(fields: [goodId], references: [id])
 
   @@unique([stationId, goodId])
-}
-
-model TradeHistory {
-  id        String   @id @default(cuid())
-  stationId String
-  goodId    String
-  price     Float
-  quantity  Int
-  type      String // "buy" or "sell"
-  playerId  String?
-  createdAt DateTime @default(now())
-
-  station Station @relation(fields: [stationId], references: [id])
-  good    Good    @relation(fields: [goodId], references: [id])
-
-  @@index([stationId])
-}
-
-model PriceHistory {
-  id       String @id @default(cuid())
-  systemId String @unique
-  entries  String @default("[]") // JSON: { tick: number, prices: Record<goodId, price> }[]
-
-  system StarSystem @relation(fields: [systemId], references: [id])
 }
 
 // ── Trade Flow ─────────────────────────────────────────────────
@@ -439,8 +335,6 @@ model GameEvent {
   sourceEvent   GameEvent?      @relation("EventSpread", fields: [sourceEventId], references: [id])
   spreadEvents  GameEvent[]     @relation("EventSpread")
   modifiers     EventModifier[]
-  tradeMissions TradeMission[]
-  missions      Mission[]
 
   @@index([type])
   @@index([systemId])
@@ -450,161 +344,18 @@ model GameEvent {
 model EventModifier {
   id         String  @id @default(cuid())
   eventId    String
-  domain     String // "economy", "navigation", "combat", "reputation"
+  domain     String // "economy" today; open-ended for future layers (war, reputation)
   type       String // "anchor_shift", "rate_multiplier", "equilibrium_shift"
   targetType String // "system", "region"
   targetId   String? // systemId or regionId
   goodId     String? // Specific good key, or null for all goods
-  parameter  String // "target_stock", "production_rate", "consumption_rate", "danger_level"
+  parameter  String // "target_stock", "production_rate", "consumption_rate"
   value      Float // Modifier value
 
   event GameEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([domain, targetType, targetId])
   @@index([eventId])
-}
-
-// ── Trade Missions ──────────────────────────────────────────────
-
-model TradeMission {
-  id             String  @id @default(cuid())
-  systemId       String // Board station (where mission appears)
-  destinationId  String // Delivery target
-  goodId         String
-  quantity       Int
-  reward         Int // Fixed CR payout
-  deadlineTick   Int // Available missions expire here
-  eventId        String? // Cascade-deletes with event
-  factionId      String? // Owning faction (faction reputation)
-  penaltyType    String  @default("none") // Future: "credits" | "reputation"
-  penaltyValue   Int     @default(0)
-  playerId       String? // null = available, set = accepted
-  acceptedAtTick Int?
-  createdAtTick  Int
-
-  system      StarSystem @relation("MissionBoard", fields: [systemId], references: [id])
-  destination StarSystem @relation("MissionDest", fields: [destinationId], references: [id])
-  good        Good       @relation(fields: [goodId], references: [id])
-  event       GameEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  player      Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  faction     Faction?   @relation(fields: [factionId], references: [id])
-
-  @@index([systemId, playerId])
-  @@index([playerId])
-  @@index([deadlineTick])
-  @@index([eventId])
-  @@index([factionId])
-}
-
-// ── Operational Missions ────────────────────────────────────────
-
-model Mission {
-  id               String  @id @default(cuid())
-  type             String // "patrol" | "survey" | "bounty"
-  systemId         String // Where mission is posted
-  targetSystemId   String // Where mission takes place
-  reward           Int
-  deadlineTick     Int
-  durationTicks    Int? // Patrol/survey commitment time (null for bounty)
-  enemyTier        String? // Bounty: "weak" | "moderate" | "strong"
-  statRequirements String  @default("{}") // JSON: { firepower: 5 } etc.
-  createdAtTick    Int
-  eventId          String? // Source event (event-spawned missions)
-
-  // State
-  status          String  @default("available") // available | accepted | in_progress | completed | failed
-  playerId        String?
-  shipId          String?
-  acceptedAtTick  Int?
-  startedAtTick   Int? // When ship arrived and commitment began
-  completedAtTick Int?
-
-  // Relations
-  system       StarSystem @relation("MissionSystem", fields: [systemId], references: [id])
-  targetSystem StarSystem @relation("MissionTarget", fields: [targetSystemId], references: [id])
-  player       Player?    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  ship         Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
-  event        GameEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  battle       Battle?
-
-  @@index([systemId, status])
-  @@index([playerId])
-  @@index([deadlineTick])
-  @@index([targetSystemId, status])
-  @@index([eventId])
-}
-
-// ── Battles ─────────────────────────────────────────────────────
-
-model Battle {
-  id        String  @id @default(cuid())
-  type      String // "pirate_encounter" — later: "fleet_battle"
-  systemId  String
-  missionId String? @unique
-  shipId    String?
-
-  status String @default("active") // active | player_victory | player_defeat | player_retreat | enemy_retreat
-
-  // Player side
-  playerStrength        Float
-  playerMorale          Float
-  dangerLevel           Float? // Danger at battle creation for enemy scaling
-  initialPlayerStrength Float? // Player strength at battle start for damage calc
-
-  // Enemy side
-  enemyStrength Float
-  enemyMorale   Float
-  enemyType     String // "pirates" — later: faction names
-  enemyTier     String // "weak" | "moderate" | "strong"
-
-  // Resolution
-  roundsCompleted Int    @default(0)
-  roundInterval   Int    @default(6)
-  nextRoundTick   Int
-  roundHistory    String @default("[]") // JSON: Array<RoundResult>
-
-  createdAtTick  Int
-  resolvedAtTick Int?
-
-  // Relations
-  system  StarSystem @relation(fields: [systemId], references: [id])
-  mission Mission?   @relation(fields: [missionId], references: [id], onDelete: SetNull)
-  ship    Ship?      @relation(fields: [shipId], references: [id], onDelete: SetNull)
-
-  @@index([status, nextRoundTick])
-  @@index([systemId])
-  @@index([shipId])
-}
-
-// ── Notifications ──────────────────────────────────────────────
-
-model PlayerNotification {
-  id        String   @id @default(cuid())
-  playerId  String
-  type      String
-  message   String
-  refs      String   @default("{}")
-  tick      Int
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@index([playerId, createdAt])
-  @@index([playerId, read])
-}
-
-model NpcVisit {
-  id       String @id @default(cuid())
-  playerId String
-  npcType  String
-  systemId String
-  visits   Int    @default(0)
-
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([playerId, npcType, systemId])
-  @@index([playerId])
 }
 
 // ── Factions ───────────────────────────────────────────────────
@@ -621,8 +372,6 @@ model Faction {
 
   homeworld     StarSystem                @relation("FactionHomeworld", fields: [homeworldId], references: [id])
   territory     StarSystem[]              @relation("FactionTerritory")
-  tradeMissions TradeMission[]
-  reputations   PlayerFactionReputation[]
   relationsAsA  FactionRelation[]         @relation("RelationFactionA")
   relationsAsB  FactionRelation[]         @relation("RelationFactionB")
   alliancesAsA  AlliancePact[]            @relation("AllianceFactionA")
@@ -666,20 +415,3 @@ model AlliancePact {
   @@index([factionBId])
 }
 
-/// Per-player, per-faction reputation score. Drives trade multipliers.
-model PlayerFactionReputation {
-  id                      String @id @default(cuid())
-  playerId                String
-  factionId               String
-  score                   Float  @default(0) // [-100, +100]
-  updatedAtTick           Int    @default(0)
-  /// Reputation accrued so far in `updatedAtTick`. Reset on the first accrual of a new tick.
-  currentTickGainThisTick Float  @default(0)
-
-  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  faction Faction @relation(fields: [factionId], references: [id], onDelete: Cascade)
-
-  @@unique([playerId, factionId])
-  @@index([playerId])
-  @@index([factionId])
-}

@@ -88,7 +88,7 @@ Each system renders as a layered glyph with a fixed radial budget so indicators 
 
 | Corner | Channel | Content |
 |---|---|---|
-| Top-left | Fleet | docked ships (blue) + convoys (copper), stacked, with counts |
+| Top-left | Fleet | docked ships (blue) with count |
 | Top-right | Price | signed % deviation from base price (ramp-tinted, matches halo) |
 | Bottom-right | Events | dominant event icon + count, bordered by the event's colour |
 | Bottom-left | *reserved* | future channel |
@@ -97,11 +97,11 @@ Pills are deliberately **rounded** — Pixi aliases sharp corners and tiny text 
 
 ### Fleet on the Map
 
-The player's own fleet is always legible, in a consistent fleet visual language (blue solo ships, copper convoys) kept distinct from event / economy / price cues:
+The player's own fleet is always legible, in a consistent fleet visual language (blue ships) kept distinct from event / economy / price cues:
 
-- **Docked ships** show as top-left count pills on the system glyph — blue for solo ships, copper for convoys, stacked when both are present.
-- **In-transit ships** show as always-visible directional markers that move smoothly along their route between ticks (a chevron points toward the destination). Convoys render as a single marker; markers that overlap on screen cluster into one pill with a count.
-- **Routes on demand** (progressive disclosure): hovering a marker shows a ghost route + ETA tooltip; clicking it draws the solid animated route and opens a compact transit card (destination, cargo, ETA); a "Ship Routes" overlay can draw every in-transit route at once.
+- **Docked ships** show as a top-left count pill on the system glyph.
+- **In-transit ships** show as always-visible directional markers that move smoothly along their route between ticks (a chevron points toward the destination). Markers that overlap on screen cluster into one pill with a count.
+- **Routes on demand** (progressive disclosure): hovering a marker shows a ghost route + ETA tooltip; clicking it draws the solid animated route and opens a compact transit card (destination, ETA); a "Ship Routes" overlay can draw every in-transit route at once.
 
 In-transit markers are the player's own ships, so they stay visible even across unexplored systems.
 
@@ -122,7 +122,7 @@ Overlays govern *ambient* clutter, not data access: with Fleet or Events off, a 
 
 The map shows you the *stars* but not the *story*. The galaxy's topology — every system's position, connections, region, economy type, and name — is public "star chart" knowledge, visible to everyone at every zoom. What's hidden is the dynamic state: live events, danger levels, and ship presence. You can see a system is there; you don't know what's happening at it unless you have eyes nearby.
 
-- **Explored / visible**: A system is visible when one of your ships is within sensor range of it. Sensor range is measured in connection hops, and varies by ship role — scouts see furthest (3 hops), trade and support ships 2, combat and stealth 1. A convoy sees the union of its members' ranges, so a scout escort extends a freighter's awareness. Visible systems render at full brightness with their event icons, danger coloring, and "you have ships here" indicators.
+- **Explored / visible**: A system is visible when one of your ships is within sensor range of it. Sensor range is measured in connection hops, and varies by ship role — scouts see furthest (3 hops), trade and support ships 2, combat and stealth 1. Visible systems render at full brightness with their event icons, danger coloring, and "you have ships here" indicators.
 - **Unknown**: Systems outside any ship's sensor range are dimmed. Their dot and name still show (star-chart data), but no live overlays — and clicking one yields atlas-level info only, with no current intel on prices, events, or ships.
 
 This is the player's *own* map knowledge: visibility is computed per-player from their fleet positions, not a global reveal. It makes exploration meaningful and information a resource worth investing in. The current model is binary (visible or unknown) with no stale/snapshot memory.
@@ -173,7 +173,7 @@ The configurable universe and tile-based map renderer are in place — scale cei
 
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
 - **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-traits.md](./system-traits.md) §2.2)
-- **Facilities**: Faction-owned strategic infrastructure seeded at systems based on traits (see [facilities.md](../../planned/facilities.md))
+- **World-gen start state**: the grand-strategy pivot ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md) §5.4) replaces "factions own everything at seed" with small developed faction cores in a mostly-unclaimed galaxy (colonisation becomes a core loop)
 
 ---
 

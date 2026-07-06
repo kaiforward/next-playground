@@ -167,7 +167,8 @@ deferred *alternative* endpoint — not a worse version of this — see the plan
 ## Where this sits in the roadmap
 
 - **Superseded** the build plan `docs/build-plans/s1-skill-tiered-labour.md` (now deleted).
-- **Expands** the `economy-scaling-and-trade-rework.md` "2a — preserve a spread" item into a structural
-  specialisation track; the contract-model rework depends on the spread this track creates.
+- **Expanded** the (now-deleted) `economy-scaling-and-trade-rework.md` "2a — preserve a spread" item into a
+  structural specialisation track. Its contract-model rework is retired by the grand-strategy pivot; the
+  spread survives as an economy-health concern.
 - **Next:** the S1→S2 **Economy UI legibility** interstitial (surface skilled-labour pools + per-factory
   binding constraint + building descriptions — tracked in `docs/BACKLOG.md`), then S2 anchors.

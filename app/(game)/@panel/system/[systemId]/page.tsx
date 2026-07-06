@@ -5,7 +5,6 @@ import { useMarket } from "@/lib/hooks/use-market";
 import { useEvents } from "@/lib/hooks/use-events";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useUniverse } from "@/lib/hooks/use-universe";
-import { useSystemAllMissions } from "@/lib/hooks/use-op-missions";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
@@ -80,7 +79,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { events } = useEvents();
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const { data: universeData } = useUniverse();
-  const allMissions = useSystemAllMissions(systemId);
   const substrate = useSystemSubstrate(systemId);
   const industry = useSystemIndustry(systemId);
   const populationState = useSystemPopulation(systemId);
@@ -174,10 +172,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
       ? formatHeadcount(populationState.population)
       : "—";
 
-  // Mission counts
-  const tradeAvailable = allMissions.tradeMissions.available.length;
-  const opAvailable = allMissions.opMissions.available.length;
-
   return (
     <>
       {/* Events banner */}
@@ -264,7 +258,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
               )}
             </StatList>
 
-            {/* Right column — economy + missions */}
+            {/* Right column — economy */}
             <div className="space-y-4">
               <div>
                 <SectionHeader as="h4" className="mb-2">Produces</SectionHeader>
@@ -273,16 +267,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
               <div>
                 <SectionHeader as="h4" className="mb-2">Consumes</SectionHeader>
                 <GoodsList goods={consumedGoods} />
-              </div>
-              <div className="border-t border-border pt-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-text-tertiary">Trade contracts</span>
-                  <span className="text-sm text-text-accent">{tradeAvailable} avail</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-text-tertiary">Operations</span>
-                  <span className="text-sm text-text-accent">{opAvailable} avail</span>
-                </div>
               </div>
             </div>
           </div>

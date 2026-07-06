@@ -111,8 +111,7 @@ export function checkPhaseTransition(
  *
  * All modifier types lerp toward 1.0: `1 + (value - 1) × severity`.
  * For anchor_shift (a multiplier), 2.0 at severity 0.5 → 1.5; rate_multiplier
- * uses the same formula. Navigation equilibrium_shift (danger_level) is additive
- * and handled elsewhere.
+ * uses the same formula.
  */
 function scaleValue(
   template: ModifierTemplate,

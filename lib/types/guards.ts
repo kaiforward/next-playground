@@ -11,27 +11,15 @@ import type {
   GovernmentType,
   Doctrine,
   FactionStatus,
-  ReputationStanding,
   QualityTier,
   ShipStatus,
-  TradeType,
   TraitId,
-  ConvoyStatus,
-  Hazard,
-  NotificationType,
-  OpMissionStatus,
-  BattleStatus,
-  EntityRef,
   SunClass,
   BodyArchetypeId,
 } from "./game";
-import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
-import { MODULES, type ModuleId } from "@/lib/constants/modules";
-import type { MissionType, StatGateKey } from "@/lib/constants/missions";
-import type { EnemyTier } from "@/lib/constants/combat";
+import type { ShipTypeId, ShipSize, ShipRole } from "@/lib/constants/ships";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import type { UniverseScale } from "@/lib/constants/universe-gen";
-import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
 import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
 
 // ── Lookup sets (built once) ────────────────────────────────────
@@ -51,10 +39,6 @@ const DOCTRINES: ReadonlySet<string> = new Set<Doctrine>([
 
 const FACTION_STATUSES: ReadonlySet<string> = new Set<FactionStatus>([
   "dominant", "major", "regional", "minor",
-]);
-
-const REPUTATION_STANDINGS: ReadonlySet<string> = new Set<ReputationStanding>([
-  "champion", "trusted", "neutral", "distrusted", "hostile",
 ]);
 
 const QUALITY_TIERS: ReadonlySet<number> = new Set<QualityTier>([1, 2, 3]);
@@ -81,10 +65,6 @@ const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([
   "docked", "in_transit",
 ]);
 
-const TRADE_TYPES: ReadonlySet<string> = new Set<TradeType>([
-  "buy", "sell",
-]);
-
 const SHIP_TYPE_IDS: ReadonlySet<string> = new Set<ShipTypeId>([
   "shuttle", "light_freighter", "interceptor", "scout_skiff",
   "bulk_freighter", "corvette", "blockade_runner", "survey_vessel",
@@ -97,14 +77,6 @@ const SHIP_SIZES: ReadonlySet<string> = new Set<ShipSize>([
 
 const SHIP_ROLES: ReadonlySet<string> = new Set<ShipRole>([
   "trade", "combat", "scout", "stealth", "support",
-]);
-
-const UPGRADE_SLOT_TYPES: ReadonlySet<string> = new Set<UpgradeSlotType>([
-  "engine", "cargo", "defence", "systems",
-]);
-
-const CONVOY_STATUSES: ReadonlySet<string> = new Set<ConvoyStatus>([
-  "docked", "in_transit",
 ]);
 
 // ── Validated converters ────────────────────────────────────────
@@ -149,13 +121,6 @@ export function toFactionStatus(value: string): FactionStatus {
   return value as FactionStatus;
 }
 
-export function toReputationStanding(value: string): ReputationStanding {
-  if (!REPUTATION_STANDINGS.has(value)) {
-    throw new Error(`Invalid reputation standing: "${value}"`);
-  }
-  return value as ReputationStanding;
-}
-
 export function toQualityTier(value: number): QualityTier {
   if (!QUALITY_TIERS.has(value)) {
     throw new Error(`Invalid quality tier: ${value}`);
@@ -177,13 +142,6 @@ export function toShipStatus(value: string): ShipStatus {
   return value as ShipStatus;
 }
 
-export function toTradeType(value: string): TradeType {
-  if (!TRADE_TYPES.has(value)) {
-    throw new Error(`Invalid trade type: "${value}"`);
-  }
-  return value as TradeType;
-}
-
 export function isShipTypeId(value: string): value is ShipTypeId {
   return SHIP_TYPE_IDS.has(value);
 }
@@ -202,128 +160,6 @@ export function toShipRole(value: string): ShipRole {
   return value as ShipRole;
 }
 
-export function toUpgradeSlotType(value: string): UpgradeSlotType {
-  if (!UPGRADE_SLOT_TYPES.has(value)) {
-    throw new Error(`Invalid upgrade slot type: "${value}"`);
-  }
-  return value as UpgradeSlotType;
-}
-
-export function toConvoyStatus(value: string): ConvoyStatus {
-  if (!CONVOY_STATUSES.has(value)) {
-    throw new Error(`Invalid convoy status: "${value}"`);
-  }
-  return value as ConvoyStatus;
-}
-
-// ── Additional guards (modules, missions, combat, notifications) ─
-
-const MODULE_IDS: ReadonlySet<string> = new Set(Object.keys(MODULES));
-
-const MISSION_TYPES: ReadonlySet<string> = new Set<MissionType>([
-  "patrol", "survey", "bounty", "salvage", "recon",
-]);
-
-const STAT_GATE_KEYS: ReadonlySet<string> = new Set<StatGateKey>([
-  "firepower", "sensors", "hullMax", "stealth",
-]);
-
-const ENEMY_TIER_VALUES: ReadonlySet<string> = new Set<EnemyTier>([
-  "weak", "moderate", "strong",
-]);
-
-const HAZARD_VALUES: ReadonlySet<string> = new Set<Hazard>([
-  "none", "low", "high",
-]);
-
-const NOTIFICATION_TYPES: ReadonlySet<string> = new Set<NotificationType>([
-  "ship_arrived", "ship_damaged", "ship_disabled",
-  "mission_completed", "mission_expired",
-  "battle_round", "battle_won", "battle_lost",
-  "cargo_lost", "hazard_incident",
-  "import_duty", "contraband_seized",
-]);
-
-const OP_MISSION_STATUSES: ReadonlySet<string> = new Set<OpMissionStatus>([
-  "available", "accepted", "in_progress", "completed", "failed",
-]);
-
-const BATTLE_STATUSES: ReadonlySet<string> = new Set<BattleStatus>([
-  "active", "player_victory", "player_defeat", "player_retreat", "enemy_retreat",
-]);
-
-export function isModuleId(value: string): value is ModuleId {
-  return MODULE_IDS.has(value);
-}
-
-export function toModuleId(value: string): ModuleId {
-  if (!MODULE_IDS.has(value)) {
-    throw new Error(`Invalid module id: "${value}"`);
-  }
-  return value as ModuleId;
-}
-
-export function toMissionType(value: string): MissionType {
-  if (!MISSION_TYPES.has(value)) {
-    throw new Error(`Invalid mission type: "${value}"`);
-  }
-  return value as MissionType;
-}
-
-export function isMissionType(value: string): value is MissionType {
-  return MISSION_TYPES.has(value);
-}
-
-export function toStatGateKey(value: string): StatGateKey {
-  if (!STAT_GATE_KEYS.has(value)) {
-    throw new Error(`Invalid stat gate key: "${value}"`);
-  }
-  return value as StatGateKey;
-}
-
-export function isStatGateKey(value: string): value is StatGateKey {
-  return STAT_GATE_KEYS.has(value);
-}
-
-export function toEnemyTier(value: string): EnemyTier {
-  if (!ENEMY_TIER_VALUES.has(value)) {
-    throw new Error(`Invalid enemy tier: "${value}"`);
-  }
-  return value as EnemyTier;
-}
-
-export function isEnemyTier(value: string): value is EnemyTier {
-  return ENEMY_TIER_VALUES.has(value);
-}
-
-export function toHazard(value: string): Hazard {
-  if (!HAZARD_VALUES.has(value)) {
-    throw new Error(`Invalid hazard level: "${value}"`);
-  }
-  return value as Hazard;
-}
-
-export function toNotificationType(value: string): NotificationType {
-  if (!NOTIFICATION_TYPES.has(value)) {
-    throw new Error(`Invalid notification type: "${value}"`);
-  }
-  return value as NotificationType;
-}
-
-export function toOpMissionStatus(value: string): OpMissionStatus {
-  if (!OP_MISSION_STATUSES.has(value)) {
-    throw new Error(`Invalid op mission status: "${value}"`);
-  }
-  return value as OpMissionStatus;
-}
-
-export function toBattleStatus(value: string): BattleStatus {
-  if (!BATTLE_STATUSES.has(value)) {
-    throw new Error(`Invalid battle status: "${value}"`);
-  }
-  return value as BattleStatus;
-}
-
 export function isEventTypeId(value: string): value is EventTypeId {
   return value in EVENT_DEFINITIONS;
 }
@@ -339,16 +175,8 @@ const UNIVERSE_SCALES: ReadonlySet<string> = new Set<UniverseScale>([
   "default", "10k",
 ]);
 
-const CANTINA_NPC_TYPES: ReadonlySet<string> = new Set<CantinaNpcType>([
-  "bartender", "cautious_trader", "frontier_gambler", "sharp_smuggler", "station_regular",
-]);
-
 const SUN_CLASS_IDS: ReadonlySet<string> = new Set(Object.keys(SUN_CLASSES));
 const BODY_ARCHETYPE_IDS: ReadonlySet<string> = new Set(Object.keys(BODY_ARCHETYPES));
-
-export function isCantinaNpcType(value: string): value is CantinaNpcType {
-  return CANTINA_NPC_TYPES.has(value);
-}
 
 export function isSunClass(value: string): value is SunClass {
   return SUN_CLASS_IDS.has(value);
@@ -392,10 +220,6 @@ export const ALL_DOCTRINES: readonly Doctrine[] = [
 
 export const ALL_FACTION_STATUSES: readonly FactionStatus[] = [
   "dominant", "major", "regional", "minor",
-];
-
-export const ALL_REPUTATION_STANDINGS: readonly ReputationStanding[] = [
-  "champion", "trusted", "neutral", "distrusted", "hostile",
 ];
 
 export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
@@ -457,43 +281,4 @@ export function deriveFactionStatus(
   return natural;
 }
 
-// ── Template literal guards ───────────────────────────────────
-
-export function isStatGateMessage(value: string): value is `STAT_GATE:${string}` {
-  return value.startsWith("STAT_GATE:");
-}
-
-// ── JSON boundary guards ────────────────────────────────────────
-
-/** Parse a JSON stat requirements string into a typed record. Invalid keys/values are dropped. */
-export function toStatRequirements(json: string): Partial<Record<StatGateKey, number>> {
-  let parsed: unknown;
-  try { parsed = JSON.parse(json); } catch { return {}; }
-  if (typeof parsed !== "object" || parsed === null) return {};
-  const result: Partial<Record<StatGateKey, number>> = {};
-  for (const [key, value] of Object.entries(parsed)) {
-    if (isStatGateKey(key) && typeof value === "number") {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
-/** Parse a JSON entity refs string into a typed record. Invalid entries are dropped. */
-export function toEntityRefs(json: string): Partial<Record<string, EntityRef>> {
-  let parsed: unknown;
-  try { parsed = JSON.parse(json); } catch { return {}; }
-  if (typeof parsed !== "object" || parsed === null) return {};
-  const result: Partial<Record<string, EntityRef>> = {};
-  for (const [key, value] of Object.entries(parsed)) {
-    if (
-      typeof value === "object" && value !== null &&
-      "id" in value && typeof value.id === "string" &&
-      "label" in value && typeof value.label === "string"
-    ) {
-      result[key] = { id: value.id, label: value.label };
-    }
-  }
-  return result;
-}
 

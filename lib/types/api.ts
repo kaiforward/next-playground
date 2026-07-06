@@ -1,7 +1,6 @@
 import type {
   FleetState,
   ShipState,
-  ConvoyState,
   GameWorldState,
   UniverseData,
   AtlasData,
@@ -11,18 +10,10 @@ import type {
   MarketEntry,
   MarketComparisonEntry,
   GoodInfo,
-  TradeHistoryEntry,
-  TradeType,
   ActiveEvent,
-  SystemPriceHistory,
-  TradeMissionInfo,
-  MissionInfo,
-  BattleInfo,
-  BattleDetailInfo,
   TraitId,
   TraitCategory,
   QualityTier,
-  PlayerNotificationInfo,
   SunClass,
   GoodTier,
   BodyArchetypeId,
@@ -255,12 +246,7 @@ export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
 export type GoodsResponse = ApiResponse<{ goods: GoodInfo[] }>;
-export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;
-export type PriceHistoryResponse = ApiResponse<SystemPriceHistory[]>;
-
-import type { PlayerFactionReputationInfo } from "@/lib/services/reputation";
-export type ReputationResponse = ApiResponse<PlayerFactionReputationInfo[]>;
 
 import type {
   FactionSummary,
@@ -270,12 +256,6 @@ import type {
 export type FactionListResponse = ApiResponse<FactionSummary[]>;
 export type FactionDetailResponse = ApiResponse<FactionDetail>;
 export type RelationsMatrixResponse = ApiResponse<RelationsMatrixData>;
-
-export interface ShipTradeResult {
-  ship: ShipState;
-  updatedMarket: MarketEntry;
-}
-export type ShipTradeResponse = ApiResponse<ShipTradeResult>;
 
 export interface ShipNavigateResult {
   ship: ShipState;
@@ -298,13 +278,6 @@ export interface TickEvent {
 
 // ── Requests ─────────────────────────────────────────────────────
 
-export interface ShipTradeRequest {
-  stationId: string;
-  goodId: string;
-  quantity: number;
-  type: TradeType;
-}
-
 export interface ShipNavigateRequest {
   route: string[]; // ordered [origin, ...hops, destination]
 }
@@ -318,117 +291,6 @@ export interface ShipRefuelResult {
   creditSpent: number;
 }
 export type ShipRefuelResponse = ApiResponse<ShipRefuelResult>;
-
-export interface ShipPurchaseRequest {
-  systemId: string;
-  shipType: string;
-}
-
-export interface ShipPurchaseResult {
-  ship: ShipState;
-  creditSpent: number;
-}
-export type ShipPurchaseResponse = ApiResponse<ShipPurchaseResult>;
-
-// ── Mission types ───────────────────────────────────────────────
-
-export interface SystemMissionsData { available: TradeMissionInfo[]; active: TradeMissionInfo[] }
-export type SystemMissionsResponse = ApiResponse<SystemMissionsData>;
-
-export interface AcceptMissionRequest { missionId: string }
-export interface AcceptMissionResult { mission: TradeMissionInfo; activeCount: number }
-export type AcceptMissionResponse = ApiResponse<AcceptMissionResult>;
-
-export interface DeliverMissionRequest { missionId: string; shipId: string }
-export interface DeliverMissionResult { mission: TradeMissionInfo; goodsValue: number; reward: number; creditEarned: number; newBalance: number }
-export type DeliverMissionResponse = ApiResponse<DeliverMissionResult>;
-
-export interface AbandonMissionRequest { missionId: string }
-export type AbandonMissionResponse = ApiResponse<{ missionId: string }>;
-
-// ── Operational mission types ───────────────────────────────────
-
-export interface SystemAllMissionsData {
-  tradeMissions: { available: TradeMissionInfo[]; active: TradeMissionInfo[] };
-  opMissions: { available: MissionInfo[]; active: MissionInfo[] };
-}
-export type SystemAllMissionsResponse = ApiResponse<SystemAllMissionsData>;
-
-export interface AcceptOpMissionResult { mission: MissionInfo }
-export type AcceptOpMissionResponse = ApiResponse<AcceptOpMissionResult>;
-
-export interface StartOpMissionRequest { shipId: string }
-export interface StartOpMissionResult { mission: MissionInfo }
-export type StartOpMissionResponse = ApiResponse<StartOpMissionResult>;
-
-export type AbandonOpMissionResponse = ApiResponse<{ missionId: string }>;
-
-// ── Battle types ───────────────────────────────────────────────
-
-export type BattlesResponse = ApiResponse<BattleInfo[]>;
-export type BattleDetailResponse = ApiResponse<BattleDetailInfo>;
-
-// ── Convoy types ────────────────────────────────────────────────
-
-export type ConvoyListResponse = ApiResponse<ConvoyState[]>;
-
-export interface CreateConvoyRequest { shipIds: string[]; name?: string }
-export interface CreateConvoyResult { convoy: ConvoyState }
-export type CreateConvoyResponse = ApiResponse<CreateConvoyResult>;
-
-export interface ConvoyMemberRequest { shipId: string }
-export interface ConvoyBatchMemberRequest { shipIds: string[] }
-export type ConvoyMemberResponse = ApiResponse<ConvoyState>;
-
-export interface ConvoyNavigateRequest { route: string[] }
-export type ConvoyNavigateResponse = ApiResponse<{ convoy: ConvoyState; fuelUsed: number; travelDuration: number }>;
-
-// ── Convoy trade types ─────────────────────────────────────────
-
-export interface ConvoyTradeResult { updatedMarket: MarketEntry }
-export type ConvoyTradeResponse = ApiResponse<ConvoyTradeResult>;
-
-// ── Convoy repair types ────────────────────────────────────────
-
-export interface ConvoyRepairRequest { fraction: number }
-export interface ConvoyRepairResult { totalCost: number; totalHealed: number }
-export type ConvoyRepairResponse = ApiResponse<ConvoyRepairResult>;
-
-// ── Convoy refuel types ────────────────────────────────────────
-
-export interface ConvoyRefuelRequest { fraction: number }
-export interface ConvoyRefuelResult { totalCost: number; totalFueled: number }
-export type ConvoyRefuelResponse = ApiResponse<ConvoyRefuelResult>;
-
-// ── Upgrade types ───────────────────────────────────────────────
-
-export interface InstallUpgradeRequest { slotId: string; moduleId: string; tier?: number }
-export interface InstallUpgradeResult { ship: ShipState; creditSpent: number }
-export type InstallUpgradeResponse = ApiResponse<InstallUpgradeResult>;
-
-export interface RemoveUpgradeRequest { slotId: string }
-export type RemoveUpgradeResponse = ApiResponse<{ ship: ShipState }>;
-
-// ── Repair types ────────────────────────────────────────────────
-
-export interface RepairResult { ship: ShipState; creditSpent: number }
-export type RepairResponse = ApiResponse<RepairResult>;
-
-// ── Pagination types ────────────────────────────────────────────
-
-/** Shared paginated response shape — all paginated endpoints return this. */
-export interface PaginatedData<T> {
-  items: T[];
-  nextCursor: string | null;
-  total: number;
-}
-export type PaginatedResponse<T> = ApiResponse<PaginatedData<T>>;
-
-// ── Notification types ──────────────────────────────────────────
-
-export type NotificationsResponse = PaginatedResponse<PlayerNotificationInfo>;
-export type UnreadCountResponse = ApiResponse<{ count: number }>;
-export type MarkReadResponse = ApiResponse<{ marked: number }>;
 
 // ── Auth types ──────────────────────────────────────────────────
 

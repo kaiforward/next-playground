@@ -1,8 +1,8 @@
 # Economy-scale knob (`ECONOMY_SCALE`)
 
-> Foundational substrate for the
-> [Economy Scaling & Trade-Logistics Rework](../../planned/economy-scaling-and-trade-rework.md); the
-> roadmap sequence is [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13.
+> Was the foundational substrate for the Economy Scaling & Trade-Logistics Rework (doc deleted with the
+> grand-strategy pivot; the knob itself is fully live and stays — legible magnitudes serve the strategy
+> game just as well).
 > Shipped and inert by default (`S = 1`). The calibration pass (2026-06-30) landed on **`S ≈ 100`** —
 > validated equilibrium-preserving on both the simulator (clean S=1 vs S=100: prices invariant, quantities
 > ×100, dispersion *tightens* as rounding noise shrinks) and a real-DB reseed (tick-500 audit ≈ the
@@ -22,8 +22,8 @@ cost) deliberately do **not** scale.
 
 It is equilibrium-preserving magnitude plumbing. It does **not** pick the real value of `S` (that's the
 calibration pass) and does **not** fix the "nowhere is expensive" price-spread problem — `ECONOMY_SCALE`
-is ratio-invariant and creates no spread by design
-([rework doc](../../planned/economy-scaling-and-trade-rework.md) Key Finding #4).
+is ratio-invariant and creates no spread by design (the deleted rework doc's Key Finding #4 — carried
+into [economy-specialisation-s4-guardrails.md](../../planned/economy-specialisation-s4-guardrails.md)).
 
 ## The invariant (the defining contract)
 

@@ -70,9 +70,6 @@ export interface TradeFlowWorld {
   /** Markets at the given systems. */
   getMarketSnapshotsForSystems(systemIds: string[]): Promise<MarketSnapshot[]>;
 
-  /** Recent player trade volume per system (0 when unavailable / sim baseline). */
-  getRecentPlayerVolumeBySystem(systemIds: string[]): Promise<Map<string, number>>;
-
   /** Bulk-write market stock (absolute, already-clamped values). */
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void>;
 
@@ -95,10 +92,6 @@ export interface TradeFlowProcessorParams {
   gradientSensitivity: number;
   /** Retention window for flow events (in ticks). */
   flowHistoryTicks: number;
-  /** Player activity fully displaces edge flow at this multiple of playerVolumeTarget. */
-  playerDisplacementFactor: number;
-  /** Per-system target trade volume used to normalize player pressure. */
-  playerVolumeTarget: number;
   /** Distance attenuation: factor = 1/(1 + distanceDecay·fuelCost). 0 = no-op. */
   distanceDecay: number;
 }

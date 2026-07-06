@@ -107,28 +107,8 @@ describe("summarizePhaseEffects", () => {
     });
   });
 
-  describe("navigation", () => {
-    it("surfaces any navigation modifier as 'Danger increased'", () => {
-      const danger: ModifierTemplate = {
-        domain: "navigation",
-        type: "equilibrium_shift",
-        target: "system",
-        parameter: "danger_level",
-        value: 0.08,
-      };
-      expect(summarizePhaseEffects(phase([danger]))).toBe("Danger increased");
-    });
-  });
-
   describe("composition and edge cases", () => {
     it("joins multiple effect categories with ' · ' in a stable order", () => {
-      const danger: ModifierTemplate = {
-        domain: "navigation",
-        type: "equilibrium_shift",
-        target: "system",
-        parameter: "danger_level",
-        value: 0.2,
-      };
       const production: ModifierTemplate = {
         domain: "economy",
         type: "rate_multiplier",
@@ -138,8 +118,8 @@ describe("summarizePhaseEffects", () => {
         value: 0.2,
       };
       expect(
-        summarizePhaseEffects(phase([anchor(2.5, "fuel"), production, danger])),
-      ).toBe("Fuel demand up · Production slowed · Danger increased");
+        summarizePhaseEffects(phase([anchor(2.5, "fuel"), production])),
+      ).toBe("Fuel demand up · Production slowed");
     });
 
     it("returns 'Minor market effects' when no recognized modifiers are present", () => {

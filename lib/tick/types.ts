@@ -1,8 +1,5 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import type { EventTypeId } from "@/lib/constants/events";
-import type { NotificationType, EntityRef } from "@/lib/types/game";
-import type { HazardIncidentEntry, ImportDutyEntry, ContrabandSeizedEntry, CargoLossEntry } from "@/lib/engine/danger";
-import type { DamageResult } from "@/lib/engine/damage";
 
 /** Transaction client type — Prisma's official type for `$transaction` callback parameter. */
 export type TxClient = Prisma.TransactionClient;
@@ -15,23 +12,6 @@ export interface ShipArrivedPayload {
   systemId: string;
   destName: string;
   playerId: string;
-  hazardIncidents?: HazardIncidentEntry[];
-  importDuties?: ImportDutyEntry[];
-  contrabandSeized?: ContrabandSeizedEntry[];
-  cargoLost?: CargoLossEntry[];
-  damageResult?: DamageResult;
-}
-
-export interface CargoLostPayload {
-  shipId: string;
-  systemId: string;
-  losses: CargoLossEntry[];
-}
-
-export interface GameNotificationPayload {
-  message: string;
-  type: NotificationType;
-  refs: Partial<Record<string, EntityRef>>;
 }
 
 export interface EconomyTickPayload {
@@ -49,39 +29,15 @@ export interface EventNotificationPayload {
   refs: Record<string, { id: string; label: string }>;
 }
 
-export interface PriceSnapshotPayload {
-  systemCount: number;
-}
-
-export interface MissionsUpdatedPayload {
-  count: number;
-  expired: number;
-}
-
-export interface OpMissionsUpdatedPayload {
-  generated: number;
-  expired: number;
-}
-
-export interface BattlesUpdatedPayload {
-  count: number;
-}
-
 // ── Typed event maps ──────────────────────────────────────────────
 
 export interface GlobalEventMap {
   economyTick: EconomyTickPayload[];
   eventNotifications: EventNotificationPayload[];
-  priceSnapshot: PriceSnapshotPayload[];
-  missionsUpdated: MissionsUpdatedPayload[];
-  opMissionsUpdated: OpMissionsUpdatedPayload[];
-  battlesUpdated: BattlesUpdatedPayload[];
 }
 
 export interface PlayerEventMap {
   shipArrived: ShipArrivedPayload[];
-  cargoLost: CargoLostPayload[];
-  gameNotifications: GameNotificationPayload[];
 }
 
 // ── Processor types ───────────────────────────────────────────────

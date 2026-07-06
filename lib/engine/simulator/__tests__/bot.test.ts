@@ -85,7 +85,7 @@ function baseWorld(
   return {
     tick: 0,
     regions: [{ id: "r1", name: "Test" }],
-    systems: [{ id: "sys-a", name: "A", economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation", population: 100, popCap: 200, traits: [], bodyDanger: 0, unrest: 0, buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0 }],
+    systems: [{ id: "sys-a", name: "A", economyType: "extraction", regionId: "r1", factionId: "f1", governmentType: "federation", population: 100, popCap: 200, traits: [], unrest: 0, buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0 }],
     connections: [],
     markets,
     events: [],

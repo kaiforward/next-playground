@@ -94,7 +94,7 @@ The ideas above are event *arcs* that fit the current engine — they need only 
 
 ### Embargo with Smuggling
 
-**Priority: Medium.** A region-level embargo restricting a good at gateway systems (standard modifiers), plus a "Smuggling" phase where player trades in the embargoed good earn a profit multiplier. Depends on the contraband system ([navigation-changes.md §4](./navigation-changes.md)) — the trade service checks active embargo modifiers and applies the multiplier at trade time.
+**Priority: Retired (grand-strategy pivot).** A region-level embargo restricting a good at gateway systems (standard modifiers), plus a "Smuggling" phase where player trades in the embargoed good earn a profit multiplier. Depended on the personal contraband system (navigation-changes.md, deleted) — personal player trading is retired; an embargo as a *faction-level* flow restriction may return with the diplomacy/war design.
 
 ### Technological Shifts
 

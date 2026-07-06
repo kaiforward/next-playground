@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EllipsisVertical } from "lucide-react";
 import { RefuelDialog } from "./refuel-dialog";
-import { RepairDialog } from "./repair-dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 
 interface ShipCardProps {
@@ -30,16 +29,13 @@ interface ShipCardProps {
   backTo?: string;
   /** Required for refuel dialog. */
   playerCredits?: number;
-  /** Whether this ship is currently in an active battle. */
-  inBattle?: boolean;
 }
 
-export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, inBattle }: ShipCardProps) {
-  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, isDocked, onMission, needsFuel, isDamaged } = getShipDerivedState(ship);
+export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: ShipCardProps) {
+  const { fuelPercent, hullPercent, isDocked, needsFuel, isDamaged } = getShipDerivedState(ship);
 
   const detailHref = backTo ? `/ship/${ship.id}?from=${backTo}` : `/ship/${ship.id}`;
   const refuelDialog = useDialog();
-  const repairDialog = useDialog();
 
   return (
     <Card variant="bordered" padding="sm" className={ship.disabled ? "opacity-60" : undefined}>
@@ -58,7 +54,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
             </Badge>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ShipStatusBadge ship={ship} inBattle={inBattle} />
+            <ShipStatusBadge ship={ship} />
             <Button href={`/?systemId=${ship.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
               <MapPinIcon className="w-3.5 h-3.5" />
             </Button>
@@ -90,13 +86,6 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
           max={ship.maxFuel}
           color={fuelPercent < 20 ? "red" : "blue"}
         />
-        <ProgressBar
-          label="Cargo"
-          value={cargoUsed}
-          max={ship.cargoMax}
-          color={cargoPercent > 80 ? "red" : "amber"}
-        />
-
         {/* Hull/Shield — only show when damaged or when hull < max */}
         {(isDamaged || ship.disabled) && (
           <ProgressBar
@@ -111,17 +100,17 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
         {isDocked && (
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
-              {!ship.disabled && !onMission && (
+              {!ship.disabled && (
                 <Button
-                  href={`/system/${ship.systemId}/market?tradeShipId=${ship.id}`}
+                  href={`/system/${ship.systemId}/market`}
                   variant="action"
                   color="green"
                   size="sm"
                 >
-                  Trade
+                  Market
                 </Button>
               )}
-              {!ship.disabled && !ship.convoyId && !onMission && (
+              {!ship.disabled && (
                 <Button
                   href={`/?navigateShipId=${ship.id}`}
                   variant="action"
@@ -148,12 +137,6 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
                 >
                   Refuel
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!isDamaged || ship.disabled || playerCredits == null}
-                  onSelect={repairDialog.onOpen}
-                >
-                  Repair
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -167,16 +150,6 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
           playerCredits={playerCredits}
           open={refuelDialog.open}
           onClose={refuelDialog.onClose}
-        />
-      )}
-
-      {/* Repair dialog */}
-      {isDamaged && !ship.disabled && playerCredits != null && (
-        <RepairDialog
-          ship={ship}
-          playerCredits={playerCredits}
-          open={repairDialog.open}
-          onClose={repairDialog.onClose}
         />
       )}
     </Card>

@@ -3,24 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useFleet } from "@/lib/hooks/use-fleet";
-import { formatCredits } from "@/lib/utils/format";
-import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
-import { NotificationBell } from "@/components/notifications/notification-bell";
 import {
   Ship,
-  ShipWheel,
   Radio,
-  Crosshair,
   ChevronLeft,
   ChevronRight,
   LogOut,
-  NotebookText,
-  ListChecks,
   Landmark,
   Network,
-  Handshake,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -36,19 +27,14 @@ interface NavItem {
 
 const FLEET_NAV: NavItem[] = [
   { href: "/fleet", label: "Fleet", icon: Ship },
-  { href: "/convoys", label: "Convoys", icon: ShipWheel },
 ];
 
 const ACTIVITY_NAV: NavItem[] = [
-  { href: "/log", label: "Captain's Log", icon: NotebookText },
-  { href: "/missions", label: "Missions", icon: ListChecks },
   { href: "/events", label: "Events", icon: Radio },
-  { href: "/battles", label: "Battles", icon: Crosshair },
 ];
 
 const POLITICS_NAV: NavItem[] = [
   { href: "/factions", label: "Factions", icon: Landmark },
-  { href: "/reputation", label: "Reputation", icon: Handshake },
   { href: "/diplomacy", label: "Diplomacy", icon: Network },
 ];
 
@@ -86,26 +72,6 @@ function NavLink({
 
 function Divider() {
   return <div className="mx-3 my-1 border-t border-border" />;
-}
-
-function StatusCredits() {
-  const { fleet } = useFleet();
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-text-secondary">Credits</span>
-      <span className="font-mono text-secondary">{formatCredits(fleet.credits)}</span>
-    </div>
-  );
-}
-
-function StatusShipCount() {
-  const { fleet } = useFleet();
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-text-secondary">Ships</span>
-      <span className="font-mono text-text-primary">{fleet.ships.length}</span>
-    </div>
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,13 +119,6 @@ export function GameSidebar({
         </Link>
       </div>
 
-      {/* Notification bell */}
-      <div className="mt-1">
-        <NotificationBell collapsed={collapsed} />
-      </div>
-
-      <Divider />
-
       {/* Fleet section */}
       {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Fleet</SectionHeader>}
       <nav aria-label="Fleet navigation" className="flex flex-col gap-0.5">
@@ -193,17 +152,6 @@ export function GameSidebar({
       {/* Status section */}
       {!collapsed && (
         <div className="px-3 py-2 flex flex-col gap-1.5">
-          <QueryBoundary
-            loadingFallback={
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-text-secondary">Credits</span>
-                <span className="font-mono text-text-tertiary">---</span>
-              </div>
-            }
-          >
-            <StatusCredits />
-            <StatusShipCount />
-          </QueryBoundary>
           <div className="flex items-center justify-between text-xs">
             <span className="text-text-secondary">Tick</span>
             <div className="flex items-center gap-1.5">

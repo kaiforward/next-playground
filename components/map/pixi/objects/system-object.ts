@@ -85,8 +85,7 @@ export class SystemObject extends Container {
   private nameLabel: Text;
   private econBg: Graphics;
   private econLabel: Text;
-  private shipPill: DockedPill;   // blue — solo docked ships
-  private convoyPill: DockedPill; // copper — docked convoys
+  private shipPill: DockedPill;   // blue — docked ships
   private pricePill: PricePill;   // top-right — price-ramp delta
   private eventPill: EventPill;   // bottom-right — dominant event icon + count
 
@@ -98,8 +97,7 @@ export class SystemObject extends Container {
   private currentEconomy = "";
   private currentNavState: NavigationNodeState | undefined;
   private currentVisibility: SystemVisibility = "unknown";
-  private currentSoloShipCount = 0;
-  private currentConvoyCount = 0;
+  private currentShipCount = 0;
   private hasFleet = false;
   private currentSelected = false;
   private currentEventTypes: string[] = [];
@@ -168,10 +166,8 @@ export class SystemObject extends Container {
     this.econLabel.anchor.set(0.5, 0);
     this.addChild(this.econLabel);
 
-    // Docked-fleet pills (top-left of the glyph; replace the pulse ring + text).
-    // Solo ships (blue) and convoys (copper) get separate pills, stacked when both.
+    // Docked-fleet pill (top-left of the glyph; replaces the pulse ring + text).
     this.shipPill = this.createDockedPill();
-    this.convoyPill = this.createDockedPill();
 
     // Price pill (top-right of the glyph) — tinted to the price ramp.
     this.pricePill = this.createPricePill();
@@ -196,9 +192,7 @@ export class SystemObject extends Container {
     const econChanged = data.economyType !== this.currentEconomy;
     const navChanged = data.navigationState !== this.currentNavState;
     const visibilityChanged = data.visibility !== this.currentVisibility;
-    const shipChanged =
-      data.dockedShipCount !== this.currentSoloShipCount ||
-      data.dockedConvoyCount !== this.currentConvoyCount;
+    const shipChanged = data.shipCount !== this.currentShipCount;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
     const eventsChanged = eventTypes !== this.currentEventTypes.join(",");
@@ -279,15 +273,13 @@ export class SystemObject extends Container {
 
     if (shipChanged) {
       // Counts come from the player's own fleet data — always show regardless of fog-of-war
-      this.currentSoloShipCount = data.dockedShipCount;
-      this.currentConvoyCount = data.dockedConvoyCount;
-      this.redrawDockedPills();
+      this.currentShipCount = data.shipCount;
+      this.redrawDockedPill();
 
-      // Fleet-presence ring: one sky-blue ring whenever any fleet (ship or
-      // convoy) is docked — matches the single blue zoomed-out fleet dot. The
-      // pills still break down ship vs convoy. Visibility (overlay / hover /
-      // select gating) is finalised in setLOD via `hasFleet`.
-      this.hasFleet = data.dockedShipCount > 0 || data.dockedConvoyCount > 0;
+      // Fleet-presence ring: one sky-blue ring whenever any ship is docked —
+      // matches the single blue zoomed-out fleet dot. Visibility (overlay /
+      // hover / select gating) is finalised in setLOD via `hasFleet`.
+      this.hasFleet = data.shipCount > 0;
       this.fleetRing.clear();
       if (this.hasFleet) {
         this.fleetRing.circle(0, 0, GLYPH.fleetRingRadius);
@@ -396,21 +388,10 @@ export class SystemObject extends Container {
     this.pricePill.container.position.set(PILL_ANCHOR.x, PILL_ANCHOR.yTop);
   }
 
-  /** Lay out the ship + convoy pills, stacking the ship pill above the convoy
-   *  pill when both are present. Both right-align to the glyph's top-left. */
-  private redrawDockedPills() {
-    const x = -PILL_ANCHOR.x;
-    const baseY = PILL_ANCHOR.yTop;
-    const hasShips = this.currentSoloShipCount > 0;
-    const hasConvoys = this.currentConvoyCount > 0;
-
-    // Convoy pill sits at the anchor (nearest the glyph); ships stack above it.
-    if (hasConvoys) {
-      this.drawPill(this.convoyPill, this.currentConvoyCount, FLEET.convoyFill, x, baseY);
-    }
-    if (hasShips) {
-      const shipY = hasConvoys ? baseY - (PILL.height + PILL.gap) : baseY;
-      this.drawPill(this.shipPill, this.currentSoloShipCount, FLEET.pillFill, x, shipY);
+  /** Lay out the docked-ship pill, right-aligned to the glyph's top-left. */
+  private redrawDockedPill() {
+    if (this.currentShipCount > 0) {
+      this.drawPill(this.shipPill, this.currentShipCount, FLEET.pillFill, -PILL_ANCHOR.x, PILL_ANCHOR.yTop);
     }
   }
 
@@ -479,13 +460,9 @@ export class SystemObject extends Container {
     // at-range cue.
     this.fleetRing.visible = revealFleet && this.hasFleet;
 
-    const showShip = revealFleet && this.currentSoloShipCount > 0;
+    const showShip = revealFleet && this.currentShipCount > 0;
     this.shipPill.container.visible = showShip;
     if (showShip) this.stagePillContent(showContent, contentAlpha, this.shipPill.glyph, this.shipPill.count);
-
-    const showConvoy = revealFleet && this.currentConvoyCount > 0;
-    this.convoyPill.container.visible = showConvoy;
-    if (showConvoy) this.stagePillContent(showContent, contentAlpha, this.convoyPill.glyph, this.convoyPill.count);
 
     const showPrice = this.currentPriceTint != null && !isUnknown;
     this.pricePill.container.visible = showPrice;

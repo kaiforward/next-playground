@@ -6,23 +6,8 @@ export const queryKeys = {
   market: (systemId: string) => ["market", systemId] as const,
   marketByGood: (goodId: string) => ["market", "by-good", goodId] as const,
   goods: ["goods"] as const,
-  tradeHistory: (systemId: string) => ["tradeHistory", systemId] as const,
   events: ["events"] as const,
-  priceHistory: (systemId: string) => ["priceHistory", systemId] as const,
   devEconomy: ["devEconomy"] as const,
-  missionsAll: ["missions"] as const,
-  systemMissions: (systemId: string) => ["missions", systemId] as const,
-  playerMissions: ["missions", "player"] as const,
-  convoys: ["convoys"] as const,
-  // Operational missions & battles
-  opMissionsAll: ["opMissions"] as const,
-  systemAllMissions: (systemId: string) => ["opMissions", systemId] as const,
-  playerOpMissions: ["opMissions", "player"] as const,
-  battles: ["battles"] as const,
-  battleDetail: (battleId: string) => ["battles", battleId] as const,
-  // Notifications
-  notifications: ["notifications"] as const,
-  unreadCount: ["unreadCount"] as const,
   // Atlas + progressive loading
   atlas: ["atlas"] as const,
   staticTile: (col: number, row: number, scale: string) => ["staticTile", col, row, scale] as const,
@@ -48,12 +33,7 @@ export const queryKeys = {
   // Per-system logistics (imports/exports + prod/con dashboard) — tick-invalidated.
   systemLogisticsAll: ["systemLogistics"] as const,
   systemLogistics: (systemId: string) => ["systemLogistics", systemId] as const,
-  // Cantina
-  cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
-  cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,
-  cantinaNpcVisits: (systemId: string) => ["cantinaNpcVisits", systemId] as const,
   // Factions
-  reputation: ["reputation"] as const,
   factions: ["factions"] as const,
   faction: (factionId: string) => ["factions", factionId] as const,
   factionRelations: ["factions", "relations"] as const,

@@ -1,5 +1,8 @@
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
-import { MISSION_CONSTANTS } from "@/lib/constants/missions";
+
+/** BFS depth bound for the cached hop-distance map — routes beyond this many
+ * hops are treated as unreachable by consumers (directed logistics/build). */
+const MAX_HOP_DISTANCE = 8;
 
 // Connections are static (set at seed time), so hop distances are computed once
 // and cached for the lifetime of the process. Each process (main server and
@@ -17,10 +20,7 @@ export async function loadHopDistances(): Promise<
     const connections = await prisma.systemConnection.findMany({
       select: { fromSystemId: true, toSystemId: true, fuelCost: true },
     });
-    cached = computeBoundedHopDistances(
-      connections,
-      MISSION_CONSTANTS.MAX_EXPORT_DISTANCE,
-    );
+    cached = computeBoundedHopDistances(connections, MAX_HOP_DISTANCE);
   }
   return cached;
 }

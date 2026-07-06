@@ -18,8 +18,6 @@ const PARAMS: TradeFlowProcessorParams = {
   gradientThreshold: 0.05,
   gradientSensitivity: 1.0,
   flowHistoryTicks: 200,
-  playerDisplacementFactor: 2.0,
-  playerVolumeTarget: 50,
   distanceDecay: 0,
 };
 
@@ -31,7 +29,7 @@ function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId, factionId,
     governmentType: "federation",
-    population: 1000, popCap: 2000, traits: [], bodyDanger: 0, unrest: 0, buildings: {},
+    population: 1000, popCap: 2000, traits: [], unrest: 0, buildings: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
@@ -54,12 +52,10 @@ function makeWorld(opts: {
   markets: SimMarketEntry[];
   connections: SimConnection[];
   flowEvents?: SimFlowEvent[];
-  playerVolumeBySystem?: Map<string, number>;
 }) {
   return new InMemoryTradeFlowWorld(
     { systems: opts.systems, markets: opts.markets, flowEvents: opts.flowEvents ?? [] },
     opts.connections,
-    opts.playerVolumeBySystem,
   );
 }
 
@@ -213,29 +209,6 @@ describe("trade-flow: flow controls", () => {
     expect(world.flowEvents.length).toBe(1);
     expect(world.flowEvents[0].quantity).toBeGreaterThan(0);
     expect(world.flowEvents[0].quantity).toBeLessThanOrEqual(6);
-  });
-
-  it("throttles flow to zero under high player pressure", async () => {
-    // edgeVolume = 200 + 200 = 400; pressure = 400 / 50 = 8;
-    // displacement = clamp(8 * 2, 0, 1) = 1 → edgeBudget = flowBudget * 0 = 0 → no flow.
-    const systems = [sys("a", "f1"), sys("b", "f1")];
-    const markets = [market("a", "food", 150), market("b", "food", 20)];
-    const playerVolumeBySystem = new Map([
-      ["a", 200],
-      ["b", 200],
-    ]);
-    const world = makeWorld({
-      systems,
-      markets,
-      connections: [conn("a", "b")],
-      playerVolumeBySystem,
-    });
-
-    await runTradeFlowProcessor(world, ctx(EDGE_TICK), PARAMS);
-
-    expect(world.flowEvents.length).toBe(0);
-    expect(world.markets.find((m) => m.systemId === "a")!.stock).toBe(150);
-    expect(world.markets.find((m) => m.systemId === "b")!.stock).toBe(20);
   });
 
   it("prunes flow events older than the retention window", async () => {

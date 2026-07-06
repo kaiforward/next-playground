@@ -1,9 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   SHIP_TYPES,
-  PURCHASABLE_SHIP_TYPES,
   REFERENCE_SPEED,
-  totalSlots,
   type ShipTypeId,
   type ShipSize,
 } from "@/lib/constants/ships";
@@ -37,27 +35,6 @@ describe("Ship constants", () => {
       expect(def.crewCapacity).toBeGreaterThan(0);
       expect(def.price).toBeGreaterThanOrEqual(0);
     }
-  });
-
-  it("slot counts match size constraints", () => {
-    const maxSlotsBySize: Record<ShipSize, number> = {
-      small: 2,
-      medium: 4,
-      large: 6,
-    };
-
-    for (const def of allTypes) {
-      const total = totalSlots(def.slotLayout);
-      expect(total).toBeLessThanOrEqual(maxSlotsBySize[def.size]);
-      expect(total).toBeGreaterThanOrEqual(1); // at least 1 engine slot
-      expect(def.slotLayout.engine).toBeGreaterThanOrEqual(1);
-    }
-  });
-
-  it("purchasable filter excludes only shuttle (price 0)", () => {
-    expect(PURCHASABLE_SHIP_TYPES).toHaveLength(11);
-    expect(PURCHASABLE_SHIP_TYPES.every((t) => t.price > 0)).toBe(true);
-    expect(PURCHASABLE_SHIP_TYPES.find((t) => t.id === "shuttle")).toBeUndefined();
   });
 
   it("reference speed is the shuttle's speed", () => {

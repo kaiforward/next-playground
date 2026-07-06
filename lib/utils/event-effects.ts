@@ -9,7 +9,7 @@ function goodDisplayName(goodId: string): string {
 /**
  * Derive a human-readable effect summary from a phase's modifiers.
  * Anchor shifts surface as "X demand up/down" (high demand = high price).
- * Returns e.g. "Food, Medicine demand up · Production slowed · Danger increased".
+ * Returns e.g. "Food, Medicine demand up · Production slowed".
  */
 export function summarizePhaseEffects(phase: EventPhaseDefinition): string {
   const parts: string[] = [];
@@ -17,14 +17,8 @@ export function summarizePhaseEffects(phase: EventPhaseDefinition): string {
   const demandUp: string[] = [];
   const demandDown: string[] = [];
   let productionChange: "up" | "down" | null = null;
-  let hasDanger = false;
 
   for (const mod of phase.modifiers) {
-    if (mod.domain === "navigation") {
-      hasDanger = true;
-      continue;
-    }
-
     const goodLabel = mod.goodId ? goodDisplayName(mod.goodId) : null;
 
     if (mod.type === "anchor_shift" && mod.parameter === "target_stock") {
@@ -47,7 +41,6 @@ export function summarizePhaseEffects(phase: EventPhaseDefinition): string {
   if (demandDown.length > 0 && !hasAllDemandDown) parts.push(`${demandDown.join(", ")} demand down`);
   if (productionChange === "down") parts.push("Production slowed");
   if (productionChange === "up") parts.push("Production boosted");
-  if (hasDanger) parts.push("Danger increased");
 
   return parts.length > 0 ? parts.join(" · ") : "Minor market effects";
 }

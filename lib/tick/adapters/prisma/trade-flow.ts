@@ -5,7 +5,6 @@ import type {
 } from "@/lib/tick/world/trade-flow-world";
 import { getOpenEdges as getOpenEdgesShared } from "@/lib/services/topology";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
-import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 
 export class PrismaTradeFlowWorld implements TradeFlowWorld {
   constructor(private tx: TxClient) {}
@@ -32,26 +31,6 @@ export class PrismaTradeFlowWorld implements TradeFlowWorld {
       priceCeiling: m.good.priceCeiling,
       storageCapacity: m.storageCapacity,
     }));
-  }
-
-  async getRecentPlayerVolumeBySystem(systemIds: string[]): Promise<Map<string, number>> {
-    const result = new Map<string, number>();
-    if (systemIds.length === 0) return result;
-    const cutoff = new Date(Date.now() - TRADE_SIMULATION.PLAYER_VOLUME_WINDOW_MS);
-    // Sum quantity per system in PostgreSQL (Station↔System is 1:1) so this
-    // returns one row per system rather than one TradeHistory row per trade.
-    // SUM over an Int column comes back as bigint — convert with Number().
-    const rows = await this.tx.$queryRaw<
-      { systemId: string; total: bigint | null }[]
-    >`
-      SELECT st."systemId" AS "systemId", SUM(th.quantity) AS total
-      FROM "TradeHistory" th
-      JOIN "Station" st ON th."stationId" = st.id
-      WHERE th."createdAt" > ${cutoff}
-        AND st."systemId" = ANY(${systemIds}::text[])
-      GROUP BY st."systemId"`;
-    for (const r of rows) result.set(r.systemId, Number(r.total ?? 0));
-    return result;
   }
 
   async applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {

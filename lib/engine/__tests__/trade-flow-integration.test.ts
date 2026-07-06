@@ -59,7 +59,6 @@ function buildFixture(): {
     population: 100,
     popCap: 1000,
     traits: [],
-    bodyDanger: 0,
     unrest: 0,
     buildings: { food: 3 },
     yields: unitResourceVector(),
@@ -79,7 +78,6 @@ function buildFixture(): {
     population: 1000,
     popCap: 2000,
     traits: [],
-    bodyDanger: 0,
     unrest: 0,
     buildings: {},
     yields: unitResourceVector(),
@@ -169,9 +167,7 @@ async function runScenario(
     gradientThreshold: 0.05,
     gradientSensitivity: 1.0,
     flowHistoryTicks: 200,
-    playerDisplacementFactor: 2.0,
     distanceDecay: 0,
-    playerVolumeTarget: DEFAULT_SIM_CONSTANTS.tradeFlow.playerVolumeTarget,
   };
 
   for (let t = 1; t <= tickCount; t++) {

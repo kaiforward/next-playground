@@ -1,7 +1,5 @@
 import type { EVENT_DEFINITIONS } from "./events";
-import type { MissionType } from "./missions";
-import type { EnemyTier } from "./combat";
-import type { NotificationType, SunClass, QualityBandId } from "@/lib/types/game";
+import type { SunClass, QualityBandId } from "@/lib/types/game";
 
 // ── Deposit quality bands ────────────────────────────────────
 // A dull→warm value ramp for deposit grades. Copper (text-accent) marks the
@@ -51,42 +49,6 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   alliance_dissolved: "amber",
 };
 
-/** Mapping from notification/event type to toast/badge accent color. */
-export const NOTIFICATION_BADGE_COLOR: Record<
-  NotificationType | keyof typeof EVENT_DEFINITIONS,
-  "red" | "amber" | "purple" | "green" | "blue" | "slate"
-> = {
-  inner_system_conflict: "red",
-  plague: "amber",
-  trade_festival: "purple",
-  conflict_spillover: "red",
-  plague_risk: "amber",
-  mining_boom: "green",
-  ore_glut: "green",
-  supply_shortage: "amber",
-  pirate_raid: "red",
-  solar_storm: "blue",
-  refugee_crisis: "amber",
-  trade_embargo: "purple",
-  tech_breakthrough: "green",
-  asteroid_strike: "red",
-  border_conflict: "red",
-  pact_under_negotiation: "purple",
-  alliance_dissolved: "amber",
-  ship_arrived: "blue",
-  ship_damaged: "amber",
-  ship_disabled: "red",
-  cargo_lost: "red",
-  hazard_incident: "amber",
-  import_duty: "slate",
-  contraband_seized: "red",
-  mission_completed: "green",
-  mission_expired: "amber",
-  battle_round: "purple",
-  battle_won: "green",
-  battle_lost: "red",
-};
-
 /**
  * Danger priority per event type — higher = more dangerous.
  * Used to pick the "dominant" event for border/glow when multiple events affect one system.
@@ -114,28 +76,6 @@ export const EVENT_TYPE_DANGER_PRIORITY: Record<
   alliance_dissolved: 0,
   // Border conflict ranks between conflict_spillover and plague.
   border_conflict: 10,
-};
-
-/** Mapping from mission type to Badge color. */
-export const MISSION_TYPE_BADGE_COLOR: Record<
-  MissionType,
-  "red" | "cyan" | "purple" | "amber" | "green"
-> = {
-  patrol: "red",
-  survey: "cyan",
-  bounty: "purple",
-  salvage: "amber",
-  recon: "green",
-};
-
-/** Mapping from enemy tier to Badge color. */
-export const ENEMY_TIER_BADGE_COLOR: Record<
-  EnemyTier,
-  "green" | "amber" | "red"
-> = {
-  weak: "green",
-  moderate: "amber",
-  strong: "red",
 };
 
 import type { LucideIcon } from "lucide-react";

@@ -4,11 +4,7 @@ import { use, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useFleet } from "@/lib/hooks/use-fleet";
-import { useConvoys } from "@/lib/hooks/use-convoy";
-import { useSystemAllMissions } from "@/lib/hooks/use-op-missions";
-import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
-import { enrichTraits } from "@/lib/utils/traits";
-import { deriveSystemLocations } from "@/lib/constants/locations";
+import { getDockedShips } from "@/lib/utils/fleet";
 import { SYSTEM_TABS, type SystemTabSegment } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -28,37 +24,16 @@ function SystemPanelContent({
 }) {
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const { fleet } = useFleet();
-  const { convoys } = useConvoys();
-  const allMissions = useSystemAllMissions(systemId);
   const pathname = usePathname();
 
-  const soloShipCount = useMemo(
+  const dockedShipCount = useMemo(
     () => getDockedShips(fleet.ships, systemId).length,
     [fleet.ships, systemId],
   );
-  const convoyCount = useMemo(
-    () => getDockedConvoys(convoys, systemId).length,
-    [convoys, systemId],
-  );
-  const contractCount =
-    allMissions.tradeMissions.available.length +
-    allMissions.opMissions.available.length;
-
-  const exploreCount = useMemo(() => {
-    // Counts *playable* locations for the tab badge. Availability is a static
-    // catalog flag (only the cantina mini-game today) and body-derived sites are
-    // all "coming soon", so the count is substrate-independent — no need to fetch
-    // bodies here and block every tab on the substrate query.
-    const features = systemInfo?.traits ? enrichTraits(systemInfo.traits) : [];
-    return deriveSystemLocations([], features).filter((l) => l.available).length;
-  }, [systemInfo?.traits]);
 
   const basePath = `/system/${systemId}`;
   const tabBadges: Partial<Record<SystemTabSegment, number>> = {
-    ships: soloShipCount,
-    convoys: convoyCount,
-    contracts: contractCount,
-    explore: exploreCount,
+    ships: dockedShipCount,
   };
   const tabs = SYSTEM_TABS.map((tab) => {
     const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;

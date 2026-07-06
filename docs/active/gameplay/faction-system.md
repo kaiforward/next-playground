@@ -19,7 +19,7 @@ Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-
 | §1 Faction Model — core, doctrines, governments | **Implemented** | Status thresholds reconciled to share-based (see §1). Military output planned (War). |
 | §2 Inter-Faction Relations — score, drift, tiers | **Implemented (subset of drivers)** | Border friction, doctrine, government, common enemy, alliance, trade, baseline all live. Resource/territory envy, historical grievance, player-action drivers, trade competition planned. |
 | §2.1 Alliance Mechanics — formation/dissolution | **Partially implemented** | Event-gated formation + dissolution shipped. Alliance capacity (slots), mutual defense, shared trade bonuses planned (War). |
-| §3 Player-Faction Reputation | **Implemented (trade only)** | Per-player score, 5 tiers, buy/sell multipliers, hostile denial all live. Faction missions, war contributions, contraband effects planned. |
+| §3 Player-Faction Reputation | **Removed (pivot teardown Sweep 2)** | Personal reputation deleted with personal trading; player↔faction standing becomes the Phase 5 diplomacy layer. |
 | §4 War and Conflict | **Border conflicts only** | `border_conflict` events fire from the relations processor. Full war mechanics planned (War sub-project). |
 | §5 Homeworlds | **Partially implemented** | Homeworlds exist, selected by trait quality, used as flood-fill seeds. Defense bonuses, unique facilities, conquest planned (War / Facilities). |
 | §6 Initial Faction Roster | **Implemented** | 8 majors per the table below. Relations seeded at 0 and drifted by the processor (not pre-seeded with doctrine/government nudges). |
@@ -76,10 +76,10 @@ Status determines:
 Military output is the faction's per-tick capacity for projecting military force. It's the resource that the [War System](../../planned/war-system.md) consumes for fleet battles, sieges, and multi-front wars. Not stored directly — derived each tick from faction state:
 
 - **Territory size**: More systems = more production capacity. The primary driver.
-- **Economic output**: Systems with higher population (see [Production §2](../../planned/production.md)) and better production traits contribute more. An industrial hub with tier-3 lagrange stations contributes more military output than a marginal frontier system.
+- **Economic output**: Systems with higher population and a stronger industrial base contribute more. An industrial hub contributes more military output than a marginal frontier system. (The military-as-industrial-ceiling model in [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §12.4 is the authoritative successor to this sketch.)
 - **Government modifier**: Militarist governments have higher military output per system. Corporate governments have lower (they invest in trade, not fleets).
 - **War disruption**: Systems in active war zones have reduced economic output, which reduces their military contribution. Prolonged wars degrade a faction's total military output.
-- **Player contributions**: Player-produced tier 3 military assets (see [Production Roster §5](../../planned/production-roster.md)) add to faction military output. This is how player production meaningfully affects wars.
+- ~~**Player contributions**: Player-produced tier 3 military assets add to faction military output.~~ *(Retired by the grand-strategy pivot — the player rules a faction; there is no personal production.)*
 
 The exact formula is an implementation detail, but the principle is: military output scales with territory quality, not just territory size. A faction with 30 well-developed systems can match one with 50 marginal frontier systems.
 
@@ -115,33 +115,33 @@ Two factions can share a government type and still be bitter enemies. A federati
 
 **Status: Implemented.** All 8 government types live in `GOVERNMENT_TYPES` (`lib/constants/government.ts`) with concrete starting values. The economy processor reads `governmentType` per-market (sourced from `system.faction.governmentType`).
 
-**Design rule**: Every government type has trade-offs — buffs balanced by debuffs. No type is strictly better or worse, just different. Players should want to trade at different government types depending on their cargo, risk tolerance, and strategy.
+**Design rule**: Every government type has trade-offs — buffs balanced by debuffs. No type is strictly better or worse, just different. Each shapes its regions' markets in a distinct direction.
 
 8 government types (expanded from the original 4 in [economy.md](./economy.md)):
 
-| Government | Economic identity | Player trade-off | Restrictions |
-|---|---|---|---|
-| Federation | Balanced, regulated, stable | Reliable profits, no surprises. The safe middle ground | Moderate — some contraband enforced |
-| Corporate | Pro-trade, low regulation, profit-maximizing | Best margins but volatile. Boom or bust cycles | Very few — almost anything profitable goes |
-| Authoritarian | State-controlled, price-fixed, rigid | Safest space, predictable demand. But most restricted — government controls what flows in and out | Heavy — strategic goods controlled, narrow allowed list |
-| Frontier | Lawless, unregulated, dangerous | Highest potential profit, highest risk. Wild price swings, smuggler's paradise | None — no one's enforcing anything |
-| Cooperative | Worker-owned, egalitarian, community-focused | Rock-solid consistency, never go broke. But low margins, luxury goods undervalued | Moderate — luxury goods taxed/restricted |
-| Technocratic | Innovation-driven, high-tier specialization | Premium prices on advanced goods. Bad market for raw materials | Low — open to most trade, basics undervalued |
-| Militarist | War economy, resource-hungry, mobilized | Starving for raw materials and weapons. Great during wartime, mediocre during peace | Moderate — strategic goods controlled |
-| Theocratic | Ideological, community-driven, insular | Pays premium for basic/cheap goods. But heavy restrictions on "immoral" goods — limited selection | Heavy — narcotics, weapons, luxury goods banned |
+| Government | Economic identity |
+|---|---|
+| Federation | Balanced, regulated, stable |
+| Corporate | Pro-trade, low regulation, profit-maximizing |
+| Authoritarian | State-controlled, price-fixed, rigid |
+| Frontier | Lawless, unregulated, dangerous |
+| Cooperative | Worker-owned, egalitarian, community-focused |
+| Technocratic | Innovation-driven, high-tier specialization |
+| Militarist | War economy, resource-hungry, mobilized |
+| Theocratic | Ideological, community-driven, insular |
 
 Concrete economic modifiers per government type. These are the live shipped values from `GOVERNMENT_TYPES`.
 
-| Government | Volatility | Eq. Spread | Danger | Contraband | Tax / Inspection | Consumption boost |
-|---|---|---|---|---|---|---|
-| Federation | 0.8× | -10% | 0.00 | weapons | 12% / 1.2× | medicine |
-| Corporate | 0.9× | -5% | 0.02 | — | 10% / 0.8× | luxuries |
-| Authoritarian | 0.7× | -15% | 0.00 | weapons, chemicals | 15% / 1.5× | weapons, fuel |
-| Frontier | 1.5× | +20% | 0.10 | — | 0% / 0.0× | — |
-| Cooperative | 0.7× | -10% | 0.00 | luxuries | 10% / 1.0× | food, medicine |
-| Technocratic | 1.0× | +5% | 0.01 | — | 8% / 0.6× | electronics |
-| Militarist | 1.3× | +10% | 0.05 | — | 10% / 1.3× | weapons, fuel, machinery |
-| Theocratic | 0.8× | -5% | 0.03 | weapons, chemicals, luxuries | 10% / 1.4× | food, medicine, textiles |
+| Government | Volatility | Eq. Spread | Danger | Consumption boost |
+|---|---|---|---|---|
+| Federation | 0.8× | -10% | 0.00 | medicine |
+| Corporate | 0.9× | -5% | 0.02 | luxuries |
+| Authoritarian | 0.7× | -15% | 0.00 | weapons, fuel |
+| Frontier | 1.5× | +20% | 0.10 | — |
+| Cooperative | 0.7× | -10% | 0.00 | food, medicine |
+| Technocratic | 1.0× | +5% | 0.01 | electronics |
+| Militarist | 1.3× | +10% | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.8× | -5% | 0.03 | food, medicine, textiles |
 
 > **Planned (tuning pass):** the original design called for per-tier nuance in equilibrium spread — e.g. Technocratic should be wide for tier-2 goods but narrow for tier-0 basics; Theocratic narrow for basics and wide for restricted. Today every government applies a single flat `equilibriumSpreadPct` to all goods. A `goodCategoryModifiers`-style field would be added to `GovernmentDefinition` during that tuning pass to support per-tier spread nuance — it is not currently declared on the interface.
 
@@ -253,48 +253,7 @@ The design intent is that as a faction grows, it loses alliance slots — creati
 
 ## 3. Player-Faction Reputation
 
-Per-player, per-faction reputation score.
-
-**Status: Implemented (trade only).** `PlayerFactionReputation` table; tiers/multipliers in `lib/constants/reputation.ts`; service in `lib/services/reputation.ts`; integration in `lib/services/trade.ts` and `lib/services/convoy-trade.ts`. New players are bootstrapped with a 0-score row for every faction at registration time (single transaction in `app/api/register/route.ts`).
-
-### Reputation Score
-
-- **Range**: -100 to +100, stored per (player, faction).
-- **Earned through**:
-  - **Trading at faction systems** (implemented): +0.5 per successful trade against a faction-owned market, capped at +2.0 per (player, faction, tick) to prevent grind-spam.
-  - **Completing faction missions** (planned — no faction missions exist yet).
-  - **Contributing to war efforts** (planned — War sub-project).
-- **Lost through** (all planned):
-  - Supporting enemy factions in wars
-  - Trading contraband in faction space (contraband pipeline lives in `GOVERNMENT_TYPES`; player-side seizure flow planned)
-  - Attacking faction ships (future tactical layer)
-
-### Forced Trade-Offs
-
-> **Planned:** the "supporting faction A costs reputation with B" mechanic requires the war contribution system. Today reputation only moves up (via trade), and only with the directly-traded-with faction.
-
-The design intent: players cannot be friends with everyone — they must pick sides. This creates factional identity and player communities. A **neutral trader** path is viable but limited: tolerated everywhere, welcomed nowhere. No access to the best prices, exclusive missions, or faction facilities.
-
-### Reputation Effects
-
-| Range | Standing | Buy multiplier | Sell multiplier | Other effects |
-|---|---|---|---|---|
-| +75 to +100 | Champion | ×0.92 | ×1.08 | Exclusive missions, political influence — *planned* |
-| +25 to +74 | Trusted | ×0.96 | ×1.04 | Faction missions — *planned* |
-| -24 to +24 | Neutral | ×1.00 | ×1.00 | Standard. Basic missions only |
-| -74 to -25 | Distrusted | ×1.08 | ×0.92 | Limited services — *planned* |
-| -100 to -75 | Hostile | denied | denied | Trade denied entirely. Denied docking / actively hunted — *planned* |
-
-Multiplier values are tuning numbers — live in `REPUTATION_TIERS` as a single constant; the simulator tunes from there. Hostile standing is enforced inside the trade transaction via `accrueTradeReputationInTx`, which re-reads the fresh row to gate-check (TOCTOU-safe).
-
-### Price Modifier Mechanism
-
-Reputation affects trade prices as a **transaction multiplier** — it modifies what the player pays/receives, not the displayed market price. Market prices remain universal (driven by each good's stock), so all players see the same price information. Reputation is your personal competitive edge.
-
-- **Buying**: `market_price × buy_multiplier` — higher reputation = lower multiplier = cheaper purchases
-- **Selling**: `market_price × sell_multiplier` — higher reputation = higher multiplier = more profit
-
-**Stacking with government modifiers**: Government modifiers (volatility, equilibrium spread, production rates) shape the *market itself* — what the price is. Reputation modifies the *transaction* — what you pay for that price. Different layers, naturally stack without conflict. A Champion trader at a Corporate system gets both the Corporate market characteristics and their personal reputation discount.
+**Removed in the pivot Phase 1 teardown (Sweep 2).** The personal-player reputation system (per-player score, standing tiers, trade multipliers) was deleted along with personal trading. The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), re-specced in the pivot's Phase 5.
 
 ---
 
@@ -356,9 +315,7 @@ Every faction has a homeworld — their capital system.
 
 ### Starting Position (Implemented)
 
-**Players are not faction-aligned at creation.** There is no `primaryFactionId` on `Player`. New players spawn at `GameWorld.startingSystemId` (the existing core-economy system near map center, now owned by a Federation-government major after Phase 2). All faction reputation scores start at 0; no faction nudge on registration.
-
-Reputation grows through play (trading, eventual faction missions, eventual war contributions) and players choose their loyalties through behavior rather than character creation. This preserves the "neutral trader path is viable but limited" design from §3.
+**Players are not faction-aligned at creation.** There is no `primaryFactionId` on `Player`. New players spawn at `GameWorld.startingSystemId` (the existing core-economy system near map center, now owned by a Federation-government major after Phase 2). No faction nudge on registration. (The per-player reputation system was removed in the pivot teardown — the player's faction seat is Phase 3 of the pivot.)
 
 ---
 
@@ -469,8 +426,6 @@ Region territory is not navigated as a separate "region map → system view" pag
 ## Related Design Docs
 
 These topics are large enough to warrant their own design documents:
-- **[War System](../../planned/war-system.md)** *(planned)* — border conflicts (the spawn side lives here in §4; the consume side is in war-system.md), faction wars, battles, territory control, player involvement
-- **[Player Progression](../../planned/player-progression.md)** *(planned)* — ship upgrades, region unlocking, credit sinks, early/mid/late game arc
-- **[Facilities](../../planned/facilities.md)** *(planned)* — faction-owned facilities, war targets, tier capabilities
+- **[War System](../../planned/war-system.md)** *(planned)* — border conflicts (the spawn side lives here in §4; the consume side is in war-system.md), faction wars, battles, territory control
 - **[System Traits](./system-traits.md)** *(active)* — trait catalog, quality tiers, economy derivation
-- **[Multiplayer Infrastructure](../../planned/multiplayer-infrastructure.md)** *(planned)* — player trading, alliances, communication, coordination
+- **[Grand-Strategy Vision](../../planned/grand-strategy-vision.md)** *(planned)* — the player now rules a faction; the retired personal-player docs (progression, facilities, multiplayer) are deleted (git history)
