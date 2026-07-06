@@ -29,7 +29,6 @@ describe("getMarketComparison (integration)", () => {
     await createTestShip(prisma, {
       playerId: player.playerId,
       systemId: universe.systems.agricultural,
-      cargoMax: 10,
     });
   });
 

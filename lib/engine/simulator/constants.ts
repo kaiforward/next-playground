@@ -41,7 +41,6 @@ export interface SimConstants {
     volume: number;
     mass: number;
     volatility: number;
-    hazard: string;
     priceFloor: number;
     priceCeiling: number;
   }>;
@@ -129,7 +128,6 @@ function buildDefaults(): SimConstants {
       volume: def.volume,
       mass: def.mass,
       volatility: def.volatility,
-      hazard: def.hazard,
       priceFloor: def.priceFloor,
       priceCeiling: def.priceCeiling,
     };

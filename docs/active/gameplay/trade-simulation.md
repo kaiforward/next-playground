@@ -128,7 +128,6 @@ Visibility-gated: an unsurveyed system shows the scan `EmptyState`. *Replaces* t
 
 The flow event log is a natural data source for several player-facing features without growing the simulation:
 
-- **Mission generation** — smuggler interception on high-contraband routes, cargo escort opportunities on dangerous high-value routes, "find an alternative" quests when an event blocks an edge, market manipulation by dumping at a known route's destination.
 - **Trade-skill tiered visibility** — once the player-progression system ships, route data can be gated by skill: aggregate-only at low tiers, full chains at high tiers, predictive route shifts at master tier by running the gradient math forward a few ticks against current state.
 - **Named convoy layer** — if interactable entities become valuable (pirate prey, escort targets), a small named-convoy layer can be added on top of the same flow data: visible entities driven by the same math, but rendered at far lower count than full NPC simulation would require.
 

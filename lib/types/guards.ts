@@ -20,7 +20,6 @@ import type {
 import type { ShipTypeId, ShipSize, ShipRole } from "@/lib/constants/ships";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import type { UniverseScale } from "@/lib/constants/universe-gen";
-import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
 import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
 
 // ── Lookup sets (built once) ────────────────────────────────────
@@ -176,16 +175,8 @@ const UNIVERSE_SCALES: ReadonlySet<string> = new Set<UniverseScale>([
   "default", "10k",
 ]);
 
-const CANTINA_NPC_TYPES: ReadonlySet<string> = new Set<CantinaNpcType>([
-  "bartender", "cautious_trader", "frontier_gambler", "sharp_smuggler", "station_regular",
-]);
-
 const SUN_CLASS_IDS: ReadonlySet<string> = new Set(Object.keys(SUN_CLASSES));
 const BODY_ARCHETYPE_IDS: ReadonlySet<string> = new Set(Object.keys(BODY_ARCHETYPES));
-
-export function isCantinaNpcType(value: string): value is CantinaNpcType {
-  return CANTINA_NPC_TYPES.has(value);
-}
 
 export function isSunClass(value: string): value is SunClass {
   return SUN_CLASS_IDS.has(value);

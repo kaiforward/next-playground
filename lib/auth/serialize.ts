@@ -43,7 +43,6 @@ export function serializeShip(ship: {
   shipType: string;
   fuel: number;
   maxFuel: number;
-  cargoMax: number;
   speed: number;
   hullMax: number;
   hullCurrent: number;
@@ -74,7 +73,6 @@ export function serializeShip(ship: {
     role: typeDef ? typeDef.role : toShipRole("trade"),
     fuel: ship.fuel,
     maxFuel: ship.maxFuel,
-    cargoMax: ship.cargoMax,
     speed: ship.speed,
     hullMax: ship.hullMax,
     hullCurrent: ship.hullCurrent,

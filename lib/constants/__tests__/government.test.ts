@@ -21,8 +21,7 @@ describe("GOVERNMENT_TYPES", () => {
 
   it("all entries match the GovernmentDefinition shape", () => {
     const requiredKeys: ReadonlyArray<keyof GovernmentDefinition> = [
-      "name", "description", "taxed", "contraband",
-      "taxRate", "inspectionModifier", "volatilityModifier",
+      "name", "description", "volatilityModifier",
       "dangerBaseline", "equilibriumSpreadPct",
       "eventWeights", "consumptionBoosts",
     ];
@@ -34,10 +33,6 @@ describe("GOVERNMENT_TYPES", () => {
       }
       expect(typeof def.name).toBe("string");
       expect(typeof def.description).toBe("string");
-      expect(Array.isArray(def.taxed)).toBe(true);
-      expect(Array.isArray(def.contraband)).toBe(true);
-      expect(typeof def.taxRate).toBe("number");
-      expect(typeof def.inspectionModifier).toBe("number");
       expect(typeof def.volatilityModifier).toBe("number");
       expect(typeof def.dangerBaseline).toBe("number");
       expect(typeof def.equilibriumSpreadPct).toBe("number");

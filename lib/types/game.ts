@@ -119,7 +119,6 @@ export type FactionStatus = "dominant" | "major" | "regional" | "minor";
 
 export type GoodTier = 0 | 1 | 2;
 
-export type Hazard = "none" | "low" | "high";
 
 export interface RegionInfo {
   id: string;
@@ -173,7 +172,6 @@ export interface ShipState {
   role: ShipRole;
   fuel: number;
   maxFuel: number;
-  cargoMax: number;
   speed: number;
   hullMax: number;
   hullCurrent: number;

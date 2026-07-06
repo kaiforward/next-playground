@@ -40,10 +40,8 @@ export interface SystemNodeData {
    *  as a hollow marker — labelled potential, not a live economy. */
   developed: boolean;
   regionId: string;
-  /** Docked ships — used for fleet-presence checks. */
+  /** Docked player ships at this system — fleet-presence checks + the blue docked pill. */
   shipCount: number;
-  /** Docked ships — drives the blue docked pill. */
-  dockedShipCount: number;
   isGateway: boolean;
   visibility: SystemVisibility;
   navigationState?: NavigationNodeState;
@@ -288,7 +286,6 @@ export function useMapData({
         developed: system.developed ?? true,
         regionId: system.regionId,
         shipCount: shipsAtSystem.get(system.id) ?? 0,
-        dockedShipCount: shipsAtSystem.get(system.id) ?? 0,
         isGateway: system.isGateway,
         visibility,
         navigationState: nodeNavigationStates.get(system.id),

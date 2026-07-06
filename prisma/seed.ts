@@ -115,7 +115,6 @@ async function main() {
           volume: def.volume,
           mass: def.mass,
           volatility: def.volatility,
-          hazard: def.hazard,
           priceFloor: def.priceFloor,
           priceCeiling: def.priceCeiling,
         })),
