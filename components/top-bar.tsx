@@ -13,15 +13,16 @@ import { useFleet } from "@/lib/hooks/use-fleet";
 
 /** Maps static route segments to display labels. */
 const SEGMENT_LABELS: Record<string, string> = {
-  dashboard: "Dashboard",
-  map: "Star Map",
-  cantina: "Cantina",
   fleet: "Fleet",
   events: "Events",
-  battles: "Battles",
+  factions: "Factions",
+  diplomacy: "Diplomacy",
+  astrography: "Astrography",
+  population: "Population",
+  industry: "Industry",
+  logistics: "Logistics",
   market: "Market",
-  trade: "Trade",
-  missions: "Missions",
+  ships: "Ships",
 };
 
 interface Crumb {

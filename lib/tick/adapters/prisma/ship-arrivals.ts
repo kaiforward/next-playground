@@ -11,7 +11,6 @@ export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
 
   async getArrivingShips(currentTick: number): Promise<ArrivingShipView[]> {
     const rows = await this.tx.ship.findMany({
-      relationLoadStrategy: "join",
       where: { status: "in_transit", arrivalTick: { lte: currentTick } },
       select: {
         id: true,

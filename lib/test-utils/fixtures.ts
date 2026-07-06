@@ -41,7 +41,6 @@ export interface TestShipOpts {
   name?: string;
   fuel?: number;
   maxFuel?: number;
-  cargoMax?: number;
   speed?: number;
   hullMax?: number;
   hullCurrent?: number;
@@ -235,7 +234,6 @@ export async function seedTestUniverse(prisma: PrismaClient): Promise<TestUniver
       volume: def.volume,
       mass: def.mass,
       volatility: def.volatility,
-      hazard: def.hazard,
       priceFloor: def.priceFloor,
       priceCeiling: def.priceCeiling,
     })),
@@ -362,7 +360,6 @@ export async function createTestShip(
       name: opts.name ?? "Test Ship",
       fuel: opts.fuel ?? 100,
       maxFuel: opts.maxFuel ?? 100,
-      cargoMax: opts.cargoMax ?? 50,
       speed: opts.speed ?? 5,
       hullMax: opts.hullMax ?? 40,
       hullCurrent: opts.hullCurrent ?? opts.hullMax ?? 40,

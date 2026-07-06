@@ -91,7 +91,6 @@ model Player {
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   ships     Ship[]
-  npcVisits NpcVisit[]
 }
 
 model Ship {
@@ -101,7 +100,6 @@ model Ship {
   shipType            String   @default("shuttle")
   fuel                Float    @default(100)
   maxFuel             Float    @default(100)
-  cargoMax            Int      @default(50)
   speed               Int      @default(5)
   hullMax             Int      @default(40)
   hullCurrent         Int      @default(40)
@@ -265,7 +263,6 @@ model Good {
   volume       Int    @default(1)
   mass         Float  @default(1.0)
   volatility   Float  @default(1.0)
-  hazard       String @default("none")
   priceFloor   Float  @default(0.2)
   priceCeiling Float  @default(5.0)
 
@@ -359,19 +356,6 @@ model EventModifier {
 
   @@index([domain, targetType, targetId])
   @@index([eventId])
-}
-
-model NpcVisit {
-  id       String @id @default(cuid())
-  playerId String
-  npcType  String
-  systemId String
-  visits   Int    @default(0)
-
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([playerId, npcType, systemId])
-  @@index([playerId])
 }
 
 // ── Factions ───────────────────────────────────────────────────

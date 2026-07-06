@@ -117,10 +117,6 @@ Some features raise system danger via `dangerModifier`: dark_nebula (+0.06), sub
 
 The overview danger badge sums government baseline + **feature danger** (`computeTraitDanger` over `dangerModifier`) + **body danger** (`Σ` archetype danger baselines — volcanic worlds). A world attribute only since the arrival pipeline was cut — see [navigation.md](./navigation.md).
 
-### Exploration sites
-
-The explore screen derives sites from the substrate (`deriveSystemLocations`, `lib/constants/locations.ts`): each body archetype opens a site (planet surface / gas platform / asteroid field), resource-bearing features (geothermal vents, crystalline formations) open a mining outpost, and each feature opens its thematic site (research station, ruins expedition, salvage yard, anomaly site, smuggler's den, …).
-
 ### Events
 
 Event spawn weighting reads features + government type (not the old economic traits). E.g. pirate raids favour dark_nebula/nebula_proximity (concealment); solar storms favour solar_flare_activity/binary_star.

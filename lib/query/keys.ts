@@ -33,10 +33,6 @@ export const queryKeys = {
   // Per-system logistics (imports/exports + prod/con dashboard) — tick-invalidated.
   systemLogisticsAll: ["systemLogistics"] as const,
   systemLogistics: (systemId: string) => ["systemLogistics", systemId] as const,
-  // Cantina
-  cantinaTips: (systemId: string) => ["cantinaTips", systemId] as const,
-  cantinaRumors: (systemId: string) => ["cantinaRumors", systemId] as const,
-  cantinaNpcVisits: (systemId: string) => ["cantinaNpcVisits", systemId] as const,
   // Factions
   factions: ["factions"] as const,
   faction: (factionId: string) => ["factions", factionId] as const,

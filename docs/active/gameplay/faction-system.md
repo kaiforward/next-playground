@@ -115,33 +115,33 @@ Two factions can share a government type and still be bitter enemies. A federati
 
 **Status: Implemented.** All 8 government types live in `GOVERNMENT_TYPES` (`lib/constants/government.ts`) with concrete starting values. The economy processor reads `governmentType` per-market (sourced from `system.faction.governmentType`).
 
-**Design rule**: Every government type has trade-offs — buffs balanced by debuffs. No type is strictly better or worse, just different. Players should want to trade at different government types depending on their cargo, risk tolerance, and strategy.
+**Design rule**: Every government type has trade-offs — buffs balanced by debuffs. No type is strictly better or worse, just different. Each shapes its regions' markets in a distinct direction.
 
 8 government types (expanded from the original 4 in [economy.md](./economy.md)):
 
-| Government | Economic identity | Player trade-off | Restrictions |
-|---|---|---|---|
-| Federation | Balanced, regulated, stable | Reliable profits, no surprises. The safe middle ground | Moderate — some contraband enforced |
-| Corporate | Pro-trade, low regulation, profit-maximizing | Best margins but volatile. Boom or bust cycles | Very few — almost anything profitable goes |
-| Authoritarian | State-controlled, price-fixed, rigid | Safest space, predictable demand. But most restricted — government controls what flows in and out | Heavy — strategic goods controlled, narrow allowed list |
-| Frontier | Lawless, unregulated, dangerous | Highest potential profit, highest risk. Wild price swings, smuggler's paradise | None — no one's enforcing anything |
-| Cooperative | Worker-owned, egalitarian, community-focused | Rock-solid consistency, never go broke. But low margins, luxury goods undervalued | Moderate — luxury goods taxed/restricted |
-| Technocratic | Innovation-driven, high-tier specialization | Premium prices on advanced goods. Bad market for raw materials | Low — open to most trade, basics undervalued |
-| Militarist | War economy, resource-hungry, mobilized | Starving for raw materials and weapons. Great during wartime, mediocre during peace | Moderate — strategic goods controlled |
-| Theocratic | Ideological, community-driven, insular | Pays premium for basic/cheap goods. But heavy restrictions on "immoral" goods — limited selection | Heavy — narcotics, weapons, luxury goods banned |
+| Government | Economic identity |
+|---|---|
+| Federation | Balanced, regulated, stable |
+| Corporate | Pro-trade, low regulation, profit-maximizing |
+| Authoritarian | State-controlled, price-fixed, rigid |
+| Frontier | Lawless, unregulated, dangerous |
+| Cooperative | Worker-owned, egalitarian, community-focused |
+| Technocratic | Innovation-driven, high-tier specialization |
+| Militarist | War economy, resource-hungry, mobilized |
+| Theocratic | Ideological, community-driven, insular |
 
 Concrete economic modifiers per government type. These are the live shipped values from `GOVERNMENT_TYPES`.
 
-| Government | Volatility | Eq. Spread | Danger | Contraband | Tax / Inspection | Consumption boost |
-|---|---|---|---|---|---|---|
-| Federation | 0.8× | -10% | 0.00 | weapons | 12% / 1.2× | medicine |
-| Corporate | 0.9× | -5% | 0.02 | — | 10% / 0.8× | luxuries |
-| Authoritarian | 0.7× | -15% | 0.00 | weapons, chemicals | 15% / 1.5× | weapons, fuel |
-| Frontier | 1.5× | +20% | 0.10 | — | 0% / 0.0× | — |
-| Cooperative | 0.7× | -10% | 0.00 | luxuries | 10% / 1.0× | food, medicine |
-| Technocratic | 1.0× | +5% | 0.01 | — | 8% / 0.6× | electronics |
-| Militarist | 1.3× | +10% | 0.05 | — | 10% / 1.3× | weapons, fuel, machinery |
-| Theocratic | 0.8× | -5% | 0.03 | weapons, chemicals, luxuries | 10% / 1.4× | food, medicine, textiles |
+| Government | Volatility | Eq. Spread | Danger | Consumption boost |
+|---|---|---|---|---|
+| Federation | 0.8× | -10% | 0.00 | medicine |
+| Corporate | 0.9× | -5% | 0.02 | luxuries |
+| Authoritarian | 0.7× | -15% | 0.00 | weapons, fuel |
+| Frontier | 1.5× | +20% | 0.10 | — |
+| Cooperative | 0.7× | -10% | 0.00 | food, medicine |
+| Technocratic | 1.0× | +5% | 0.01 | electronics |
+| Militarist | 1.3× | +10% | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.8× | -5% | 0.03 | food, medicine, textiles |
 
 > **Planned (tuning pass):** the original design called for per-tier nuance in equilibrium spread — e.g. Technocratic should be wide for tier-2 goods but narrow for tier-0 basics; Theocratic narrow for basics and wide for restricted. Today every government applies a single flat `equilibriumSpreadPct` to all goods. A `goodCategoryModifiers`-style field would be added to `GovernmentDefinition` during that tuning pass to support per-tier spread nuance — it is not currently declared on the interface.
 

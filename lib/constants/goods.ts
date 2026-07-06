@@ -1,4 +1,4 @@
-import type { GoodTier, Hazard } from "@/lib/types/game";
+import type { GoodTier } from "@/lib/types/game";
 
 export interface GoodDefinition {
   name: string;
@@ -8,7 +8,6 @@ export interface GoodDefinition {
   volume: number;
   mass: number;
   volatility: number;
-  hazard: Hazard;
   /** Min price multiplier on basePrice. */
   priceFloor: number;
   /** Max price multiplier on basePrice. */
@@ -28,7 +27,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 2,
     mass: 2.0,
     volatility: 0.5,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -40,7 +38,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 1.0,
     volatility: 0.7,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -52,7 +49,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 2,
     mass: 2.5,
     volatility: 0.6,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -64,7 +60,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 0.5,
     volatility: 0.8,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -76,7 +71,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 2,
     mass: 1.0,
     volatility: 0.7,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -88,7 +82,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 2.0,
     volatility: 0.8,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -100,7 +93,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 2,
     mass: 1.5,
     volatility: 0.6,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -112,7 +104,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 2.0,
     volatility: 1.2,
-    hazard: "high",
     priceFloor: 0.5,
     priceCeiling: 2.0,
   },
@@ -129,7 +120,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 1.5,
     volatility: 1.0,
-    hazard: "low",
     priceFloor: 0.5,
     priceCeiling: 2.5,
   },
@@ -141,7 +131,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 2.0,
     volatility: 0.8,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.5,
   },
@@ -153,7 +142,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 1.0,
     volatility: 1.2,
-    hazard: "low",
     priceFloor: 0.5,
     priceCeiling: 2.5,
   },
@@ -165,7 +153,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 0.5,
     volatility: 1.5,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 2.5,
   },
@@ -173,37 +160,37 @@ export const GOODS: Record<string, GoodDefinition> = {
     name: "Alloys",
     description: "High-strength composite metals — titanium alloys, durasteel.",
     basePrice: 60, tier: 1, volume: 1, mass: 2.0,
-    volatility: 0.8, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+    volatility: 0.8, priceFloor: 0.5, priceCeiling: 2.5,
   },
   polymers: {
     name: "Polymers",
     description: "Plastics, synthetics, and carbon fibre from petrochemicals and bioprocessing.",
     basePrice: 48, tier: 1, volume: 1, mass: 1.0,
-    volatility: 0.7, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+    volatility: 0.7, priceFloor: 0.5, priceCeiling: 2.5,
   },
   components: {
     name: "Components",
     description: "Precision parts — circuit boards, actuators, micro-assemblies. The universal intermediate.",
     basePrice: 70, tier: 1, volume: 1, mass: 1.0,
-    volatility: 0.9, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+    volatility: 0.9, priceFloor: 0.5, priceCeiling: 2.5,
   },
   consumer_goods: {
     name: "Consumer Goods",
     description: "Everyday manufactured products — clothing, tools, devices.",
     basePrice: 55, tier: 1, volume: 1, mass: 1.0,
-    volatility: 0.6, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+    volatility: 0.6, priceFloor: 0.5, priceCeiling: 2.5,
   },
   munitions: {
     name: "Munitions",
     description: "Ammunition, explosives, and propellant charges.",
     basePrice: 75, tier: 1, volume: 1, mass: 1.5,
-    volatility: 1.3, hazard: "low", priceFloor: 0.5, priceCeiling: 2.5,
+    volatility: 1.3, priceFloor: 0.5, priceCeiling: 2.5,
   },
   hull_plating: {
     name: "Hull Plating",
     description: "Armour plates and structural panels — military-grade structural material.",
     basePrice: 70, tier: 1, volume: 2, mass: 2.5,
-    volatility: 0.9, hazard: "none", priceFloor: 0.5, priceCeiling: 2.5,
+    volatility: 0.9, priceFloor: 0.5, priceCeiling: 2.5,
   },
 
   // ── Tier 2 — Advanced ─────────────────────────────────────────
@@ -218,7 +205,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 0.5,
     volatility: 1.0,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 3.0,
   },
@@ -230,7 +216,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 2,
     mass: 2.5,
     volatility: 0.8,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 3.0,
   },
@@ -242,7 +227,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 1.5,
     volatility: 2.0,
-    hazard: "high",
     priceFloor: 0.5,
     priceCeiling: 3.0,
   },
@@ -254,7 +238,6 @@ export const GOODS: Record<string, GoodDefinition> = {
     volume: 1,
     mass: 0.5,
     volatility: 1.8,
-    hazard: "none",
     priceFloor: 0.5,
     priceCeiling: 3.0,
   },
@@ -262,25 +245,25 @@ export const GOODS: Record<string, GoodDefinition> = {
     name: "Weapons Systems",
     description: "Ship-mounted weapon platforms — turrets, launchers, beam arrays.",
     basePrice: 160, tier: 2, volume: 1, mass: 1.5,
-    volatility: 1.5, hazard: "high", priceFloor: 0.5, priceCeiling: 3.0,
+    volatility: 1.5, priceFloor: 0.5, priceCeiling: 3.0,
   },
   targeting_arrays: {
     name: "Targeting Arrays",
     description: "Fire-control systems, long-range sensors, tactical computers.",
     basePrice: 140, tier: 2, volume: 1, mass: 0.5,
-    volatility: 1.0, hazard: "none", priceFloor: 0.5, priceCeiling: 3.0,
+    volatility: 1.0, priceFloor: 0.5, priceCeiling: 3.0,
   },
   reactor_cores: {
     name: "Reactor Cores",
     description: "Military-grade power plants — fusion reactors, antimatter containment.",
     basePrice: 170, tier: 2, volume: 1, mass: 2.0,
-    volatility: 1.2, hazard: "high", priceFloor: 0.5, priceCeiling: 3.0,
+    volatility: 1.2, priceFloor: 0.5, priceCeiling: 3.0,
   },
   ship_frames: {
     name: "Ship Frames",
     description: "Assembled structural hull sections — spaceframes, bulkheads.",
     basePrice: 180, tier: 2, volume: 2, mass: 2.5,
-    volatility: 1.0, hazard: "none", priceFloor: 0.5, priceCeiling: 3.0,
+    volatility: 1.0, priceFloor: 0.5, priceCeiling: 3.0,
   },
 } as const;
 

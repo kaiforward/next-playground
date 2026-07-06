@@ -5,8 +5,6 @@ import { usePathname } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { getDockedShips } from "@/lib/utils/fleet";
-import { enrichTraits } from "@/lib/utils/traits";
-import { deriveSystemLocations } from "@/lib/constants/locations";
 import { SYSTEM_TABS, type SystemTabSegment } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -33,19 +31,9 @@ function SystemPanelContent({
     [fleet.ships, systemId],
   );
 
-  const exploreCount = useMemo(() => {
-    // Counts *playable* locations for the tab badge. Availability is a static
-    // catalog flag (only the cantina mini-game today) and body-derived sites are
-    // all "coming soon", so the count is substrate-independent — no need to fetch
-    // bodies here and block every tab on the substrate query.
-    const features = systemInfo?.traits ? enrichTraits(systemInfo.traits) : [];
-    return deriveSystemLocations([], features).filter((l) => l.available).length;
-  }, [systemInfo?.traits]);
-
   const basePath = `/system/${systemId}`;
   const tabBadges: Partial<Record<SystemTabSegment, number>> = {
     ships: dockedShipCount,
-    explore: exploreCount,
   };
   const tabs = SYSTEM_TABS.map((tab) => {
     const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;

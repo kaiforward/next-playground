@@ -14,48 +14,48 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 Deep, liquid markets, thin per-unit margin. High population-driven demand gives them the deepest days-of-supply cover, so large trades barely move price. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these. Each tier-0 good is **extracted** from a body resource deposit (no recipe) — Water/Gas/Ore/Minerals/Biomass/Radioactives map 1:1 to their resource; Food and Textiles both come from the `arable` resource.
 
-| Good | Base Price | Volatility | Hazard | Price Range |
-|---|---|---|---|---|
-| Water | 25 | 0.5 | none | 0.5x-2.0x |
-| Food | 30 | 0.7 | none | 0.5x-2.0x |
-| Gas | 30 | 0.7 | none | 0.5x-2.0x |
-| Biomass | 32 | 0.6 | none | 0.5x-2.0x |
-| Ore | 35 | 0.6 | none | 0.5x-2.0x |
-| Textiles | 35 | 0.8 | none | 0.5x-2.0x |
-| Minerals | 40 | 0.8 | none | 0.5x-2.0x |
-| Radioactives | 50 | 1.2 | high | 0.5x-2.0x |
+| Good | Base Price | Volatility | Price Range |
+|---|---|---|---|
+| Water | 25 | 0.5 | 0.5x-2.0x |
+| Food | 30 | 0.7 | 0.5x-2.0x |
+| Gas | 30 | 0.7 | 0.5x-2.0x |
+| Biomass | 32 | 0.6 | 0.5x-2.0x |
+| Ore | 35 | 0.6 | 0.5x-2.0x |
+| Textiles | 35 | 0.8 | 0.5x-2.0x |
+| Minerals | 40 | 0.8 | 0.5x-2.0x |
+| Radioactives | 50 | 1.2 | 0.5x-2.0x |
 
 ### Tier 1 — Processed Goods (10)
 
 Medium-depth markets, moderate per-unit margin. Lower per-capita demand than staples → shallower cover → price reacts more to each trade. Better margin but needs more capital. Mid-game income. Each is manufactured from a recipe of tier-0 (and one tier-1) inputs.
 
-| Good | Base Price | Volatility | Hazard | Price Range | Inputs (per output) |
-|---|---|---|---|---|---|
-| Fuel | 35 | 1.0 | low | 0.5x-2.5x | Gas 1 |
-| Metals | 45 | 0.8 | none | 0.5x-2.5x | Ore 1 |
-| Polymers | 48 | 0.7 | none | 0.5x-2.5x | Gas 0.5, Biomass 0.5 |
-| Chemicals | 55 | 1.2 | low | 0.5x-2.5x | Gas 0.5, Minerals 0.5 |
-| Consumer Goods | 55 | 0.6 | none | 0.5x-2.5x | Textiles 0.5, Polymers 0.5 |
-| Alloys | 60 | 0.8 | none | 0.5x-2.5x | Metals 0.6, Minerals 0.4 |
-| Medicine | 65 | 1.5 | none | 0.5x-2.5x | Biomass 0.5, Chemicals 0.5 |
-| Components | 70 | 0.9 | none | 0.5x-2.5x | Minerals 0.5, Metals 0.5 |
-| Hull Plating* | 70 | 0.9 | none | 0.5x-2.5x | Metals 0.5, Alloys 0.5 |
-| Munitions* | 75 | 1.3 | low | 0.5x-2.5x | Metals 0.5, Chemicals 0.5 |
+| Good | Base Price | Volatility | Price Range | Inputs (per output) |
+|---|---|---|---|---|
+| Fuel | 35 | 1.0 | 0.5x-2.5x | Gas 1 |
+| Metals | 45 | 0.8 | 0.5x-2.5x | Ore 1 |
+| Polymers | 48 | 0.7 | 0.5x-2.5x | Gas 0.5, Biomass 0.5 |
+| Chemicals | 55 | 1.2 | 0.5x-2.5x | Gas 0.5, Minerals 0.5 |
+| Consumer Goods | 55 | 0.6 | 0.5x-2.5x | Textiles 0.5, Polymers 0.5 |
+| Alloys | 60 | 0.8 | 0.5x-2.5x | Metals 0.6, Minerals 0.4 |
+| Medicine | 65 | 1.5 | 0.5x-2.5x | Biomass 0.5, Chemicals 0.5 |
+| Components | 70 | 0.9 | 0.5x-2.5x | Minerals 0.5, Metals 0.5 |
+| Hull Plating* | 70 | 0.9 | 0.5x-2.5x | Metals 0.5, Alloys 0.5 |
+| Munitions* | 75 | 1.3 | 0.5x-2.5x | Metals 0.5, Chemicals 0.5 |
 
 ### Tier 2 — Advanced Goods (8)
 
 Thin, scarce markets, high per-unit price swing. Lowest per-capita demand → shallowest cover → a small trade swings price hard. Highest absolute margin per unit but can't fill cargo from one system. Late-game income — needs big capital AND multi-system routes.
 
-| Good | Base Price | Volatility | Hazard | Price Range | Inputs (per output) |
-|---|---|---|---|---|---|
-| Electronics | 80 | 1.0 | none | 0.5x-3.0x | Components 0.6, Chemicals 0.4 |
-| Machinery | 100 | 0.8 | none | 0.5x-3.0x | Metals 0.5, Components 0.5 |
-| Weapons* | 120 | 2.0 | high | 0.5x-3.0x | Metals 0.4, Chemicals 0.3, Munitions 0.3 |
-| Targeting Arrays* | 140 | 1.0 | none | 0.5x-3.0x | Electronics 0.6, Components 0.4 |
-| Luxuries | 150 | 1.8 | none | 0.5x-3.0x | Consumer Goods 0.5, Electronics 0.5 |
-| Weapons Systems* | 160 | 1.5 | high | 0.5x-3.0x | Electronics 0.4, Munitions 0.3, Hull Plating 0.3 |
-| Reactor Cores* | 170 | 1.2 | high | 0.5x-3.0x | Radioactives 0.4, Alloys 0.3, Components 0.3 |
-| Ship Frames* | 180 | 1.0 | none | 0.5x-3.0x | Hull Plating 0.4, Alloys 0.3, Components 0.3 |
+| Good | Base Price | Volatility | Price Range | Inputs (per output) |
+|---|---|---|---|---|
+| Electronics | 80 | 1.0 | 0.5x-3.0x | Components 0.6, Chemicals 0.4 |
+| Machinery | 100 | 0.8 | 0.5x-3.0x | Metals 0.5, Components 0.5 |
+| Weapons* | 120 | 2.0 | 0.5x-3.0x | Metals 0.4, Chemicals 0.3, Munitions 0.3 |
+| Targeting Arrays* | 140 | 1.0 | 0.5x-3.0x | Electronics 0.6, Components 0.4 |
+| Luxuries | 150 | 1.8 | 0.5x-3.0x | Consumer Goods 0.5, Electronics 0.5 |
+| Weapons Systems* | 160 | 1.5 | 0.5x-3.0x | Electronics 0.4, Munitions 0.3, Hull Plating 0.3 |
+| Reactor Cores* | 170 | 1.2 | 0.5x-3.0x | Radioactives 0.4, Alloys 0.3, Components 0.3 |
+| Ship Frames* | 180 | 1.0 | 0.5x-3.0x | Hull Plating 0.4, Alloys 0.3, Components 0.3 |
 
 \* **Military-tagged** dual-use goods. They trade on the open market with ordinary civilian demand today; a strategic war-demand channel (and the tier-3 non-market military *assets* they feed) is planned for the faction-agency and war layers. **Bottleneck goods** — Components (5 downstream recipes), Metals (near-universal), Alloys, and Electronics — sit on the most chains, so a shortage in one cascades widest.
 
@@ -143,22 +143,21 @@ At seed/reset time each market's starting stock is **cover-based** (`getInitialS
 
 All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-| Government | Volatility | Eq. Spread | Tax | Inspection | Danger | Contraband | Taxed goods | Consumption boosts |
-|---|---|---|---|---|---|---|---|---|
-| Federation | 0.8× | -10% | 12% | 1.2× | 0.00 | weapons | chemicals | medicine |
-| Corporate | 0.9× | -5% | 10% | 0.8× | 0.02 | — | — | luxuries |
-| Authoritarian | 0.7× | -15% | 15% | 1.5× | 0.00 | weapons, chemicals | — | weapons, fuel |
-| Frontier | 1.5× | +20% | 0% | 0.0× | 0.10 | — | — | — |
-| Cooperative | 0.7× | -10% | 10% | 1.0× | 0.00 | luxuries | — | food, medicine |
-| Technocratic | 1.0× | +5% | 8% | 0.6× | 0.01 | — | water, food | electronics |
-| Militarist | 1.3× | +10% | 10% | 1.3× | 0.05 | — | electronics, machinery | weapons, fuel, machinery |
-| Theocratic | 0.8× | -5% | 10% | 1.4× | 0.03 | weapons, chemicals, luxuries | — | food, medicine, textiles |
+| Government | Volatility | Eq. Spread | Danger | Consumption boosts |
+|---|---|---|---|---|
+| Federation | 0.8× | -10% | 0.00 | medicine |
+| Corporate | 0.9× | -5% | 0.02 | luxuries |
+| Authoritarian | 0.7× | -15% | 0.00 | weapons, fuel |
+| Frontier | 1.5× | +20% | 0.10 | — |
+| Cooperative | 0.7× | -10% | 0.00 | food, medicine |
+| Technocratic | 1.0× | +5% | 0.01 | electronics |
+| Militarist | 1.3× | +10% | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.8× | -5% | 0.03 | food, medicine, textiles |
 
 ### Government Effects on Gameplay
 - **Volatility modifier**: Scales price-noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
 - **Spread modifier** (`equilibriumSpreadPct`): Scales the **bid-ask half-spread** `s` — the gap between buy and sell price. Frontier widens it (+20% → bigger round-trip cost / wider quotes), authoritarian tightens it (-15%). Replaces the legacy supply/demand-band spread now that there is a single stock value.
 - **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
-- **Tax rate / contraband lists**: Data retained on government definitions; inert since the arrival pipeline was cut (war-era candidates).
 - **Consumption boosts**: Extra consumption per tick for specific goods (e.g., authoritarian +1 weapons consumption) — drains stock faster, raising price.
 
 ---

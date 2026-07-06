@@ -38,7 +38,6 @@ describe("getSystemLogistics (integration)", () => {
     await createTestShip(prisma, {
       playerId: player.playerId,
       systemId: universe.systems.agricultural,
-      cargoMax: 10,
     });
     await prisma.ship.updateMany({
       where: { playerId: player.playerId },

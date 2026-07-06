@@ -31,7 +31,6 @@ describe("getSystemPopulation (integration)", () => {
     await createTestShip(prisma, {
       playerId: player.playerId,
       systemId: universe.systems.agricultural,
-      cargoMax: 10,
     });
 
     // Switch to interceptor (sensor range 1) so tech (2 hops) is hidden.

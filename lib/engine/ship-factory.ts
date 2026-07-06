@@ -10,7 +10,6 @@ export interface ShipCreateData {
   shipType: string;
   fuel: number;
   maxFuel: number;
-  cargoMax: number;
   speed: number;
   hullMax: number;
   hullCurrent: number;
@@ -34,7 +33,6 @@ export function buildShipData(def: ShipTypeDefinition, name: string): ShipCreate
     shipType: def.id,
     fuel: def.fuel,
     maxFuel: def.fuel,
-    cargoMax: def.cargo,
     speed: def.speed,
     hullMax: def.hullMax,
     hullCurrent: def.hullMax,

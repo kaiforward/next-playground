@@ -10,7 +10,8 @@ Master specification for the game. Describes what the game does, how systems con
 > documented here until the Phase 1 teardown removes them.
 > Missions/battles/combat were removed in teardown Sweep 1; personal trading, player
 > reputation, notifications, and price history in Sweep 2; the arrival danger pipeline,
-> convoys, shipyard/upgrades, and cargo in Sweep 3.
+> convoys, shipyard/upgrades, and cargo in Sweep 3; the in-system Explore/cantina layer
+> in Sweep 4 (the Void's Gambit engine stays parked in `lib/engine/mini-games/`).
 
 ---
 

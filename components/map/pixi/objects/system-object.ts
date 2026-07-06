@@ -192,7 +192,7 @@ export class SystemObject extends Container {
     const econChanged = data.economyType !== this.currentEconomy;
     const navChanged = data.navigationState !== this.currentNavState;
     const visibilityChanged = data.visibility !== this.currentVisibility;
-    const shipChanged = data.dockedShipCount !== this.currentShipCount;
+    const shipChanged = data.shipCount !== this.currentShipCount;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
     const eventsChanged = eventTypes !== this.currentEventTypes.join(",");
@@ -273,13 +273,13 @@ export class SystemObject extends Container {
 
     if (shipChanged) {
       // Counts come from the player's own fleet data — always show regardless of fog-of-war
-      this.currentShipCount = data.dockedShipCount;
+      this.currentShipCount = data.shipCount;
       this.redrawDockedPill();
 
       // Fleet-presence ring: one sky-blue ring whenever any ship is docked —
       // matches the single blue zoomed-out fleet dot. Visibility (overlay /
       // hover / select gating) is finalised in setLOD via `hasFleet`.
-      this.hasFleet = data.dockedShipCount > 0;
+      this.hasFleet = data.shipCount > 0;
       this.fleetRing.clear();
       if (this.hasFleet) {
         this.fleetRing.circle(0, 0, GLYPH.fleetRingRadius);
