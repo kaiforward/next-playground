@@ -176,14 +176,15 @@ Active docs describe shipped code and stay accurate until the code changes: each
 
 Order of operations, not a build plan. Each phase gets its own spec → plan → build; earlier phases are deliberately playable.
 
-- **Phase 0 — Adopt the pivot.** Commit this doc; execute the doc dispositions; purge BACKLOG; rewrite SPEC.md's overview.
-- **Phase 1 — The ant farm (engine extraction).** Single-player runtime: in-memory world, services re-pointed, auth deleted, save/load, pause/speed, world-gen from seed script. Milestone: the living galaxy runs locally as an observable simulation with the full map — no Postgres, no login. (Personal-player systems can be stripped here or lazily in Phase 2 — decide at spec time.)
-- **Phase 2 — The player seat (v1 of the game).** Pick a faction; treasury/budget bands + build orders (the SP5 "full agency" design, built player-facing and AI-shared); manual placement with fractional allocations; per-domain automation toggles; new world-gen (small cores, open galaxy) + colonisation; alert feed. Milestone: you can *play* — develop a small faction against AI rivals.
-- **Phase 3 — Pops, ideology, control.** Pop entities + ideology axes + friction; control stat; flow-system merge (diffusion + logistics + control levers). The big economy re-pointing (goods → construction/pops channels) lands here; recalibrate once.
-- **Phase 4 — Diplomacy & events as content.** Player diplomacy verbs over the relations substrate; Paradox-style event choices; physical event perturbations (the old SP4).
-- **Phase 5 — War (capstone).** Military ceiling from the industrial base, mobilisation, fronts, logistics interdiction, conquest → digestion via pops. Re-spec `war-system.md` first.
+- **Phase 0 — Adopt the pivot (docs only).** Commit this doc; execute the doc dispositions; purge BACKLOG; rewrite SPEC.md's overview.
+- **Phase 1 — Teardown.** Delete the §4 cut systems from the code: UI, routes, services, hooks, tick processors, Prisma models, tests — and each system's active doc in the same PR. Done *before* engine extraction so the migration surface shrinks (nothing dead gets migrated). The app keeps running in its current form throughout; build + tests stay green after each sweep. Not purely mechanical — entanglements need per-piece calls in the spec (ship *travel* survives for fleets while the danger pipeline dies; the market screen dies as a trading surface but partially survives as an economy inspection view; auth is load-bearing for every route, so it gets stubbed to a single local player here and deleted in Phase 2).
+- **Phase 2 — The ant farm (engine extraction).** Single-player runtime: in-memory world, remaining services re-pointed, auth deleted, save/load, pause/speed, world-gen from seed script. Milestone: the living galaxy runs locally as an observable simulation with the full map — no Postgres, no login.
+- **Phase 3 — The player seat (v1 of the game).** Pick a faction; treasury/budget bands + build orders (the SP5 "full agency" design, built player-facing and AI-shared); manual placement with fractional allocations; per-domain automation toggles; new world-gen (small cores, open galaxy) + colonisation; alert feed. Milestone: you can *play* — develop a small faction against AI rivals.
+- **Phase 4 — Pops, ideology, control.** Pop entities + ideology axes + friction; control stat; flow-system merge (diffusion + logistics + control levers). The big economy re-pointing (goods → construction/pops channels) lands here; recalibrate once.
+- **Phase 5 — Diplomacy & events as content.** Player diplomacy verbs over the relations substrate; Paradox-style event choices; physical event perturbations (the old SP4).
+- **Phase 6 — War (capstone).** Military ceiling from the industrial base, mobilisation, fronts, logistics interdiction, conquest → digestion via pops. Re-spec `war-system.md` first.
 
-The old sequence (S4 guardrails → contract rework → ship re-pricing → SP4 → full SP5 → events → war) is superseded; its surviving members are absorbed above (full-SP5 agency → Phase 2, SP4 viability/events → Phase 4, war → Phase 5, S4 calibration → Phase 3's single recalibration).
+The old sequence (S4 guardrails → contract rework → ship re-pricing → SP4 → full SP5 → events → war) is superseded; its surviving members are absorbed above (full-SP5 agency → Phase 3, SP4 viability/events → Phase 5, war → Phase 6, S4 calibration → Phase 4's single recalibration).
 
 ---
 
