@@ -114,6 +114,7 @@ Seeding inverts from "8 majors + minors own everything" to **small developed fac
 - **Diplomacy verbs** — relations exist; the player-facing action set does not.
 - **Culture/ideology depth** — the lean v1 vs the deep layers (§5.2).
 - **Goods roster rework detail** — which goods survive, what construction/military actually consumes.
+- **Market/pricing model simplification** (noted 2026-07-06, during Phase 2 planning) — the curve/anchor/band pricing apparatus was built to price player arbitrage; as a pure cost signal for player/AI decisions it is likely over-built, and it's a performance suspect at uncapped tick speed. Re-derive a cheaper pricing model inside the Phase 4 economy re-point (single recalibration), informed by max-speed profiling from the Phase 2 ant farm — not before.
 - **UI paradigm** — the current page-per-screen web app vs a map-first single-surface app (genre standard). Likely map-first with panels; needs a design pass.
 - **Tick/time model** — tick length, speed steps, what "a day" is.
 - **Title** — "Stellar Trader" no longer describes the game.
