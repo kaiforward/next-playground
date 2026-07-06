@@ -89,7 +89,7 @@ See [Ship Roster §3](./ship-roster.md) for the slot layout of each of the 12 cl
 
 ## 5. Installation, Removal, Cost
 
-- **Installation**: Modules are purchased and fitted at any system's drydock service. There is no facility-tier gating today. `[PENDING: facilities]`
+- **Installation**: Modules are purchased and fitted at any system's drydock service. There is no facility-tier gating today (and none coming — this system is slated for the grand-strategy pivot's Phase 1 teardown).
 - **Purchase cost**: One-time credit cost set per module tier in `MODULES`. Mk III modules are an order of magnitude more expensive than Mk I
 - **Removal**: Free; the module goes back to the player's inventory and can be installed on another ship
 - **Loss**: Ship destruction would destroy installed modules along with the ship, but the destruction path is not yet wired up — ships currently disable at hull 0 rather than destruct (see [Ship Roster §5.3](./ship-roster.md)). `[PENDING: combat-destruction]`
@@ -124,13 +124,9 @@ This is a deliberate simplicity decision. The interesting choices come from slot
 
 ## 7. Future Extensions
 
-Tagged with `[PENDING: <system>]` so they're greppable. Run `grep -r "\[PENDING:" docs/active/` to find all deferred work across active specs.
+**All deferred items below are cancelled** — this system is slated for the grand-strategy pivot's Phase 1 teardown ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md) §4); none of the pending work will be built.
 
-- **Faction-exclusive modules** — six factions each offer a unique capability module at homeworld drydocks, gated by Champion reputation. `[PENDING: faction-system]`
-- **Drydock facility tiers** — restricting which tier of module a drydock can install. `[PENDING: facilities]`
-- **Module upkeep costs** — per-tick operating cost while installed. Designed as the economic governor on automation fleet size. `[PENDING: automation]`
-- **Automation strategy tiers** — Basic/Standard/Advanced strategy variants. The single capability flag exists today; the strategy fanout arrives with the automation processor. `[PENDING: automation]`
-- **Passive hull regen via Repair Bay** — the stat is computed but no processor applies it between voyages yet. `[PENDING: hull-regen-processor]`
+- ~~**Faction-exclusive modules**~~ ~~**Drydock facility tiers**~~ ~~**Module upkeep costs**~~ ~~**Automation strategy tiers**~~ ~~**Passive hull regen via Repair Bay**~~
 
 ---
 

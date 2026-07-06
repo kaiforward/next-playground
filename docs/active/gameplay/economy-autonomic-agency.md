@@ -11,9 +11,9 @@
 > North-star constraint: [negative-space-economy.md](../../planned/negative-space-economy.md).
 >
 > **Scope note.** This is *autonomic-light*: free (capacity-bounded, no treasury), needs-driven, no
-> embodied agents. The player-facing trade-logistics layer (surfaced marketplace arbitrage, bounties) and
-> the full treasury-funded faction brain are later SP5 slices — see
-> [economy-scaling-and-trade-rework.md](../../planned/economy-scaling-and-trade-rework.md).
+> embodied agents. The full treasury-funded faction brain is a later slice — now the *player's control
+> surface* under the grand-strategy pivot ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md)
+> Phase 3). The personal trade-logistics layer (marketplace arbitrage, bounties) is retired with the pivot.
 
 ---
 
@@ -229,8 +229,8 @@ land); labour-gated industry builds (fractional spare-labour gate); both builds 
 faction budget with per-system pacing; both processors on the 48-tick agency clock.
 
 **Deferred (explicitly out):**
-- **Player trade layer** — the ditched claimable-Contract design; reworked into bounty / surfaced-
-  marketplace arbitrage after a global economy scale-up → [scaling rework](../../planned/economy-scaling-and-trade-rework.md).
+- **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy
+  pivot** (personal trading is cut; the deleted scaling-rework doc's bounty/marketplace fork is moot).
 - **Treasury & money** — the budget is a physical work allowance, not a cost; treasury funding, the
   logistics-efficiency band, and the "faction prefers a player did it" payout asymmetry → SP5-full.
 - **Route consequences** — per-system transit cost, event/revolt blocking, cargo damage, visible

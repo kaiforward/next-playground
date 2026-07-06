@@ -141,7 +141,7 @@ Each stat maps to a different kind of threat. No single stat dominates the pipel
 
 ### 5.1 Acquisition
 
-- **Purchase**: Buy at any system's shipyard service for the listed price. The full class roster is offered everywhere — shipyard *tier* gating (only T1 shipyards sell small ships, etc.) is deferred. `[PENDING: facilities]`
+- **Purchase**: Buy at any system's shipyard service for the listed price. The full class roster is offered everywhere — shipyard *tier* gating (only T1 shipyards sell small ships, etc.) is dropped — personal ship purchase is slated for the grand-strategy pivot's Phase 1 teardown (ships survive as faction assets).
 - **Starter ship**: New players spawn with a free Shuttle
 
 ### 5.2 Upgrades

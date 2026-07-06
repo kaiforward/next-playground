@@ -76,10 +76,10 @@ Status determines:
 Military output is the faction's per-tick capacity for projecting military force. It's the resource that the [War System](../../planned/war-system.md) consumes for fleet battles, sieges, and multi-front wars. Not stored directly — derived each tick from faction state:
 
 - **Territory size**: More systems = more production capacity. The primary driver.
-- **Economic output**: Systems with higher population (see [Production §2](../../planned/production.md)) and better production traits contribute more. An industrial hub with tier-3 lagrange stations contributes more military output than a marginal frontier system.
+- **Economic output**: Systems with higher population and a stronger industrial base contribute more. An industrial hub contributes more military output than a marginal frontier system. (The military-as-industrial-ceiling model in [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §12.4 is the authoritative successor to this sketch.)
 - **Government modifier**: Militarist governments have higher military output per system. Corporate governments have lower (they invest in trade, not fleets).
 - **War disruption**: Systems in active war zones have reduced economic output, which reduces their military contribution. Prolonged wars degrade a faction's total military output.
-- **Player contributions**: Player-produced tier 3 military assets (see [Production Roster §5](../../planned/production-roster.md)) add to faction military output. This is how player production meaningfully affects wars.
+- ~~**Player contributions**: Player-produced tier 3 military assets add to faction military output.~~ *(Retired by the grand-strategy pivot — the player rules a faction; there is no personal production.)*
 
 The exact formula is an implementation detail, but the principle is: military output scales with territory quality, not just territory size. A faction with 30 well-developed systems can match one with 50 marginal frontier systems.
 
@@ -469,8 +469,6 @@ Region territory is not navigated as a separate "region map → system view" pag
 ## Related Design Docs
 
 These topics are large enough to warrant their own design documents:
-- **[War System](../../planned/war-system.md)** *(planned)* — border conflicts (the spawn side lives here in §4; the consume side is in war-system.md), faction wars, battles, territory control, player involvement
-- **[Player Progression](../../planned/player-progression.md)** *(planned)* — ship upgrades, region unlocking, credit sinks, early/mid/late game arc
-- **[Facilities](../../planned/facilities.md)** *(planned)* — faction-owned facilities, war targets, tier capabilities
+- **[War System](../../planned/war-system.md)** *(planned)* — border conflicts (the spawn side lives here in §4; the consume side is in war-system.md), faction wars, battles, territory control
 - **[System Traits](./system-traits.md)** *(active)* — trait catalog, quality tiers, economy derivation
-- **[Multiplayer Infrastructure](../../planned/multiplayer-infrastructure.md)** *(planned)* — player trading, alliances, communication, coordination
+- **[Grand-Strategy Vision](../../planned/grand-strategy-vision.md)** *(planned)* — the player now rules a faction; the retired personal-player docs (progression, facilities, multiplayer) are deleted (git history)

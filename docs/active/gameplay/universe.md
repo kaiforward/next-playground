@@ -173,7 +173,7 @@ The configurable universe and tile-based map renderer are in place — scale cei
 
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
 - **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-traits.md](./system-traits.md) §2.2)
-- **Facilities**: Faction-owned strategic infrastructure seeded at systems based on traits (see [facilities.md](../../planned/facilities.md))
+- **World-gen start state**: the grand-strategy pivot ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md) §5.4) replaces "factions own everything at seed" with small developed faction cores in a mostly-unclaimed galaxy (colonisation becomes a core loop)
 
 ---
 

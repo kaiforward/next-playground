@@ -1,6 +1,15 @@
 # Economy Simulation — North-Star Vision
 
-Status: **Vision / not yet built** — created 2026-05-31, refined 2026-05-31 (agency layer, growth/boundedness, treasury, war-coupling, and directed-logistics model worked through — see §5.4, §12, §13). This is the overarching design north star for reworking the economy into a physically-simulated, consequence-driven model. It is deliberately above implementation: it locks the *philosophy and core model*, names the *rethinks* to existing systems, and decomposes the work into buildable sub-projects. Each sub-project gets its own spec → plan → build cycle; this doc is the shared reference they all hang off.
+Status: **Vision / partially built** — created 2026-05-31. This is the design north star for the physically-simulated, consequence-driven economy model. It is deliberately above implementation: it locks the *philosophy and core model*, names the *rethinks* to existing systems, and decomposes the work into buildable sub-projects.
+
+> **⚠ Superseded in part by the grand-strategy pivot (2026-07-06)** — see
+> [grand-strategy-vision.md](./grand-strategy-vision.md). The simulation **model** here (§2–§12)
+> stands and remains load-bearing. Superseded: the **roadmap** (§13 in its entirety, including the
+> CURRENT SEQUENCE block) — the pivot's phasing replaces it — and the **player framing** (the
+> "player as premium throughput layer" in §12.2, player-facilities as the player agent in §12,
+> and every reference to player trade/arbitrage): the player now *rules a faction* and takes the
+> agency layer's seat directly; there is no personal-trader player. Read "faction" as
+> "player-or-AI faction" throughout §12.
 
 Expect edits. This is a living document.
 
@@ -67,7 +76,7 @@ The current ~40 narrative traits split into two layers:
 
 ### 3.2 Resource base → raw goods
 
-Each body's resource base maps onto the tier-0 raw goods (catalog in [production-roster.md](./production-roster.md)):
+Each body's resource base maps onto the tier-0 raw goods (roster shipped — see the goods constants and [economy.md](../active/gameplay/economy.md)):
 
 | Resource-base entry | Tier-0 good(s) |
 |---|---|
@@ -212,7 +221,7 @@ This creates a three-way pull on every body — **extract / manufacture / house 
 
 ### 8.4 Baseline vs development
 
-The **baseline NPC economy** comes from bodies × population auto-working their resource base, so **markets function with zero player facilities** (the hybrid principle from [production.md §1](./production.md)). Slots/buildings are the **development layer** (player + faction) that boosts or redirects output on top. "Everything derives from generation" and "markets work without players" both hold.
+The **baseline NPC economy** comes from bodies × population auto-working their resource base, so **markets function with zero player facilities** (the hybrid principle from the retired production.md). Slots/buildings are the **development layer** (player + faction) that boosts or redirects output on top. "Everything derives from generation" and "markets work without players" both hold.
 
 Exact slot counts, the NPC-baseline-vs-player split, and build UI are facilities-sub-project detail.
 
@@ -260,8 +269,8 @@ These are the payoffs the model should produce without scripting:
 
 Everything above is *passive physics*: bodies produce, population consumes, goods diffuse, systems grow or starve. None of it *decides* anything. The agency layer is the deciding intelligence on top — what gets built, and where resources are deliberately sent. It runs on a slower clock than the physics tick ([§5.3](#53-the-tick-loop)). Three agents:
 
-- **Players** — manual facility builds and shipping (covered by [player-facilities.md](./player-facilities.md)).
-- **Factions** — the NPC economic brain (**new**). Today's faction model is purely political/relational; this gives it an economy to manage.
+- **Players** — *(superseded by the pivot: the player now rules a faction and uses the faction control surface below; personal facility builds are retired.)*
+- **Factions** — the economic brain (**new**), player-driven or AI-driven. Today's faction model is purely political/relational; this gives it an economy to manage.
 - **Autonomic drift** — unaligned/independent systems develop slowly on their own (subsistence + local resource base only), so the world evolves even before/without a faction brain.
 
 ### 12.1 Affordability, treasury & the money model
@@ -336,7 +345,7 @@ The work is far too large for one spec. It breaks into sub-projects, each its ow
 
 Trade-flow edge diffusion already exists and threads through all of them.
 
-> ## ✦ CURRENT SEQUENCE (2026-06-28) — authoritative; supersedes the dated sequencing notes below
+> ## ✦ ~~CURRENT SEQUENCE (2026-06-28)~~ — **SUPERSEDED (2026-07-06) by the grand-strategy pivot's phasing** ([grand-strategy-vision.md](./grand-strategy-vision.md) §8). Kept as the record of what shipped. Was: authoritative; supersedes the dated sequencing notes below
 >
 > The two notes that follow (2026-06-24, 2026-06-26) are **historical**: the 2026-06-26 "seed-coherence
 > Stage 1 → emergent-territory Stage 2 → then logistics P2–4" plan was *not* what shipped — PR #114 went
@@ -383,8 +392,8 @@ Trade-flow edge diffusion already exists and threads through all of them.
 > (small float magnitudes vs whole-unit player trade) and a **multiplayer-contention** problem (a shared
 > board of claimable rival missions invites hoarding). Both push the player trade-logistics layer into a
 > rework — global economy scale-up + a contract-model that isn't claimable discrete missions (bounty /
-> marketplace-arbitrage). Full design + the 3-dial model + Phase-2 lessons:
-> [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md).
+> marketplace-arbitrage). Full design + the 3-dial model + Phase-2 lessons were in
+> economy-scaling-and-trade-rework.md (deleted with the pivot; git history).
 
 > **[HISTORICAL — superseded by the CURRENT SEQUENCE above]** **Sequencing update (2026-06-24) — order resequenced; principle in [negative-space-economy.md](./negative-space-economy.md).** A post-SP3.5 viability audit showed the un-agentic world is a one-way ratchet (decay only) that progressively hollows (pop −11.5% / 3000 ticks, and trending), driven by a *logistics* gap: ~58% of systems can't feed themselves locally but a same-faction food surplus sits within ~2 hops, undelivered because market diffusion is distance-attenuated. ~41% are a self-sufficient durable core (survive with zero agency); ~1% are structurally stranded (doomed, fine). Implications: **(1)** events (SP4's namesake) move **last** — decoration on an unfinished base; **(2)** SP4's *population ← economic viability* phase needs a recovery counterforce first, or it just sharpens the hollowing; **(3)** bring **SP5 autonomic-light agency forward, *logistics-first then build*** — the at-risk middle needs food *moved* (no arable deposits to build food on), not industry rebuilt. Revised order: seed staffing-fix ✅ → autonomic-light logistics → autonomic-light build → SP4 population-viability → full faction agency → events → war. **Directed logistics is a separate flow on the shared edge topology** (third alongside market goods + migration), *not* a re-tuning of market trade-flow, which stays deliberately leaky — the negative space is the gameplay. This supersedes the older "mild lean events-first" note.
 
@@ -401,7 +410,7 @@ Resolved this session (now captured above, kept here as a pointer): the **treasu
 Still open:
 
 - **Sequencing**: substrate-first vs loop-first (see §13).
-- **Population units/scale**: what magnitude the single number is in, and how it maps to per-capita consumption rates and to the stock-range increase [production.md](./production.md) calls for.
+- **Population units/scale**: what magnitude the single number is in, and how it maps to per-capita consumption rates. *(Largely resolved: 1 pop ≈ 1M people, `ECONOMY_SCALE` S≈100.)*
 - **Pricing formula**: exact days-of-supply curve, elasticity, and how the round-trip guard (slippage + spread) carries over.
 - **Migration mechanics**: pull/push factors, rate, conservation rules, interaction with jump-lane topology. *(Resolved for SP2: attractiveness = low unrest + headroom, distance-attenuated, conserved, on the de-regioned intra-faction topology.)*
 - **Unrest → strike/rebellion thresholds**: how unrest accumulates and what triggers each consequence. *(SP2 covers unrest → **strike** + growth/decline (convex demand-weighted dissatisfaction); **rebellion is deferred to SP5** with the rest of faction dynamics.)*
@@ -424,7 +433,7 @@ Still open:
 - **[economy.md](../active/gameplay/economy.md)** (active) — the current single-stock model. This vision supersedes its pricing-anchor, economy-type, prosperity, and event-lever sections; the slippage/spread anti-exploit mechanics and the stock substrate carry forward.
 - **[system-traits.md](../active/gameplay/system-traits.md)** (active) — reframed into the two-layer bodies/features model (§3), with resource traits folded into the resource base.
 - **[faction-system.md](../active/gameplay/faction-system.md)** (active) — gains an economic-management dimension: monetary treasury, build decisions, directed logistics, and military-as-industrial-base (§12). Grounds its "planned" military-output and faction-facility hooks.
-- **[production.md](./production.md)** + **[production-roster.md](./production-roster.md)** (planned) — the population stat, raw-goods vocabulary, and supply chains align closely and feed sub-projects 1–3; facility roster re-pointed to generic one-good buildings (§8.1).
-- **[player-facilities.md](./player-facilities.md)** (planned) — build system for the development layer (§8) and the player agent (§12).
+- **production.md + production-roster.md** (deleted with the pivot; git history) — their goods vocabulary and supply chains shipped via SP1–SP3.
+- **player-facilities.md** (deleted with the pivot; git history) — the personal-player build system is retired; the faction build system is the game.
 - **[war-system.md](./war-system.md)** (planned) — consumes the military-as-industrial-base-ceiling model (§12.4); combat resolution and war objectives live there.
 - **[events.md](../active/gameplay/events.md)** (active) — event modifier catalog; the `anchor_shift` lever is retired in favour of physical perturbations (§10).

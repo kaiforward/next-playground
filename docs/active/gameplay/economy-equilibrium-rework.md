@@ -1,10 +1,8 @@
 # Economy Equilibrium Rework — Anchor-Relative Production & Satisfaction (+ Scale Calibration)
 
-> Sub-project **2** of the [Economy Scaling & Trade Rework](./economy-scaling-and-trade-rework.md),
-> expanded from "calibrate the scale" into a small **equilibrium-model fix** plus the calibration.
-> Roadmap slot: [economy-simulation-vision.md](./economy-simulation-vision.md) §13 (the "B. Calibrate
-> scale" item, now "B. Anchor-relative equilibrium + calibrate"). Builds on the shipped
-> [economy-scale knob](../active/gameplay/economy-scale-knob.md) (SP1).
+> Was sub-project **2** of the Economy Scaling & Trade Rework (doc deleted with the grand-strategy
+> pivot; the equilibrium model and calibration described here are fully shipped and stay). Builds on
+> the shipped [economy-scale knob](./economy-scale-knob.md).
 
 ## Headline
 

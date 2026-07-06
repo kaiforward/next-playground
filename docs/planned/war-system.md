@@ -1,10 +1,19 @@
 # War System Design
 
+> **Status: needs a re-spec pass before build** — the grand-strategy pivot
+> ([grand-strategy-vision.md](./grand-strategy-vision.md), Phase 6) changes the seat: the player
+> *rules a faction*, so war is played from the war-room (mobilisation, fronts, logistics
+> interdiction, conquest → digestion via pops), not contributed to as a personal-scale trader.
+> The personal involvement layer here (war contribution missions, player asset seizure, escort
+> runs) is retired; the faction-vs-faction machinery (exhaustion, battles, territory capture,
+> military-as-industrial-ceiling per economy-simulation-vision.md §12.4) is the part that carries
+> forward. Kept as the faction-layer reference until the Phase 6 re-spec.
+
 Wars and territorial conflict between factions. This covers two distinct layers: **ambient border conflicts** (event-system-driven tension at faction borders) and **interactive faction wars** (full wars with player involvement, battle mechanics, and territory capture).
 
 **Replaces**: The random War event in the current event catalog (`lib/constants/events.ts`) will be removed when this system is implemented. Border conflicts absorb its role as the source of war-themed economy/danger modifiers.
 
-**Depends on**: [Faction System](../active/gameplay/faction-system.md) (relations, alliances, doctrine), [Navigation Changes](./navigation-changes.md) (war zone danger values), [Ship Roster](../active/gameplay/ship-roster.md) (combat stats for battle resolution)
+**Depends on**: [Faction System](../active/gameplay/faction-system.md) (relations, alliances, doctrine), [Ship Roster](../active/gameplay/ship-roster.md) (combat stats for battle resolution)
 
 ---
 
@@ -122,7 +131,7 @@ Tension → Declaration → Active War → Exhaustion → Resolution → Consequ
 
 2. **Declaration**: When relations hit the hostile threshold and doctrine/power checks pass, a war declaration event fires. This is a galaxy-wide notification — everyone knows war has started. Markets in the region immediately react (price spikes on war-relevant goods).
 
-3. **Active war**: Border systems become contested. War exhaustion climbs per tick for both sides (1.5x for attacker). Contested systems have disrupted markets, increased danger (+0.20–0.25, see [navigation-changes.md §6](./navigation-changes.md)), and war-specific events. Economy effects applied per §10. Players contribute through tiered involvement system (see §8). Faction economy takes hits proportional to war intensity.
+3. **Active war**: Border systems become contested. War exhaustion climbs per tick for both sides (1.5x for attacker). Contested systems have disrupted markets, increased danger (+0.20–0.25, see navigation-changes.md §6, deleted — resolve at re-spec), and war-specific events. Economy effects applied per §10. Players contribute through tiered involvement system (see §8). Faction economy takes hits proportional to war intensity.
 
 4. **Exhaustion climax**: As exhaustion climbs past 75, the losing side starts seeking peace. Events signal war weariness. If one side hits 100 exhaustion, the war ends automatically.
 
@@ -263,7 +272,7 @@ Decisiveness affects siege progress rate if a siege follows (see §5.3), but spa
 An attacker may win fleet battles at border systems without committing to a siege. This is still valuable:
 
 - **Ties down defender resources** — the defender must commit military output to contest these systems or lose orbital control
-- **Increases danger** — systems under hostile space superiority have elevated danger for trade ships (see [navigation-changes.md §6](./navigation-changes.md))
+- **Increases danger** — systems under hostile space superiority have elevated danger for trade ships (see navigation-changes.md §6, deleted — resolve at re-spec)
 - **Strategic pressure** — forces the defender to spread thin, weakening their defence at the systems the attacker actually wants to siege
 - **Feints** — the attacker can threaten a siege to draw defender forces, then commit elsewhere
 
@@ -407,7 +416,7 @@ When a siege's control score reaches 100:
 4. **Player assets**: Handled per §9 (reputation-based consequences)
 5. **New border**: The front line shifts. Previously safe systems may now be border systems and eligible for future contestation
 6. **Historical record**: The system's capture is logged. If the original faction reclaims it later, the "liberation" event generates positive reputation with that faction
-7. **Post-capture instability**: Elevated danger in the captured system that decays over ~50 ticks as the new faction establishes control (see [navigation-changes.md §6](./navigation-changes.md))
+7. **Post-capture instability**: Elevated danger in the captured system that decays over ~50 ticks as the new faction establishes control (see navigation-changes.md §6, deleted — resolve at re-spec)
 
 ---
 
@@ -592,7 +601,7 @@ War economic effects are applied per-system based on the system's war state. The
 | **Under siege** | -30–40% all goods | Very large boost: weapons, fuel, food | +50–60% | +0.25 (danger cap applies) | Systems under active siege. Economy nearly collapsed, desperate demand for war supplies |
 | **Recently captured** | -20% decaying over ~50 ticks | Boost: food, machinery (rebuilding) | +30% decaying | +0.15 decaying | Post-capture instability. New faction establishing control |
 
-Danger values align with [navigation-changes.md §6](./navigation-changes.md) which defines the navigation-side effects of war zone danger.
+Danger values align with navigation-changes.md §6, deleted — resolve at re-spec which defines the navigation-side effects of war zone danger.
 
 ### War Goods Demand
 
@@ -666,8 +675,7 @@ Co-defenders accumulate exhaustion at a **reduced rate (~0.5×)** — it's not t
 
 ## Related Design Docs
 
-- **[Faction System](../active/gameplay/faction-system.md)** — faction model, inter-faction relations, player reputation, homeworlds, roster
-- **[Navigation Changes](./navigation-changes.md)** — war zone danger values (§6), convoy escort mechanics in contested space
-- **[Missions](./missions.md)** — war logistics, intelligence, sabotage as mission types
+- **[Faction System](../active/gameplay/faction-system.md)** — faction model, inter-faction relations, homeworlds, roster
+- **[Grand-Strategy Vision](./grand-strategy-vision.md)** — the pivot this doc will be re-specced against (Phase 6); the personal-layer companions cited throughout (navigation-changes, missions, player-progression) are deleted (git history)
 - **[Ship Roster](../active/gameplay/ship-roster.md)** — combat ship stats that feed into battle resolution (future interaction)
-- **[Player Progression](./player-progression.md)** — war contributions as a progression path
+- **[Economy Simulation Vision](./economy-simulation-vision.md)** §12.4 — military as industrial-base ceiling, the economic model war consumes

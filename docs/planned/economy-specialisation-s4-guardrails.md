@@ -1,10 +1,25 @@
 # Economy Specialisation S4 — Guardrails & Joint S1–S4 Calibration
 
-> **Status: working spec — discussion scaffold, not final.** Findings and hypotheses collected
-> here for per-item discussion; more ideas will be added before this settles into a build plan.
+> **Status: PAUSED by the grand-strategy pivot** ([grand-strategy-vision.md](./grand-strategy-vision.md),
+> 2026-07-06). Was: working spec / discussion scaffold for per-item discussion. S4's calibration
+> resumes inside pivot **Phase 4** (pops/ideology/control + goods re-pointing) as part of that
+> phase's single recalibration — the goods rework and flow-system merge reopen calibration anyway,
+> so it is done once, there. The findings and lever lists below remain the evidence base for that
+> pass. Note the original motivation shift: a durable price spread is no longer a *player-arbitrage
+> prerequisite* (arbitrage is retired); it remains an economy-health and world-legibility concern.
+>
 > Stage S4 of the [economy-specialisation track](./economy-specialisation.md) (guardrails: volume
 > + diffusion, plus the one joint calibration pass across everything S1–S3 shipped). The S2/S3
 > lever lists recorded in the umbrella doc's findings sections feed in here.
+>
+> **Carried context from the deleted trade-rework doc** (`economy-scaling-and-trade-rework.md`,
+> Key Finding #4 UPDATE 2026-06-30): the price spread is **maturity-dependent** — a young galaxy
+> holds a rich spread (median ~1.3× base, ~65% of markets expensive, deep-chain goods genuinely
+> starved) which the autonomic build/decay loop flattens over ~thousands of ticks (current-code
+> 6000-tick sim: 1.27× → 1.06×) as the planner fills manufacturing out everywhere. S1–S3 were
+> built to arrest exactly this; the tick-8874 audit above confirms the mature galaxy now holds a
+> spread (median 1.14×, expensive-skewed). Default-scale sims under-flatten relative to 10k
+> (smaller universe → less redistribution), so validate spread-at-maturity against the real 10k DB.
 
 ## Headline
 

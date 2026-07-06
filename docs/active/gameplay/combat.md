@@ -128,5 +128,4 @@ The combat engine is designed for reuse by the faction war system (Layer 2):
 - **[Navigation (active)](./navigation.md)** — ship stats, danger pipeline, convoy system
 - **[Trading (active)](./trading.md)** — trade missions (the other mission type)
 - **[Tick Engine (active)](../engineering/tick-engine.md)** — processor pipeline
-- **[Missions (planned)](../../planned/missions.md)** — full mission vision including faction-gated types
 - **[War System (planned)](../../planned/war-system.md)** — faction wars that extend this combat engine

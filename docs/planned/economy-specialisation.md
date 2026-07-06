@@ -5,11 +5,12 @@
 > [economy-specialisation.md (active)](../active/gameplay/economy-specialisation.md),
 > [economy-specialisation-s2-complexes.md (active)](../active/gameplay/economy-specialisation-s2-complexes.md) and
 > [economy-specialisation-s3-demand.md (active)](../active/gameplay/economy-specialisation-s3-demand.md).
-> Stage **S4 remains planned.** Sits inside **SP5 autonomic-light**, and **expands the roadmap's narrow "2a — preserve a
-> spread" item** (in [economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)) from
-> "build/decay pacing" into a real structural-specialisation track. Decomposes into **four** ordered
-> stages, each its own spec → plan → build. Authoritative sequence in
-> [economy-simulation-vision.md](./economy-simulation-vision.md) §13.
+> Stage **S4 remains planned but is PAUSED by the grand-strategy pivot** — its calibration pass resumes
+> inside pivot Phase 4; see [grand-strategy-vision.md](./grand-strategy-vision.md) and the status note in
+> [economy-specialisation-s4-guardrails.md](./economy-specialisation-s4-guardrails.md). Originally expanded
+> the trade-rework's "2a — preserve a spread" item (that doc is deleted with the pivot — player arbitrage is
+> retired; the spread survives as an economy-health concern). The old authoritative sequence
+> (economy-simulation-vision.md §13) is superseded by the pivot's phasing.
 
 ## Headline
 
@@ -398,9 +399,9 @@ multi-seed robustness.
 
 ## Relationship to existing docs
 
-- **[economy-scaling-and-trade-rework.md](./economy-scaling-and-trade-rework.md)** — this **expands its
-  "2a — preserve a spread" item** from build/decay pacing into the full structural track. The contract-model
-  rework (its sub-project 3) depends on the spread this track creates.
+- **economy-scaling-and-trade-rework.md** (deleted with the grand-strategy pivot; git history) — this
+  expanded its "2a — preserve a spread" item from build/decay pacing into the full structural track. Its
+  contract-model rework is retired; the maturity-spread finding is carried in the S4 guardrails doc.
 - **[economy-simulation-vision.md](./economy-simulation-vision.md)** — realises §8 (build space, the
   industrialize-vs-feed pull) and §11 (regional specialisation, need-cascades) at the baseline level, and
   pre-builds the substrate full faction agency (§12) will later *decide* over.

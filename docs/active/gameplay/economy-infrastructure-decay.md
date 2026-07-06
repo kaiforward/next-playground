@@ -5,7 +5,7 @@
 > unchanged). Roadmap home: [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13 — this is
 > the **decay** half of the §13-item-5 autonomic mechanism brought forward, fused with a narrow slice of
 > the §13-item-4 booked phase *"Population ← economic viability."* The SP5/war layering conclusions it drew on
-> live in `docs/planned/sp5-war-layering-contract-audit.md`.
+> lived in `docs/planned/sp5-war-layering-contract-audit.md` (deleted with the grand-strategy pivot; git history).
 
 ---
 
@@ -269,9 +269,10 @@ holds, nonviable decays; dispersion across systems) — precise tuning is perish
 ## Where this sits in the roadmap
 
 - **Superseded** the converged brainstorm `docs/build-plans/autonomic-growth-decay-brainstorm.md` (now deleted).
-- **Draws from** `docs/planned/sp5-war-layering-contract-audit.md` — its SP5/war layering conclusions (treasury
-  G1, runtime build-out as the *growth* path, labour priority, military channel, topology-cache invalidation)
-  remain the reference for SP5 and should fold into the SP5 spec when written.
+- **Drew from** `docs/planned/sp5-war-layering-contract-audit.md` (deleted with the grand-strategy pivot;
+  git history) — its SP5/war layering conclusions (treasury G1, runtime build-out as the *growth* path,
+  labour priority, military channel, topology-cache invalidation) should be resurrected from git when the
+  player-seat (pivot Phase 3) and war (Phase 6) specs are written.
 - **Vision §13:** decay half of item 5 (autonomic) brought forward + narrow slice of item 4 (pop-viability).
   Full SP4 (events → physical perturbations + the dominant-lever pop-viability rework) and full SP5 (treasury,
   build planner, directed logistics, military ceiling) follow, in that order, on top of this moving substrate.

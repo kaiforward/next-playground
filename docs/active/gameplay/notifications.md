@@ -27,7 +27,7 @@ Unread state is server-side: a notification is `read: false` until the player ma
 
 ## Captain's Log
 
-A dedicated panel (`/log`) showing the full reverse-chronological history. It uses the shared FilterBar with category chips (All / Trade / Combat / Fleet / Missions — each mapping to a set of notification types) and a free-text search over message contents. Results load in pages of 30 with a "load more" footer, and show an "X of Y" count. This panel is the first consumer of the shared [server-side pagination infra](../../planned/server-side-filtering.md).
+A dedicated panel (`/log`) showing the full reverse-chronological history. It uses the shared FilterBar with category chips (All / Trade / Combat / Fleet / Missions — each mapping to a set of notification types) and a free-text search over message contents. Results load in pages of 30 with a "load more" footer, and show an "X of Y" count. This panel is the first consumer of the shared server-side pagination infra (its expansion doc is deleted with the grand-strategy pivot — multiplayer-scale API concern).
 
 ## Pruning
 
