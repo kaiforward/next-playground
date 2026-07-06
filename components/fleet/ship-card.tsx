@@ -111,12 +111,12 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
             <div className="flex items-center gap-2">
               {!ship.disabled && (
                 <Button
-                  href={`/system/${ship.systemId}/market?tradeShipId=${ship.id}`}
+                  href={`/system/${ship.systemId}/market`}
                   variant="action"
                   color="green"
                   size="sm"
                 >
-                  Trade
+                  Market
                 </Button>
               )}
               {!ship.disabled && !ship.convoyId && (
