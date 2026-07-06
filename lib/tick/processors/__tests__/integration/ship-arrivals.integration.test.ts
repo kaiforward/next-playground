@@ -26,7 +26,7 @@ describe("shipArrivalsProcessor (integration)", () => {
     );
   }
 
-  it("ship arrives and docks: status → docked, systemId updated, destination cleared, shields regenerated", async () => {
+  it("ship arrives and docks: status → docked, systemId updated, destination cleared", async () => {
     const shipId = await createTestShip(prisma, {
       playerId: player.playerId,
       systemId: universe.systems.agricultural,
@@ -34,8 +34,6 @@ describe("shipArrivalsProcessor (integration)", () => {
       destinationSystemId: universe.systems.industrial,
       departureTick: 5,
       arrivalTick: 10,
-      shieldMax: 10,
-      shieldCurrent: 3, // Damaged shields
     });
 
     const result = await runProcessor(10);
@@ -46,8 +44,6 @@ describe("shipArrivalsProcessor (integration)", () => {
     expect(ship!.destinationSystemId).toBeNull();
     expect(ship!.departureTick).toBeNull();
     expect(ship!.arrivalTick).toBeNull();
-    // Shields regenerate to max on dock (may be reduced by danger damage)
-    expect(ship!.shieldCurrent).toBeLessThanOrEqual(ship!.shieldMax);
 
     // Result should contain shipArrived player event
     expect(result.playerEvents).toBeDefined();

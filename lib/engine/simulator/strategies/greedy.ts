@@ -3,7 +3,7 @@
  */
 
 import type { TradeStrategy, TradeDecision } from "./types";
-import { getReachable, findOpportunities, getRiskMultiplier } from "./helpers";
+import { getReachable, findOpportunities } from "./helpers";
 import type { SimAdjacencyList } from "../pathfinding-cache";
 import type { SimPlayer, SimShip, SimWorld } from "../types";
 
@@ -14,15 +14,7 @@ export function createGreedyStrategy(): TradeStrategy {
       const reachable = getReachable(world, ship, adj);
       if (reachable.size === 0) return null;
 
-      const raw = findOpportunities(world, ship, reachable, player.credits);
-      if (raw.length === 0) return null;
-
-      // Adjust profits for arrival risk (hazard, tax, contraband)
-      const opportunities = raw
-        .map((opp) => ({
-          ...opp,
-          profit: opp.profit * getRiskMultiplier(opp.goodId, opp.targetSystemId, world),
-        }))
+      const opportunities = findOpportunities(world, ship, reachable, player.credits)
         .filter((opp) => opp.profit > 0);
       if (opportunities.length === 0) return null;
 

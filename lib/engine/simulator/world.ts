@@ -79,7 +79,6 @@ export function createSimWorld(config: SimConfig, constants: SimConstants): SimW
       population: s.population,
       popCap: s.popCap,
       traits: s.traits.map((t) => ({ traitId: t.traitId, quality: t.quality })),
-      bodyDanger: s.bodyDanger,
       unrest: 0,
       buildings: s.buildings,
       yields: s.yieldMult,

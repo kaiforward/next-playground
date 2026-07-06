@@ -1,7 +1,5 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import type { EventTypeId } from "@/lib/constants/events";
-import type { HazardIncidentEntry, ImportDutyEntry, ContrabandSeizedEntry, CargoLossEntry } from "@/lib/engine/danger";
-import type { DamageResult } from "@/lib/engine/damage";
 
 /** Transaction client type — Prisma's official type for `$transaction` callback parameter. */
 export type TxClient = Prisma.TransactionClient;
@@ -14,17 +12,6 @@ export interface ShipArrivedPayload {
   systemId: string;
   destName: string;
   playerId: string;
-  hazardIncidents?: HazardIncidentEntry[];
-  importDuties?: ImportDutyEntry[];
-  contrabandSeized?: ContrabandSeizedEntry[];
-  cargoLost?: CargoLossEntry[];
-  damageResult?: DamageResult;
-}
-
-export interface CargoLostPayload {
-  shipId: string;
-  systemId: string;
-  losses: CargoLossEntry[];
 }
 
 export interface EconomyTickPayload {
@@ -51,7 +38,6 @@ export interface GlobalEventMap {
 
 export interface PlayerEventMap {
   shipArrived: ShipArrivedPayload[];
-  cargoLost: CargoLostPayload[];
 }
 
 // ── Processor types ───────────────────────────────────────────────

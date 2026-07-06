@@ -42,7 +42,6 @@ interface MarkerObject {
   unitId: string;
   /** Last-drawn shape inputs — geometry is only redrawn when these change.
    *  The heading is applied every frame via a cheap rotation, not a redraw. */
-  drawnConvoy: boolean;
   drawnSingle: boolean;
   drawnCount: number;
 }
@@ -164,7 +163,7 @@ export class FleetTransitLayer {
       const ckey = memberIds.join(",");
       wanted.add(ckey);
       const single = c.items.length === 1;
-      const count = c.items.reduce((n, i) => n + i.unit.memberCount, 0);
+      const count = c.items.length;
       const lead = c.items[0];
 
       let m = this.markerPool.get(ckey);
@@ -175,8 +174,7 @@ export class FleetTransitLayer {
       m.container.position.set(lead.x, lead.y);
       m.container.scale.set(markerScale);
       m.container.visible = frustum.contains(lead.x, lead.y);
-      const isConvoy = single && lead.unit.kind === "convoy";
-      this.drawMarker(m, lead.angle, count, single, isConvoy);
+      this.drawMarker(m, lead.angle, count, single);
     }
 
     for (const [k, m] of this.markerPool) {
@@ -209,7 +207,7 @@ export class FleetTransitLayer {
     // drawnCount = -1 is an impossible real count, so the first drawMarker always draws.
     const m: MarkerObject = {
       container, body, pill, glyph, badge, count, hit, unitId,
-      drawnConvoy: false, drawnSingle: false, drawnCount: -1,
+      drawnSingle: false, drawnCount: -1,
     };
 
     container.on("pointerover", () => {
@@ -227,22 +225,21 @@ export class FleetTransitLayer {
     return m;
   }
 
-  private drawMarker(m: MarkerObject, angle: number, count: number, single: boolean, isConvoy: boolean) {
+  private drawMarker(m: MarkerObject, angle: number, count: number, single: boolean) {
     // The heading rotates every frame as the unit moves — a cheap transform, no redraw.
     m.body.rotation = angle;
 
-    // The pill/glyph/badge geometry only depends on convoy-ness, cluster-ness, and
-    // count — none of which change frame-to-frame for a stable marker. Skip the
-    // (expensive) Graphics clear+rebuild unless one of those actually changed.
-    if (m.drawnConvoy === isConvoy && m.drawnSingle === single && m.drawnCount === count) return;
-    m.drawnConvoy = isConvoy;
+    // The pill/glyph/badge geometry only depends on cluster-ness and count —
+    // neither changes frame-to-frame for a stable marker. Skip the (expensive)
+    // Graphics clear+rebuild unless one actually changed.
+    if (m.drawnSingle === single && m.drawnCount === count) return;
     m.drawnSingle = single;
     m.drawnCount = count;
 
     const h = FLEET.markerHeight;
     const bodyW = FLEET.markerMinWidth;
     const half = (bodyW + FLEET.noseLength) / 2;
-    const fill = isConvoy ? FLEET.convoyFill : FLEET.pillFill;
+    const fill = FLEET.pillFill;
 
     // Pill body + connected nose, both filled the same colour so they read as one
     // arrow-shaped marker. The nose's base is exactly the pill's leading edge.

@@ -6,7 +6,6 @@ import { signOut } from "next-auth/react";
 import { SectionHeader } from "@/components/ui/section-header";
 import {
   Ship,
-  ShipWheel,
   Radio,
   ChevronLeft,
   ChevronRight,
@@ -28,7 +27,6 @@ interface NavItem {
 
 const FLEET_NAV: NavItem[] = [
   { href: "/fleet", label: "Fleet", icon: Ship },
-  { href: "/convoys", label: "Convoys", icon: ShipWheel },
 ];
 
 const ACTIVITY_NAV: NavItem[] = [

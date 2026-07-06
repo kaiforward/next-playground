@@ -1,9 +1,9 @@
 /**
  * Pure ship factory — creates ship data objects from ship type definitions.
- * Used by registration, shipyard, and seed to ensure consistent ship creation.
+ * Used by registration and seed to ensure consistent ship creation.
  */
 
-import type { ShipTypeDefinition, UpgradeSlotType, SlotLayout } from "@/lib/constants/ships";
+import type { ShipTypeDefinition } from "@/lib/constants/ships";
 
 export interface ShipCreateData {
   name: string;
@@ -22,11 +22,6 @@ export interface ShipCreateData {
   sensors: number;
   crewCapacity: number;
   status: "docked";
-}
-
-export interface UpgradeSlotCreateData {
-  slotType: string;
-  slotIndex: number;
 }
 
 /**
@@ -52,22 +47,4 @@ export function buildShipData(def: ShipTypeDefinition, name: string): ShipCreate
     crewCapacity: def.crewCapacity,
     status: "docked",
   };
-}
-
-/**
- * Build the upgrade slot create data from a slot layout.
- * Returns an array of { slotType, slotIndex } for Prisma createMany.
- */
-export function buildUpgradeSlots(layout: SlotLayout): UpgradeSlotCreateData[] {
-  const slots: UpgradeSlotCreateData[] = [];
-  const slotTypes: UpgradeSlotType[] = ["engine", "cargo", "defence", "systems"];
-
-  for (const slotType of slotTypes) {
-    const count = layout[slotType];
-    for (let i = 0; i < count; i++) {
-      slots.push({ slotType, slotIndex: i });
-    }
-  }
-
-  return slots;
 }

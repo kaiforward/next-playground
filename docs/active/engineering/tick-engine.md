@@ -36,7 +36,7 @@ Events ────────────────────────�
 
 | Processor | Frequency | Dependencies | What It Does |
 |---|---|---|---|
-| Ship Arrivals | Every tick | None | Lands ships that have reached their arrival tick. Runs 5-stage cargo danger pipeline (hazard, tax, contraband, loss, hull/shield damage). Notifies players of arrivals and losses |
+| Ship Arrivals | Every tick | None | Docks ships that have reached their arrival tick (status → docked, destination/arrival columns cleared) and emits per-player `shipArrived` events |
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
 | Economy | Every tick | Events | Processes ~`total/ECONOMY_UPDATE_INTERVAL` systems each tick (sorted by id via `shardRange`), so every system refreshes every `ECONOMY_UPDATE_INTERVAL` (24) ticks at any scale. Applies event modifiers and government effects to each market's stock; applies strike suppression to production (derived from last tick's `unrest`). Applied rates × `catchUpFactor` (= 1 at the reference interval). Records per-system satisfaction (`delivered / demanded`) into `ctx.results` for the population processor |
 | Trade Flow | Every tick (fixed-interval edge shard) | Economy | Simulates inter-system goods flow over the **intra-faction** edge graph (region lines ignored, faction borders closed), distance-attenuated by fuel cost. Each tick processes `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` over the stable edge order — full sweep takes `ECONOMY_UPDATE_INTERVAL` ticks at any scale. Per-edge amount × `catchUpFactor`. Mutates stock at both endpoints, appends flow events, increments per-system volume. Recent player trade volume throttles edge budget toward zero (per-edge displacement). See [trade-simulation.md](../gameplay/trade-simulation.md) |
@@ -58,7 +58,7 @@ After all processors complete, results are broadcast to connected clients via Se
 
 ### Two Event Scopes
 - **Global events**: Broadcast to every connected client (economy ticks, event notifications)
-- **Player-scoped events**: Sent only to the specific player (ship arrivals, cargo losses)
+- **Player-scoped events**: Sent only to the specific player (ship arrivals)
 
 ### Client Integration
 - Clients connect to SSE endpoint on page load
@@ -97,5 +97,5 @@ The economy, trade-flow, and migration processors all run every tick but each on
 
 - **Economy**: Economy processor is the core simulation driver, processing markets with event modifiers (see [economy.md](../gameplay/economy.md))
 - **Events**: Events processor manages lifecycle, must run before economy so modifiers are current (see [events.md](../gameplay/events.md))
-- **Navigation**: Ship arrivals processor handles transit completion and cargo danger (see [navigation.md](../gameplay/navigation.md))
+- **Navigation**: Ship arrivals processor handles transit completion (see [navigation.md](../gameplay/navigation.md))
 - **Relations**: Relations processor (every 3 ticks) drifts inter-faction scores and spawns relation events; runs after events so its drift drivers and threshold spawns see the current event state (see [faction-system.md](../gameplay/faction-system.md))

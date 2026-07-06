@@ -46,8 +46,7 @@ export const FLEET_DOTS = {
 // Colours/sizes are the binding values from the v2 mockup
 // (docs/design/planned/ship-map-ux/mockup.html).
 export const FLEET = {
-  pillFill: 0x38bdf8,     // sky-400 — solo ship pill body (docked + in-transit)
-  convoyFill: 0xd06a42,   // copper accent — convoy pill body (contrasts with ship blue)
+  pillFill: 0x38bdf8,     // sky-400 — ship pill body (docked + in-transit)
   pillContent: 0x0a1018,  // near-black — ship glyph drawn on the pill
   pillCorner: 2,          // matches the price-heatmap badge corner
   markerHeight: 18,       // pill height (world units, before counter-scale)

@@ -88,7 +88,7 @@ Each system renders as a layered glyph with a fixed radial budget so indicators 
 
 | Corner | Channel | Content |
 |---|---|---|
-| Top-left | Fleet | docked ships (blue) + convoys (copper), stacked, with counts |
+| Top-left | Fleet | docked ships (blue) with count |
 | Top-right | Price | signed % deviation from base price (ramp-tinted, matches halo) |
 | Bottom-right | Events | dominant event icon + count, bordered by the event's colour |
 | Bottom-left | *reserved* | future channel |
@@ -97,11 +97,11 @@ Pills are deliberately **rounded** — Pixi aliases sharp corners and tiny text 
 
 ### Fleet on the Map
 
-The player's own fleet is always legible, in a consistent fleet visual language (blue solo ships, copper convoys) kept distinct from event / economy / price cues:
+The player's own fleet is always legible, in a consistent fleet visual language (blue ships) kept distinct from event / economy / price cues:
 
-- **Docked ships** show as top-left count pills on the system glyph — blue for solo ships, copper for convoys, stacked when both are present.
-- **In-transit ships** show as always-visible directional markers that move smoothly along their route between ticks (a chevron points toward the destination). Convoys render as a single marker; markers that overlap on screen cluster into one pill with a count.
-- **Routes on demand** (progressive disclosure): hovering a marker shows a ghost route + ETA tooltip; clicking it draws the solid animated route and opens a compact transit card (destination, cargo, ETA); a "Ship Routes" overlay can draw every in-transit route at once.
+- **Docked ships** show as a top-left count pill on the system glyph.
+- **In-transit ships** show as always-visible directional markers that move smoothly along their route between ticks (a chevron points toward the destination). Markers that overlap on screen cluster into one pill with a count.
+- **Routes on demand** (progressive disclosure): hovering a marker shows a ghost route + ETA tooltip; clicking it draws the solid animated route and opens a compact transit card (destination, ETA); a "Ship Routes" overlay can draw every in-transit route at once.
 
 In-transit markers are the player's own ships, so they stay visible even across unexplored systems.
 

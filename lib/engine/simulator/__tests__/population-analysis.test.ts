@@ -65,7 +65,7 @@ describe("detectPingPong", () => {
 function infraSys(id: string, buildings: Record<string, number>, popCap: number): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1",
-    governmentType: "frontier", population: 50, popCap, traits: [], bodyDanger: 0,
+    governmentType: "frontier", population: 50, popCap, traits: [],
     unrest: 0, buildings, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }

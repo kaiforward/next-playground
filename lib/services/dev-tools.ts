@@ -180,46 +180,6 @@ export async function teleportShip(
   return { ok: true, data: { shipId, systemId } };
 }
 
-// ── Set cargo ───────────────────────────────────────────────────
-
-export async function setShipCargo(
-  shipId: string,
-  cargo: { goodId: string; quantity: number }[],
-): Promise<ServiceResult<{ shipId: string; cargoCount: number }>> {
-  const ship = await prisma.ship.findUnique({ where: { id: shipId } });
-  if (!ship) {
-    return { ok: false, error: `Ship not found: ${shipId}` };
-  }
-
-  // Resolve good names to IDs
-  const goods = await prisma.good.findMany();
-  const goodByName = new Map(goods.map((g) => [g.name.toLowerCase(), g.id]));
-  const goodById = new Set(goods.map((g) => g.id));
-
-  await prisma.$transaction(async (tx) => {
-    // Clear existing cargo
-    await tx.cargoItem.deleteMany({ where: { shipId } });
-
-    // Create new cargo entries
-    for (const item of cargo) {
-      // Accept either good ID or good key name
-      let resolvedGoodId = item.goodId;
-      if (!goodById.has(resolvedGoodId)) {
-        const byName = goodByName.get(resolvedGoodId.toLowerCase());
-        if (byName) resolvedGoodId = byName;
-      }
-
-      if (item.quantity > 0) {
-        await tx.cargoItem.create({
-          data: { shipId, goodId: resolvedGoodId, quantity: item.quantity },
-        });
-      }
-    }
-  });
-
-  return { ok: true, data: { shipId, cargoCount: cargo.length } };
-}
-
 // ── Economy snapshot ────────────────────────────────────────────
 
 export interface EconomySnapshotSystem {

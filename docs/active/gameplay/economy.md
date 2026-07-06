@@ -157,9 +157,8 @@ All 8 government types are implemented. Every type has trade-offs — buffs bala
 ### Government Effects on Gameplay
 - **Volatility modifier**: Scales price-noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
 - **Spread modifier** (`equilibriumSpreadPct`): Scales the **bid-ask half-spread** `s` — the gap between buy and sell price. Frontier widens it (+20% → bigger round-trip cost / wider quotes), authoritarian tightens it (-15%). Replaces the legacy supply/demand-band spread now that there is a single stock value.
-- **Tax rate**: Fraction of taxed goods seized on arrival (import duty).
-- **Danger baseline**: Added to all event-based danger. Frontier adds 10% base cargo loss risk.
-- **Contraband**: Goods inspected and confiscated if caught. Inspection chance varies by government (0% frontier to 37.5% authoritarian).
+- **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
+- **Tax rate / contraband lists**: Data retained on government definitions; inert since the arrival pipeline was cut (war-era candidates).
 - **Consumption boosts**: Extra consumption per tick for specific goods (e.g., authoritarian +1 weapons consumption) — drains stock faster, raising price.
 
 ---
@@ -334,40 +333,16 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                growth/decline, migration, demandRate rewrite
 3  Disruptions (events)        shocks + modifiers temporarily change how
                                layer 2 behaves
-4  Player agency (real-time)   trading on the edge-flow background
 ```
 
 Edge-flow mechanics are detailed in [trade-simulation.md](./trade-simulation.md); this is just where it sits in the tick.
 
 ---
 
-## Ship Prices & Progression
-
-Ship prices are calibrated relative to trade margins to create a multi-stage progression:
-
-| Ship | Price | Cargo | Role |
-|---|---|---|---|
-| Shuttle | 0 (starter) | 50 | Early T0 trading |
-| Light Freighter | 25,000 | 80 | Upgraded T0/early T1 |
-| Scout Skiff | 20,000 | 10 | Exploration |
-| Interceptor | 35,000 | 15 | Combat |
-| Bulk Freighter | 120,000 | 200 | Serious T1/T2 hauling |
-| Corvette | 150,000 | 40 | Combat + opportunistic trade |
-| Blockade Runner | 175,000 | 60 | Smuggling |
-| Survey Vessel | 90,000 | 50 | Support |
-| Heavy Freighter | 350,000 | 400 | Endgame hauling |
-| Frigate | 450,000 | 30 | Fleet escort |
-| Stealth Transport | 400,000 | 150 | Covert hauling |
-| Command Vessel | 500,000 | 80 | Endgame support |
-
-With T0 margins of ~5cr/unit and 50 cargo, a shuttle earns a few hundred cr/trip. Mixing in T1/T2 goods as capital grows shortens the climb to the next ship significantly.
-
----
-
 ## System Interactions
 
 - **Events** inject economic shocks — one-time stock jolts (immediate stock deltas), rate multipliers (production/consumption scale), and **anchor shifts** (the sustained price lever: multiply a good's per-system pricing reference for the event's duration, raising or lowering where "mid price = base price" sits). Anchor shifts and stock shocks are distinct: a shock moves stock immediately; an anchor shift changes *what price a given stock level reads as* for as long as the event is active. Both are live every tick across all read paths (market display, trade-flow gradient). (see [events.md](./events.md))
-- **Navigation danger** is partly driven by government danger baseline — affects cargo loss on arrival (see [navigation.md](./navigation.md))
+- **Navigation danger** is partly driven by government danger baseline — a readout-only world attribute since the teardown (see [navigation.md](./navigation.md))
 - **Faction system** (planned) will add faction-specific economic modifiers and war-driven market disruption (see [faction-system.md](./faction-system.md))
 
 ---

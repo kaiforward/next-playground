@@ -1,9 +1,7 @@
-import type { ShipState, ConvoyState, UpgradeSlotState } from "@/lib/types/game";
-import { toShipStatus, toEconomyType, toShipSize, toShipRole, toUpgradeSlotType, toConvoyStatus, toModuleId } from "@/lib/types/guards";
+import type { ShipState } from "@/lib/types/game";
+import { toShipStatus, toEconomyType, toShipSize, toShipRole } from "@/lib/types/guards";
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import { isShipTypeId } from "@/lib/types/guards";
-import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
-import { getInstalledModules } from "@/lib/utils/ship";
 
 // ── System serialization helper ──────────────────────────────────
 
@@ -64,19 +62,6 @@ export function serializeShip(ship: {
   arrivalTick: number | null;
   system: RawSystem;
   destination: RawSystem | null;
-  cargo: Array<{
-    goodId: string;
-    quantity: number;
-    good: { name: string };
-  }>;
-  upgradeSlots?: Array<{
-    id: string;
-    slotType: string;
-    slotIndex: number;
-    moduleId: string | null;
-    moduleTier: number | null;
-  }>;
-  convoyMember?: { convoyId: string } | null;
 }): ShipState {
   const shipType = ship.shipType;
   const typeDef = isShipTypeId(shipType) ? SHIP_TYPES[shipType] : null;
@@ -108,65 +93,5 @@ export function serializeShip(ship: {
     destinationSystem: ship.destination ? serializeSystem(ship.destination) : null,
     departureTick: ship.departureTick,
     arrivalTick: ship.arrivalTick,
-    cargo: ship.cargo.map((c) => ({
-      goodId: c.goodId,
-      goodName: c.good.name,
-      quantity: c.quantity,
-    })),
-    upgradeSlots: (ship.upgradeSlots ?? []).map((s): UpgradeSlotState => ({
-      id: s.id,
-      slotType: toUpgradeSlotType(s.slotType),
-      slotIndex: s.slotIndex,
-      moduleId: s.moduleId ? toModuleId(s.moduleId) : null,
-      moduleTier: s.moduleTier,
-    })),
-    convoyId: ship.convoyMember?.convoyId ?? null,
-  };
-}
-
-// ── Convoy serialization ─────────────────────────────────────────
-
-/**
- * Serialize a Prisma convoy record into a ConvoyState.
- */
-export function serializeConvoy(convoy: {
-  id: string;
-  playerId: string;
-  name: string | null;
-  systemId: string;
-  status: string;
-  destinationSystemId: string | null;
-  departureTick: number | null;
-  arrivalTick: number | null;
-  system: RawSystem;
-  destination: RawSystem | null;
-  members: Array<{
-    ship: Parameters<typeof serializeShip>[0];
-  }>;
-}): ConvoyState {
-  const members = convoy.members.map((m) => serializeShip(m.ship));
-  const combinedCargoMax = members.reduce((sum, s) => {
-    const bonuses = computeUpgradeBonuses(getInstalledModules(s.upgradeSlots));
-    return sum + s.cargoMax + bonuses.cargoBonus;
-  }, 0);
-  const combinedCargoUsed = members.reduce(
-    (sum, s) => sum + s.cargo.reduce((cs, c) => cs + c.quantity, 0),
-    0,
-  );
-
-  return {
-    id: convoy.id,
-    playerId: convoy.playerId,
-    name: convoy.name,
-    systemId: convoy.systemId,
-    system: serializeSystem(convoy.system),
-    status: toConvoyStatus(convoy.status),
-    destinationSystemId: convoy.destinationSystemId,
-    destinationSystem: convoy.destination ? serializeSystem(convoy.destination) : null,
-    departureTick: convoy.departureTick,
-    arrivalTick: convoy.arrivalTick,
-    members,
-    combinedCargoMax,
-    combinedCargoUsed,
   };
 }

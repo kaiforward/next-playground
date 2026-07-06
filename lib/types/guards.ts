@@ -14,13 +14,10 @@ import type {
   QualityTier,
   ShipStatus,
   TraitId,
-  ConvoyStatus,
-  Hazard,
   SunClass,
   BodyArchetypeId,
 } from "./game";
-import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
-import { MODULES, type ModuleId } from "@/lib/constants/modules";
+import type { ShipTypeId, ShipSize, ShipRole } from "@/lib/constants/ships";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import type { UniverseScale } from "@/lib/constants/universe-gen";
 import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
@@ -81,14 +78,6 @@ const SHIP_SIZES: ReadonlySet<string> = new Set<ShipSize>([
 
 const SHIP_ROLES: ReadonlySet<string> = new Set<ShipRole>([
   "trade", "combat", "scout", "stealth", "support",
-]);
-
-const UPGRADE_SLOT_TYPES: ReadonlySet<string> = new Set<UpgradeSlotType>([
-  "engine", "cargo", "defence", "systems",
-]);
-
-const CONVOY_STATUSES: ReadonlySet<string> = new Set<ConvoyStatus>([
-  "docked", "in_transit",
 ]);
 
 // ── Validated converters ────────────────────────────────────────
@@ -170,46 +159,6 @@ export function toShipRole(value: string): ShipRole {
     throw new Error(`Invalid ship role: "${value}"`);
   }
   return value as ShipRole;
-}
-
-export function toUpgradeSlotType(value: string): UpgradeSlotType {
-  if (!UPGRADE_SLOT_TYPES.has(value)) {
-    throw new Error(`Invalid upgrade slot type: "${value}"`);
-  }
-  return value as UpgradeSlotType;
-}
-
-export function toConvoyStatus(value: string): ConvoyStatus {
-  if (!CONVOY_STATUSES.has(value)) {
-    throw new Error(`Invalid convoy status: "${value}"`);
-  }
-  return value as ConvoyStatus;
-}
-
-// ── Additional guards (modules) ─────────────────────────────────
-
-const MODULE_IDS: ReadonlySet<string> = new Set(Object.keys(MODULES));
-
-const HAZARD_VALUES: ReadonlySet<string> = new Set<Hazard>([
-  "none", "low", "high",
-]);
-
-export function isModuleId(value: string): value is ModuleId {
-  return MODULE_IDS.has(value);
-}
-
-export function toModuleId(value: string): ModuleId {
-  if (!MODULE_IDS.has(value)) {
-    throw new Error(`Invalid module id: "${value}"`);
-  }
-  return value as ModuleId;
-}
-
-export function toHazard(value: string): Hazard {
-  if (!HAZARD_VALUES.has(value)) {
-    throw new Error(`Invalid hazard level: "${value}"`);
-  }
-  return value as Hazard;
 }
 
 export function isEventTypeId(value: string): value is EventTypeId {

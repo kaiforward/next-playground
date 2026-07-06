@@ -77,13 +77,9 @@ async function main() {
   await prisma.tradeFlow.deleteMany();
   await prisma.eventModifier.deleteMany();
   await prisma.gameEvent.deleteMany();
-  await prisma.cargoItem.deleteMany();
-  await prisma.convoyMember.deleteMany();
-  await prisma.shipUpgradeSlot.deleteMany();
   await prisma.stationMarket.deleteMany();
   await prisma.systemConnection.deleteMany();
   await prisma.ship.deleteMany();
-  await prisma.convoy.deleteMany();
   await prisma.player.deleteMany();
   // Clear auth tables so re-registration works after reseed
   await prisma.session.deleteMany();

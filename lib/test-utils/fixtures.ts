@@ -58,17 +58,6 @@ export interface TestShipOpts {
   disabled?: boolean;
 }
 
-export interface TestConvoyOpts {
-  playerId: string;
-  systemId: string;
-  shipIds: string[];
-  name?: string;
-  status?: "docked" | "in_transit";
-  destinationSystemId?: string | null;
-  departureTick?: number | null;
-  arrivalTick?: number | null;
-}
-
 // ── Seed test universe ───────────────────────────────────────────
 
 let seedCounter = 0;
@@ -392,26 +381,4 @@ export async function createTestShip(
   });
 
   return ship.id;
-}
-
-export async function createTestConvoy(
-  prisma: PrismaClient,
-  opts: TestConvoyOpts,
-): Promise<string> {
-  const convoy = await prisma.convoy.create({
-    data: {
-      playerId: opts.playerId,
-      systemId: opts.systemId,
-      name: opts.name ?? "Test Convoy",
-      status: opts.status ?? "docked",
-      destinationSystemId: opts.destinationSystemId ?? null,
-      departureTick: opts.departureTick ?? null,
-      arrivalTick: opts.arrivalTick ?? null,
-      members: {
-        create: opts.shipIds.map((shipId) => ({ shipId })),
-      },
-    },
-  });
-
-  return convoy.id;
 }

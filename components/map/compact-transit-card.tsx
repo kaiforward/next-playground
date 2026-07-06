@@ -2,7 +2,6 @@
 
 import type { TransitUnit } from "@/lib/hooks/use-map-data";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
 export interface CompactTransitCardProps {
@@ -22,7 +21,6 @@ export function CompactTransitCard({ unit, etaTicks, onClose }: CompactTransitCa
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-sm font-semibold text-text-primary truncate">{unit.name}</span>
-          {unit.kind === "convoy" && <Badge color="cyan">{unit.memberCount} ships</Badge>}
         </div>
         <Button
           type="button"
@@ -40,14 +38,10 @@ export function CompactTransitCard({ unit, etaTicks, onClose }: CompactTransitCa
         <dd className="font-mono text-text-secondary text-right truncate">{unit.destinationName}</dd>
         <dt className="text-text-tertiary">ETA</dt>
         <dd className="font-mono text-text-accent text-right">{etaTicks} {etaTicks === 1 ? "tick" : "ticks"}</dd>
-        <dt className="text-text-tertiary">Cargo</dt>
-        <dd className="font-mono text-text-secondary text-right">{unit.cargoUsed}/{unit.cargoMax}</dd>
       </dl>
-      {unit.kind === "ship" && (
-        <Button href={`/ship/${unit.id}`} variant="ghost" size="xs" fullWidth>
-          Ship details
-        </Button>
-      )}
+      <Button href={`/ship/${unit.id}`} variant="ghost" size="xs" fullWidth>
+        Ship details
+      </Button>
     </Card>
   );
 }

@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useFleet } from "@/lib/hooks/use-fleet";
-import { useConvoys } from "@/lib/hooks/use-convoy";
 
 /* ------------------------------------------------------------------ */
 /*  Breadcrumb data resolution                                        */
@@ -18,12 +17,10 @@ const SEGMENT_LABELS: Record<string, string> = {
   map: "Star Map",
   cantina: "Cantina",
   fleet: "Fleet",
-  convoys: "Convoys",
   events: "Events",
   battles: "Battles",
   market: "Market",
   trade: "Trade",
-  shipyard: "Shipyard",
   missions: "Missions",
 };
 
@@ -32,7 +29,7 @@ interface Crumb {
   href?: string;
 }
 
-/** Resolve system/ship/convoy names from hooks. */
+/** Resolve system/ship names from hooks. */
 function useBreadcrumbNames() {
   const { data: universe } = useUniverse();
   const systemMap = useMemo(() => new Map(universe.systems.map((s) => [s.id, s.name])), [universe.systems]);
@@ -40,15 +37,12 @@ function useBreadcrumbNames() {
   const { fleet } = useFleet();
   const shipMap = useMemo(() => new Map(fleet.ships.map((s) => [s.id, s.name])), [fleet.ships]);
 
-  const { convoys } = useConvoys();
-  const convoyMap = useMemo(() => new Map(convoys.map((c) => [c.id, c.name])), [convoys]);
-
-  return { systemMap, shipMap, convoyMap };
+  return { systemMap, shipMap };
 }
 
 function BreadcrumbsInner() {
   const pathname = usePathname();
-  const { systemMap, shipMap, convoyMap } = useBreadcrumbNames();
+  const { systemMap, shipMap } = useBreadcrumbNames();
 
   const segments = pathname.split("/").filter(Boolean);
   const crumbs: Crumb[] = [];
@@ -63,13 +57,11 @@ function BreadcrumbsInner() {
       crumbs.push({ label: systemMap.get(seg) ?? seg, href });
     } else if (prev === "ship") {
       crumbs.push({ label: shipMap.get(seg) ?? seg, href });
-    } else if (prev === "convoy") {
-      crumbs.push({ label: convoyMap.get(seg) ?? seg, href });
     } else if (SEGMENT_LABELS[seg]) {
       crumbs.push({ label: SEGMENT_LABELS[seg], href });
     } else {
       // Skip pure ID segments that were already handled
-      if (["system", "ship", "convoy"].includes(seg)) continue;
+      if (["system", "ship"].includes(seg)) continue;
       crumbs.push({ label: seg, href });
     }
   }

@@ -69,7 +69,7 @@ Events apply modifiers that alter market behavior and navigation danger.
 The anchor for each good is stored as `StationMarket.anchorMult` (default `1`). The economy processor recomputes it every tick from the system's active anchor-shift modifiers (same writer/cadence as `stock`) and writes it alongside stock. Reads are pure: price, trade limits, and trade-flow calculations all derive `targetStock = getTargetStock(good) × anchorMult`. Modifiers are aggregated per system: anchor shifts multiply together, rate multipliers multiply together. Caps: anchor multiplier [0.1, 4.0], rate multiplier [0.1, 3.0].
 
 ### Navigation Modifiers
-Danger level modifiers increase cargo loss risk on ship arrival. Applied as equilibrium shift on `danger_level` parameter. Stacks with government danger baseline.
+Danger level modifiers raise the system's danger as world state (`danger_level` parameter). Nothing consumes them mechanically since the arrival pipeline was cut — kept for the overview readout and the future war layer.
 
 ### Shocks
 One-time market jolts applied when a phase starts. Directly modify supply or demand at the system (e.g., Plague Outbreak: -30 food supply instantly). Not repeated — only fire once per phase transition.
@@ -102,6 +102,6 @@ One-time market jolts applied when a phase starts. Directly modify supply or dem
 ## System Interactions
 
 - **Economy**: Events apply modifiers that shift the pricing anchor (`anchor_shift`) and multiply production/consumption rates (`rate_multiplier`); shocks deliver one-time stock jolts (see [economy.md](./economy.md))
-- **Navigation**: Danger modifiers increase cargo loss on arrival (see [navigation.md](./navigation.md))
+- **Navigation**: Danger modifiers exist as world state; only the overview danger readout consumes them (see [navigation.md](./navigation.md))
 - **Tick engine**: Events processor runs every tick, before economy processor (see [tick-engine.md](../engineering/tick-engine.md))
 - **Faction relations**: the relations processor spawns border-conflict, pact-negotiation, and alliance-dissolution events (see [faction-system.md](./faction-system.md)); full faction wars are planned (see [war-system.md](../../planned/war-system.md))

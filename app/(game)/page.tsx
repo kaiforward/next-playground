@@ -7,7 +7,6 @@ import { useAtlas } from "@/lib/hooks/use-atlas";
 import { useFleet } from "@/lib/hooks/use-fleet";
 
 import { useNavigateMutation } from "@/lib/hooks/use-navigate-mutation";
-import { useConvoys, useConvoyNavigateByIdMutation } from "@/lib/hooks/use-convoy";
 import { useEvents } from "@/lib/hooks/use-events";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -16,18 +15,14 @@ import { LoadingFallback } from "@/components/ui/loading-fallback";
 
 function MapContent({
   initialShipId,
-  initialConvoyId,
   initialSystemId,
 }: {
   initialShipId?: string;
-  initialConvoyId?: string;
   initialSystemId?: string;
 }) {
   const { atlas } = useAtlas();
   const { fleet } = useFleet();
   const { mutateAsync: navigateAsync } = useNavigateMutation();
-  const { convoys } = useConvoys();
-  const convoyNavigate = useConvoyNavigateByIdMutation();
   const { events } = useEvents();
   const [navError, setNavError] = useState<string | null>(null);
 
@@ -43,18 +38,6 @@ function MapContent({
     [navigateAsync],
   );
 
-  const handleNavigateConvoy = useCallback(
-    async (convoyId: string, route: string[]) => {
-      setNavError(null);
-      try {
-        await convoyNavigate.mutateAsync({ convoyId, route });
-      } catch (err) {
-        setNavError(err instanceof Error ? err.message : "Convoy navigation failed.");
-      }
-    },
-    [convoyNavigate],
-  );
-
   return (
     <div className="h-[calc(100vh-var(--topbar-height))] w-full relative">
       {navError && (
@@ -66,11 +49,8 @@ function MapContent({
       <StarMap
         atlas={atlas}
         ships={fleet.ships}
-        convoys={convoys}
         onNavigateShip={handleNavigateShip}
-        onNavigateConvoy={handleNavigateConvoy}
         initialSelectedShipId={initialShipId}
-        initialSelectedConvoyId={initialConvoyId}
         initialSelectedSystemId={initialSystemId}
         events={events}
       />
@@ -81,7 +61,6 @@ function MapContent({
 export default function MapPage() {
   const searchParams = useSearchParams();
   const initialShipId = searchParams.get("navigateShipId") ?? undefined;
-  const initialConvoyId = searchParams.get("navigateConvoyId") ?? undefined;
   const initialSystemId = searchParams.get("systemId") ?? undefined;
 
   return (
@@ -95,7 +74,6 @@ export default function MapPage() {
     >
       <MapContent
         initialShipId={initialShipId}
-        initialConvoyId={initialConvoyId}
         initialSystemId={initialSystemId}
       />
     </QueryBoundary>

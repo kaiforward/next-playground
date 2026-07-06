@@ -91,7 +91,6 @@ model Player {
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   ships     Ship[]
-  convoys   Convoy[]
   npcVisits NpcVisit[]
 }
 
@@ -125,66 +124,8 @@ model Ship {
   player       Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
   system       StarSystem        @relation("ShipCurrentSystem", fields: [systemId], references: [id])
   destination  StarSystem?       @relation("ShipDestination", fields: [destinationSystemId], references: [id])
-  cargo        CargoItem[]
-  upgradeSlots ShipUpgradeSlot[]
-  convoyMember ConvoyMember?
 
   @@index([playerId])
-}
-
-model ShipUpgradeSlot {
-  id         String  @id @default(cuid())
-  shipId     String
-  slotType   String // "engine" | "cargo" | "defence" | "systems"
-  slotIndex  Int // 0-based index within slotType
-  moduleId   String? // null = empty slot
-  moduleTier Int? // null = empty slot
-
-  ship Ship @relation(fields: [shipId], references: [id], onDelete: Cascade)
-
-  @@unique([shipId, slotType, slotIndex])
-  @@index([shipId])
-}
-
-model Convoy {
-  id                  String   @id @default(cuid())
-  playerId            String
-  name                String?
-  systemId            String
-  status              String   @default("docked") // "docked" | "in_transit"
-  destinationSystemId String?
-  departureTick       Int?
-  arrivalTick         Int?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  player      Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  system      StarSystem     @relation("ConvoyCurrentSystem", fields: [systemId], references: [id])
-  destination StarSystem?    @relation("ConvoyDestination", fields: [destinationSystemId], references: [id])
-  members     ConvoyMember[]
-
-  @@index([playerId])
-}
-
-model ConvoyMember {
-  id       String @id @default(cuid())
-  convoyId String
-  shipId   String @unique // a ship can only be in one convoy
-
-  convoy Convoy @relation(fields: [convoyId], references: [id], onDelete: Cascade)
-  ship   Ship   @relation(fields: [shipId], references: [id], onDelete: Cascade)
-}
-
-model CargoItem {
-  id       String @id @default(cuid())
-  shipId   String
-  goodId   String
-  quantity Int
-
-  ship Ship @relation(fields: [shipId], references: [id], onDelete: Cascade)
-  good Good @relation(fields: [goodId], references: [id])
-
-  @@unique([shipId, goodId])
 }
 
 model StarSystem {
@@ -231,8 +172,6 @@ model StarSystem {
   buildings         SystemBuilding[]
   ships             Ship[]             @relation("ShipCurrentSystem")
   incomingShips     Ship[]             @relation("ShipDestination")
-  convoys           Convoy[]           @relation("ConvoyCurrentSystem")
-  incomingConvoys   Convoy[]           @relation("ConvoyDestination")
   connectionsFrom   SystemConnection[] @relation("FromSystem")
   connectionsTo     SystemConnection[] @relation("ToSystem")
   events            GameEvent[]
@@ -330,7 +269,6 @@ model Good {
   priceFloor   Float  @default(0.2)
   priceCeiling Float  @default(5.0)
 
-  cargoItems    CargoItem[]
   markets       StationMarket[]
 }
 
