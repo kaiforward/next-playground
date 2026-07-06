@@ -12,13 +12,13 @@ These events are live in `lib/constants/events.ts`.
 
 Target: Industrial, tech, extraction, core systems. Multi-phase arc with spread.
 
-| Phase | Duration | Economy Modifiers | Navigation | Spread |
-|-------|----------|-------------------|------------|--------|
-| **Tensions** | 30-60 | Fuel demand up (x1.4), machinery demand up (x1.5) | — | — |
-| **Escalation** | 20-40 | Fuel demand up (x1.8), machinery demand up (x1.8), production x0.5 | Danger 0.08 | — |
-| **Active Conflict** | 80-150 | Fuel demand up (x2.5), machinery demand up (x2.0), production x0.2 | Danger 0.2 | conflict_spillover |
-| **Aftermath** | 50-100 | Electronics demand up (x1.8), food demand up (x1.6), production x0.5 | Danger 0.05 | — |
-| **Recovery** | 40-80 | Electronics demand up (x1.2), food demand up (x1.15) | — | — |
+| Phase | Duration | Economy Modifiers | Spread |
+|-------|----------|-------------------|--------|
+| **Tensions** | 30-60 | Fuel demand up (x1.4), machinery demand up (x1.5) | — |
+| **Escalation** | 20-40 | Fuel demand up (x1.8), machinery demand up (x1.8), production x0.5 | — |
+| **Active Conflict** | 80-150 | Fuel demand up (x2.5), machinery demand up (x2.0), production x0.2 | conflict_spillover |
+| **Aftermath** | 50-100 | Electronics demand up (x1.8), food demand up (x1.6), production x0.5 | — |
+| **Recovery** | 40-80 | Electronics demand up (x1.2), food demand up (x1.15) | — |
 
 Player opportunity: Stockpile machinery during tensions, sell during active conflict. Deliver food/electronics during aftermath.
 
@@ -26,12 +26,12 @@ Player opportunity: Stockpile machinery during tensions, sell during active conf
 
 Target: Agricultural systems. Multi-phase arc with spread.
 
-| Phase | Duration | Economy Modifiers | Navigation | Spread |
-|-------|----------|-------------------|------------|--------|
-| **Outbreak** | 20-40 | Food production x0.15, food supply shock -80% | — | — |
-| **Spreading** | 40-80 | Food production x0.1, medicine demand up (x2.0) | Danger 0.05 | plague_risk |
-| **Containment** | 30-60 | Food production x0.4, medicine demand up (x1.6) | — | — |
-| **Recovery** | 40-60 | Food production x0.7 | — | — |
+| Phase | Duration | Economy Modifiers | Spread |
+|-------|----------|-------------------|--------|
+| **Outbreak** | 20-40 | Food production x0.15, food supply shock -80% | — |
+| **Spreading** | 40-80 | Food production x0.1, medicine demand up (x2.0) | plague_risk |
+| **Containment** | 30-60 | Food production x0.4, medicine demand up (x1.6) | — |
+| **Recovery** | 40-60 | Food production x0.7 | — |
 
 Player opportunity: Rush food imports. Sell medicine. Secondary profit at neighbouring agricultural systems.
 
@@ -72,23 +72,23 @@ Player opportunity: Deliver goods (especially food and fuel) for premium prices.
 
 Target: Any system. Two-phase arc. Weight 8, cooldown 80.
 
-| Phase | Duration | Economy Modifiers | Navigation |
-|-------|----------|-------------------|------------|
-| **Raiding** | 40-80 | All-goods anchor up (x1.67), weapons demand up (x2.0), electronics supply shock -25% | Danger 0.2 |
-| **Crackdown** | 20-40 | Machinery demand up (x1.6) | Danger 0.05 |
+| Phase | Duration | Economy Modifiers |
+|-------|----------|-------------------|
+| **Raiding** | 40-80 | All-goods anchor up (x1.67), weapons demand up (x2.0), electronics supply shock -25% |
+| **Crackdown** | 20-40 | Machinery demand up (x1.6) |
 
-Player opportunity: Avoid the system during raiding (or risk cargo loss for discounted goods). Supply machinery during crackdown.
+Player opportunity: Buy discounted goods during raiding. Supply machinery during crackdown.
 
 ### Solar Storm
 
 Target: Any system. Short, intense two-phase event. Weight 6, cooldown 40.
 
-| Phase | Duration | Economy Modifiers | Navigation |
-|-------|----------|-------------------|------------|
-| **Storm** | 15-30 | All production x0.05, electronics supply shock -50% | Danger 0.3 |
-| **Clearing** | 10-20 | All production x0.3 | — |
+| Phase | Duration | Economy Modifiers |
+|-------|----------|-------------------|
+| **Storm** | 15-30 | All production x0.05, electronics supply shock -50% |
+| **Clearing** | 10-20 | All production x0.3 |
 
-Player opportunity: Avoid during storm, rush in during clearing to buy goods at disrupted prices before production recovers.
+Player opportunity: Rush in during clearing to buy goods at disrupted prices before production recovers.
 
 ### Conflict Spillover (child event)
 
@@ -106,11 +106,11 @@ Spawned by Mining Boom spread. Reduced severity (0.4x). Ore supply surplus depre
 
 Target: Core, agricultural systems. Multi-phase arc with spread. Weight 8, cooldown 100.
 
-| Phase | Duration | Economy Modifiers | Navigation | Spread |
-|-------|----------|-------------------|------------|--------|
-| **Influx** | 20-40 | Food demand up (x1.6), medicine demand up (x1.4), food supply shock -30% | — | — |
-| **Overcrowding** | 40-80 | Food demand up (x2.0), medicine demand up (x1.8), production x0.7 | Danger 0.08 | plague_risk in region |
-| **Settlement** | 30-60 | Food demand up (x1.3), medicine demand up (x1.15) | — | — |
+| Phase | Duration | Economy Modifiers | Spread |
+|-------|----------|-------------------|--------|
+| **Influx** | 20-40 | Food demand up (x1.6), medicine demand up (x1.4), food supply shock -30% | — |
+| **Overcrowding** | 40-80 | Food demand up (x2.0), medicine demand up (x1.8), production x0.7 | plague_risk in region |
+| **Settlement** | 30-60 | Food demand up (x1.3), medicine demand up (x1.15) | — |
 
 Player opportunity: Rush food and medicine imports during influx/overcrowding. High demand creates premium prices. Watch for plague spreading to agricultural neighbors.
 
@@ -142,10 +142,10 @@ Player opportunity: Buy cheap electronics during innovation phase, sell to syste
 
 Target: Extraction systems. Multi-phase arc. Weight 5, cooldown 80.
 
-| Phase | Duration | Economy Modifiers | Navigation |
-|-------|----------|-------------------|------------|
-| **Impact** | 10-20 | All production x0.05, ore supply shock -70%, fuel supply shock -50% | Danger 0.25 |
-| **Aftermath** | 40-80 | All production x0.3, machinery demand up (x1.8) | — |
-| **Recovery** | 30-60 | All production x0.7 | — |
+| Phase | Duration | Economy Modifiers |
+|-------|----------|-------------------|
+| **Impact** | 10-20 | All production x0.05, ore supply shock -70%, fuel supply shock -50% |
+| **Aftermath** | 40-80 | All production x0.3, machinery demand up (x1.8) |
+| **Recovery** | 30-60 | All production x0.7 |
 
-Player opportunity: Avoid during impact (extreme danger). Deliver machinery during aftermath for high rewards. Salvage and recon missions spawn here.
+Player opportunity: Deliver machinery during aftermath for high rewards.

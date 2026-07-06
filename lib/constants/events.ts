@@ -28,12 +28,12 @@ export type EventTypeId =
 // ── Type interfaces ─────────────────────────────────────────────
 
 export interface ModifierTemplate {
-  domain: "economy" | "navigation";
+  domain: "economy";
   type: "equilibrium_shift" | "anchor_shift" | "rate_multiplier";
   target: "system" | "region";
   goodId?: string | null;
-  parameter: string; // "target_stock" (anchor_shift), "production_rate"/"consumption_rate" (rate_multiplier), "danger_level" (equilibrium_shift/navigation)
-  value: number;     // Multiplier (anchor_shift, rate_multiplier) or additive (navigation danger_level)
+  parameter: string; // "target_stock" (anchor_shift), "production_rate"/"consumption_rate" (rate_multiplier)
+  value: number;     // Multiplier on the modified parameter
 }
 
 export interface ShockTemplate {
@@ -108,7 +108,7 @@ export const MODIFIER_CAPS = {
 } as const;
 
 // ── Event definitions ───────────────────────────────────────────
-// NOTE: anchor_shift values are MULTIPLIERS on a good's pricing anchor (1.0 = no change, 2.0 = double = pricier, 0.5 = half = cheaper). danger_level values remain additive.
+// NOTE: anchor_shift values are MULTIPLIERS on a good's pricing anchor (1.0 = no change, 2.0 = double = pricier, 0.5 = half = cheaper).
 
 const innerSystemConflict: EventDefinition = {
   type: "inner_system_conflict",
@@ -138,7 +138,6 @@ const innerSystemConflict: EventDefinition = {
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "fuel", parameter: "target_stock", value: 1.8 },
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.8 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.5 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.08 },
       ],
     },
     {
@@ -150,7 +149,6 @@ const innerSystemConflict: EventDefinition = {
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "fuel", parameter: "target_stock", value: 2.5 },
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 2.0 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.2 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.2 },
       ],
       shocks: [
         { target: "system", goodId: "fuel", parameter: "supply", value: -0.3, mode: "percentage" },
@@ -169,7 +167,6 @@ const innerSystemConflict: EventDefinition = {
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "electronics", parameter: "target_stock", value: 1.8 },
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 1.6 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.5 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
       ],
     },
     {
@@ -214,7 +211,6 @@ const plague: EventDefinition = {
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: "food", parameter: "production_rate", value: 0.1 },
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 2.0 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
       ],
       shocks: [
         { target: "system", goodId: "food", parameter: "supply", value: -0.5, mode: "percentage" },
@@ -290,7 +286,6 @@ const conflictSpillover: EventDefinition = {
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "fuel", parameter: "target_stock", value: 1.4 },
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.3 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.8 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.08 },
       ],
     },
   ],
@@ -439,7 +434,6 @@ const pirateRaid: EventDefinition = {
       modifiers: [
         { domain: "economy", type: "anchor_shift", target: "system", goodId: null, parameter: "target_stock", value: 1.67 },
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "weapons", parameter: "target_stock", value: 2.0 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.2 },
       ],
       shocks: [
         { target: "system", goodId: "electronics", parameter: "supply", value: -0.25, mode: "percentage" },
@@ -452,7 +446,6 @@ const pirateRaid: EventDefinition = {
       notification: "Crackdown on pirates near {systemName}. Machinery needed for repairs.",
       modifiers: [
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "machinery", parameter: "target_stock", value: 1.6 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
       ],
     },
   ],
@@ -473,7 +466,6 @@ const solarStorm: EventDefinition = {
       notification: "Solar storm hits {systemName}! Production halted, navigation extremely dangerous.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.05 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.3 },
       ],
       shocks: [
         { target: "system", goodId: "electronics", parameter: "supply", value: -0.5, mode: "percentage" },
@@ -524,7 +516,6 @@ const refugeeCrisis: EventDefinition = {
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "food", parameter: "target_stock", value: 2.0 },
         { domain: "economy", type: "anchor_shift", target: "system", goodId: "medicine", parameter: "target_stock", value: 1.8 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.7 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.08 },
       ],
       spread: [
         {
@@ -653,7 +644,6 @@ const asteroidStrike: EventDefinition = {
       notification: "Asteroid strike at {systemName}! Production halted, massive damage.",
       modifiers: [
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.05 },
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.25 },
       ],
       shocks: [
         { target: "system", goodId: "ore", parameter: "supply", value: -0.7, mode: "percentage" },
@@ -693,7 +683,7 @@ const asteroidStrike: EventDefinition = {
 const borderConflict: EventDefinition = {
   type: "border_conflict",
   name: "Border Conflict",
-  description: "Skirmishes erupt along a contested faction border, raising danger and disrupting production.",
+  description: "Skirmishes erupt along a contested faction border, disrupting production.",
   cooldown: 60,
   maxActive: 100,
   weight: 0, // Never spawned randomly — only by the relations processor.
@@ -702,16 +692,13 @@ const borderConflict: EventDefinition = {
       name: "tension",
       displayName: "Border Tension",
       durationRange: [15, 25],
-      modifiers: [
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.05 },
-      ],
+      modifiers: [],
     },
     {
       name: "skirmish",
       displayName: "Skirmish",
       durationRange: [25, 35],
       modifiers: [
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.10 },
         { domain: "economy", type: "rate_multiplier", target: "system", goodId: null, parameter: "production_rate", value: 0.9 },
       ],
     },
@@ -719,9 +706,7 @@ const borderConflict: EventDefinition = {
       name: "de_escalation",
       displayName: "De-escalation",
       durationRange: [10, 20],
-      modifiers: [
-        { domain: "navigation", type: "equilibrium_shift", target: "system", parameter: "danger_level", value: 0.02 },
-      ],
+      modifiers: [],
     },
   ],
 };

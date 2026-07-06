@@ -49,7 +49,16 @@ Ordered so each sweep deletes leaf-ward first and the shared-plumbing edits land
 ### Sweep 4 — Explore/cantina + shell cleanup
 
 - **Explore/cantina**: `NpcVisit` model; `lib/services/cantina.ts`; `app/api/game/cantina/**`; `components/cantina/*`, `components/ui/suit-badge.tsx`; pages `@panel/system/[systemId]/explore/**`; hooks `use-cantina`, `use-voids-gambit`; `lib/engine/cantina/*`; constants `cantina-npcs.ts`, `locations.ts` (`deriveSystemLocations`), `lib/types/cantina.ts`. **Keep parked**: `lib/engine/mini-games/voids-gambit/**` + tests.
-- **Shell**: final pass over `SYSTEM_TABS` (Market/Overview/Astrography/Population/Industry/Logistics survive), `game-sidebar.tsx` (Events/Factions/Diplomacy/Tick survive), `top-bar.tsx` `SEGMENT_LABELS`, map `system-detail-panel` buttons, `lib/query/keys.ts`, `lib/types/api.ts`/`game.ts` dead types, orphan `components/dashboard/player-summary.tsx`, `lib/auth/serialize.ts#serializeShip` consumers check.
+- **Shell**: final pass over `SYSTEM_TABS` (Market/Overview/Astrography/Population/Industry/Logistics survive), `game-sidebar.tsx` (Events/Factions/Diplomacy/Tick survive), `top-bar.tsx` `SEGMENT_LABELS` (dead `battles`/`missions`/`trade` entries), map `system-detail-panel` buttons, `lib/query/keys.ts`, `lib/types/api.ts`/`game.ts` dead types, orphan `components/dashboard/player-summary.tsx`, `lib/auth/serialize.ts#serializeShip` consumers check.
+- **Sweep-3 residue** (deferred orphans found during the S3 build + review):
+  - `lib/services/pagination.ts` + test and `components/ui/load-more-footer.tsx` (caller-less since S2)
+  - Caller-less `components/fleet/selected-ship-card.tsx` + `ship-picker-list.tsx`; stale price-snapshots mention in `lib/constants/tick-cadence.ts:3`
+  - Pixi `SystemNodeData.shipCount`/`dockedShipCount` now-identical pair in `lib/hooks/use-map-data.ts` — collapse to one field and update `system-object.ts`/`pixi-map-canvas.tsx` consumers
+  - `GovernmentDefinition.taxed`/`.contraband`/`.taxRate`/`.inspectionModifier` — consumer-less since `danger.ts` deletion (only a shape test reads them); drop the fields + test assertions, or annotate as war-layer survivals
+  - `GoodDefinition.hazard` + the `Hazard` type — consumer-less since `rollHazardIncidents` deletion; drop or leave for a cargo-risk rework (but don't mistake for a live mechanic)
+  - `ShipState.cargoMax` serialized but read by nothing live — drop from `ShipState`/serialize or add to the ship-roster "inert until war" stat list
+  - Ship combat columns (hull/shield/firepower/evasion/stealth/disabled) now frozen at creation defaults while ship-card/ship-detail-panel display them — confirm the "inert until war" display is wanted, or hide the stats until war
+  - `relationLoadStrategy: "join"` in `lib/tick/adapters/prisma/ship-arrivals.ts` guards a single remaining relation — drop or comment why it stays
 - **Docs**: SPEC.md final prune (Explore/cantina was never active-specced; verify no `[PENDING:]` stragglers; update tick-engine doc to the surviving processor list) + delete this build plan on merge.
 
 ## Tick pipeline after teardown
