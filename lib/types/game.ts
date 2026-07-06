@@ -119,7 +119,6 @@ export type FactionStatus = "dominant" | "major" | "regional" | "minor";
 
 export type GoodTier = 0 | 1 | 2;
 
-
 export interface RegionInfo {
   id: string;
   name: string;
