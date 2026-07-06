@@ -64,18 +64,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create user, player, and starter ship in a transaction. Also bootstrap
-    // a zero-score reputation row for every known faction so the reputation
-    // panel renders a complete row set from tick zero. The faction list and
-    // the user creation share one transaction so a faction added between
-    // the two operations can't slip past unbootstrapped.
+    // Create user, player, and starter ship in a transaction.
     const shuttleDef = SHIP_TYPES.shuttle;
     const shipData = buildShipData(shuttleDef, "Starter Ship");
     const slotData = buildUpgradeSlots(shuttleDef.slotLayout);
 
     const user = await prisma.$transaction(
       async (tx) => {
-        const factions = await tx.faction.findMany({ select: { id: true } });
         return tx.user.create({
           data: {
             name,
@@ -90,13 +85,6 @@ export async function POST(request: Request) {
                     systemId: startingSystem.id,
                     upgradeSlots: { create: slotData },
                   },
-                },
-                factionReputations: {
-                  create: factions.map((f) => ({
-                    factionId: f.id,
-                    score: 0,
-                    updatedAtTick: 0,
-                  })),
                 },
               },
             },

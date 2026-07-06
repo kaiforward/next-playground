@@ -169,9 +169,7 @@ async function runScenario(
     gradientThreshold: 0.05,
     gradientSensitivity: 1.0,
     flowHistoryTicks: 200,
-    playerDisplacementFactor: 2.0,
     distanceDecay: 0,
-    playerVolumeTarget: DEFAULT_SIM_CONSTANTS.tradeFlow.playerVolumeTarget,
   };
 
   for (let t = 1; t <= tickCount; t++) {

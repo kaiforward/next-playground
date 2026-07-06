@@ -32,9 +32,8 @@ export function curveForGoodRow(
 
 /**
  * Build a display MarketEntry from a market row's stock + good. The single-unit
- * buy/sell prices use the bid-ask spread for the system's government; the
- * integrated-slippage total for a real trade is computed separately in
- * executeTrade. `stock` is floored so the player never sees fractional goods.
+ * buy/sell prices use the bid-ask spread for the system's government.
+ * `stock` is floored so the player never sees fractional goods.
  *
  * `demandRate` is the market row's stored days-of-supply denominator; `anchorMult`
  * its stored anchor-shift multiplier (default 1). The resulting `targetStock` is

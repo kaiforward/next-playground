@@ -10,19 +10,12 @@ import { TrendIcon } from "@/components/ui/trend-icon";
 
 interface MarketTableProps {
   entries: MarketEntry[];
-  onSelectGood: (goodId: string) => void;
-  selectedGoodId?: string;
-  /** Quantity of each good the player currently owns, keyed by goodId. */
-  cargoByGoodId?: Map<string, number>;
   /** When provided, renders a per-row Compare action that opens a cross-system comparison. */
   onCompareGood?: (goodId: string, goodName: string) => void;
 }
 
 export function MarketTable({
   entries,
-  onSelectGood,
-  selectedGoodId,
-  cargoByGoodId,
   onCompareGood,
 }: MarketTableProps) {
   const columns: Column<MarketEntry>[] = [
@@ -35,20 +28,6 @@ export function MarketTable({
         <span className="font-medium text-text-primary">{row.goodName}</span>
       ),
     },
-    ...(cargoByGoodId
-      ? [
-          {
-            key: "owned",
-            label: "Owned",
-            render: (row: MarketEntry) => {
-              const qty = cargoByGoodId.get(row.goodId) ?? 0;
-              return qty > 0
-                ? <span className="text-text-primary font-medium">{qty}</span>
-                : <span className="text-text-tertiary">0</span>;
-            },
-          },
-        ]
-      : []),
     {
       key: "basePrice",
       label: "Base Price",
@@ -128,10 +107,6 @@ export function MarketTable({
       columns={columns}
       data={entries}
       getKey={(row) => row.goodId}
-      onRowClick={(row) => onSelectGood(row.goodId)}
-      rowClassName={(row) =>
-        row.goodId === selectedGoodId ? "bg-surface-active" : ""
-      }
     />
   );
 }

@@ -118,13 +118,6 @@ export type Doctrine =
 
 export type FactionStatus = "dominant" | "major" | "regional" | "minor";
 
-export type ReputationStanding =
-  | "champion"
-  | "trusted"
-  | "neutral"
-  | "distrusted"
-  | "hostile";
-
 export type GoodTier = 0 | 1 | 2;
 
 export type Hazard = "none" | "low" | "high";
@@ -170,8 +163,6 @@ export interface DynamicTileSystem {
   hasPlayerShips: boolean;
   danger: number;
 }
-
-export type TradeType = "buy" | "sell";
 
 export type ShipStatus = "docked" | "in_transit";
 
@@ -339,17 +330,6 @@ export interface MarketComparisonEntry {
   stock: number;
 }
 
-export interface TradeHistoryEntry {
-  id: string;
-  stationId: string;
-  goodId: string;
-  goodName: string;
-  price: number;
-  quantity: number;
-  type: TradeType;
-  createdAt: string;
-}
-
 /** Per-system unrest reading for the stability choropleth overlay. */
 export interface StabilityEntry {
   systemId: string;
@@ -418,47 +398,3 @@ export interface ActiveEvent {
   severity: number;
 }
 
-// ── Price history types ─────────────────────────────────────────
-
-export interface PriceSnapshotPoint {
-  tick: number;
-  price: number;
-}
-
-export interface SystemPriceHistory {
-  goodId: string;
-  goodName: string;
-  points: PriceSnapshotPoint[];
-}
-
-// ── Notification types ──────────────────────────────────────────
-
-export type NotificationType =
-  | "ship_arrived"
-  | "ship_damaged"
-  | "ship_disabled"
-  | "mission_completed"
-  | "mission_expired"
-  | "battle_round"
-  | "battle_won"
-  | "battle_lost"
-  | "cargo_lost"
-  | "hazard_incident"
-  | "import_duty"
-  | "contraband_seized";
-
-export interface EntityRef {
-  id: string;
-  label: string;
-}
-
-/** Server-persisted notification (returned from API). */
-export interface PlayerNotificationInfo {
-  id: string;
-  type: NotificationType;
-  message: string;
-  refs: Partial<Record<string, EntityRef>>;
-  tick: number;
-  read: boolean;
-  createdAt: string;
-}

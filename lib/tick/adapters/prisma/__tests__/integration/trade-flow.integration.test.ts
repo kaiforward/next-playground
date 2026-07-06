@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useIntegrationDb } from "@/lib/test-utils/integration";
 import { seedTestUniverse } from "@/lib/test-utils/fixtures";
 import type { TestUniverse } from "@/lib/test-utils/fixtures";
-import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 
 const { prisma } = useIntegrationDb();
 vi.mock("@/lib/prisma", () => ({ prisma }));
@@ -40,53 +39,6 @@ describe("PrismaTradeFlowWorld (integration)", () => {
     // The cross-faction agri system never appears on an open edge.
     expect(edge.aSystemId).not.toBe(universe.systems.agricultural);
     expect(edge.bSystemId).not.toBe(universe.systems.agricultural);
-  });
-
-  it("getRecentPlayerVolumeBySystem sums TradeHistory.quantity per system in SQL", async () => {
-    const foodGoodId = universe.goodIds["food"];
-    // Two recent trades at the industrial station (60 + 40) and one at tech (25).
-    // Station↔System is 1:1, so the SQL join collapses station rows onto systems.
-    await prisma.tradeHistory.createMany({
-      data: [
-        { stationId: universe.stations.industrial, goodId: foodGoodId, price: 100, quantity: 60, type: "buy" },
-        { stationId: universe.stations.industrial, goodId: foodGoodId, price: 100, quantity: 40, type: "sell" },
-        { stationId: universe.stations.tech, goodId: foodGoodId, price: 100, quantity: 25, type: "buy" },
-      ],
-    });
-
-    const volume = await prisma.$transaction((tx) =>
-      new PrismaTradeFlowWorld(tx).getRecentPlayerVolumeBySystem([
-        universe.systems.industrial,
-        universe.systems.tech,
-        universe.systems.agricultural,
-      ]),
-    );
-
-    expect(volume.get(universe.systems.industrial)).toBe(100); // 60 + 40
-    expect(volume.get(universe.systems.tech)).toBe(25);
-    // No trades at agri → absent from the map (the processor treats missing as 0).
-    expect(volume.has(universe.systems.agricultural)).toBe(false);
-  });
-
-  it("getRecentPlayerVolumeBySystem excludes trades older than the volume window", async () => {
-    const foodGoodId = universe.goodIds["food"];
-    const stale = new Date(Date.now() - TRADE_SIMULATION.PLAYER_VOLUME_WINDOW_MS - 60_000);
-    await prisma.tradeHistory.create({
-      data: {
-        stationId: universe.stations.tech,
-        goodId: foodGoodId,
-        price: 100,
-        quantity: 25,
-        type: "buy",
-        createdAt: stale,
-      },
-    });
-
-    const volume = await prisma.$transaction((tx) =>
-      new PrismaTradeFlowWorld(tx).getRecentPlayerVolumeBySystem([universe.systems.tech]),
-    );
-
-    expect(volume.has(universe.systems.tech)).toBe(false); // outside the window
   });
 
   it("invalidateAdjacencyCache clears the open-edge cache so topology changes take effect", async () => {

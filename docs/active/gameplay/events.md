@@ -102,7 +102,6 @@ One-time market jolts applied when a phase starts. Directly modify supply or dem
 ## System Interactions
 
 - **Economy**: Events apply modifiers that shift the pricing anchor (`anchor_shift`) and multiply production/consumption rates (`rate_multiplier`); shocks deliver one-time stock jolts (see [economy.md](./economy.md))
-- **Trade missions**: Event-linked missions spawn with thematic goods and 1.5x reward bonus (see [trading.md](./trading.md))
 - **Navigation**: Danger modifiers increase cargo loss on arrival (see [navigation.md](./navigation.md))
 - **Tick engine**: Events processor runs every tick, before economy processor (see [tick-engine.md](../engineering/tick-engine.md))
 - **Faction relations**: the relations processor spawns border-conflict, pact-negotiation, and alliance-dissolution events (see [faction-system.md](./faction-system.md)); full faction wars are planned (see [war-system.md](../../planned/war-system.md))

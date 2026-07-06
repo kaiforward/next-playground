@@ -44,7 +44,6 @@ For processors that shard by system (economy, mission generation), the shard sel
 
 | Processor | World interface | Prisma adapter | Memory adapter |
 |---|---|---|---|
-| price-snapshots | ✓ | ✓ | ✓ |
 | events | ✓ | ✓ | ✓ |
 | economy | ✓ | ✓ | ✓ |
 | relations | ✓ | ✓ | ✓ |

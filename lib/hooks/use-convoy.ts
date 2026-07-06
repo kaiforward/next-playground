@@ -4,8 +4,7 @@ import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { apiFetch, apiMutate, apiDelete } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
 import type { ConvoyState } from "@/lib/types/game";
-import type { CreateConvoyResult, ConvoyNavigateRequest, ConvoyRepairResult, ConvoyRefuelResult, ConvoyTradeResult, ShipTradeRequest } from "@/lib/types/api";
-import type { MarketEntry, TradeType } from "@/lib/types/game";
+import type { CreateConvoyResult, ConvoyNavigateRequest, ConvoyRepairResult, ConvoyRefuelResult } from "@/lib/types/api";
 
 export function useConvoys() {
   const { data } = useSuspenseQuery({
@@ -178,55 +177,3 @@ export function useConvoyRefuelMutation(convoyId: string) {
   });
 }
 
-interface ConvoyTradeRequest {
-  goodId: string;
-  quantity: number;
-  type: TradeType;
-}
-
-export function useConvoyTradeMutation({
-  convoyId,
-  stationId,
-  systemId,
-}: {
-  convoyId: string | null;
-  stationId: string | null;
-  systemId: string | null;
-}) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (request: ConvoyTradeRequest) => {
-      if (!convoyId || !stationId) throw new Error("Missing convoyId or stationId");
-      return apiMutate<ConvoyTradeResult>(
-        `/api/game/convoy/${convoyId}/trade`,
-        { ...request, stationId } satisfies ShipTradeRequest,
-      );
-    },
-    onSuccess: (data) => {
-      // Instant UI update: patch the market cache with the updated entry
-      if (systemId && data.updatedMarket) {
-        queryClient.setQueryData(
-          queryKeys.market(systemId),
-          (old: { stationId: string; entries: MarketEntry[] } | undefined) => {
-            if (!old) return old;
-            return {
-              ...old,
-              entries: old.entries.map((e) =>
-                e.goodId === data.updatedMarket.goodId
-                  ? data.updatedMarket
-                  : e,
-              ),
-            };
-          },
-        );
-      }
-
-      queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
-      queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
-      if (systemId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.tradeHistory(systemId) });
-      }
-    },
-  });
-}

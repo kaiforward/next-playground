@@ -68,8 +68,6 @@ export async function runTradeFlowProcessor(
     goods.add(s.goodId);
   }
 
-  const playerVol = await world.getRecentPlayerVolumeBySystem(sliceSystems);
-
   const flowEvents: FlowEventInsert[] = [];
   const updatesByMarketId = new Map<string, MarketUpdate>();
 
@@ -109,13 +107,7 @@ export async function runTradeFlowProcessor(
     const mTo = marketByKey.get(`${toSystemId}|${bestGoodId}`);
     if (!mFrom || !mTo) continue;
 
-    // Per-edge player displacement from endpoint volumes (replaces per-region throttle).
-    const edgeVolume =
-      (playerVol.get(edge.aSystemId) ?? 0) + (playerVol.get(edge.bSystemId) ?? 0);
-    const pressure =
-      params.playerVolumeTarget > 0 ? edgeVolume / params.playerVolumeTarget : 0;
-    const displacement = Math.max(0, Math.min(1, pressure * params.playerDisplacementFactor));
-    const edgeBudget = params.flowBudget * (1 - displacement);
+    const edgeBudget = params.flowBudget;
     if (edgeBudget < 1) continue;
 
     // Distance attenuation (1 when distanceDecay = 0).
@@ -173,8 +165,6 @@ export const tradeFlowProcessor: TickProcessor = {
       gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
       gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
       flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
-      playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
-      playerVolumeTarget: TRADE_SIMULATION.PLAYER_VOLUME_TARGET,
       distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
     });
   },

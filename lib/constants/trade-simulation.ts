@@ -32,22 +32,6 @@ export const TRADE_SIMULATION = {
   GRADIENT_SENSITIVITY: 1.0,
   /** Window (in ticks) for flow history retention and route inference. */
   FLOW_HISTORY_TICKS: 200,
-  /**
-   * Per-system target trade volume that normalizes player-displacement pressure
-   * (`edgeVolume / PLAYER_VOLUME_TARGET`). A throttle constant for NPC flow — was
-   * `PROSPERITY_TARGET_VOLUME`, kept after prosperity's retirement (unrelated to it).
-   */
-  PLAYER_VOLUME_TARGET: 50,
-  /**
-   * Player activity fully displaces edge flow at this multiple of
-   * PLAYER_VOLUME_TARGET.
-   */
-  PLAYER_DISPLACEMENT_FACTOR: 2.0,
-  /**
-   * Wall-clock window (ms) for "recent" player trade volume used to throttle
-   * flow. Sliding window over `TradeHistory.createdAt`.
-   */
-  PLAYER_VOLUME_WINDOW_MS: 60_000,
   /** Minimum cumulative flow on an edge to count toward route inference. */
   ROUTE_INFERENCE_FLOOR: 5,
   /**

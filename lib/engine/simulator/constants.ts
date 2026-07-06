@@ -70,8 +70,6 @@ export interface SimConstants {
     gradientThreshold: number;
     gradientSensitivity: number;
     flowHistoryTicks: number;
-    playerDisplacementFactor: number;
-    playerVolumeTarget: number;
   };
   population: {
     unrest: { gain: number; decay: number };
@@ -191,8 +189,6 @@ function buildDefaults(): SimConstants {
       gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
       gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
       flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
-      playerDisplacementFactor: TRADE_SIMULATION.PLAYER_DISPLACEMENT_FACTOR,
-      playerVolumeTarget: TRADE_SIMULATION.PLAYER_VOLUME_TARGET,
     },
     population: {
       unrest: { ...UNREST_PARAMS },

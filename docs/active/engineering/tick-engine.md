@@ -15,7 +15,7 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Processor Pipeline
 
-12 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+10 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
 
 ```
 Ship Arrivals ────────────────────────────────────────┐
@@ -26,10 +26,8 @@ Events ────────────────────────�
   │    └→ Population (depends on: economy, infra-decay)┤
   │         └→ Migration (depends on: population) ────┤
   │    └→ Directed Logistics (depends on: economy) ───┤
-  │    │    └→ Directed Build (depends on: d-logistics)┤
-  │    └→ Price Snapshots (depends on: economy) ──────┘
+  │         └→ Directed Build (depends on: d-logistics)┘
   └→ Relations (depends on: events, every 3 ticks)
-Notification Prune (independent, every 50 ticks)
 ```
 
 **Economy → Population in-memory handoff:** the economy processor records per-system satisfaction (`delivered_g / demanded_g` for each good it processes this tick) into `ctx.results` — a transient in-memory store that lives only for the duration of that tick. The population processor reads this from `ctx.results` in the same tick to compute dissatisfaction `D` and update `unrest` without an extra database round-trip. This data is never persisted or broadcast to clients.
@@ -46,8 +44,6 @@ Notification Prune (independent, every 50 ticks)
 | Population | Every tick | Economy, Infrastructure Decay | Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline against the **live** post-decay `popCap`; housing-overshoot (`population > popCap`, the unrest-snowball case) sheds the excess as unrest-weighted death (the conserved migration half rides the migration processor); rewrites `StationMarket.demandRate` for each system's new population level |
 | Migration | Every tick (fixed-interval edge shard) | Population | Relocates population (conserved) along the same intra-faction open-edge topology + fixed-interval edge shard as trade-flow; population flows down-unrest / up-headroom (`popCap − population`), distance-attenuated, per-edge amount × `catchUpFactor`. Gateways throttle migration as they do goods. Produces boom/bust geography over time |
 | Relations | Every 3 ticks | Events | Drifts every faction pair's relation score (border length, cross-faction trade, doctrine, common enemies). Spawns `border_conflict`/`pact_under_negotiation`/`alliance_dissolved` events on threshold crossings, then resolves relations-owned event windows (forms/dissolves alliances, expires events). See [faction-system.md](../gameplay/faction-system.md) |
-| Price Snapshots | Every tick | Economy | Folded onto the economy shard (`dependsOn: economy`): snapshots only the systems economy just processed, so each system is snapshotted every `ECONOMY_UPDATE_INTERVAL` (24) ticks. Retains a rolling history (max 50 snapshots per system) |
-| Notification Prune | Every 50 ticks | None | Deletes old notifications past their max age to prevent unbounded growth |
 
 ### Execution Model
 - All processors run inside a single transaction — all updates commit atomically
@@ -61,7 +57,7 @@ Notification Prune (independent, every 50 ticks)
 After all processors complete, results are broadcast to connected clients via Server-Sent Events.
 
 ### Two Event Scopes
-- **Global events**: Broadcast to every connected client (economy ticks, event notifications, price snapshots)
+- **Global events**: Broadcast to every connected client (economy ticks, event notifications)
 - **Player-scoped events**: Sent only to the specific player (ship arrivals, cargo losses)
 
 ### Client Integration
@@ -74,7 +70,7 @@ After all processors complete, results are broadcast to connected clients via Se
 
 ## Shard schedule
 
-The economy, trade-flow, migration, and price-snapshot processors all run every tick but each only process a *slice* of their data — a fixed-interval shard that spreads work evenly across `ECONOMY_UPDATE_INTERVAL` (24) ticks.
+The economy, trade-flow, and migration processors all run every tick but each only process a *slice* of their data — a fixed-interval shard that spreads work evenly across `ECONOMY_UPDATE_INTERVAL` (24) ticks.
 
 **Scale-invariant by design.** The shard is decoupled from the region/territory concept — regions are *only* territory now (faction borders, names, gateway rendering). Under the old region round-robin, economy advanced once every `regionCount` ticks, so a 10k universe (60 regions) ran 2.5× slower per system than the 600-system default (24 regions). The fixed-interval shard pins every system to refresh every `ECONOMY_UPDATE_INTERVAL` ticks regardless of universe size.
 
@@ -85,10 +81,10 @@ The economy, trade-flow, migration, and price-snapshot processors all run every 
 | Knob | Meaning | Default |
 |---|---|---|
 | **Tick rate** | wall-clock ms per tick | 5000ms |
-| **Update interval** | game-ticks between refreshes per item | `ECONOMY_UPDATE_INTERVAL` = 24 (economy/flow/migration/snapshots) |
+| **Update interval** | game-ticks between refreshes per item | `ECONOMY_UPDATE_INTERVAL` = 24 (economy/flow/migration) |
 | **Throughput / shard size** | items processed per tick | *derived* (`total / interval`); ceiling is the perf limit |
 
-**Cross-cadence coherence.** Trade-flow and migration share the same `ECONOMY_UPDATE_INTERVAL` as economy, so production and flow advance on one unified clock at every scale. Price snapshots are folded onto the economy shard and fire immediately after economy processes each system, keeping snapshot cadence aligned.
+**Cross-cadence coherence.** Trade-flow and migration share the same `ECONOMY_UPDATE_INTERVAL` as economy, so production and flow advance on one unified clock at every scale.
 
 **Resolved design questions:**
 - *Bursty vs catch-up* — fixed interval + `catchUpFactor`; processing-everything-per-tick was ~16s/tick at 10k (3× over budget, measured).

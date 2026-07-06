@@ -66,7 +66,6 @@ const ConstantOverridesSchema = z.object({
     gradientThreshold: z.number().min(0).optional(),
     gradientSensitivity: z.number().min(0).optional(),
     flowHistoryTicks: z.number().int().min(1).optional(),
-    playerDisplacementFactor: z.number().min(0).optional(),
   }).optional(),
   bots: z.object({
     startingCredits: z.number().optional(),

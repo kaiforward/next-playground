@@ -11,15 +11,11 @@ import type {
   GovernmentType,
   Doctrine,
   FactionStatus,
-  ReputationStanding,
   QualityTier,
   ShipStatus,
-  TradeType,
   TraitId,
   ConvoyStatus,
   Hazard,
-  NotificationType,
-  EntityRef,
   SunClass,
   BodyArchetypeId,
 } from "./game";
@@ -49,10 +45,6 @@ const FACTION_STATUSES: ReadonlySet<string> = new Set<FactionStatus>([
   "dominant", "major", "regional", "minor",
 ]);
 
-const REPUTATION_STANDINGS: ReadonlySet<string> = new Set<ReputationStanding>([
-  "champion", "trusted", "neutral", "distrusted", "hostile",
-]);
-
 const QUALITY_TIERS: ReadonlySet<number> = new Set<QualityTier>([1, 2, 3]);
 
 const TRAIT_IDS: ReadonlySet<string> = new Set<TraitId>([
@@ -75,10 +67,6 @@ const TRAIT_IDS: ReadonlySet<string> = new Set<TraitId>([
 
 const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([
   "docked", "in_transit",
-]);
-
-const TRADE_TYPES: ReadonlySet<string> = new Set<TradeType>([
-  "buy", "sell",
 ]);
 
 const SHIP_TYPE_IDS: ReadonlySet<string> = new Set<ShipTypeId>([
@@ -145,13 +133,6 @@ export function toFactionStatus(value: string): FactionStatus {
   return value as FactionStatus;
 }
 
-export function toReputationStanding(value: string): ReputationStanding {
-  if (!REPUTATION_STANDINGS.has(value)) {
-    throw new Error(`Invalid reputation standing: "${value}"`);
-  }
-  return value as ReputationStanding;
-}
-
 export function toQualityTier(value: number): QualityTier {
   if (!QUALITY_TIERS.has(value)) {
     throw new Error(`Invalid quality tier: ${value}`);
@@ -171,13 +152,6 @@ export function toShipStatus(value: string): ShipStatus {
     throw new Error(`Invalid ship status: "${value}"`);
   }
   return value as ShipStatus;
-}
-
-export function toTradeType(value: string): TradeType {
-  if (!TRADE_TYPES.has(value)) {
-    throw new Error(`Invalid trade type: "${value}"`);
-  }
-  return value as TradeType;
 }
 
 export function isShipTypeId(value: string): value is ShipTypeId {
@@ -212,20 +186,12 @@ export function toConvoyStatus(value: string): ConvoyStatus {
   return value as ConvoyStatus;
 }
 
-// ── Additional guards (modules, notifications) ──────────────────
+// ── Additional guards (modules) ─────────────────────────────────
 
 const MODULE_IDS: ReadonlySet<string> = new Set(Object.keys(MODULES));
 
 const HAZARD_VALUES: ReadonlySet<string> = new Set<Hazard>([
   "none", "low", "high",
-]);
-
-const NOTIFICATION_TYPES: ReadonlySet<string> = new Set<NotificationType>([
-  "ship_arrived", "ship_damaged", "ship_disabled",
-  "mission_completed", "mission_expired",
-  "battle_round", "battle_won", "battle_lost",
-  "cargo_lost", "hazard_incident",
-  "import_duty", "contraband_seized",
 ]);
 
 export function isModuleId(value: string): value is ModuleId {
@@ -244,13 +210,6 @@ export function toHazard(value: string): Hazard {
     throw new Error(`Invalid hazard level: "${value}"`);
   }
   return value as Hazard;
-}
-
-export function toNotificationType(value: string): NotificationType {
-  if (!NOTIFICATION_TYPES.has(value)) {
-    throw new Error(`Invalid notification type: "${value}"`);
-  }
-  return value as NotificationType;
 }
 
 export function isEventTypeId(value: string): value is EventTypeId {
@@ -323,10 +282,6 @@ export const ALL_FACTION_STATUSES: readonly FactionStatus[] = [
   "dominant", "major", "regional", "minor",
 ];
 
-export const ALL_REPUTATION_STANDINGS: readonly ReputationStanding[] = [
-  "champion", "trusted", "neutral", "distrusted", "hostile",
-];
-
 export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
 
 // ── Faction status derivation (hysteresis) ───────────────────────
@@ -386,23 +341,4 @@ export function deriveFactionStatus(
   return natural;
 }
 
-// ── JSON boundary guards ────────────────────────────────────────
-
-/** Parse a JSON entity refs string into a typed record. Invalid entries are dropped. */
-export function toEntityRefs(json: string): Partial<Record<string, EntityRef>> {
-  let parsed: unknown;
-  try { parsed = JSON.parse(json); } catch { return {}; }
-  if (typeof parsed !== "object" || parsed === null) return {};
-  const result: Partial<Record<string, EntityRef>> = {};
-  for (const [key, value] of Object.entries(parsed)) {
-    if (
-      typeof value === "object" && value !== null &&
-      "id" in value && typeof value.id === "string" &&
-      "label" in value && typeof value.label === "string"
-    ) {
-      result[key] = { id: value.id, label: value.label };
-    }
-  }
-  return result;
-}
 

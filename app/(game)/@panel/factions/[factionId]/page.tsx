@@ -14,17 +14,13 @@ import { EventIcon } from "@/components/events/event-icon";
 import { FactionCard } from "@/components/factions/faction-card";
 import { FactionStatusBadge } from "@/components/factions/faction-status-badge";
 import { RelationTierBadge } from "@/components/factions/relation-tier-badge";
-import { StandingBadge } from "@/components/factions/standing-badge";
 import { useFaction } from "@/lib/hooks/use-faction";
-import { useFactionReputation } from "@/lib/hooks/use-faction-reputation";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 import type { FactionRelatedEvent } from "@/lib/services/factions";
 
 function FactionDetailContent({ factionId }: { factionId: string }) {
   const { faction } = useFaction(factionId);
-  const { reputations } = useFactionReputation();
-  const playerStanding = reputations.find((r) => r.factionId === factionId);
 
   return (
     <DetailPanel title={faction.name} size="xl" backPath="/factions">
@@ -57,17 +53,6 @@ function FactionDetailContent({ factionId }: { factionId: string }) {
                   {faction.territorySize} systems
                 </span>
               </StatRow>
-              {playerStanding && (
-                <StatRow label="Your standing">
-                  <span className="flex items-center gap-2">
-                    <span className="font-mono tabular-nums text-text-primary">
-                      {playerStanding.score >= 0 ? "+" : ""}
-                      {playerStanding.score.toFixed(1)}
-                    </span>
-                    <StandingBadge standing={playerStanding.standing} />
-                  </span>
-                </StatRow>
-              )}
             </StatList>
             <p className="mt-4 text-sm text-text-secondary leading-relaxed">
               <span className="text-text-tertiary">Doctrine — </span>
