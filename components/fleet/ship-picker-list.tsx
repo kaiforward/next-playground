@@ -62,7 +62,6 @@ export function ShipPickerList({
             >
               <span className="text-sm text-text-primary truncate flex-1">{ship.name}</span>
               <Badge color={ROLE_COLORS[ship.role] ?? "slate"}>{ship.role}</Badge>
-              <span className="text-xs text-text-secondary whitespace-nowrap">{ship.cargoMax} cargo</span>
               {showSystem && (
                 <span className="text-xs text-text-tertiary truncate max-w-24">{ship.system.name}</span>
               )}

@@ -8,7 +8,6 @@ export const queryKeys = {
   goods: ["goods"] as const,
   events: ["events"] as const,
   devEconomy: ["devEconomy"] as const,
-  convoys: ["convoys"] as const,
   // Atlas + progressive loading
   atlas: ["atlas"] as const,
   staticTile: (col: number, row: number, scale: string) => ["staticTile", col, row, scale] as const,

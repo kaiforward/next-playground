@@ -1,10 +1,9 @@
 // Shared game types — no Prisma dependency, importable everywhere
 
-import type { ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
-import type { ModuleId } from "@/lib/constants/modules";
+import type { ShipSize, ShipRole } from "@/lib/constants/ships";
 import type { EventTypeId } from "@/lib/constants/events";
 
-export type { ShipSize, ShipRole, UpgradeSlotType };
+export type { ShipSize, ShipRole };
 
 export type EconomyType =
   | "agricultural"
@@ -166,14 +165,6 @@ export interface DynamicTileSystem {
 
 export type ShipStatus = "docked" | "in_transit";
 
-export interface UpgradeSlotState {
-  id: string;
-  slotType: UpgradeSlotType;
-  slotIndex: number;
-  moduleId: ModuleId | null;
-  moduleTier: number | null;
-}
-
 export interface ShipState {
   id: string;
   name: string;
@@ -194,8 +185,6 @@ export interface ShipState {
   sensors: number;
   crewCapacity: number;
   disabled: boolean;
-  cargo: CargoItemState[];
-  upgradeSlots: UpgradeSlotState[];
   status: ShipStatus;
   systemId: string;
   system: StarSystemInfo;
@@ -203,25 +192,6 @@ export interface ShipState {
   destinationSystem: StarSystemInfo | null;
   departureTick: number | null;
   arrivalTick: number | null;
-  convoyId: string | null;
-}
-
-export type ConvoyStatus = "docked" | "in_transit";
-
-export interface ConvoyState {
-  id: string;
-  playerId: string;
-  name: string | null;
-  systemId: string;
-  system: StarSystemInfo;
-  status: ConvoyStatus;
-  destinationSystemId: string | null;
-  destinationSystem: StarSystemInfo | null;
-  departureTick: number | null;
-  arrivalTick: number | null;
-  members: ShipState[];
-  combinedCargoMax: number;
-  combinedCargoUsed: number;
 }
 
 export interface FleetState {
@@ -235,12 +205,6 @@ export interface GameWorldState {
   currentTick: number;
   tickRate: number;
   startingSystemId: string | null;
-}
-
-export interface CargoItemState {
-  goodId: string;
-  goodName: string;
-  quantity: number;
 }
 
 export interface SystemTraitInfo {

@@ -9,8 +9,6 @@ export const SYSTEM_TABS = [
   { label: "Logistics", segment: "logistics" },
   { label: "Market", segment: "market" },
   { label: "Ships", segment: "ships" },
-  { label: "Convoys", segment: "convoys" },
-  { label: "Shipyard", segment: "shipyard" },
   { label: "Explore", segment: "explore" },
 ] as const;
 

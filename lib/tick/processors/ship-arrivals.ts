@@ -1,253 +1,34 @@
-import {
-  computeSystemDanger,
-  rollCargoLoss,
-  rollHazardIncidents,
-  applyImportDuty,
-  rollContrabandInspection,
-  type CargoLossEntry,
-  type HazardIncidentEntry,
-  type ImportDutyEntry,
-  type ContrabandSeizedEntry,
-  type ShipDangerModifiers,
-} from "@/lib/engine/danger";
-import {
-  rollDamageOnArrival,
-  computeEscortProtection,
-  type DamageResult,
-} from "@/lib/engine/damage";
-import { computeUpgradeBonuses } from "@/lib/engine/upgrades";
-import { getInstalledModules } from "@/lib/utils/ship";
-import { computeTraitDanger } from "@/lib/engine/trait-gen";
-
-import { GOVERNMENT_TYPES } from "@/lib/constants/government";
-import { GOODS } from "@/lib/constants/goods";
-import { toHazard } from "@/lib/types/guards";
-import { groupModifiersByTarget } from "../helpers";
 import type {
-  TickContext,
   TickProcessor,
   TickProcessorResult,
   ShipArrivedPayload,
-  CargoLostPayload,
   PlayerEventMap,
 } from "../types";
 import { PrismaShipArrivalsWorld } from "@/lib/tick/adapters/prisma/ship-arrivals";
-import type {
-  ArrivingShipView,
-  CargoMutation,
-  ShipArrivalsWorld,
-} from "@/lib/tick/world/ship-arrivals-world";
-
-export interface ShipArrivalsProcessorParams {
-  rng: () => number;
-}
+import type { ShipArrivalsWorld } from "@/lib/tick/world/ship-arrivals-world";
 
 /**
- * Pure processor body. Depends only on `ShipArrivalsWorld` + an injected
- * RNG. Live game owns the orchestration; the simulator keeps its own ship
- * arrival path for now (see ShipArrivalsWorld doc-comment).
+ * Pure processor body. Docks ships whose arrival tick has come due and
+ * emits per-player `shipArrived` events. Live game owns the orchestration;
+ * the simulator keeps its own ship arrival path (see ShipArrivalsWorld
+ * doc-comment).
  */
 export async function runShipArrivalsProcessor(
   world: ShipArrivalsWorld,
-  ctx: TickContext,
-  params: ShipArrivalsProcessorParams,
+  ctx: { tick: number },
 ): Promise<TickProcessorResult> {
-  const { rng } = params;
   const arrivingShips = await world.getArrivingShips(ctx.tick);
   if (arrivingShips.length === 0) return {};
-
-  const destinationIds = [
-    ...new Set(
-      arrivingShips
-        .map((s) => s.destinationSystemId)
-        .filter((id): id is string => id !== null),
-    ),
-  ];
-
-  const navModifiers = await world.getNavModifiersForSystems(destinationIds);
-  const modsBySystem = groupModifiersByTarget(navModifiers);
-
-  // Group arriving ships by convoy for escort calculations.
-  const convoyShips = new Map<string, ArrivingShipView[]>();
-  for (const ship of arrivingShips) {
-    if (!ship.convoyId) continue;
-    const group = convoyShips.get(ship.convoyId) ?? [];
-    group.push(ship);
-    convoyShips.set(ship.convoyId, group);
-  }
 
   const arrived: ShipArrivedPayload[] = [];
 
   for (const ship of arrivingShips) {
     if (!ship.destinationSystemId) continue;
 
-    const bonuses = computeUpgradeBonuses(getInstalledModules(ship.upgradeSlots));
-
-    const shipMods: ShipDangerModifiers = {
-      hullStat: ship.hullMax,
-      armourBonus: bonuses.hullBonus,
-      reinforcedContainersBonus: bonuses.lossSeverityReduction,
-      stealthStat: ship.stealth,
-      hiddenCargoFraction: bonuses.hiddenCargoFraction,
-      evasionStat: ship.evasion,
-      manoeuvringBonus: bonuses.evasionBonus,
-      pointDefenceReduction: bonuses.cargoLossProbReduction,
-    };
-
-    // Dock the ship and regenerate shields.
     await world.dockShip({
       shipId: ship.id,
       destinationSystemId: ship.destinationSystemId,
-      shieldCurrent: ship.shieldMax,
     });
-
-    // Compute danger at destination.
-    const systemMods = modsBySystem.get(ship.destinationSystemId) ?? [];
-    const govDef = ship.destination?.governmentType
-      ? GOVERNMENT_TYPES[ship.destination.governmentType]
-      : undefined;
-    const govBaseline = govDef?.dangerBaseline ?? 0;
-    const traitDanger = ship.destination
-      ? computeTraitDanger(ship.destination.traits)
-      : 0;
-    const danger = computeSystemDanger(
-      systemMods,
-      govBaseline,
-      traitDanger,
-      ship.destination?.bodyDanger ?? 0,
-    );
-
-    // Mutable local cargo — each stage mutates the next stage's input.
-    const localCargo = ship.cargo.map((c) => ({
-      id: c.id,
-      goodId: c.goodId,
-      quantity: c.quantity,
-    }));
-
-    let hazardIncidents: HazardIncidentEntry[] | undefined;
-    let importDuties: ImportDutyEntry[] | undefined;
-    let contrabandSeized: ContrabandSeizedEntry[] | undefined;
-    let cargoLost: CargoLossEntry[] | undefined;
-
-    // Stage 1: hazard incidents.
-    if (localCargo.length > 0) {
-      const enriched = localCargo
-        .filter((c) => c.quantity > 0)
-        .map((c) => ({
-          goodId: c.goodId,
-          quantity: c.quantity,
-          hazard: toHazard(GOODS[c.goodId]?.hazard ?? "none"),
-        }));
-      const incidents = rollHazardIncidents(enriched, danger, rng, shipMods);
-      if (incidents.length > 0) {
-        for (const inc of incidents) {
-          const item = localCargo.find((c) => c.goodId === inc.goodId);
-          if (item) item.quantity = inc.remaining;
-        }
-        hazardIncidents = incidents;
-      }
-    }
-
-    // Stage 2: import duty.
-    if (govDef && govDef.taxed.length > 0 && govDef.taxRate > 0) {
-      const duties = applyImportDuty(
-        localCargo.filter((c) => c.quantity > 0),
-        govDef.taxed,
-        govDef.taxRate,
-      );
-      if (duties.length > 0) {
-        for (const duty of duties) {
-          const item = localCargo.find((c) => c.goodId === duty.goodId);
-          if (item) item.quantity = duty.remaining;
-        }
-        importDuties = duties;
-      }
-    }
-
-    // Stage 3: contraband inspection.
-    if (govDef && govDef.contraband.length > 0 && govDef.inspectionModifier > 0) {
-      const seized = rollContrabandInspection(
-        localCargo.filter((c) => c.quantity > 0),
-        govDef.contraband,
-        govDef.inspectionModifier,
-        rng,
-        shipMods,
-      );
-      if (seized.length > 0) {
-        for (const s of seized) {
-          const item = localCargo.find((c) => c.goodId === s.goodId);
-          if (item) item.quantity = Math.max(0, item.quantity - s.seized);
-        }
-        contrabandSeized = seized;
-      }
-    }
-
-    // Stage 4: event-based cargo loss.
-    if (danger > 0) {
-      const remaining = localCargo.filter((c) => c.quantity > 0);
-      if (remaining.length > 0) {
-        const losses = rollCargoLoss(danger, remaining, rng, shipMods);
-        if (losses.length > 0) {
-          for (const loss of losses) {
-            const item = localCargo.find((c) => c.goodId === loss.goodId);
-            if (item) item.quantity = loss.remaining;
-          }
-          cargoLost = losses;
-        }
-      }
-    }
-
-    // Stage 5: hull/shield damage.
-    let damageResult: DamageResult | undefined;
-    if (danger > 0) {
-      const convoyId = ship.convoyId;
-      let escort;
-      if (convoyId) {
-        const convoyGroup = convoyShips.get(convoyId) ?? [];
-        const escortShips = convoyGroup
-          .filter((s) => s.id !== ship.id)
-          .map((s) => ({ firepower: s.firepower }));
-        if (escortShips.length > 0) {
-          escort = computeEscortProtection(escortShips);
-        }
-      }
-
-      const dmg = rollDamageOnArrival(
-        danger,
-        ship.shieldMax,
-        ship.shieldMax, // shields regenerated on dock; damage uses pre-dock state.
-        ship.hullMax,
-        ship.hullCurrent,
-        rng,
-        escort,
-      );
-
-      if (dmg.shieldDamage > 0 || dmg.hullDamage > 0) {
-        damageResult = dmg;
-        const newHull = Math.max(0, ship.hullCurrent - dmg.hullDamage);
-
-        if (dmg.disabled) {
-          for (const item of localCargo) item.quantity = 0;
-        }
-
-        await world.applyShipDamage({
-          shipId: ship.id,
-          hullCurrent: newHull,
-          shieldCurrent: Math.max(0, ship.shieldMax - dmg.shieldDamage),
-          disabled: dmg.disabled,
-          clearCargo: dmg.disabled,
-        });
-      }
-    }
-
-    // Persist cargo changes.
-    const mutations: CargoMutation[] = [];
-    for (const item of localCargo) {
-      const original = ship.cargo.find((c) => c.goodId === item.goodId);
-      if (!original || original.quantity === item.quantity) continue;
-      mutations.push({ cargoItemId: original.id, newQuantity: item.quantity });
-    }
-    await world.applyCargoMutations(mutations);
 
     arrived.push({
       shipId: ship.id,
@@ -255,32 +36,7 @@ export async function runShipArrivalsProcessor(
       systemId: ship.destinationSystemId,
       destName: ship.destination?.name ?? "Unknown",
       playerId: ship.playerId,
-      hazardIncidents,
-      importDuties,
-      contrabandSeized,
-      cargoLost,
-      damageResult,
     });
-  }
-
-  // Convoy status updates for any convoys whose members have all arrived.
-  const convoyIds = [...new Set(
-    arrivingShips
-      .map((s) => s.convoyId)
-      .filter((id): id is string => id !== null),
-  )];
-
-  for (const convoyId of convoyIds) {
-    const inTransitCount = await world.countInTransitConvoyMembers(convoyId);
-    if (inTransitCount > 0) continue;
-
-    const firstArrived = arrived.find((a) => {
-      const ship = arrivingShips.find((s) => s.id === a.shipId);
-      return ship?.convoyId === convoyId;
-    });
-    if (!firstArrived) continue;
-
-    await world.dockConvoy(convoyId, firstArrived.systemId);
   }
 
   // Build per-player event payloads.
@@ -290,18 +46,6 @@ export async function runShipArrivalsProcessor(
     existing.shipArrived = existing.shipArrived
       ? [...existing.shipArrived, a]
       : [a];
-
-    if (a.cargoLost && a.cargoLost.length > 0) {
-      const loss: CargoLostPayload = {
-        shipId: a.shipId,
-        systemId: a.systemId,
-        losses: a.cargoLost,
-      };
-      existing.cargoLost = existing.cargoLost
-        ? [...existing.cargoLost, loss]
-        : [loss];
-    }
-
     playerEvents.set(a.playerId, existing);
   }
 
@@ -316,6 +60,6 @@ export const shipArrivalsProcessor: TickProcessor = {
 
   async process(ctx): Promise<TickProcessorResult> {
     const world = new PrismaShipArrivalsWorld(ctx.tx);
-    return runShipArrivalsProcessor(world, ctx, { rng: Math.random });
+    return runShipArrivalsProcessor(world, ctx);
   },
 };

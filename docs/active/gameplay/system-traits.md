@@ -113,17 +113,13 @@ Some features raise system danger via `dangerModifier`: dark_nebula (+0.06), sub
 
 ## 4. Interactions with other systems
 
-### Navigation & danger
+### System danger readout
 
-`computeSystemDanger` sums four terms, clamped to `[0, 0.5]`: event navigation modifiers + government baseline + **feature danger** (`computeTraitDanger` over `dangerModifier`) + **body danger** (`Σ` archetype danger baselines — volcanic worlds). See [navigation.md](./navigation.md).
+The overview danger badge sums government baseline + **feature danger** (`computeTraitDanger` over `dangerModifier`) + **body danger** (`Σ` archetype danger baselines — volcanic worlds). A world attribute only since the arrival pipeline was cut — see [navigation.md](./navigation.md).
 
 ### Exploration sites
 
 The explore screen derives sites from the substrate (`deriveSystemLocations`, `lib/constants/locations.ts`): each body archetype opens a site (planet surface / gas platform / asteroid field), resource-bearing features (geothermal vents, crystalline formations) open a mining outpost, and each feature opens its thematic site (research station, ruins expedition, salvage yard, anomaly site, smuggler's den, …).
-
-### Operational missions
-
-Feature traits gate operational mission eligibility (`lib/constants/missions.ts`): **survey** (precursor_ruins, gravitational_anomaly, exotic_matter_traces, …), **salvage** (generation_ship_wreckage, derelict_fleet, …), and **recon** (dark_nebula, pirate_stronghold, ancient_minefield, …).
 
 ### Events
 

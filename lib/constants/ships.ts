@@ -2,7 +2,6 @@
 
 export type ShipSize = "small" | "medium" | "large";
 export type ShipRole = "trade" | "combat" | "scout" | "stealth" | "support";
-export type UpgradeSlotType = "engine" | "cargo" | "defence" | "systems";
 
 /** Badge color mapping for ship roles. Used across fleet UI components. */
 export const ROLE_COLORS: Record<ShipRole, "blue" | "red" | "cyan" | "purple" | "green"> = {
@@ -12,13 +11,6 @@ export const ROLE_COLORS: Record<ShipRole, "blue" | "red" | "cyan" | "purple" | 
   stealth: "purple",
   support: "green",
 };
-
-export interface SlotLayout {
-  engine: number;
-  cargo: number;
-  defence: number;
-  systems: number;
-}
 
 export interface ShipTypeDefinition {
   id: ShipTypeId;
@@ -36,7 +28,6 @@ export interface ShipTypeDefinition {
   stealth: number;
   sensors: number;
   crewCapacity: number;
-  slotLayout: SlotLayout;
   /** Price in credits. 0 = starter only, not purchasable. */
   price: number;
 }
@@ -74,7 +65,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 3,
     sensors: 4,
     crewCapacity: 2,
-    slotLayout: { engine: 1, cargo: 1, defence: 0, systems: 0 },
     price: 0,
   },
 
@@ -94,7 +84,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 2,
     sensors: 3,
     crewCapacity: 3,
-    slotLayout: { engine: 1, cargo: 1, defence: 0, systems: 0 },
     price: 25000,
   },
 
@@ -114,7 +103,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 4,
     sensors: 5,
     crewCapacity: 2,
-    slotLayout: { engine: 1, cargo: 0, defence: 1, systems: 0 },
     price: 35000,
   },
 
@@ -134,7 +122,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 5,
     sensors: 10,
     crewCapacity: 1,
-    slotLayout: { engine: 1, cargo: 0, defence: 0, systems: 1 },
     price: 20000,
   },
 
@@ -156,7 +143,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 1,
     sensors: 3,
     crewCapacity: 6,
-    slotLayout: { engine: 1, cargo: 2, defence: 1, systems: 0 },
     price: 120000,
   },
 
@@ -176,7 +162,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 3,
     sensors: 6,
     crewCapacity: 8,
-    slotLayout: { engine: 1, cargo: 0, defence: 2, systems: 1 },
     price: 150000,
   },
 
@@ -196,7 +181,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 10,
     sensors: 5,
     crewCapacity: 4,
-    slotLayout: { engine: 1, cargo: 1, defence: 1, systems: 1 },
     price: 175000,
   },
 
@@ -216,7 +200,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 3,
     sensors: 12,
     crewCapacity: 6,
-    slotLayout: { engine: 1, cargo: 1, defence: 0, systems: 2 },
     price: 90000,
   },
 
@@ -238,7 +221,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 0,
     sensors: 3,
     crewCapacity: 10,
-    slotLayout: { engine: 1, cargo: 3, defence: 1, systems: 1 },
     price: 350000,
   },
 
@@ -258,7 +240,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 1,
     sensors: 7,
     crewCapacity: 15,
-    slotLayout: { engine: 1, cargo: 0, defence: 3, systems: 2 },
     price: 450000,
   },
 
@@ -278,7 +259,6 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 12,
     sensors: 6,
     crewCapacity: 8,
-    slotLayout: { engine: 1, cargo: 2, defence: 1, systems: 2 },
     price: 400000,
   },
 
@@ -298,20 +278,9 @@ export const SHIP_TYPES: Record<ShipTypeId, ShipTypeDefinition> = {
     stealth: 2,
     sensors: 14,
     crewCapacity: 20,
-    slotLayout: { engine: 2, cargo: 1, defence: 1, systems: 2 },
     price: 500000,
   },
 };
 
-/** Ship types available for purchase at shipyards. */
-export const PURCHASABLE_SHIP_TYPES: ShipTypeDefinition[] = Object.values(
-  SHIP_TYPES,
-).filter((t) => t.price > 0);
-
 /** Reference speed used for travel time calculations — Shuttle's speed. */
 export const REFERENCE_SPEED = SHIP_TYPES.shuttle.speed;
-
-/** Total upgrade slots for a ship type. */
-export function totalSlots(layout: SlotLayout): number {
-  return layout.engine + layout.cargo + layout.defence + layout.systems;
-}

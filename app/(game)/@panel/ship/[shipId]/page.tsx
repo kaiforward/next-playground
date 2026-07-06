@@ -4,7 +4,6 @@ import { use } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
-import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -15,12 +14,8 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
   const { fleet } = useFleet();
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
-  const { convoys } = useConvoys();
 
   const ship = fleet.ships.find((s) => s.id === shipId);
-  const shipConvoy = ship?.convoyId
-    ? convoys.find((c) => c.id === ship.convoyId)
-    : undefined;
 
   if (!ship) {
     return (
@@ -50,7 +45,6 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
         currentTick={currentTick}
         regions={universeData.regions}
         playerCredits={fleet.credits}
-        convoyName={shipConvoy?.name ?? (shipConvoy ? "Convoy" : undefined)}
       />
     </DetailPanel>
   );

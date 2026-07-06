@@ -7,17 +7,6 @@
 import { type EconomySimParams } from "@/lib/engine/tick";
 import { scaleEventCaps } from "@/lib/constants/events";
 import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
-import { GOVERNMENT_TYPES } from "@/lib/constants/government";
-import { GOODS } from "@/lib/constants/goods";
-import { computeTraitDanger } from "@/lib/engine/trait-gen";
-import { toTraitId, toQualityTier, toHazard } from "@/lib/types/guards";
-import {
-  computeSystemDanger,
-  rollCargoLoss,
-  rollHazardIncidents,
-  applyImportDuty,
-  rollContrabandInspection,
-} from "@/lib/engine/danger";
 import type { RNG } from "@/lib/engine/universe-gen";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
@@ -74,7 +63,7 @@ function resolveInjectionTarget(
 
 // ── Ship arrivals ───────────────────────────────────────────────
 
-function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
+function processSimShipArrivals(world: SimWorld): SimWorld {
   const ships = world.ships.map((ship) => {
     if (
       ship.status !== "in_transit" ||
@@ -86,77 +75,6 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
 
     const destSystemId = ship.destinationSystemId;
     if (!destSystemId) return ship;
-    let cargo = [...(ship.cargo ?? []).map((c) => ({ ...c }))];
-
-    const destSystem = world.systems.find((s) => s.id === destSystemId);
-    const govDef = destSystem
-      ? GOVERNMENT_TYPES[destSystem.governmentType]
-      : undefined;
-
-    const navMods = world.modifiers.filter(
-      (m) => m.domain === "navigation" && m.targetType === "system" && m.targetId === destSystemId,
-    );
-    const govBaseline = govDef?.dangerBaseline ?? 0;
-    const traitDanger = destSystem
-      ? computeTraitDanger(destSystem.traits.map((t) => ({
-          traitId: toTraitId(t.traitId),
-          quality: toQualityTier(t.quality),
-        })))
-      : 0;
-    const danger = computeSystemDanger(navMods, govBaseline, traitDanger, destSystem?.bodyDanger ?? 0);
-
-    // Stage 1: Hazard incidents
-    const enriched = cargo
-      .filter((c) => c.quantity > 0)
-      .map((c) => ({
-        goodId: c.goodId,
-        quantity: c.quantity,
-        hazard: toHazard(GOODS[c.goodId]?.hazard ?? "none"),
-      }));
-    const hazardLosses = rollHazardIncidents(enriched, danger, rng);
-    for (const inc of hazardLosses) {
-      const item = cargo.find((c) => c.goodId === inc.goodId);
-      if (item) item.quantity = inc.remaining;
-    }
-
-    // Stage 2: Import duty
-    if (govDef && govDef.taxed.length > 0 && govDef.taxRate > 0) {
-      const duties = applyImportDuty(
-        cargo.filter((c) => c.quantity > 0),
-        govDef.taxed,
-        govDef.taxRate,
-      );
-      for (const duty of duties) {
-        const item = cargo.find((c) => c.goodId === duty.goodId);
-        if (item) item.quantity = duty.remaining;
-      }
-    }
-
-    // Stage 3: Contraband inspection
-    if (govDef && govDef.contraband.length > 0 && govDef.inspectionModifier > 0) {
-      const seized = rollContrabandInspection(
-        cargo.filter((c) => c.quantity > 0),
-        govDef.contraband,
-        govDef.inspectionModifier,
-        rng,
-      );
-      for (const s of seized) {
-        const item = cargo.find((c) => c.goodId === s.goodId);
-        if (item) item.quantity = 0;
-      }
-    }
-
-    // Stage 4: Existing event-based danger
-    if (danger > 0) {
-      const remaining = cargo.filter((c) => c.quantity > 0);
-      const losses = rollCargoLoss(danger, remaining, rng);
-      for (const loss of losses) {
-        const item = cargo.find((c) => c.goodId === loss.goodId);
-        if (item) item.quantity = loss.remaining;
-      }
-    }
-
-    cargo = cargo.filter((c) => c.quantity > 0);
 
     return {
       ...ship,
@@ -164,7 +82,6 @@ function processSimShipArrivals(world: SimWorld, rng: RNG): SimWorld {
       systemId: destSystemId,
       destinationSystemId: null,
       arrivalTick: null,
-      cargo,
     };
   });
   return { ...world, ships };
@@ -511,7 +428,7 @@ export async function simulateWorldTick(
   ctx: SimRunContext,
 ): Promise<SimWorld> {
   let w = { ...world, tick: world.tick + 1 };
-  w = processSimShipArrivals(w, rng);
+  w = processSimShipArrivals(w);
   w = await processSimEvents(w, rng, ctx);
   const eco = await processSimEconomy(w, rng, ctx.constants);
   w = await processSimInfrastructureDecay(eco.world, eco.signals, ctx.constants);

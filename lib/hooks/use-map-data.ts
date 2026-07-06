@@ -5,7 +5,6 @@ import type {
   UniverseData,
   StarSystemInfo,
   ShipState,
-  ConvoyState,
   ActiveEvent,
   DynamicTileSystem,
   EconomyType,
@@ -41,12 +40,10 @@ export interface SystemNodeData {
    *  as a hollow marker — labelled potential, not a live economy. */
   developed: boolean;
   regionId: string;
-  /** Total docked ships incl. convoy members — used for fleet-presence checks. */
+  /** Docked ships — used for fleet-presence checks. */
   shipCount: number;
-  /** Solo docked ships (not in a convoy) — drives the blue docked pill. */
+  /** Docked ships — drives the blue docked pill. */
   dockedShipCount: number;
-  /** Docked convoys at this system — drives the copper docked pill. */
-  dockedConvoyCount: number;
   isGateway: boolean;
   visibility: SystemVisibility;
   navigationState?: NavigationNodeState;
@@ -59,7 +56,6 @@ export interface SystemNodeData {
 
 export interface TransitUnit {
   id: string;
-  kind: "ship" | "convoy";
   name: string;
   originSystemId: string;
   destinationSystemId: string;
@@ -67,9 +63,6 @@ export interface TransitUnit {
   departureTick: number;
   arrivalTick: number;
   speed: number;
-  memberCount: number;
-  cargoUsed: number;
-  cargoMax: number;
 }
 
 export interface ConnectionData {
@@ -95,7 +88,6 @@ export interface MapData {
   priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
   // Detail panel data
   shipsAtSelected: ShipState[];
-  convoysAtSelected: ConvoyState[];
   transitUnits: TransitUnit[];
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
@@ -110,7 +102,6 @@ export interface MapData {
 interface UseMapDataOptions {
   universe: UniverseData;
   ships: ShipState[];
-  convoys: ConvoyState[];
   events: ActiveEvent[];
   visibleSystemIds: Set<string>;
   dynamicSystems: DynamicTileSystem[];
@@ -147,7 +138,6 @@ function keyByCanonicalPair(
 export function useMapData({
   universe,
   ships,
-  convoys,
   events,
   visibleSystemIds,
   dynamicSystems,
@@ -172,62 +162,27 @@ export function useMapData({
     return map;
   }, [ships]);
 
-  // ── Solo docked ships per system (excludes convoy members) ────
-  const dockedSoloShips = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const ship of ships) {
-      if (ship.status === "docked" && !ship.convoyId) {
-        map.set(ship.systemId, (map.get(ship.systemId) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [ships]);
-
-  // ── Docked convoys per system ─────────────────────────────────
-  const dockedConvoys = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const convoy of convoys) {
-      if (convoy.status === "docked") {
-        map.set(convoy.systemId, (map.get(convoy.systemId) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [convoys]);
-
-  // ── Solo ships docked at selected system ──────────────────────
+  // ── Ships docked at selected system ───────────────────────────
   const shipsAtSelected = useMemo(
     () =>
       selectedSystem
         ? ships.filter(
-            (s) => s.status === "docked" && s.systemId === selectedSystem.id && !s.convoyId,
+            (s) => s.status === "docked" && s.systemId === selectedSystem.id,
           )
         : [],
     [selectedSystem, ships],
   );
 
-  // ── Convoys docked at selected system ─────────────────────────
-  const convoysAtSelected = useMemo(
-    () =>
-      selectedSystem
-        ? convoys.filter(
-            (c) => c.status === "docked" && c.systemId === selectedSystem.id,
-          )
-        : [],
-    [selectedSystem, convoys],
-  );
-
-  // ── In-transit units (solo ships + convoys) for map markers ───
+  // ── In-transit ships for map markers ──────────────────────────
   const transitUnits = useMemo((): TransitUnit[] => {
     const nameById = new Map(universe.systems.map((s) => [s.id, s.name]));
-    const sumCargo = (s: ShipState) => s.cargo.reduce((n, c) => n + c.quantity, 0);
     const out: TransitUnit[] = [];
 
     for (const ship of ships) {
-      if (ship.status !== "in_transit" || ship.convoyId) continue;
+      if (ship.status !== "in_transit") continue;
       if (!ship.destinationSystemId || ship.departureTick === null || ship.arrivalTick === null) continue;
       out.push({
         id: ship.id,
-        kind: "ship",
         name: ship.name,
         originSystemId: ship.systemId,
         destinationSystemId: ship.destinationSystemId,
@@ -235,33 +190,10 @@ export function useMapData({
         departureTick: ship.departureTick,
         arrivalTick: ship.arrivalTick,
         speed: ship.speed,
-        memberCount: 1,
-        cargoUsed: sumCargo(ship),
-        cargoMax: ship.cargoMax,
-      });
-    }
-
-    for (const convoy of convoys) {
-      if (convoy.status !== "in_transit") continue;
-      if (!convoy.destinationSystemId || convoy.departureTick === null || convoy.arrivalTick === null) continue;
-      const speed = convoy.members.length > 0 ? Math.min(...convoy.members.map((m) => m.speed)) : 1;
-      out.push({
-        id: convoy.id,
-        kind: "convoy",
-        name: convoy.name ?? "Convoy",
-        originSystemId: convoy.systemId,
-        destinationSystemId: convoy.destinationSystemId,
-        destinationName: nameById.get(convoy.destinationSystemId) ?? "Unknown",
-        departureTick: convoy.departureTick,
-        arrivalTick: convoy.arrivalTick,
-        speed,
-        memberCount: convoy.members.length,
-        cargoUsed: convoy.combinedCargoUsed,
-        cargoMax: convoy.combinedCargoMax,
       });
     }
     return out;
-  }, [ships, convoys, universe.systems]);
+  }, [ships, universe.systems]);
 
   // ── Events per system (from dynamic data) ────────────────────
   const eventsPerSystem = useMemo(() => {
@@ -292,7 +224,7 @@ export function useMapData({
     const states = new Map<string, NavigationNodeState>();
 
     if (mode.phase === "unit_selected") {
-      const originId = mode.unit.systemId;
+      const originId = mode.ship.systemId;
       for (const system of universe.systems) {
         if (system.id === originId) {
           states.set(system.id, "origin");
@@ -303,7 +235,7 @@ export function useMapData({
         }
       }
     } else if (mode.phase === "route_preview") {
-      const originId = mode.unit.systemId;
+      const originId = mode.ship.systemId;
       const destId = mode.destination.id;
       const routeSet = new Set(mode.route.path);
 
@@ -356,8 +288,7 @@ export function useMapData({
         developed: system.developed ?? true,
         regionId: system.regionId,
         shipCount: shipsAtSystem.get(system.id) ?? 0,
-        dockedShipCount: dockedSoloShips.get(system.id) ?? 0,
-        dockedConvoyCount: dockedConvoys.get(system.id) ?? 0,
+        dockedShipCount: shipsAtSystem.get(system.id) ?? 0,
         isGateway: system.isGateway,
         visibility,
         navigationState: nodeNavigationStates.get(system.id),
@@ -366,7 +297,7 @@ export function useMapData({
         priceDelta,
       };
     });
-  }, [universe.systems, shipsAtSystem, dockedSoloShips, dockedConvoys, nodeNavigationStates, eventsPerSystem, visibleSystemIds, priceHeatmap, priceMode]);
+  }, [universe.systems, shipsAtSystem, nodeNavigationStates, eventsPerSystem, visibleSystemIds, priceHeatmap, priceMode]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
@@ -454,7 +385,6 @@ export function useMapData({
     logisticsFlowEdges,
     priceHeatmap,
     shipsAtSelected,
-    convoysAtSelected,
     transitUnits,
     eventsAtSelected,
     selectedGatewayTargets,

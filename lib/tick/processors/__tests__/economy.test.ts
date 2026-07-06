@@ -60,7 +60,6 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
     population: 50,
     popCap: 1000,
     traits: [],
-    bodyDanger: 0,
     unrest,
     buildings: { food: 2 },
     yields: unitResourceVector(),
@@ -81,7 +80,6 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
     population: 1000,
     popCap: 2000,
     traits: [],
-    bodyDanger: 0,
     unrest,
     buildings: {},
     yields: unitResourceVector(),
@@ -372,7 +370,6 @@ describe("economy processor: supply-chain input-gating", () => {
         population: 65, // 2×25 (metals) + 1×15 (vocational_school) = exactly 65 → fulfillment = 1
         popCap: 200,
         traits: [],
-        bodyDanger: 0,
         unrest: 0,
         buildings: { metals: 2, vocational_school: 1 }, // smelter + academy — no ore extractor
         yields: unitResourceVector(),

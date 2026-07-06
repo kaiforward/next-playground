@@ -29,7 +29,7 @@ function sys(id: string, factionId: string | null, regionId = "r1"): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId, factionId,
     governmentType: "federation",
-    population: 1000, popCap: 2000, traits: [], bodyDanger: 0, unrest: 0, buildings: {},
+    population: 1000, popCap: 2000, traits: [], unrest: 0, buildings: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }

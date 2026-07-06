@@ -41,7 +41,7 @@ import { PrismaRelationsWorld } from "@/lib/tick/adapters/prisma/relations";
  *   4. Resolve relations-owned event windows: form/dissolve alliances and expire events.
  *
  * `border_conflict` events are owned by the events processor (multi-phase,
- * danger + production modifiers). `pact_under_negotiation` and
+ * production modifiers). `pact_under_negotiation` and
  * `alliance_dissolved` are owned by this processor (single-phase,
  * informational, expiry resolved here via metadata.expiresAtTick).
  */

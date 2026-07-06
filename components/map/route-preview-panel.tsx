@@ -2,14 +2,13 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import type { StarSystemInfo } from "@/lib/types/game";
-import type { NavigableUnit } from "@/lib/types/navigable";
+import type { StarSystemInfo, ShipState } from "@/lib/types/game";
 import type { PathResult } from "@/lib/engine/pathfinding";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { hopDuration } from "@/lib/engine/travel";
 
 interface RoutePreviewPanelProps {
-  unit: NavigableUnit;
+  ship: ShipState;
   destination: StarSystemInfo;
   route: PathResult;
   connections: ConnectionInfo[];
@@ -32,7 +31,7 @@ function hopFuel(
 }
 
 export function RoutePreviewPanel({
-  unit,
+  ship,
   destination,
   route,
   connections,
@@ -52,27 +51,23 @@ export function RoutePreviewPanel({
       from: route.path[i],
       to: route.path[i + 1],
       fuel,
-      ticks: hopDuration(fuel, unit.speed),
+      ticks: hopDuration(fuel, ship.speed),
     });
   }
-
-  const subtitle = unit.kind === "convoy"
-    ? `${unit.name} (${unit.convoy.members.length} ships)`
-    : unit.name;
 
   return (
     <Dialog
       open
       onClose={onCancel}
       className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[380px] max-w-[calc(100%-2rem)]"
-      aria-label={`Route preview: ${unit.name} to ${destination.name}`}
+      aria-label={`Route preview: ${ship.name} to ${destination.name}`}
     >
       <div className="rounded-xl border border-border bg-gray-900/95 backdrop-blur shadow-2xl">
         {/* Header */}
         <div className="px-4 py-3 border-b border-border">
           <h3 className="text-sm font-bold text-text-primary">Route Preview</h3>
           <p className="text-xs text-text-secondary mt-0.5">
-            {subtitle} &rarr; {destination.name}
+            {ship.name} &rarr; {destination.name}
           </p>
         </div>
 
@@ -120,7 +115,7 @@ export function RoutePreviewPanel({
             <div className="text-sm font-semibold text-text-primary">
               {route.totalFuelCost}
               <span className="text-text-tertiary font-normal">
-                {" "}/ {Math.round(unit.fuel)}
+                {" "}/ {Math.round(ship.fuel)}
               </span>
             </div>
           </div>

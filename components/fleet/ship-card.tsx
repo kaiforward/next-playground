@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EllipsisVertical } from "lucide-react";
 import { RefuelDialog } from "./refuel-dialog";
-import { RepairDialog } from "./repair-dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 
 interface ShipCardProps {
@@ -33,11 +32,10 @@ interface ShipCardProps {
 }
 
 export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: ShipCardProps) {
-  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, isDocked, needsFuel, isDamaged } = getShipDerivedState(ship);
+  const { fuelPercent, hullPercent, isDocked, needsFuel, isDamaged } = getShipDerivedState(ship);
 
   const detailHref = backTo ? `/ship/${ship.id}?from=${backTo}` : `/ship/${ship.id}`;
   const refuelDialog = useDialog();
-  const repairDialog = useDialog();
 
   return (
     <Card variant="bordered" padding="sm" className={ship.disabled ? "opacity-60" : undefined}>
@@ -88,13 +86,6 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
           max={ship.maxFuel}
           color={fuelPercent < 20 ? "red" : "blue"}
         />
-        <ProgressBar
-          label="Cargo"
-          value={cargoUsed}
-          max={ship.cargoMax}
-          color={cargoPercent > 80 ? "red" : "amber"}
-        />
-
         {/* Hull/Shield — only show when damaged or when hull < max */}
         {(isDamaged || ship.disabled) && (
           <ProgressBar
@@ -119,7 +110,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
                   Market
                 </Button>
               )}
-              {!ship.disabled && !ship.convoyId && (
+              {!ship.disabled && (
                 <Button
                   href={`/?navigateShipId=${ship.id}`}
                   variant="action"
@@ -146,12 +137,6 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
                 >
                   Refuel
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!isDamaged || ship.disabled || playerCredits == null}
-                  onSelect={repairDialog.onOpen}
-                >
-                  Repair
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -165,16 +150,6 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: 
           playerCredits={playerCredits}
           open={refuelDialog.open}
           onClose={refuelDialog.onClose}
-        />
-      )}
-
-      {/* Repair dialog */}
-      {isDamaged && !ship.disabled && playerCredits != null && (
-        <RepairDialog
-          ship={ship}
-          playerCredits={playerCredits}
-          open={repairDialog.open}
-          onClose={repairDialog.onClose}
         />
       )}
     </Card>

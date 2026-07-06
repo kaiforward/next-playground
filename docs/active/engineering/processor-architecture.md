@@ -48,11 +48,8 @@ For processors that shard by system (economy, mission generation), the shard sel
 | economy | ✓ | ✓ | ✓ |
 | relations | ✓ | ✓ | ✓ |
 | ship-arrivals | ✓ | ✓ | — (sim keeps its own path, see below) |
-| notification-prune | — | — | — (16-line service wrapper; abstraction not warranted) |
 
-**Sim ship-arrivals exception:** The simulator's `processSimShipArrivals` in `lib/engine/simulator/economy.ts` still owns ship arrivals in the sim path. Migrating it to the unified processor would require expanding `SimWorld` with cargo IDs, convoy membership, and upgrade slots — meaningful scope that exceeds the consistency goal of this refactor. The structural pattern is in place; future sim work can add the memory adapter when those fields land.
-
-**notification-prune:** Skipped on purpose. It calls one service function. Adding a World there would be ceremony without payoff. The rule for future processors: introduce the abstraction when there's real orchestration to share OR a sim path that needs it.
+**Sim ship-arrivals exception:** The simulator's `processSimShipArrivals` in `lib/engine/simulator/economy.ts` still owns ship arrivals in the sim path — sim ships (bot fleets) live in `SimWorld`, not behind `ShipArrivalsWorld`. Both paths are now dock-only, so the duplication is a few lines; unifying them is not worth the adapter ceremony. The rule for future processors: introduce the abstraction when there's real orchestration to share OR a sim path that needs it.
 
 ---
 

@@ -5,14 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EconomyBadge } from "@/components/ui/economy-badge";
-import type { StarSystemInfo, ShipState, ConvoyState, ActiveEvent, SystemVisibility } from "@/lib/types/game";
-import type { NavigableUnit } from "@/lib/types/navigable";
-import { shipToNavigableUnit, convoyToNavigableUnit } from "@/lib/types/navigable";
+import type { StarSystemInfo, ShipState, ActiveEvent, SystemVisibility } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
 import { SectionHeader } from "@/components/ui/section-header";
 import { CompactShipCard } from "@/components/map/compact-ship-card";
-import { CompactConvoyCard } from "@/components/map/compact-convoy-card";
 import { enrichTraits } from "@/lib/utils/traits";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 
@@ -24,15 +21,14 @@ interface GatewayTarget {
 interface SystemDetailPanelProps {
   system: StarSystemInfo | null;
   shipsHere: ShipState[];
-  convoysHere: ConvoyState[];
   regionName?: string;
   factionName?: string;
   gatewayTargetRegions?: GatewayTarget[];
   activeEvents?: ActiveEvent[];
   visibility: SystemVisibility;
   onClose: () => void;
-  /** Triggers nav-mode for the given unit (ship or convoy) without leaving the map. */
-  onNavigateUnit: (unit: NavigableUnit) => void;
+  /** Triggers nav-mode for the given ship without leaving the map. */
+  onNavigateShip: (ship: ShipState) => void;
 }
 
 const MAX_VISIBLE_PER_SECTION = 3;
@@ -40,25 +36,20 @@ const MAX_VISIBLE_PER_SECTION = 3;
 export function SystemDetailPanel({
   system,
   shipsHere,
-  convoysHere,
   regionName,
   factionName,
   gatewayTargetRegions,
   activeEvents,
   visibility,
   onClose,
-  onNavigateUnit,
+  onNavigateShip,
 }: SystemDetailPanelProps) {
   if (!system) return null;
 
-  // Only idle ships/convoys are actionable from the panel.
+  // Only idle ships are actionable from the panel.
   const idleShips = shipsHere.filter(
-    (s) => s.status === "docked" && !s.convoyId && !s.disabled,
+    (s) => s.status === "docked" && !s.disabled,
   );
-  const idleConvoys = convoysHere.filter((c) => c.status === "docked");
-
-  const visibleConvoys = idleConvoys.slice(0, MAX_VISIBLE_PER_SECTION);
-  const hiddenConvoys = idleConvoys.length - visibleConvoys.length;
 
   const visibleShips = idleShips.slice(0, MAX_VISIBLE_PER_SECTION);
   const hiddenShips = idleShips.length - visibleShips.length;
@@ -159,36 +150,6 @@ export function SystemDetailPanel({
             {/* Active events */}
             {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
 
-            {/* Convoys Here */}
-            {idleConvoys.length > 0 && (
-              <div>
-                <SectionHeader className="mb-2 flex items-center justify-between">
-                  <span>Convoys Here</span>
-                  <span className="font-normal text-text-tertiary normal-case tracking-normal">
-                    {idleConvoys.length}
-                  </span>
-                </SectionHeader>
-                <div className="flex flex-col gap-1.5">
-                  {visibleConvoys.map((c) => (
-                    <CompactConvoyCard
-                      key={c.id}
-                      convoy={c}
-                      systemId={system.id}
-                      onNavigate={(convoy) => onNavigateUnit(convoyToNavigableUnit(convoy))}
-                    />
-                  ))}
-                  {hiddenConvoys > 0 && (
-                    <Link
-                      href={`/system/${system.id}/convoys`}
-                      className="text-xs text-text-accent hover:text-accent-muted text-center py-1"
-                    >
-                      View all {idleConvoys.length} convoys &rarr;
-                    </Link>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Ships Here */}
             {idleShips.length > 0 && (
               <div>
@@ -204,7 +165,7 @@ export function SystemDetailPanel({
                       key={s.id}
                       ship={s}
                       systemId={system.id}
-                      onNavigate={(ship) => onNavigateUnit(shipToNavigableUnit(ship))}
+                      onNavigate={onNavigateShip}
                     />
                   ))}
                   {hiddenShips > 0 && (
@@ -219,7 +180,7 @@ export function SystemDetailPanel({
               </div>
             )}
 
-            {idleConvoys.length === 0 && idleShips.length === 0 && (
+            {idleShips.length === 0 && (
               <p className="text-sm text-text-tertiary">No idle ships docked here.</p>
             )}
 

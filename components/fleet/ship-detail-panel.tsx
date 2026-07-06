@@ -12,8 +12,6 @@ import { StatList, StatRow } from "@/components/ui/stat-row";
 import { useDialog } from "@/components/ui/dialog";
 import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
-import { RepairDialog } from "./repair-dialog";
-import { UpgradeSlot } from "./upgrade-slot";
 
 import { ROLE_COLORS } from "@/lib/constants/ships";
 
@@ -22,15 +20,12 @@ interface ShipDetailPanelProps {
   currentTick: number;
   regions?: RegionInfo[];
   playerCredits?: number;
-  /** When the ship is in a convoy, display name and disable Navigate. */
-  convoyName?: string;
 }
 
-export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, convoyName }: ShipDetailPanelProps) {
-  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, shieldPercent, isDocked, needsFuel, isDamaged } = getShipDerivedState(ship);
+export function ShipDetailPanel({ ship, currentTick, regions, playerCredits }: ShipDetailPanelProps) {
+  const { fuelPercent, hullPercent, shieldPercent, isDocked, needsFuel } = getShipDerivedState(ship);
 
   const refuelDialog = useDialog();
-  const repairDialog = useDialog();
 
   return (
     <div className="space-y-6">
@@ -52,12 +47,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, con
             <StatRow label="Status">
               <ShipStatusBadge ship={ship} />
             </StatRow>
-
-            {convoyName && (
-              <StatRow label="Convoy">
-                <span className="text-sm text-cyan-300">{convoyName}</span>
-              </StatRow>
-            )}
 
             <StatRow label="Location">
               <div className="flex flex-wrap items-center gap-2">
@@ -82,13 +71,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, con
             value={Math.round(ship.fuel)}
             max={ship.maxFuel}
             color={fuelPercent < 20 ? "red" : "blue"}
-            size="md"
-          />
-          <ProgressBar
-            label="Cargo"
-            value={cargoUsed}
-            max={ship.cargoMax}
-            color={cargoPercent > 80 ? "red" : "amber"}
             size="md"
           />
           <ProgressBar
@@ -125,58 +107,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, con
         </CardContent>
       </Card>
 
-      {/* Upgrade slots (read-only) */}
-      {ship.upgradeSlots.length > 0 && (
-        <Card variant="bordered" padding="md">
-          <CardHeader title="Upgrade Slots" subtitle={`${ship.upgradeSlots.filter((s) => s.moduleId).length} / ${ship.upgradeSlots.length} installed`} />
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              {ship.upgradeSlots.map((slot) => (
-                <UpgradeSlot
-                  key={slot.id}
-                  slot={slot}
-                  readOnly
-                />
-              ))}
-            </div>
-            {isDocked && !ship.disabled && (
-              <Button
-                href={`/system/${ship.systemId}/shipyard`}
-                variant="ghost"
-                size="sm"
-              >
-                Manage at Upgrade Bay &rarr;
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Cargo hold card */}
-      <Card variant="bordered" padding="md">
-        <CardHeader title="Cargo Hold" subtitle={`${cargoUsed} / ${ship.cargoMax} units`} />
-        <CardContent>
-          {ship.cargo.length === 0 ? (
-            <div className="text-center py-6">
-              <p className="text-text-tertiary text-sm">Cargo hold is empty</p>
-              <p className="text-text-tertiary text-xs mt-1">Visit a station market to buy goods</p>
-            </div>
-          ) : (
-            <ul className="space-y-2">
-              {ship.cargo.map((item) => (
-                <li
-                  key={item.goodId}
-                  className="flex items-center justify-between py-2 px-3 bg-surface"
-                >
-                  <span className="text-sm font-medium text-text-primary">{item.goodName}</span>
-                  <span className="text-sm text-text-secondary">x{item.quantity}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Actions */}
       {isDocked && (
         <div className="flex gap-3 flex-wrap">
@@ -190,26 +120,14 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, con
               >
                 Market
               </Button>
-              {convoyName ? (
-                <Button
-                  variant="action"
-                  color="accent"
-                  className="flex-1 opacity-50 cursor-not-allowed"
-                  disabled
-                  title="Navigate via convoy"
-                >
-                  Navigate via convoy
-                </Button>
-              ) : (
-                <Button
-                  href={`/?navigateShipId=${ship.id}`}
-                  variant="action"
-                  color="accent"
-                  className="flex-1"
-                >
-                  Navigate
-                </Button>
-              )}
+              <Button
+                href={`/?navigateShipId=${ship.id}`}
+                variant="action"
+                color="accent"
+                className="flex-1"
+              >
+                Navigate
+              </Button>
             </>
           )}
           {needsFuel && !ship.disabled && playerCredits != null && (
@@ -220,16 +138,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, con
               onClick={refuelDialog.onOpen}
             >
               Refuel
-            </Button>
-          )}
-          {isDamaged && playerCredits != null && (
-            <Button
-              variant="pill"
-              color="green"
-              size="md"
-              onClick={repairDialog.onOpen}
-            >
-              Repair
             </Button>
           )}
         </div>
@@ -244,17 +152,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, con
           onClose={refuelDialog.onClose}
         />
       )}
-
-      {/* Repair dialog */}
-      {isDamaged && playerCredits != null && (
-        <RepairDialog
-          ship={ship}
-          playerCredits={playerCredits}
-          open={repairDialog.open}
-          onClose={repairDialog.onClose}
-        />
-      )}
-
     </div>
   );
 }

@@ -1,6 +1,6 @@
 # Events System
 
-Dynamic world events that inject economic shocks, trade opportunities, and navigation danger. Events spawn randomly, progress through multi-phase arcs, apply modifiers to markets and navigation, and spread to neighboring systems.
+Dynamic world events that inject economic shocks and trade opportunities. Events spawn randomly, progress through multi-phase arcs, apply modifiers to markets, and spread to neighboring systems.
 
 ---
 
@@ -8,25 +8,25 @@ Dynamic world events that inject economic shocks, trade opportunities, and navig
 
 ### Primary Events (spawn naturally)
 
-| Event | Target Economies | Phases | Duration Range | Max Active | Danger |
-|---|---|---|---|---|---|
-| War | Industrial, Tech, Extraction, Core | Tensions → Escalation → Active Conflict → Aftermath → Recovery | 30-60 → 20-40 → 80-150 → 50-100 → 40-80 ticks | 3 | Up to 0.15 |
-| Plague | Agricultural | Outbreak → Spreading → Containment → Recovery | 20-40 → 40-80 → 30-60 → 40-60 | 2 | 0.03 |
-| Trade Festival | Core | Single phase | 40-80 | 3 | None |
-| Mining Boom | Extraction | Discovery → Boom → Peak → Depletion | 20-30 → 60-100 → 40-60 → 60-100 | 2 | None |
-| Supply Shortage | Any | Single phase | 30-60 | 3 | None |
-| Pirate Raid | Any | Raiding → Crackdown | 40-80 → 20-40 | 3 | Up to 0.15 |
-| Solar Storm | Any | Storm → Clearing | 15-30 → 10-20 | 2 | 0.25 (highest) |
-| Refugee Crisis | Core, Agricultural | Influx → Overcrowding → Settlement | 20-40 → 40-80 → 30-60 | 25 | 0.08 |
-| Trade Embargo | Core, Industrial | Imposed → Enforcement → Easing | 20-40 → 40-80 → 30-60 | 15 | None |
-| Tech Breakthrough | Tech | Discovery → Innovation → Adoption | 15-30 → 40-80 → 30-60 | 15 | None |
-| Asteroid Strike | Extraction | Impact → Aftermath → Recovery | 10-20 → 40-80 → 30-60 | 15 | 0.25 |
+| Event | Target Economies | Phases | Duration Range | Max Active |
+|---|---|---|---|---|
+| War | Industrial, Tech, Extraction, Core | Tensions → Escalation → Active Conflict → Aftermath → Recovery | 30-60 → 20-40 → 80-150 → 50-100 → 40-80 ticks | 3 |
+| Plague | Agricultural | Outbreak → Spreading → Containment → Recovery | 20-40 → 40-80 → 30-60 → 40-60 | 2 |
+| Trade Festival | Core | Single phase | 40-80 | 3 |
+| Mining Boom | Extraction | Discovery → Boom → Peak → Depletion | 20-30 → 60-100 → 40-60 → 60-100 | 2 |
+| Supply Shortage | Any | Single phase | 30-60 | 3 |
+| Pirate Raid | Any | Raiding → Crackdown | 40-80 → 20-40 | 3 |
+| Solar Storm | Any | Storm → Clearing | 15-30 → 10-20 | 2 |
+| Refugee Crisis | Core, Agricultural | Influx → Overcrowding → Settlement | 20-40 → 40-80 → 30-60 | 25 |
+| Trade Embargo | Core, Industrial | Imposed → Enforcement → Easing | 20-40 → 40-80 → 30-60 | 15 |
+| Tech Breakthrough | Tech | Discovery → Innovation → Adoption | 15-30 → 40-80 → 30-60 | 15 |
+| Asteroid Strike | Extraction | Impact → Aftermath → Recovery | 10-20 → 40-80 → 30-60 | 15 |
 
 ### Child Events (spread only, never spawn independently)
 
 | Event | Parent | Effect |
 |---|---|---|
-| Conflict Spillover | War (Active phase) | Smaller war echo — fuel/machinery demand, mild danger |
+| Conflict Spillover | War (Active phase) | Smaller war echo — fuel/machinery demand |
 | Plague Risk | Plague (Spreading phase), Refugee Crisis (Overcrowding phase) | Milder plague — reduced food production, medicine demand |
 | Ore Glut | Mining Boom (Boom phase) | Market oversupply — ore floods neighboring systems |
 
@@ -58,7 +58,7 @@ When an event transitions to a phase with spread rules:
 
 ## Modifiers
 
-Events apply modifiers that alter market behavior and navigation danger.
+Events apply modifiers that alter market behavior.
 
 ### Economy Modifiers
 | Modifier Type | Effect | Example |
@@ -67,9 +67,6 @@ Events apply modifiers that alter market behavior and navigation danger.
 | Rate multiplier | Scales production or consumption rate | War: production x0.4 (60% reduction) |
 
 The anchor for each good is stored as `StationMarket.anchorMult` (default `1`). The economy processor recomputes it every tick from the system's active anchor-shift modifiers (same writer/cadence as `stock`) and writes it alongside stock. Reads are pure: price, trade limits, and trade-flow calculations all derive `targetStock = getTargetStock(good) × anchorMult`. Modifiers are aggregated per system: anchor shifts multiply together, rate multipliers multiply together. Caps: anchor multiplier [0.1, 4.0], rate multiplier [0.1, 3.0].
-
-### Navigation Modifiers
-Danger level modifiers increase cargo loss risk on ship arrival. Applied as equilibrium shift on `danger_level` parameter. Stacks with government danger baseline.
 
 ### Shocks
 One-time market jolts applied when a phase starts. Directly modify supply or demand at the system (e.g., Plague Outbreak: -30 food supply instantly). Not repeated — only fire once per phase transition.
@@ -87,21 +84,19 @@ One-time market jolts applied when a phase starts. Directly modify supply or dem
 
 ## Key Gameplay Effects
 
-- **War** is the most impactful — halves production, spikes weapon/fuel demand, creates danger, and spreads conflict to neighbors. Long duration (200-390 ticks total).
-- **Solar Storm** has the highest danger (0.25) but is short-lived. Near-total production halt makes it devastating but brief.
+- **War** is the most impactful — halves production, spikes weapon/fuel demand, and spreads conflict to neighbors. Long duration (200-390 ticks total).
+- **Solar Storm** is short-lived but devastating — near-total production halt.
 - **Trade Festival** is the only purely positive event — demand surge creates profitable opportunities.
 - **Mining Boom** floods ore markets, benefits refineries downstream, but ends in depletion.
 - **Refugee Crisis** strains food and medicine supplies at core/agricultural systems, with overcrowding spreading plague risk to neighbors.
 - **Trade Embargo** creates severe supply shortages at core/industrial systems — all production and supply suppressed, with slow easing.
 - **Tech Breakthrough** is a positive event for tech systems — electronics production surges, machinery demand rises.
-- **Asteroid Strike** devastates extraction systems — near-total production halt on impact (0.05x), with high danger (0.25) and ore/fuel supply shocks.
-- **Events create trade missions** — war spawns weapons/fuel delivery contracts, plague spawns medicine/food contracts, etc.
+- **Asteroid Strike** devastates extraction systems — near-total production halt on impact (0.05x) and ore/fuel supply shocks.
 
 ---
 
 ## System Interactions
 
 - **Economy**: Events apply modifiers that shift the pricing anchor (`anchor_shift`) and multiply production/consumption rates (`rate_multiplier`); shocks deliver one-time stock jolts (see [economy.md](./economy.md))
-- **Navigation**: Danger modifiers increase cargo loss on arrival (see [navigation.md](./navigation.md))
 - **Tick engine**: Events processor runs every tick, before economy processor (see [tick-engine.md](../engineering/tick-engine.md))
 - **Faction relations**: the relations processor spawns border-conflict, pact-negotiation, and alliance-dissolution events (see [faction-system.md](./faction-system.md)); full faction wars are planned (see [war-system.md](../../planned/war-system.md))

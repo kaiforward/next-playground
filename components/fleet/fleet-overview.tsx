@@ -12,11 +12,8 @@ interface FleetOverviewProps {
 }
 
 export function FleetOverview({ ships, currentTick, regions, playerCredits }: FleetOverviewProps) {
-  const soloShips = useMemo(() => ships.filter((s) => !s.convoyId), [ships]);
-  const convoyCount = useMemo(() => ships.filter((s) => s.convoyId).length, [ships]);
-
-  const docked = useMemo(() => soloShips.filter((s) => s.status === "docked").length, [soloShips]);
-  const inTransit = useMemo(() => soloShips.filter((s) => s.status === "in_transit").length, [soloShips]);
+  const docked = useMemo(() => ships.filter((s) => s.status === "docked").length, [ships]);
+  const inTransit = useMemo(() => ships.filter((s) => s.status === "in_transit").length, [ships]);
 
   return (
     <div>
@@ -24,10 +21,7 @@ export function FleetOverview({ ships, currentTick, regions, playerCredits }: Fl
         <h2 className="text-lg font-semibold text-text-primary">Fleet</h2>
         <div className="flex gap-3 text-xs text-text-tertiary">
           <span>
-            {soloShips.length} ship{soloShips.length !== 1 ? "s" : ""}
-            {convoyCount > 0 && (
-              <span className="text-text-tertiary"> ({convoyCount} in convoys)</span>
-            )}
+            {ships.length} ship{ships.length !== 1 ? "s" : ""}
           </span>
           <span className="text-green-400">{docked} docked</span>
           {inTransit > 0 && (
@@ -36,15 +30,11 @@ export function FleetOverview({ ships, currentTick, regions, playerCredits }: Fl
         </div>
       </div>
 
-      {soloShips.length === 0 ? (
-        <p className="text-sm text-text-tertiary py-4">All ships are in convoys.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {soloShips.map((ship) => (
-            <ShipCard key={ship.id} ship={ship} currentTick={currentTick} regions={regions} playerCredits={playerCredits} />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {ships.map((ship) => (
+          <ShipCard key={ship.id} ship={ship} currentTick={currentTick} regions={regions} playerCredits={playerCredits} />
+        ))}
+      </div>
     </div>
   );
 }

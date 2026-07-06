@@ -4,8 +4,7 @@ import { use, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useFleet } from "@/lib/hooks/use-fleet";
-import { useConvoys } from "@/lib/hooks/use-convoy";
-import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
+import { getDockedShips } from "@/lib/utils/fleet";
 import { enrichTraits } from "@/lib/utils/traits";
 import { deriveSystemLocations } from "@/lib/constants/locations";
 import { SYSTEM_TABS, type SystemTabSegment } from "@/lib/constants/system-tabs";
@@ -27,16 +26,11 @@ function SystemPanelContent({
 }) {
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const { fleet } = useFleet();
-  const { convoys } = useConvoys();
   const pathname = usePathname();
 
-  const soloShipCount = useMemo(
+  const dockedShipCount = useMemo(
     () => getDockedShips(fleet.ships, systemId).length,
     [fleet.ships, systemId],
-  );
-  const convoyCount = useMemo(
-    () => getDockedConvoys(convoys, systemId).length,
-    [convoys, systemId],
   );
 
   const exploreCount = useMemo(() => {
@@ -50,8 +44,7 @@ function SystemPanelContent({
 
   const basePath = `/system/${systemId}`;
   const tabBadges: Partial<Record<SystemTabSegment, number>> = {
-    ships: soloShipCount,
-    convoys: convoyCount,
+    ships: dockedShipCount,
     explore: exploreCount,
   };
   const tabs = SYSTEM_TABS.map((tab) => {
