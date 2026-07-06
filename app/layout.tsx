@@ -1,22 +1,18 @@
 import type { Metadata } from "next";
-import { Chakra_Petch, Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
 import "./globals.css";
 
-const chakraPetch = Chakra_Petch({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const chakraPetch = localFont({
+  src: [
+    { path: "./fonts/chakra-petch-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/chakra-petch-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/chakra-petch-600.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/chakra-petch-700.woff2", weight: "700", style: "normal" },
+  ],
   variable: "--font-chakra",
-});
-
-const geist = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
 });
 
 export const metadata: Metadata = {
@@ -32,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${chakraPetch.variable} ${geist.variable} ${geistMono.variable}`}
+      className={`${chakraPetch.variable} ${GeistSans.variable} ${GeistMono.variable}`}
     >
       <body className="antialiased">
         {children}
