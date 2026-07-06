@@ -3,141 +3,64 @@ import {
   ExperimentConfigSchema,
   experimentToSimConfig,
 } from "../simulator/experiment";
+import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 
 describe("ExperimentConfig", () => {
   describe("ExperimentConfigSchema", () => {
-    it("accepts a valid minimal config", () => {
-      const result = ExperimentConfigSchema.safeParse({
-        bots: [{ strategy: "greedy" }],
-      });
+    it("accepts an empty config, defaulting seed/ticks/systemCount", () => {
+      const result = ExperimentConfigSchema.safeParse({});
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.seed).toBe(42);
-        expect(result.data.ticks).toBe(500);
-        expect(result.data.bots[0].count).toBe(1);
-      }
+      if (!result.success) return;
+      expect(result.data.seed).toBe(42);
+      expect(result.data.ticks).toBe(500);
+      expect(result.data.systemCount).toBe(UNIVERSE_GEN.TOTAL_SYSTEMS);
     });
 
-    it("accepts a full config with all sections", () => {
+    it("accepts a full config with label/seed/ticks/systemCount overridden", () => {
       const result = ExperimentConfigSchema.safeParse({
         label: "test-experiment",
         seed: 99,
         ticks: 200,
-        bots: [
-          { strategy: "greedy", count: 2 },
-          { strategy: "random", count: 1 },
-        ],
-        overrides: {
-          economy: { noiseFraction: 0.1 },
-          goods: { food: { basePrice: 30 } },
-          fuel: { refuelCostPerUnit: 3 },
-        },
-        events: {
-          disableRandom: true,
-          inject: [
-            {
-              tick: 50,
-              target: { economyType: "extraction" },
-              type: "inner_system_conflict",
-              severity: 1.5,
-            },
-          ],
-        },
+        systemCount: 120,
       });
       expect(result.success).toBe(true);
-    });
-
-    it("rejects missing bots", () => {
-      const result = ExperimentConfigSchema.safeParse({
-        ticks: 100,
-      });
-      expect(result.success).toBe(false);
+      if (!result.success) return;
+      expect(result.data.label).toBe("test-experiment");
+      expect(result.data.seed).toBe(99);
+      expect(result.data.ticks).toBe(200);
+      expect(result.data.systemCount).toBe(120);
     });
 
     it("rejects negative ticks", () => {
-      const result = ExperimentConfigSchema.safeParse({
-        ticks: -1,
-        bots: [{ strategy: "greedy" }],
-      });
+      const result = ExperimentConfigSchema.safeParse({ ticks: -1 });
       expect(result.success).toBe(false);
     });
 
-    it("rejects empty bots array", () => {
-      const result = ExperimentConfigSchema.safeParse({
-        bots: [],
-      });
+    it("rejects a systemCount below 1", () => {
+      const result = ExperimentConfigSchema.safeParse({ systemCount: 0 });
       expect(result.success).toBe(false);
-    });
-
-    it("applies defaults for seed and ticks", () => {
-      const result = ExperimentConfigSchema.safeParse({
-        bots: [{ strategy: "greedy" }],
-      });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.seed).toBe(42);
-        expect(result.data.ticks).toBe(500);
-      }
-    });
-
-    it("accepts systemIndex injection target", () => {
-      const result = ExperimentConfigSchema.safeParse({
-        bots: [{ strategy: "greedy" }],
-        events: {
-          inject: [
-            { tick: 10, target: { systemIndex: 5 }, type: "inner_system_conflict" },
-          ],
-        },
-      });
-      expect(result.success).toBe(true);
     });
   });
 
   describe("experimentToSimConfig", () => {
-    it("maps config correctly", () => {
+    it("maps config fields directly onto SimConfig", () => {
       const exp = ExperimentConfigSchema.parse({
         label: "test",
         seed: 99,
         ticks: 200,
-        bots: [{ strategy: "greedy", count: 2 }],
-        overrides: {
-          economy: { noiseFraction: 0.1 },
-        },
-        events: {
-          disableRandom: true,
-          inject: [
-            { tick: 50, target: { economyType: "extraction" }, type: "inner_system_conflict", severity: 2.0 },
-          ],
-        },
+        systemCount: 120,
       });
 
-      const { config, overrides, label } = experimentToSimConfig(exp);
+      const { config, label } = experimentToSimConfig(exp);
 
       expect(label).toBe("test");
-      expect(config.tickCount).toBe(200);
-      expect(config.seed).toBe(99);
-      expect(config.bots).toEqual([{ strategy: "greedy", count: 2 }]);
-      expect(config.disableRandomEvents).toBe(true);
-      expect(config.eventInjections).toHaveLength(1);
-      expect(config.eventInjections![0].eventType).toBe("inner_system_conflict");
-      expect(config.eventInjections![0].severity).toBe(2.0);
-      expect(overrides.economy?.noiseFraction).toBe(0.1);
+      expect(config).toEqual({ systemCount: 120, seed: 99, tickCount: 200 });
     });
 
-    it("returns empty overrides when none specified", () => {
-      const exp = ExperimentConfigSchema.parse({
-        bots: [{ strategy: "random" }],
-      });
-      const { overrides } = experimentToSimConfig(exp);
-      expect(overrides).toEqual({});
-    });
-
-    it("omits eventInjections when empty", () => {
-      const exp = ExperimentConfigSchema.parse({
-        bots: [{ strategy: "greedy" }],
-      });
-      const { config } = experimentToSimConfig(exp);
-      expect(config.eventInjections).toBeUndefined();
+    it("omits label when none is specified", () => {
+      const exp = ExperimentConfigSchema.parse({});
+      const { label } = experimentToSimConfig(exp);
+      expect(label).toBeUndefined();
     });
   });
 });

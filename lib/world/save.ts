@@ -1,0 +1,83 @@
+/**
+ * Pure save serialization for `World`. No `fs`/`process.env`/Node imports —
+ * the disk adapter lives in `save-files.ts`, the only Node-edge file in
+ * `lib/world`; this module only turns a `World` into a JSON string and back.
+ *
+ * Bump `SAVE_FORMAT_VERSION` any time `World`'s shape (types.ts) changes.
+ * `deserializeWorld` does structural spot-checks, not exhaustive validation,
+ * so an old save's shape can drift from the current `World` type without
+ * tripping any of the checks below — the version bump is what makes old
+ * saves fail cleanly ("saves break on upgrade") instead of loading a stale
+ * shape that happens to pass the spot-checks.
+ */
+
+import type { World } from "./types";
+
+export const SAVE_FORMAT_VERSION = 1;
+
+interface SaveFile {
+  formatVersion: number;
+  world: World;
+}
+
+export type DeserializeResult =
+  | { ok: true; world: World }
+  | { ok: false; error: string };
+
+export function serializeWorld(world: World): string {
+  const save: SaveFile = { formatVersion: SAVE_FORMAT_VERSION, world };
+  return JSON.stringify(save);
+}
+
+/**
+ * Narrows a `JSON.parse` result into a typed `World`. Per the JSON-boundary
+ * convention, the parsed value is checked with `typeof`/`in` immediately
+ * rather than threaded through as `unknown` — these are structural
+ * spot-checks (top-level shape, `formatVersion`, `meta.currentTick`/`seed`
+ * numeric), not exhaustive validation: pre-1.0 saves are trusted local
+ * files, not untrusted network input.
+ */
+export function deserializeWorld(json: string): DeserializeResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { ok: false, error: "Save file is not valid JSON" };
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return { ok: false, error: "Save file is not a JSON object" };
+  }
+  if (!("formatVersion" in parsed) || parsed.formatVersion !== SAVE_FORMAT_VERSION) {
+    return {
+      ok: false,
+      error: `Unsupported save formatVersion (expected ${SAVE_FORMAT_VERSION})`,
+    };
+  }
+  if (!("world" in parsed) || !isWorldShaped(parsed.world)) {
+    return { ok: false, error: "Save file's world is missing required meta fields" };
+  }
+
+  return { ok: true, world: parsed.world };
+}
+
+/**
+ * Spot-check every save's world must pass: an object with a `meta` object
+ * whose `currentTick`/`seed` are numeric. Not exhaustive — see the module
+ * doc comment. A user-defined type guard asserts the rest of `World`'s
+ * shape; it is the caller's responsibility (formatVersion bump) to keep
+ * that assertion honest as `World` evolves.
+ */
+function isWorldShaped(value: unknown): value is World {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("meta" in value) || typeof value.meta !== "object" || value.meta === null) {
+    return false;
+  }
+  const meta = value.meta;
+  return (
+    "currentTick" in meta &&
+    typeof meta.currentTick === "number" &&
+    "seed" in meta &&
+    typeof meta.seed === "number"
+  );
+}

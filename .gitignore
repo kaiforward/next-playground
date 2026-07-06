@@ -47,6 +47,9 @@ next-env.d.ts
 /experiments
 !/experiments/examples/
 
+# single-player world saves (local JSON files, not build output)
+/saves
+
 # claude local settings
 .claude/settings.local.json
 .claude/worktrees/

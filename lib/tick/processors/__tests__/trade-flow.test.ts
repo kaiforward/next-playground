@@ -216,8 +216,8 @@ describe("trade-flow: flow controls", () => {
     const systems = [sys("a", "f1"), sys("b", "f1")];
     const markets = [market("a", "food", 100), market("b", "food", 100)];
     const flowEvents: SimFlowEvent[] = [
-      { tick: 5, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 4 },
-      { tick: 95, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 3 },
+      { tick: 5, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 4, flowType: "market" },
+      { tick: 95, fromSystemId: "a", toSystemId: "b", goodId: "food", quantity: 3, flowType: "market" },
     ];
     const world = makeWorld({ systems, markets, connections: [conn("a", "b")], flowEvents });
 

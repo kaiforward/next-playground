@@ -1,10 +1,8 @@
 /**
  * ShipArrivalsWorld — data interface for the ship-arrivals processor.
  *
- * The simulator has its own ship-arrival path
- * (`processSimShipArrivals` in `lib/engine/simulator/economy.ts`) and is
- * *not* migrated to this interface. The live orchestration follows the same
- * World pattern as the rest. See
+ * Implemented by `InMemoryShipArrivalsWorld` (`lib/tick/adapters/memory/
+ * ship-arrivals.ts`), which `runWorldTick` wires into the shared pipeline. See
  * `docs/design/active/processor-architecture.md` for the broader pattern.
  */
 
