@@ -12,7 +12,6 @@
 import type { GovernmentType } from "@/lib/types/game";
 import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { ModifierRow } from "@/lib/engine/events";
-import type { PlayerEventMap } from "@/lib/tick/types";
 
 export interface UpgradeSlotView {
   moduleId: string | null;
@@ -98,10 +97,4 @@ export interface ShipArrivalsWorld {
 
   /** Dock a convoy whose members have all arrived. */
   dockConvoy(convoyId: string, systemId: string): Promise<void>;
-
-  /** Persist accumulated player notifications. */
-  persistNotifications(
-    events: Map<string, Partial<PlayerEventMap>>,
-    tick: number,
-  ): Promise<void>;
 }

@@ -31,10 +31,7 @@ export function getTestPrisma(): PrismaClient {
 
 /** All Prisma model table names in FK-safe truncation order. */
 const ALL_TABLES = [
-  "PlayerNotification",
   "EventModifier",
-  "TradeHistory",
-  "PriceHistory",
   "CargoItem",
   "ShipUpgradeSlot",
   "ConvoyMember",
@@ -45,7 +42,6 @@ const ALL_TABLES = [
   "SystemConnection",
   "Ship",
   "Convoy",
-  "PlayerFactionReputation",
   "FactionRelation",
   "AlliancePact",
   "StarSystem",

@@ -25,8 +25,6 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
   constructor(
     initial: { systems: SimSystem[]; markets: SimMarketEntry[]; flowEvents: SimFlowEvent[] },
     private readonly connections: SimConnection[],
-    /** Optional per-system player-volume injection for tests; sim baseline is empty. */
-    private readonly playerVolumeBySystem: ReadonlyMap<string, number> = new Map(),
   ) {
     this.systems = initial.systems.map((s) => ({ ...s }));
     this.markets = initial.markets.map((m) => ({ ...m }));
@@ -65,15 +63,6 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
       });
     }
     return Promise.resolve(snapshots);
-  }
-
-  getRecentPlayerVolumeBySystem(systemIds: string[]): Promise<Map<string, number>> {
-    const result = new Map<string, number>();
-    for (const id of systemIds) {
-      const v = this.playerVolumeBySystem.get(id);
-      if (v) result.set(id, v);
-    }
-    return Promise.resolve(result);
   }
 
   applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {

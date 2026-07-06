@@ -1,6 +1,5 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import type { EventTypeId } from "@/lib/constants/events";
-import type { NotificationType, EntityRef } from "@/lib/types/game";
 import type { HazardIncidentEntry, ImportDutyEntry, ContrabandSeizedEntry, CargoLossEntry } from "@/lib/engine/danger";
 import type { DamageResult } from "@/lib/engine/damage";
 
@@ -28,12 +27,6 @@ export interface CargoLostPayload {
   losses: CargoLossEntry[];
 }
 
-export interface GameNotificationPayload {
-  message: string;
-  type: NotificationType;
-  refs: Partial<Record<string, EntityRef>>;
-}
-
 export interface EconomyTickPayload {
   /** Number of systems processed in this tick's shard. */
   systemCount: number;
@@ -49,22 +42,16 @@ export interface EventNotificationPayload {
   refs: Record<string, { id: string; label: string }>;
 }
 
-export interface PriceSnapshotPayload {
-  systemCount: number;
-}
-
 // ── Typed event maps ──────────────────────────────────────────────
 
 export interface GlobalEventMap {
   economyTick: EconomyTickPayload[];
   eventNotifications: EventNotificationPayload[];
-  priceSnapshot: PriceSnapshotPayload[];
 }
 
 export interface PlayerEventMap {
   shipArrived: ShipArrivedPayload[];
   cargoLost: CargoLostPayload[];
-  gameNotifications: GameNotificationPayload[];
 }
 
 // ── Processor types ───────────────────────────────────────────────

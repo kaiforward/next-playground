@@ -354,9 +354,7 @@ async function processSimTradeFlow(
     gradientThreshold: constants.tradeFlow.gradientThreshold,
     gradientSensitivity: constants.tradeFlow.gradientSensitivity,
     flowHistoryTicks: constants.tradeFlow.flowHistoryTicks,
-    playerDisplacementFactor: constants.tradeFlow.playerDisplacementFactor,
     distanceDecay: constants.tradeFlow.distanceDecay,
-    playerVolumeTarget: constants.tradeFlow.playerVolumeTarget,
   });
 
   return {

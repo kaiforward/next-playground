@@ -33,12 +33,12 @@ export function CompactShipCard({ ship, systemId, onNavigate }: CompactShipCardP
           Navigate
         </Button>
         <Button
-          href={`/system/${systemId}/market?tradeShipId=${ship.id}`}
+          href={`/system/${systemId}/market`}
           variant="ghost"
           size="xs"
           className="flex-1"
         >
-          Trade
+          Market
         </Button>
       </div>
     </div>

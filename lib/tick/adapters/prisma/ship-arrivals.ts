@@ -1,4 +1,4 @@
-import type { TxClient, PlayerEventMap } from "@/lib/tick/types";
+import type { TxClient } from "@/lib/tick/types";
 import type {
   ArrivingShipView,
   CargoMutation,
@@ -7,7 +7,6 @@ import type {
   ShipDamageUpdate,
 } from "@/lib/tick/world/ship-arrivals-world";
 import type { ModifierRow } from "@/lib/engine/events";
-import { persistPlayerNotifications } from "@/lib/tick/helpers";
 import { toGovernmentType, toTraitId, toQualityTier } from "@/lib/types/guards";
 
 /** Live-game adapter for the ship-arrivals processor. */
@@ -161,12 +160,5 @@ export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
         arrivalTick: null,
       },
     });
-  }
-
-  async persistNotifications(
-    events: Map<string, Partial<PlayerEventMap>>,
-    tick: number,
-  ): Promise<void> {
-    await persistPlayerNotifications(this.tx, events, tick);
   }
 }

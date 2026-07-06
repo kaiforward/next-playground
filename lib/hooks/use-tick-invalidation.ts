@@ -46,15 +46,6 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
         queryClient.invalidateQueries({ queryKey: queryKeys.convoys });
       }),
-      // Price snapshots → refresh price history
-      subscribeToEvent("priceSnapshot", () => {
-        queryClient.invalidateQueries({ queryKey: ["priceHistory"] });
-      }),
-      // Game notifications → refresh notification feed and unread count
-      subscribeToEvent("gameNotifications", () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
-        queryClient.invalidateQueries({ queryKey: queryKeys.unreadCount });
-      }),
     ];
 
     return () => unsubs.forEach((unsub) => unsub());

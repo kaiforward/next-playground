@@ -6,10 +6,10 @@ Master specification for the game. Describes what the game does, how systems con
 > multiplayer space-trading game to a **single-player grand-strategy game** — north star:
 > [grand-strategy-vision.md](./planned/grand-strategy-vision.md). The Game Overview below describes
 > the re-conceived game. The **Active Systems** sections describe the *implemented* code, which is
-> mid-pivot: systems marked **cut** in the vision doc §4 (personal trading, danger pipeline,
-> ship upgrades, player reputation, auth, notifications) still exist in code and are documented
-> here until the Phase 1 teardown removes them. Missions, battles, and combat were removed in
-> teardown Sweep 1.
+> mid-pivot: systems marked **cut** in the vision doc §4 (danger pipeline, ship upgrades, auth)
+> still exist in code and are documented here until the Phase 1 teardown removes them.
+> Missions/battles/combat were removed in teardown Sweep 1; personal trading, player
+> reputation, notifications, and price history in Sweep 2.
 
 ---
 
@@ -58,8 +58,8 @@ Demand's specialisation gradient (stage **S3** of the track). Civilian consumpti
 ### Events — [detailed spec](./active/gameplay/events.md)
 12 primary event types (inner_system_conflict, plague, trade_festival, mining_boom, ore_glut, supply_shortage, pirate_raid, solar_storm, refugee_crisis, trade_embargo, tech_breakthrough, asteroid_strike), 2 child events that spread from parents (conflict_spillover, plague_risk), and 3 relations-owned event types spawned exclusively by the relations processor (border_conflict, pact_under_negotiation, alliance_dissolved — see Inter-Faction Relations below). Events spawn randomly (weighted by government type), progress through multi-phase arcs, apply modifiers to markets and navigation danger, and spread to neighboring systems. Each phase has distinct economic and danger effects.
 
-### Trading — [detailed spec](./active/gameplay/trading.md)
-Players buy and sell goods at station markets. Prices update dynamically based on each good's stock. (Trade missions were removed in the Phase 1 teardown; personal trading itself is removed in Sweep 2, leaving a read-only market inspection view.)
+### Market Inspection
+The market screen is a read-only inspection surface: per-system current prices, stock levels, and a cross-system price comparison (heatmap overlay + comparison panel). Prices update dynamically based on each good's stock via the economy tick. Personal buy/sell trading was removed in the Phase 1 teardown — goods move through the simulated trade flow and directed logistics, not player hauling.
 
 ### Navigation & Fleet — [detailed spec](./active/gameplay/navigation.md)
 Travel along jump-lane connections. Travel time scales with the ship's `speed` stat (faster ships = fewer ticks). Ships can be grouped into convoys for collective travel and trade; the convoy moves at the slowest member's speed and all members contribute firepower to a shared escort pool. On arrival, cargo passes through a 5-stage danger pipeline: hazard incidents, import duty, contraband inspection, event-based cargo loss, and hull/shield damage. Hull at 0 disables a ship (cargo lost, needs repair). Shields regenerate on dock.
@@ -76,17 +76,11 @@ The political layer. 8 major factions plus minor factions (12 at default scale, 
 ### Inter-Faction Relations — [detailed spec](./active/gameplay/faction-system.md#2-inter-faction-relations)
 Per-pair score (-100 to +100) drifts every 3 ticks via a dedicated relations processor. Drift drivers: a constant negative baseline ("peace needs maintenance"), border friction (cross-faction jump lanes), doctrine compatibility, sparse government opposition, common-enemy bonus, recent trade volume, active-alliance maintenance, and alliance-with-enemy penalty. Five tiers (allied +75 / friendly +25 / neutral / unfriendly -25 / hostile -75). The processor spawns `border_conflict` events (one active per pair, three phases applying danger and production modifiers) when a pair drops to ≤-25, telegraphs alliance formation via `pact_under_negotiation` events (5–10 tick negotiation window, must hold ≥+60 to confirm), and dissolves alliances below +50 via `alliance_dissolved` events. Pact records and per-pair history (last 10 drift entries) are stored.
 
-### Player-Faction Reputation — [detailed spec](./active/gameplay/faction-system.md#3-player-faction-reputation)
-Per-player, per-faction score (-100 to +100) bootstrapped at 0 across every faction on registration. Earned through trading at faction-owned markets (+0.5 per successful trade, capped at +2.0 per faction per tick to prevent grind-spam). Drives transaction multipliers on buy/sell (Champion ×0.92/×1.08, Trusted ×0.96/×1.04, Neutral ×1.0, Distrusted ×1.08/×0.92, Hostile denied entirely). Market prices remain universal — reputation modifies the player's individual transaction, not the displayed price, so it stacks naturally with government modifiers and event modifiers without collision. Reputation panel surfaces all standings per player.
-
 ### Tick Engine — [detailed spec](./active/engineering/tick-engine.md)
-Game clock advancing every 5 seconds. 12 processors run sequentially in topological order: ship arrivals, events, economy, infrastructure decay (depends on economy), population (depends on economy + infrastructure decay), migration (depends on population), trade flow, directed logistics (depends on economy), directed build (depends on directed logistics), price snapshots, notification prune, relations (every 3 ticks, depends on events). Each declares its dependencies and an optional frequency (e.g. price snapshots every 20 ticks, notification prune every 50). Economy processes one region per tick (round-robin) and records per-system satisfaction into an in-memory context field for the population processor; trade flow and migration both sweep work-budget slices of the intra-faction edge graph each tick (region-independent); directed logistics and directed build each sweep a per-faction shard on a slow 48-tick agency clock (every faction acted on once per interval); relations processes all faction pairs each time it runs. All processors execute inside a single transaction — if one fails, the tick counter does not advance. Results are broadcast to clients via SSE with per-player event filtering.
-
-### Notifications & Captain's Log — [detailed spec](./active/gameplay/notifications.md)
-Per-player notifications for things that happen to your own assets — ship arrivals, damage/disable, cargo loss, import duties, contraband seizure — distinct from ambient world events. Surfaced two ways: a sidebar bell with an unread badge and recent feed, and the Captain's Log (a full searchable, filterable, paginated history). Persisted server-side so offline players catch up; a tick processor prunes entries older than 500 ticks.
+Game clock advancing every 5 seconds. 10 processors run sequentially in topological order: ship arrivals, events, economy, infrastructure decay (depends on economy), population (depends on economy + infrastructure decay), migration (depends on population), trade flow, directed logistics (depends on economy), directed build (depends on directed logistics), relations (every 3 ticks, depends on events). Each declares its dependencies and an optional frequency. Economy processes one region per tick (round-robin) and records per-system satisfaction into an in-memory context field for the population processor; trade flow and migration both sweep work-budget slices of the intra-faction edge graph each tick (region-independent); directed logistics and directed build each sweep a per-faction shard on a slow 48-tick agency clock (every faction acted on once per interval); relations processes all faction pairs each time it runs. All processors execute inside a single transaction — if one fails, the tick counter does not advance. Results are broadcast to clients via SSE with per-player event filtering.
 
 ### Auth & Players
-User registration and login via NextAuth (JWT/Credentials). Each user has one player profile with credits and a fleet of ships. New players spawn at the `GameWorld.startingSystemId` — currently a core-economy system in a Federation-government major's territory near the map center — with a starter Shuttle. A `PlayerFactionReputation` row is created for every faction at the same time, all at score 0; players are not faction-aligned at creation.
+User registration and login via NextAuth (JWT/Credentials). Each user has one player profile with credits and a fleet of ships. New players spawn at the `GameWorld.startingSystemId` — currently a core-economy system in a Federation-government major's territory near the map center — with a starter Shuttle. Players are not faction-aligned at creation.
 
 ---
 
@@ -111,10 +105,7 @@ flowchart TD
     SH[Ships & Upgrades]
     FA[Factions]
     GOV[Government Types]
-    REP[Player Reputation]
     TR["System Substrate & Traits"]
-    PS[Price Snapshots]
-    NP[Notification Prune]
 
     TE -- "orchestrates (sequential)" --> SA
     TE -- "orchestrates (sequential)" --> EV
@@ -126,8 +117,6 @@ flowchart TD
     TE -- "orchestrates (sequential)" --> DL
     TE -- "orchestrates (sequential)" --> DB
     TE -- "every 3 ticks,<br/>after events" --> REL
-    TE -- "orchestrates (sequential)" --> PS
-    TE -- "every 50 ticks" --> NP
 
     EV -- "modifiers: equilibrium shifts,<br/>rate multipliers, reversion" --> EC
     EV -- "danger modifiers" --> NF
@@ -136,7 +125,6 @@ flowchart TD
     EC -- "per-system satisfaction<br/>(in-memory ctx.results)" --> POP
     EC -- "downward count decay +<br/>output uptake (ctx.results)" --> ID
     ID -- "live popCap<br/>(read before growth)" --> POP
-    EC -- "current prices" --> PS
     EC -- "market bands +<br/>supply/demand (per-faction shard)" --> DL
     DL -- "silent surplus→deficit<br/>stock deltas + logistics flow rows" --> EC
     DL -- "fed & calm systems<br/>ready to grow (dependsOn)" --> DB
@@ -159,8 +147,6 @@ flowchart TD
     REL -- "border_conflict /<br/>pact_under_negotiation /<br/>alliance_dissolved events" --> EV
     REL -- "alliance pacts<br/>(future war co-defense)" --> FA
 
-    REP -- "buy/sell multipliers,<br/>hostile trade denial" --> NF
-
     TR -- "economy type derivation<br/>(body resources + population)" --> EC
 
     SH -- "hull / stealth / evasion<br/>+ module bonuses" --> NF
@@ -168,9 +154,6 @@ flowchart TD
     SH -- "speed → travel ticks" --> NF
 
     SA -- "cargo danger pipeline<br/>(hazard, duty, contraband, loss, damage)" --> NF
-
-    NF -- "trade at destination<br/>(buy/sell affects stock)" --> EC
-    NF -- "successful trade →<br/>+0.5 rep (capped per tick)" --> REP
 ```
 
 Key interactions:
@@ -179,7 +162,7 @@ Key interactions:
 - **Economy → Trade Flow**: Trade flow runs *after* the economy processor each tick (`dependsOn`), so for any system the two both touch this tick, the economy's price update is committed before trade flow reads it — gradients never fire against mid-update state
 - **Economy → Population**: The economy processor writes per-system satisfaction (`delivered / demanded`) into an in-memory context field (`ctx.results`); the population processor reads it in the same tick to integrate `unrest` and apply growth/decline. This handoff is transient — not persisted, not broadcast.
 - **Economy → Infrastructure Decay → Population**: After the economy commits market/labour state, the infrastructure-decay processor runs on the same shard (reading the economy's `ctx.results` — its processed system set + per-good output uptake). It shrinks `SystemBuilding.count` **downward only** toward what is *used* (disuse where built exceeds staffed-and-selling/occupancy, plus an unrest-driven teardown above θ), and recomputes `popCap` live from the surviving housing. Population then runs *after* it (`dependsOn` economy + infrastructure-decay), reading the fresh `popCap` before growth/decline — so housing that rots below its occupants displaces the overshoot (unrest-weighted migration ⊕ death).
-- **Trade Flow → Economy**: Each flow writes the same stock delta a player trade would
+- **Trade Flow → Economy**: Each flow writes a direct stock delta at both endpoints
 - **Economy → Directed Logistics → Economy**: On the 48-tick agency shard, directed logistics reads each system's market bands + supply/demand, greedily matches a faction's surplus to its own deficits (within a population-funded work budget, donor never drawn below its anchor), and writes the resulting stock deltas back plus a `logistics`-tagged `TradeFlow` row — an additive command flow alongside price-gradient diffusion
 - **Directed Logistics → Directed Build → Economy**: Directed build runs after logistics (`dependsOn`) on the same shard — logistics makes systems *fed and calm*, which is the trigger for building. It grows `SystemBuilding.count` **upward** (proactive housing toward habitable land → live `popCap` rise → labour-gated industry), the recovery counterpart to infrastructure decay's downward-only mutation; the two share one equilibrium so they don't churn
 - **Population → Economy**: `unrest` from the previous tick drives the strike suppression multiplier applied to production each economy run; rewritten `demandRate` flows into the pricing reference (`TARGET_COVER × demandRate × anchorMult`)
@@ -191,8 +174,6 @@ Key interactions:
 - **Factions → Relations**: Doctrine pair and status drive drift bias; status gates alliance capacity (planned)
 - **Relations → Events**: The relations processor spawns `border_conflict` (when a pair turns unfriendly), `pact_under_negotiation` (alliance telegraph), and `alliance_dissolved` (warning before pact removal) events. The events processor then applies the danger and production modifiers
 - **Trade Flow → Relations**: Cross-faction trade volume is a positive drift driver (capped per drift tick)
-- **Navigation → Reputation**: Successful trades at faction-owned markets accrue +0.5 reputation with the owning faction, capped at +2.0 per faction per tick
-- **Reputation → Navigation**: Per-faction standing applies a transaction multiplier to buy/sell prices (Champion best, Hostile denies trade) — the displayed market price is unchanged
 - **Substrate → Economy**: A system's bodies (finite available space → per-resource deposit slots × quality + general/habitable space) seed its industrial base and population at world-gen, which then drive capacity-driven, input-gated production each tick (tier-0 output scaled by deposit quality); consumption is population-scaled plus the production-input draw, and each market's stock band is demand-priced (floor) and infrastructure-stocked (ceiling). Economy type is a derived display label. Narrative features carry no economic role
 - **Ships → Navigation**: Hull, stealth, and evasion stats (plus matching upgrade modules) modify danger pipeline outcomes through diminishing returns. Convoy firepower feeds escort damage reduction. Speed determines transit duration
 - **Tick Engine → All**: Orchestrates processor execution order and broadcasts results via SSE

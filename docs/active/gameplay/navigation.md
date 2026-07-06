@@ -175,5 +175,5 @@ After cargo processing, the ship may take structural damage:
 
 - **Economy**: Government modifiers affect market volatility and equilibrium (see [economy.md](./economy.md))
 - **Events**: Active events add danger modifiers that increase cargo loss risk. Events also disrupt production, creating price signals worth navigating toward (see [events.md](./events.md))
-- **Trading**: Cargo loss directly affects trade profitability. Mission delivery requires surviving the arrival pipeline with enough goods (see [trading.md](./trading.md))
+- **Trading**: removed in the pivot Phase 1 teardown — goods move via the simulated trade flow, not player hauling
 - **Faction system** (planned): Faction territory will determine government type. War zones will have elevated danger. Player reputation may affect inspection rates (see [faction-system.md](./faction-system.md))

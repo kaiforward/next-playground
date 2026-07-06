@@ -89,12 +89,10 @@ model Player {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ships              Ship[]
-  convoys            Convoy[]
-  notifications      PlayerNotification[]
-  npcVisits          NpcVisit[]
-  factionReputations PlayerFactionReputation[]
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ships     Ship[]
+  convoys   Convoy[]
+  npcVisits NpcVisit[]
 }
 
 model Ship {
@@ -238,7 +236,6 @@ model StarSystem {
   connectionsFrom   SystemConnection[] @relation("FromSystem")
   connectionsTo     SystemConnection[] @relation("ToSystem")
   events            GameEvent[]
-  priceHistory      PriceHistory?
   tradeFlowsFrom    TradeFlow[]        @relation("TradeFlowsFrom")
   tradeFlowsTo      TradeFlow[]        @relation("TradeFlowsTo")
 
@@ -318,7 +315,6 @@ model Station {
 
   system  StarSystem      @relation(fields: [systemId], references: [id])
   markets StationMarket[]
-  trades  TradeHistory[]
 }
 
 model Good {
@@ -336,7 +332,6 @@ model Good {
 
   cargoItems    CargoItem[]
   markets       StationMarket[]
-  trades        TradeHistory[]
 }
 
 // Stock-based economy: a single `stock` axis replaced the legacy
@@ -363,30 +358,6 @@ model StationMarket {
   good    Good    @relation(fields: [goodId], references: [id])
 
   @@unique([stationId, goodId])
-}
-
-model TradeHistory {
-  id        String   @id @default(cuid())
-  stationId String
-  goodId    String
-  price     Float
-  quantity  Int
-  type      String // "buy" or "sell"
-  playerId  String?
-  createdAt DateTime @default(now())
-
-  station Station @relation(fields: [stationId], references: [id])
-  good    Good    @relation(fields: [goodId], references: [id])
-
-  @@index([stationId])
-}
-
-model PriceHistory {
-  id       String @id @default(cuid())
-  systemId String @unique
-  entries  String @default("[]") // JSON: { tick: number, prices: Record<goodId, price> }[]
-
-  system StarSystem @relation(fields: [systemId], references: [id])
 }
 
 // ── Trade Flow ─────────────────────────────────────────────────
@@ -452,24 +423,6 @@ model EventModifier {
   @@index([eventId])
 }
 
-// ── Notifications ──────────────────────────────────────────────
-
-model PlayerNotification {
-  id        String   @id @default(cuid())
-  playerId  String
-  type      String
-  message   String
-  refs      String   @default("{}")
-  tick      Int
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@index([playerId, createdAt])
-  @@index([playerId, read])
-}
-
 model NpcVisit {
   id       String @id @default(cuid())
   playerId String
@@ -497,7 +450,6 @@ model Faction {
 
   homeworld     StarSystem                @relation("FactionHomeworld", fields: [homeworldId], references: [id])
   territory     StarSystem[]              @relation("FactionTerritory")
-  reputations   PlayerFactionReputation[]
   relationsAsA  FactionRelation[]         @relation("RelationFactionA")
   relationsAsB  FactionRelation[]         @relation("RelationFactionB")
   alliancesAsA  AlliancePact[]            @relation("AllianceFactionA")
@@ -541,20 +493,3 @@ model AlliancePact {
   @@index([factionBId])
 }
 
-/// Per-player, per-faction reputation score. Drives trade multipliers.
-model PlayerFactionReputation {
-  id                      String @id @default(cuid())
-  playerId                String
-  factionId               String
-  score                   Float  @default(0) // [-100, +100]
-  updatedAtTick           Int    @default(0)
-  /// Reputation accrued so far in `updatedAtTick`. Reset on the first accrual of a new tick.
-  currentTickGainThisTick Float  @default(0)
-
-  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  faction Faction @relation(fields: [factionId], references: [id], onDelete: Cascade)
-
-  @@unique([playerId, factionId])
-  @@index([playerId])
-  @@index([factionId])
-}

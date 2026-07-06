@@ -75,7 +75,6 @@ async function main() {
 
   // ── Clear existing data (FK-safe order) ──
   await prisma.tradeFlow.deleteMany();
-  await prisma.tradeHistory.deleteMany();
   await prisma.eventModifier.deleteMany();
   await prisma.gameEvent.deleteMany();
   await prisma.cargoItem.deleteMany();
@@ -85,15 +84,12 @@ async function main() {
   await prisma.systemConnection.deleteMany();
   await prisma.ship.deleteMany();
   await prisma.convoy.deleteMany();
-  await prisma.playerNotification.deleteMany();
-  await prisma.playerFactionReputation.deleteMany();
   await prisma.player.deleteMany();
   // Clear auth tables so re-registration works after reseed
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.verificationToken.deleteMany();
   await prisma.user.deleteMany();
-  await prisma.priceHistory.deleteMany();
   await prisma.systemTrait.deleteMany();
   await prisma.station.deleteMany();
   await prisma.good.deleteMany();
@@ -366,13 +362,6 @@ async function main() {
     })),
   });
   console.log(`  Created ${relationRows.length} faction relation rows`);
-
-  // ── Seed price history (batched, one row per system) ──
-  await createManyChunked(
-    systemIds.map((systemId) => ({ systemId, entries: "[]" })),
-    (batch) => prisma.priceHistory.createMany({ data: batch }),
-  );
-  console.log(`  Created ${systemIds.length} price history rows`);
 
   // ── Seed connections (batched; already bidirectional from generator) ──
   await createManyChunked(

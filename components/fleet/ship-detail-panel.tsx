@@ -183,7 +183,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, con
           {!ship.disabled && (
             <>
               <Button
-                href={`/system/${ship.systemId}/market?tradeShipId=${ship.id}`}
+                href={`/system/${ship.systemId}/market`}
                 variant="action"
                 color="green"
                 className="flex-1"

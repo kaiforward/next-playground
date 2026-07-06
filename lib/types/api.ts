@@ -11,14 +11,10 @@ import type {
   MarketEntry,
   MarketComparisonEntry,
   GoodInfo,
-  TradeHistoryEntry,
-  TradeType,
   ActiveEvent,
-  SystemPriceHistory,
   TraitId,
   TraitCategory,
   QualityTier,
-  PlayerNotificationInfo,
   SunClass,
   GoodTier,
   BodyArchetypeId,
@@ -251,12 +247,7 @@ export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
 export type GoodsResponse = ApiResponse<{ goods: GoodInfo[] }>;
-export type TradeHistoryResponse = ApiResponse<TradeHistoryEntry[]>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;
-export type PriceHistoryResponse = ApiResponse<SystemPriceHistory[]>;
-
-import type { PlayerFactionReputationInfo } from "@/lib/services/reputation";
-export type ReputationResponse = ApiResponse<PlayerFactionReputationInfo[]>;
 
 import type {
   FactionSummary,
@@ -266,12 +257,6 @@ import type {
 export type FactionListResponse = ApiResponse<FactionSummary[]>;
 export type FactionDetailResponse = ApiResponse<FactionDetail>;
 export type RelationsMatrixResponse = ApiResponse<RelationsMatrixData>;
-
-export interface ShipTradeResult {
-  ship: ShipState;
-  updatedMarket: MarketEntry;
-}
-export type ShipTradeResponse = ApiResponse<ShipTradeResult>;
 
 export interface ShipNavigateResult {
   ship: ShipState;
@@ -293,13 +278,6 @@ export interface TickEvent {
 }
 
 // ── Requests ─────────────────────────────────────────────────────
-
-export interface ShipTradeRequest {
-  stationId: string;
-  goodId: string;
-  quantity: number;
-  type: TradeType;
-}
 
 export interface ShipNavigateRequest {
   route: string[]; // ordered [origin, ...hops, destination]
@@ -341,11 +319,6 @@ export type ConvoyMemberResponse = ApiResponse<ConvoyState>;
 export interface ConvoyNavigateRequest { route: string[] }
 export type ConvoyNavigateResponse = ApiResponse<{ convoy: ConvoyState; fuelUsed: number; travelDuration: number }>;
 
-// ── Convoy trade types ─────────────────────────────────────────
-
-export interface ConvoyTradeResult { updatedMarket: MarketEntry }
-export type ConvoyTradeResponse = ApiResponse<ConvoyTradeResult>;
-
 // ── Convoy repair types ────────────────────────────────────────
 
 export interface ConvoyRepairRequest { fraction: number }
@@ -371,22 +344,6 @@ export type RemoveUpgradeResponse = ApiResponse<{ ship: ShipState }>;
 
 export interface RepairResult { ship: ShipState; creditSpent: number }
 export type RepairResponse = ApiResponse<RepairResult>;
-
-// ── Pagination types ────────────────────────────────────────────
-
-/** Shared paginated response shape — all paginated endpoints return this. */
-export interface PaginatedData<T> {
-  items: T[];
-  nextCursor: string | null;
-  total: number;
-}
-export type PaginatedResponse<T> = ApiResponse<PaginatedData<T>>;
-
-// ── Notification types ──────────────────────────────────────────
-
-export type NotificationsResponse = PaginatedResponse<PlayerNotificationInfo>;
-export type UnreadCountResponse = ApiResponse<{ count: number }>;
-export type MarkReadResponse = ApiResponse<{ marked: number }>;
 
 // ── Auth types ──────────────────────────────────────────────────
 

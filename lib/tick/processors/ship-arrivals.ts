@@ -29,7 +29,6 @@ import type {
   TickProcessorResult,
   ShipArrivedPayload,
   CargoLostPayload,
-  GameNotificationPayload,
   PlayerEventMap,
 } from "../types";
 import { PrismaShipArrivalsWorld } from "@/lib/tick/adapters/prisma/ship-arrivals";
@@ -284,7 +283,7 @@ export async function runShipArrivalsProcessor(
     await world.dockConvoy(convoyId, firstArrived.systemId);
   }
 
-  // Build per-player event payloads + notifications.
+  // Build per-player event payloads.
   const playerEvents = new Map<string, Partial<PlayerEventMap>>();
   for (const a of arrived) {
     const existing = playerEvents.get(a.playerId) ?? {};
@@ -303,87 +302,8 @@ export async function runShipArrivalsProcessor(
         : [loss];
     }
 
-    const notifications: GameNotificationPayload[] = existing.gameNotifications
-      ? [...existing.gameNotifications]
-      : [];
-    const shipRef = { id: a.shipId, label: a.shipName };
-    const systemRef = { id: a.systemId, label: a.destName };
-
-    notifications.push({
-      message: `${a.shipName} arrived at ${a.destName}`,
-      type: "ship_arrived",
-      refs: { ship: shipRef, system: systemRef },
-    });
-
-    if (a.hazardIncidents && a.hazardIncidents.length > 0) {
-      const goodNames = a.hazardIncidents
-        .map((i) => GOODS[i.goodId]?.name ?? i.goodId)
-        .join(", ");
-      notifications.push({
-        message: `${a.shipName}: hazard incident — ${goodNames} damaged near ${a.destName}`,
-        type: "hazard_incident",
-        refs: { ship: shipRef, system: systemRef },
-      });
-    }
-
-    if (a.importDuties && a.importDuties.length > 0) {
-      const details = a.importDuties
-        .map((d) => `${d.seized} ${GOODS[d.goodId]?.name ?? d.goodId}`)
-        .join(", ");
-      notifications.push({
-        message: `${a.shipName}: import duty — ${details} seized at ${a.destName}`,
-        type: "import_duty",
-        refs: { ship: shipRef, system: systemRef },
-      });
-    }
-
-    if (a.contrabandSeized && a.contrabandSeized.length > 0) {
-      const details = a.contrabandSeized
-        .map((s) => `${s.seized} ${GOODS[s.goodId]?.name ?? s.goodId}`)
-        .join(", ");
-      notifications.push({
-        message: `${a.shipName}: contraband confiscated — ${details} at ${a.destName}`,
-        type: "contraband_seized",
-        refs: { ship: shipRef, system: systemRef },
-      });
-    }
-
-    if (a.cargoLost && a.cargoLost.length > 0) {
-      notifications.push({
-        message: `${a.shipName} lost cargo near ${a.destName}`,
-        type: "cargo_lost",
-        refs: { ship: shipRef, system: systemRef },
-      });
-    }
-
-    if (
-      a.damageResult &&
-      (a.damageResult.hullDamage > 0 || a.damageResult.shieldDamage > 0)
-    ) {
-      const parts: string[] = [];
-      if (a.damageResult.shieldDamage > 0)
-        parts.push(`${a.damageResult.shieldDamage} shield`);
-      if (a.damageResult.hullDamage > 0)
-        parts.push(`${a.damageResult.hullDamage} hull`);
-      notifications.push({
-        message: `${a.shipName} took ${parts.join(" + ")} damage near ${a.destName}`,
-        type: "ship_damaged",
-        refs: { ship: shipRef, system: systemRef },
-      });
-      if (a.damageResult.disabled) {
-        notifications.push({
-          message: `${a.shipName} was disabled! All cargo lost.`,
-          type: "ship_disabled",
-          refs: { ship: shipRef, system: systemRef },
-        });
-      }
-    }
-
-    existing.gameNotifications = notifications;
     playerEvents.set(a.playerId, existing);
   }
-
-  await world.persistNotifications(playerEvents, ctx.tick);
 
   return { playerEvents };
 }
