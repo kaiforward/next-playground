@@ -19,16 +19,12 @@ import type {
   ConvoyStatus,
   Hazard,
   NotificationType,
-  OpMissionStatus,
-  BattleStatus,
   EntityRef,
   SunClass,
   BodyArchetypeId,
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
 import { MODULES, type ModuleId } from "@/lib/constants/modules";
-import type { MissionType, StatGateKey } from "@/lib/constants/missions";
-import type { EnemyTier } from "@/lib/constants/combat";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import type { UniverseScale } from "@/lib/constants/universe-gen";
 import type { CantinaNpcType } from "@/lib/constants/cantina-npcs";
@@ -216,21 +212,9 @@ export function toConvoyStatus(value: string): ConvoyStatus {
   return value as ConvoyStatus;
 }
 
-// ── Additional guards (modules, missions, combat, notifications) ─
+// ── Additional guards (modules, notifications) ──────────────────
 
 const MODULE_IDS: ReadonlySet<string> = new Set(Object.keys(MODULES));
-
-const MISSION_TYPES: ReadonlySet<string> = new Set<MissionType>([
-  "patrol", "survey", "bounty", "salvage", "recon",
-]);
-
-const STAT_GATE_KEYS: ReadonlySet<string> = new Set<StatGateKey>([
-  "firepower", "sensors", "hullMax", "stealth",
-]);
-
-const ENEMY_TIER_VALUES: ReadonlySet<string> = new Set<EnemyTier>([
-  "weak", "moderate", "strong",
-]);
 
 const HAZARD_VALUES: ReadonlySet<string> = new Set<Hazard>([
   "none", "low", "high",
@@ -244,14 +228,6 @@ const NOTIFICATION_TYPES: ReadonlySet<string> = new Set<NotificationType>([
   "import_duty", "contraband_seized",
 ]);
 
-const OP_MISSION_STATUSES: ReadonlySet<string> = new Set<OpMissionStatus>([
-  "available", "accepted", "in_progress", "completed", "failed",
-]);
-
-const BATTLE_STATUSES: ReadonlySet<string> = new Set<BattleStatus>([
-  "active", "player_victory", "player_defeat", "player_retreat", "enemy_retreat",
-]);
-
 export function isModuleId(value: string): value is ModuleId {
   return MODULE_IDS.has(value);
 }
@@ -261,39 +237,6 @@ export function toModuleId(value: string): ModuleId {
     throw new Error(`Invalid module id: "${value}"`);
   }
   return value as ModuleId;
-}
-
-export function toMissionType(value: string): MissionType {
-  if (!MISSION_TYPES.has(value)) {
-    throw new Error(`Invalid mission type: "${value}"`);
-  }
-  return value as MissionType;
-}
-
-export function isMissionType(value: string): value is MissionType {
-  return MISSION_TYPES.has(value);
-}
-
-export function toStatGateKey(value: string): StatGateKey {
-  if (!STAT_GATE_KEYS.has(value)) {
-    throw new Error(`Invalid stat gate key: "${value}"`);
-  }
-  return value as StatGateKey;
-}
-
-export function isStatGateKey(value: string): value is StatGateKey {
-  return STAT_GATE_KEYS.has(value);
-}
-
-export function toEnemyTier(value: string): EnemyTier {
-  if (!ENEMY_TIER_VALUES.has(value)) {
-    throw new Error(`Invalid enemy tier: "${value}"`);
-  }
-  return value as EnemyTier;
-}
-
-export function isEnemyTier(value: string): value is EnemyTier {
-  return ENEMY_TIER_VALUES.has(value);
 }
 
 export function toHazard(value: string): Hazard {
@@ -308,20 +251,6 @@ export function toNotificationType(value: string): NotificationType {
     throw new Error(`Invalid notification type: "${value}"`);
   }
   return value as NotificationType;
-}
-
-export function toOpMissionStatus(value: string): OpMissionStatus {
-  if (!OP_MISSION_STATUSES.has(value)) {
-    throw new Error(`Invalid op mission status: "${value}"`);
-  }
-  return value as OpMissionStatus;
-}
-
-export function toBattleStatus(value: string): BattleStatus {
-  if (!BATTLE_STATUSES.has(value)) {
-    throw new Error(`Invalid battle status: "${value}"`);
-  }
-  return value as BattleStatus;
 }
 
 export function isEventTypeId(value: string): value is EventTypeId {
@@ -457,27 +386,7 @@ export function deriveFactionStatus(
   return natural;
 }
 
-// ── Template literal guards ───────────────────────────────────
-
-export function isStatGateMessage(value: string): value is `STAT_GATE:${string}` {
-  return value.startsWith("STAT_GATE:");
-}
-
 // ── JSON boundary guards ────────────────────────────────────────
-
-/** Parse a JSON stat requirements string into a typed record. Invalid keys/values are dropped. */
-export function toStatRequirements(json: string): Partial<Record<StatGateKey, number>> {
-  let parsed: unknown;
-  try { parsed = JSON.parse(json); } catch { return {}; }
-  if (typeof parsed !== "object" || parsed === null) return {};
-  const result: Partial<Record<StatGateKey, number>> = {};
-  for (const [key, value] of Object.entries(parsed)) {
-    if (isStatGateKey(key) && typeof value === "number") {
-      result[key] = value;
-    }
-  }
-  return result;
-}
 
 /** Parse a JSON entity refs string into a typed record. Invalid entries are dropped. */
 export function toEntityRefs(json: string): Partial<Record<string, EntityRef>> {

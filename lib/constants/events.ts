@@ -771,46 +771,6 @@ const allianceDissolved: EventDefinition = {
   ],
 };
 
-// ── Event → mission theme mapping ──────────────────────────────
-
-export const EVENT_MISSION_GOODS: Partial<Record<EventTypeId, { goods: string[]; isImport: boolean }>> = {
-  inner_system_conflict: { goods: ["weapons", "fuel", "machinery"], isImport: true },
-  plague:                { goods: ["medicine", "food"],              isImport: true },
-  trade_festival:        { goods: ["luxuries", "food"],              isImport: true },
-  mining_boom:           { goods: ["machinery", "food"],             isImport: true },
-  supply_shortage:       { goods: ["food", "fuel", "medicine"],      isImport: true },
-  pirate_raid:           { goods: ["weapons", "machinery"],          isImport: true },
-  solar_storm:           { goods: ["electronics", "fuel"],           isImport: true },
-  refugee_crisis:        { goods: ["food", "medicine"],              isImport: true },
-  trade_embargo:         { goods: ["electronics", "machinery", "food"], isImport: true },
-  tech_breakthrough:     { goods: ["machinery", "electronics"],      isImport: true },
-  asteroid_strike:       { goods: ["machinery", "ore", "fuel"],      isImport: true },
-};
-
-// ── Event → operational mission mapping ─────────────────────────
-
-import type { MissionType } from "./missions";
-
-export interface EventOpMissionConfig {
-  /** Mission types this event can spawn. */
-  types: MissionType[];
-  /** Base probability of spawning per mission type (scaled by severity). */
-  spawnProbability: number;
-  /** Multiplier on base reward for event-spawned missions. */
-  rewardMult: number;
-}
-
-export const EVENT_OP_MISSIONS: Partial<Record<EventTypeId, EventOpMissionConfig>> = {
-  inner_system_conflict: { types: ["patrol", "bounty"],   spawnProbability: 0.6, rewardMult: 1.5 },
-  pirate_raid:           { types: ["patrol", "bounty"],   spawnProbability: 0.7, rewardMult: 1.3 },
-  conflict_spillover:    { types: ["patrol"],             spawnProbability: 0.3, rewardMult: 1.2 },
-  solar_storm:           { types: ["salvage"],            spawnProbability: 0.4, rewardMult: 1.2 },
-  supply_shortage:       { types: ["patrol"],             spawnProbability: 0.2, rewardMult: 1.1 },
-  refugee_crisis:        { types: ["patrol"],             spawnProbability: 0.5, rewardMult: 1.3 },
-  trade_embargo:         { types: ["recon"],              spawnProbability: 0.3, rewardMult: 1.2 },
-  asteroid_strike:       { types: ["salvage", "recon"],   spawnProbability: 0.6, rewardMult: 1.4 },
-};
-
 /** All registered event definitions, keyed by type. */
 const EVENT_DEFINITIONS_INTERNAL = {
   inner_system_conflict: innerSystemConflict,

@@ -81,15 +81,6 @@ export function mergeGlobalEvents(
   if (src.priceSnapshot) {
     target.priceSnapshot = target.priceSnapshot ? [...target.priceSnapshot, ...src.priceSnapshot] : [...src.priceSnapshot];
   }
-  if (src.missionsUpdated) {
-    target.missionsUpdated = target.missionsUpdated ? [...target.missionsUpdated, ...src.missionsUpdated] : [...src.missionsUpdated];
-  }
-  if (src.opMissionsUpdated) {
-    target.opMissionsUpdated = target.opMissionsUpdated ? [...target.opMissionsUpdated, ...src.opMissionsUpdated] : [...src.opMissionsUpdated];
-  }
-  if (src.battlesUpdated) {
-    target.battlesUpdated = target.battlesUpdated ? [...target.battlesUpdated, ...src.battlesUpdated] : [...src.battlesUpdated];
-  }
 }
 
 /**

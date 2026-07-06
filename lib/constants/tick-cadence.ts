@@ -2,5 +2,3 @@
 export const REFERENCE_INTERVAL = 24;
 /** Ticks for the economy cluster (economy / trade-flow / migration / price-snapshots) to refresh every system once. Fixed gameplay constant → scale-invariant cadence. */
 export const ECONOMY_UPDATE_INTERVAL = 24;
-/** Ticks for mission *generation* to sweep every system once. Long: missions persist until claimed/expired, so generate no faster than players consume them. First-draft playtest knob. */
-export const MISSION_GEN_INTERVAL = 120;

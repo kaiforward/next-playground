@@ -10,16 +10,7 @@ export const queryKeys = {
   events: ["events"] as const,
   priceHistory: (systemId: string) => ["priceHistory", systemId] as const,
   devEconomy: ["devEconomy"] as const,
-  missionsAll: ["missions"] as const,
-  systemMissions: (systemId: string) => ["missions", systemId] as const,
-  playerMissions: ["missions", "player"] as const,
   convoys: ["convoys"] as const,
-  // Operational missions & battles
-  opMissionsAll: ["opMissions"] as const,
-  systemAllMissions: (systemId: string) => ["opMissions", systemId] as const,
-  playerOpMissions: ["opMissions", "player"] as const,
-  battles: ["battles"] as const,
-  battleDetail: (battleId: string) => ["battles", battleId] as const,
   // Notifications
   notifications: ["notifications"] as const,
   unreadCount: ["unreadCount"] as const,

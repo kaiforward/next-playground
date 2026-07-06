@@ -30,12 +30,10 @@ interface ShipCardProps {
   backTo?: string;
   /** Required for refuel dialog. */
   playerCredits?: number;
-  /** Whether this ship is currently in an active battle. */
-  inBattle?: boolean;
 }
 
-export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, inBattle }: ShipCardProps) {
-  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, isDocked, onMission, needsFuel, isDamaged } = getShipDerivedState(ship);
+export function ShipCard({ ship, currentTick, regions, backTo, playerCredits }: ShipCardProps) {
+  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, isDocked, needsFuel, isDamaged } = getShipDerivedState(ship);
 
   const detailHref = backTo ? `/ship/${ship.id}?from=${backTo}` : `/ship/${ship.id}`;
   const refuelDialog = useDialog();
@@ -58,7 +56,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
             </Badge>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ShipStatusBadge ship={ship} inBattle={inBattle} />
+            <ShipStatusBadge ship={ship} />
             <Button href={`/?systemId=${ship.systemId}`} variant="pill" color="cyan" size="xs" aria-label="Show on map">
               <MapPinIcon className="w-3.5 h-3.5" />
             </Button>
@@ -111,7 +109,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
         {isDocked && (
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
-              {!ship.disabled && !onMission && (
+              {!ship.disabled && (
                 <Button
                   href={`/system/${ship.systemId}/market?tradeShipId=${ship.id}`}
                   variant="action"
@@ -121,7 +119,7 @@ export function ShipCard({ ship, currentTick, regions, backTo, playerCredits, in
                   Trade
                 </Button>
               )}
-              {!ship.disabled && !ship.convoyId && !onMission && (
+              {!ship.disabled && !ship.convoyId && (
                 <Button
                   href={`/?navigateShipId=${ship.id}`}
                   variant="action"

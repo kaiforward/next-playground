@@ -6,9 +6,10 @@ Master specification for the game. Describes what the game does, how systems con
 > multiplayer space-trading game to a **single-player grand-strategy game** — north star:
 > [grand-strategy-vision.md](./planned/grand-strategy-vision.md). The Game Overview below describes
 > the re-conceived game. The **Active Systems** sections describe the *implemented* code, which is
-> mid-pivot: systems marked **cut** in the vision doc §4 (personal trading, trade/operational
-> missions, danger pipeline, ship upgrades, player reputation, auth, notifications) still exist in
-> code and are documented here until the Phase 1 teardown removes them.
+> mid-pivot: systems marked **cut** in the vision doc §4 (personal trading, danger pipeline,
+> ship upgrades, player reputation, auth, notifications) still exist in code and are documented
+> here until the Phase 1 teardown removes them. Missions, battles, and combat were removed in
+> teardown Sweep 1.
 
 ---
 
@@ -34,7 +35,7 @@ These systems are implemented and functional. Each has a detailed design doc.
 Configurable universe scale controlled by `UNIVERSE_SCALE` env var — currently supports up to ~10,000 systems across 60 regions in a 25,000×25,000 map, with the goal of scaling as high as possible. Systems are connected by jump lanes forming a navigable graph. Each system belongs to one faction (which sets its government type) and one region (which contributes a `dominantEconomy` label for orientation). The map uses a WebGL canvas (Pixi.js) with a two-tier rendering pipeline: a point cloud shows all systems as dots at universe zoom, while tile-based viewport loading fetches detailed system data only for visible tiles at close zoom. A LOD engine crossfades between tiers — zoomed out shows the point cloud, Voronoi-derived region boundaries, fleet presence dots, and region name labels; zooming in progressively reveals system names, economy badges, ship counts, event indicators, and connection fuel costs. A map-mode toggle paints the territory polygons by faction (default), by region, by a per-system **stability** choropleth (the inverse of `unrest` — high unrest = low stability), or hides them entirely; additive trade-flow (market diffusion, straight particle streams) and logistics (directed faction hauls, curved convoy arcs) overlays sit on top of any mode, and the price overlay (a per-system halo) carries a buy/sell sub-toggle (price uses a green↔red deal-quality ramp). Gateway systems serve as chokepoints for inter-region travel. Data loading at this scale and per-player fog-of-war visibility are detailed in [map-data-loading](./active/engineering/map-data-loading.md).
 
 ### System Substrate & Traits — [detailed spec](./active/gameplay/system-traits.md)
-Every system is built from a physical substrate — a sun (its class gates composition), 1–N bodies (planets, asteroid belts, gas giants) each with a finite **available space** (from body size) partitioned into per-resource **deposit slots** (each carrying a poor/average/good/rich **quality band**) and fungible **general space**, whose **habitable fraction** caps population — plus 0–2 narrative features. Economy type (agricultural, extraction, refinery, industrial, tech, core) is derived bottom-up from the system's effective deposit potential (slot caps × quality yields) and population — no direct assignment, no region biasing; the galaxy is **extraction-dominant by design** (raw building blocks are needed in volume, and gas giants with no habitable land are truly dead). Features (precursor ruins, anomalies, derelict fleets, etc.) carry no economic role: they have quality tiers (1–3), modify danger baselines, gate survey/salvage/recon missions and exploration sites, and influence event spawning. The faction-facing extensions (economy nudge on conquest, war targets) will be specced with the pivot's war phase (the old planned Facilities doc is deleted).
+Every system is built from a physical substrate — a sun (its class gates composition), 1–N bodies (planets, asteroid belts, gas giants) each with a finite **available space** (from body size) partitioned into per-resource **deposit slots** (each carrying a poor/average/good/rich **quality band**) and fungible **general space**, whose **habitable fraction** caps population — plus 0–2 narrative features. Economy type (agricultural, extraction, refinery, industrial, tech, core) is derived bottom-up from the system's effective deposit potential (slot caps × quality yields) and population — no direct assignment, no region biasing; the galaxy is **extraction-dominant by design** (raw building blocks are needed in volume, and gas giants with no habitable land are truly dead). Features (precursor ruins, anomalies, derelict fleets, etc.) carry no economic role: they have quality tiers (1–3), modify danger baselines, gate exploration sites, and influence event spawning. The faction-facing extensions (economy nudge on conquest, war targets) will be specced with the pivot's war phase (the old planned Facilities doc is deleted).
 
 ### Economy — [detailed spec](./active/gameplay/economy.md)
 26 goods in 3 tiers (raw, processed, advanced) traded at station markets. Prices emerge from a single stock value per market via a pricing-anchor curve clamped to a **per-market band** — a demand-derived floor reserve and an infrastructure-derived ceiling (`Σ` building storage), replacing the legacy global `[5, 200]` — with intra-trade slippage and a bid-ask spread that make same-station round-trips unprofitable. Stock evolves through self-limiting production/consumption, band-relative noise, event modifiers, and government effects — equilibrium emerges from production/consumption balance plus spatial trade flow, with no mean-reversion and no separate demand axis. Production is capacity-driven and **input-gated**: each system has a seeded industrial base (`SystemBuilding` counts built onto the bodies' **available space** — extractors on deposit slots, factories on general space, population centres on habitable space), and per-good output equals `Σ count × outputPerUnit × effectiveFulfilment × inputGate × yield` where `effectiveFulfilment` is the head-count ratio `min(1, population / labour demand)` (population is the labour pool) further gated, for tier-1+ goods, by academy-licensed **skill ceilings** (see Economy Specialisation), `inputGate` throttles a tier-1+ good by the availability of its recipe inputs (1 for tier-0 extractables), and `yield` scales a tier-0 extractable by its deposit quality (1 for tier-1+). The 26 goods form a production chain: tier-1+ buildings draw their recipe inputs from local stock each tick, processed in recipe-topological order per system, so a shortage of any input **cascades** down the chain — cut an input's supply and every downstream good throttles in sequence. Consumption has two channels — universal civilian demand from a per-system **demand basis** (per-capita baseline + per-grade skilled-work consumption baskets — see Economy Specialisation S3) plus the production-input draw — and `demandRate` (the days-of-supply pricing denominator) sums both, so an input-heavy good (a refinery world's Ore) prices honestly rather than cheap-when-scarce. Economy type is a derived display label, not an input to the tick. **Population is dynamic** (Float, grows/declines/migrates): the economy processor records per-good satisfaction (`delivered / demanded`) each tick; the population processor integrates these into `unrest` (0…1), applies logistic growth/decline, and rewrites `demandRate` for the new population and its labour allocation; a migration processor then relocates population along the same intra-faction topology. Chronic unmet demand raises `unrest`; high `unrest` triggers a strike state that smoothly suppresses production (consumption is never suppressed). A per-system **stability** readout (the inverse of `unrest`) surfaces on the map as a choropleth and as a per-system badge, and on the system screen as a Population tab (magnitude, `popCap` utilisation, unrest/stability, strike state, per-good demand footprint) and a stability row on the Overview. **Infrastructure is dynamic too**: `SystemBuilding.count` decays **downward** each economy shard toward what is actively *used* — gentle disuse where built exceeds staffed-and-selling (production/extraction) or occupancy (housing), plus a catastrophic unrest-driven teardown above a threshold — so `popCap` recomputes live from the surviving housing and a failing system sheds its industry; housing rotting below its occupants displaces the overshoot as migration ⊕ death. The **Industry panel** surfaces this per building as available (shared land headroom) · built · in-use, health-coloured (stable / idle / collapsing) …and surfaces the skill-tiered labour model — a system Labour card (workforce + the two academy-licensed skill ceilings), per-building health glyphs, academy-named idle reasons, and per-grade staffing tooltips.
@@ -57,8 +58,8 @@ Demand's specialisation gradient (stage **S3** of the track). Civilian consumpti
 ### Events — [detailed spec](./active/gameplay/events.md)
 12 primary event types (inner_system_conflict, plague, trade_festival, mining_boom, ore_glut, supply_shortage, pirate_raid, solar_storm, refugee_crisis, trade_embargo, tech_breakthrough, asteroid_strike), 2 child events that spread from parents (conflict_spillover, plague_risk), and 3 relations-owned event types spawned exclusively by the relations processor (border_conflict, pact_under_negotiation, alliance_dissolved — see Inter-Faction Relations below). Events spawn randomly (weighted by government type), progress through multi-phase arcs, apply modifiers to markets and navigation danger, and spread to neighboring systems. Each phase has distinct economic and danger effects.
 
-### Trading & Missions — [detailed spec](./active/gameplay/trading.md)
-Players buy and sell goods at station markets. Prices update dynamically based on each good's stock. Trade missions are auto-generated delivery contracts — import missions at high-price systems, export missions at low-price systems, and event-themed missions during active events. Missions reward credits on delivery plus the goods' sale value.
+### Trading — [detailed spec](./active/gameplay/trading.md)
+Players buy and sell goods at station markets. Prices update dynamically based on each good's stock. (Trade missions were removed in the Phase 1 teardown; personal trading itself is removed in Sweep 2, leaving a read-only market inspection view.)
 
 ### Navigation & Fleet — [detailed spec](./active/gameplay/navigation.md)
 Travel along jump-lane connections. Travel time scales with the ship's `speed` stat (faster ships = fewer ticks). Ships can be grouped into convoys for collective travel and trade; the convoy moves at the slowest member's speed and all members contribute firepower to a shared escort pool. On arrival, cargo passes through a 5-stage danger pipeline: hazard incidents, import duty, contraband inspection, event-based cargo loss, and hull/shield damage. Hull at 0 disables a ship (cargo lost, needs repair). Shields regenerate on dock.
@@ -68,9 +69,6 @@ Travel along jump-lane connections. Travel time scales with the ship's `speed` s
 
 ### Ship Upgrades — [detailed spec](./active/gameplay/ship-upgrades.md)
 Modular slot system. Each ship has a fixed layout of typed slots (engine, cargo, defence, systems) summing to 2–5 total. 12 modules (3 per slot type) — some are tiered stat boosts (Mk I/II/III), others are flat capability unlocks (hidden compartment, manoeuvring thrusters, point defence, scanner array). Modules stack additively or multiplicatively into a single bonus bundle that feeds the danger pipeline and ship stats. Installed at any system today; drydock tier gating is dropped (system is slated for the pivot's Phase 1 teardown).
-
-### Operational Missions & Combat — [combat spec](./active/gameplay/combat.md)
-Three non-trade mission types: **Patrol** (reduce system danger), **Survey** (gather data from trait-rich systems), and **Bounty** (fight pirate encounters). Missions are generated by tick processor based on system danger levels (patrol, bounty) and system traits (survey). Ships must meet stat gates (firepower, sensors, hull) to accept missions. Patrol and survey missions commit the ship for a timed duration. Bounty missions trigger a tick-based battle on arrival — simultaneous damage resolution every 6 ticks with strength/morale tracking, variance, and morale cascades. Battle outcomes (victory, defeat, retreat) apply hull damage and credit rewards. A battle viewer shows live strength bars, morale state, and round history.
 
 ### Factions — [detailed spec](./active/gameplay/faction-system.md)
 The political layer. 8 major factions plus minor factions (12 at default scale, 18 at 10K) own the universe — every star system has a `factionId`. Each faction has a government type (one of 8: federation, corporate, authoritarian, frontier, cooperative, technocratic, militarist, theocratic) that drives its economic identity, and a doctrine (one of 5: expansionist, protectionist, mercantile, hegemonic, opportunistic) that drives political behaviour. Government type sourced per-system from the owning faction (no longer per-region). Faction status (dominant / major / regional / minor) is derived from share of total factioned systems with hysteresis at the boundaries — scale-independent, so the same thresholds work at 600 and 10K. Minors are placed at world-gen by four archetypes (buffer, frontier, enclave, cluster) and protected by a 5-system floor. Faction overview UI lists factions with a detail page showing territory sample, doctrine, government, relations, alliances, recent border conflicts, and your own reputation.
@@ -82,10 +80,10 @@ Per-pair score (-100 to +100) drifts every 3 ticks via a dedicated relations pro
 Per-player, per-faction score (-100 to +100) bootstrapped at 0 across every faction on registration. Earned through trading at faction-owned markets (+0.5 per successful trade, capped at +2.0 per faction per tick to prevent grind-spam). Drives transaction multipliers on buy/sell (Champion ×0.92/×1.08, Trusted ×0.96/×1.04, Neutral ×1.0, Distrusted ×1.08/×0.92, Hostile denied entirely). Market prices remain universal — reputation modifies the player's individual transaction, not the displayed price, so it stacks naturally with government modifiers and event modifiers without collision. Reputation panel surfaces all standings per player.
 
 ### Tick Engine — [detailed spec](./active/engineering/tick-engine.md)
-Game clock advancing every 5 seconds. 15 processors run sequentially in topological order: ship arrivals, events, economy, infrastructure decay (depends on economy), population (depends on economy + infrastructure decay), migration (depends on population), trade flow, directed logistics (depends on economy), directed build (depends on directed logistics), trade missions, op missions, battles, price snapshots, notification prune, relations (every 3 ticks, depends on events). Each declares its dependencies and an optional frequency (e.g. price snapshots every 20 ticks, notification prune every 50). Economy processes one region per tick (round-robin) and records per-system satisfaction into an in-memory context field for the population processor; trade flow and migration both sweep work-budget slices of the intra-faction edge graph each tick (region-independent); directed logistics and directed build each sweep a per-faction shard on a slow 48-tick agency clock (every faction acted on once per interval); relations processes all faction pairs each time it runs. All processors execute inside a single transaction — if one fails, the tick counter does not advance. Results are broadcast to clients via SSE with per-player event filtering.
+Game clock advancing every 5 seconds. 12 processors run sequentially in topological order: ship arrivals, events, economy, infrastructure decay (depends on economy), population (depends on economy + infrastructure decay), migration (depends on population), trade flow, directed logistics (depends on economy), directed build (depends on directed logistics), price snapshots, notification prune, relations (every 3 ticks, depends on events). Each declares its dependencies and an optional frequency (e.g. price snapshots every 20 ticks, notification prune every 50). Economy processes one region per tick (round-robin) and records per-system satisfaction into an in-memory context field for the population processor; trade flow and migration both sweep work-budget slices of the intra-faction edge graph each tick (region-independent); directed logistics and directed build each sweep a per-faction shard on a slow 48-tick agency clock (every faction acted on once per interval); relations processes all faction pairs each time it runs. All processors execute inside a single transaction — if one fails, the tick counter does not advance. Results are broadcast to clients via SSE with per-player event filtering.
 
 ### Notifications & Captain's Log — [detailed spec](./active/gameplay/notifications.md)
-Per-player notifications for things that happen to your own assets — ship arrivals, damage/disable, cargo loss, battle outcomes, mission completion/expiry, import duties, contraband seizure — distinct from ambient world events. Surfaced two ways: a sidebar bell with an unread badge and recent feed, and the Captain's Log (a full searchable, filterable, paginated history). Persisted server-side so offline players catch up; a tick processor prunes entries older than 500 ticks.
+Per-player notifications for things that happen to your own assets — ship arrivals, damage/disable, cargo loss, import duties, contraband seizure — distinct from ambient world events. Surfaced two ways: a sidebar bell with an unread badge and recent feed, and the Captain's Log (a full searchable, filterable, paginated history). Persisted server-side so offline players catch up; a tick processor prunes entries older than 500 ticks.
 
 ### Auth & Players
 User registration and login via NextAuth (JWT/Credentials). Each user has one player profile with credits and a fleet of ships. New players spawn at the `GameWorld.startingSystemId` — currently a core-economy system in a Federation-government major's territory near the map center — with a starter Shuttle. A `PlayerFactionReputation` row is created for every faction at the same time, all at score 0; players are not faction-aligned at creation.
@@ -100,7 +98,6 @@ How the active systems connect and affect each other:
 flowchart TD
     TE[Tick Engine]
     SA[Ship Arrivals]
-    BT[Battles]
     EV[Events]
     EC[Economy]
     TF[Trade Flow]
@@ -109,8 +106,6 @@ flowchart TD
     MIG[Migration]
     DL[Directed Logistics]
     DB[Directed Build]
-    TM[Trade Missions]
-    OM[Operational Missions]
     REL[Relations Processor]
     NF[Navigation & Fleet]
     SH[Ships & Upgrades]
@@ -122,7 +117,6 @@ flowchart TD
     NP[Notification Prune]
 
     TE -- "orchestrates (sequential)" --> SA
-    TE -- "orchestrates (sequential)" --> BT
     TE -- "orchestrates (sequential)" --> EV
     TE -- "orchestrates (sequential)" --> EC
     TE -- "orchestrates (sequential)" --> TF
@@ -131,21 +125,17 @@ flowchart TD
     TE -- "orchestrates (sequential)" --> MIG
     TE -- "orchestrates (sequential)" --> DL
     TE -- "orchestrates (sequential)" --> DB
-    TE -- "orchestrates (sequential)" --> TM
-    TE -- "orchestrates (sequential)" --> OM
     TE -- "every 3 ticks,<br/>after events" --> REL
     TE -- "orchestrates (sequential)" --> PS
     TE -- "every 50 ticks" --> NP
 
     EV -- "modifiers: equilibrium shifts,<br/>rate multipliers, reversion" --> EC
     EV -- "danger modifiers" --> NF
-    EV -- "themed missions + bonus rewards" --> TM
 
     EC -- "settled prices feed<br/>gradient calc" --> TF
     EC -- "per-system satisfaction<br/>(in-memory ctx.results)" --> POP
     EC -- "downward count decay +<br/>output uptake (ctx.results)" --> ID
     ID -- "live popCap<br/>(read before growth)" --> POP
-    EC -- "price extremes trigger<br/>mission generation" --> TM
     EC -- "current prices" --> PS
     EC -- "market bands +<br/>supply/demand (per-faction shard)" --> DL
     DL -- "silent surplus→deficit<br/>stock deltas + logistics flow rows" --> EC
@@ -172,27 +162,20 @@ flowchart TD
     REP -- "buy/sell multipliers,<br/>hostile trade denial" --> NF
 
     TR -- "economy type derivation<br/>(body resources + population)" --> EC
-    TR -- "survey/salvage/recon<br/>feature gating" --> OM
 
     SH -- "hull / stealth / evasion<br/>+ module bonuses" --> NF
     SH -- "firepower → escort<br/>damage reduction" --> NF
     SH -- "speed → travel ticks" --> NF
 
     SA -- "cargo danger pipeline<br/>(hazard, duty, contraband, loss, damage)" --> NF
-    SA -- "bounty arrival → battle creation,<br/>patrol/survey → commitment start" --> BT
-
-    BT -- "resolves rounds, applies<br/>ship damage + rewards" --> NF
 
     NF -- "trade at destination<br/>(buy/sell affects stock)" --> EC
     NF -- "successful trade →<br/>+0.5 rep (capped per tick)" --> REP
-
-    OM -- "generates patrol/survey/bounty<br/>from danger + traits" --> BT
 ```
 
 Key interactions:
 - **Events → Economy**: Event modifiers shift market equilibrium, multiply production/consumption rates, dampen price reversion
 - **Events → Navigation**: Danger modifiers increase cargo loss risk on ship arrival
-- **Events → Trade Missions**: Active events generate themed delivery contracts with bonus rewards
 - **Economy → Trade Flow**: Trade flow runs *after* the economy processor each tick (`dependsOn`), so for any system the two both touch this tick, the economy's price update is committed before trade flow reads it — gradients never fire against mid-update state
 - **Economy → Population**: The economy processor writes per-system satisfaction (`delivered / demanded`) into an in-memory context field (`ctx.results`); the population processor reads it in the same tick to integrate `unrest` and apply growth/decline. This handoff is transient — not persisted, not broadcast.
 - **Economy → Infrastructure Decay → Population**: After the economy commits market/labour state, the infrastructure-decay processor runs on the same shard (reading the economy's `ctx.results` — its processed system set + per-good output uptake). It shrinks `SystemBuilding.count` **downward only** toward what is *used* (disuse where built exceeds staffed-and-selling/occupancy, plus an unrest-driven teardown above θ), and recomputes `popCap` live from the surviving housing. Population then runs *after* it (`dependsOn` economy + infrastructure-decay), reading the fresh `popCap` before growth/decline — so housing that rots below its occupants displaces the overshoot (unrest-weighted migration ⊕ death).
@@ -202,10 +185,6 @@ Key interactions:
 - **Population → Economy**: `unrest` from the previous tick drives the strike suppression multiplier applied to production each economy run; rewritten `demandRate` flows into the pricing reference (`TARGET_COVER × demandRate × anchorMult`)
 - **Population → Migration**: The migration processor reads updated `population` and `unrest` from the population processor in the same tick to compute attractiveness gradients and relocate population
 - **Migration → Population (next tick)**: Population moved this tick is reflected in the next tick's growth/decline and satisfaction calculations — no in-transit state, relocation is instantaneous
-- **Economy → Trade Missions**: Price extremes (>2x or <0.5x base) trigger mission generation
-- **System Traits → Operational Missions**: Systems with survey-eligible traits (precursor_ruins, gravitational_anomaly, etc.) generate survey missions
-- **Danger Levels → Operational Missions**: High-danger systems generate patrol and bounty missions. Enemy tier scales with danger
-- **Ship Arrivals → Battles**: Bounty mission ships arriving at target system trigger battle creation. Patrol/survey ships begin their timed commitment
 - **Government → Economy**: Volatility scaling, equilibrium spread adjustment, consumption boosts
 - **Government → Navigation**: Tax rates, contraband lists, inspection modifiers, danger baseline
 - **Factions → Government**: Government type is sourced from each system's owning faction (no longer per-region)

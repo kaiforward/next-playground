@@ -76,9 +76,6 @@ async function main() {
   // ── Clear existing data (FK-safe order) ──
   await prisma.tradeFlow.deleteMany();
   await prisma.tradeHistory.deleteMany();
-  await prisma.battle.deleteMany();
-  await prisma.mission.deleteMany();
-  await prisma.tradeMission.deleteMany();
   await prisma.eventModifier.deleteMany();
   await prisma.gameEvent.deleteMany();
   await prisma.cargoItem.deleteMany();

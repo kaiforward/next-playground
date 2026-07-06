@@ -1,4 +1,4 @@
-import type { ShipState, ShipActiveMission, ConvoyState, UpgradeSlotState } from "@/lib/types/game";
+import type { ShipState, ConvoyState, UpgradeSlotState } from "@/lib/types/game";
 import { toShipStatus, toEconomyType, toShipSize, toShipRole, toUpgradeSlotType, toConvoyStatus, toModuleId } from "@/lib/types/guards";
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import { isShipTypeId } from "@/lib/types/guards";
@@ -77,7 +77,7 @@ export function serializeShip(ship: {
     moduleTier: number | null;
   }>;
   convoyMember?: { convoyId: string } | null;
-}, activeMission?: ShipActiveMission | null): ShipState {
+}): ShipState {
   const shipType = ship.shipType;
   const typeDef = isShipTypeId(shipType) ? SHIP_TYPES[shipType] : null;
 
@@ -121,7 +121,6 @@ export function serializeShip(ship: {
       moduleTier: s.moduleTier,
     })),
     convoyId: ship.convoyMember?.convoyId ?? null,
-    activeMission: activeMission ?? null,
   };
 }
 

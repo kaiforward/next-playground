@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useConvoys } from "@/lib/hooks/use-convoy";
-import { useSystemAllMissions } from "@/lib/hooks/use-op-missions";
 import { getDockedShips, getDockedConvoys } from "@/lib/utils/fleet";
 import { enrichTraits } from "@/lib/utils/traits";
 import { deriveSystemLocations } from "@/lib/constants/locations";
@@ -29,7 +28,6 @@ function SystemPanelContent({
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const { fleet } = useFleet();
   const { convoys } = useConvoys();
-  const allMissions = useSystemAllMissions(systemId);
   const pathname = usePathname();
 
   const soloShipCount = useMemo(
@@ -40,9 +38,6 @@ function SystemPanelContent({
     () => getDockedConvoys(convoys, systemId).length,
     [convoys, systemId],
   );
-  const contractCount =
-    allMissions.tradeMissions.available.length +
-    allMissions.opMissions.available.length;
 
   const exploreCount = useMemo(() => {
     // Counts *playable* locations for the tab badge. Availability is a static
@@ -57,7 +52,6 @@ function SystemPanelContent({
   const tabBadges: Partial<Record<SystemTabSegment, number>> = {
     ships: soloShipCount,
     convoys: convoyCount,
-    contracts: contractCount,
     explore: exploreCount,
   };
   const tabs = SYSTEM_TABS.map((tab) => {

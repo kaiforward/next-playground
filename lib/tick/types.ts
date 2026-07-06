@@ -53,29 +53,12 @@ export interface PriceSnapshotPayload {
   systemCount: number;
 }
 
-export interface MissionsUpdatedPayload {
-  count: number;
-  expired: number;
-}
-
-export interface OpMissionsUpdatedPayload {
-  generated: number;
-  expired: number;
-}
-
-export interface BattlesUpdatedPayload {
-  count: number;
-}
-
 // ── Typed event maps ──────────────────────────────────────────────
 
 export interface GlobalEventMap {
   economyTick: EconomyTickPayload[];
   eventNotifications: EventNotificationPayload[];
   priceSnapshot: PriceSnapshotPayload[];
-  missionsUpdated: MissionsUpdatedPayload[];
-  opMissionsUpdated: OpMissionsUpdatedPayload[];
-  battlesUpdated: BattlesUpdatedPayload[];
 }
 
 export interface PlayerEventMap {

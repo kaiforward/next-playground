@@ -2,8 +2,6 @@
 
 import type { ShipSize, ShipRole, UpgradeSlotType } from "@/lib/constants/ships";
 import type { ModuleId } from "@/lib/constants/modules";
-import type { MissionType, StatGateKey } from "@/lib/constants/missions";
-import type { EnemyTier } from "@/lib/constants/combat";
 import type { EventTypeId } from "@/lib/constants/events";
 
 export type { ShipSize, ShipRole, UpgradeSlotType };
@@ -185,12 +183,6 @@ export interface UpgradeSlotState {
   moduleTier: number | null;
 }
 
-export interface ShipActiveMission {
-  id: string;
-  type: MissionType;
-  status: OpMissionStatus;
-}
-
 export interface ShipState {
   id: string;
   name: string;
@@ -221,7 +213,6 @@ export interface ShipState {
   departureTick: number | null;
   arrivalTick: number | null;
   convoyId: string | null;
-  activeMission: ShipActiveMission | null;
 }
 
 export type ConvoyStatus = "docked" | "in_transit";
@@ -425,109 +416,6 @@ export interface ActiveEvent {
   phaseDuration: number;
   ticksRemaining: number;
   severity: number;
-}
-
-// ── Trade mission types ─────────────────────────────────────────
-
-export interface TradeMissionInfo {
-  id: string;
-  systemId: string;
-  systemName: string;
-  destinationId: string;
-  destinationName: string;
-  goodId: string;
-  goodName: string;
-  quantity: number;
-  reward: number;
-  estimatedGoodsValue: number;
-  deadlineTick: number;
-  ticksRemaining: number;
-  hops: number;
-  isImport: boolean;
-  isExport: boolean;
-  eventId: string | null;
-  playerId: string | null;
-  acceptedAtTick: number | null;
-}
-
-// ── Operational mission types ────────────────────────────────────
-
-export type OpMissionStatus = "available" | "accepted" | "in_progress" | "completed" | "failed";
-
-export interface MissionInfo {
-  id: string;
-  type: MissionType;
-  systemId: string;
-  systemName: string;
-  targetSystemId: string;
-  targetSystemName: string;
-  reward: number;
-  deadlineTick: number;
-  ticksRemaining: number;
-  durationTicks: number | null;
-  enemyTier: EnemyTier | null;
-  statRequirements: Partial<Record<StatGateKey, number>>;
-  status: OpMissionStatus;
-  playerId: string | null;
-  shipId: string | null;
-  acceptedAtTick: number | null;
-  startedAtTick: number | null;
-  completedAtTick: number | null;
-}
-
-// ── Battle types ────────────────────────────────────────────────
-
-export type BattleStatus =
-  | "active"
-  | "player_victory"
-  | "player_defeat"
-  | "player_retreat"
-  | "enemy_retreat";
-
-export interface BattleRoundResult {
-  round: number;
-  playerDamageDealt: number;
-  enemyDamageDealt: number;
-  playerStrengthAfter: number;
-  enemyStrengthAfter: number;
-  playerMoraleAfter: number;
-  enemyMoraleAfter: number;
-}
-
-export interface BattleInfo {
-  id: string;
-  type: string;
-  systemId: string;
-  systemName: string;
-  missionId: string | null;
-  shipId: string | null;
-  shipName: string | null;
-  status: BattleStatus;
-  playerStrength: number;
-  playerMorale: number;
-  playerMaxStrength: number;
-  enemyStrength: number;
-  enemyMorale: number;
-  enemyMaxStrength: number;
-  enemyType: string;
-  enemyTier: EnemyTier;
-  roundsCompleted: number;
-  roundHistory: BattleRoundResult[];
-  createdAtTick: number;
-  resolvedAtTick: number | null;
-}
-
-export interface BattleShipStats {
-  hullMax: number;
-  hullCurrent: number;
-  shieldMax: number;
-  shieldCurrent: number;
-  firepower: number;
-  evasion: number;
-}
-
-export interface BattleDetailInfo extends BattleInfo {
-  shipStats: BattleShipStats | null;
 }
 
 // ── Price history types ─────────────────────────────────────────

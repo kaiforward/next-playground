@@ -15,10 +15,6 @@ import type {
   TradeType,
   ActiveEvent,
   SystemPriceHistory,
-  TradeMissionInfo,
-  MissionInfo,
-  BattleInfo,
-  BattleDetailInfo,
   TraitId,
   TraitCategory,
   QualityTier,
@@ -329,44 +325,6 @@ export interface ShipPurchaseResult {
   creditSpent: number;
 }
 export type ShipPurchaseResponse = ApiResponse<ShipPurchaseResult>;
-
-// ── Mission types ───────────────────────────────────────────────
-
-export interface SystemMissionsData { available: TradeMissionInfo[]; active: TradeMissionInfo[] }
-export type SystemMissionsResponse = ApiResponse<SystemMissionsData>;
-
-export interface AcceptMissionRequest { missionId: string }
-export interface AcceptMissionResult { mission: TradeMissionInfo; activeCount: number }
-export type AcceptMissionResponse = ApiResponse<AcceptMissionResult>;
-
-export interface DeliverMissionRequest { missionId: string; shipId: string }
-export interface DeliverMissionResult { mission: TradeMissionInfo; goodsValue: number; reward: number; creditEarned: number; newBalance: number }
-export type DeliverMissionResponse = ApiResponse<DeliverMissionResult>;
-
-export interface AbandonMissionRequest { missionId: string }
-export type AbandonMissionResponse = ApiResponse<{ missionId: string }>;
-
-// ── Operational mission types ───────────────────────────────────
-
-export interface SystemAllMissionsData {
-  tradeMissions: { available: TradeMissionInfo[]; active: TradeMissionInfo[] };
-  opMissions: { available: MissionInfo[]; active: MissionInfo[] };
-}
-export type SystemAllMissionsResponse = ApiResponse<SystemAllMissionsData>;
-
-export interface AcceptOpMissionResult { mission: MissionInfo }
-export type AcceptOpMissionResponse = ApiResponse<AcceptOpMissionResult>;
-
-export interface StartOpMissionRequest { shipId: string }
-export interface StartOpMissionResult { mission: MissionInfo }
-export type StartOpMissionResponse = ApiResponse<StartOpMissionResult>;
-
-export type AbandonOpMissionResponse = ApiResponse<{ missionId: string }>;
-
-// ── Battle types ───────────────────────────────────────────────
-
-export type BattlesResponse = ApiResponse<BattleInfo[]>;
-export type BattleDetailResponse = ApiResponse<BattleDetailInfo>;
 
 // ── Convoy types ────────────────────────────────────────────────
 

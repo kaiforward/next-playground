@@ -11,7 +11,6 @@ export const SYSTEM_TABS = [
   { label: "Ships", segment: "ships" },
   { label: "Convoys", segment: "convoys" },
   { label: "Shipyard", segment: "shipyard" },
-  { label: "Contracts", segment: "contracts" },
   { label: "Explore", segment: "explore" },
 ] as const;
 

@@ -12,12 +12,10 @@ import {
   Ship,
   ShipWheel,
   Radio,
-  Crosshair,
   ChevronLeft,
   ChevronRight,
   LogOut,
   NotebookText,
-  ListChecks,
   Landmark,
   Network,
   Handshake,
@@ -41,9 +39,7 @@ const FLEET_NAV: NavItem[] = [
 
 const ACTIVITY_NAV: NavItem[] = [
   { href: "/log", label: "Captain's Log", icon: NotebookText },
-  { href: "/missions", label: "Missions", icon: ListChecks },
   { href: "/events", label: "Events", icon: Radio },
-  { href: "/battles", label: "Battles", icon: Crosshair },
 ];
 
 const POLITICS_NAV: NavItem[] = [

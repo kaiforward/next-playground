@@ -7,9 +7,6 @@ import { migrationProcessor } from "./processors/migration";
 import { tradeFlowProcessor } from "./processors/trade-flow";
 import { directedLogisticsProcessor } from "./processors/directed-logistics";
 import { directedBuildProcessor } from "./processors/directed-build";
-import { tradeMissionsProcessor } from "./processors/trade-missions";
-import { missionsProcessor } from "./processors/missions";
-import { battlesProcessor } from "./processors/battles";
 import { priceSnapshotsProcessor } from "./processors/price-snapshots";
 import { notificationPruneProcessor } from "./processors/notification-prune";
 import { relationsProcessor } from "./processors/relations";
@@ -26,9 +23,6 @@ export const processors: TickProcessor[] = [
   tradeFlowProcessor,
   directedLogisticsProcessor,
   directedBuildProcessor,   // runs after logistics (dependsOn: ["directed-logistics"])
-  tradeMissionsProcessor,
-  missionsProcessor,
-  battlesProcessor,
   priceSnapshotsProcessor,
   notificationPruneProcessor,
   relationsProcessor,
