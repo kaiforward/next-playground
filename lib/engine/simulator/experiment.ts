@@ -1,125 +1,39 @@
 /**
  * Experiment system — YAML config parsing, validation, and result serialization.
+ *
+ * The calibration harness is now a thin wrapper over `generateWorld` +
+ * `runWorldTick` (see `docs/build-plans/pivot-phase2-engine-extraction.md`
+ * Task 5): there is no per-run constants-override channel any more —
+ * `runWorldTick` reads the same code constants the live game does — so an
+ * experiment config only names the world to generate and how long to run it.
  */
 
 import { z } from "zod";
-import { toEventTypeId } from "@/lib/types/guards";
-import type { SimConfig, SimResults, EventInjection, InjectionTarget } from "./types";
-import type { SimConstantOverrides } from "./constants";
+import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import type { SimConfig, SimResults } from "./types";
 
-// ── Zod schemas ──────────────────────────────────────────────────
-
-const InjectionTargetSchema = z.union([
-  z.object({ economyType: z.string(), nth: z.number().int().min(0).optional() }),
-  z.object({ systemIndex: z.number().int().min(0) }),
-]);
-
-const EventInjectionSchema = z.object({
-  tick: z.number().int().min(0),
-  target: InjectionTargetSchema,
-  type: z.string(),
-  severity: z.number().positive().optional(),
-});
-
-const BotConfigSchema = z.object({
-  strategy: z.string(),
-  count: z.number().int().min(1).default(1),
-});
-
-const ConstantOverridesSchema = z.object({
-  economy: z.object({
-    noiseFraction: z.number().min(0).optional(),
-    holdCover: z.number().min(1).optional(),
-    interval: z.number().int().min(1).optional(),
-  }).optional(),
-  goods: z.record(z.string(), z.object({ basePrice: z.number() })).optional(),
-  fuel: z.object({
-    refuelCostPerUnit: z.number().optional(),
-  }).optional(),
-  events: z.object({
-    spawnInterval: z.number().int().min(1).optional(),
-    maxPerSystem: z.number().int().min(1).optional(),
-    maxGlobal: z.number().int().min(1).optional(),
-    modifierCaps: z.object({
-      minAnchorMult: z.number().optional(),
-      maxAnchorMult: z.number().optional(),
-      minMultiplier: z.number().optional(),
-      maxMultiplier: z.number().optional(),
-    }).optional(),
-  }).optional(),
-  ships: z.record(z.string(), z.object({
-    fuel: z.number().optional(),
-    cargo: z.number().optional(),
-    price: z.number().optional(),
-  })).optional(),
-  universe: z.object({
-    regionCount: z.number().int().min(1).optional(),
-    totalSystems: z.number().int().min(1).optional(),
-    intraRegionBaseFuel: z.number().optional(),
-    gatewayFuelMultiplier: z.number().optional(),
-    gatewaysPerBorder: z.number().int().min(1).optional(),
-    intraRegionExtraEdges: z.number().optional(),
-  }).optional(),
-  tradeFlow: z.object({
-    distanceDecay: z.number().min(0).optional(),
-    flowBudget: z.number().min(0).optional(),
-    gradientThreshold: z.number().min(0).optional(),
-    gradientSensitivity: z.number().min(0).optional(),
-    flowHistoryTicks: z.number().int().min(1).optional(),
-  }).optional(),
-  bots: z.object({
-    startingCredits: z.number().optional(),
-    refuelThreshold: z.number().optional(),
-    tradeImpactFactor: z.number().optional(),
-  }).optional(),
-}).optional();
-
-const EventsConfigSchema = z.object({
-  disableRandom: z.boolean().default(false),
-  inject: z.array(EventInjectionSchema).default([]),
-}).optional();
+// ── Zod schema ───────────────────────────────────────────────────
 
 export const ExperimentConfigSchema = z.object({
   label: z.string().optional(),
   seed: z.number().int().default(42),
   ticks: z.number().int().min(1).default(500),
-  bots: z.array(BotConfigSchema).min(1),
-  overrides: ConstantOverridesSchema,
-  events: EventsConfigSchema,
+  systemCount: z.number().int().min(1).default(UNIVERSE_GEN.TOTAL_SYSTEMS),
 });
 
 export type ExperimentConfig = z.infer<typeof ExperimentConfigSchema>;
 
 // ── Conversion ───────────────────────────────────────────────────
 
-/**
- * Convert a validated experiment config to SimConfig + overrides.
- */
+/** Convert a validated experiment config to SimConfig. */
 export function experimentToSimConfig(exp: ExperimentConfig): {
   config: SimConfig;
-  overrides: SimConstantOverrides;
   label?: string;
 } {
-  const injections: EventInjection[] = (exp.events?.inject ?? []).map((inj) => {
-    // Zod validates structure — narrow the union via property checks
-    const target: InjectionTarget = "systemIndex" in inj.target
-      ? { systemIndex: inj.target.systemIndex }
-      : { economyType: inj.target.economyType, nth: inj.target.nth };
-    return { tick: inj.tick, target, eventType: toEventTypeId(inj.type), severity: inj.severity };
-  });
-
-  const config: SimConfig = {
-    tickCount: exp.ticks,
-    bots: exp.bots,
-    seed: exp.seed,
-    eventInjections: injections.length > 0 ? injections : undefined,
-    disableRandomEvents: exp.events?.disableRandom ?? false,
+  return {
+    config: { systemCount: exp.systemCount, seed: exp.seed, tickCount: exp.ticks },
+    label: exp.label,
   };
-
-  // Zod validates the shape — construct with explicit fields to satisfy the type
-  const overrides: SimConstantOverrides = exp.overrides ?? {};
-
-  return { config, overrides, label: exp.label };
 }
 
 // ── Result serialization ─────────────────────────────────────────
@@ -128,10 +42,6 @@ export interface ExperimentResult {
   label?: string;
   timestamp: string;
   config: SimConfig;
-  constants: SimResults["constants"];
-  overrides: SimResults["overrides"];
-  summaries: SimResults["summaries"];
-  strategyAggregates: SimResults["strategyAggregates"];
   marketHealth: SimResults["marketHealth"];
   eventImpacts: SimResults["eventImpacts"];
   elapsedMs: number;
@@ -145,10 +55,6 @@ export function buildExperimentResult(results: SimResults): ExperimentResult {
     label: results.label,
     timestamp: new Date().toISOString(),
     config: results.config,
-    constants: results.constants,
-    overrides: results.overrides,
-    summaries: results.summaries,
-    strategyAggregates: results.strategyAggregates,
     marketHealth: results.marketHealth,
     eventImpacts: results.eventImpacts,
     elapsedMs: results.elapsedMs,

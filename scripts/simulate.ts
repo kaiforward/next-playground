@@ -21,9 +21,11 @@ import {
   experimentToSimConfig,
   buildExperimentResult,
 } from "../lib/engine/simulator/experiment";
-import { STRATEGY_NAMES } from "../lib/engine/simulator/strategies";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/engine/simulator/population-analysis";
-import type { SimConfig, BotConfig, SimResults } from "../lib/engine/simulator/types";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
+import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { toSimSystems } from "../lib/world/tick";
+import type { SimConfig, SimResults } from "../lib/engine/simulator/types";
 
 // ── Argument parsing ────────────────────────────────────────────
 
@@ -74,7 +76,7 @@ function fmtNum(n: number): string {
 }
 
 function formatTable(results: SimResults): string {
-  const { strategyAggregates, marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, constants, populationSnapshots } = results;
+  const { marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
   const lines: string[] = [];
 
@@ -100,70 +102,7 @@ function formatTable(results: SimResults): string {
     lines.push("");
   }
 
-  // Strategy aggregate summary
-  const headers = [
-    "Strategy",
-    "Bots",
-    "Avg Credits",
-    "Min / Max",
-    "Avg Trades",
-    "Cr/Tick",
-    "Profit/Trade",
-    "Idle %",
-    "Explore %",
-  ];
-  const widths = [12, 5, 14, 22, 10, 10, 12, 7, 10];
-
-  lines.push(headers.map((h, i) => pad(h, widths[i])).join(" | "));
-  lines.push(widths.map((w) => "-".repeat(w)).join("-+-"));
-
-  for (const a of strategyAggregates) {
-    const row = [
-      pad(a.strategy, widths[0]),
-      rpad(String(a.botCount), widths[1]),
-      rpad(fmtNum(a.avgCredits), widths[2]),
-      rpad(`${fmtNum(a.minCredits)} / ${fmtNum(a.maxCredits)}`, widths[3]),
-      rpad(a.avgTrades.toFixed(0), widths[4]),
-      rpad(a.avgCreditsPerTick.toFixed(1), widths[5]),
-      rpad(a.avgProfitPerTrade.toFixed(1), widths[6]),
-      rpad((a.avgIdleRate * 100).toFixed(1) + "%", widths[7]),
-      rpad((a.avgExplorationRate * 100).toFixed(1) + "%", widths[8]),
-    ];
-    lines.push(row.join(" | "));
-  }
-
-  lines.push("");
   lines.push(`Simulation completed in ${elapsedMs.toFixed(0)}ms`);
-
-  // Goods breakdown per strategy (aggregated across all bots)
-  for (const a of strategyAggregates) {
-    if (a.goodBreakdown.length === 0) continue;
-
-    const totalProfit = a.goodBreakdown.reduce((sum, g) => sum + Math.max(0, g.netProfit), 0);
-
-    lines.push("");
-    lines.push(`Goods Breakdown (${a.strategy}, ${a.botCount} bots aggregated):`);
-
-    const gHeaders = ["Good", "Bought", "Sold", "Spent", "Revenue", "Net Profit", "% of Profit"];
-    const gWidths = [12, 10, 10, 14, 14, 14, 12];
-
-    lines.push(gHeaders.map((h, i) => pad(h, gWidths[i])).join(" | "));
-    lines.push(gWidths.map((w) => "-".repeat(w)).join("-+-"));
-
-    for (const g of a.goodBreakdown) {
-      const pctOfProfit = totalProfit > 0 ? (Math.max(0, g.netProfit) / totalProfit) * 100 : 0;
-      const row = [
-        pad(g.goodId, gWidths[0]),
-        rpad(fmtNum(g.totalQuantityBought), gWidths[1]),
-        rpad(fmtNum(g.totalQuantitySold), gWidths[2]),
-        rpad(fmtNum(g.totalSpent), gWidths[3]),
-        rpad(fmtNum(g.totalRevenue), gWidths[4]),
-        rpad(fmtNum(g.netProfit), gWidths[5]),
-        rpad(pctOfProfit.toFixed(1) + "%", gWidths[6]),
-      ];
-      lines.push(row.join(" | "));
-    }
-  }
 
   // Market health summary
   if (marketHealth) {
@@ -221,9 +160,9 @@ function formatTable(results: SimResults): string {
   // Population and unrest summary
   {
     const pop = summarizePopulation(
-      finalWorld.systems,
+      toSimSystems(finalWorld),
       initialPopulationTotal,
-      constants.population.strike.threshold,
+      STRIKE_PARAMS.threshold,
     );
     lines.push("");
     lines.push("Population & Unrest (end of simulation):");
@@ -252,7 +191,7 @@ function formatTable(results: SimResults): string {
 
   // Infrastructure decay summary
   {
-    const infra = summarizeInfrastructure(finalWorld.systems, initialBuildingTotal);
+    const infra = summarizeInfrastructure(toSimSystems(finalWorld), initialBuildingTotal);
     lines.push("");
     lines.push("Infrastructure (end of simulation):");
     const iWidths = [24, 16];
@@ -273,8 +212,8 @@ function formatTable(results: SimResults): string {
     lines.push("");
     lines.push(`Event Impact (top ${topEvents.length} of ${eventImpacts.length}):`);
 
-    const eHeaders = ["Type", "System", "Ticks", "Sev", "Price Δ", "Top Movers", "Trades", "Profit"];
-    const eWidths = [20, 16, 12, 5, 9, 30, 7, 10];
+    const eHeaders = ["Type", "System", "Ticks", "Sev", "Price Δ", "Top Movers"];
+    const eWidths = [20, 16, 12, 5, 9, 30];
 
     lines.push(eHeaders.map((h, i) => pad(h, eWidths[i])).join(" | "));
     lines.push(eWidths.map((w) => "-".repeat(w)).join("-+-"));
@@ -304,42 +243,12 @@ function formatTable(results: SimResults): string {
         rpad(e.severity.toFixed(1), eWidths[3]),
         rpad(`${priceSign}${e.weightedPriceImpactPct.toFixed(1)}%`, eWidths[4]),
         pad(topMovers || "-", eWidths[5]),
-        rpad(e.tradeCountDuring.toLocaleString(), eWidths[6]),
-        rpad(e.tradeProfitDuring.toLocaleString(), eWidths[7]),
       ];
       lines.push(row.join(" | "));
     }
   } else {
     lines.push("");
     lines.push("Event Impact: no events occurred during simulation");
-  }
-
-  // Government trade — sells by destination government type (aggregated)
-  const allGovTypes = [
-    ...new Set(strategyAggregates.flatMap((a) => a.governmentSellBreakdown.map((g) => g.governmentType))),
-  ].sort();
-
-  if (allGovTypes.length > 0) {
-    lines.push("");
-    lines.push("Government Trade (sells by destination, all bots per strategy):");
-
-    const gtWidths = [12, ...allGovTypes.map(() => 18)];
-    const gtHeaders = ["Strategy", ...allGovTypes];
-
-    lines.push(gtHeaders.map((h, i) => pad(h, gtWidths[i])).join(" | "));
-    lines.push(gtWidths.map((w) => "-".repeat(w)).join("-+-"));
-
-    for (const a of strategyAggregates) {
-      const totalSold = a.governmentSellBreakdown.reduce((sum, g) => sum + g.totalSold, 0);
-      const govMap = new Map(a.governmentSellBreakdown.map((g) => [g.governmentType, g]));
-      const cells = allGovTypes.map((gov) => {
-        const entry = govMap.get(gov);
-        if (!entry || totalSold === 0) return rpad("-", 18);
-        const pct = ((entry.totalSold / totalSold) * 100).toFixed(1);
-        return rpad(`${fmtNum(entry.totalSold)} (${pct}%)`, 18);
-      });
-      lines.push([pad(a.strategy, 12), ...cells].join(" | "));
-    }
   }
 
   return lines.join("\n");
@@ -366,18 +275,14 @@ async function runExperiment(configPath: string, jsonOutput: boolean): Promise<v
     process.exit(1);
   }
 
-  const { config, overrides, label } = experimentToSimConfig(validated.data);
+  const { config, label } = experimentToSimConfig(validated.data);
 
   console.log(
     `Running experiment${label ? ` "${label}"` : ""}: ` +
-    `${config.tickCount} ticks, seed ${config.seed}, ` +
-    `${config.bots.length} bot group(s)` +
-    (config.disableRandomEvents ? ", random events disabled" : "") +
-    (config.eventInjections?.length ? `, ${config.eventInjections.length} injection(s)` : "") +
-    "\n",
+    `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems\n`,
   );
 
-  const results = await runSimulation(config, overrides, label);
+  const results = await runSimulation(config, label);
 
   if (jsonOutput) {
     console.log(JSON.stringify(results, null, 2));
@@ -420,9 +325,10 @@ Options:
   --help           Show this help
 
 Quick Run:
-  Running with no flags runs all strategies (${STRATEGY_NAMES.join(", ")}),
-  1 bot each, 500 ticks, seed 42. For custom parameters, use --config with a
-  YAML file — see experiments/examples/ for templates.
+  Running with no flags generates the default-scale world (${UNIVERSE_GEN.TOTAL_SYSTEMS}
+  systems), runs 500 ticks with seed 42, and reports market/population/infrastructure
+  health. For custom parameters, use --config with a YAML file — see
+  experiments/examples/ for templates.
 
 Examples:
   npm run simulate                                                 # Quick sanity check
@@ -439,20 +345,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Hardcoded quick-run: all strategies, 1 bot each, 500 ticks, seed 42
-  const botConfigs: BotConfig[] = STRATEGY_NAMES.map((strategy) => ({
-    strategy,
-    count: 1,
-  }));
-
   const config: SimConfig = {
-    tickCount: 500,
-    bots: botConfigs,
+    systemCount: UNIVERSE_GEN.TOTAL_SYSTEMS,
     seed: 42,
+    tickCount: 500,
   };
 
   console.log(
-    `Running quick-run: 500 ticks, seed 42, strategies: ${STRATEGY_NAMES.join(", ")}, 1 bot each\n`,
+    `Running quick-run: ${config.systemCount} systems, ${config.tickCount} ticks, seed ${config.seed}\n`,
   );
 
   const results = await runSimulation(config);

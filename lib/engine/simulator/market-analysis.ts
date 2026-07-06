@@ -10,7 +10,7 @@ import { spotPrice, curveForGood, marketBand, midPriceAt } from "@/lib/engine/ma
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type {
-  SimWorld, MarketSnapshot, MarketHealthSummary, SimMarketEntry,
+  MarketSnapshot, MarketHealthSummary, SimMarketEntry,
   PriceLevelSummary, CoverLevelEntry,
 } from "./types";
 
@@ -34,8 +34,8 @@ function nearBandCeiling(m: SimMarketEntry, band: { minStock: number; maxStock: 
 }
 
 /** Take a snapshot of all market prices at the current tick. */
-export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
-  return world.markets.map((m) => ({
+export function takeMarketSnapshot(markets: SimMarketEntry[]): MarketSnapshot[] {
+  return markets.map((m) => ({
     systemId: m.systemId,
     goodId: m.goodId,
     stock: m.stock,
@@ -43,14 +43,14 @@ export function takeMarketSnapshot(world: SimWorld): MarketSnapshot[] {
   }));
 }
 
-/** Compute market health summary from the final world state. */
-export function computeMarketHealth(world: SimWorld): MarketHealthSummary {
+/** Compute market health summary from the final market state. */
+export function computeMarketHealth(markets: SimMarketEntry[]): MarketHealthSummary {
   return {
-    priceDispersion: computePriceDispersion(world),
-    stockDrift: computeStockDrift(world),
-    stockPins: computeStockPins(world),
-    priceLevels: computePriceLevels(world),
-    coverLevels: computeCoverLevels(world),
+    priceDispersion: computePriceDispersion(markets),
+    stockDrift: computeStockDrift(markets),
+    stockPins: computeStockPins(markets),
+    priceLevels: computePriceLevels(markets),
+    coverLevels: computeCoverLevels(markets),
   };
 }
 
@@ -62,11 +62,11 @@ export function computeMarketHealth(world: SimWorld): MarketHealthSummary {
  * Low dispersion = prices are uniform = no reason to trade this good.
  */
 function computePriceDispersion(
-  world: SimWorld,
+  markets: SimMarketEntry[],
 ): { goodId: string; avgStdDev: number }[] {
   // Group prices by good
   const pricesByGood = new Map<string, number[]>();
-  for (const m of world.markets) {
+  for (const m of markets) {
     const price = spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock);
     let prices = pricesByGood.get(m.goodId);
     if (!prices) {
@@ -96,11 +96,11 @@ function computePriceDispersion(
  * where the good prices at base.
  */
 function computeStockDrift(
-  world: SimWorld,
+  markets: SimMarketEntry[],
 ): { goodId: string; avgStockDrift: number }[] {
   const driftsByGood = new Map<string, number[]>();
 
-  for (const m of world.markets) {
+  for (const m of markets) {
     const reference = curveForGood(
       m.basePrice,
       m.priceFloor,
@@ -138,11 +138,11 @@ function computeStockDrift(
  * the unambiguous supply pathology. Sorted by total pinned fraction descending.
  */
 function computeStockPins(
-  world: SimWorld,
+  markets: SimMarketEntry[],
 ): { goodId: string; floorFrac: number; ceilingFrac: number }[] {
   const byGood = new Map<string, { floor: number; ceiling: number; total: number }>();
 
-  for (const m of world.markets) {
+  for (const m of markets) {
     let agg = byGood.get(m.goodId);
     if (!agg) {
       agg = { floor: 0, ceiling: 0, total: 0 };
@@ -187,9 +187,9 @@ function quantile(xs: number[], q: number): number {
  * read. Mirrors the DB audit's PRICE LEVELS section: a galaxy stuck cheap (median
  * « 1, high cheapFrac) is the overproduction signature this phase fixes.
  */
-function computePriceLevels(world: SimWorld): PriceLevelSummary {
+function computePriceLevels(markets: SimMarketEntry[]): PriceLevelSummary {
   const ratios: number[] = [];
-  for (const m of world.markets) {
+  for (const m of markets) {
     const price = midPriceAt(
       curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult),
       m.stock,
@@ -214,9 +214,9 @@ function computePriceLevels(world: SimWorld): PriceLevelSummary {
  * Per-good distribution of cover = stock / anchor. Surplus/deficit use the same
  * thresholds as directed logistics so the sim read lines up with the live audit.
  */
-function computeCoverLevels(world: SimWorld): CoverLevelEntry[] {
+function computeCoverLevels(markets: SimMarketEntry[]): CoverLevelEntry[] {
   const coversByGood = new Map<string, number[]>();
-  for (const m of world.markets) {
+  for (const m of markets) {
     const target = curveForGood(
       m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult,
     ).targetStock;

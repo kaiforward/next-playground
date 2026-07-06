@@ -1,15 +1,22 @@
 /**
- * Simulator types — in-memory world model for economy testing.
- * No DB dependency. All data is plain objects.
+ * Simulator types — shape types shared by the tick processors' in-memory
+ * adapters (`lib/tick/adapters/memory/*`), plus the calibration harness's own
+ * config/results/health types.
+ *
+ * The bot/player/world-orchestration types that used to live here (`SimWorld`,
+ * `SimShip`, `SimPlayer`, `BotConfig`, per-tick trade metrics, …) died with the
+ * bot layer — `World` (`lib/world/types.ts`) is the one world model now, and
+ * `runWorldTick` (`lib/world/tick.ts`) is the one tick pipeline. What remains
+ * here are the flat row shapes the shared memory adapters require (still
+ * distinct from `World*` rows — see `lib/world/tick.ts`'s join helpers for the
+ * bridge) and the harness's own config/results types.
  */
 
 import type { EventTypeId } from "@/lib/constants/events";
 import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
-import type { ModifierRow } from "@/lib/engine/events";
-import type { SimConstants, SimConstantOverrides } from "./constants";
-import type { SimAdjacencyList } from "./pathfinding-cache";
+import type { World } from "@/lib/world/types";
 
-// ── World model ─────────────────────────────────────────────────
+// ── Adapter row shapes ──────────────────────────────────────────
 
 export interface SimRegion {
   id: string;
@@ -33,7 +40,7 @@ export interface SimSystem {
   traits: { traitId: string; quality: number }[];
   /** Unrest accumulator (0…1) — integral of demand-weighted dissatisfaction. */
   unrest: number;
-  /** Seeded industrial base — buildingType → count. Static at runtime. */
+  /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
@@ -70,8 +77,10 @@ export interface SimEvent {
   id: string;
   type: EventTypeId;
   phase: string;
-  systemId: string;
-  regionId: string;
+  /** Target system, or null for region/pair-level events (e.g. relations-owned events). */
+  systemId: string | null;
+  /** Target region, or null. */
+  regionId: string | null;
   startTick: number;
   phaseStartTick: number;
   phaseDuration: number;
@@ -87,172 +96,12 @@ export interface SimFlowEvent {
   quantity: number;
 }
 
-export interface SimShip {
-  id: string;
-  playerId: string;
-  shipType: string;
-  fuel: number;
-  maxFuel: number;
-  cargo: SimCargoItem[];
-  cargoMax: number;
-  speed: number;
-  hullMax: number;
-  hullCurrent: number;
-  shieldMax: number;
-  firepower: number;
-  evasion: number;
-  stealth: number;
-  disabled: boolean;
-  status: "docked" | "in_transit";
-  systemId: string;
-  destinationSystemId: string | null;
-  arrivalTick: number | null;
-}
-
-export interface SimCargoItem {
-  goodId: string;
-  quantity: number;
-}
-
-export interface SimPlayer {
-  id: string;
-  name: string;
-  credits: number;
-  strategy: string;
-}
-
-export interface SimWorld {
-  tick: number;
-  regions: SimRegion[];
-  systems: SimSystem[];
-  connections: SimConnection[];
-  markets: SimMarketEntry[];
-  events: SimEvent[];
-  modifiers: ModifierRow[];
-  ships: SimShip[];
-  players: SimPlayer[];
-  /** Rolling window of edge-flow events; pruned by the trade-flow processor. */
-  flowEvents: SimFlowEvent[];
-  /** Monotonic counter for generating unique IDs. */
-  nextId: number;
-}
-
-// ── Configuration ───────────────────────────────────────────────
-
-export interface BotConfig {
-  strategy: string;
-  count: number;
-}
+// ── Calibration harness config ──────────────────────────────────
 
 export interface SimConfig {
-  tickCount: number;
-  bots: BotConfig[];
+  systemCount: number;
   seed: number;
-  /** Optional: inject events at specific ticks. */
-  eventInjections?: EventInjection[];
-  /** When true, suppresses random event spawning (injections still fire). */
-  disableRandomEvents?: boolean;
-}
-
-export type InjectionTarget =
-  | { economyType: string; nth?: number }
-  | { systemIndex: number };
-
-export interface EventInjection {
-  tick: number;
-  target: InjectionTarget;
-  eventType: EventTypeId;
-  severity?: number;
-}
-
-/** Runtime context threaded through the simulation loop. */
-export interface SimRunContext {
-  constants: SimConstants;
-  disableRandomEvents: boolean;
-  eventInjections: EventInjection[];
-  /** Pre-built adjacency list for simulator pathfinding (avoids rebuilding per call). */
-  adjacencyList: SimAdjacencyList;
-  /** Map from systemId → governmentType for sell tracking. */
-  systemToGov: Map<string, GovernmentType>;
-}
-
-// ── Metrics ─────────────────────────────────────────────────────
-
-export interface GoodTradeRecord {
-  goodId: string;
-  /** Quantity bought (0 if only sold this tick). */
-  bought: number;
-  /** Quantity sold (0 if only bought this tick). */
-  sold: number;
-  /** Credits spent buying. */
-  buyCost: number;
-  /** Credits earned selling. */
-  sellRevenue: number;
-  /** Government type of the system where a sell occurred. */
-  sellGovernmentType?: GovernmentType;
-}
-
-export interface TickMetrics {
-  tick: number;
-  credits: number;
-  tradeCount: number;
-  tradeProfitSum: number;
-  fuelSpent: number;
-  /** Per-good trade data recorded this tick. */
-  goodsTraded: GoodTradeRecord[];
-  /** System the bot was at (or departed from) this tick. Null if in transit. */
-  systemVisited: string | null;
-  /** True if the bot was docked but found no profitable trade this tick. */
-  idle: boolean;
-}
-
-export interface GoodBreakdownEntry {
-  goodId: string;
-  timesBought: number;
-  timesSold: number;
-  totalQuantityBought: number;
-  totalQuantitySold: number;
-  totalSpent: number;
-  totalRevenue: number;
-  netProfit: number;
-}
-
-export interface PlayerSummary {
-  playerId: string;
-  playerName: string;
-  strategy: string;
-  finalCredits: number;
-  totalTrades: number;
-  avgProfitPerTrade: number;
-  creditsPerTick: number;
-  /** Tick when player first reached 5000 credits (freighter milestone), or null. */
-  freighterTick: number | null;
-  totalFuelSpent: number;
-  profitPerFuel: number;
-  /** Credits at each tick for charting. */
-  creditsCurve: number[];
-  /** Aggregate stats per good across the full run. */
-  goodBreakdown: GoodBreakdownEntry[];
-  /** Number of unique systems visited during the run. */
-  uniqueSystemsVisited: number;
-  /** Top 5 most-visited systems with visit counts. */
-  topSystems: { systemId: string; systemName: string; visits: number }[];
-  /** Fraction of total systems visited at least once. */
-  explorationRate: number;
-  /** Number of ticks spent docked with no trade available. */
-  idleTicks: number;
-  /** Idle rate as fraction of total docked ticks. */
-  idleRate: number;
-  /** Earning rate per tick as a rolling window (window size = 50 ticks). */
-  earningRateCurve: number[];
-  /** Breakdown of sell trades by destination government type. */
-  governmentSellBreakdown: GovernmentSellEntry[];
-}
-
-export interface GovernmentSellEntry {
-  governmentType: GovernmentType;
-  totalSold: number;
-  totalRevenue: number;
+  tickCount: number;
 }
 
 // ── Market health ───────────────────────────────────────────────
@@ -314,14 +163,15 @@ export interface EventBoundaryPrice {
 export interface EventLifecycle {
   id: string;
   type: EventTypeId;
-  systemId: string;
+  /** Null for region/pair-level events (e.g. relations-owned events). */
+  systemId: string | null;
   severity: number;
   startTick: number;
   endTick: number;
   sourceEventId: string | null;
-  /** Prices at the event's system when the event started. */
+  /** Prices at the event's system when the event started ([] if systemId is null). */
   startPrices: EventBoundaryPrice[];
-  /** Prices at the event's system when the event ended. */
+  /** Prices at the event's system when the event ended ([] if systemId is null). */
   endPrices: EventBoundaryPrice[];
 }
 
@@ -336,7 +186,7 @@ export interface GoodPriceChange {
 export interface EventImpact {
   eventId: string;
   eventType: string;
-  systemId: string;
+  systemId: string | null;
   systemName: string;
   severity: number;
   startTick: number;
@@ -348,44 +198,21 @@ export interface EventImpact {
   goodPriceChanges: GoodPriceChange[];
   /** Base-price-weighted average price change across all goods (%). */
   weightedPriceImpactPct: number;
-  /** Number of bot-ticks at this system during the event. */
-  botVisitsDuring: number;
-  /** Number of trades executed at this system during the event. */
-  tradeCountDuring: number;
-  /** Total profit earned at this system during the event. */
-  tradeProfitDuring: number;
 }
 
-// ── Strategy aggregates ─────────────────────────────────────
+// ── Region overview ─────────────────────────────────────────────
 
-export interface StrategyAggregate {
-  strategy: string;
-  botCount: number;
-  avgCredits: number;
-  minCredits: number;
-  maxCredits: number;
-  avgTrades: number;
-  avgCreditsPerTick: number;
-  avgProfitPerTrade: number;
-  avgIdleRate: number;
-  avgExplorationRate: number;
-  avgFuelSpent: number;
-  avgProfitPerFuel: number;
-  /** Aggregated goods breakdown across all bots of this strategy. */
-  goodBreakdown: GoodBreakdownEntry[];
-  /** Aggregated government sell breakdown across all bots. */
-  governmentSellBreakdown: GovernmentSellEntry[];
+export interface RegionOverviewEntry {
+  name: string;
+  /** Modal government type across the region's systems, derived from faction ownership. */
+  dominantGovernmentType: GovernmentType;
+  systemCount: number;
 }
 
 // ── Results ─────────────────────────────────────────────────────
 
 export interface SimResults {
   config: SimConfig;
-  constants: SimConstants;
-  overrides: SimConstantOverrides;
-  summaries: PlayerSummary[];
-  /** Per-strategy aggregate metrics (one row per strategy). */
-  strategyAggregates: StrategyAggregate[];
   /** Market state sampled at regular intervals. */
   marketSnapshots: { tick: number; markets: MarketSnapshot[] }[];
   /** Derived market health metrics. */
@@ -399,18 +226,11 @@ export interface SimResults {
   /** Total wall-clock time in ms. */
   elapsedMs: number;
   /** Final world state after all ticks (for post-run analysis). */
-  finalWorld: SimWorld;
+  finalWorld: World;
   /** Total population summed across all systems at tick 0 (before the loop). */
   initialPopulationTotal: number;
   /** Total building count summed across all systems at tick 0 (before the loop). */
   initialBuildingTotal: number;
   /** Population snapshots sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
   populationSnapshots: Array<Map<string, number>>;
-}
-
-export interface RegionOverviewEntry {
-  name: string;
-  /** Modal government type across the region's systems, derived from faction ownership. */
-  dominantGovernmentType: GovernmentType;
-  systemCount: number;
 }
