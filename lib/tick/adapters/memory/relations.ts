@@ -52,19 +52,35 @@ interface MemoryTradeFlow {
   quantity: number;
 }
 
+/**
+ * Stored shape for one relations-owned event (border_conflict,
+ * pact_under_negotiation, alliance_dissolved). `phase`/`systemId`/`regionId`/
+ * `startTick`/`severity`/`sourceEventId` mirror `World`'s unified `WorldEvent`
+ * row exactly — they're optional here (unread by the relations processor
+ * itself, which only needs `id`/`type`/`phaseStartTick`/`phaseDuration`/
+ * `metadata`) so existing fixture-only callers (unit tests) keep compiling,
+ * but `createRelationEvents` always fills them from the real event template
+ * so a caller that seeds/reads back full `WorldEvent` rows (`lib/world/tick.ts`)
+ * round-trips every field without loss.
+ */
 interface MemoryRelationEvent {
   id: string;
   type: RelationEventView["type"];
+  phase?: string;
+  systemId?: string | null;
+  regionId?: string | null;
+  startTick?: number;
   phaseStartTick: number;
   phaseDuration: number;
+  severity?: number;
+  sourceEventId?: string | null;
   metadata: RelationEventView["metadata"];
 }
 
 /**
- * In-memory adapter for the relations processor. Built for unit and
- * integration tests of the processor body; SimWorld doesn't model factions
- * directly (the simulator has no relations layer), so callers construct
- * this adapter with explicit fixtures.
+ * In-memory adapter for the relations processor. Used by unit tests of the
+ * processor body (explicit fixtures) and by `lib/world/tick.ts` (built fresh
+ * each tick from `World`'s factions/relations/alliancePacts/systems).
  *
  * Pair convention: factionAId < factionBId. Stored canonical; reads/writes
  * normalize input on every call.
@@ -77,7 +93,9 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   connections: MemoryConnection[];
   tradeFlows: MemoryTradeFlow[];
   events: MemoryRelationEvent[];
-  private nextId: number;
+  /** Public (unlike the other memory adapters' private counters) so callers threading
+   *  World.nextId across stages (lib/world/tick.ts) can read the post-run value back. */
+  nextId: number;
 
   constructor(initial: {
     factions: MemoryFaction[];
@@ -243,9 +261,15 @@ export class InMemoryRelationsWorld implements RelationsWorld {
       this.events.push({
         id,
         type: c.type,
+        phase: c.phase,
+        systemId: c.systemId,
+        regionId: c.regionId,
         // Mirror Prisma adapter: startTick == phaseStartTick on create.
+        startTick: currentTick,
         phaseStartTick: currentTick,
         phaseDuration: c.phaseDuration,
+        severity: c.severity,
+        sourceEventId: null,
         metadata: { ...c.metadata },
       });
     }

@@ -54,13 +54,14 @@ export interface MarketUpdate {
   stock: number;
 }
 
-/** One flow event — appended to TradeFlow. */
+/** One flow event — appended to TradeFlow. Always "market"-origin — this is the trade-flow processor's own insert shape (directed-logistics writes through a separate LogisticsFlowInsert/appendLogisticsFlows path). */
 export interface FlowEventInsert {
   tick: number;
   fromSystemId: string;
   toSystemId: string;
   goodId: string;
   quantity: number;
+  flowType: "market";
 }
 
 export interface TradeFlowWorld {

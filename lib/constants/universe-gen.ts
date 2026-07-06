@@ -43,18 +43,22 @@ const BASE_CONFIG: UniverseGenConfig = {
 export type UniverseScale = "default" | "10k";
 
 /**
- * Scale preset overrides. Each key maps to fields that differ from BASE_CONFIG.
+ * 10k-preset knob values, typed as concrete numbers (not Partial<UniverseGenConfig>)
+ * so genConfigForSystemCount can read them as interpolation anchors without a cast.
  * 10K: 10,000 systems in a 25,000×25,000 map (16×16 grid → ~39 systems/tile).
  */
+const TEN_K_OVERRIDES = {
+  TOTAL_SYSTEMS: 10_000,
+  MAP_SIZE: 25_000,
+  REGION_COUNT: 60,
+  REGION_MIN_DISTANCE: 2_500,
+  MINOR_FACTION_COUNT: 18,
+} as const;
+
+/** Scale preset overrides. Each key maps to fields that differ from BASE_CONFIG. */
 const SCALE_OVERRIDES: Record<UniverseScale, Partial<UniverseGenConfig>> = {
   default: {},
-  "10k": {
-    TOTAL_SYSTEMS: 10_000,
-    MAP_SIZE: 25_000,
-    REGION_COUNT: 60,
-    REGION_MIN_DISTANCE: 2_500,
-    MINOR_FACTION_COUNT: 18,
-  },
+  "10k": TEN_K_OVERRIDES,
 };
 
 function resolveScale(): UniverseScale {
@@ -69,6 +73,64 @@ export const UNIVERSE_GEN: UniverseGenConfig = {
   ...BASE_CONFIG,
   ...SCALE_OVERRIDES[ACTIVE_SCALE],
 };
+
+// ── Continuous generation config (arbitrary system count) ──────
+
+/** √N anchor points: the two known presets used to derive every scale-dependent knob. */
+const SQRT_ANCHOR_600 = Math.sqrt(BASE_CONFIG.TOTAL_SYSTEMS);
+const SQRT_ANCHOR_10K = Math.sqrt(TEN_K_OVERRIDES.TOTAL_SYSTEMS);
+
+/**
+ * Linear interpolation in √N space, anchored at (600, valueAt600) and (10_000, valueAt10k):
+ * value(N) = a + b·√N, where b = (valueAt10k − valueAt600) / (√10000 − √600)
+ * and a = valueAt600 − b·√600. Extrapolates for N outside [600, 10_000].
+ */
+function interpolateBySqrtN(systemCount: number, valueAt600: number, valueAt10k: number): number {
+  const slope = (valueAt10k - valueAt600) / (SQRT_ANCHOR_10K - SQRT_ANCHOR_600);
+  const intercept = valueAt600 - slope * SQRT_ANCHOR_600;
+  return intercept + slope * Math.sqrt(systemCount);
+}
+
+/**
+ * Derives a full UniverseGenConfig for an arbitrary system count (50–20,000 in practice).
+ * Every knob SCALE_OVERRIDES["10k"] overrides is interpolated continuously in √N space,
+ * anchored at the 600-system and 10,000-system presets (see interpolateBySqrtN); knobs the
+ * 10k preset doesn't touch stay at their BASE_CONFIG constant. TOTAL_SYSTEMS is the input
+ * itself, not a formula. Region/faction counts are floored at 1 so extreme low N can't
+ * produce a degenerate 0-region or 0-minor-faction universe.
+ */
+export function genConfigForSystemCount(systemCount: number): UniverseGenConfig {
+  return {
+    ...BASE_CONFIG,
+    TOTAL_SYSTEMS: Math.round(systemCount),
+    MAP_SIZE: Math.round(
+      interpolateBySqrtN(systemCount, BASE_CONFIG.MAP_SIZE, TEN_K_OVERRIDES.MAP_SIZE)
+    ),
+    REGION_COUNT: Math.max(
+      1,
+      Math.round(
+        interpolateBySqrtN(systemCount, BASE_CONFIG.REGION_COUNT, TEN_K_OVERRIDES.REGION_COUNT)
+      )
+    ),
+    REGION_MIN_DISTANCE: Math.round(
+      interpolateBySqrtN(
+        systemCount,
+        BASE_CONFIG.REGION_MIN_DISTANCE,
+        TEN_K_OVERRIDES.REGION_MIN_DISTANCE
+      )
+    ),
+    MINOR_FACTION_COUNT: Math.max(
+      1,
+      Math.round(
+        interpolateBySqrtN(
+          systemCount,
+          BASE_CONFIG.MINOR_FACTION_COUNT,
+          TEN_K_OVERRIDES.MINOR_FACTION_COUNT
+        )
+      )
+    ),
+  };
+}
 
 /** Flat pool of generic space region names (28 names, cycled with suffix for >28 regions). */
 export const REGION_NAMES: string[] = [

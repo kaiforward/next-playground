@@ -25,10 +25,13 @@ export class InMemoryTradeFlowWorld implements TradeFlowWorld {
   constructor(
     initial: { systems: SimSystem[]; markets: SimMarketEntry[]; flowEvents: SimFlowEvent[] },
     private readonly connections: SimConnection[],
+    /** Precomputed open edges (e.g. shared with migration for the same tick); self-computes on first use when omitted. */
+    precomputedOpenEdges?: EdgeView[],
   ) {
     this.systems = initial.systems.map((s) => ({ ...s }));
     this.markets = initial.markets.map((m) => ({ ...m }));
     this.flowEvents = [...initial.flowEvents];
+    this.openEdgesCache = precomputedOpenEdges ?? null;
   }
 
   private getSysFaction(): Map<string, string | null> {

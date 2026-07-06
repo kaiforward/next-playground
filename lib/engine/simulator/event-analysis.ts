@@ -9,22 +9,22 @@
 import type { EventTypeId } from "@/lib/constants/events";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import type {
-  SimWorld,
+  SimEvent,
   SimMarketEntry,
   EventLifecycle,
   EventBoundaryPrice,
   EventImpact,
   GoodPriceChange,
-  TickMetrics,
 } from "./types";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Snapshot current prices at a system from a markets array. */
+/** Snapshot current prices at a system from a markets array ([] for region/pair-level events with no system). */
 function snapshotPrices(
   markets: SimMarketEntry[],
-  systemId: string,
+  systemId: string | null,
 ): EventBoundaryPrice[] {
+  if (systemId === null) return [];
   return markets
     .filter((m) => m.systemId === systemId)
     .map((m) => ({
@@ -37,7 +37,7 @@ function snapshotPrices(
 
 interface ActiveEventRecord {
   type: EventTypeId;
-  systemId: string;
+  systemId: string | null;
   severity: number;
   startTick: number;
   sourceEventId: string | null;
@@ -47,23 +47,25 @@ interface ActiveEventRecord {
 // ── Lifecycle tracking ──────────────────────────────────────────
 
 /**
- * Track event lifecycles by diffing world.events each tick.
- * Call once per tick in the runner loop. Returns lifecycle records
- * for events that expired this tick.
+ * Track event lifecycles by diffing the current tick's events against the
+ * active set. Call once per tick in the runner loop. Returns lifecycle
+ * records for events that expired this tick.
  *
  * @param preTickMarkets - the markets array from BEFORE the current tick
  *   (used to capture start prices for newly-detected events)
  */
 export function trackEventLifecycles(
-  world: SimWorld,
+  events: SimEvent[],
+  markets: SimMarketEntry[],
+  tick: number,
   activeEvents: Map<string, ActiveEventRecord>,
   preTickMarkets: SimMarketEntry[],
 ): EventLifecycle[] {
   const completed: EventLifecycle[] = [];
-  const currentIds = new Set(world.events.map((e) => e.id));
+  const currentIds = new Set(events.map((e) => e.id));
 
   // Detect newly appeared events
-  for (const event of world.events) {
+  for (const event of events) {
     if (!activeEvents.has(event.id)) {
       activeEvents.set(event.id, {
         type: event.type,
@@ -76,7 +78,7 @@ export function trackEventLifecycles(
     }
   }
 
-  // Detect expired events (were active, no longer in world.events)
+  // Detect expired events (were active, no longer present)
   for (const [id, info] of activeEvents) {
     if (!currentIds.has(id)) {
       completed.push({
@@ -85,10 +87,10 @@ export function trackEventLifecycles(
         systemId: info.systemId,
         severity: info.severity,
         startTick: info.startTick,
-        endTick: world.tick,
+        endTick: tick,
         sourceEventId: info.sourceEventId,
         startPrices: info.startPrices,
-        endPrices: snapshotPrices(world.markets, info.systemId),
+        endPrices: snapshotPrices(markets, info.systemId),
       });
       activeEvents.delete(id);
     }
@@ -130,11 +132,9 @@ export function flushActiveEvents(
  *
  * - Per-good price changes from lifecycle boundary prices
  * - Base-price-weighted average price change
- * - System-local bot activity (visits, trades, profit) during the event
  */
 export function computeEventImpacts(
   events: EventLifecycle[],
-  allMetrics: Map<string, TickMetrics[]>,
   systemNames: Map<string, string>,
 ): EventImpact[] {
   if (events.length === 0) return [];
@@ -157,14 +157,6 @@ export function computeEventImpacts(
     // Base-price-weighted average
     const weightedPriceImpactPct = computeWeightedPriceImpact(goodPriceChanges);
 
-    // System-local bot activity during event window
-    const { botVisits, tradeCount, tradeProfit } = computeSystemActivity(
-      event.systemId,
-      event.startTick,
-      event.endTick,
-      allMetrics,
-    );
-
     // Resolve parent event type (null for root events)
     const parentEventType = event.sourceEventId
       ? (eventTypeById.get(event.sourceEventId) ?? null)
@@ -174,7 +166,7 @@ export function computeEventImpacts(
       eventId: event.id,
       eventType: event.type,
       systemId: event.systemId,
-      systemName: systemNames.get(event.systemId) ?? event.systemId,
+      systemName: event.systemId ? (systemNames.get(event.systemId) ?? event.systemId) : "—",
       severity: event.severity,
       startTick: event.startTick,
       endTick: event.endTick,
@@ -182,9 +174,6 @@ export function computeEventImpacts(
       parentEventType,
       goodPriceChanges,
       weightedPriceImpactPct,
-      botVisitsDuring: botVisits,
-      tradeCountDuring: tradeCount,
-      tradeProfitDuring: tradeProfit,
     });
   }
 
@@ -241,37 +230,6 @@ function computeWeightedPriceImpact(changes: GoodPriceChange[]): number {
   }
 
   return totalWeight > 0 ? weightedSum / totalWeight : 0;
-}
-
-/**
- * Count bot activity at a specific system during an event window.
- */
-function computeSystemActivity(
-  systemId: string,
-  startTick: number,
-  endTick: number,
-  allMetrics: Map<string, TickMetrics[]>,
-): { botVisits: number; tradeCount: number; tradeProfit: number } {
-  let botVisits = 0;
-  let tradeCount = 0;
-  let tradeProfit = 0;
-
-  for (const metrics of allMetrics.values()) {
-    // Tick indices are 0-based, ticks are 1-based
-    const iStart = Math.max(0, startTick - 1);
-    const iEnd = Math.min(metrics.length, endTick - 1);
-
-    for (let i = iStart; i < iEnd; i++) {
-      const m = metrics[i];
-      if (m.systemVisited === systemId) {
-        botVisits++;
-        tradeCount += m.tradeCount;
-        tradeProfit += m.tradeProfitSum;
-      }
-    }
-  }
-
-  return { botVisits, tradeCount, tradeProfit };
 }
 
 /**

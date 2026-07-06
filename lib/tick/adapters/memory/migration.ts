@@ -11,13 +11,16 @@ import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
  */
 export class InMemoryMigrationWorld implements MigrationWorld {
   systems: SimSystem[];
-  private openEdgesCache: EdgeView[] | null = null;
+  private openEdgesCache: EdgeView[] | null;
 
   constructor(
     initial: { systems: SimSystem[] },
     private readonly connections: SimConnection[],
+    /** Precomputed open edges (e.g. shared with trade-flow for the same tick); self-computes on first use when omitted. */
+    precomputedOpenEdges?: EdgeView[],
   ) {
     this.systems = initial.systems.map((s) => ({ ...s }));
+    this.openEdgesCache = precomputedOpenEdges ?? null;
   }
 
   getOpenEdges(): Promise<EdgeView[]> {
