@@ -132,7 +132,7 @@ export async function runTradeFlowProcessor(
     mTo.stock = newToStock;
     updatesByMarketId.set(mFrom.id, { id: mFrom.id, stock: newFromStock });
     updatesByMarketId.set(mTo.id, { id: mTo.id, stock: newToStock });
-    flowEvents.push({ tick: ctx.tick, fromSystemId, toSystemId, goodId: bestGoodId, quantity });
+    flowEvents.push({ tick: ctx.tick, fromSystemId, toSystemId, goodId: bestGoodId, quantity, flowType: "market" });
   }
 
   if (updatesByMarketId.size > 0) {

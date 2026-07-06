@@ -94,6 +94,8 @@ export interface SimFlowEvent {
   toSystemId: string;
   goodId: string;
   quantity: number;
+  /** "market" (diffusion, from trade-flow) or "logistics" (directed). */
+  flowType: "market" | "logistics";
 }
 
 // ── Calibration harness config ──────────────────────────────────

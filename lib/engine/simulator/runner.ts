@@ -93,7 +93,9 @@ export async function runSimulation(config: SimConfig, label?: string): Promise<
 
     const result = await runWorldTick(world);
     world = result.world;
-    currentMarkets = toSimMarkets(world);
+    // runWorldTick already built this tick's Sim-shaped markets internally —
+    // reuse it instead of re-running the toSimMarkets join over `world`.
+    currentMarkets = result.markets;
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {
       marketSnapshots.push({ tick: world.meta.currentTick, markets: takeMarketSnapshot(currentMarkets) });

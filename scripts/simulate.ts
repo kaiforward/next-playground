@@ -78,6 +78,10 @@ function fmtNum(n: number): string {
 function formatTable(results: SimResults): string {
   const { marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
+  // Computed once and reused by both the population/unrest and infrastructure
+  // summaries below — they used to each call toSimSystems(finalWorld) separately.
+  const finalSimSystems = toSimSystems(finalWorld);
+
   const lines: string[] = [];
 
   // Region Overview
@@ -160,7 +164,7 @@ function formatTable(results: SimResults): string {
   // Population and unrest summary
   {
     const pop = summarizePopulation(
-      toSimSystems(finalWorld),
+      finalSimSystems,
       initialPopulationTotal,
       STRIKE_PARAMS.threshold,
     );
@@ -191,7 +195,7 @@ function formatTable(results: SimResults): string {
 
   // Infrastructure decay summary
   {
-    const infra = summarizeInfrastructure(toSimSystems(finalWorld), initialBuildingTotal);
+    const infra = summarizeInfrastructure(finalSimSystems, initialBuildingTotal);
     lines.push("");
     lines.push("Infrastructure (end of simulation):");
     const iWidths = [24, 16];

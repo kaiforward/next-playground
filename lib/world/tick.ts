@@ -37,6 +37,8 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
+import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
+import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
@@ -296,6 +298,37 @@ function applyStockUpdates(markets: SimMarketEntry[], updates: Map<string, numbe
   });
 }
 
+/**
+ * Patch just the rows directed-logistics changed, instead of remapping every
+ * market row a second time for directed-build. `updates` keys are
+ * `${systemId}|${goodId}` (same composite key `marketRowsBySystem` gives each
+ * row's `id`); only the handful of touched systems get a new row array —
+ * every other system's array is reused by reference.
+ */
+function patchMarketRowStocks(
+  bySystem: Map<string, MarketRowForLogistics[]>,
+  updates: Map<string, number>,
+): Map<string, MarketRowForLogistics[]> {
+  if (updates.size === 0) return bySystem;
+  const touchedSystems = new Set<string>();
+  for (const key of updates.keys()) {
+    touchedSystems.add(key.slice(0, key.indexOf("|")));
+  }
+  const patched = new Map(bySystem);
+  for (const systemId of touchedSystems) {
+    const rows = patched.get(systemId);
+    if (!rows) continue;
+    patched.set(
+      systemId,
+      rows.map((r) => {
+        const newStock = updates.get(r.id);
+        return newStock !== undefined ? { ...r, stock: newStock } : r;
+      }),
+    );
+  }
+  return patched;
+}
+
 function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpdate[]): SimSystem[] {
   if (updates.length === 0) return systems;
   const bySystem = new Map<string, Map<string, number>>();
@@ -363,7 +396,9 @@ function rebuildWorldModifiers(
  * resolve immediately, but `await` still requires an async caller) — same
  * reason `simulateWorldTick` was async.
  */
-export async function runWorldTick(world: World): Promise<{ world: World; events: TickEventRaw }> {
+export async function runWorldTick(
+  world: World,
+): Promise<{ world: World; events: TickEventRaw; markets: SimMarketEntry[] }> {
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
   const scaled = scaleEventCaps(world.systems.length);
@@ -473,9 +508,15 @@ export async function runWorldTick(world: World): Promise<{ world: World; events
     processorsRun.push("population");
   }
 
+  // ── migration & trade-flow share one open-edges computation — faction
+  // ownership doesn't change between these two stages within a tick, so the
+  // same-faction edge set migration computes is still valid for trade-flow ──
+  const sysFactionForEdges = new Map(systems.map((s) => [s.id, s.factionId]));
+  const openEdges: EdgeView[] = buildOpenEdges(connections, sysFactionForEdges);
+
   // ── migration ──
   {
-    const migWorld = new InMemoryMigrationWorld({ systems }, connections);
+    const migWorld = new InMemoryMigrationWorld({ systems }, connections, openEdges);
     await runMigrationProcessor(migWorld, newTickCtx(), {
       interval: ECONOMY_UPDATE_INTERVAL,
       flow: MIGRATION_PARAMS,
@@ -486,15 +527,7 @@ export async function runWorldTick(world: World): Promise<{ world: World; events
 
   // ── trade-flow ──
   {
-    // WorldFlowEvent.flowType has no equivalent on SimFlowEvent (the shared
-    // trade-flow adapter's row shape) — track it by object identity so
-    // retained rows keep their original tag and brand-new ones (which the
-    // adapter can't tag — the live/Prisma path defaults them the same way,
-    // see PrismaTradeFlowWorld.appendFlowEvents) default to "market".
-    const flowTypeByRef = new Map<object, WorldFlowEvent["flowType"]>(
-      flowEvents.map((f) => [f, f.flowType]),
-    );
-    const flowWorld = new InMemoryTradeFlowWorld({ systems, markets, flowEvents }, connections);
+    const flowWorld = new InMemoryTradeFlowWorld({ systems, markets, flowEvents }, connections, openEdges);
     await runTradeFlowProcessor(flowWorld, newTickCtx(), {
       interval: ECONOMY_UPDATE_INTERVAL,
       flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
@@ -504,31 +537,47 @@ export async function runWorldTick(world: World): Promise<{ world: World; events
       distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
     });
     markets = flowWorld.markets;
+    // flowType now round-trips structurally through SimFlowEvent (no more
+    // object-identity side channel — see FlowEventInsert/SimFlowEvent).
     flowEvents = flowWorld.flowEvents.map((f) => ({
       tick: f.tick,
       fromSystemId: f.fromSystemId,
       toSystemId: f.toSystemId,
       goodId: f.goodId,
       quantity: f.quantity,
-      flowType: flowTypeByRef.get(f) ?? "market",
+      flowType: f.flowType,
     }));
     processorsRun.push("trade-flow");
   }
 
+  // directed-logistics and directed-build share one hop-BFS per tick, run at
+  // the larger of their two (independently tunable) MAX_HOPS radii — each
+  // stage's routeCost closure still applies its OWN cutoff below, so a BFS
+  // computed at the larger radius is a safe superset for the smaller one.
+  const hops = computeBoundedHopDistances(
+    connections,
+    Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS),
+  );
+  // Per-system market row groups, built once and shared: directed-build
+  // patches just the stock deltas directed-logistics applied instead of
+  // remapping every market row a second time (see patchMarketRowStocks).
+  const logisticsMarketRows = marketRowsBySystem(markets);
+  let dlStockUpdates: Map<string, number> = new Map();
+
   // ── directed-logistics ──
   {
-    const hops = computeBoundedHopDistances(connections, DIRECTED_LOGISTICS.MAX_HOPS);
     const routeCost: RouteCost = (f, t) => {
       const h = hops.get(f)?.get(t);
       return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
     };
-    const rows = buildLogisticsRows(systems, marketRowsBySystem(markets));
+    const rows = buildLogisticsRows(systems, logisticsMarketRows);
     const dlWorld = new MemoryDirectedLogisticsWorld(rows);
     await runDirectedLogisticsProcessor(dlWorld, { tick }, {
       interval: DIRECTED_LOGISTICS.INTERVAL,
       routeCost,
     });
     markets = applyStockUpdates(markets, dlWorld.stockUpdates);
+    dlStockUpdates = dlWorld.stockUpdates;
     const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows.map((f) => ({ ...f, flowType: "logistics" }));
     flowEvents = [...flowEvents, ...newLogisticsFlows];
     processorsRun.push("directed-logistics");
@@ -536,12 +585,11 @@ export async function runWorldTick(world: World): Promise<{ world: World; events
 
   // ── directed-build ──
   {
-    const hops = computeBoundedHopDistances(connections, DIRECTED_BUILD.MAX_HOPS);
     const routeCost: RouteCost = (f, t) => {
       const h = hops.get(f)?.get(t);
       return h === undefined || h > DIRECTED_BUILD.MAX_HOPS ? null : h * DIRECTED_BUILD.HOP_WEIGHT;
     };
-    const rows = buildBuildRows(systems, marketRowsBySystem(markets));
+    const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
     const dbWorld = new MemoryDirectedBuildWorld(rows);
     await runDirectedBuildProcessor(dbWorld, { tick }, {
       interval: DIRECTED_BUILD.INTERVAL,
@@ -630,5 +678,9 @@ export async function runWorldTick(world: World): Promise<{ world: World; events
     processors: processorsRun,
   };
 
-  return { world: nextWorld, events: tickEvents };
+  // `markets` is already this tick's final Sim-shaped join (same one folded
+  // into nextWorld above) — returned so callers that need the Sim view (the
+  // calibration harness) don't have to re-run toSimMarkets(nextWorld) right
+  // after we just built it.
+  return { world: nextWorld, events: tickEvents, markets };
 }

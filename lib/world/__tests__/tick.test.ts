@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { runWorldTick } from "../tick";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
+import type { WorldShip } from "../types";
 
 async function runTicks(world: ReturnType<typeof generateWorld>, count: number) {
   let w = world;
@@ -85,5 +86,83 @@ describe("runWorldTick", () => {
     const { world: after, events } = await runWorldTick(world);
     expect(events.currentTick).toBe(after.meta.currentTick);
     expect(events.currentTick).toBe(1);
+  });
+});
+
+// ── Per-stage wiring — each of these fails if `runWorldTick` ever drops the
+// named stage from the pipeline (dropping a stage silently no-ops it instead
+// of erroring, so only an effect assertion like these catches it). ─────────
+
+function makeInTransitShip(overrides: Partial<WorldShip> & { id: string }): WorldShip {
+  return {
+    name: overrides.id,
+    shipType: "shuttle",
+    fuel: 100,
+    maxFuel: 100,
+    speed: 5,
+    hullMax: 40,
+    hullCurrent: 40,
+    shieldMax: 10,
+    shieldCurrent: 10,
+    firepower: 2,
+    evasion: 6,
+    stealth: 3,
+    sensors: 4,
+    crewCapacity: 2,
+    disabled: false,
+    status: "in_transit",
+    systemId: "origin",
+    destinationSystemId: "destination",
+    departureTick: 0,
+    arrivalTick: 5,
+    ...overrides,
+  };
+}
+
+describe("runWorldTick — per-stage wiring", () => {
+  it("ship-arrivals: docks an in-transit ship at its destination once arrivalTick passes (worlds seed zero ships)", async () => {
+    const world = generateWorld({ systemCount: 100, seed: 42 });
+    const origin = world.systems[0].id;
+    const destination = world.systems[1].id;
+    const ship = makeInTransitShip({
+      id: "test-ship-1",
+      systemId: origin,
+      destinationSystemId: destination,
+      arrivalTick: 5,
+    });
+    const seeded = { ...world, ships: [...world.ships, ship] };
+
+    const after = await runTicks(seeded, 10);
+
+    const docked = after.ships.find((s) => s.id === "test-ship-1");
+    expect(docked).toBeDefined();
+    expect(docked?.status).toBe("docked");
+    expect(docked?.systemId).toBe(destination);
+    expect(docked?.destinationSystemId).toBeNull();
+    expect(docked?.departureTick).toBeNull();
+    expect(docked?.arrivalTick).toBeNull();
+  });
+
+  it("population/migration: changes at least one system's population over 50 ticks", async () => {
+    const world = generateWorld({ systemCount: 100, seed: 42 });
+    const before = new Map(world.systems.map((s) => [s.id, s.population]));
+    const after = await runTicks(world, 50);
+
+    const changed = after.systems.some((s) => before.get(s.id) !== s.population);
+    expect(changed).toBe(true);
+  });
+
+  it("infrastructure-decay/directed-build: changes the buildings roster over 50 ticks (decay reduces / build adds)", async () => {
+    const world = generateWorld({ systemCount: 100, seed: 42 });
+    const after = await runTicks(world, 50);
+
+    expect(after.buildings).not.toEqual(world.buildings);
+  });
+
+  it("trade-flow/directed-logistics: produces flow events over 50 ticks", async () => {
+    const world = generateWorld({ systemCount: 100, seed: 42 });
+    const after = await runTicks(world, 50);
+
+    expect(after.flowEvents.length).toBeGreaterThan(0);
   });
 });

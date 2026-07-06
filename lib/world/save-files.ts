@@ -6,7 +6,7 @@
  * gitignored — these are local single-player save files, not build output.
  */
 
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { deserializeWorld, serializeWorld } from "./save";
 import type { World } from "./types";
@@ -20,8 +20,18 @@ export interface SaveInfo {
   bytes: number;
 }
 
-const SAVES_DIR = path.resolve("saves");
+let SAVES_DIR = path.resolve("saves");
 const SAVE_EXTENSION = ".json";
+
+/**
+ * Test-only override for the on-disk saves directory (default: repo-root
+ * `saves/`). Lets `save-files.test.ts` point writes at a throwaway temp dir
+ * instead of the real `saves/` folder, without changing the public
+ * read/write/list API.
+ */
+export function setSavesDirForTesting(dir: string): void {
+  SAVES_DIR = dir;
+}
 
 /**
  * Save names come from player input (the "new save" text box) — strip
@@ -36,9 +46,17 @@ function saveFilePath(name: string): string {
   return path.join(SAVES_DIR, `${sanitizeName(name)}${SAVE_EXTENSION}`);
 }
 
+/**
+ * Writes via a temp file in `saves/` then `rename()`s over the final path —
+ * `rename` is atomic on the same volume (including Windows), so a reader
+ * never observes a partially-written save even if the process dies mid-write.
+ */
 export async function writeSave(name: string, world: World): Promise<void> {
   await mkdir(SAVES_DIR, { recursive: true });
-  await writeFile(saveFilePath(name), serializeWorld(world), "utf-8");
+  const finalPath = saveFilePath(name);
+  const tempPath = `${finalPath}.tmp`;
+  await writeFile(tempPath, serializeWorld(world), "utf-8");
+  await rename(tempPath, finalPath);
 }
 
 export async function readSave(name: string): Promise<string> {
