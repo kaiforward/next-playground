@@ -50,20 +50,6 @@ export function useTickInvalidation() {
       subscribeToEvent("priceSnapshot", () => {
         queryClient.invalidateQueries({ queryKey: ["priceHistory"] });
       }),
-      // Mission updates → refresh mission queries
-      subscribeToEvent("missionsUpdated", () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.missionsAll });
-      }),
-      // Operational mission updates → refresh op-mission queries
-      subscribeToEvent("opMissionsUpdated", () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.opMissionsAll });
-      }),
-      // Battle updates → refresh battle queries and fleet (ship damage)
-      subscribeToEvent("battlesUpdated", () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.battles });
-        queryClient.invalidateQueries({ queryKey: queryKeys.fleet });
-        queryClient.invalidateQueries({ queryKey: queryKeys.opMissionsAll });
-      }),
       // Game notifications → refresh notification feed and unread count
       subscribeToEvent("gameNotifications", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.notifications });

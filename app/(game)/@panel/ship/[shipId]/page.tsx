@@ -4,11 +4,8 @@ import { use } from "react";
 import { useFleet } from "@/lib/hooks/use-fleet";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
-import { usePlayerMissions } from "@/lib/hooks/use-player-missions";
-import { useActiveBattles } from "@/lib/hooks/use-battles";
 import { useConvoys } from "@/lib/hooks/use-convoy";
 import { ShipDetailPanel } from "@/components/fleet/ship-detail-panel";
-import { BattleCard } from "@/components/fleet/battle-card";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -18,8 +15,6 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
   const { fleet } = useFleet();
   const { data: universeData } = useUniverse();
   const { currentTick } = useTickContext();
-  const { missions } = usePlayerMissions();
-  const { battles } = useActiveBattles();
   const { convoys } = useConvoys();
 
   const ship = fleet.ships.find((s) => s.id === shipId);
@@ -38,10 +33,6 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
     );
   }
 
-  const shipBattle = battles.find(
-    (b) => b.shipId === shipId && b.status === "active",
-  );
-
   return (
     <DetailPanel
       title={ship.name}
@@ -54,27 +45,12 @@ function ShipPanelContent({ shipId }: { shipId: string }) {
         </Button>
       }
     >
-      {shipBattle && (
-        <div className="mb-6">
-          <BattleCard battle={shipBattle} detailHref={`/battle/${shipBattle.id}`} />
-        </div>
-      )}
-
       <ShipDetailPanel
         ship={ship}
         currentTick={currentTick}
         regions={universeData.regions}
         playerCredits={fleet.credits}
         convoyName={shipConvoy?.name ?? (shipConvoy ? "Convoy" : undefined)}
-        deliverableMissions={
-          ship.status === "docked"
-            ? missions.filter((m) => {
-                if (m.destinationId !== ship.systemId) return false;
-                const cargoItem = ship.cargo.find((c) => c.goodId === m.goodId);
-                return (cargoItem?.quantity ?? 0) >= m.quantity;
-              })
-            : undefined
-        }
       />
     </DetailPanel>
   );

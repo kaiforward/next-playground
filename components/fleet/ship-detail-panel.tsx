@@ -1,6 +1,6 @@
 "use client";
 
-import type { ShipState, RegionInfo, TradeMissionInfo } from "@/lib/types/game";
+import type { ShipState, RegionInfo } from "@/lib/types/game";
 import { getShipDerivedState } from "@/lib/utils/ship";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import { ShipTransitIndicator } from "./ship-transit-indicator";
 import { RefuelDialog } from "./refuel-dialog";
 import { RepairDialog } from "./repair-dialog";
 import { UpgradeSlot } from "./upgrade-slot";
-import { DeliverableMissionsCard } from "@/components/missions/deliverable-missions-card";
 
 import { ROLE_COLORS } from "@/lib/constants/ships";
 
@@ -23,13 +22,12 @@ interface ShipDetailPanelProps {
   currentTick: number;
   regions?: RegionInfo[];
   playerCredits?: number;
-  deliverableMissions?: TradeMissionInfo[];
   /** When the ship is in a convoy, display name and disable Navigate. */
   convoyName?: string;
 }
 
-export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, deliverableMissions, convoyName }: ShipDetailPanelProps) {
-  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, shieldPercent, isDocked, onMission, needsFuel, isDamaged } = getShipDerivedState(ship);
+export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, convoyName }: ShipDetailPanelProps) {
+  const { fuelPercent, cargoUsed, cargoPercent, hullPercent, shieldPercent, isDocked, needsFuel, isDamaged } = getShipDerivedState(ship);
 
   const refuelDialog = useDialog();
   const repairDialog = useDialog();
@@ -182,7 +180,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
       {/* Actions */}
       {isDocked && (
         <div className="flex gap-3 flex-wrap">
-          {!ship.disabled && !onMission && (
+          {!ship.disabled && (
             <>
               <Button
                 href={`/system/${ship.systemId}/market?tradeShipId=${ship.id}`}
@@ -214,7 +212,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               )}
             </>
           )}
-          {needsFuel && !ship.disabled && !onMission && playerCredits != null && (
+          {needsFuel && !ship.disabled && playerCredits != null && (
             <Button
               variant="pill"
               color="cyan"
@@ -224,7 +222,7 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
               Refuel
             </Button>
           )}
-          {isDamaged && !onMission && playerCredits != null && (
+          {isDamaged && playerCredits != null && (
             <Button
               variant="pill"
               color="green"
@@ -235,11 +233,6 @@ export function ShipDetailPanel({ ship, currentTick, regions, playerCredits, del
             </Button>
           )}
         </div>
-      )}
-
-      {/* Deliverable missions */}
-      {isDocked && !ship.disabled && deliverableMissions && deliverableMissions.length > 0 && (
-        <DeliverableMissionsCard missions={deliverableMissions} ship={ship} />
       )}
 
       {/* Refuel dialog */}

@@ -48,9 +48,6 @@ For processors that shard by system (economy, mission generation), the shard sel
 | events | ✓ | ✓ | ✓ |
 | economy | ✓ | ✓ | ✓ |
 | relations | ✓ | ✓ | ✓ |
-| trade-missions | ✓ | ✓ | — (no sim need yet) |
-| missions (operational) | ✓ | ✓ | — (no sim need yet) |
-| battles | ✓ | ✓ | — (no sim need yet) |
 | ship-arrivals | ✓ | ✓ | — (sim keeps its own path, see below) |
 | notification-prune | — | — | — (16-line service wrapper; abstraction not warranted) |
 

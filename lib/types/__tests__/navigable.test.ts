@@ -49,7 +49,6 @@ function makeShip(overrides: Partial<ShipState> = {}): ShipState {
     departureTick: null,
     arrivalTick: null,
     convoyId: null,
-    activeMission: null,
     ...overrides,
   };
 }

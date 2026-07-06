@@ -134,4 +134,3 @@ This is a deliberate simplicity decision. The interesting choices come from slot
 
 - **[Ship Roster](./ship-roster.md)** — base ship stats, size categories, slot layouts, danger pipeline ship-stat integration
 - **[Navigation](./navigation.md)** — arrival danger pipeline stages
-- **[Combat](./combat.md)** — combat damage interactions (relevant to armour/shield modules)

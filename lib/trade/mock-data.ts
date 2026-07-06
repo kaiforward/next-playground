@@ -85,7 +85,6 @@ export const MOCK_FLEET: FleetState = {
       disabled: false,
       upgradeSlots: [],
       convoyId: null,
-      activeMission: null,
       status: "docked",
       systemId: "sol",
       system: SOL_SYSTEM,

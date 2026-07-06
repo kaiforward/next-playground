@@ -179,4 +179,3 @@ Tagged with `[PENDING: <system>]` so they're greppable. Run `grep -r "\[PENDING:
 
 - **[Ship Upgrades](./ship-upgrades.md)** — modular upgrade system, slot types, module catalog
 - **[Navigation](./navigation.md)** — convoy travel, jump lanes, arrival pipeline
-- **[Combat](./combat.md)** — battle resolution, combat mission flow

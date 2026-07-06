@@ -1,6 +1,4 @@
 import type { EVENT_DEFINITIONS } from "./events";
-import type { MissionType } from "./missions";
-import type { EnemyTier } from "./combat";
 import type { NotificationType, SunClass, QualityBandId } from "@/lib/types/game";
 
 // ── Deposit quality bands ────────────────────────────────────
@@ -114,28 +112,6 @@ export const EVENT_TYPE_DANGER_PRIORITY: Record<
   alliance_dissolved: 0,
   // Border conflict ranks between conflict_spillover and plague.
   border_conflict: 10,
-};
-
-/** Mapping from mission type to Badge color. */
-export const MISSION_TYPE_BADGE_COLOR: Record<
-  MissionType,
-  "red" | "cyan" | "purple" | "amber" | "green"
-> = {
-  patrol: "red",
-  survey: "cyan",
-  bounty: "purple",
-  salvage: "amber",
-  recon: "green",
-};
-
-/** Mapping from enemy tier to Badge color. */
-export const ENEMY_TIER_BADGE_COLOR: Record<
-  EnemyTier,
-  "green" | "amber" | "red"
-> = {
-  weak: "green",
-  moderate: "amber",
-  strong: "red",
 };
 
 import type { LucideIcon } from "lucide-react";

@@ -32,7 +32,6 @@ export interface ShipDerivedState {
   hullPercent: number;
   shieldPercent: number;
   isDocked: boolean;
-  onMission: boolean;
   needsFuel: boolean;
   isDamaged: boolean;
 }
@@ -48,7 +47,6 @@ export function getShipDerivedState(ship: ShipState): ShipDerivedState {
     hullPercent: ship.hullMax > 0 ? (ship.hullCurrent / ship.hullMax) * 100 : 100,
     shieldPercent: ship.shieldMax > 0 ? (ship.shieldCurrent / ship.shieldMax) * 100 : 100,
     isDocked,
-    onMission: ship.activeMission?.status === "in_progress",
     needsFuel: isDocked && ship.fuel < ship.maxFuel,
     isDamaged: ship.hullCurrent < ship.hullMax,
   };
@@ -60,10 +58,8 @@ export interface ShipStatusInfo {
 }
 
 /** Determine the status badge label and color for a ship. */
-export function getShipStatusInfo(ship: ShipState, inBattle?: boolean): ShipStatusInfo {
+export function getShipStatusInfo(ship: ShipState): ShipStatusInfo {
   if (ship.disabled) return { label: "Disabled", color: "red" };
-  if (inBattle) return { label: "In Battle", color: "purple" };
-  if (ship.activeMission?.status === "in_progress") return { label: "On Mission", color: "cyan" };
   if (ship.status === "docked") return { label: "Docked", color: "green" };
   return { label: "In Transit", color: "amber" };
 }
