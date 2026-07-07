@@ -187,11 +187,6 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     throw new ServiceError("System not found.", 404);
   }
 
-  // Monthly pulse: every system's economy resolves on tick % MONTH_LENGTH === 0,
-  // so the group is uniformly 0. The client pairs it with the live tick to count
-  // down to the next update.
-  const economyShardGroup = 0;
-
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
 
   // marketStock + per-good stock band keyed by good KEY (world market rows
@@ -226,7 +221,6 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
 
   return {
     visibility: "visible",
-    economyShardGroup,
     unrest: system.unrest,
     // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
     // but feed the deposit-fill rows and the production/consumption profile below.

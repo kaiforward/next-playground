@@ -218,10 +218,6 @@ export type { SystemIndustryReadout, SubstrateSpace, SystemDepositSummary, Subst
 export type SystemIndustryData =
   | ({
       visibility: "visible";
-      /** Monthly-pulse group — always 0 under the synchronized pulse (the whole
-       *  galaxy resolves on `tick % MONTH_LENGTH === 0`). Paired with the live
-       *  tick to count down to the next update. */
-      economyShardGroup: number;
       /** Stored unrest integral 0…1. Drives the decay-loop and the coarse health read. */
       unrest: number;
       /** Available-space partition + built-out land per partition (headroom). */

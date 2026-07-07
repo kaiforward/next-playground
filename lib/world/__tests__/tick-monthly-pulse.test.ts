@@ -20,10 +20,17 @@ describe("runWorldTick: monthly pulse", () => {
       expect(totalPopulation(world)).toBeCloseTo(startPop, 6);
     }
 
+    // Snapshot per-system population right before the first boundary tick.
+    const before = new Map(world.systems.map((s) => [s.id, s.population]));
+
     // Tick MONTH_LENGTH is the first boundary: the population processor runs.
     world = (await runWorldTick(world)).world;
     expect(world.meta.currentTick).toBe(MONTH_LENGTH);
-    expect(totalPopulation(world)).not.toBeCloseTo(startPop, 6);
+    // At least one system's population moves. A per-system check (not an aggregate
+    // delta) so a chance growth/decline cancellation across systems can't mask the
+    // pulse firing.
+    const moved = world.systems.some((s) => Math.abs(s.population - (before.get(s.id) ?? 0)) > 1e-6);
+    expect(moved).toBe(true);
   });
 
   it("produces no NaN/Infinity in population or stock across a full month", async () => {

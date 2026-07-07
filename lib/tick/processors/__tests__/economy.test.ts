@@ -309,6 +309,33 @@ describe("economy processor: monthly pulse coverage", () => {
     const result = await runEconomyProcessor(world, makeCtx(3), { ...ECON_PARAMS, interval: 1, rng: mulberry32(1) });
     expect(result.economySignals!.dissatisfactionBySystem.size).toBe(systems.length);
   });
+
+  it("scales the per-resolution step by catchUpFactor(interval) (symmetric, equilibrium-invariant)", async () => {
+    const goodId = "food";
+    // A pure consumer (no production) so only the consumption term moves stock —
+    // its self-limiting factor is evaluated at the identical start stock in both
+    // runs, isolating the catch-up factor as the only difference.
+    const start = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
+
+    // Both runs resolve on tick 0 — a pulse boundary for ANY interval — so the
+    // whole list is processed in each. interval=1 → catchUpFactor 1/24;
+    // interval=2 → catchUpFactor 2/24, exactly double the per-resolution step.
+    const w1 = new InMemoryEconomyWorld(
+      { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
+    );
+    await runEconomyProcessor(w1, makeCtx(0), { ...ECON_PARAMS, interval: 1, rng: mulberry32(7) });
+    const drain1 = start - w1.markets.find((m) => m.goodId === goodId)!.stock;
+
+    const w2 = new InMemoryEconomyWorld(
+      { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
+    );
+    await runEconomyProcessor(w2, makeCtx(0), { ...ECON_PARAMS, interval: 2, rng: mulberry32(7) });
+    const drain2 = start - w2.markets.find((m) => m.goodId === goodId)!.stock;
+
+    // Doubling the interval doubles the per-resolution step (catchUpFactor(2)/catchUpFactor(1) = 2).
+    expect(drain1).toBeGreaterThan(0);
+    expect(drain2).toBeCloseTo(2 * drain1, 6);
+  });
 });
 
 // ── Supply-chain input-gating (cascade) ──────────────────────────

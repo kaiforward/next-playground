@@ -43,9 +43,12 @@ export async function runEconomyProcessor(
 
   const allSystemIds = await world.getSystemIds();
   const { start, end } = pulseShard(allSystemIds.length, ctx.tick, interval);
-  const shardIndex = ((ctx.tick % interval) + interval) % interval;
+  // Normalize the interval the same way pulseShard does so the reported shard
+  // index/count can't diverge from the actual pulse boundary for a non-integer interval.
+  const iv = Math.max(1, Math.floor(interval));
+  const shardIndex = ((ctx.tick % iv) + iv) % iv;
   const emptyPayload = {
-    economyTick: [{ systemCount: 0, shardIndex, shardCount: interval }],
+    economyTick: [{ systemCount: 0, shardIndex, shardCount: iv }],
   };
   if (start >= end) {
     return { globalEvents: emptyPayload };
@@ -160,7 +163,7 @@ export async function runEconomyProcessor(
   const modCount = rawModifiers.length;
   if (DEBUG) {
     console.log(
-      `[economy] Shard ${shardIndex + 1}/${interval}: ${systemIds.length} systems / ${markets.length} markets` +
+      `[economy] Shard ${shardIndex + 1}/${iv}: ${systemIds.length} systems / ${markets.length} markets` +
         (modCount > 0 ? `, ${modCount} active modifier(s)` : ""),
     );
   }
@@ -171,7 +174,7 @@ export async function runEconomyProcessor(
         {
           systemCount: systemIds.length,
           shardIndex,
-          shardCount: interval,
+          shardCount: iv,
         },
       ],
     },
