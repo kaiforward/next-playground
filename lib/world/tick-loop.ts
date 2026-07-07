@@ -40,6 +40,8 @@ export class TickLoop {
   private maxToken = 0;
   /** Re-entrancy guard: a paced interval firing mid-tick skips instead of overlapping. */
   private ticking = false;
+  /** In-flight guard for autosave: a save already writing skips instead of overlapping. */
+  private saving = false;
   private subscribers = new Set<(e: TickBroadcast) => void>();
   private tickTimestamps: number[] = [];
   private lastEmitAt = 0;
@@ -185,12 +187,16 @@ export class TickLoop {
   }
 
   private autosave(): void {
-    if (!hasWorld()) return;
+    if (!hasWorld() || this.saving) return;
+    this.saving = true;
     this.lastAutosaveAt = Date.now();
     const world = getWorld();
     void import("./save-files")
       .then(({ writeSave, AUTOSAVE_NAME }) => writeSave(AUTOSAVE_NAME, world))
-      .catch((error) => console.error("[tick-loop] autosave failed:", error));
+      .catch((error) => console.error("[tick-loop] autosave failed:", error))
+      .finally(() => {
+        this.saving = false;
+      });
   }
 }
 

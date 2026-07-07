@@ -392,6 +392,17 @@ function rebuildWorldModifiers(
  * resolve immediately, but `await` still requires an async caller) — same
  * reason `simulateWorldTick` was async.
  */
+/**
+ * Bounded hop distances depend only on the connection graph, which never
+ * changes for the life of a world (nothing in the pipeline reassigns
+ * `connections` into the next World). Keyed on the connections array's
+ * identity — the store version can't be the key, it bumps on every
+ * `setWorld()`, i.e. every tick. A new or loaded world brings a new array
+ * and recomputes.
+ */
+let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number>> } | null =
+  null;
+
 export async function runWorldTick(
   world: World,
 ): Promise<{ world: World; events: TickEventRaw; markets: SimMarketEntry[] }> {
@@ -543,14 +554,21 @@ export async function runWorldTick(
     processorsRun.push("trade-flow");
   }
 
-  // directed-logistics and directed-build share one hop-BFS per tick, run at
-  // the larger of their two (independently tunable) MAX_HOPS radii — each
+  // directed-logistics and directed-build share one hop-BFS, run at the
+  // larger of their two (independently tunable) MAX_HOPS radii — each
   // stage's routeCost closure still applies its OWN cutoff below, so a BFS
   // computed at the larger radius is a safe superset for the smaller one.
-  const hops = computeBoundedHopDistances(
-    connections,
-    Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS),
-  );
+  // The BFS is computed once per world, not per tick (see hopsCache).
+  if (hopsCache?.key !== world.connections) {
+    hopsCache = {
+      key: world.connections,
+      hops: computeBoundedHopDistances(
+        connections,
+        Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS),
+      ),
+    };
+  }
+  const hops = hopsCache.hops;
   // Per-system market row groups, built once and shared: directed-build
   // patches just the stock deltas directed-logistics applied instead of
   // remapping every market row a second time (see patchMarketRowStocks).
