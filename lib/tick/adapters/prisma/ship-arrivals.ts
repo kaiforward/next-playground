@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   ArrivingShipView,
   DockShipUpdate,
@@ -7,7 +7,7 @@ import type {
 
 /** Live-game adapter for the ship-arrivals processor. */
 export class PrismaShipArrivalsWorld implements ShipArrivalsWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   async getArrivingShips(currentTick: number): Promise<ArrivingShipView[]> {
     const rows = await this.tx.ship.findMany({

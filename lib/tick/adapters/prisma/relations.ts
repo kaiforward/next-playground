@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   AlliancePactView,
   FactionPairKey,
@@ -66,7 +66,7 @@ function clampScore(score: number): number {
  * every `RELATIONS_FREQUENCY` ticks, so latency budget is comfortable.
  */
 export class PrismaRelationsWorld implements RelationsWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   async getFactions(): Promise<FactionView[]> {
     // Single query: factions + per-faction system count via _count relation.

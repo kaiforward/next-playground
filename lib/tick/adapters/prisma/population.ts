@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   PopulationStateView, PopulationUpdate, PopulationWorld,
 } from "@/lib/tick/world/population-world";
@@ -15,7 +15,7 @@ import { resourceVectorFromColumns, unitResourceVector } from "@/lib/engine/reso
  * (it owns the system→market→good join) from each system's new population.
  */
 export class PrismaPopulationWorld implements PopulationWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   async getPopulationState(systemIds: string[]): Promise<PopulationStateView[]> {
     if (systemIds.length === 0) return [];

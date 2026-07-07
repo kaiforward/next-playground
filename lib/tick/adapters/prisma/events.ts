@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   EventCreate,
   EventCreateResult,
@@ -15,7 +15,7 @@ import { toEventTypeId } from "@/lib/types/guards";
 
 /** Live-game adapter. Bulk-writes via unnest() and createMany live here. */
 export class PrismaEventsWorld implements EventsWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   async getEvents(): Promise<EventWithName[]> {
     const rows = await this.tx.gameEvent.findMany({

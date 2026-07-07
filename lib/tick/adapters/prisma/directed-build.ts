@@ -1,4 +1,3 @@
-import type { TxClient } from "@/lib/tick/types";
 import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   DirectedBuildWorld,
@@ -27,7 +26,7 @@ import { resourceVectorFromColumns } from "@/lib/engine/resources";
  * file that imports this class stays unit-loadable without a DATABASE_URL.
  */
 export class PrismaDirectedBuildWorld implements DirectedBuildWorld {
-  constructor(private readonly tx: TxClient) {}
+  constructor(private readonly tx: Prisma.TransactionClient) {}
 
   async getFactionShardKeys(): Promise<Array<string | null>> {
     const rows = await this.tx.starSystem.findMany({

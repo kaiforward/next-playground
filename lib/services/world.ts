@@ -1,23 +1,15 @@
-import { prisma } from "@/lib/prisma";
-import { ServiceError } from "./errors";
+import { getWorld } from "@/lib/world/store";
+import { tickLoop } from "@/lib/world/tick-loop";
 import type { GameWorldState } from "@/lib/types/game";
 
 /**
- * Get the current game world state (tick info).
- * Throws ServiceError(500) if world not initialized.
+ * Current world meta plus tick-loop pacing state.
+ * Throws ServiceError(409) via the store when no world is loaded.
  */
-export async function getGameWorld(): Promise<GameWorldState> {
-  const world = await prisma.gameWorld.findUnique({
-    where: { id: "world" },
-  });
-
-  if (!world) {
-    throw new ServiceError("Game world not initialized.", 500);
-  }
-
+export function getGameWorld(): GameWorldState {
   return {
-    currentTick: world.currentTick,
-    tickRate: world.tickRate,
-    startingSystemId: world.startingSystemId,
+    meta: getWorld().meta,
+    speed: tickLoop.getSpeed(),
+    achievedTps: tickLoop.getAchievedTps(),
   };
 }

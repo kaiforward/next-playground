@@ -19,7 +19,7 @@ function sys(id: string, over: Partial<SimSystem>): SimSystem {
 }
 
 function ctxWith(signals: EconomySignals): TickContext {
-  return { tx: undefined as never, tick: 0, results: new Map([["economy", { economySignals: signals }]]) };
+  return { tick: 0, results: new Map([["economy", { economySignals: signals }]]) };
 }
 
 const DECAY = { disuseRate: 0.1, unrestRate: 0.05, unrestThreshold: 0.75 };
@@ -27,7 +27,7 @@ const DECAY = { disuseRate: 0.1, unrestRate: 0.05, unrestThreshold: 0.75 };
 describe("infrastructure-decay processor", () => {
   it("no-ops when there are no economy signals", async () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", {})] });
-    await runInfrastructureDecayProcessor(world, { tx: undefined as never, tick: 0, results: new Map() }, { decay: DECAY });
+    await runInfrastructureDecayProcessor(world, { tick: 0, results: new Map() }, { decay: DECAY });
     expect(world.systems[0].buildings).toEqual({ [HOUSING_TYPE]: 10, ore: 10 });
   });
 

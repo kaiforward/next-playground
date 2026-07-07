@@ -1,7 +1,5 @@
-import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
+import type { TickContext, TickProcessorResult } from "../types";
 import { accumulateUnrest, populationDelta } from "@/lib/engine/population";
-import { UNREST_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
-import { PrismaPopulationWorld } from "@/lib/tick/adapters/prisma/population";
 import type {
   PopulationProcessorParams, PopulationUpdate, PopulationWorld,
 } from "@/lib/tick/world/population-world";
@@ -38,15 +36,3 @@ export async function runPopulationProcessor(
   await world.rewriteDemandRates(demandPops);
   return {};
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-export const populationProcessor: TickProcessor = {
-  name: "population",
-  frequency: 1,
-  dependsOn: ["economy", "infrastructure-decay"],
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaPopulationWorld(ctx.tx);
-    return runPopulationProcessor(world, ctx, { unrest: UNREST_PARAMS, population: POPULATION_PARAMS });
-  },
-};

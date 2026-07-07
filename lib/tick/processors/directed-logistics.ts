@@ -1,7 +1,4 @@
-import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
-import { PrismaDirectedLogisticsWorld } from "@/lib/tick/adapters/prisma/directed-logistics";
-import { loadHopDistances } from "@/lib/services/hop-distances";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import type { TickContext, TickProcessorResult } from "../types";
 import { shardRange } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import {
@@ -136,25 +133,3 @@ export async function runDirectedLogisticsProcessor(
 
   return {};
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-export const directedLogisticsProcessor: TickProcessor = {
-  name: "directed-logistics",
-  frequency: 1, // per-faction shard handled inside the body
-  dependsOn: ["economy"],
-
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaDirectedLogisticsWorld(ctx.tx);
-    const hops = await loadHopDistances();
-    const routeCost: RouteCost = (fromId, toId) => {
-      const h = hops.get(fromId)?.get(toId);
-      if (h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS) return null;
-      return h * DIRECTED_LOGISTICS.HOP_WEIGHT;
-    };
-    return runDirectedLogisticsProcessor(world, ctx, {
-      interval: DIRECTED_LOGISTICS.INTERVAL,
-      routeCost,
-    });
-  },
-};

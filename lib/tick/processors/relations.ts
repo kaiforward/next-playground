@@ -1,12 +1,8 @@
 import type {
   TickContext,
-  TickProcessor,
   TickProcessorResult,
 } from "../types";
-import {
-  ALLIANCE,
-  RELATIONS_FREQUENCY,
-} from "@/lib/constants/relations";
+import { ALLIANCE } from "@/lib/constants/relations";
 import {
   allianceDissolvedTemplate,
   applyDriftToPair,
@@ -27,7 +23,6 @@ import type {
   RelationsWorld,
 } from "@/lib/tick/world/relations-world";
 import { pairKey } from "@/lib/tick/world/relations-world";
-import { PrismaRelationsWorld } from "@/lib/tick/adapters/prisma/relations";
 
 /**
  * Pure processor body. Same logic runs against the Prisma adapter (live game)
@@ -252,18 +247,3 @@ export async function runRelationsProcessor(
 
   return {};
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-export const relationsProcessor: TickProcessor = {
-  name: "relations",
-  frequency: RELATIONS_FREQUENCY,
-  dependsOn: ["events"],
-
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaRelationsWorld(ctx.tx);
-    return runRelationsProcessor(world, ctx, {
-      tradeWindowTicks: RELATIONS_FREQUENCY,
-    });
-  },
-};

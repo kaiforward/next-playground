@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   InfrastructureWorld,
   InfrastructureStateView,
@@ -14,7 +14,7 @@ import type {
  * it; NaN/Infinity are guarded before raw SQL (PG aborts the tx on them).
  */
 export class PrismaInfrastructureWorld implements InfrastructureWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   async getInfrastructureState(systemIds: string[]): Promise<InfrastructureStateView[]> {
     if (systemIds.length === 0) return [];

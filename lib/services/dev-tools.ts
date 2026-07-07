@@ -1,11 +1,11 @@
 /**
  * Dev tools service — server-side manipulation of game state.
- * Only usable in development mode. All functions use Prisma.
+ * Only usable in development mode.
  */
 
 import { prisma } from "@/lib/prisma";
-import { processors, sortProcessors } from "@/lib/tick/registry";
-import type { TickContext } from "@/lib/tick/types";
+import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
+import { runWorldTick } from "@/lib/world/tick";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
@@ -26,39 +26,23 @@ export async function advanceTicks(count: number): Promise<ServiceResult<{ newTi
   if (count < 1 || count > 1000) {
     return { ok: false, error: "Count must be between 1 and 1000." };
   }
+  if (!hasWorld()) {
+    return { ok: false, error: "No world loaded." };
+  }
 
   const start = performance.now();
 
+  let world = getWorld();
   for (let i = 0; i < count; i++) {
-    await prisma.$transaction(async (tx) => {
-      const world = await tx.gameWorld.findUnique({ where: { id: "world" } });
-      if (!world) return;
-
-      const newTick = world.currentTick + 1;
-      await tx.gameWorld.update({
-        where: { id: "world" },
-        data: { currentTick: newTick, lastTickAt: new Date() },
-      });
-
-      const activeProcessors = sortProcessors(processors, newTick);
-      const ctx: TickContext = { tx, tick: newTick, results: new Map() };
-
-      for (const processor of activeProcessors) {
-        try {
-          const result = await processor.process(ctx);
-          ctx.results.set(processor.name, result);
-        } catch (error) {
-          console.error(`[dev-tools] Processor "${processor.name}" failed on tick ${newTick}:`, error);
-        }
-      }
-    });
+    const result = await runWorldTick(world);
+    world = result.world;
   }
+  setWorld(world);
 
-  const world = await prisma.gameWorld.findUnique({ where: { id: "world" } });
   return {
     ok: true,
     data: {
-      newTick: world?.currentTick ?? 0,
+      newTick: world.meta.currentTick,
       elapsed: Math.round(performance.now() - start),
     },
   };
@@ -298,37 +282,4 @@ export async function resetEconomy(): Promise<ServiceResult<{ marketsReset: numb
   });
 
   return { ok: true, data: result };
-}
-
-// ── Tick control ────────────────────────────────────────────────
-
-export async function controlTick(params: {
-  action: "pause" | "resume" | "setRate";
-  tickRate?: number;
-}): Promise<ServiceResult<{ tickRate: number; paused: boolean }>> {
-  const world = await prisma.gameWorld.findUnique({ where: { id: "world" } });
-  if (!world) {
-    return { ok: false, error: "Game world not found." };
-  }
-
-  let newRate = world.tickRate;
-
-  if (params.action === "pause") {
-    // Use a very high tick rate as "paused" (effectively stops ticking)
-    newRate = 999999999;
-  } else if (params.action === "resume") {
-    newRate = 5000;
-  } else if (params.action === "setRate" && params.tickRate) {
-    newRate = Math.max(500, Math.min(60000, params.tickRate));
-  }
-
-  await prisma.gameWorld.update({
-    where: { id: "world" },
-    data: { tickRate: newRate },
-  });
-
-  return {
-    ok: true,
-    data: { tickRate: newRate, paused: newRate >= 999999999 },
-  };
 }

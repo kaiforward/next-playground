@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   EconomyWorld,
   MarketUpdate,
@@ -26,7 +26,7 @@ import {
  * SQL — same pattern as the events adapter.
  */
 export class PrismaEconomyWorld implements EconomyWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   async getSystemIds(): Promise<string[]> {
     const rows = await this.tx.starSystem.findMany({

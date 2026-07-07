@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { TickEvent } from "@/lib/types/api";
+import type { TickBroadcast } from "@/lib/world/tick-loop";
 
 type EventCallback = (events: unknown[]) => void;
 
@@ -29,7 +29,7 @@ export function useTick(): UseTickResult {
     fetch("/api/game/world")
       .then((res) => res.json())
       .then((json) => {
-        if (json.data?.currentTick) setCurrentTick(json.data.currentTick);
+        if (json.data?.meta?.currentTick) setCurrentTick(json.data.meta.currentTick);
       })
       .catch(() => {}); // SSE will provide the value shortly anyway
   }, []);
@@ -41,21 +41,11 @@ export function useTick(): UseTickResult {
 
     es.onmessage = (e) => {
       try {
-        const event: TickEvent = JSON.parse(e.data);
+        const event: TickBroadcast = JSON.parse(e.data);
         setCurrentTick(event.currentTick);
 
         // Dispatch global events to listeners
         for (const [eventName, eventList] of Object.entries(event.events)) {
-          const listeners = eventListeners.current.get(eventName);
-          if (listeners && eventList.length > 0) {
-            for (const cb of listeners) cb(eventList);
-          }
-        }
-
-        // Dispatch player-scoped events to listeners
-        for (const [eventName, eventList] of Object.entries(
-          event.playerEvents,
-        )) {
           const listeners = eventListeners.current.get(eventName);
           if (listeners && eventList.length > 0) {
             for (const cb of listeners) cb(eventList);

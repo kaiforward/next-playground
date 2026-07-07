@@ -1,9 +1,6 @@
-import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
+import type { TickContext, TickProcessorResult } from "../types";
 import { spotPrice, curveForGood, marketBandForRow } from "@/lib/engine/market-pricing";
-import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { shardRange, catchUpFactor } from "@/lib/tick/shard";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
-import { PrismaTradeFlowWorld } from "@/lib/tick/adapters/prisma/trade-flow";
 import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
   TradeFlowProcessorParams, TradeFlowWorld,
@@ -149,23 +146,3 @@ export async function runTradeFlowProcessor(
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-export const tradeFlowProcessor: TickProcessor = {
-  name: "tradeFlow",
-  frequency: 1,
-  dependsOn: ["economy"],
-
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaTradeFlowWorld(ctx.tx);
-    return runTradeFlowProcessor(world, ctx, {
-      interval: ECONOMY_UPDATE_INTERVAL,
-      flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
-      gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
-      gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
-      flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
-      distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
-    });
-  },
-};

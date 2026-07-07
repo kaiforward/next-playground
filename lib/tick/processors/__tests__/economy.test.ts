@@ -42,7 +42,7 @@ const ECON_PARAMS = {
 };
 
 function makeCtx(tick = 0): TickContext {
-  return { tx: undefined as never, tick, results: new Map() };
+  return { tick, results: new Map() };
 }
 
 /**

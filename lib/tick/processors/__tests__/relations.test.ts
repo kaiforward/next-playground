@@ -3,14 +3,9 @@ import { runRelationsProcessor } from "../relations";
 import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 import { ALLIANCE, RELATIONS_PHASE_SENTINEL } from "@/lib/constants/relations";
 import type { TickContext } from "@/lib/tick/types";
-import type { Prisma } from "@/app/generated/prisma/client";
-
-// The relations processor doesn't touch ctx.tx — the adapter owns all writes.
-// We pass a no-op stub typed as TransactionClient for the signature only.
-const noopTx = {} as Prisma.TransactionClient;
 
 function makeCtx(tick: number, results: TickContext["results"] = new Map()): TickContext {
-  return { tick, tx: noopTx, results };
+  return { tick, results };
 }
 
 function makeWorld(score: number, opts: { alliance?: boolean; events?: { id: string; type: "pact_under_negotiation" | "alliance_dissolved" | "border_conflict"; expiresAtTick: number }[] } = {}) {

@@ -1,9 +1,6 @@
-import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
+import type { TickContext, TickProcessorResult } from "../types";
 import { migrationFlow, type MigrationNode } from "@/lib/engine/migration";
-import { MIGRATION_PARAMS } from "@/lib/constants/population";
 import { shardRange, catchUpFactor } from "@/lib/tick/shard";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
-import { PrismaMigrationWorld } from "@/lib/tick/adapters/prisma/migration";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
 import type {
   MigrationDelta, MigrationProcessorParams, MigrationWorld,
@@ -65,15 +62,3 @@ export async function runMigrationProcessor(
   if (deltas.length > 0) await world.applyMigrationDeltas(deltas);
   return {};
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-export const migrationProcessor: TickProcessor = {
-  name: "migration",
-  frequency: 1,
-  dependsOn: ["population"],
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaMigrationWorld(ctx.tx);
-    return runMigrationProcessor(world, ctx, { interval: ECONOMY_UPDATE_INTERVAL, flow: MIGRATION_PARAMS });
-  },
-};

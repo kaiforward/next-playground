@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
 import type {
   MigrationDelta, MigrationNodeView, MigrationWorld,
@@ -7,7 +7,7 @@ import { getOpenEdges } from "@/lib/services/topology";
 
 /** Live-game adapter for the migration processor. Bulk writes via unnest(). */
 export class PrismaMigrationWorld implements MigrationWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   getOpenEdges(): Promise<EdgeView[]> {
     return getOpenEdges();

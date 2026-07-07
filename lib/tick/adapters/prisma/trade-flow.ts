@@ -1,4 +1,4 @@
-import type { TxClient } from "@/lib/tick/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import type {
   EdgeView, FlowEventInsert, MarketSnapshot, MarketUpdate,
   TradeFlowWorld,
@@ -7,7 +7,7 @@ import { getOpenEdges as getOpenEdgesShared } from "@/lib/services/topology";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 
 export class PrismaTradeFlowWorld implements TradeFlowWorld {
-  constructor(private tx: TxClient) {}
+  constructor(private tx: Prisma.TransactionClient) {}
 
   getOpenEdges(): Promise<EdgeView[]> {
     return getOpenEdgesShared();

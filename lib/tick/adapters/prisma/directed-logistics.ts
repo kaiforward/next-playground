@@ -1,4 +1,3 @@
-import type { TxClient } from "@/lib/tick/types";
 import type {
   DirectedLogisticsWorld,
   LogisticsFlowInsert,
@@ -10,7 +9,7 @@ import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 
 export class PrismaDirectedLogisticsWorld implements DirectedLogisticsWorld {
-  constructor(private readonly tx: TxClient) {}
+  constructor(private readonly tx: Prisma.TransactionClient) {}
 
   async getFactionShardKeys(): Promise<Array<string | null>> {
     const rows = await this.tx.starSystem.findMany({

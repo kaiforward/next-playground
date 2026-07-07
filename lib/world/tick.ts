@@ -1,19 +1,16 @@
 /**
  * `runWorldTick` — the one shared tick pipeline.
  *
- * Transplanted from the simulator's `simulateWorldTick`
- * (`lib/engine/simulator/economy.ts`, deleted): the same pure processor
- * bodies (`lib/tick/processors/*`) run here against in-memory adapters
- * (`lib/tick/adapters/memory/*`), exactly as they do in the simulator and in
- * the live game (which swaps in the Prisma adapters). This is now the ONLY
- * tick body — the live game's tick loop (Task 6) and the calibration
- * harness (`lib/engine/simulator/runner.ts`) both call it.
+ * The pure processor bodies (`lib/tick/processors/*`) run here against
+ * in-memory adapters (`lib/tick/adapters/memory/*`). This is the ONLY
+ * tick body — the live game's tick loop (`lib/world/tick-loop.ts`) and the
+ * calibration harness (`lib/engine/simulator/runner.ts`) both call it.
  *
- * Stage order mirrors `lib/tick/registry.ts`'s topological sort of the live
- * processor list: ship-arrivals → events → economy → infrastructure-decay →
+ * Stage order is the processors' dependency topological order:
+ * ship-arrivals → events → economy → infrastructure-decay →
  * population → migration → trade-flow → directed-logistics → directed-build
- * → relations. Economy signals flow between stages via the same in-memory
- * `TickContext.results` map the live engine and the old simulator both use.
+ * → relations. Economy signals flow between stages via the in-memory
+ * `TickContext.results` map.
  *
  * `World`'s flat rows (`WorldSystem`, `WorldMarket`, …) don't match the
  * adapters' `Sim*` row shapes field-for-field (see the join/merge helpers
@@ -66,12 +63,11 @@ import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directe
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
 import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 
-import { mergeGlobalEvents, mergePlayerEvents } from "@/lib/tick/helpers";
+import { mergeGlobalEvents } from "@/lib/tick/helpers";
 import type {
   TickContext,
   TickEventRaw,
   GlobalEventMap,
-  PlayerEventMap,
 } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
@@ -404,7 +400,6 @@ export async function runWorldTick(
   const scaled = scaleEventCaps(world.systems.length);
 
   const globalEvents: Partial<GlobalEventMap> = {};
-  const playerEvents = new Map<string, Partial<PlayerEventMap>>();
   const processorsRun: string[] = [];
 
   let systems = toSimSystems(world);
@@ -420,7 +415,7 @@ export async function runWorldTick(
   const metadataByEventId = new Map(world.events.map((e) => [e.id, e.metadata]));
   let events: WorldEvent[] = world.events;
 
-  const newTickCtx = (): TickContext => ({ tx: undefined as never, tick, results: new Map() });
+  const newTickCtx = (): TickContext => ({ tick, results: new Map() });
 
   // ── ship-arrivals ──
   {
@@ -428,7 +423,6 @@ export async function runWorldTick(
     const result = await runShipArrivalsProcessor(shipsWorld, { tick });
     ships = shipsWorld.ships;
     mergeGlobalEvents(globalEvents, result);
-    mergePlayerEvents(playerEvents, result);
     processorsRun.push("ship-arrivals");
   }
 
@@ -464,7 +458,6 @@ export async function runWorldTick(
       metadata: metadataByEventId.get(e.id) ?? null,
     }));
     mergeGlobalEvents(globalEvents, result);
-    mergePlayerEvents(playerEvents, result);
     processorsRun.push("events");
   }
 
@@ -488,7 +481,7 @@ export async function runWorldTick(
     const decayWorld = new InMemoryInfrastructureWorld({ systems });
     await runInfrastructureDecayProcessor(
       decayWorld,
-      { tx: undefined as never, tick, results: new Map([["economy", { economySignals }]]) },
+      { tick, results: new Map([["economy", { economySignals }]]) },
       { decay: INFRASTRUCTURE_DECAY_PARAMS },
     );
     systems = decayWorld.systems;
@@ -500,7 +493,7 @@ export async function runWorldTick(
     const popWorld = new InMemoryPopulationWorld({ systems, markets });
     await runPopulationProcessor(
       popWorld,
-      { tx: undefined as never, tick, results: new Map([["economy", { economySignals }]]) },
+      { tick, results: new Map([["economy", { economySignals }]]) },
       { unrest: UNREST_PARAMS, population: POPULATION_PARAMS },
     );
     systems = popWorld.systems;
@@ -599,8 +592,8 @@ export async function runWorldTick(
     processorsRun.push("directed-build");
   }
 
-  // ── relations (gated by RELATIONS_FREQUENCY, offset 0 — mirrors
-  // lib/tick/registry.ts's `(tick - offset) % frequency === 0` filter) ──
+  // ── relations (gated by RELATIONS_FREQUENCY, offset 0 — the one
+  // processor that runs every Nth tick rather than every tick) ──
   if (world.factions.length >= 2 && tick % RELATIONS_FREQUENCY === 0) {
     const territoryByFaction = new Map<string, Set<string>>();
     for (const s of world.systems) {
@@ -670,11 +663,7 @@ export async function runWorldTick(
 
   const tickEvents: TickEventRaw = {
     currentTick: tick,
-    // Loop-speed cadence is a tick-LOOP concern (lib/world/tick-loop.ts,
-    // Task 6), not this pure per-tick function's — filled by the caller.
-    tickRate: 0,
     events: globalEvents,
-    playerEvents,
     processors: processorsRun,
   };
 
