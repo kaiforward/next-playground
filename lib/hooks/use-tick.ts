@@ -5,6 +5,21 @@ import type { TickBroadcast } from "@/lib/world/tick-loop";
 
 type EventCallback = (events: unknown[]) => void;
 
+/** Narrows a parsed SSE frame before it's trusted as a TickBroadcast. */
+function isTickBroadcast(value: unknown): value is TickBroadcast {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "currentTick" in value &&
+    typeof value.currentTick === "number" &&
+    "speed" in value &&
+    (typeof value.speed === "string" || typeof value.speed === "number") &&
+    "events" in value &&
+    typeof value.events === "object" &&
+    value.events !== null
+  );
+}
+
 interface UseTickResult {
   currentTick: number;
   isConnected: boolean;
@@ -41,7 +56,9 @@ export function useTick(): UseTickResult {
 
     es.onmessage = (e) => {
       try {
-        const event: TickBroadcast = JSON.parse(e.data);
+        const parsed: unknown = JSON.parse(e.data);
+        if (!isTickBroadcast(parsed)) return;
+        const event = parsed;
         setCurrentTick(event.currentTick);
 
         // Dispatch global events to listeners

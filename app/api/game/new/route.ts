@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateWorld } from "@/lib/world/gen";
-import { setWorld } from "@/lib/world/store";
-import { tickLoop } from "@/lib/world/tick-loop";
+import { newGame } from "@/lib/services/game";
 import { newGameSchema } from "@/lib/schemas/game-setup";
 import { parseJsonBody } from "@/lib/api/parse-json";
 import type { ApiResponse } from "@/lib/types/api";
@@ -15,12 +13,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json<ApiResponse<never>>({ error: message }, { status: 400 });
   }
 
-  // The only permissible Math.random — a default seed picked outside the
-  // deterministic tick path.
-  const seed = result.data.seed ?? Math.floor(Math.random() * 2_000_000_000);
-  tickLoop.setSpeed("paused");
-  const world = generateWorld({ systemCount: result.data.systemCount, seed });
-  setWorld(world);
-
-  return NextResponse.json<ApiResponse<WorldMeta>>({ data: world.meta });
+  return NextResponse.json<ApiResponse<WorldMeta>>({ data: newGame(result.data) });
 }

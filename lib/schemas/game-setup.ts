@@ -10,7 +10,9 @@ export const newGameSchema = z.object({
 });
 
 export const speedSchema = z.object({
-  speed: z.union([z.literal("paused"), z.literal(1), z.literal(5), z.literal("max")]),
+  speed: z.union([z.literal("paused"), z.literal(1), z.literal(5), z.literal("max")], {
+    error: 'Speed must be one of "paused", 1, 5, "max".',
+  }),
 });
 
 export type NewGameInput = z.infer<typeof newGameSchema>;
