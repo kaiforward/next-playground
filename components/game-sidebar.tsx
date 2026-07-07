@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
 import { SectionHeader } from "@/components/ui/section-header";
 import {
   Ship,
   Radio,
   ChevronLeft,
   ChevronRight,
-  LogOut,
   Landmark,
   Network,
 } from "lucide-react";
@@ -79,14 +77,12 @@ function Divider() {
 /* ------------------------------------------------------------------ */
 
 interface GameSidebarProps {
-  userEmail: string | null;
   currentTick: number;
   collapsed: boolean;
   onToggle: () => void;
 }
 
 export function GameSidebar({
-  userEmail,
   currentTick,
   collapsed,
   onToggle,
@@ -173,31 +169,6 @@ export function GameSidebar({
       >
         {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>
-
-      {/* User section */}
-      <div className="border-t border-border px-3 py-2 shrink-0">
-        {collapsed ? (
-          <button
-            onClick={() => signOut({ redirectTo: "/login" })}
-            title={userEmail ?? "Sign Out"}
-            className="flex items-center justify-center w-full text-text-secondary hover:text-text-primary transition-colors"
-          >
-            <LogOut className="w-4.5 h-4.5 shrink-0" />
-          </button>
-        ) : (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-text-secondary truncate max-w-[100px]">
-              {userEmail}
-            </span>
-            <button
-              onClick={() => signOut({ redirectTo: "/login" })}
-              className="text-xs text-text-secondary hover:text-text-primary transition-colors"
-            >
-              Sign Out
-            </button>
-          </div>
-        )}
-      </div>
     </aside>
   );
 }
