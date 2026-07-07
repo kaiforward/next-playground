@@ -1,4 +1,4 @@
-import { shardRange, catchUpFactor, shardGroupForIndex, ticksUntilShard } from "@/lib/tick/shard";
+import { shardRange, catchUpFactor, shardGroupForIndex, ticksUntilShard, pulseShard } from "@/lib/tick/shard";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 
 it("covers every index exactly once across one interval, no overlap", () => {
@@ -43,6 +43,29 @@ it("shardGroupForIndex inverts shardRange: every index falls in its group's wind
 });
 it("shardGroupForIndex degenerates safely (empty list → group 0)", () => {
   expect(shardGroupForIndex(0, 0, 24)).toBe(0);
+});
+it("pulseShard: whole list on the boundary tick, empty otherwise", () => {
+  const total = 100, interval = 24;
+  expect(pulseShard(total, 0, interval)).toEqual({ start: 0, end: total });   // tick 0 → boundary
+  expect(pulseShard(total, 24, interval)).toEqual({ start: 0, end: total });  // 24 % 24 = 0
+  expect(pulseShard(total, 48, interval)).toEqual({ start: 0, end: total });
+  for (let t = 1; t < interval; t++) {
+    expect(pulseShard(total, t, interval)).toEqual({ start: 0, end: 0 });     // every off-boundary tick empty
+  }
+});
+it("pulseShard: degenerates safely (total 0 → empty; interval ≤ 1 → whole list every tick)", () => {
+  expect(pulseShard(0, 0, 24)).toEqual({ start: 0, end: 0 });
+  expect(pulseShard(50, 5, 1)).toEqual({ start: 0, end: 50 }); // interval 1 → every tick is a boundary
+  expect(pulseShard(50, 7, 1)).toEqual({ start: 0, end: 50 });
+});
+it("pulseShard: covers the whole list exactly once per interval (one boundary per period)", () => {
+  const total = 100, interval = 24;
+  let covered = 0;
+  for (let t = 0; t < interval; t++) {
+    const { start, end } = pulseShard(total, t, interval);
+    covered += end - start;
+  }
+  expect(covered).toBe(total); // exactly one full pass per interval
 });
 it("ticksUntilShard: 0 on the system's own tick, counts down, periodic, handles negatives", () => {
   const iv = 24;

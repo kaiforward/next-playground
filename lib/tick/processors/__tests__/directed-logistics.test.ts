@@ -29,7 +29,7 @@ describe("MemoryDirectedLogisticsWorld", () => {
 // targetStock = 40×1×1 = 40; minStock = 40/2 = 20; maxStock = 40/0.5 + storageCapacity = 80+storageCapacity.
 // mA: stock=95, storageCapacity=20 → targetStock=40; surplusThreshold=40×1.4=56; 95≥56 ✓ surplus; drawable=95−40=55.
 // mB: stock=10, storageCapacity=20 → targetStock=40; deficitThreshold=40×0.8=32; 10<32 ✓ deficit; shortfall=40−10=30.
-// tick=INTERVAL−1 (=47): shardRange(1, 47, 48) → start=0, end=1.
+// tick=0 (monthly pulse boundary): pulseShard(1, 0, 24) → start=0, end=1 (all factions redistribute).
 // engine quantity=min(shortfall 30, drawable 55, affordable 200)=30. A logistics delivery is a level-fill
 // toward the anchor, so the body moves exactly that (no catch-up): moved=min(30, 95−20, 100−10)=30 → mB lands at 40 (=anchor).
 function market(id: string, goodId: string, stock: number, storageCapacity: number) {
@@ -39,7 +39,7 @@ function market(id: string, goodId: string, stock: number, storageCapacity: numb
   };
 }
 
-const DUE_TICK = DIRECTED_LOGISTICS.INTERVAL - 1; // 47 — last slot, shard window [0,1) covers the 1 faction key
+const DUE_TICK = 0; // monthly pulse: all factions redistribute on ticks where tick % interval === 0
 
 describe("runDirectedLogisticsProcessor (body)", () => {
   it("moves staple surplus to a deficit system and records a logistics flow", async () => {
@@ -108,9 +108,10 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(world.flows).toHaveLength(0);
   });
 
-  it("skips a faction that has work but whose shard is not due this tick", async () => {
-    // Same surplus(mA)+deficit(mB) as the happy path, but tick=0: shardRange(1, 0, 48) is an
-    // empty window, so f1 is not due and NO work runs — distinct from the empty-world early return.
+  it("moves nothing on an off-boundary tick (monthly pulse)", async () => {
+    // Same surplus(mA)+deficit(mB) as the happy path, but tick=1: pulseShard(1, 1, 24) is an
+    // empty window off the month boundary, so NO faction redistributes — distinct from the
+    // empty-world early return.
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
@@ -124,7 +125,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const world = new MemoryDirectedLogisticsWorld(systems);
     await runDirectedLogisticsProcessor(
       world,
-      { tick: 0 },
+      { tick: 1 },
       { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(0);

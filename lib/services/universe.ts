@@ -1,5 +1,5 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, economyShardRankById, marketsBySystem } from "./world-index";
+import { buildingsBySystem, marketsBySystem } from "./world-index";
 import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, SystemTraitInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
@@ -12,8 +12,6 @@ import {
   summariseDeposits,
 } from "@/lib/engine/industry";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
-import { shardGroupForIndex } from "@/lib/tick/shard";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { GOODS } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { deriveRegionDominantFaction } from "@/lib/utils/region";
@@ -189,17 +187,6 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     throw new ServiceError("System not found.", 404);
   }
 
-  // Which economy shard this system lands in — static (its rank in the shared
-  // economy shard order, see lib/engine/shard-order.ts). The client pairs this
-  // with the live tick to count down to the next economy update; the value
-  // itself never changes.
-  const shardRanks = economyShardRankById();
-  const economyShardGroup = shardGroupForIndex(
-    shardRanks.get(systemId) ?? 0,
-    shardRanks.size,
-    ECONOMY_UPDATE_INTERVAL,
-  );
-
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
 
   // marketStock + per-good stock band keyed by good KEY (world market rows
@@ -234,7 +221,6 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
 
   return {
     visibility: "visible",
-    economyShardGroup,
     unrest: system.unrest,
     // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
     // but feed the deposit-fill rows and the production/consumption profile below.

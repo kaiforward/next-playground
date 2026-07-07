@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { shardRange } from "@/lib/tick/shard";
+import { pulseShard } from "@/lib/tick/shard";
 import { planFactionBuilds, type BuildSystemState } from "@/lib/engine/directed-build";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
@@ -31,9 +31,10 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
 }
 
 /**
- * Pure processor body. PER-FACTION shard (mirrors directed-logistics): a contiguous
- * window of the stable faction-key order runs each tick, so every faction is planned
- * once per `interval` ticks. The build engine returns production + housing builds; we
+ * Pure processor body. Monthly resolution pulse (mirrors directed-logistics): on the
+ * boundary tick (`tick % interval === 0`) every faction is planned at once via
+ * `pulseShard`; every other tick is a no-op. The build engine returns production +
+ * housing builds; we
  * apply them as building-count increments (continuous Float). The engine bounds each
  * build to the site's remaining capacity, so counts never exceed capacity. Removal
  * stays disuse-decay's job — this only adds.
@@ -46,7 +47,7 @@ export async function runDirectedBuildProcessor(
   const factionKeys = await world.getFactionShardKeys();
   if (factionKeys.length === 0) return {};
 
-  const { start, end } = shardRange(factionKeys.length, ctx.tick, params.interval);
+  const { start, end } = pulseShard(factionKeys.length, ctx.tick, params.interval);
   const dueKeys = factionKeys.slice(start, end);
   if (dueKeys.length === 0) return {};
 
