@@ -5,7 +5,8 @@
  *   1. Strike suppression: high unrest reduces post-tick stock for producers.
  *   2. Dissatisfaction signal: the returned `economySignals.dissatisfactionBySystem`
  *      reflects demand satisfaction from post-tick stock.
- *   3. Fixed-interval system shard: coverage, payload, and catch-up scaling.
+ *   3. Monthly pulse: the whole galaxy resolves on the boundary tick
+ *      (tick % interval === 0), nothing off-boundary.
  */
 
 import { describe, it, expect } from "vitest";
@@ -16,7 +17,6 @@ import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
-import { shardRange } from "@/lib/tick/shard";
 import type { TickContext } from "@/lib/tick/types";
 import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
 
@@ -277,64 +277,37 @@ describe("economy processor: dissatisfaction signal", () => {
   });
 });
 
-// ── Fixed-interval system shard ───────────────────────────────────
+// ── Monthly pulse: whole-galaxy on the boundary, empty off it ──────
 
-describe("economy processor: fixed-interval system shard", () => {
-  it("covers every system exactly once over `interval` ticks; payload reports the slice", async () => {
-    const interval = 4;
+describe("economy processor: monthly pulse coverage", () => {
+  it("processes every system on the boundary tick and none off-boundary", async () => {
+    const interval = 4; // small MONTH_LENGTH stand-in for the test
     const systems = Array.from({ length: 10 }, (_, i) => makeProducerSystem(`sys-${i}`, 0));
     const sortedIds = systems.map((s) => s.id).sort((a, b) => a.localeCompare(b));
     const markets = systems.map((s) => makeMarket(s.id, "food", 100));
 
-    const seen = new Map<string, number>();
-    let totalReported = 0;
-    for (let t = 0; t < interval; t++) {
-      const world = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
-      const result = await runEconomyProcessor(world, makeCtx(t), { ...ECON_PARAMS, interval, rng: mulberry32(1) });
+    // Boundary tick (tick % interval === 0): the signal covers ALL systems.
+    const wOn = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
+    const onResult = await runEconomyProcessor(wOn, makeCtx(interval), { ...ECON_PARAMS, interval, rng: mulberry32(1) });
+    const processed = [...onResult.economySignals!.dissatisfactionBySystem.keys()].sort((a, b) => a.localeCompare(b));
+    expect(processed).toEqual(sortedIds);
+    expect(onResult.globalEvents!.economyTick![0].systemCount).toBe(systems.length);
 
-      // The dissatisfaction signal is keyed by exactly the processed shard.
-      const processed = [...result.economySignals!.dissatisfactionBySystem.keys()];
-      const { start, end } = shardRange(sortedIds.length, t, interval);
-      expect(processed.sort((a, b) => a.localeCompare(b))).toEqual(sortedIds.slice(start, end));
-
-      const payload = result.globalEvents!.economyTick![0];
-      expect(payload.shardCount).toBe(interval);
-      expect(payload.shardIndex).toBe(t % interval);
-      expect(payload.systemCount).toBe(processed.length);
-      totalReported += payload.systemCount;
-      for (const id of processed) seen.set(id, (seen.get(id) ?? 0) + 1);
+    // Off-boundary ticks: no economySignals at all (decay + population then skip).
+    for (let t = 1; t < interval; t++) {
+      const wOff = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
+      const offResult = await runEconomyProcessor(wOff, makeCtx(t), { ...ECON_PARAMS, interval, rng: mulberry32(1) });
+      expect(offResult.economySignals).toBeUndefined();
+      expect(offResult.globalEvents!.economyTick![0].systemCount).toBe(0);
     }
-
-    // Full, disjoint coverage of the whole list across one interval.
-    expect(seen.size).toBe(systems.length);
-    expect([...seen.values()].every((c) => c === 1)).toBe(true);
-    expect(totalReported).toBe(systems.length);
   });
 
-  it("scales the per-update step by catchUpFactor(interval) (symmetric, equilibrium-invariant)", async () => {
-    const goodId = "food";
-    // A pure consumer (no production) so only the consumption term moves stock —
-    // its self-limiting factor is evaluated at the identical start stock in both
-    // runs, isolating the catch-up factor as the only difference.
-    const start = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
-
-    // interval=1 → catchUpFactor 1/24; the single system is processed at tick 0.
-    const w1 = new InMemoryEconomyWorld(
-      { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
-    );
-    await runEconomyProcessor(w1, makeCtx(0), { ...ECON_PARAMS, interval: 1, rng: mulberry32(7) });
-    const drain1 = start - w1.markets.find((m) => m.goodId === goodId)!.stock;
-
-    // interval=2 → catchUpFactor 2/24; the single system is processed at tick 1.
-    const w2 = new InMemoryEconomyWorld(
-      { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
-    );
-    await runEconomyProcessor(w2, makeCtx(1), { ...ECON_PARAMS, interval: 2, rng: mulberry32(7) });
-    const drain2 = start - w2.markets.find((m) => m.goodId === goodId)!.stock;
-
-    // Doubling the interval doubles the per-update step (catchUpFactor(2)/catchUpFactor(1) = 2).
-    expect(drain1).toBeGreaterThan(0);
-    expect(drain2).toBeCloseTo(2 * drain1, 6);
+  it("interval=1 still resolves the whole list every tick (each tick is a boundary)", async () => {
+    const systems = Array.from({ length: 5 }, (_, i) => makeProducerSystem(`s-${i}`, 0));
+    const markets = systems.map((s) => makeMarket(s.id, "food", 100));
+    const world = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
+    const result = await runEconomyProcessor(world, makeCtx(3), { ...ECON_PARAMS, interval: 1, rng: mulberry32(1) });
+    expect(result.economySignals!.dissatisfactionBySystem.size).toBe(systems.length);
   });
 });
 
