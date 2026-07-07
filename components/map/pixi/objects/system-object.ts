@@ -1,8 +1,8 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
-import type { SystemNodeData, NavigationNodeState, SystemEventInfo } from "@/lib/hooks/use-map-data";
+import type { SystemNodeData, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, NAV_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, FLEET, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
+import { ECONOMY_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -17,9 +17,9 @@ const ECON_STYLE = new TextStyle({
   align: "center",
 });
 
-const DOCKED_COUNT_STYLE = new TextStyle({
+const PILL_LABEL_STYLE = new TextStyle({
   fontSize: 13,
-  fill: FLEET.pillContent,
+  fill: 0xffffff,
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
   fontWeight: "700",
   align: "center",
@@ -33,14 +33,6 @@ const EVENT_COUNT_STYLE = new TextStyle({
   fontWeight: "700",
   align: "center",
 });
-
-/** A single docked-fleet pill (ship glyph + count) drawn on the system glyph. */
-interface DockedPill {
-  container: Container;
-  bg: Graphics;
-  glyph: Graphics;
-  count: Text;
-}
 
 /** Top-right price pill: signed % delta, tinted to the price ramp. */
 interface PricePill {
@@ -79,13 +71,11 @@ export class SystemObject extends Container {
   private glow: Graphics;
   private core: Graphics;
   private highlight: Graphics;
-  private fleetRing: Graphics;
-  private navigationRing: Graphics;
+  private selectionRing: Graphics;
   private nameBg: Graphics;
   private nameLabel: Text;
   private econBg: Graphics;
   private econLabel: Text;
-  private shipPill: DockedPill;   // blue — docked ships
   private pricePill: PricePill;   // top-right — price-ramp delta
   private eventPill: EventPill;   // bottom-right — dominant event icon + count
 
@@ -95,10 +85,7 @@ export class SystemObject extends Container {
   // Track state for update diffing
   private currentName = "";
   private currentEconomy = "";
-  private currentNavState: NavigationNodeState | undefined;
   private currentVisibility: SystemVisibility = "unknown";
-  private currentShipCount = 0;
-  private hasFleet = false;
   private currentSelected = false;
   private currentEventTypes: string[] = [];
   private currentPriceTint: number | null = null;
@@ -107,10 +94,9 @@ export class SystemObject extends Container {
   private eventHasCount = false;
 
   // ── Ambient-visibility gating ─────────────────────────────────
-  // Fleet/event pills render ambiently only when their overlay is on; otherwise
-  // they reveal on hover or selection (overlay-off hides the clutter, it doesn't
-  // hide the data). Defaults match the "default" preset (both overlays on).
-  private showFleet = true;
+  // The event pill renders ambiently only when its overlay is on; otherwise it
+  // reveals on hover or selection (overlay-off hides the clutter, it doesn't
+  // hide the data). Defaults to the overlay's default (on).
   private showEvents = true;
   private isHovered = false;
 
@@ -128,16 +114,9 @@ export class SystemObject extends Container {
     this.glow = new Graphics();
     this.addChild(this.glow);
 
-    // Fleet-presence ring (sky-blue) — outside the halo, below the core. Shows
-    // when the player has any fleet docked here; the at-range cue the gateway
-    // ring used to be.
-    this.fleetRing = new Graphics();
-    this.fleetRing.visible = false;
-    this.addChild(this.fleetRing);
-
-    // Navigation ring (behind core)
-    this.navigationRing = new Graphics();
-    this.addChild(this.navigationRing);
+    // Selection focus ring (behind core)
+    this.selectionRing = new Graphics();
+    this.addChild(this.selectionRing);
 
     // Core circle
     this.core = new Graphics();
@@ -166,9 +145,6 @@ export class SystemObject extends Container {
     this.econLabel.anchor.set(0.5, 0);
     this.addChild(this.econLabel);
 
-    // Docked-fleet pill (top-left of the glyph; replaces the pulse ring + text).
-    this.shipPill = this.createDockedPill();
-
     // Price pill (top-right of the glyph) — tinted to the price ramp.
     this.pricePill = this.createPricePill();
 
@@ -190,9 +166,7 @@ export class SystemObject extends Container {
     this.position.set(data.x, data.y);
 
     const econChanged = data.economyType !== this.currentEconomy;
-    const navChanged = data.navigationState !== this.currentNavState;
     const visibilityChanged = data.visibility !== this.currentVisibility;
-    const shipChanged = data.shipCount !== this.currentShipCount;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
     const eventsChanged = eventTypes !== this.currentEventTypes.join(",");
@@ -244,10 +218,9 @@ export class SystemObject extends Container {
       this.redrawPricePill();
     }
 
-    if (econChanged || navChanged || selectedChanged || visibilityChanged) {
-      this.currentNavState = data.navigationState;
+    if (econChanged || selectedChanged || visibilityChanged) {
       this.currentSelected = isSelected;
-      this.updateNavigationVisuals(data.navigationState, isSelected);
+      this.updateSelectionRing(isSelected);
     }
 
     // Name — only update text + backing when changed (avoids Pixi texture
@@ -271,37 +244,20 @@ export class SystemObject extends Container {
     this.econLabel.visible = !isUnknown;
     this.econBg.visible = !isUnknown;
 
-    if (shipChanged) {
-      // Counts come from the player's own fleet data — always show regardless of fog-of-war
-      this.currentShipCount = data.shipCount;
-      this.redrawDockedPill();
-
-      // Fleet-presence ring: one sky-blue ring whenever any ship is docked —
-      // matches the single blue zoomed-out fleet dot. Visibility (overlay /
-      // hover / select gating) is finalised in setLOD via `hasFleet`.
-      this.hasFleet = data.shipCount > 0;
-      this.fleetRing.clear();
-      if (this.hasFleet) {
-        this.fleetRing.circle(0, 0, GLYPH.fleetRingRadius);
-        this.fleetRing.stroke({ color: FLEET.pillFill, width: GLYPH.fleetRingWidth });
-      }
-    }
-
     if (eventsChanged || visibilityChanged) {
       this.currentEventTypes = eventTypes.split(",").filter(Boolean);
-      this.redrawEventPill(isUnknown ? undefined : data.activeEvents, data.navigationState);
+      this.redrawEventPill(isUnknown ? undefined : data.activeEvents);
     }
 
     // Tracked state may have changed — force the next setLOD to reapply.
     this.lodDirty = true;
   }
 
-  /** Set whether fleet / event pills show ambiently (overlay flags). When off,
-   *  the pills still reveal on hover/selection. Marks LOD dirty so the next
-   *  frame reapplies. */
-  setOverlayFlags(showFleet: boolean, showEvents: boolean) {
-    if (this.showFleet === showFleet && this.showEvents === showEvents) return;
-    this.showFleet = showFleet;
+  /** Set whether the event pill shows ambiently (overlay flag). When off, the
+   *  pill still reveals on hover/selection. Marks LOD dirty so the next frame
+   *  reapplies. */
+  setOverlayFlags(showEvents: boolean) {
+    if (this.showEvents === showEvents) return;
     this.showEvents = showEvents;
     this.lodDirty = true;
   }
@@ -344,22 +300,10 @@ export class SystemObject extends Container {
     bg.fill({ color: LABEL.bgFill, alpha: LABEL.bgAlpha });
   }
 
-  private createDockedPill(): DockedPill {
-    const container = new Container();
-    const bg = new Graphics();
-    const glyph = new Graphics();
-    const count = new Text({ text: "", style: DOCKED_COUNT_STYLE, resolution: TEXT_RESOLUTION });
-    count.anchor.set(0, 0.5);
-    container.addChild(bg, glyph, count);
-    container.visible = false;
-    this.addChild(container);
-    return { container, bg, glyph, count };
-  }
-
   private createPricePill(): PricePill {
     const container = new Container();
     const bg = new Graphics();
-    const label = new Text({ text: "", style: DOCKED_COUNT_STYLE, resolution: TEXT_RESOLUTION });
+    const label = new Text({ text: "", style: PILL_LABEL_STYLE, resolution: TEXT_RESOLUTION });
     label.anchor.set(0, 0.5);
     container.addChild(bg, label);
     container.visible = false;
@@ -384,42 +328,15 @@ export class SystemObject extends Container {
     bg.fill(tint);
 
     label.position.set(PILL.padX, 0);
-    // Top-right mirror of the fleet pills' top-left anchor; grows rightward.
+    // Top-right anchor; grows rightward.
     this.pricePill.container.position.set(PILL_ANCHOR.x, PILL_ANCHOR.yTop);
-  }
-
-  /** Lay out the docked-ship pill, right-aligned to the glyph's top-left. */
-  private redrawDockedPill() {
-    if (this.currentShipCount > 0) {
-      this.drawPill(this.shipPill, this.currentShipCount, FLEET.pillFill, -PILL_ANCHOR.x, PILL_ANCHOR.yTop);
-    }
-  }
-
-  private drawPill(pill: DockedPill, count: number, color: number, x: number, y: number) {
-    const h = PILL.height;
-    const glyphW = PILL.glyphSize;
-    pill.count.text = String(count);
-    const w = PILL.padX + glyphW + PILL.gap + pill.count.width + PILL.padX;
-
-    pill.bg.clear();
-    pill.bg.roundRect(-w, -h / 2, w, h, PILL.corner);
-    pill.bg.fill(color);
-
-    // ship glyph (small right-pointing chevron) near the left
-    const gx = -w + PILL.padX;
-    pill.glyph.clear();
-    pill.glyph.poly([gx, -glyphW / 2, gx + glyphW, 0, gx, glyphW / 2, gx + glyphW * 0.35, 0]);
-    pill.glyph.fill(FLEET.pillContent);
-
-    pill.count.position.set(gx + glyphW + PILL.gap, 0);
-    pill.container.position.set(x, y);
   }
 
   /** Apply LOD-based visibility. Called per frame from layer. */
   setLOD(lod: LODState) {
     // Idle-frame fast path: nothing in update() changed and the LOD bands this
     // method reads are identical to last frame — skip the ~25 display-object
-    // writes (the player is neither zooming nor moving fleets).
+    // writes (nothing about this system changed this frame).
     if (!this.lodDirty && this.appliedLod && lodVisuallyEqual(this.appliedLod, lod)) {
       return;
     }
@@ -449,20 +366,10 @@ export class SystemObject extends Container {
     const showContent = lod.showPillContent;
     const contentAlpha = lod.pillContentAlpha;
 
-    // Hover or selection always reveals a system's pills, even with the overlay
-    // off. Fleet pills gate on the Fleet overlay; the event pill on Events.
+    // Hover or selection always reveals a system's event pill, even with the
+    // Events overlay off.
     const reveal = this.isHovered || this.currentSelected;
-    const revealFleet = this.showFleet || reveal;
     const revealEvents = this.showEvents || reveal;
-
-    // Fleet-presence ring follows the same gating as the fleet pills (so the
-    // Fleet overlay declutters the ring too); held full-size at low zoom as the
-    // at-range cue.
-    this.fleetRing.visible = revealFleet && this.hasFleet;
-
-    const showShip = revealFleet && this.currentShipCount > 0;
-    this.shipPill.container.visible = showShip;
-    if (showShip) this.stagePillContent(showContent, contentAlpha, this.shipPill.glyph, this.shipPill.count);
 
     const showPrice = this.currentPriceTint != null && !isUnknown;
     this.pricePill.container.visible = showPrice;
@@ -481,7 +388,7 @@ export class SystemObject extends Container {
     // Scale core + highlight by LOD
     this.core.scale.set(lod.systemDotScale);
     this.highlight.scale.set(lod.systemDotScale);
-    this.navigationRing.scale.set(lod.systemDotScale);
+    this.selectionRing.scale.set(lod.systemDotScale);
   }
 
   /** Two-stage LOD helper: toggle a pill's content nodes (text/icons) together.
@@ -513,49 +420,12 @@ export class SystemObject extends Container {
     g.stroke({ color, width, alpha });
   }
 
-  private updateNavigationVisuals(
-    state: NavigationNodeState | undefined,
-    isSelected: boolean,
-  ) {
-    this.navigationRing.clear();
-    this.alpha = 1;
-    this.scale.set(1);
-    this.cursor = "pointer";
-
-    if (isSelected && !state) {
-      // Selected system (no navigation) — bright white dashed focus ring, thicker
-      // than the nav rings so the selection reads clearly at a glance.
-      this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, 0xffffff, GLYPH.selectedRingWidth, 1);
-    }
-
-    if (!state) return;
-
-    switch (state) {
-      case "origin":
-        this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, NAV_COLORS.origin, GLYPH.navRingWidth);
-        this.scale.set(1.1);
-        break;
-
-      case "reachable":
-        // Reachability is graph topology (from atlas), not fog-of-war intel — always show
-        this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 3);
-        this.navigationRing.stroke({ color: NAV_COLORS.reachable, width: 1.5, alpha: 0.6 });
-        break;
-
-      case "unreachable":
-        this.alpha = 0.3;
-        this.cursor = "not-allowed";
-        break;
-
-      case "route_hop":
-        this.navigationRing.circle(0, 0, SIZES.systemCoreRadius + 4);
-        this.navigationRing.stroke({ color: NAV_COLORS.route_hop, width: 2, alpha: 1 });
-        break;
-
-      case "destination":
-        this.strokeDashedRing(this.navigationRing, GLYPH.navRingRadius, NAV_COLORS.destination, GLYPH.navRingWidth);
-        this.scale.set(1.1);
-        break;
+  private updateSelectionRing(isSelected: boolean) {
+    this.selectionRing.clear();
+    if (isSelected) {
+      // Selected system — bright white dashed focus ring so the selection
+      // reads clearly at a glance.
+      this.strokeDashedRing(this.selectionRing, GLYPH.navRingRadius, 0xffffff, GLYPH.selectedRingWidth, 1);
     }
   }
 
@@ -578,8 +448,8 @@ export class SystemObject extends Container {
 
   /** Draw the bottom-right event pill from the dominant (highest-priority)
    *  event. Visibility is finalised in setLOD via `hasEventPill`. */
-  private redrawEventPill(events: SystemEventInfo[] | undefined, navState?: NavigationNodeState) {
-    this.hasEventPill = !!events && events.length > 0 && navState !== "unreachable";
+  private redrawEventPill(events: SystemEventInfo[] | undefined) {
+    this.hasEventPill = !!events && events.length > 0;
     if (!this.hasEventPill || !events) return;
 
     const top = [...events].sort((a, b) => b.priority - a.priority)[0];

@@ -2,7 +2,6 @@ import { Container, Graphics } from "pixi.js";
 import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
 import { TERRITORY } from "../theme";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { computeTerritoryPolygons } from "../territory-utils";
 import { stabilityRampColorPixi } from "@/lib/utils/stability";
 import type { AtlasSystem } from "@/lib/types/game";
@@ -28,14 +27,13 @@ export class StabilityTerritoryLayer {
   }
 
   /** Compute per-system Voronoi cells from atlas positions (not per frame). */
-  sync(systems: AtlasSystem[]) {
+  sync(systems: AtlasSystem[], mapSize: number) {
     if (systems.length < 3) {
       this.clear();
       return;
     }
     const points: [number, number][] = systems.map((s) => [s.x, s.y]);
-    const size = UNIVERSE_GEN.MAP_SIZE;
-    const voronoi = Delaunay.from(points).voronoi([0, 0, size, size]);
+    const voronoi = Delaunay.from(points).voronoi([0, 0, mapSize, mapSize]);
     this.cachedCells = computeTerritoryPolygons(
       systems.length,
       voronoi,

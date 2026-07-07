@@ -56,17 +56,8 @@ describe("getDynamicData", () => {
         EVENT_TYPE_DANGER_PRIORITY.asteroid_strike,
       ),
     );
-    expect(tileX.hasPlayerShips).toBe(false);
-
     const tileY = data.systems.find((s) => s.id === sysY.id)!;
     expect(tileY.eventTypeIds).toEqual([]);
     expect(tileY.danger).toBe(0);
-    expect(tileY.hasPlayerShips).toBe(false);
-  });
-
-  it("never reports player ships (deliberate single-player stub)", () => {
-    const data = getDynamicData();
-    expect(data.systems.length).toBeGreaterThan(0);
-    expect(data.systems.every((s) => s.hasPlayerShips === false)).toBe(true);
   });
 });

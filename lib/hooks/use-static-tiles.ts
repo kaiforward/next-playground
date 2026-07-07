@@ -5,7 +5,6 @@ import { useQueries } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
 import { frustumToTiles } from "@/lib/engine/tiles";
-import { ACTIVE_SCALE } from "@/lib/constants/universe-gen";
 import type { ViewportBounds, StaticTileSystem } from "@/lib/types/game";
 
 /** Zoom threshold: start fetching tiles before names appear (0.45) but after universe view. */
@@ -21,8 +20,12 @@ const THROTTLE_MS = 150;
  * Query caching — tiles are never refetched once loaded.
  *
  * Returns an `onViewportChange` callback matching the PixiMapCanvas contract.
+ *
+ * `mapSize` comes from the atlas meta (world state) — tile geometry and query
+ * keys derive from it, so a new world with a different extent can never serve
+ * stale tiles.
  */
-export function useStaticTiles() {
+export function useStaticTiles(mapSize: number) {
   const [viewport, setViewport] = useState<ViewportBounds | null>(null);
   const [zoom, setZoom] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -56,16 +59,16 @@ export function useStaticTiles() {
   const active = viewport !== null && zoom >= NAME_ZOOM_THRESHOLD;
 
   const visibleTiles = useMemo(
-    () => (active ? frustumToTiles(viewport) : []),
-    [active, viewport],
+    () => (active ? frustumToTiles(viewport, mapSize) : []),
+    [active, viewport, mapSize],
   );
 
   const queries = useQueries({
     queries: visibleTiles.map((tile) => ({
-      queryKey: queryKeys.staticTile(tile.col, tile.row, ACTIVE_SCALE),
+      queryKey: queryKeys.staticTile(tile.col, tile.row, mapSize),
       queryFn: () =>
         apiFetch<{ systems: StaticTileSystem[] }>(
-          `/api/game/systems/tile/static?col=${tile.col}&row=${tile.row}&scale=${ACTIVE_SCALE}`,
+          `/api/game/systems/tile/static?col=${tile.col}&row=${tile.row}`,
         ),
       staleTime: Infinity,
       gcTime: Infinity,

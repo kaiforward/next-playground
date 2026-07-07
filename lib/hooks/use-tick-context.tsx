@@ -2,14 +2,16 @@
 
 import { createContext, useContext } from "react";
 import { useTick } from "./use-tick";
+import type { Speed } from "@/lib/world/tick-loop";
 
 type EventCallback = (events: unknown[]) => void;
 
 interface TickContextValue {
   currentTick: number;
+  speed: Speed;
+  achievedTps: number;
   isConnected: boolean;
   subscribeToEvent: (eventName: string, cb: EventCallback) => () => void;
-  subscribeToArrivals: (cb: (shipIds: string[]) => void) => () => void;
 }
 
 const TickContext = createContext<TickContextValue | null>(null);

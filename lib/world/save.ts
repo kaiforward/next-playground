@@ -15,6 +15,20 @@ import type { World } from "./types";
 
 export const SAVE_FORMAT_VERSION = 1;
 
+/** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
+export const AUTOSAVE_NAME = "autosave";
+
+/**
+ * Canonical save-name sanitizer — strips everything but `[a-z0-9-_]` so a
+ * player-typed name can never escape `saves/` via path separators or
+ * traversal sequences (`../`). Lives here (pure) rather than in the disk
+ * adapter so the save-name form schema can reject names that sanitize to
+ * empty without importing Node-edge code.
+ */
+export function sanitizeSaveName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9-_]/g, "");
+}
+
 interface SaveFile {
   formatVersion: number;
   world: World;
@@ -33,9 +47,9 @@ export function serializeWorld(world: World): string {
  * Narrows a `JSON.parse` result into a typed `World`. Per the JSON-boundary
  * convention, the parsed value is checked with `typeof`/`in` immediately
  * rather than threaded through as `unknown` — these are structural
- * spot-checks (top-level shape, `formatVersion`, `meta.currentTick`/`seed`
- * numeric), not exhaustive validation: pre-1.0 saves are trusted local
- * files, not untrusted network input.
+ * spot-checks (top-level shape, `formatVersion`, and the numeric `meta`
+ * fields the map/tile geometry depends on), not exhaustive validation:
+ * pre-1.0 saves are trusted local files, not untrusted network input.
  */
 export function deserializeWorld(json: string): DeserializeResult {
   let parsed: unknown;
@@ -63,10 +77,13 @@ export function deserializeWorld(json: string): DeserializeResult {
 
 /**
  * Spot-check every save's world must pass: an object with a `meta` object
- * whose `currentTick`/`seed` are numeric. Not exhaustive — see the module
- * doc comment. A user-defined type guard asserts the rest of `World`'s
- * shape; it is the caller's responsibility (formatVersion bump) to keep
- * that assertion honest as `World` evolves.
+ * whose `currentTick`/`seed`/`mapSize`/`systemCount` are numeric. `mapSize`
+ * and `systemCount` are checked because the client tile geometry divides by
+ * `mapSize` — a save missing it would silently produce NaN tile bounds
+ * downstream. Not exhaustive — see the module doc comment. A user-defined
+ * type guard asserts the rest of `World`'s shape; it is the caller's
+ * responsibility (formatVersion bump) to keep that assertion honest as
+ * `World` evolves.
  */
 function isWorldShaped(value: unknown): value is World {
   if (typeof value !== "object" || value === null) return false;
@@ -78,6 +95,10 @@ function isWorldShaped(value: unknown): value is World {
     "currentTick" in meta &&
     typeof meta.currentTick === "number" &&
     "seed" in meta &&
-    typeof meta.seed === "number"
+    typeof meta.seed === "number" &&
+    "mapSize" in meta &&
+    typeof meta.mapSize === "number" &&
+    "systemCount" in meta &&
+    typeof meta.systemCount === "number"
   );
 }

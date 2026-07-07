@@ -64,6 +64,16 @@ describe("getAtlas", () => {
     }
   });
 
+  it("exposes world meta (mapSize/systemCount/seed) for client tile geometry", () => {
+    // The client derives tile-grid math from atlas.meta.mapSize (this replaced
+    // the removed UNIVERSE_SCALE env), so meta must round-trip world.meta.
+    expect(getAtlas().meta).toEqual({
+      mapSize: world.meta.mapSize,
+      systemCount: world.meta.systemCount,
+      seed: world.meta.seed,
+    });
+  });
+
   it("sorts factions by name ascending", () => {
     const names = getAtlas().factions.map((f) => f.name);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));

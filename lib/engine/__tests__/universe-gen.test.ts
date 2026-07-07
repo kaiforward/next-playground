@@ -15,31 +15,20 @@ import {
   type GeneratedRegion,
 } from "../universe-gen";
 import {
-  UNIVERSE_GEN,
+  genConfigForSystemCount,
+  DEFAULT_SYSTEM_COUNT,
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
+import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
+const DEFAULT_GEN_CONFIG = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
+
 function defaultParams(): GenParams {
-  return {
-    seed: UNIVERSE_GEN.SEED,
-    regionCount: UNIVERSE_GEN.REGION_COUNT,
-    totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
-    mapSize: UNIVERSE_GEN.MAP_SIZE,
-    mapPadding: UNIVERSE_GEN.MAP_PADDING,
-    poissonMinDistance: UNIVERSE_GEN.POISSON_MIN_DISTANCE,
-    poissonKCandidates: UNIVERSE_GEN.POISSON_K_CANDIDATES,
-    regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
-    extraEdgeFraction: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
-    gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
-    gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
-    intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
-    maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
-    minorFactionCount: UNIVERSE_GEN.MINOR_FACTION_COUNT,
-  };
+  return buildGenParams(DEFAULT_GEN_CONFIG.SEED, DEFAULT_GEN_CONFIG);
 }
 
 /** BFS reachability from a start node in a directed adjacency list. */

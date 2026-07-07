@@ -46,6 +46,11 @@ export function getAtlas(): AtlasData {
   });
 
   return {
+    meta: {
+      mapSize: world.meta.mapSize,
+      systemCount: world.meta.systemCount,
+      seed: world.meta.seed,
+    },
     regions: regionInfos,
     systems: world.systems.map((s) => ({
       id: s.id,

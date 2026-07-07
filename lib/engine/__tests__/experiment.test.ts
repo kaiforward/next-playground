@@ -3,7 +3,7 @@ import {
   ExperimentConfigSchema,
   experimentToSimConfig,
 } from "../simulator/experiment";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 
 describe("ExperimentConfig", () => {
   describe("ExperimentConfigSchema", () => {
@@ -13,7 +13,7 @@ describe("ExperimentConfig", () => {
       if (!result.success) return;
       expect(result.data.seed).toBe(42);
       expect(result.data.ticks).toBe(500);
-      expect(result.data.systemCount).toBe(UNIVERSE_GEN.TOTAL_SYSTEMS);
+      expect(result.data.systemCount).toBe(DEFAULT_SYSTEM_COUNT);
     });
 
     it("accepts a full config with label/seed/ticks/systemCount overridden", () => {

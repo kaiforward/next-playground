@@ -2,7 +2,6 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
 import { BG_COLOR, ECONOMY_COLORS, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { computeTerritoryPolygons } from "../territory-utils";
 import type { AtlasSystem, EconomyType } from "@/lib/types/game";
 
@@ -25,7 +24,6 @@ export class TerritoryLayer {
   private territoryGraphics = new Graphics();
   private labelContainer = new Container();
   private regionLabels = new Map<string, Text>();
-  private playerRegionIds = new Set<string>();
 
   // Cached Voronoi results for lightweight fill-only redraws
   private cachedTerritories: Map<string, [number, number][][][]> | null = null;
@@ -41,7 +39,7 @@ export class TerritoryLayer {
    * Compute and render filled territory polygons per region.
    * Called when system data changes (not per frame).
    */
-  sync(systems: AtlasSystem[], regions: RegionInfo[]) {
+  sync(systems: AtlasSystem[], regions: RegionInfo[], mapSize: number) {
     if (systems.length < 3) {
       this.clear();
       return;
@@ -50,8 +48,7 @@ export class TerritoryLayer {
     // Build Delaunay triangulation from system positions
     const points: [number, number][] = systems.map((s) => [s.x, s.y]);
     const delaunay = Delaunay.from(points);
-    const size = UNIVERSE_GEN.MAP_SIZE;
-    const voronoi = delaunay.voronoi([0, 0, size, size]);
+    const voronoi = delaunay.voronoi([0, 0, mapSize, mapSize]);
 
     // Compute dominant economy per region for fill tinting
     const regionEconomyCounts = new Map<string, Map<EconomyType, number>>();
@@ -102,7 +99,7 @@ export class TerritoryLayer {
     }
   }
 
-  /** Redraw only polygon fills (no Voronoi recompute). Used by setPlayerPresence. */
+  /** Redraw only polygon fills (no Voronoi recompute). */
   private drawFills() {
     if (!this.cachedTerritories || !this.cachedRegionEconomy) return;
 
@@ -111,8 +108,7 @@ export class TerritoryLayer {
     for (const [regionId, multiPoly] of this.cachedTerritories) {
       const economy = this.cachedRegionEconomy.get(regionId) ?? "industrial";
       const color = ECONOMY_COLORS[economy].core;
-      const isPlayer = this.playerRegionIds.has(regionId);
-      const fillAlpha = isPlayer ? TERRITORY.playerFillAlpha : TERRITORY.fillAlpha;
+      const fillAlpha = TERRITORY.fillAlpha;
 
       for (const poly of multiPoly) {
         // Exterior ring (first ring)
@@ -176,14 +172,6 @@ export class TerritoryLayer {
     }
   }
 
-  /** Update which regions have player presence (brighter fill) */
-  setPlayerPresence(regionIds: Set<string>) {
-    if (setsEqual(this.playerRegionIds, regionIds)) return;
-    this.playerRegionIds = regionIds;
-    // Lightweight redraw — only redraws polygon fills, no Voronoi recompute
-    this.drawFills();
-  }
-
   /** Per-frame LOD update */
   updateVisibility(lod: LODState) {
     this.territoryGraphics.visible = lod.showTerritories;
@@ -211,12 +199,4 @@ export class TerritoryLayer {
     this.labelContainer.destroy({ children: true });
     this.container.destroy({ children: true });
   }
-}
-
-function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
-  if (a.size !== b.size) return false;
-  for (const item of a) {
-    if (!b.has(item)) return false;
-  }
-  return true;
 }

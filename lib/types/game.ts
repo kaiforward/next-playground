@@ -155,50 +155,14 @@ export interface StaticTileSystem {
 
 export type SystemVisibility = "visible" | "unknown";
 
-/** Dynamic system data — events, danger, and ship presence for visible systems. */
+/** Dynamic system data — events and danger for visible systems. */
 export interface DynamicTileSystem {
   id: string;
   eventTypeIds: EventTypeId[];
-  hasPlayerShips: boolean;
   danger: number;
 }
 
 export type ShipStatus = "docked" | "in_transit";
-
-export interface ShipState {
-  id: string;
-  name: string;
-  shipType: string;
-  size: ShipSize;
-  role: ShipRole;
-  fuel: number;
-  maxFuel: number;
-  speed: number;
-  hullMax: number;
-  hullCurrent: number;
-  shieldMax: number;
-  shieldCurrent: number;
-  firepower: number;
-  evasion: number;
-  stealth: number;
-  sensors: number;
-  crewCapacity: number;
-  disabled: boolean;
-  status: ShipStatus;
-  systemId: string;
-  system: StarSystemInfo;
-  destinationSystemId: string | null;
-  destinationSystem: StarSystemInfo | null;
-  departureTick: number | null;
-  arrivalTick: number | null;
-}
-
-export interface FleetState {
-  id: string;
-  userId: string;
-  credits: number;
-  ships: ShipState[];
-}
 
 export interface GameWorldState {
   meta: WorldMeta;
@@ -337,6 +301,8 @@ export interface AtlasFaction {
 }
 
 export interface AtlasData {
+  /** World identity + extent — the client derives tile geometry from mapSize. */
+  meta: { mapSize: number; systemCount: number; seed: number };
   regions: RegionInfo[];
   systems: AtlasSystem[];
   connections: SystemConnectionInfo[];

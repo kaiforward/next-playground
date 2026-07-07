@@ -23,7 +23,7 @@ const MODE_LABELS: Record<MapMode, string> = {
 };
 
 /** Overlays whose colour mapping isn't self-evident carry a hover/focus legend. */
-type LegendKind = "price" | "tradeFlow" | "logistics" | "routes";
+type LegendKind = "price" | "tradeFlow" | "logistics";
 
 interface OverlayDef {
   key: MapOverlayKey;
@@ -39,12 +39,10 @@ interface OverlayDef {
  * pulled from the same constants the Pixi renderer uses so they can't drift.
  */
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
-  { key: "fleet", label: "Fleet", swatch: "#38bdf8" }, // FLEET.pillFill (sky-400)
   { key: "events", label: "Events", swatch: "#f59e0b" }, // EVENT_DOT_COLORS.amber
   { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium, legend: "price" },
   { key: "tradeFlow", label: "Trade Flows", swatch: pixiHexToCss(TIER_COLOR[2]), legend: "tradeFlow" },
   { key: "logistics", label: "Logistics", swatch: pixiHexToCss(TIER_COLOR[1]), legend: "logistics" },
-  { key: "shipRoutes", label: "Ship Routes", swatch: "#38bdf8", legend: "routes" },
 ];
 
 const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({
@@ -144,13 +142,7 @@ function SectionHeading({ children }: { children: string }) {
 function OverlayLegend({ kind }: { kind: LegendKind }) {
   if (kind === "price") return <PriceRampLegend />;
   if (kind === "tradeFlow") return <TradeFlowLegend />;
-  if (kind === "logistics") return <LogisticsLegend />;
-  return (
-    <p className="text-[10px] leading-relaxed text-text-secondary">
-      Every in-transit ship&apos;s route. Markers stay visible at all zooms —
-      hover one for its ETA, click to pin its route.
-    </p>
-  );
+  return <LogisticsLegend />;
 }
 
 const PRICE_RAMP = [

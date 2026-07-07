@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SectionHeader } from "@/components/ui/section-header";
+import { useDialog } from "@/components/ui/dialog";
+import { SaveGameDialog } from "@/components/save-game-dialog";
+import { SpeedControls } from "@/components/speed-controls";
 import {
-  Ship,
   Radio,
   ChevronLeft,
   ChevronRight,
   Landmark,
   Network,
+  Save,
+  DoorOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -23,10 +27,6 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-const FLEET_NAV: NavItem[] = [
-  { href: "/fleet", label: "Fleet", icon: Ship },
-];
-
 const ACTIVITY_NAV: NavItem[] = [
   { href: "/events", label: "Events", icon: Radio },
 ];
@@ -39,6 +39,16 @@ const POLITICS_NAV: NavItem[] = [
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                    */
 /* ------------------------------------------------------------------ */
+
+function sidebarItemClasses(collapsed: boolean, active: boolean): string {
+  return `flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
+    collapsed ? "justify-center" : ""
+  } ${
+    active
+      ? "bg-surface-active border-l-2 border-l-accent text-text-primary"
+      : "border-l-2 border-l-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+  }`;
+}
 
 function NavLink({
   item,
@@ -54,13 +64,7 @@ function NavLink({
     <Link
       href={item.href}
       title={collapsed ? item.label : undefined}
-      className={`flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
-        collapsed ? "justify-center" : ""
-      } ${
-        active
-          ? "bg-surface-active border-l-2 border-l-accent text-text-primary"
-          : "border-l-2 border-l-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-      }`}
+      className={sidebarItemClasses(collapsed, active)}
     >
       <Icon className="w-4.5 h-4.5 shrink-0" />
       {!collapsed && <span>{item.label}</span>}
@@ -88,10 +92,11 @@ export function GameSidebar({
   onToggle,
 }: GameSidebarProps) {
   const pathname = usePathname();
+  const saveDialog = useDialog();
 
   // Longest-prefix match across all nav hrefs so nested entries
   // (e.g. /factions + /factions/[id]) don't both highlight.
-  const allHrefs = [...FLEET_NAV, ...ACTIVITY_NAV, ...POLITICS_NAV].map((n) => n.href);
+  const allHrefs = [...ACTIVITY_NAV, ...POLITICS_NAV].map((n) => n.href);
   const activeHref = allHrefs
     .filter((h) => pathname === h || pathname.startsWith(h + "/"))
     .reduce((best, h) => (h.length > best.length ? h : best), "");
@@ -114,16 +119,6 @@ export function GameSidebar({
           )}
         </Link>
       </div>
-
-      {/* Fleet section */}
-      {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Fleet</SectionHeader>}
-      <nav aria-label="Fleet navigation" className="flex flex-col gap-0.5">
-        {FLEET_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
-        ))}
-      </nav>
-
-      <Divider />
 
       {/* Activity section */}
       {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Activity</SectionHeader>}
@@ -155,11 +150,33 @@ export function GameSidebar({
               <span className="font-mono text-text-primary">{currentTick}</span>
             </div>
           </div>
+          <SpeedControls />
         </div>
       )}
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Game section — save / exit to menu */}
+      <div className="flex flex-col gap-0.5 border-t border-border py-1">
+        <button
+          onClick={saveDialog.onOpen}
+          title={collapsed ? "Save Game" : undefined}
+          className={sidebarItemClasses(collapsed, false)}
+        >
+          <Save className="w-4.5 h-4.5 shrink-0" />
+          {!collapsed && <span>Save Game</span>}
+        </button>
+        <Link
+          href="/start"
+          title={collapsed ? "Exit to Menu" : undefined}
+          className={sidebarItemClasses(collapsed, false)}
+        >
+          <DoorOpen className="w-4.5 h-4.5 shrink-0" />
+          {!collapsed && <span>Exit to Menu</span>}
+        </Link>
+      </div>
+      <SaveGameDialog open={saveDialog.open} onClose={saveDialog.onClose} />
 
       {/* Collapse toggle */}
       <button

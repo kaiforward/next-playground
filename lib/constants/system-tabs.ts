@@ -8,7 +8,6 @@ export const SYSTEM_TABS = [
   { label: "Industry", segment: "industry" },
   { label: "Logistics", segment: "logistics" },
   { label: "Market", segment: "market" },
-  { label: "Ships", segment: "ships" },
 ] as const;
 
 export type SystemTab = (typeof SYSTEM_TABS)[number];

@@ -14,10 +14,9 @@ export class SystemLayer {
   /** All system data — creation is deferred to updateVisibility (frustum-gated). */
   private systemData = new Map<string, SystemNodeData>();
   private selectedId: string | null = null;
-  // Ambient-pill overlay flags, applied to every object (and to ones created
-  // later). Default to the "default" preset (both on) so glyphs created before
-  // the first overlay sync don't flash hidden.
-  private showFleet = true;
+  // Ambient-pill overlay flag, applied to every object (and to ones created
+  // later). Defaults ON so glyphs created before the first overlay sync don't
+  // flash hidden.
   private showEvents = true;
   onObjectCreated?: (obj: SystemObject) => void;
 
@@ -29,14 +28,13 @@ export class SystemLayer {
   }
 
   /**
-   * Set which ambient pill overlays are on (fleet / events). Stored so objects
-   * created later inherit the flags, and pushed to all live objects now.
+   * Set whether the ambient event pill is on. Stored so objects created later
+   * inherit the flag, and pushed to all live objects now.
    */
-  setOverlayVisibility({ fleet, events }: { fleet: boolean; events: boolean }) {
-    this.showFleet = fleet;
+  setOverlayVisibility({ events }: { events: boolean }) {
     this.showEvents = events;
     for (const obj of this.objects.values()) {
-      obj.setOverlayFlags(fleet, events);
+      obj.setOverlayFlags(events);
     }
   }
 
@@ -92,7 +90,7 @@ export class SystemLayer {
         this.objects.set(id, obj);
         this.container.addChild(obj);
         this.onObjectCreated?.(obj);
-        obj.setOverlayFlags(this.showFleet, this.showEvents);
+        obj.setOverlayFlags(this.showEvents);
         obj.update(data, id === this.selectedId);
         createdThisFrame++;
       }

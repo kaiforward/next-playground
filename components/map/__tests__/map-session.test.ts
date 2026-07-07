@@ -64,36 +64,46 @@ describe("map-session", () => {
       expect("politicalTerritory" in (overlays ?? {})).toBe(false);
     });
 
-    it("keeps fleet and events when present, including an explicit false", () => {
-      // `fleet`/`events` default ON, so an explicit `false` must round-trip —
+    it("keeps events when present, including an explicit false", () => {
+      // `events` defaults ON, so an explicit `false` must round-trip —
       // a dropped key would silently revert to the default on hydrate.
       sessionStorage.setItem(
         "stellarTrader:mapState",
-        JSON.stringify({ overlays: { fleet: false, events: true } }),
+        JSON.stringify({ overlays: { events: false, tradeFlow: true } }),
       );
       const overlays = getMapSessionState()?.overlays;
-      expect(overlays?.fleet).toBe(false);
-      expect(overlays?.events).toBe(true);
+      expect(overlays?.events).toBe(false);
+      expect(overlays?.tradeFlow).toBe(true);
     });
 
-    it("drops a non-boolean fleet value during parse", () => {
+    it("drops a non-boolean events value during parse", () => {
       sessionStorage.setItem(
         "stellarTrader:mapState",
-        JSON.stringify({ overlays: { fleet: "yes" } }),
+        JSON.stringify({ overlays: { events: "yes" } }),
       );
       // Non-boolean is ignored; with no valid overlay keys left, overlays
       // collapses to undefined (same as the legacy-only case above).
       expect(getMapSessionState()?.overlays).toBeUndefined();
     });
 
-    it("round-trips an explicit fleet:false through the write path", () => {
+    it("drops the retired fleet key during parse", () => {
+      sessionStorage.setItem(
+        "stellarTrader:mapState",
+        JSON.stringify({ overlays: { fleet: false, events: true } }),
+      );
+      const overlays = getMapSessionState()?.overlays;
+      expect(overlays?.events).toBe(true);
+      expect("fleet" in (overlays ?? {})).toBe(false);
+    });
+
+    it("round-trips an explicit events:false through the write path", () => {
       // Exercises setOverlaysInSession → writeSessionState → getMapSessionState
       // end-to-end (not just a seeded parse): a default-ON overlay turned off
       // must survive the write, or it would silently revert on hydrate.
-      setOverlaysInSession({ fleet: false, events: true });
+      setOverlaysInSession({ events: false, tradeFlow: true });
       const overlays = getMapSessionState()?.overlays;
-      expect(overlays?.fleet).toBe(false);
-      expect(overlays?.events).toBe(true);
+      expect(overlays?.events).toBe(false);
+      expect(overlays?.tradeFlow).toBe(true);
     });
   });
 

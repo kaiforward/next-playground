@@ -23,7 +23,7 @@ import {
 } from "../lib/engine/simulator/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/engine/simulator/population-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { toSimSystems } from "../lib/world/tick";
 import type { SimConfig, SimResults } from "../lib/engine/simulator/types";
 
@@ -329,7 +329,7 @@ Options:
   --help           Show this help
 
 Quick Run:
-  Running with no flags generates the default-scale world (${UNIVERSE_GEN.TOTAL_SYSTEMS}
+  Running with no flags generates the default-scale world (${DEFAULT_SYSTEM_COUNT}
   systems), runs 500 ticks with seed 42, and reports market/population/infrastructure
   health. For custom parameters, use --config with a YAML file — see
   experiments/examples/ for templates.
@@ -350,7 +350,7 @@ async function main(): Promise<void> {
   }
 
   const config: SimConfig = {
-    systemCount: UNIVERSE_GEN.TOTAL_SYSTEMS,
+    systemCount: DEFAULT_SYSTEM_COUNT,
     seed: 42,
     tickCount: 500,
   };

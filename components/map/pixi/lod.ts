@@ -20,14 +20,13 @@ export interface LODState {
   showSystemDots: boolean;
   showSystemNames: boolean;
   showEconomyLabels: boolean;
-  showFuelLabels: boolean;
   showTerritories: boolean;
   showRegionLabels: boolean;
   /** Scale factor for system dots at low zoom */
   systemDotScale: number;
   /** Alpha for system name labels (smooth fade) */
   systemNameAlpha: number;
-  /** Alpha for economy/ship/fuel labels */
+  /** Alpha for economy labels */
   detailAlpha: number;
   /** Alpha for the Regions (economy) territory layer. */
   territoryAlpha: number;
@@ -37,12 +36,6 @@ export interface LODState {
   regionLabelAlpha: number;
   /** Whether to show glow effects */
   showGlow: boolean;
-  /** Whether to show effect layer (particles, pulse rings) */
-  showEffects: boolean;
-  /** Whether to show fleet presence dots */
-  showFleetDots: boolean;
-  /** Alpha for fleet presence dots */
-  fleetDotAlpha: number;
   /** Alpha for trade-flow particles (smooth fade in 0.4 → 0.6). */
   tradeFlowAlpha: number;
   /** Whether pill TEXT/ICON content shows (shapes show earlier, with the layer). */
@@ -86,8 +79,6 @@ const LAYER_FADE = {
   regionsTerritory: { start: 0.3, end: 0.7, min: 0.5 },
   /** Region name labels: fade out before deep zoom — text clutters systems. */
   regionLabels: { start: 0.3, end: 0.5, min: 0 },
-  /** Fleet presence dots: fade out with the region labels. */
-  fleetDots: { start: 0.3, end: 0.5, min: 0 },
 } as const satisfies Record<string, FadeConfig>;
 
 /** Lerps from `max` (at/below start) to `min` (at/beyond end), smoothstep eased. */
@@ -123,9 +114,8 @@ export function computeLOD(zoom: number): LODState {
     showSystemNames: zoom > 0.8,
     systemNameAlpha: smoothStep(0.8, 0.9, zoom),
 
-    // Economy + fuel labels ride the same 0.8–0.9 text band as the name.
+    // Economy labels ride the same 0.8–0.9 text band as the name.
     showEconomyLabels: zoom > 0.8,
-    showFuelLabels: zoom > 0.8,
     detailAlpha: smoothStep(0.8, 0.9, zoom),
 
     // Territories never cull — they're the spatial frame for both modes.
@@ -143,13 +133,6 @@ export function computeLOD(zoom: number): LODState {
 
     // Glow effects only at medium+ zoom
     showGlow: zoom > 0.45,
-
-    // Effects (particles, pulse rings) visible alongside names
-    showEffects: zoom > 0.45,
-
-    // Fleet dots visible at low zoom, fade with the region-label band
-    showFleetDots: zoom < 0.5,
-    fleetDotAlpha: computeFade(zoom, LAYER_FADE.fleetDots),
 
     // Trade-flow overlay fades in across the crossfade-to-system band
     tradeFlowAlpha: smoothStep(0.4, 0.6, zoom),
