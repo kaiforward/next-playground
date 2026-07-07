@@ -13,6 +13,7 @@
  */
 
 import { getWorld, hasWorld, setWorld } from "./store";
+import { AUTOSAVE_NAME } from "./save";
 import { runWorldTick } from "./tick";
 import type { GlobalEventMap } from "@/lib/tick/types";
 
@@ -192,7 +193,7 @@ export class TickLoop {
     this.lastAutosaveAt = Date.now();
     const world = getWorld();
     void import("./save-files")
-      .then(({ writeSave, AUTOSAVE_NAME }) => writeSave(AUTOSAVE_NAME, world))
+      .then(({ writeSave }) => writeSave(AUTOSAVE_NAME, world))
       .catch((error) => console.error("[tick-loop] autosave failed:", error))
       .finally(() => {
         this.saving = false;

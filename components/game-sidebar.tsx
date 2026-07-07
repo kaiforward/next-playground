@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SectionHeader } from "@/components/ui/section-header";
+import { useDialog } from "@/components/ui/dialog";
+import { SaveGameDialog } from "@/components/save-game-dialog";
 import {
   Ship,
   Radio,
@@ -10,6 +12,8 @@ import {
   ChevronRight,
   Landmark,
   Network,
+  Save,
+  DoorOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -40,6 +44,16 @@ const POLITICS_NAV: NavItem[] = [
 /*  Sub-components                                                    */
 /* ------------------------------------------------------------------ */
 
+function sidebarItemClasses(collapsed: boolean, active: boolean): string {
+  return `flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
+    collapsed ? "justify-center" : ""
+  } ${
+    active
+      ? "bg-surface-active border-l-2 border-l-accent text-text-primary"
+      : "border-l-2 border-l-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+  }`;
+}
+
 function NavLink({
   item,
   active,
@@ -54,13 +68,7 @@ function NavLink({
     <Link
       href={item.href}
       title={collapsed ? item.label : undefined}
-      className={`flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
-        collapsed ? "justify-center" : ""
-      } ${
-        active
-          ? "bg-surface-active border-l-2 border-l-accent text-text-primary"
-          : "border-l-2 border-l-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-      }`}
+      className={sidebarItemClasses(collapsed, active)}
     >
       <Icon className="w-4.5 h-4.5 shrink-0" />
       {!collapsed && <span>{item.label}</span>}
@@ -88,6 +96,7 @@ export function GameSidebar({
   onToggle,
 }: GameSidebarProps) {
   const pathname = usePathname();
+  const saveDialog = useDialog();
 
   // Longest-prefix match across all nav hrefs so nested entries
   // (e.g. /factions + /factions/[id]) don't both highlight.
@@ -160,6 +169,27 @@ export function GameSidebar({
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Game section — save / exit to menu */}
+      <div className="flex flex-col gap-0.5 border-t border-border py-1">
+        <button
+          onClick={saveDialog.onOpen}
+          title={collapsed ? "Save Game" : undefined}
+          className={sidebarItemClasses(collapsed, false)}
+        >
+          <Save className="w-4.5 h-4.5 shrink-0" />
+          {!collapsed && <span>Save Game</span>}
+        </button>
+        <Link
+          href="/start"
+          title={collapsed ? "Exit to Menu" : undefined}
+          className={sidebarItemClasses(collapsed, false)}
+        >
+          <DoorOpen className="w-4.5 h-4.5 shrink-0" />
+          {!collapsed && <span>Exit to Menu</span>}
+        </Link>
+      </div>
+      <SaveGameDialog open={saveDialog.open} onClose={saveDialog.onClose} />
 
       {/* Collapse toggle */}
       <button

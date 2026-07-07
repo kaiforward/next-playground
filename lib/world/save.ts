@@ -15,6 +15,20 @@ import type { World } from "./types";
 
 export const SAVE_FORMAT_VERSION = 1;
 
+/** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
+export const AUTOSAVE_NAME = "autosave";
+
+/**
+ * Canonical save-name sanitizer — strips everything but `[a-z0-9-_]` so a
+ * player-typed name can never escape `saves/` via path separators or
+ * traversal sequences (`../`). Lives here (pure) rather than in the disk
+ * adapter so the save-name form schema can reject names that sanitize to
+ * empty without importing Node-edge code.
+ */
+export function sanitizeSaveName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9-_]/g, "");
+}
+
 interface SaveFile {
   formatVersion: number;
   world: World;

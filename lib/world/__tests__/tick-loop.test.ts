@@ -5,7 +5,8 @@ import * as path from "node:path";
 import { TickLoop, type TickBroadcast } from "@/lib/world/tick-loop";
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld, setWorld, clearWorld } from "@/lib/world/store";
-import { setSavesDirForTesting, AUTOSAVE_NAME, writeSave } from "@/lib/world/save-files";
+import { setSavesDirForTesting, writeSave } from "@/lib/world/save-files";
+import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { runWorldTick } from "@/lib/world/tick";
 
 // Wraps the real implementations in a `vi.fn` so most tests exercise genuine

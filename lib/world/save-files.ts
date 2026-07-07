@@ -8,15 +8,14 @@
 
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import { deserializeWorld, serializeWorld } from "./save";
+import { deserializeWorld, sanitizeSaveName, serializeWorld } from "./save";
 import type { World } from "./types";
-
-export const AUTOSAVE_NAME = "autosave";
 
 export interface SaveInfo {
   name: string;
   tick: number;
-  savedAt: Date;
+  /** ISO-8601 timestamp — a string so the shape survives the JSON API boundary unchanged. */
+  savedAt: string;
   bytes: number;
 }
 
@@ -33,17 +32,8 @@ export function setSavesDirForTesting(dir: string): void {
   SAVES_DIR = dir;
 }
 
-/**
- * Save names come from player input (the "new save" text box) — strip
- * everything but `[a-z0-9-_]` so a name can never escape `saves/` via path
- * separators or traversal sequences (`../`).
- */
-function sanitizeName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9-_]/g, "");
-}
-
 function saveFilePath(name: string): string {
-  return path.join(SAVES_DIR, `${sanitizeName(name)}${SAVE_EXTENSION}`);
+  return path.join(SAVES_DIR, `${sanitizeSaveName(name)}${SAVE_EXTENSION}`);
 }
 
 /**
@@ -89,7 +79,7 @@ export async function listSaves(): Promise<SaveInfo[]> {
     infos.push({
       name: fileName.slice(0, -SAVE_EXTENSION.length),
       tick: parsed.world.meta.currentTick,
-      savedAt: fileStat.mtime,
+      savedAt: fileStat.mtime.toISOString(),
       bytes: fileStat.size,
     });
   }

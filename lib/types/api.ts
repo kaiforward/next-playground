@@ -22,6 +22,8 @@ import type {
   ResourceVector,
 } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
+import type { SaveInfo } from "@/lib/world/save-files";
+import type { WorldMeta } from "@/lib/world/types";
 
 // ── Responses ────────────────────────────────────────────────────
 
@@ -32,6 +34,10 @@ export interface ApiResponse<T> {
 
 export type FleetResponse = ApiResponse<FleetState>;
 export type GameWorldResponse = ApiResponse<GameWorldState>;
+export type SavesResponse = ApiResponse<SaveInfo[]>;
+export type SaveGameResponse = ApiResponse<{ name: string; tick: number }>;
+export type LoadGameResponse = ApiResponse<WorldMeta>;
+export type NewGameResponse = ApiResponse<WorldMeta>;
 export type UniverseResponse = ApiResponse<UniverseData>;
 export type AtlasResponse = ApiResponse<AtlasData>;
 export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
