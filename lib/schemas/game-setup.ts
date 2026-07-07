@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { sanitizeSaveName } from "@/lib/world/save";
+import { sanitizeSaveName, AUTOSAVE_NAME } from "@/lib/world/save";
 
 export const newGameSchema = z.object({
   systemCount: z
@@ -19,22 +19,27 @@ export const speedSchema = z.object({
 /**
  * Save names are sanitized to `[a-z0-9-_]` on disk (`sanitizeSaveName`), so a
  * name that sanitizes to nothing (e.g. "???") would silently collide on
- * `saves/.json` — reject it here at the boundary instead.
+ * `saves/.json` — reject it here at the boundary instead. Shared by the save
+ * and load schemas so both apply the same length + sanitize constraints.
  */
+const saveName = z
+  .string()
+  .trim()
+  .min(1, "Save name is required")
+  .max(40, "Save name must be at most 40 characters")
+  .refine((name) => sanitizeSaveName(name).length > 0, {
+    message: "Save name must contain at least one letter or number",
+  });
+
 export const saveGameSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Save name is required")
-    .max(40, "Save name must be at most 40 characters")
-    .refine((name) => sanitizeSaveName(name).length > 0, {
-      message: "Save name must contain at least one letter or number",
-    }),
+  // A player-typed name that sanitizes to the reserved autosave slot would
+  // silently clobber (and be clobbered by) the ambient autosave — reject it.
+  name: saveName.refine((name) => sanitizeSaveName(name) !== AUTOSAVE_NAME, {
+    message: `"${AUTOSAVE_NAME}" is a reserved save name`,
+  }),
 });
 
-export const loadGameSchema = z.object({
-  name: z.string().min(1, "Save name is required"),
-});
+export const loadGameSchema = z.object({ name: saveName });
 
 export type NewGameInput = z.infer<typeof newGameSchema>;
 export type SpeedInput = z.infer<typeof speedSchema>;

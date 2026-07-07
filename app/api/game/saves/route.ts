@@ -16,17 +16,20 @@ export function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await parseJsonBody<{ name?: string }>(request);
-  const result = saveGameSchema.safeParse(body);
-  if (!result.success) {
-    const message = result.error.issues.map((issue) => issue.message).join(", ");
-    return NextResponse.json<ApiResponse<never>>({ error: message }, { status: 400 });
-  }
+  return withServiceErrors("POST /api/game/saves", async () => {
+    const body = await parseJsonBody<{ name?: string }>(request);
+    const result = saveGameSchema.safeParse(body);
+    if (!result.success) {
+      const message = result.error.issues.map((issue) => issue.message).join(", ");
+      return NextResponse.json<ApiResponse<never>>({ error: message }, { status: 400 });
+    }
 
-  const saved = await saveGame(result.data.name);
-  if (!saved.ok) {
-    // The only save failure is "no world loaded" — same conflict the store signals.
-    return NextResponse.json<ApiResponse<never>>({ error: saved.error }, { status: 409 });
-  }
-  return NextResponse.json<SaveGameResponse>({ data: saved.data });
+    // saveGame returns ok:false only for the expected "no world loaded" conflict;
+    // an fs write failure throws and is turned into a graceful 500 by the wrapper.
+    const saved = await saveGame(result.data.name);
+    if (!saved.ok) {
+      return NextResponse.json<ApiResponse<never>>({ error: saved.error }, { status: 409 });
+    }
+    return NextResponse.json<SaveGameResponse>({ data: saved.data });
+  });
 }

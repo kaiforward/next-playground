@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { apiFetch } from "@/lib/query/fetcher";
 import type { Speed, TickBroadcast } from "@/lib/world/tick-loop";
+import type { GameWorldState } from "@/lib/types/game";
 
 type EventCallback = (events: unknown[]) => void;
 
@@ -43,14 +45,15 @@ export function useTick(): UseTickResult {
   const [isConnected, setIsConnected] = useState(false);
   const eventListeners = useRef<Map<string, Set<EventCallback>>>(new Map());
 
-  // Seed tick/speed from world state so the sidebar is correct before the
-  // SSE connection establishes
+  // Seed tick/speed/TPS from world state so the sidebar is correct before the
+  // SSE connection establishes. apiFetch types the response as GameWorldState,
+  // so speed lands as a real `Speed` (no untyped `any` into setSpeed).
   useEffect(() => {
-    fetch("/api/game/world")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.data?.meta?.currentTick) setCurrentTick(json.data.meta.currentTick);
-        if (json.data?.speed !== undefined) setSpeed(json.data.speed);
+    apiFetch<GameWorldState>("/api/game/world")
+      .then((state) => {
+        setCurrentTick(state.meta.currentTick);
+        setSpeed(state.speed);
+        setAchievedTps(state.achievedTps);
       })
       .catch(() => {}); // SSE will provide the values shortly anyway
   }, []);

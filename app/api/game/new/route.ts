@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { newGame } from "@/lib/services/game";
 import { newGameSchema } from "@/lib/schemas/game-setup";
 import { parseJsonBody } from "@/lib/api/parse-json";
-import type { ApiResponse } from "@/lib/types/api";
-import type { WorldMeta } from "@/lib/world/types";
+import type { ApiResponse, NewGameResponse } from "@/lib/types/api";
 
 export async function POST(request: NextRequest) {
   const body = await parseJsonBody<{ systemCount?: number; seed?: number }>(request);
@@ -13,5 +12,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json<ApiResponse<never>>({ error: message }, { status: 400 });
   }
 
-  return NextResponse.json<ApiResponse<WorldMeta>>({ data: newGame(result.data) });
+  return NextResponse.json<NewGameResponse>({ data: newGame(result.data) });
 }

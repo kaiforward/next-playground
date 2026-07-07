@@ -35,7 +35,7 @@ function buildRows(lod: LODState): DebugRow[] {
       active: lod.showSystemNames && lod.systemNameAlpha > VISIBLE,
     },
     {
-      label: "econ/fuel labels",
+      label: "econ labels",
       value: lod.showEconomyLabels ? a2(lod.detailAlpha) : "off",
       active: lod.showEconomyLabels && lod.detailAlpha > VISIBLE,
     },

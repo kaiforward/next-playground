@@ -28,6 +28,9 @@ describe("game lifecycle services (save/load)", () => {
     it("fails with ok:false when no world is loaded", async () => {
       const result = await saveGame("mysave");
       expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatch(/no world/i);
+      }
     });
 
     it("writes the current world and reports the sanitized name + tick", async () => {

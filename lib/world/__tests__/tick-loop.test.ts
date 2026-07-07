@@ -39,10 +39,14 @@ beforeEach(() => {
   loop = new TickLoop();
 });
 
-afterEach(() => {
+afterEach(async () => {
   loop.stop();
-  clearWorld();
+  // The pause/cadence autosave is fire-and-forget; wait for it to settle so a
+  // slow write can't land in the shared saves dir during the next test and
+  // race its autosave (all tests write the same AUTOSAVE_NAME file).
   vi.useRealTimers();
+  await loop.whenAutosaveSettled();
+  clearWorld();
 });
 
 describe("TickLoop", () => {

@@ -31,6 +31,9 @@ export function SpeedControls() {
             size="xs"
             className="flex-1 px-0"
             title={option.title}
+            // Icon-only options (Pause/FastForward) have no visible text, so give
+            // them an accessible name; the "1×"/"5×" options already read fine.
+            aria-label={typeof option.label === "string" ? undefined : option.title}
             aria-pressed={speed === option.value}
             disabled={speedMutation.isPending}
             onClick={() => speedMutation.mutate(option.value)}

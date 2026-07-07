@@ -43,6 +43,8 @@ export class TickLoop {
   private ticking = false;
   /** In-flight guard for autosave: a save already writing skips instead of overlapping. */
   private saving = false;
+  /** The most recent autosave's write chain — awaitable for graceful shutdown / tests. */
+  private savePromise: Promise<void> = Promise.resolve();
   private subscribers = new Set<(e: TickBroadcast) => void>();
   private tickTimestamps: number[] = [];
   private lastEmitAt = 0;
@@ -192,12 +194,21 @@ export class TickLoop {
     this.saving = true;
     this.lastAutosaveAt = Date.now();
     const world = getWorld();
-    void import("./save-files")
+    this.savePromise = import("./save-files")
       .then(({ writeSave }) => writeSave(AUTOSAVE_NAME, world))
       .catch((error) => console.error("[tick-loop] autosave failed:", error))
       .finally(() => {
         this.saving = false;
       });
+  }
+
+  /**
+   * Resolves once the most recent autosave's write has settled. The pause /
+   * cadence autosave is otherwise fire-and-forget; await this before shutdown
+   * (or between tests) so an in-flight write can't outlive its trigger.
+   */
+  async whenAutosaveSettled(): Promise<void> {
+    await this.savePromise;
   }
 }
 
