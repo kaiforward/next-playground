@@ -6,8 +6,8 @@ import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 export const DIRECTED_BUILD = {
-  /** Ticks for the per-faction shard to sweep every faction once — the agency clock (matches logistics). */
-  INTERVAL: 2 * ECONOMY_UPDATE_INTERVAL,
+  /** Ticks between agency sweeps: every faction plans builds on the monthly resolution pulse (matches logistics). */
+  INTERVAL: ECONOMY_UPDATE_INTERVAL,
   /** Build-unit budget a system contributes per cycle = population × this. Free + capacity-bounded in v1. */
   GENERATION_PER_POP: 0.05,
   /** Reachability horizon, shared with logistics (tunable; see hop-cap note in the design). */
