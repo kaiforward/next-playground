@@ -3,43 +3,26 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/form/number-input";
-import { useAdvanceTicksMutation, useTickControlMutation } from "@/lib/hooks/use-dev-tools";
+import { useAdvanceTicksMutation } from "@/lib/hooks/use-dev-tools";
 
-export function TickControlSection() {
+/**
+ * Synchronously advance N ticks — useful while the loop is paused. Pacing
+ * (pause/1×/5×/max) lives in the sidebar SpeedControls, not here.
+ */
+export function AdvanceTicksSection() {
   const [advanceCount, setAdvanceCount] = useState(10);
   const advanceMutation = useAdvanceTicksMutation();
-  const tickControlMutation = useTickControlMutation();
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
-        <Button
-          variant="action"
-          color="red"
-          size="xs"
-          onClick={() => tickControlMutation.mutate({ action: "pause" })}
-          disabled={tickControlMutation.isPending}
-        >
-          Pause
-        </Button>
-        <Button
-          variant="action"
-          color="green"
-          size="xs"
-          onClick={() => tickControlMutation.mutate({ action: "resume" })}
-          disabled={tickControlMutation.isPending}
-        >
-          Resume
-        </Button>
-        <Button
-          variant="primary"
-          size="xs"
-          onClick={() => advanceMutation.mutate(1)}
-          disabled={advanceMutation.isPending}
-        >
-          Step 1
-        </Button>
-      </div>
+      <Button
+        variant="primary"
+        size="xs"
+        onClick={() => advanceMutation.mutate(1)}
+        disabled={advanceMutation.isPending}
+      >
+        Step 1
+      </Button>
 
       <div className="flex gap-2 items-end">
         <div className="flex-1">

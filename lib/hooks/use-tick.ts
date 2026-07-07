@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { TickBroadcast } from "@/lib/world/tick-loop";
+import type { Speed, TickBroadcast } from "@/lib/world/tick-loop";
 
 type EventCallback = (events: unknown[]) => void;
 
@@ -14,6 +14,8 @@ function isTickBroadcast(value: unknown): value is TickBroadcast {
     typeof value.currentTick === "number" &&
     "speed" in value &&
     (typeof value.speed === "string" || typeof value.speed === "number") &&
+    "achievedTps" in value &&
+    typeof value.achievedTps === "number" &&
     "events" in value &&
     typeof value.events === "object" &&
     value.events !== null
@@ -22,6 +24,8 @@ function isTickBroadcast(value: unknown): value is TickBroadcast {
 
 interface UseTickResult {
   currentTick: number;
+  speed: Speed;
+  achievedTps: number;
   isConnected: boolean;
   subscribeToEvent: (eventName: string, cb: EventCallback) => () => void;
   subscribeToArrivals: (cb: (shipIds: string[]) => void) => () => void;
@@ -35,18 +39,21 @@ interface UseTickResult {
  */
 export function useTick(): UseTickResult {
   const [currentTick, setCurrentTick] = useState(0);
+  const [speed, setSpeed] = useState<Speed>("paused");
+  const [achievedTps, setAchievedTps] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const eventListeners = useRef<Map<string, Set<EventCallback>>>(new Map());
 
-  // Seed currentTick from world state so transit indicators are correct
-  // before the SSE connection establishes
+  // Seed tick/speed from world state so the sidebar is correct before the
+  // SSE connection establishes
   useEffect(() => {
     fetch("/api/game/world")
       .then((res) => res.json())
       .then((json) => {
         if (json.data?.meta?.currentTick) setCurrentTick(json.data.meta.currentTick);
+        if (json.data?.speed !== undefined) setSpeed(json.data.speed);
       })
-      .catch(() => {}); // SSE will provide the value shortly anyway
+      .catch(() => {}); // SSE will provide the values shortly anyway
   }, []);
 
   useEffect(() => {
@@ -60,6 +67,8 @@ export function useTick(): UseTickResult {
         if (!isTickBroadcast(parsed)) return;
         const event = parsed;
         setCurrentTick(event.currentTick);
+        setSpeed(event.speed);
+        setAchievedTps(event.achievedTps);
 
         // Dispatch global events to listeners
         for (const [eventName, eventList] of Object.entries(event.events)) {
@@ -110,5 +119,5 @@ export function useTick(): UseTickResult {
     [subscribeToEvent],
   );
 
-  return { currentTick, isConnected, subscribeToEvent, subscribeToArrivals };
+  return { currentTick, speed, achievedTps, isConnected, subscribeToEvent, subscribeToArrivals };
 }

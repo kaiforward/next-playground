@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { SectionHeader } from "@/components/ui/section-header";
 import { useDialog } from "@/components/ui/dialog";
 import { SaveGameDialog } from "@/components/save-game-dialog";
+import { SpeedControls } from "@/components/speed-controls";
 import {
   Ship,
   Radio,
@@ -164,6 +165,7 @@ export function GameSidebar({
               <span className="font-mono text-text-primary">{currentTick}</span>
             </div>
           </div>
+          <SpeedControls />
         </div>
       )}
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TabList, Tab } from "@/components/ui/tabs";
-import { TickControlSection } from "./tick-control-section";
+import { AdvanceTicksSection } from "./advance-ticks-section";
 import { EventSpawnerSection } from "./event-spawner-section";
 import { EconomyOverviewSection } from "./economy-overview-section";
 import { CheatsSection } from "./cheats-section";
@@ -55,7 +55,7 @@ export function DevToolsPanel() {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-3">
-            {tab === "Tick" && <TickControlSection />}
+            {tab === "Tick" && <AdvanceTicksSection />}
             {tab === "Events" && <EventSpawnerSection />}
             {tab === "Economy" && <EconomyOverviewSection />}
             {tab === "Cheats" && <CheatsSection />}

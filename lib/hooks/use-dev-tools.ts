@@ -77,10 +77,3 @@ export function useResetEconomyMutation() {
     },
   });
 }
-
-export function useTickControlMutation() {
-  return useMutation({
-    mutationFn: (params: { action: "pause" | "resume" | "setRate"; tickRate?: number }) =>
-      apiMutate<{ tickRate: number; paused: boolean }>("/api/dev/tick-control", params),
-  });
-}
