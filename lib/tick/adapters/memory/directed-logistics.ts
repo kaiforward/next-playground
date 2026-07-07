@@ -4,6 +4,7 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
 } from "@/lib/tick/world/directed-logistics-world";
+import { factionShardKeys } from "@/lib/engine/shard-order";
 
 /** In-memory DirectedLogisticsWorld for unit tests + the simulator. Captures writes for assertions. */
 export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
@@ -13,9 +14,7 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   constructor(private readonly systems: SystemLogisticsRow[]) {}
 
   async getFactionShardKeys(): Promise<Array<string | null>> {
-    const seen = new Set<string | null>();
-    for (const s of this.systems) seen.add(s.factionId);
-    return [...seen];
+    return factionShardKeys(this.systems);
   }
 
   async getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]> {

@@ -1,4 +1,5 @@
 import { getWorld } from "@/lib/world/store";
+import { systemNameById } from "@/lib/services/world-index";
 import { EVENT_DEFINITIONS, getPhaseEffectSummary } from "@/lib/constants/events";
 import type { ActiveEvent } from "@/lib/types/game";
 
@@ -8,7 +9,7 @@ import type { ActiveEvent } from "@/lib/types/game";
 export function getActiveEvents(): ActiveEvent[] {
   const world = getWorld();
   const currentTick = world.meta.currentTick;
-  const systemNameById = new Map(world.systems.map((s) => [s.id, s.name]));
+  const nameById = systemNameById();
 
   // NOTE: Filters by systemId only — region-level events (systemId=null) are excluded.
   // All current event definitions target systems, so this is safe for now.
@@ -27,7 +28,7 @@ export function getActiveEvents(): ActiveEvent[] {
         phaseDisplayName: phaseDef?.displayName ?? e.phase,
         effects: getPhaseEffectSummary(e.type, e.phase),
         systemId: e.systemId,
-        systemName: e.systemId ? systemNameById.get(e.systemId) ?? null : null,
+        systemName: e.systemId ? nameById.get(e.systemId) ?? null : null,
         regionId: e.regionId,
         startTick: e.startTick,
         phaseStartTick: e.phaseStartTick,

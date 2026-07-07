@@ -1,4 +1,5 @@
 import { getWorld } from "@/lib/world/store";
+import { buildingsBySystem, economyShardRankById, marketsBySystem } from "./world-index";
 import { ServiceError } from "./errors";
 import type { GovernmentType, RegionInfo, SystemTraitInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
@@ -196,29 +197,25 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     throw new ServiceError("System not found.", 404);
   }
 
-  // Which economy shard this system lands in — static (its id-rank in the same
-  // localeCompare id order the economy processor shards over, see
-  // InMemoryEconomyWorld.getSystemIds). The client pairs this with the live
-  // tick to count down to the next economy update; the value itself never changes.
-  const sortedIds = world.systems.map((s) => s.id).sort((a, b) => a.localeCompare(b));
+  // Which economy shard this system lands in — static (its rank in the shared
+  // economy shard order, see lib/engine/shard-order.ts). The client pairs this
+  // with the live tick to count down to the next economy update; the value
+  // itself never changes.
+  const shardRanks = economyShardRankById();
   const economyShardGroup = shardGroupForIndex(
-    sortedIds.indexOf(systemId),
-    sortedIds.length,
+    shardRanks.get(systemId) ?? 0,
+    shardRanks.size,
     ECONOMY_UPDATE_INTERVAL,
   );
 
-  const buildings: Record<string, number> = {};
-  for (const b of world.buildings) {
-    if (b.systemId === systemId) buildings[b.buildingType] = b.count;
-  }
+  const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
 
   // marketStock + per-good stock band keyed by good KEY (world market rows
   // already use good keys as goodId).
   const marketStock: Record<string, number> = {};
   const minStockByGood: Record<string, number> = {};
   const maxStockByGood: Record<string, number> = {};
-  for (const row of world.markets) {
-    if (row.systemId !== systemId) continue;
+  for (const row of marketsBySystem().get(systemId) ?? []) {
     const band = marketBandForRow(row, GOODS[row.goodId]);
     marketStock[row.goodId] = row.stock;
     minStockByGood[row.goodId] = band.minStock;

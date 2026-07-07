@@ -1,4 +1,5 @@
 import { getWorld } from "@/lib/world/store";
+import { marketsBySystem } from "./world-index";
 import { buildMarketEntry } from "./market-entry";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
@@ -23,8 +24,7 @@ export function getMarket(systemId: string): { stationId: string; entries: Marke
     : undefined;
   const govDef = faction ? GOVERNMENT_TYPES[faction.governmentType] : undefined;
 
-  const entries: MarketEntry[] = world.markets
-    .filter((m) => m.systemId === systemId)
+  const entries: MarketEntry[] = (marketsBySystem().get(systemId) ?? [])
     .map((m) => buildMarketEntry(m.goodId, GOODS[m.goodId], m.stock, m.demandRate, govDef, m.anchorMult));
 
   return { stationId: systemId, entries };

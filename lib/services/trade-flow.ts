@@ -1,4 +1,5 @@
 import { getWorld } from "@/lib/world/store";
+import { buildingsBySystem, flowEventsBySystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
@@ -63,14 +64,9 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) return { visibility: "unknown" };
 
-  const flows = world.flowEvents.filter(
-    (f) => f.tick > minTick && (f.fromSystemId === systemId || f.toSystemId === systemId),
-  );
+  const flows = (flowEventsBySystem().get(systemId) ?? []).filter((f) => f.tick > minTick);
 
-  const buildings: Record<string, number> = {};
-  for (const b of world.buildings) {
-    if (b.systemId === systemId) buildings[b.buildingType] = b.count;
-  }
+  const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
   const yields = resourceVectorFromColumns(
     {
       yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
@@ -91,7 +87,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
     if (d > 0) inputDemandByGood.set(g.goodId, d);
   }
 
-  const nameById = new Map(world.systems.map((s) => [s.id, s.name]));
+  const nameById = systemNameById();
   const resolveName = (id: string): string => nameById.get(id) ?? "Unknown System";
 
   const flowRows: LogisticsFlowRow[] = flows;

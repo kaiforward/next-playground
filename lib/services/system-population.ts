@@ -1,4 +1,5 @@
 import { getWorld } from "@/lib/world/store";
+import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { demandFootprint } from "@/lib/constants/market-economy";
@@ -18,10 +19,7 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) throw new ServiceError("System not found.", 404);
 
-  const buildings: Record<string, number> = {};
-  for (const b of world.buildings) {
-    if (b.systemId === systemId) buildings[b.buildingType] = b.count;
-  }
+  const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
   const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
 
   // Full consumption footprint (already filtered to consumed goods, demand-sorted).

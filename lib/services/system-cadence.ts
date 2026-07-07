@@ -1,5 +1,6 @@
 import { getWorld } from "@/lib/world/store";
 import { ServiceError } from "./errors";
+import { economyShardRankById, logisticsFactionShardKeys } from "./world-index";
 import { shardGroupForIndex } from "@/lib/tick/shard";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
@@ -11,37 +12,28 @@ import type { SystemCadence } from "@/lib/types/api";
  * these with the live tick (see `ticksUntilShard`); the groups themselves never
  * change for a fixed universe, so the client caches them with staleTime Infinity.
  *
- * Both orderings replicate the in-memory tick adapters exactly so the countdown
- * matches the processor:
- *  - economy: per-SYSTEM shard over id order sorted by localeCompare
- *    (InMemoryEconomyWorld.getSystemIds) — when this system's markets /
- *    production / consumption refresh.
- *  - logistics: per-FACTION shard over first-seen faction-key order across
- *    the systems array, null/independents included where first encountered
- *    (MemoryDirectedLogisticsWorld.getFactionShardKeys) — when this faction's
- *    surplus→deficit redistribution and autonomic build run (build shares the
- *    same shard).
+ * Both orderings come from the shared shard-order helpers the tick adapters
+ * consume (`lib/engine/shard-order.ts`), so the countdown can't drift from the
+ * order the processors actually run:
+ *  - economy: per-SYSTEM shard over the economy shard order — when this
+ *    system's markets / production / consumption refresh.
+ *  - logistics: per-FACTION shard over the faction shard keys — when this
+ *    faction's surplus→deficit redistribution and autonomic build run (build
+ *    shares the same shard).
  */
 export function getSystemCadence(systemId: string): SystemCadence {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) throw new ServiceError("System not found.", 404);
 
-  const sortedIds = world.systems.map((s) => s.id).sort((a, b) => a.localeCompare(b));
-  const systemRank = sortedIds.indexOf(systemId);
+  const shardRanks = economyShardRankById();
   const economyShardGroup = shardGroupForIndex(
-    systemRank,
-    sortedIds.length,
+    shardRanks.get(systemId) ?? 0,
+    shardRanks.size,
     ECONOMY_UPDATE_INTERVAL,
   );
 
-  const factionKeys: Array<string | null> = [];
-  const seen = new Set<string | null>();
-  for (const s of world.systems) {
-    if (seen.has(s.factionId)) continue;
-    seen.add(s.factionId);
-    factionKeys.push(s.factionId);
-  }
+  const factionKeys = logisticsFactionShardKeys();
   const factionIndex = factionKeys.indexOf(system.factionId);
   const logisticsShardGroup =
     factionIndex < 0

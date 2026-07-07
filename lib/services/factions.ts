@@ -1,4 +1,5 @@
 import { getWorld } from "@/lib/world/store";
+import { systemNameById } from "./world-index";
 import { ServiceError } from "./errors";
 import { deriveFactionStatus } from "@/lib/types/guards";
 import { DOCTRINES } from "@/lib/constants/doctrines";
@@ -190,7 +191,7 @@ export function getFactionDetail(factionId: string, territorySampleLimit = 20): 
     .sort((a, b) => b.score - a.score);
 
   const otherById = new Map(otherFactions.map((o) => [o.id, o]));
-  const systemNameById = new Map(world.systems.map((s) => [s.id, s.name]));
+  const nameById = systemNameById();
 
   // Relations-spawned events touching this faction, newest-first, capped at
   // 10 for the panel surface.
@@ -216,7 +217,7 @@ export function getFactionDetail(factionId: string, territorySampleLimit = 20): 
         phase: ev.phase,
         startTick: ev.startTick,
         systemId: ev.systemId,
-        systemName: ev.systemId ? systemNameById.get(ev.systemId) ?? null : null,
+        systemName: ev.systemId ? nameById.get(ev.systemId) ?? null : null,
         otherFactionId: otherId,
         otherFactionName: other?.name ?? null,
       };
