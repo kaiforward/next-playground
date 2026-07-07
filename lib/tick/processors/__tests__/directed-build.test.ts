@@ -17,8 +17,8 @@ function foodMarket(systemId: string, stock: number): MarketRowForLogistics {
 }
 
 const INTERVAL = 4;
-const DUE_TICK = INTERVAL - 1; // a single faction shard is due when tick % interval === interval-1
-const NOT_DUE_TICK = 0;        // window [floor(0), floor(1/4)) = [0,0) — empty
+const DUE_TICK = 0;      // monthly pulse: every faction plans on ticks where tick % interval === 0
+const NOT_DUE_TICK = 1;  // off-boundary tick: pulseShard window is empty, no faction is due
 
 function builderSlots(n: number) {
   const slotCap = emptyResourceVector();
@@ -57,7 +57,7 @@ describe("runDirectedBuildProcessor", () => {
     expect(w.buildingUpdates.every((u) => u.systemId === "B")).toBe(true);
   });
 
-  it("does nothing on a not-due tick (empty shard window)", async () => {
+  it("builds nothing on an off-boundary tick (monthly pulse)", async () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0));
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
     expect(w.buildingUpdates).toHaveLength(0);
@@ -77,11 +77,10 @@ describe("runDirectedBuildProcessor", () => {
     expect(countOf(w2, "B", "food")).toBeGreaterThan(food1);
   });
 
-  it("never builds past capacity, even when the catch-up factor exceeds 1", async () => {
-    // The live INTERVAL (48) is 2× the reference interval, so catchUpFactor = 2. The
-    // build budget is per-cycle, so the planner already plans one cycle's worth and the
-    // capacity-bounded output must be written as-is — a builder with a 10-slot arable cap
-    // and ample budget must end at ≤ 10 food, never 20.
+  it("never builds past capacity (capacity-bounded output)", async () => {
+    // The build budget is per-cycle and the planner already plans one cycle's worth,
+    // so the capacity-bounded output must be written as-is — a builder with a 10-slot
+    // arable cap and ample budget must end at ≤ 10 food, never more, on the pulse boundary.
     const rows: SystemBuildRow[] = [
       {
         systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
@@ -95,7 +94,7 @@ describe("runDirectedBuildProcessor", () => {
       },
     ];
     const w = new MemoryDirectedBuildWorld(rows);
-    await runDirectedBuildProcessor(w, { tick: 47 }, { interval: 48, routeCost: reachable });
+    await runDirectedBuildProcessor(w, { tick: 0 }, { interval: 24, routeCost: reachable });
     const food = countOf(w, "B", "food");
     expect(food).toBeGreaterThan(0);
     expect(food).toBeLessThanOrEqual(10);

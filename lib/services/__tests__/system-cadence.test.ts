@@ -3,9 +3,6 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemCadence } from "@/lib/services/system-cadence";
 import { ServiceError } from "@/lib/services/errors";
-import { shardGroupForIndex } from "@/lib/tick/shard";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { economyShardOrder, factionShardKeys } from "@/lib/engine/shard-order";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
@@ -87,18 +84,14 @@ afterEach(() => {
   clearWorld();
 });
 
-describe("getSystemCadence — economy shard", () => {
-  it("ranks systems by localeCompare id order, independent of array order", () => {
-    // Deliberately NOT in sorted order.
+describe("getSystemCadence — monthly pulse", () => {
+  it("returns pulseGroup 0 for every system (all resolve on the monthly boundary)", () => {
     const ids = ["zulu", "alpha", "mike", "bravo", "yankee"];
     const systems = ids.map((id) => makeSystem(id, null));
     setWorld(buildWorld(systems));
 
-    const sortedIds = [...ids].sort((a, b) => a.localeCompare(b));
-    for (const id of ids) {
-      const rank = sortedIds.indexOf(id);
-      const expected = shardGroupForIndex(rank, sortedIds.length, ECONOMY_UPDATE_INTERVAL);
-      expect(getSystemCadence(id).economyShardGroup).toBe(expected);
+    for (const s of systems) {
+      expect(getSystemCadence(s.id)).toEqual({ pulseGroup: 0 });
     }
   });
 });
@@ -124,29 +117,6 @@ describe("shard-order helpers vs. the tick adapters (drift guard)", () => {
 
     const fromAdapter = await world.getFactionShardKeys();
     expect(fromAdapter).toEqual(factionShardKeys(rows));
-  });
-});
-
-describe("getSystemCadence — logistics shard", () => {
-  it("uses first-seen faction order across the systems array, independents included", () => {
-    // faction-1 seen first, then faction-2, then a null (independent) system
-    // planted in the middle — first-seen order must be [faction-1, faction-2, null].
-    const sysA = makeSystem("sys-a", "faction-1");
-    const sysB = makeSystem("sys-b", "faction-2");
-    const sysC = makeSystem("sys-c", null);
-    const sysD = makeSystem("sys-d", "faction-1");
-    const sysE = makeSystem("sys-e", "faction-2");
-    setWorld(buildWorld([sysA, sysB, sysC, sysD, sysE]));
-
-    const total = 3; // faction-1, faction-2, null
-    const expectedFor = (index: number): number =>
-      shardGroupForIndex(index, total, DIRECTED_LOGISTICS.INTERVAL);
-
-    expect(getSystemCadence(sysA.id).logisticsShardGroup).toBe(expectedFor(0));
-    expect(getSystemCadence(sysD.id).logisticsShardGroup).toBe(expectedFor(0));
-    expect(getSystemCadence(sysB.id).logisticsShardGroup).toBe(expectedFor(1));
-    expect(getSystemCadence(sysE.id).logisticsShardGroup).toBe(expectedFor(1));
-    expect(getSystemCadence(sysC.id).logisticsShardGroup).toBe(expectedFor(2));
   });
 });
 

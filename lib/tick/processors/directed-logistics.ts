@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { shardRange } from "@/lib/tick/shard";
+import { pulseShard } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import {
   matchFactionTransfers,
@@ -33,19 +33,19 @@ function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
 }
 
 /**
- * Pure processor body. PER-FACTION shard: a contiguous window of the stable
- * faction-key order runs each tick, so every faction is matched once per
- * `interval` ticks. Matched volume is moved silently (stock deltas + logistics
- * flow rows).
+ * Pure processor body. Monthly resolution pulse: on the boundary tick
+ * (`tick % interval === 0`) every faction is matched at once via `pulseShard`;
+ * every other tick is a no-op. Matched volume is moved silently (stock deltas +
+ * logistics flow rows).
  *
  * No catch-up scaling: unlike trade-flow (a per-tick *rate* that must scale with
  * the shard interval), a logistics transfer is an absolute *level-fill* toward the
  * days-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
- * by the interval ratio overshoots the anchor — at INTERVAL = 2× the economy it
- * doubled deliveries, pushing recipients past the surplus margin (≈2× anchor),
- * which both wasted hauls and flipped fresh recipients into donors / cheap
- * re-export targets. The anchor (40 economy-runs of cover) already vastly exceeds
- * one inter-cycle draw, so a single fill-to-anchor over-provisions on its own.
+ * by the interval ratio overshoots the anchor — scaling deliveries by the interval
+ * pushes recipients past the surplus margin (≈2× anchor), which both wastes hauls
+ * and flips fresh recipients into donors / cheap re-export targets. The anchor
+ * (40 economy-runs of cover) already vastly exceeds one month's draw, so a single
+ * fill-to-anchor over-provisions on its own.
  */
 export async function runDirectedLogisticsProcessor(
   world: DirectedLogisticsWorld,
@@ -55,7 +55,7 @@ export async function runDirectedLogisticsProcessor(
   const factionKeys = await world.getFactionShardKeys();
   if (factionKeys.length === 0) return {};
 
-  const { start, end } = shardRange(factionKeys.length, ctx.tick, params.interval);
+  const { start, end } = pulseShard(factionKeys.length, ctx.tick, params.interval);
   const dueKeys = factionKeys.slice(start, end);
   if (dueKeys.length === 0) return {};
 

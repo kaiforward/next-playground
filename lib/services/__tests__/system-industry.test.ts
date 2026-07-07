@@ -3,7 +3,6 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemIndustry } from "@/lib/services/universe";
 import { ServiceError } from "@/lib/services/errors";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 const VALID_BANDS = ["poor", "average", "good", "rich"];
@@ -28,12 +27,6 @@ describe("getSystemIndustry", () => {
     const data = getSystemIndustry(system.id);
     expect(data.visibility).toBe("visible");
     if (data.visibility !== "visible") throw new Error("expected visible");
-
-    // economyShardGroup: a static shard index in [0, ECONOMY_UPDATE_INTERVAL),
-    // derived from the system's rank in localeCompare id order.
-    expect(Number.isInteger(data.economyShardGroup)).toBe(true);
-    expect(data.economyShardGroup).toBeGreaterThanOrEqual(0);
-    expect(data.economyShardGroup).toBeLessThan(ECONOMY_UPDATE_INTERVAL);
 
     // Space partition mirrors the world columns; deposit = available − general.
     expect(data.space.available).toBe(system.availableSpace);

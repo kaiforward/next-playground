@@ -1,5 +1,4 @@
 import { getWorld, getWorldVersion } from "@/lib/world/store";
-import { economyShardOrder, factionShardKeys } from "@/lib/engine/shard-order";
 import type { World, WorldFlowEvent, WorldMarket } from "@/lib/world/types";
 
 /**
@@ -63,14 +62,4 @@ export const flowEventsBySystem = versionCached((world) => {
 /** System display names by id. */
 export const systemNameById = versionCached(
   (world) => new Map(world.systems.map((s) => [s.id, s.name])),
-);
-
-/** Each system id's rank in the economy processor's shard order. */
-export const economyShardRankById = versionCached(
-  (world) => new Map(economyShardOrder(world.systems).map((id, rank) => [id, rank])),
-);
-
-/** The logistics/build processors' faction shard keys (first-seen order). */
-export const logisticsFactionShardKeys = versionCached((world) =>
-  factionShardKeys(world.systems),
 );

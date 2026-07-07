@@ -52,3 +52,18 @@ export function ticksUntilShard(group: number, tick: number, interval: number): 
 export function catchUpFactor(interval: number): number {
   return interval / REFERENCE_INTERVAL;
 }
+
+/**
+ * Pulse coverage: the whole item list on the resolution-pulse tick
+ * (`tick % interval === 0`), empty on every other tick — the monthly-pulse
+ * counterpart to {@link shardRange}'s rolling slice. Processors that resolve the
+ * entire galaxy at once on the month boundary (economy, migration,
+ * directed-logistics, directed-build) use this; trade-flow keeps `shardRange`
+ * for daily diffusion. Half-open [start, end).
+ */
+export function pulseShard(total: number, tick: number, interval: number): ShardWindow {
+  if (total <= 0) return { start: 0, end: 0 };
+  const iv = Math.max(1, Math.floor(interval));
+  const g = ((tick % iv) + iv) % iv; // non-negative group index
+  return g === 0 ? { start: 0, end: total } : { start: 0, end: 0 };
+}
