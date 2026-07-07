@@ -26,18 +26,11 @@ When you flag a violation, use the matching slug below so dedup is deterministic
 
 | Slug | Flags (read CLAUDE.md for the rule) |
 |------|-------------------------------------|
-| `missing-driver-adapter` | `new PrismaClient()` with no `@prisma/adapter-pg` |
-| `missing-tx-timeout` | `$transaction()` without `{ timeout: 30_000 }` |
-| `relation-fanout-no-join` | a multi-relation `findMany`/`findUnique` on the tick / `$transaction` path without `relationLoadStrategy: "join"` — see nuance below |
-| `n+1-writes-in-tx` | per-row `create` / `update` / `findMany` inside `$transaction` (batch via `createMany` / `unnest()`) |
-| `tx-error-swallowed` | catching a query error inside `$transaction` and continuing on the same `tx` (PG aborts it) |
-| `nan-to-raw-sql` | `NaN` / `Infinity` reaching raw SQL unguarded |
-| `int-overflow-sentinel` | `MAX_SAFE_INTEGER` / `Infinity` into a Prisma `Int` (`int4`); use a `2_000_000_000` sentinel |
-| `static-prisma-in-unit-graph` | static `@/lib/prisma` import (direct or transitive) in a unit-tested module — use a dynamic import |
+| `world-not-serializable` | a `Map`/`Set`/`Date`/class instance or `Infinity`/`NaN` stored in `World` state (breaks JSON save/load) |
+| `static-node-edge-in-pure-path` | static `fs`/`process.env` import in `lib/engine` / `lib/services` / `lib/world` (except `save-files.ts`) — use a dynamic `import()` |
+| `nondeterministic-tick` | `Date.now` / `Math.random` / `new Date()` inside a processor body or tick math (use seeded `tickRng`) |
 | `record-includes` | `.includes()` on a `Record` (e.g. `ECONOMY_PRODUCTION[type]`) — use the `in` operator / an accessor |
-| `toctou-outside-tx` | computing a write from a pre-`$transaction` snapshot instead of re-reading inside |
-| `cache-public-on-auth-route` | `Cache-Control: public` on a `requirePlayer()`-gated route (use `private`) |
-| `immutable-on-api` | `Cache-Control: immutable` on an API response |
+| `immutable-on-api` | `Cache-Control: immutable` (or a long `max-age`) on an API response — a new game replaces world state |
 | `sort-mutates-state` | `.sort()` on a React state array during render (use `[...arr].sort()` / `.toSorted()`) |
 | `unawaited-async-callback` | a child not awaiting an async callback prop (type it `() => Promise<void>`) |
 | `sse-without-seed` | an SSE-driven hook with no REST seed of initial state |
@@ -51,7 +44,8 @@ Distinguish carefully before flagging; these are the recurring false-positive tr
 - **`as-cast`** — the `as` type-assertion keyword (`x as Foo`), not the word "as" in identifiers / comments / strings; `as const` is permitted.
 - **`unknown-in-types`** — the literal `unknown` in a type position, not the English word in prose.
 - **`sort-mutates-state`** — only a `.sort()` on a React **state** value during render, not every `.sort()`.
-- **`relation-fanout-no-join`** — flag only multi-relation reads on the tick / `$transaction` hot path (where the concurrent fan-out actually bites). A one-off page/service query that pulls relations is fine; don't flag every `include`.
+- **`static-node-edge-in-pure-path`** — flag a **static** `import` of `fs`/`node:fs`/`process.env` reads in `lib/engine`, `lib/services`, or `lib/world` (except `save-files.ts`). A dynamic `await import(...)` inside a function body is the sanctioned pattern; don't flag those, and don't flag Node imports in `scripts/` or route handlers.
+- **`world-not-serializable`** — flag a `Map`/`Set`/`Date`/class instance or a possible `Infinity`/`NaN` assigned into a `World` row / `meta`. Ordinary local `Map`/`Set` inside a processor body (not persisted into `World`) is fine.
 - Non-executable text (markdown, prompts, YAML) is never a violation by content match — see the severity rubric's scope guard.
 
 ## Maintenance note

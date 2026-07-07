@@ -11,7 +11,7 @@
 
 ## Key mechanics (the headline)
 
-Today the seeded universe is a **one-way ratchet**: `SystemBuilding.count` is written once at seed and only
+Today the seeded universe is a **one-way ratchet**: `WorldBuilding.count` is written once at seed and only
 ever read — so the industrial base can never shrink. Population *can* decline (via unrest), but infrastructure
 cannot, which means a chronically-failing system keeps all its factories forever. This sub-project gives the
 world its missing counterweight.
@@ -73,11 +73,10 @@ only thing that can reverse it is later faction treasury spend (build-out + unre
 
 ## The decay model (detail)
 
-`SystemBuilding.count: Float` becomes a per-tick **read/write**, mutating **downward only**. It runs on the
+`WorldBuilding.count: Float` becomes a per-tick **read/write**, mutating **downward only**. It runs on the
 existing economy-shard cadence (the same fixed-interval shard as the economy and population processors, every
 `ECONOMY_UPDATE_INTERVAL` ticks) and reads the freshly-computed `labourFulfillment` and market state. Writes
-are **batched** across the shard (collect deltas into arrays → one `unnest()` UPDATE), never per-row — the
-Prisma N+1 / 30s-timeout trap at 10K scale.
+apply batched `count` deltas across the shard in one pass, never per-row.
 
 ### "Used" depends on the building's role
 
@@ -225,8 +224,8 @@ renders the finished, moving substrate.
 1. **Decay engine (pure).** `lib/engine/` functions: `used` per building class, disuse decay, unrest decay —
    pure, total, Vitest-tested in isolation (no DB import in the test graph).
 2. **Tick wiring.** A decay step on the economy-shard cadence: read building set + `labourFulfillment` +
-   market uptake, compute batched downward `count` deltas, write via `unnest()` UPDATE; recompute `popCap` live.
-   Live (Prisma) + in-memory (simulator) adapters share the pure body.
+   market uptake, compute batched downward `count` deltas, apply them, recompute `popCap` live.
+   The pure body runs against the in-memory world.
 3. **Population coupling.** Housing-overshoot → unrest-weighted **migration ⊕ death** displacement term.
 4. **Calibrate.** Run long seeds through `npm run simulate`; confirm the *coarse* behaviour — viable systems
    hold, nonviable ones visibly decay, no NaN/runaway/total collapse of the galaxy — and tune the rate knobs.
@@ -238,7 +237,7 @@ Phases 1–4 are the economy-engine PR(s); phase 5 is the UI PR. Split per the 2
 
 ## Scope boundaries
 
-**In:** downward-only `SystemBuilding.count` mutation; disuse + unrest decay channels; `outputUptake` signal;
+**In:** downward-only `WorldBuilding.count` mutation; disuse + unrest decay channels; `outputUptake` signal;
 live `popCap` recompute; housing-overshoot population displacement (migration ⊕ death, naming the existing
 decline term as the non-conserved death sink); Industry panel rework.
 

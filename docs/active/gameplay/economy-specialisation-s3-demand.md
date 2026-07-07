@@ -87,7 +87,7 @@ perishable).
 1. **`consumptionRate()`** (`lib/engine/physical-economy.ts`) — the chokepoint. Signature grows
    from `(goodId, population)` to a demand basis `{ population, technicians, engineers }`
    (`CivilianDemandBasis`); `consumptionBreakdown()` exposes the three terms for display.
-2. **Tick adapters** (`lib/tick/adapters/prisma/*` + `memory/*`, economy + population) — the
+2. **Tick adapters** (`lib/tick/adapters/memory/*`, economy + population) — the
    one-pass `computeSystemLabourSnapshot` (`lib/engine/industry.ts`) bundles `LabourState` +
    basis, computed once per system. Live and sim stay identical.
 3. **`capacityGoodRates`** (`lib/engine/industry.ts` readout) — already has buildings +

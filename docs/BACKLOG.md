@@ -10,13 +10,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
-- **[L] Pivot Phase 1 — teardown spec** — First pivot work item: spec the deletion of the cut systems (grand-strategy-vision.md §4), including the entanglement calls (ship travel survives for fleets vs danger pipeline dies; market screen as trading surface dies vs economy inspection view survives; auth stubbed here, deleted in Phase 2). Then plan → build as deletion sweeps that keep build + tests green.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
-- **[M] System-finder dev tool** — A queryable dev panel (or `scripts/` CLI) to surface representative systems by characteristic for manual smoke-testing / QA: population band (dead/undeveloped/tiny-outpost/healthy), economy-type, deposit profile, building roster, NaN/anomaly checks — returning name + direct `/system/<id>` link. Recurring need whenever generation/economy changes land (e.g. verifying barren-but-alive systems read correctly). Stopgap in place: `scripts/find-smoke-systems.ts`. Should grow into a real tool with filter inputs, ideally surfaced in the existing dev cheat panel.
-- **[S] Simulator hot-loop cost (deferred from PR81 review)** — `findOpportunities` (`lib/engine/simulator/strategies/helpers.ts`) does an O(totalMarkets) `world.markets.find()` inside a `reachable × localGoods` double loop, and `getPrice` rebuilds a `MarketCurve` via `curveForGood` on every call. Offline calibration harness only (not user-facing), but a real algorithmic blow-up at universe scale. Fix: build a `Map<systemId|goodId, entry>` once per tick; cache the curve on `SimMarketEntry`. Same `curveForGood`-per-call allocation also affects `snapshot.ts`/`market-analysis.ts`/`trade-flow.ts`. **More relevant post-pivot: the simulator becomes the game engine's test bench.**
+- **[M] System-finder dev tool** — A queryable dev panel (or `scripts/` CLI) to surface representative systems by characteristic for manual smoke-testing / QA: population band (dead/undeveloped/tiny-outpost/healthy), economy-type, deposit profile, building roster, NaN/anomaly checks — returning name + direct `/system/<id>` link. Recurring need whenever generation/economy changes land (e.g. verifying barren-but-alive systems read correctly). Build it against the in-memory world (`getWorld()`), surfaced in a `scripts/` CLI or the dev-tools panel.
 
 ## Needs Design
 

@@ -72,7 +72,7 @@ reference  = TARGET_COVER × demandRate × anchorMult
 
 The reference's *magnitude* sets the market's **depth**, and that depth now emerges from each system's own demand rather than a hand-tuned per-good number: high-demand staples get a high reference (deep, liquid market — large trades barely move price), low-demand advanced goods get a low reference (thin market — a small trade swings price hard). This is why the same price formula gives staples flat prices and advanced goods volatile ones.
 
-`TARGET_COVER` is the single global pricing constant, **calibrated** via the simulator (`npm run simulate`): the chosen value maximises the minimum cross-system price dispersion across all 26 goods, so staples and advanced goods are both tradeable at once. Lower values pin advanced goods to the price floor (cheap everywhere); higher values pin staples to the ceiling (dear everywhere). Constants live in `lib/constants/market-economy.ts`; `demandRate` is stored on `StationMarket` and the reference is assembled in `curveForGood` (`lib/engine/market-pricing.ts`).
+`TARGET_COVER` is the single global pricing constant, **calibrated** via the simulator (`npm run simulate`): the chosen value maximises the minimum cross-system price dispersion across all 26 goods, so staples and advanced goods are both tradeable at once. Lower values pin advanced goods to the price floor (cheap everywhere); higher values pin staples to the ceiling (dear everywhere). Constants live in `lib/constants/market-economy.ts`; `demandRate` is stored on `WorldMarket` and the reference is assembled in `curveForGood` (`lib/engine/market-pricing.ts`).
 
 ### Good Properties
 Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in data but not currently enforced for cargo. Reserved for future use.
@@ -83,7 +83,7 @@ Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in 
 
 Production and consumption are **physical** — they derive from each system's seeded industrial base and population, not from an economy-type rate table. Economy type is a derived display label (see [system-traits.md](./system-traits.md)).
 
-**Production** — capacity-driven and **input-gated**, computed per good `g` from the system's `SystemBuilding` rows (see [system-traits.md](./system-traits.md) §1.5):
+**Production** — capacity-driven and **input-gated**, computed per good `g` from the system's `WorldBuilding` rows (see [system-traits.md](./system-traits.md) §1.5):
 
 ```
 production_g = Σ(buildings whose output good is g)  count × outputPerUnit × labourFulfillment × inputGate_g × yield_g
@@ -110,7 +110,7 @@ All `outputPerUnit` constants and per-capita needs are first-draft and **simulat
 
 ### Infrastructure Decay
 
-`SystemBuilding.count` is no longer seed-frozen. A dedicated **infrastructure-decay** processor runs each economy shard (right after economy commits, before population) and mutates `count` **downward only**, toward what is actively *used* — the gap between *built* and *used* is what rots:
+`WorldBuilding.count` is no longer seed-frozen. A dedicated **infrastructure-decay** processor runs each economy shard (right after economy commits, before population) and mutates `count` **downward only**, toward what is actively *used* — the gap between *built* and *used* is what rots:
 
 - **"Used" per role.** Housing → occupancy `population / POP_CENTRE_DENSITY`; production/extraction → staffed *and* selling `count × min(labourFulfillment, outputUptake)`. `outputUptake(stock, minStock, maxStock)` (in `lib/engine/tick.ts`) is the seller-side mirror of satisfaction — ~1 when output sells freely at the floor, → 0 as it piles against the storage ceiling.
 - **Disuse decay (gentle).** `count ← count − disuseRate · max(0, count − used)`. A small `disuseRate` is itself the hysteresis — one idle shard sheds only a sliver; only a *sustained* gap compounds down.
@@ -179,7 +179,7 @@ sellUnit  = mid × (1 − s)        (what the player receives)
 
 ### Market Pricing Band (per-market stock range)
 
-The `[minStock, maxStock]` band each market's `stock` lives in is **per-market**, derived from the same `StationMarket` row the price curve reads — replacing the legacy global `[5, 200]`. It splits two jobs an absolute band conflated and gives each its natural driver: **demand prices the market; built infrastructure sets its depth.**
+The `[minStock, maxStock]` band each market's `stock` lives in is **per-market**, derived from the same `WorldMarket` row the price curve reads — replacing the legacy global `[5, 200]`. It splits two jobs an absolute band conflated and gives each its natural driver: **demand prices the market; built infrastructure sets its depth.**
 
 ```
 demandRate  = max( perCapitaNeed × population + production-input draw , MIN_DEMAND )
@@ -190,7 +190,7 @@ maxStock    = targetStock / priceFloor ^ (1/k)              // demand headroom �
 ```
 
 - **Demand-derived floor & anchor.** `minStock` is a *reserve*, not zero — a player buys everything above it (`stock − minStock`); as stock falls toward it, price climbs to the ceiling and the market holds its last reserve. Both `minStock` and `targetStock` scale with population, so the price point and the scarcity threshold track local demand.
-- **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`facilityStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `StationMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
+- **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`facilityStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `WorldMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
 
 This restores the cover model's intended invariant — **same days-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 days of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term. The bid-ask spread and buy/sell symmetry that block the resell exploit depend on the *curve*, not the band, and are unchanged.
 
@@ -258,7 +258,7 @@ Events can shift a good's **pricing reference** (the anchor) — the stock level
 - `goodId: null` — applies to all goods at the target station; setting a specific `goodId` targets one good only
 - Multiple active shifts on the same good **compound** (multiply together)
 
-**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same shard cadence as `stock`) and writes it to **`StationMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — market display, cross-system comparison, and trade-flow gradient.
+**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same shard cadence as `stock`) and writes it to **`WorldMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — market display, cross-system comparison, and trade-flow gradient.
 
 **Safety cap**: `anchorMult` is clamped to **[0.1, 4.0]** — a single good can at most become 4× as expensive (or 10× as cheap) via anchor shift.
 
@@ -290,7 +290,7 @@ TRADE FLOW   run third  - goods flow along open intra-faction edges
    |                      distance-attenuated, by mid-price gradient;
    |                      a single stock delta moves cheap -> dear
    v
-INFRA DECAY  run fourth - shrinks SystemBuilding.count downward toward used
+INFRA DECAY  run fourth - shrinks WorldBuilding.count downward toward used
    |                      (disuse where built > used, + unrest teardown above
    |                      theta); recomputes popCap live from surviving housing;
    |                      acts on the economy's just-processed shard
@@ -309,14 +309,14 @@ PLAYER TRADES  anytime (not tick-locked) - buy lowers stock, sell raises
                it (one stock delta); same per-market effect as a flow
 ```
 
-The economy→population **satisfaction handoff** (`ctx.results`) is purely in-memory and transient — it is not persisted to the database and not broadcast to clients. It carries the per-system `delivered_g / demanded_g` measurements the economy tick records internally, which the population processor consumes in the same tick to update `unrest` and population.
+The economy→population **satisfaction handoff** (`ctx.results`) is purely in-memory and transient — it is not persisted and not broadcast to clients. It carries the per-system `delivered_g / demanded_g` measurements the economy tick records internally, which the population processor consumes in the same tick to update `unrest` and population.
 
 Viewed another way, the simulation stacks four layers from static to real-time:
 
 ```
 1  Base identity (static)      bodies (deposit slots × quality + general/
                                habitable space) + seeded industrial base
-                               (SystemBuilding counts on available space,
+                               (WorldBuilding counts on available space,
                                recipes) -> per-good production rates
                                (capacity-driven, input-gated, tier-0 × yield);
                                civilian + production-input consumption rates;

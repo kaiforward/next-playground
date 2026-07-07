@@ -8,7 +8,7 @@
 > ×100, dispersion *tightens* as rounding noise shrinks) and a real-DB reseed (tick-500 audit ≈ the
 > current-code sim at the same maturity), with magnitudes landing in the legible hundreds–thousands. `S` is
 > set via the `ECONOMY_SCALE` **env var**; the code **default stays `1`** so the unscaled baseline keeps the
-> unit+sim suite green (the `UNIVERSE_SCALE` pattern — flipping the default to 100 breaks ~6 magnitude-pinning
+> unit+sim suite green (flipping the default to 100 breaks ~6 magnitude-pinning
 > tests). The code is the source of truth; this spec records the invariant contract and the audited seam
 > inventory.
 
@@ -57,13 +57,13 @@ value that is globally constant per run).
 ### The knob
 
 - `lib/constants/economy-scale.ts`:
-  - `ECONOMY_SCALE = toEconomyScale(process.env.ECONOMY_SCALE ?? "1")` — mirrors the `UNIVERSE_SCALE` →
-    `ACTIVE_SCALE` resolution pattern in `lib/constants/universe-gen.ts`.
+  - `ECONOMY_SCALE = toEconomyScale(process.env.ECONOMY_SCALE ?? "1")` — resolves the `ECONOMY_SCALE`
+    env var to a numeric multiplier at module load (default `1`).
   - Helpers `scaleValue(n)` and `scaleRecord(record)` DRY the record mapping (`GOOD_CONSUMPTION`,
     `OUTPUT_PER_UNIT`, `POP_CENTRE_STORAGE`).
   - `toEconomyScale(raw)` parses → **defaults to `1`** when unset → validates **positive and finite**
-    (rejects `0` / negative / `NaN` / `Infinity` — these would break pricing or trip the Postgres
-    `NaN`/`Infinity` raw-SQL guard). The validator lives **inline** in this leaf rather than in
+    (rejects `0` / negative / `NaN` / `Infinity` — these would break pricing, and `NaN`/`Infinity`
+    would corrupt a JSON save, since `JSON.stringify` turns them into `null`). The validator lives **inline** in this leaf rather than in
     `lib/types/guards.ts` (where the analogous `toUniverseScale` lives): the module imports nothing so it
     stays the acyclic root of the constants-magnitude graph, and `guards.ts` carries value imports that
     would risk a cycle.

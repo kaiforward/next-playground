@@ -35,7 +35,7 @@ Players start with one Shuttle. Fleets are fixed — there is no ship purchase (
 - Ships are locked in transit until arrival tick
 
 ### Arrival
-The ship-arrivals processor docks any in-transit ship whose arrival tick has come due (status → docked, destination/arrival columns cleared) and emits a per-player `shipArrived` SSE event that drives client cache invalidation.
+The ship-arrivals processor docks any in-transit ship whose arrival tick has come due (status → docked, destination/arrival fields cleared) and emits a `shipArrived` SSE event that drives client cache invalidation.
 
 ---
 
@@ -49,7 +49,7 @@ Systems retain a danger readout on the overview panel — it is player-independe
 | Feature danger (`computeTraitDanger`) | -3% to +8% per feature. Positive: subspace_rift (+8%), pirate_stronghold (+8%), dark_nebula (+6%), ancient_minefield (+5%), ion_storm_corridor (+4%), solar_flare_activity (+3%), binary_star (+3%). Negative: lagrange_stations (-3%). Sums across the system's features |
 | Body danger | +5% per volcanic-world body (sum of body-archetype danger baselines) |
 
-Nothing consumes danger mechanically since the arrival pipeline was removed in the pivot Phase 1 teardown.
+Nothing consumes danger mechanically — there is no arrival-danger pipeline. Events and the future war layer are the intended consumers.
 
 ---
 

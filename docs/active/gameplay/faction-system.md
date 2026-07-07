@@ -19,7 +19,7 @@ Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-
 | §1 Faction Model — core, doctrines, governments | **Implemented** | Status thresholds reconciled to share-based (see §1). Military output planned (War). |
 | §2 Inter-Faction Relations — score, drift, tiers | **Implemented (subset of drivers)** | Border friction, doctrine, government, common enemy, alliance, trade, baseline all live. Resource/territory envy, historical grievance, player-action drivers, trade competition planned. |
 | §2.1 Alliance Mechanics — formation/dissolution | **Partially implemented** | Event-gated formation + dissolution shipped. Alliance capacity (slots), mutual defense, shared trade bonuses planned (War). |
-| §3 Player-Faction Reputation | **Removed (pivot teardown Sweep 2)** | Personal reputation deleted with personal trading; player↔faction standing becomes the Phase 5 diplomacy layer. |
+| §3 Player-Faction Reputation | **Not present** | There is no personal reputation; player↔faction standing is part of the planned diplomacy layer. |
 | §4 War and Conflict | **Border conflicts only** | `border_conflict` events fire from the relations processor. Full war mechanics planned (War sub-project). |
 | §5 Homeworlds | **Partially implemented** | Homeworlds exist, selected by trait quality, used as flood-fill seeds. Defense bonuses, unique facilities, conquest planned (War / Facilities). |
 | §6 Initial Faction Roster | **Implemented** | 8 majors per the table below. Relations seeded at 0 and drifted by the processor (not pre-seeded with doctrine/government nudges). |
@@ -32,7 +32,7 @@ Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-
 
 Factions are hand-crafted named entities with distinct identity and behavior.
 
-**Status: Implemented** — model lives in `prisma/schema.prisma` (`Faction`), summary derivation in `lib/services/factions.ts`.
+**Status: Implemented** — the hand-owned `WorldFaction` row type lives in `lib/world/types.ts`; summary derivation in `lib/services/factions.ts`.
 
 ### Core Properties
 
@@ -253,7 +253,7 @@ The design intent is that as a faction grows, it loses alliance slots — creati
 
 ## 3. Player-Faction Reputation
 
-**Removed in the pivot Phase 1 teardown (Sweep 2).** The personal-player reputation system (per-player score, standing tiers, trade multipliers) was deleted along with personal trading. The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), re-specced in the pivot's Phase 5.
+**Not present.** There is no personal-player reputation system (per-player score, standing tiers, trade multipliers) and no personal trading. The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), which is planned.
 
 ---
 
@@ -273,7 +273,7 @@ Border conflicts are ambient, low-stakes friction events that fire when a factio
   - **Skirmish** (25–35 ticks): danger +0.10, production rate ×0.9 on the target system.
   - **De-escalation** (10–20 ticks): danger +0.02.
 - **No player notifications** — border conflicts surface on the political map, not in player feeds.
-- **Replaces the old `war: N` government event-weight stubs** — the previous government definitions referenced a `"war"` event that was never actually defined; those dead weights were removed during Foundation. Border conflicts now provide the war-themed economy/danger pressure those weights were meant to gesture at.
+- **Replaces earlier `war: N` government event-weight stubs** — earlier government definitions referenced a `"war"` event that was never actually defined; those dead weights are gone. Border conflicts provide the war-themed economy/danger pressure those weights were meant to gesture at.
 
 ### Full Wars (Planned)
 
@@ -315,7 +315,7 @@ Every faction has a homeworld — their capital system.
 
 ### Starting Position (Implemented)
 
-**Players are not faction-aligned at creation.** There is no `primaryFactionId` on `Player`. New players spawn at `GameWorld.startingSystemId` (the existing core-economy system near map center, now owned by a Federation-government major after Phase 2). No faction nudge on registration. (The per-player reputation system was removed in the pivot teardown — the player's faction seat is Phase 3 of the pivot.)
+**There is no player.** There is no `Player` model, registration, or per-player reputation. World-gen records a `meta.startingSystemId` — a core-economy system near map center, owned by a Federation-government major — as the reserved, faction-unaligned start point for the planned player seat. The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), which is planned.
 
 ---
 
@@ -396,14 +396,14 @@ New factions would always spawn as minor, inheriting some traits from their pare
 
 ### System Scale (Implemented)
 
-Two universe presets, selected via the `UNIVERSE_SCALE` env var:
+System count is chosen per game on the New-game screen (50–20,000; default 600); regions, map size, and faction counts derive continuously from it. Two reference points:
 
-| Preset | Total systems | Map size | Regions | Major factions | Minor factions |
-|---|---|---|---|---|---|
-| `default` | 600 | 7,000 × 7,000 | 24 | 8 | 12 |
-| `10k` | 10,000 | 25,000 × 25,000 | 60 | 8 | 18 |
+| System count | Map size | Regions | Major factions | Minor factions |
+|---|---|---|---|---|
+| 600 (default) | 7,000 × 7,000 | 24 | 8 | 12 |
+| ~10,000 (stress test) | 25,000 × 25,000 | 60 | 8 | 18 |
 
-The original design target was 1K–2K systems. Layer 0's universe-scaling work landed both a smaller dev preset (600, snappy iteration) and a stress-test preset (10K, validates PostgreSQL + tile/LOD scaling). The 1K–2K range is no longer a discrete preset — share-based status thresholds (§1) and percentage-based archetype distributions (§7) make both presets behave correctly without hand-tuning.
+The original design target was 1K–2K systems. The universe-scaling work landed both a snappy small default (600) and a large stress-test scale (~10K, validates tile/LOD rendering). There is no discrete preset anymore — the count is continuous, and share-based status thresholds (§1) and percentage-based archetype distributions (§7) make every scale behave correctly without hand-tuning.
 
 ### Map Structure (Implemented)
 
