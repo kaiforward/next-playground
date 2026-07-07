@@ -1,18 +1,20 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { migrationFlow, type MigrationNode } from "@/lib/engine/migration";
-import { shardRange, catchUpFactor } from "@/lib/tick/shard";
+import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
 import type {
   MigrationDelta, MigrationProcessorParams, MigrationWorld,
 } from "@/lib/tick/world/migration-world";
 
 /**
- * Pure processor body — a trade-flow twin for people. A fixed-interval shard over
- * the same faction-bounded open edges; population flows toward the more
- * attractive (calmer, roomier) endpoint, distance-attenuated, conserved. Deltas
- * compose across edges within the tick so a hub touched by several edges nets
- * correctly. The per-edge moved amount is scaled by `catchUpFactor(interval)` so
- * the wall-clock migration rate is interval-invariant.
+ * Pure processor body — a twin for people of the population resolution. A
+ * monthly-pulse pass over the faction-bounded open edges: the whole edge set
+ * resolves on the boundary tick (`tick % interval === 0`), empty otherwise.
+ * Population flows toward the more attractive (calmer, roomier) endpoint,
+ * distance-attenuated, conserved. Deltas compose across edges within the tick so
+ * a hub touched by several edges nets correctly. The per-edge moved amount is
+ * scaled by `catchUpFactor(interval)` so the wall-clock migration rate is
+ * interval-invariant.
  */
 export async function runMigrationProcessor(
   world: MigrationWorld,
@@ -23,7 +25,7 @@ export async function runMigrationProcessor(
   if (edges.length === 0) return {};
 
   const total = edges.length;
-  const { start, end } = shardRange(total, ctx.tick, params.interval);
+  const { start, end } = pulseShard(total, ctx.tick, params.interval);
   const slice: EdgeView[] = edges.slice(start, end);
   if (slice.length === 0) return {};
   const catchUp = catchUpFactor(params.interval);
