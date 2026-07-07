@@ -1,16 +1,11 @@
-import { prisma } from "@/lib/prisma";
+import { getWorld } from "@/lib/world/store";
 import { ServiceError } from "./errors";
-import {
-  deriveFactionStatus,
-  toDoctrine,
-  toEconomyType,
-  toGovernmentType,
-} from "@/lib/types/guards";
+import { deriveFactionStatus } from "@/lib/types/guards";
 import { DOCTRINES } from "@/lib/constants/doctrines";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { getRelationTier, type RelationTier } from "@/lib/constants/relations";
-import { isEventTypeId } from "@/lib/types/guards";
 import type { EventTypeId } from "@/lib/constants/events";
+import type { World, WorldFaction } from "@/lib/world/types";
 import type {
   Doctrine,
   EconomyType,
@@ -101,166 +96,79 @@ export interface RelationsMatrixData {
   pairs: RelationsMatrixPair[];
 }
 
+/** Systems owned per faction id, over the whole world. */
+function territoryCounts(world: World): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const s of world.systems) {
+    if (!s.factionId) continue;
+    counts.set(s.factionId, (counts.get(s.factionId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function toSummary(
+  faction: WorldFaction,
+  world: World,
+  territorySize: number,
+  totalSystems: number,
+): FactionSummary {
+  const homeworld = world.systems.find((s) => s.id === faction.homeworldId);
+  return {
+    id: faction.id,
+    name: faction.name,
+    description: faction.description,
+    color: faction.color,
+    governmentType: faction.governmentType,
+    governmentName: GOVERNMENT_TYPES[faction.governmentType].name,
+    doctrine: faction.doctrine,
+    doctrineName: DOCTRINES[faction.doctrine].name,
+    homeworldId: faction.homeworldId,
+    homeworldName: homeworld?.name ?? "",
+    territorySize,
+    status: deriveFactionStatus(territorySize, totalSystems),
+  };
+}
+
 /** List all factions with derived status and territory size. */
-export async function listFactions(): Promise<FactionSummary[]> {
-  const rows = await prisma.faction.findMany({
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      color: true,
-      governmentType: true,
-      doctrine: true,
-      homeworldId: true,
-      homeworld: { select: { name: true } },
-      _count: { select: { territory: true } },
-    },
-    orderBy: { name: "asc" },
-  });
+export function listFactions(): FactionSummary[] {
+  const world = getWorld();
+  const counts = territoryCounts(world);
+  const totalSystems = [...counts.values()].reduce((sum, c) => sum + c, 0);
 
-  const totalSystems = rows.reduce((sum, r) => sum + r._count.territory, 0);
-
-  return rows.map((r) => {
-    const gov = toGovernmentType(r.governmentType);
-    const doc = toDoctrine(r.doctrine);
-    const territorySize = r._count.territory;
-    return {
-      id: r.id,
-      name: r.name,
-      description: r.description,
-      color: r.color,
-      governmentType: gov,
-      governmentName: GOVERNMENT_TYPES[gov].name,
-      doctrine: doc,
-      doctrineName: DOCTRINES[doc].name,
-      homeworldId: r.homeworldId,
-      homeworldName: r.homeworld.name,
-      territorySize,
-      status: deriveFactionStatus(territorySize, totalSystems),
-    };
-  });
+  return [...world.factions]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((f) => toSummary(f, world, counts.get(f.id) ?? 0, totalSystems));
 }
 
 /** Detail for one faction with territory sample, per-faction relations, and active alliances. */
-export async function getFactionDetail(
-  factionId: string,
-  territorySampleLimit = 20,
-): Promise<FactionDetail> {
-  const faction = await prisma.faction.findUnique({
-    where: { id: factionId },
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      color: true,
-      governmentType: true,
-      doctrine: true,
-      homeworldId: true,
-      homeworld: { select: { name: true } },
-      _count: { select: { territory: true } },
-    },
-  });
+export function getFactionDetail(factionId: string, territorySampleLimit = 20): FactionDetail {
+  const world = getWorld();
+  const faction = world.factions.find((f) => f.id === factionId);
   if (!faction) {
     throw new ServiceError(`Faction ${factionId} not found.`, 404);
   }
 
-  const gov = toGovernmentType(faction.governmentType);
-  const doc = toDoctrine(faction.doctrine);
-  const territorySize = faction._count.territory;
+  const counts = territoryCounts(world);
+  const totalSystems = [...counts.values()].reduce((sum, c) => sum + c, 0);
+  const territorySize = counts.get(factionId) ?? 0;
 
-  const [
-    territorySample,
-    otherFactions,
-    relationsA,
-    relationsB,
-    alliancesA,
-    alliancesB,
-    relatedEventRows,
-  ] = await Promise.all([
-    prisma.starSystem.findMany({
-      where: { factionId },
-      select: { id: true, name: true, economyType: true, isGateway: true },
-      orderBy: [{ isGateway: "desc" }, { name: "asc" }],
-      take: territorySampleLimit,
-    }),
-    prisma.faction.findMany({
-      where: { id: { not: factionId } },
-      select: {
-        id: true,
-        name: true,
-        color: true,
-        _count: { select: { territory: true } },
-      },
-    }),
-    prisma.factionRelation.findMany({
-      where: { factionAId: factionId },
-      select: { factionBId: true, score: true },
-    }),
-    prisma.factionRelation.findMany({
-      where: { factionBId: factionId },
-      select: { factionAId: true, score: true },
-    }),
-    prisma.alliancePact.findMany({
-      where: { factionAId: factionId },
-      select: {
-        factionBId: true,
-        formedAtTick: true,
-        pendingDissolutionAtTick: true,
-      },
-    }),
-    prisma.alliancePact.findMany({
-      where: { factionBId: factionId },
-      select: {
-        factionAId: true,
-        formedAtTick: true,
-        pendingDissolutionAtTick: true,
-      },
-    }),
-    // Relations-spawned events touching this faction. Identified by the
-    // factionId substring inside the JSON metadata column — cuids are unique
-    // enough across the table that false matches are negligible. Ordered
-    // newest-first; cap at 10 for the panel surface.
-    prisma.gameEvent.findMany({
-      where: {
-        type: { in: ["border_conflict", "pact_under_negotiation", "alliance_dissolved"] },
-        metadata: { contains: factionId },
-      },
-      select: {
-        id: true,
-        type: true,
-        phase: true,
-        startTick: true,
-        systemId: true,
-        system: { select: { name: true } },
-        metadata: true,
-      },
-      orderBy: { startTick: "desc" },
-      take: 10,
-    }),
-  ]);
-
-  // Status is relative to the total factioned-system pool — sum across this
-  // faction plus all others. `getFactions` queries already returned `_count.territory`.
-  const totalSystems =
-    territorySize + otherFactions.reduce((sum, o) => sum + o._count.territory, 0);
-  const status = deriveFactionStatus(territorySize, totalSystems);
+  const otherFactions = world.factions.filter((f) => f.id !== factionId);
 
   const scoreByOther = new Map<string, number>();
-  for (const r of relationsA) scoreByOther.set(r.factionBId, r.score);
-  for (const r of relationsB) scoreByOther.set(r.factionAId, r.score);
+  for (const r of world.relations) {
+    if (r.factionAId === factionId) scoreByOther.set(r.factionBId, r.score);
+    else if (r.factionBId === factionId) scoreByOther.set(r.factionAId, r.score);
+  }
 
   const allianceByOther = new Map<
     string,
     { formedAtTick: number; pendingDissolutionAtTick: number | null }
   >();
-  for (const a of alliancesA) {
-    allianceByOther.set(a.factionBId, {
-      formedAtTick: a.formedAtTick,
-      pendingDissolutionAtTick: a.pendingDissolutionAtTick,
-    });
-  }
-  for (const a of alliancesB) {
-    allianceByOther.set(a.factionAId, {
+  for (const a of world.alliancePacts) {
+    const otherId =
+      a.factionAId === factionId ? a.factionBId : a.factionBId === factionId ? a.factionAId : null;
+    if (!otherId) continue;
+    allianceByOther.set(otherId, {
       formedAtTick: a.formedAtTick,
       pendingDissolutionAtTick: a.pendingDissolutionAtTick,
     });
@@ -273,7 +181,7 @@ export async function getFactionDetail(
         otherFactionId: o.id,
         otherFactionName: o.name,
         otherFactionColor: o.color,
-        otherFactionStatus: deriveFactionStatus(o._count.territory, totalSystems),
+        otherFactionStatus: deriveFactionStatus(counts.get(o.id) ?? 0, totalSystems),
         score,
         tier: getRelationTier(score),
         hasAlliance: allianceByOther.has(o.id),
@@ -282,26 +190,37 @@ export async function getFactionDetail(
     .sort((a, b) => b.score - a.score);
 
   const otherById = new Map(otherFactions.map((o) => [o.id, o]));
+  const systemNameById = new Map(world.systems.map((s) => [s.id, s.name]));
 
-  const recentEvents: FactionRelatedEvent[] = [];
-  for (const ev of relatedEventRows) {
-    if (!isEventTypeId(ev.type)) continue;
-    const { otherFactionId, otherFactionName } = resolveEventOtherFaction(
-      ev.metadata,
-      factionId,
-      otherById,
-    );
-    recentEvents.push({
-      id: ev.id,
-      type: ev.type,
-      phase: ev.phase,
-      startTick: ev.startTick,
-      systemId: ev.systemId,
-      systemName: ev.system?.name ?? null,
-      otherFactionId,
-      otherFactionName,
+  // Relations-spawned events touching this faction, newest-first, capped at
+  // 10 for the panel surface.
+  const recentEvents: FactionRelatedEvent[] = world.events
+    .filter(
+      (ev) =>
+        ev.metadata !== null &&
+        (ev.metadata.factionAId === factionId || ev.metadata.factionBId === factionId),
+    )
+    .sort((a, b) => b.startTick - a.startTick)
+    .slice(0, 10)
+    .map((ev) => {
+      const metadata = ev.metadata;
+      const otherId = metadata
+        ? metadata.factionAId === factionId
+          ? metadata.factionBId
+          : metadata.factionAId
+        : null;
+      const other = otherId ? otherById.get(otherId) : undefined;
+      return {
+        id: ev.id,
+        type: ev.type,
+        phase: ev.phase,
+        startTick: ev.startTick,
+        systemId: ev.systemId,
+        systemName: ev.systemId ? systemNameById.get(ev.systemId) ?? null : null,
+        otherFactionId: otherId,
+        otherFactionName: other?.name ?? null,
+      };
     });
-  }
 
   const alliancesList: FactionAllianceRow[] = [];
   for (const o of otherFactions) {
@@ -317,111 +236,55 @@ export async function getFactionDetail(
   }
   alliancesList.sort((a, b) => b.formedAtTick - a.formedAtTick);
 
-  return {
-    id: faction.id,
-    name: faction.name,
-    description: faction.description,
-    color: faction.color,
-    governmentType: gov,
-    governmentName: GOVERNMENT_TYPES[gov].name,
-    governmentDescription: GOVERNMENT_TYPES[gov].description,
-    doctrine: doc,
-    doctrineName: DOCTRINES[doc].name,
-    doctrineDescription: DOCTRINES[doc].description,
-    homeworldId: faction.homeworldId,
-    homeworldName: faction.homeworld.name,
-    territorySize,
-    status,
-    territorySample: territorySample.map((s) => ({
+  const territorySample: FactionTerritorySystem[] = world.systems
+    .filter((s) => s.factionId === factionId)
+    .sort((a, b) => Number(b.isGateway) - Number(a.isGateway) || a.name.localeCompare(b.name))
+    .slice(0, territorySampleLimit)
+    .map((s) => ({
       id: s.id,
       name: s.name,
-      economyType: toEconomyType(s.economyType),
+      economyType: s.economyType,
       isGateway: s.isGateway,
-    })),
+    }));
+
+  return {
+    ...toSummary(faction, world, territorySize, totalSystems),
+    governmentDescription: GOVERNMENT_TYPES[faction.governmentType].description,
+    doctrineDescription: DOCTRINES[faction.doctrine].description,
+    territorySample,
     relations,
     alliances: alliancesList,
     recentEvents,
   };
 }
 
-/**
- * Pull the partner faction id+name out of a relations-event metadata blob.
- * The metadata contains a factionA/factionB pair; whichever is not the
- * subject faction is the partner. Returns nulls when parsing fails or the
- * partner isn't in the known faction set.
- */
-function resolveEventOtherFaction(
-  metadataJson: string,
-  selfFactionId: string,
-  otherById: Map<string, { id: string; name: string }>,
-): { otherFactionId: string | null; otherFactionName: string | null } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(metadataJson);
-  } catch {
-    return { otherFactionId: null, otherFactionName: null };
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    return { otherFactionId: null, otherFactionName: null };
-  }
-  const a = "factionAId" in parsed && typeof parsed.factionAId === "string"
-    ? parsed.factionAId
-    : null;
-  const b = "factionBId" in parsed && typeof parsed.factionBId === "string"
-    ? parsed.factionBId
-    : null;
-  const otherId = a === selfFactionId ? b : b === selfFactionId ? a : null;
-  if (!otherId) return { otherFactionId: null, otherFactionName: null };
-  const other = otherById.get(otherId);
-  return {
-    otherFactionId: otherId,
-    otherFactionName: other?.name ?? null,
-  };
-}
-
 /** Full relations matrix across all factions. */
-export async function getRelationsMatrix(): Promise<RelationsMatrixData> {
-  const [factions, relations, alliances] = await Promise.all([
-    prisma.faction.findMany({
-      select: {
-        id: true,
-        name: true,
-        color: true,
-        governmentType: true,
-        doctrine: true,
-        _count: { select: { territory: true } },
-      },
-      orderBy: { name: "asc" },
-    }),
-    prisma.factionRelation.findMany({
-      select: { factionAId: true, factionBId: true, score: true },
-    }),
-    prisma.alliancePact.findMany({
-      select: { factionAId: true, factionBId: true },
-    }),
-  ]);
+export function getRelationsMatrix(): RelationsMatrixData {
+  const world = getWorld();
+  const counts = territoryCounts(world);
+  const totalSystems = [...counts.values()].reduce((sum, c) => sum + c, 0);
 
   const allianceKeys = new Set<string>();
-  for (const a of alliances) {
+  for (const a of world.alliancePacts) {
     allianceKeys.add(`${a.factionAId}|${a.factionBId}`);
   }
 
-  const totalSystems = factions.reduce((sum, f) => sum + f._count.territory, 0);
-
   return {
-    factions: factions.map((f) => {
-      const territorySize = f._count.territory;
-      return {
-        id: f.id,
-        name: f.name,
-        color: f.color,
-        governmentType: toGovernmentType(f.governmentType),
-        doctrine: toDoctrine(f.doctrine),
-        status: deriveFactionStatus(territorySize, totalSystems),
-        territorySize,
-      };
-    }),
-    pairs: relations.map((r) => ({
+    factions: [...world.factions]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((f) => {
+        const territorySize = counts.get(f.id) ?? 0;
+        return {
+          id: f.id,
+          name: f.name,
+          color: f.color,
+          governmentType: f.governmentType,
+          doctrine: f.doctrine,
+          status: deriveFactionStatus(territorySize, totalSystems),
+          territorySize,
+        };
+      }),
+    pairs: world.relations.map((r) => ({
       factionAId: r.factionAId,
       factionBId: r.factionBId,
       score: r.score,

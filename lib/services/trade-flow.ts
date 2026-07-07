@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/prisma";
-import { getPlayerVisibility } from "./visibility-cache";
+import { getWorld } from "@/lib/world/store";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
@@ -18,42 +17,35 @@ import {
 
 /**
  * Returns the two map-overlay edge sets (market diffusion + directed logistics)
- * aggregated over the last `FLOW_HISTORY_TICKS`, filtered to edges with at
- * least one endpoint in the player's visibility set. Filtering is server-side
- * so we never leak galaxy-wide commerce intel over the wire.
+ * aggregated over the last `FLOW_HISTORY_TICKS`.
  */
-export async function getTradeFlowEdges(playerId: string): Promise<TradeFlowEdges> {
-  const { visibleSet, currentTick } = await getPlayerVisibility(playerId);
+export function getTradeFlowEdges(): TradeFlowEdges {
+  const world = getWorld();
+  const minTick = world.meta.currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
-  if (visibleSet.size === 0) {
-    return { marketEdges: [], logisticsEdges: [] };
+  // Group by (from, to, good, flowType) summing quantity over the window.
+  const grouped = new Map<string, RawFlowRow>();
+  for (const f of world.flowEvents) {
+    if (f.tick <= minTick || f.quantity <= 0) continue;
+    const key = `${f.fromSystemId}|${f.toSystemId}|${f.goodId}|${f.flowType}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.quantity += f.quantity;
+    } else {
+      grouped.set(key, {
+        fromSystemId: f.fromSystemId,
+        toSystemId: f.toSystemId,
+        goodId: f.goodId,
+        quantity: f.quantity,
+        flowType: f.flowType,
+      });
+    }
   }
 
-  const minTick = currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
-
-  // One indexed groupBy, now split by flowType so the two overlays render apart.
-  const grouped = await prisma.tradeFlow.groupBy({
-    by: ["fromSystemId", "toSystemId", "goodId", "flowType"],
-    where: { tick: { gt: minTick } },
-    _sum: { quantity: true },
-  });
-
-  const rows: RawFlowRow[] = [];
-  for (const row of grouped) {
-    const qty = row._sum.quantity ?? 0;
-    if (qty <= 0) continue;
-    rows.push({
-      fromSystemId: row.fromSystemId,
-      toSystemId: row.toSystemId,
-      goodId: row.goodId,
-      quantity: qty,
-      flowType: row.flowType,
-    });
-  }
-
+  const allSystemIds = new Set(world.systems.map((s) => s.id));
   return buildFlowEdges(
-    rows,
-    visibleSet,
+    [...grouped.values()],
+    allSystemIds,
     TRADE_SIMULATION.ROUTE_INFERENCE_FLOOR,
     TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
   );
@@ -62,44 +54,23 @@ export async function getTradeFlowEdges(playerId: string): Promise<TradeFlowEdge
 /**
  * Per-system Logistics tab data: internal production/consumption rates +
  * external imports/exports (split by flow type) + the volume-over-time series.
- * Visibility-gated: an unsurveyed system returns `{ visibility: "unknown" }`.
  */
-export async function getSystemLogistics(
-  playerId: string,
-  systemId: string,
-): Promise<SystemLogisticsData> {
-  const { visibleSet, currentTick } = await getPlayerVisibility(playerId);
-  if (!visibleSet.has(systemId)) return { visibility: "unknown" };
-
+export function getSystemLogistics(systemId: string): SystemLogisticsData {
+  const world = getWorld();
+  const currentTick = world.meta.currentTick;
   const minTick = currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
-  const [system, flows] = await Promise.all([
-    prisma.starSystem.findUnique({
-      where: { id: systemId },
-      relationLoadStrategy: "join",
-      select: {
-        population: true,
-        yieldGas: true, yieldMinerals: true, yieldOre: true, yieldBiomass: true,
-        yieldArable: true, yieldWater: true, yieldRadioactive: true,
-        buildings: { select: { buildingType: true, count: true } },
-      },
-    }),
-    prisma.tradeFlow.findMany({
-      where: {
-        tick: { gt: minTick },
-        OR: [{ fromSystemId: systemId }, { toSystemId: systemId }],
-      },
-      select: {
-        tick: true, fromSystemId: true, toSystemId: true,
-        goodId: true, quantity: true, flowType: true,
-      },
-    }),
-  ]);
-
+  const system = world.systems.find((s) => s.id === systemId);
   if (!system) return { visibility: "unknown" };
 
+  const flows = world.flowEvents.filter(
+    (f) => f.tick > minTick && (f.fromSystemId === systemId || f.toSystemId === systemId),
+  );
+
   const buildings: Record<string, number> = {};
-  for (const b of system.buildings) buildings[b.buildingType] = b.count;
+  for (const b of world.buildings) {
+    if (b.systemId === systemId) buildings[b.buildingType] = b.count;
+  }
   const yields = resourceVectorFromColumns(
     {
       yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
@@ -120,21 +91,7 @@ export async function getSystemLogistics(
     if (d > 0) inputDemandByGood.set(g.goodId, d);
   }
 
-  // Resolve partner system names once (no N+1) for the source/destination tooltips.
-  // Only name partners the player can actually see; an unsurveyed partner stays
-  // anonymous ("Unknown System" fallback below) so this endpoint never discloses
-  // the identity of a system the player hasn't surveyed — same server-side
-  // visibility gate the map-overlay edge sets apply.
-  const partnerIds = new Set<string>();
-  for (const f of flows) {
-    const partnerId = f.fromSystemId === systemId ? f.toSystemId : f.fromSystemId;
-    if (visibleSet.has(partnerId)) partnerIds.add(partnerId);
-  }
-  const partnerRows = await prisma.starSystem.findMany({
-    where: { id: { in: [...partnerIds] } },
-    select: { id: true, name: true },
-  });
-  const nameById = new Map(partnerRows.map((r) => [r.id, r.name]));
+  const nameById = new Map(world.systems.map((s) => [s.id, s.name]));
   const resolveName = (id: string): string => nameById.get(id) ?? "Unknown System";
 
   const flowRows: LogisticsFlowRow[] = flows;

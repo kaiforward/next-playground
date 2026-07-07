@@ -9,7 +9,6 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration",
     "simulate": "tsx scripts/simulate.ts",
     "validate:gen": "tsx --tsconfig tsconfig.json scripts/validate-distributions.ts",
     "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts",

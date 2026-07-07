@@ -45,7 +45,7 @@ export async function runRelationsProcessor(
   ctx: TickContext,
   params: RelationsProcessorParams,
 ): Promise<TickProcessorResult> {
-  const rng = params.rng ?? Math.random;
+  const rng = params.rng;
 
   const factions = await world.getFactions();
   if (factions.length < 2) {

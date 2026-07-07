@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { requirePlayer, isErrorResponse } from "@/lib/api/require-player";
 import { getStaticTile } from "@/lib/services/static-tiles";
 import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { TILE_COLS, TILE_ROWS } from "@/lib/engine/tiles";
@@ -8,9 +7,6 @@ import type { StaticTileResponse } from "@/lib/types/api";
 
 export function GET(request: NextRequest) {
   return withServiceErrors("GET /api/game/systems/tile/static", async () => {
-    const auth = await requirePlayer();
-    if (isErrorResponse(auth)) return auth;
-
     const { searchParams } = request.nextUrl;
     const colStr = searchParams.get("col");
     const rowStr = searchParams.get("row");
@@ -36,7 +32,7 @@ export function GET(request: NextRequest) {
       );
     }
 
-    const data = await getStaticTile(col, row);
+    const data = getStaticTile(col, row);
     return NextResponse.json<StaticTileResponse>(
       { data },
       { headers: { "Cache-Control": "private, no-cache" } },

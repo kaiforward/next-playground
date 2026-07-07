@@ -1,42 +1,31 @@
-import { prisma } from "@/lib/prisma";
+import { getWorld } from "@/lib/world/store";
 import { buildMarketEntry } from "./market-entry";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
+import { GOODS } from "@/lib/constants/goods";
 import { ServiceError } from "./errors";
 import type { MarketEntry } from "@/lib/types/game";
-import { toGovernmentType } from "@/lib/types/guards";
 
 /**
- * Get market data for the station in the given system.
- * Throws ServiceError(404) if no station found.
+ * Get market data for the given system. Markets are per-system in the world
+ * model (stations are gone); `stationId` is kept as the system id so the
+ * response shape the client already consumes is unchanged.
+ * Throws ServiceError(404) if the system doesn't exist.
  */
-export async function getMarket(
-  systemId: string,
-): Promise<{ stationId: string; entries: MarketEntry[] }> {
-  const station = await prisma.station.findUnique({
-    where: { systemId },
-    include: { system: { select: { faction: { select: { governmentType: true } } } } },
-  });
-
-  if (!station) {
-    throw new ServiceError("No station found in this system.", 404);
+export function getMarket(systemId: string): { stationId: string; entries: MarketEntry[] } {
+  const world = getWorld();
+  const system = world.systems.find((s) => s.id === systemId);
+  if (!system) {
+    throw new ServiceError("System not found.", 404);
   }
 
-  const govDef = station.system.faction
-    ? GOVERNMENT_TYPES[toGovernmentType(station.system.faction.governmentType)]
+  const faction = system.factionId
+    ? world.factions.find((f) => f.id === system.factionId)
     : undefined;
+  const govDef = faction ? GOVERNMENT_TYPES[faction.governmentType] : undefined;
 
-  const marketEntries = await prisma.stationMarket.findMany({
-    where: { stationId: station.id },
-    include: {
-      good: {
-        select: { id: true, name: true, basePrice: true, priceFloor: true, priceCeiling: true },
-      },
-    },
-  });
+  const entries: MarketEntry[] = world.markets
+    .filter((m) => m.systemId === systemId)
+    .map((m) => buildMarketEntry(m.goodId, GOODS[m.goodId], m.stock, m.demandRate, govDef, m.anchorMult));
 
-  const entries: MarketEntry[] = marketEntries.map((m) =>
-    buildMarketEntry(m.good.id, m.good, m.stock, m.demandRate, govDef, m.anchorMult),
-  );
-
-  return { stationId: station.id, entries };
+  return { stationId: systemId, entries };
 }

@@ -50,7 +50,7 @@ function makeWorld(score: number, opts: { alliance?: boolean; events?: { id: str
 describe("runRelationsProcessor", () => {
   it("drifts every pair and writes a history entry per pair", async () => {
     const world = makeWorld(0);
-    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3, rng: () => 0.5 });
     const updated = await world.getFactionRelations();
     expect(updated).toHaveLength(1);
     expect(updated[0].history).toHaveLength(1);
@@ -63,7 +63,7 @@ describe("runRelationsProcessor", () => {
     // Default drift = baseline (-0.05) + border friction (-0.02) = -0.07,
     // so starting at -24.95 brings newScore to -25.02 (≤ -25, prior score > -25).
     const world = makeWorld(-24.95);
-    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3, rng: () => 0.5 });
     const events = await world.getActiveRelationEvents();
     const borderConflict = events.find((e) => e.type === "border_conflict");
     expect(borderConflict).toBeDefined();
@@ -78,7 +78,7 @@ describe("runRelationsProcessor", () => {
     // Boost the pair with a positive driver: add trade volume so drift is positive.
     world.tradeFlows.push({ tick: 5, fromSystemId: "s1", toSystemId: "s2", quantity: 5000 });
     world.tradeFlows.push({ tick: 5, fromSystemId: "s2", toSystemId: "s1", quantity: 5000 });
-    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 100 });
+    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 100, rng: () => 0.5 });
     const events = await world.getActiveRelationEvents();
     const pact = events.find((e) => e.type === "pact_under_negotiation");
     expect(pact).toBeDefined();
@@ -90,7 +90,7 @@ describe("runRelationsProcessor", () => {
         { id: "ev1", type: "pact_under_negotiation", expiresAtTick: 10 },
       ],
     });
-    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3, rng: () => 0.5 });
     const alliances = await world.getActiveAlliances();
     expect(alliances).toHaveLength(1);
     expect(alliances[0].factionAId).toBe("fa");
@@ -105,7 +105,7 @@ describe("runRelationsProcessor", () => {
         { id: "ev1", type: "pact_under_negotiation", expiresAtTick: 10 },
       ],
     });
-    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3, rng: () => 0.5 });
     const alliances = await world.getActiveAlliances();
     expect(alliances).toHaveLength(0);
   });
@@ -117,7 +117,7 @@ describe("runRelationsProcessor", () => {
         { id: "ev1", type: "alliance_dissolved", expiresAtTick: 10 },
       ],
     });
-    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(10), { tradeWindowTicks: 3, rng: () => 0.5 });
     const alliances = await world.getActiveAlliances();
     expect(alliances).toHaveLength(0);
   });
@@ -128,7 +128,7 @@ describe("runRelationsProcessor", () => {
         { id: "ev1", type: "border_conflict", expiresAtTick: 1 },
       ],
     });
-    await runRelationsProcessor(world, makeCtx(100), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(100), { tradeWindowTicks: 3, rng: () => 0.5 });
     const events = await world.getActiveRelationEvents();
     expect(events.find((e) => e.type === "border_conflict")).toBeDefined();
   });
@@ -139,7 +139,7 @@ describe("runRelationsProcessor", () => {
         { id: "ev1", type: "border_conflict", expiresAtTick: RELATIONS_PHASE_SENTINEL },
       ],
     });
-    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3, rng: () => 0.5 });
     const events = await world.getActiveRelationEvents();
     const conflicts = events.filter((e) => e.type === "border_conflict");
     expect(conflicts).toHaveLength(1);
@@ -151,7 +151,7 @@ describe("runRelationsProcessor", () => {
     const world = makeWorld(ALLIANCE.dissolutionThreshold - 2, {
       alliance: true,
     });
-    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3, rng: () => 0.5 });
     const events = await world.getActiveRelationEvents();
     const dissolution = events.find((e) => e.type === "alliance_dissolved");
     expect(dissolution).toBeDefined();
@@ -170,7 +170,7 @@ describe("runRelationsProcessor", () => {
         { id: "ev1", type: "alliance_dissolved", expiresAtTick: RELATIONS_PHASE_SENTINEL },
       ],
     });
-    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3 });
+    await runRelationsProcessor(world, makeCtx(5), { tradeWindowTicks: 3, rng: () => 0.5 });
     const events = await world.getActiveRelationEvents();
     expect(events.filter((e) => e.type === "alliance_dissolved")).toHaveLength(1);
   });

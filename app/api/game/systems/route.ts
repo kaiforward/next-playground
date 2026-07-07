@@ -5,7 +5,7 @@ import type { UniverseResponse } from "@/lib/types/api";
 
 export function GET() {
   return withServiceErrors("GET /api/game/systems", async () => {
-    const data = await getUniverse();
+    const data = getUniverse();
     return NextResponse.json<UniverseResponse>({ data });
   });
 }

@@ -186,10 +186,10 @@ export interface RelationsProcessorParams {
   tradeWindowTicks: number;
   /**
    * RNG source for event-template windows (negotiation duration, border
-   * conflict phase rolls). Defaults to `Math.random` in the live wrapper;
-   * tests and the simulator inject a seeded source for determinism.
+   * conflict phase rolls). The tick pipeline injects its seeded per-tick
+   * stream so relations stay deterministic and save/load-safe.
    */
-  rng?: () => number;
+  rng: () => number;
   /**
    * Hook for the war system: contributes positive deltas to in-flight
    * negotiation windows from diplomatic missions. Not yet wired up.
