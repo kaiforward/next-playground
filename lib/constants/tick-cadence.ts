@@ -2,3 +2,13 @@
 export const REFERENCE_INTERVAL = 24;
 /** Ticks for the economy cluster (economy / trade-flow / migration) to refresh every system once. Fixed gameplay constant → scale-invariant cadence. */
 export const ECONOMY_UPDATE_INTERVAL = 24;
+
+/**
+ * One "month" = the resolution-pulse period, in ticks. All faction-scale
+ * accounting (economy, infrastructure decay, population, migration, directed
+ * logistics, directed build) resolves for the whole galaxy on ticks where
+ * `tick % MONTH_LENGTH === 0`. Equal to the economy interval, so each system's
+ * magnitude-per-resolution is unchanged from the old rolling shard — only
+ * staggered → synchronized changes.
+ */
+export const MONTH_LENGTH = ECONOMY_UPDATE_INTERVAL;
