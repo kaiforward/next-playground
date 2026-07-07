@@ -17,7 +17,7 @@ The tick advances against an **in-memory world** paced by a single in-process lo
 
 ## Processor Pipeline
 
-10 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order.
+10 processors run sequentially each tick in topologically sorted order. Processors declare dependencies to ensure correct execution order. Two cadences interleave: a **daily heartbeat** (ship arrivals, events, trade-flow diffusion) advances every tick, while a **monthly resolution pulse** (economy → infrastructure decay → population → migration → directed logistics → directed build) resolves the whole galaxy together on the month boundary and no-ops on every other tick. See [Cadence](#cadence-daily-heartbeat--monthly-resolution-pulse).
 
 ```
 Ship Arrivals ────────────────────────────────────────┐
@@ -38,15 +38,15 @@ Events ────────────────────────�
 
 | Processor | Frequency | Dependencies | What It Does |
 |---|---|---|---|
-| Ship Arrivals | Every tick | None | Docks ships that have reached their arrival tick (status → docked, destination/arrival fields cleared) and emits `shipArrived` events. Currently dormant — world-gen seeds no ships (player fleets are planned) — but present in the pipeline |
-| Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
-| Economy | Every tick | Events | Processes ~`total/ECONOMY_UPDATE_INTERVAL` systems each tick (sorted by id via `shardRange`), so every system refreshes every `ECONOMY_UPDATE_INTERVAL` (24) ticks at any scale. Applies event modifiers and government effects to each market's stock; applies strike suppression to production (derived from last tick's `unrest`). Applied rates × `catchUpFactor` (= 1 at the reference interval). Records per-system satisfaction (`delivered / demanded`) into `ctx.results` for the population processor |
-| Trade Flow | Every tick (fixed-interval edge shard) | Economy | Simulates inter-system goods flow over the **intra-faction** edge graph (region lines ignored, faction borders closed), distance-attenuated by fuel cost. Each tick processes `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` over the stable edge order — full sweep takes `ECONOMY_UPDATE_INTERVAL` ticks at any scale. Per-edge amount × `catchUpFactor`. Mutates stock at both endpoints, appends flow events, increments per-system volume. See [trade-simulation.md](../gameplay/trade-simulation.md) |
-| Infrastructure Decay | Every tick (economy shard) | Economy | Shrinks `WorldBuilding.count` **downward only** toward what is *used* — disuse decay where built exceeds staffed-and-selling (`count × min(labourFulfillment, outputUptake)`) or housing occupancy (`population / POP_CENTRE_DENSITY`), plus a catastrophic unrest teardown above θ_decay. Acts only on the economy's just-processed shard (read off `ctx.results`, incl. per-good output uptake); applies `count` deltas in one pass and recomputes `popCap` live from the surviving housing. Never raises a count or goes below 0 |
-| Population | Every tick | Economy, Infrastructure Decay | Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline against the **live** post-decay `popCap`; housing-overshoot (`population > popCap`, the unrest-snowball case) sheds the excess as unrest-weighted death (the conserved migration half rides the migration processor); rewrites `WorldMarket.demandRate` for each system's new population level |
-| Migration | Every tick (fixed-interval edge shard) | Population | Relocates population (conserved) along the same intra-faction open-edge topology + fixed-interval edge shard as trade-flow; population flows down-unrest / up-headroom (`popCap − population`), distance-attenuated, per-edge amount × `catchUpFactor`. Gateways throttle migration as they do goods. Produces boom/bust geography over time |
-| Directed Logistics | Every tick (economy shard) | Economy | Silent, budgeted surplus→deficit goods redistribution within each faction — routes stock from surplus systems to deficit systems the passive trade flow can't reach. See [economy-autonomic-agency.md](../gameplay/economy-autonomic-agency.md) |
-| Directed Build | Every tick (economy shard) | Directed Logistics | Autonomic construction: proactive housing where population wants to grow, labour-gated industry where staffing and input self-supply support it. See [economy-autonomic-agency.md](../gameplay/economy-autonomic-agency.md) |
+| Ship Arrivals | Daily (every tick) | None | Docks ships that have reached their arrival tick (status → docked, destination/arrival fields cleared) and emits `shipArrived` events. Currently dormant — world-gen seeds no ships (player fleets are planned) — but present in the pipeline |
+| Events | Daily (every tick) | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
+| Economy | Monthly pulse | Events | On the month boundary (`tick % MONTH_LENGTH === 0`) resolves the **whole galaxy** at once (`pulseShard`); no-ops otherwise. Applies event modifiers and government effects to each market's stock; applies strike suppression to production (derived from last month's `unrest`). Applied rates × `catchUpFactor` (= 1 at the reference interval → one full month's magnitude per resolution). Records per-system satisfaction (`delivered / demanded`) into `ctx.results` for infrastructure-decay and population |
+| Trade Flow | Daily (rolling edge shard) | Economy | Simulates inter-system goods flow over the **intra-faction** edge graph (region lines ignored, faction borders closed), distance-attenuated by fuel cost. Each tick processes `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` over the stable edge order — a rolling slice so diffusion advances daily and a full sweep completes every `ECONOMY_UPDATE_INTERVAL` ticks at any scale. Per-edge amount × `catchUpFactor`. Mutates stock at both endpoints, appends flow events, increments per-system volume. See [trade-simulation.md](../gameplay/trade-simulation.md) |
+| Infrastructure Decay | Monthly pulse | Economy | Shrinks `WorldBuilding.count` **downward only** toward what is *used* — disuse decay where built exceeds staffed-and-selling (`count × min(labourFulfillment, outputUptake)`) or housing occupancy (`population / POP_CENTRE_DENSITY`), plus a catastrophic unrest teardown above θ_decay. Runs only when the economy resolved this tick (reads its `economySignals` off `ctx.results`, incl. per-good output uptake), so it inherits the monthly pulse; applies `count` deltas in one pass and recomputes `popCap` live from the surviving housing. Never raises a count or goes below 0 |
+| Population | Monthly pulse | Economy, Infrastructure Decay | Runs only when the economy resolved this tick (same `economySignals` gate → monthly). Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline against the **live** post-decay `popCap`; housing-overshoot (`population > popCap`, the unrest-snowball case) sheds the excess as unrest-weighted death (the conserved migration half rides the migration processor); rewrites `WorldMarket.demandRate` for each system's new population level |
+| Migration | Monthly pulse | Population | On the month boundary relocates population (conserved) over the whole intra-faction open-edge topology (`pulseShard`); population flows down-unrest / up-headroom (`popCap − population`), distance-attenuated, per-edge amount × `catchUpFactor`. Gateways throttle migration as they do goods. Produces boom/bust geography over time |
+| Directed Logistics | Monthly pulse | Economy | On the month boundary every faction redistributes surplus→deficit goods within its territory (`pulseShard`) — routes stock from surplus systems to deficit systems the passive trade flow can't reach. See [economy-autonomic-agency.md](../gameplay/economy-autonomic-agency.md) |
+| Directed Build | Monthly pulse | Directed Logistics | On the month boundary every faction plans construction (`pulseShard`): proactive housing where population wants to grow, labour-gated industry where staffing and input self-supply support it. See [economy-autonomic-agency.md](../gameplay/economy-autonomic-agency.md) |
 | Relations | Every 3 ticks | Events | Drifts every faction pair's relation score (border length, cross-faction trade, doctrine, common enemies). Spawns `border_conflict`/`pact_under_negotiation`/`alliance_dissolved` events on threshold crossings, then resolves relations-owned event windows (forms/dissolves alliances, expires events). See [faction-system.md](../gameplay/faction-system.md) |
 
 ### Execution Model
@@ -66,28 +66,25 @@ After a successful tick, the `TickLoop` broadcasts a `TickBroadcast` frame (`{ c
 
 ---
 
-## Shard schedule
+## Cadence: daily heartbeat + monthly resolution pulse
 
-The economy, trade-flow, and migration processors all run every tick but each only process a *slice* of their data — a fixed-interval shard that spreads work evenly across `ECONOMY_UPDATE_INTERVAL` (24) ticks.
+Two clocks interleave inside the single tick loop.
 
-**Scale-invariant by design.** The shard is decoupled from the region/territory concept — regions are *only* territory now (faction borders, names, gateway rendering). Under the old region round-robin, economy advanced once every `regionCount` ticks, so a 10k universe (60 regions) ran 2.5× slower per system than the 600-system default (24 regions). The fixed-interval shard pins every system to refresh every `ECONOMY_UPDATE_INTERVAL` ticks regardless of universe size.
+**Daily heartbeat — every tick.** Ship arrivals, event progression, and trade-flow diffusion advance on every tick. Trade-flow processes a *rolling* edge shard — `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` over the stable edge order — so goods diffuse a little every tick and a full sweep of the graph completes every `ECONOMY_UPDATE_INTERVAL` (24) ticks at any universe scale. Its per-edge amount is scaled by `catchUpFactor(interval)` so the daily diffusion *rate* is constant regardless of the shard size.
 
-**`catchUpFactor` normalization.** Each sharded processor multiplies its applied amounts by `catchUpFactor(interval) = interval / REFERENCE_INTERVAL`. At the reference interval (24), the factor is 1 — the default scale is behavior-identical to before. At any other interval the economic *rate* (applied amount per tick) stays constant: `rate = factor × calibrated_amount / interval = calibrated_amount / REFERENCE_INTERVAL`. This makes the interval a pure **granularity/perf knob** — changing it speeds or slows per-tick work without touching gameplay rates.
+**Monthly resolution pulse — one tick a month.** On the month boundary (`tick % MONTH_LENGTH === 0`, `MONTH_LENGTH` = 24) the whole galaxy's faction-scale accounting resolves together, in dependency order: **economy → infrastructure decay → population → migration → directed logistics → directed build**. This is synchronized, not round-robin — every system's economy and every faction's logistics/build fire on the *same* tick, so a Paradox-style monthly settle replaces the old per-item rolling shard. Economy, migration, directed-logistics and directed-build gate on `pulseShard` (whole list on the boundary, empty otherwise); infrastructure-decay and population run only when the economy produced `economySignals` this tick, so they inherit the same monthly cadence automatically.
 
-**Three independent knobs:**
+**`catchUpFactor` normalization.** The rate-based resolvers (economy, migration) multiply their applied amounts by `catchUpFactor(interval) = interval / REFERENCE_INTERVAL`. At the pulse period (24 = the reference interval) the factor is 1, so one monthly resolution applies exactly one calibrated month's worth of production/consumption/migration — the per-system magnitude is unchanged from a rolling shard that touched each system once per `ECONOMY_UPDATE_INTERVAL`. Directed logistics (a level-fill toward the days-of-supply anchor) and directed build (capacity-bounded per-cycle budget) take **no** catch-up scaling — scaling an absolute fill by the interval would overshoot the target.
+
+**Scale-invariance.** The pulse resolves the whole galaxy in one pass regardless of universe size, and the trade-flow rolling shard pins per-system diffusion cadence independent of scale. Sharding is a pure performance/topology concern — decoupled from the region/territory concept (regions are *only* territory: faction borders, names, gateway rendering).
+
+**Knobs:**
 
 | Knob | Meaning | Default |
 |---|---|---|
 | **Tick rate** | wall-clock pacing per tick | player speed dial (`paused` / `1`/s / `5`/s / `max`) |
-| **Update interval** | game-ticks between refreshes per item | `ECONOMY_UPDATE_INTERVAL` = 24 (economy/flow/migration) |
-| **Throughput / shard size** | items processed per tick | *derived* (`total / interval`); ceiling is the perf limit |
-
-**Cross-cadence coherence.** Trade-flow and migration share the same `ECONOMY_UPDATE_INTERVAL` as economy, so production and flow advance on one unified clock at every scale.
-
-**Resolved design questions:**
-- *Bursty vs catch-up* — fixed interval + `catchUpFactor`; processing-everything-per-tick was ~16s/tick at 10k (3× over budget, measured).
-- *Cross-cadence coherence* — flow/migration on the same clock as economy; one unified economy clock at all scales.
-- *Population-signal cadence* — population already follows the economy's processed set (reads `ctx.results`); it follows the new shard unchanged.
+| **Month length** | ticks between whole-galaxy resolution pulses | `MONTH_LENGTH` = 24 |
+| **Trade-flow shard interval** | ticks for daily diffusion to sweep every edge once | `ECONOMY_UPDATE_INTERVAL` = 24 |
 
 ---
 
