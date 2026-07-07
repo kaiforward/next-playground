@@ -13,7 +13,7 @@ Parse the user's command for these flags:
 
 - Positional `<PR#>` (optional integer) — if present, **PR mode**; otherwise **local mode** (current branch vs `main`).
 - `--effort=quick|standard|deep` — default `standard`.
-- `--only=<comma-separated>` — restrict to listed reviewers. Names: `architect`, `conventions`, `db-integrity`, `data-contract`, `security`, `silent-failures`, `user-journey`, `tests`, `performance`.
+- `--only=<comma-separated>` — restrict to listed reviewers. Names: `architect`, `conventions`, `world-integrity`, `data-contract`, `boundary-safety`, `silent-failures`, `user-journey`, `tests`, `performance`.
 - `--skip-architect` — skip the gating pass.
 - `--threshold=<N>` — confidence floor for inclusion (default 70).
 - `--chunk-size=<N>` — target chunk size (default 20).
@@ -24,9 +24,9 @@ Parse the user's command for these flags:
 |--------|-----------|---------------------|----------------------|
 | `quick` | sonnet | haiku | haiku |
 | `standard` (default) | opus | sonnet | haiku |
-| `deep` | opus | sonnet (+ opus for data-contract & security) | haiku |
+| `deep` | opus | sonnet (+ opus for data-contract & boundary-safety) | haiku |
 
-Reasoning reviewers: db-integrity, data-contract, security, user-journey, tests, performance.
+Reasoning reviewers: world-integrity, data-contract, boundary-safety, user-journey, tests, performance.
 Mechanical reviewers: conventions, silent-failures.
 
 ## Pipeline
@@ -49,7 +49,7 @@ Mechanical reviewers: conventions, silent-failures.
 
 #### 1.1. Check out the PR branch (PR mode only) — REQUIRED
 
-Reviewer and validator agents `Read` source files for context (db-integrity, security, and silent-failures need whole-file context to confirm transaction boundaries, auth gates, and call sites — the diff hunk alone is not enough). Those reads resolve against the **working tree**, which in PR mode usually sits on the PR's **base** branch. Without this step, agents review **pre-PR code** and emit false positives — most dangerously, spurious "won't compile" findings from cross-chunk renames they can't see, and a worthless "security clean" against the wrong code.
+Reviewer and validator agents `Read` source files for context (world-integrity, boundary-safety, and silent-failures need whole-file context to confirm whether a value reaches `World` state, whether input is validated before use, and call sites — the diff hunk alone is not enough). Those reads resolve against the **working tree**, which in PR mode usually sits on the PR's **base** branch. Without this step, agents review **pre-PR code** and emit false positives — most dangerously, spurious "won't compile" findings from cross-chunk renames they can't see, and a worthless "boundary-safety clean" against the wrong code.
 
 So before dispatching any agent, check out the PR head so the tree matches the diff:
 - Bash: `git fetch origin <headRefName>` then `git checkout <headRefName>`.
@@ -61,14 +61,13 @@ No need to restore the original branch afterward — fixes land on this branch a
 For each file in the diff, assign one classification:
 
 - **docs** — matches `*.md`, `LICENSE`, `*.txt`
-- **schema** — matches `prisma/schema.prisma` or `prisma/migrations/**`
 - **config** — matches `package.json`, `package-lock.json`, `tsconfig*.json`, `next.config.*`, `eslint.config.*`, `vitest.config.*`, `prettier.config.*`, `.env.*`, `*.config.{ts,js,mjs}`, `Dockerfile*`, `Makefile`, `*.{yaml,yml}`, `.github/**`, and the common dotfile configs: `.gitignore`, `.gitattributes`, `.dockerignore`, `.editorconfig`, `.npmrc`, `.nvmrc`, `.prettierrc*`, `.eslintrc*`
 - **asset** — images (`*.png`, `*.jpg`, `*.jpeg`, `*.gif`, `*.ico`, `*.svg`, `*.webp`, `*.avif`), fonts (`*.woff`, `*.woff2`, `*.ttf`, `*.otf`), files under `public/`
 - **source** — anything else (default catch-all)
 
 Hold the classification as a map `file → classification` for use by the skip-gate matrix.
 
-A chunk is **docs-only** if every file is `docs`; **schema-only** if every file is `schema` (or `schema` + `docs`); **config-only** if every file is `config` (or `config` + `docs`). The full PR (one chunk in PR 2) is classified accordingly.
+A chunk is **docs-only** if every file is `docs`; **config-only** if every file is `config` (or `config` + `docs`). The full PR is classified accordingly.
 
 ### 1.6. Chunk the diff (if large)
 
@@ -92,11 +91,9 @@ For each file, strip recognized layer prefixes to extract a feature stem:
 | `lib/engine/<feature>/...` | `<feature>` |
 | `lib/tick/processors/<feature>.ts` | `<feature>` |
 | `lib/tick/world/<feature>.ts` | `<feature>` |
-| `lib/tick/adapters/prisma/<feature>.ts` | `<feature>` |
 | `lib/tick/adapters/memory/<feature>.ts` | `<feature>` |
 | `app/api/game/<feature>/...` | `<feature>` |
 | `app/(game)/<feature>/...` | `<feature>` |
-| `app/(auth)/<feature>/...` | `<feature>` |
 | `components/<feature>/...` | `<feature>` |
 | anything else | `shared` |
 
@@ -189,16 +186,16 @@ Skip this section if:
 
 | Reviewer | Runs when chunk contains... |
 |----------|------------------------------|
-| Conventions | At least one `source` file (skips docs-only / schema-only / config-only) |
-| DB integrity | At least one file under `prisma/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/adapters/prisma/`, `lib/tick/world/` |
-| Data contract | Files spanning ≥2 layers from {prisma, lib/services, lib/tick, app/api, lib/hooks, components, app/(game), app/(auth)} |
-| Security | At least one file under `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, OR any `.ts`/`.tsx` file containing `requirePlayer`, `getServerSession`, or `session.` (grep the diff body, restricted to source files — never trigger on markdown/docs that merely *describe* these keywords) |
+| Conventions | At least one `source` file (skips docs-only / config-only) |
+| World integrity | At least one file under `lib/world/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/`, `lib/engine/`, or `lib/services/` |
+| Data contract | Files spanning ≥2 layers from {lib/world, lib/services, lib/tick, app/api, lib/hooks, components, app/(game)} |
+| Boundary safety | At least one file under `app/api/`, `lib/services/`, `lib/schemas/`, or `lib/world/` (save/load path), OR any `.ts`/`.tsx` source file that reads `process.env`, sets a `Cache-Control` header, or builds a save-file path (grep the diff body, restricted to source files — never trigger on markdown/docs that merely *describe* these) |
 | Silent failures | At least one `source` file |
-| User journey | At least one file under `app/(game)/`, `app/(auth)/`, `components/` |
+| User journey | At least one file under `app/(game)/`, `components/` |
 | Tests | **Any** of: (a) a source file under `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/`; **or** (b) a changed test file (path under `**/__tests__/**` or matching `*.test.{ts,tsx}`); **or** (c) a changed pure-logic `.ts` module (not `.tsx`) anywhere that has a co-located test — i.e. a `__tests__/` sibling dir or a `<name>.test.ts` next to it. Rationale: testable logic isn't confined to the `lib/` dirs (e.g. `components/map/pixi/lod.ts` is pure LOD math with `__tests__/lod.test.ts`), and a changed test file should always be reviewed for meaningfulness even when its source sits outside `lib/`. |
 | Performance | At least one `source` file |
 
-Apply `--only` filter on top of the matrix (if `--only=security,db-integrity`, only those two run).
+Apply `--only` filter on top of the matrix (if `--only=boundary-safety,world-integrity`, only those two run).
 
 Apply effort dial for model selection per reviewer (see "Effort dial" section above).
 
@@ -225,7 +222,7 @@ For each group with >1 finding:
 - Merge: pick the **highest** severity
 - Concatenate messages (joined by ` | `)
 - Concatenate evidence (joined by `\n\n`)
-- Record `agents` as the array of co-flaggers (e.g., `["security", "data-contract"]`)
+- Record `agents` as the array of co-flaggers (e.g., `["boundary-safety", "data-contract"]`)
 - Pick first `suggested_fix` that's non-empty
 
 **Pass 2 — semantic merge (Haiku, on-demand).**
@@ -370,16 +367,16 @@ Save to `.claude/reviews/<branch-or-PR>-<YYYY-MM-DD-HHmmss>.md`. (Create `.claud
 For the single chunk (full PR):
 
 - Files in chunk: <count>
-- Classification: <docs-only | schema-only | config-only | mixed (default)>
+- Classification: <docs-only | config-only | mixed (default)>
 
 Reviewer status:
 
 | Reviewer | Status | Reason |
 |----------|--------|--------|
 | Conventions | ran / skipped | <reason if skipped> |
-| DB integrity | ran / skipped | ... |
+| World integrity | ran / skipped | ... |
 | Data contract | ran / skipped | ... |
-| Security | ran / skipped | ... |
+| Boundary safety | ran / skipped | ... |
 | Silent failures | ran / skipped | ... |
 | User journey | ran / skipped | ... |
 | Tests | ran / skipped | ... |
@@ -454,7 +451,7 @@ Optional, human-gated, and **only** in PR mode. The review pipeline itself never
 
 1. **Apply the accepted fixes.** Edit the PR branch to address the findings the user wants fixed (skip the ones they wave off). Keep changes scoped to the review — don't fold in unrelated work.
 
-2. **Re-verify.** Run the project's checks and confirm they pass before claiming done: `tsc` clean and the relevant test suites green (`npx vitest run` for unit; add integration if the change touches the live DB path). Quote the actual output — never assert "tests pass" without running them.
+2. **Re-verify.** Run the project's checks and confirm they pass before claiming done: `tsc` clean, the relevant Vitest suites green (`npx vitest run`), and — for a change with a build surface — the webpack build gate (`npx next build --webpack`). Quote the actual output — never assert "tests pass" without running them.
 
 3. **Complete the feature's doc lifecycle on the branch** (when the PR ships a feature). Promote its spec `docs/planned/` → `docs/active/` with an as-built status header, tick the umbrella/roadmap doc, update `docs/SPEC.md`, and DELETE the `docs/build-plans/` entry — as commit(s) on this same branch, so one squash-merge lands code + docs atomically. Never leave the doc shuffle for a post-merge docs-only PR.
 

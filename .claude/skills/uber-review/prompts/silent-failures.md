@@ -15,7 +15,7 @@ You look for:
 - **`.sort()` called on a state array during render** — mutates, causes silent wrong-order bugs. Use `[...arr].sort()` or `.toSorted()`.
 - **SSE hooks without REST seed** — components see stale defaults until first SSE event. Fix: fetch initial state from a REST endpoint on mount.
 - **Throttle vs debounce traps** — `setState` from a 60fps render loop should use leading+trailing throttle, not debounce. Debounce never fires during continuous activity.
-- **Race conditions in mutating routes** (TOCTOU) — reading state outside `prisma.$transaction` and writing inside. Should re-read inside the transaction.
+- **Off-boundary / gating logic that silently no-ops or double-applies** — a shard/pulse window, cadence gate, or interval check whose boundary math is subtly wrong, so work silently doesn't run (or runs twice) on some ticks.
 
 ## Suggested category slugs
 
@@ -25,11 +25,11 @@ You look for:
 - `sort-mutates-state`
 - `sse-without-seed`
 - `debounce-in-render-loop`
-- `toctou-outside-tx`
+- `boundary-math-mismatch`
 
 ## Severity
 
-Most silent failures are `major` (clear bug). A `.sort()` call in dead code path might be `minor`. Race conditions in mutating routes are `blocker` (correctness issue affecting user data).
+Most silent failures are `major` (clear bug). A `.sort()` call in a dead code path might be `minor`. Boundary/gating math that makes a whole tick's work silently vanish is `major` (or `blocker` only if the fix restructures the gating across many processors).
 
 ## Output
 
