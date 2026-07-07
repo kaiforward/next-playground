@@ -116,17 +116,17 @@ export type SystemLogisticsData =
     }
   | { visibility: "unknown" };
 
-// ── System cadence (header "next update" countdowns) ─────────────────────────
+// ── System cadence (header "next update" countdown) ──────────────────────────
 /**
- * Static per-system shard groups for the header cadence countdowns. Both never
- * change for a given universe (id-rank / faction-rank are fixed), so the client
- * fetches once (staleTime Infinity) and counts down off the live tick.
+ * The system's single "next update" cadence group for the header countdown.
+ * Under the monthly resolution pulse the whole galaxy resolves together on
+ * `tick % MONTH_LENGTH === 0`, so this is uniformly 0; the value never changes
+ * for a given universe, so the client fetches once (staleTime Infinity) and
+ * counts down off the live tick.
  */
 export interface SystemCadence {
-  /** Group in [0, ECONOMY_UPDATE_INTERVAL): when this system's economy shard runs. */
-  economyShardGroup: number;
-  /** Group in [0, DIRECTED_LOGISTICS.INTERVAL): when this faction's logistics/build shard runs. */
-  logisticsShardGroup: number;
+  /** Group in [0, MONTH_LENGTH): when the whole galaxy resolves. Always 0 under the monthly pulse; kept so the client counts down with ticksUntilShard(pulseGroup, tick, MONTH_LENGTH). */
+  pulseGroup: number;
 }
 export type SystemCadenceResponse = ApiResponse<SystemCadence>;
 export type SystemLogisticsResponse = ApiResponse<SystemLogisticsData>;
@@ -218,8 +218,9 @@ export type { SystemIndustryReadout, SubstrateSpace, SystemDepositSummary, Subst
 export type SystemIndustryData =
   | ({
       visibility: "visible";
-      /** Economy shard this system lands in (0…ECONOMY_UPDATE_INTERVAL−1) — static.
-       *  Paired with the live tick to count down to the next economy update. */
+      /** Monthly-pulse group — always 0 under the synchronized pulse (the whole
+       *  galaxy resolves on `tick % MONTH_LENGTH === 0`). Paired with the live
+       *  tick to count down to the next update. */
       economyShardGroup: number;
       /** Stored unrest integral 0…1. Drives the decay-loop and the coarse health read. */
       unrest: number;
