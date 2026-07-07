@@ -25,7 +25,6 @@ export class TerritoryLayer {
   private territoryGraphics = new Graphics();
   private labelContainer = new Container();
   private regionLabels = new Map<string, Text>();
-  private playerRegionIds = new Set<string>();
 
   // Cached Voronoi results for lightweight fill-only redraws
   private cachedTerritories: Map<string, [number, number][][][]> | null = null;
@@ -102,7 +101,7 @@ export class TerritoryLayer {
     }
   }
 
-  /** Redraw only polygon fills (no Voronoi recompute). Used by setPlayerPresence. */
+  /** Redraw only polygon fills (no Voronoi recompute). */
   private drawFills() {
     if (!this.cachedTerritories || !this.cachedRegionEconomy) return;
 
@@ -111,8 +110,7 @@ export class TerritoryLayer {
     for (const [regionId, multiPoly] of this.cachedTerritories) {
       const economy = this.cachedRegionEconomy.get(regionId) ?? "industrial";
       const color = ECONOMY_COLORS[economy].core;
-      const isPlayer = this.playerRegionIds.has(regionId);
-      const fillAlpha = isPlayer ? TERRITORY.playerFillAlpha : TERRITORY.fillAlpha;
+      const fillAlpha = TERRITORY.fillAlpha;
 
       for (const poly of multiPoly) {
         // Exterior ring (first ring)
@@ -176,14 +174,6 @@ export class TerritoryLayer {
     }
   }
 
-  /** Update which regions have player presence (brighter fill) */
-  setPlayerPresence(regionIds: Set<string>) {
-    if (setsEqual(this.playerRegionIds, regionIds)) return;
-    this.playerRegionIds = regionIds;
-    // Lightweight redraw — only redraws polygon fills, no Voronoi recompute
-    this.drawFills();
-  }
-
   /** Per-frame LOD update */
   updateVisibility(lod: LODState) {
     this.territoryGraphics.visible = lod.showTerritories;
@@ -211,12 +201,4 @@ export class TerritoryLayer {
     this.labelContainer.destroy({ children: true });
     this.container.destroy({ children: true });
   }
-}
-
-function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
-  if (a.size !== b.size) return false;
-  for (const item of a) {
-    if (!b.has(item)) return false;
-  }
-  return true;
 }

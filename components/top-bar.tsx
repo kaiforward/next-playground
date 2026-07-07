@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useUniverse } from "@/lib/hooks/use-universe";
-import { useFleet } from "@/lib/hooks/use-fleet";
 
 /* ------------------------------------------------------------------ */
 /*  Breadcrumb data resolution                                        */
@@ -13,7 +12,6 @@ import { useFleet } from "@/lib/hooks/use-fleet";
 
 /** Maps static route segments to display labels. */
 const SEGMENT_LABELS: Record<string, string> = {
-  fleet: "Fleet",
   events: "Events",
   factions: "Factions",
   diplomacy: "Diplomacy",
@@ -22,7 +20,6 @@ const SEGMENT_LABELS: Record<string, string> = {
   industry: "Industry",
   logistics: "Logistics",
   market: "Market",
-  ships: "Ships",
 };
 
 interface Crumb {
@@ -30,20 +27,17 @@ interface Crumb {
   href?: string;
 }
 
-/** Resolve system/ship names from hooks. */
+/** Resolve system names from the universe query. */
 function useBreadcrumbNames() {
   const { data: universe } = useUniverse();
   const systemMap = useMemo(() => new Map(universe.systems.map((s) => [s.id, s.name])), [universe.systems]);
 
-  const { fleet } = useFleet();
-  const shipMap = useMemo(() => new Map(fleet.ships.map((s) => [s.id, s.name])), [fleet.ships]);
-
-  return { systemMap, shipMap };
+  return { systemMap };
 }
 
 function BreadcrumbsInner() {
   const pathname = usePathname();
-  const { systemMap, shipMap } = useBreadcrumbNames();
+  const { systemMap } = useBreadcrumbNames();
 
   const segments = pathname.split("/").filter(Boolean);
   const crumbs: Crumb[] = [];
@@ -56,13 +50,11 @@ function BreadcrumbsInner() {
     // Dynamic segment resolution
     if (prev === "system") {
       crumbs.push({ label: systemMap.get(seg) ?? seg, href });
-    } else if (prev === "ship") {
-      crumbs.push({ label: shipMap.get(seg) ?? seg, href });
     } else if (SEGMENT_LABELS[seg]) {
       crumbs.push({ label: SEGMENT_LABELS[seg], href });
     } else {
       // Skip pure ID segments that were already handled
-      if (["system", "ship"].includes(seg)) continue;
+      if (seg === "system") continue;
       crumbs.push({ label: seg, href });
     }
   }

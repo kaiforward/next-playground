@@ -5,12 +5,10 @@ import { isMapMode, type MapMode } from "@/lib/types/map";
 const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapOverlaysState {
-  fleet?: boolean;
   events?: boolean;
   tradeFlow?: boolean;
   logistics?: boolean;
   priceHeatmap?: boolean;
-  shipRoutes?: boolean;
 }
 
 export interface MapSessionState {
@@ -22,9 +20,6 @@ export interface MapSessionState {
 function parseOverlays(value: unknown): MapOverlaysState | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const out: MapOverlaysState = {};
-  if ("fleet" in value && typeof value.fleet === "boolean") {
-    out.fleet = value.fleet;
-  }
   if ("events" in value && typeof value.events === "boolean") {
     out.events = value.events;
   }
@@ -37,11 +32,9 @@ function parseOverlays(value: unknown): MapOverlaysState | undefined {
   if ("priceHeatmap" in value && typeof value.priceHeatmap === "boolean") {
     out.priceHeatmap = value.priceHeatmap;
   }
-  if ("shipRoutes" in value && typeof value.shipRoutes === "boolean") {
-    out.shipRoutes = value.shipRoutes;
-  }
-  // Legacy `politicalTerritory` is silently dropped — it migrated to the
-  // single-select `mode` axis. Users land on the default mode.
+  // Legacy keys (`politicalTerritory`, `fleet`, `shipRoutes`) are silently
+  // dropped — mode migrated to its own axis; fleet overlays died with the
+  // single-player pivot.
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

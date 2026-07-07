@@ -6,10 +6,9 @@ import { TabList, Tab } from "@/components/ui/tabs";
 import { AdvanceTicksSection } from "./advance-ticks-section";
 import { EventSpawnerSection } from "./event-spawner-section";
 import { EconomyOverviewSection } from "./economy-overview-section";
-import { CheatsSection } from "./cheats-section";
 import { MapDebugSection } from "./map-debug-section";
 
-const TABS = ["Tick", "Events", "Economy", "Cheats", "Map"] as const;
+const TABS = ["Tick", "Events", "Economy", "Map"] as const;
 type Tab = (typeof TABS)[number];
 
 export function DevToolsPanel() {
@@ -58,7 +57,6 @@ export function DevToolsPanel() {
             {tab === "Tick" && <AdvanceTicksSection />}
             {tab === "Events" && <EventSpawnerSection />}
             {tab === "Economy" && <EconomyOverviewSection />}
-            {tab === "Cheats" && <CheatsSection />}
             {tab === "Map" && <MapDebugSection />}
           </div>
         </div>

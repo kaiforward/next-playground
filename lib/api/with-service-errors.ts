@@ -8,9 +8,9 @@ import type { ApiResponse } from "@/lib/types/api";
  *
  * Usage in a route handler:
  *   export function GET() {
- *     return withServiceErrors("GET /api/game/fleet", async () => {
- *       const data = await getFleet(playerId);
- *       return NextResponse.json<FleetResponse>({ data });
+ *     return withServiceErrors("GET /api/game/world", async () => {
+ *       const data = getGameWorld();
+ *       return NextResponse.json<GameWorldResponse>({ data });
  *     });
  *   }
  */

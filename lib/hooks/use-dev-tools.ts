@@ -24,7 +24,6 @@ export function useAdvanceTicksMutation() {
     mutationFn: (count: number) =>
       apiMutate<{ newTick: number; elapsed: number }>("/api/dev/advance-ticks", { count }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.fleet });
       qc.invalidateQueries({ queryKey: queryKeys.marketAll });
       qc.invalidateQueries({ queryKey: queryKeys.events });
       qc.invalidateQueries({ queryKey: queryKeys.devEconomy });
@@ -39,28 +38,6 @@ export function useSpawnEventMutation() {
       apiMutate<{ eventId: string; type: string; phase: string }>("/api/dev/spawn-event", params),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.events });
-    },
-  });
-}
-
-export function useGiveCreditsMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (params: { playerId: string; amount: number }) =>
-      apiMutate<{ credits: number }>("/api/dev/give-credits", params),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.fleet });
-    },
-  });
-}
-
-export function useTeleportShipMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (params: { shipId: string; systemId: string }) =>
-      apiMutate<{ shipId: string; systemId: string }>("/api/dev/teleport-ship", params),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.fleet });
     },
   });
 }

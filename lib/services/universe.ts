@@ -16,7 +16,6 @@ import { shardGroupForIndex } from "@/lib/tick/shard";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { GOODS } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { TRAITS } from "@/lib/constants/traits";
 import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
 /**
@@ -122,18 +121,11 @@ export function getSystemDetail(systemId: string): SystemDetailData {
     visibility: "visible",
     // Stations are gone from the world model — markets are per-system.
     station: null,
+    // Display data (name/category/description) is enriched client-side from
+    // the TRAITS catalog (`enrichTraits`) — the API carries only the facts.
     traits: world.traits
       .filter((t) => t.systemId === systemId)
-      .map((t) => {
-        const def = TRAITS[t.traitId];
-        return {
-          traitId: t.traitId,
-          quality: t.quality,
-          name: def.name,
-          category: def.category,
-          description: def.descriptions[t.quality],
-        };
-      }),
+      .map((t) => ({ traitId: t.traitId, quality: t.quality })),
   };
 }
 

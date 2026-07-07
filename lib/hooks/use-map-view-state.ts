@@ -30,7 +30,7 @@ export function useMapViewState({
   universe,
   initialSelectedSystemId,
 }: UseMapViewStateOptions): MapViewState {
-  // Mount priority chain: query param → session storage → ship fallback
+  // Mount priority chain: query param → session storage → none
   const initialState = useMemo((): {
     selectedSystem: StarSystemInfo | null;
   } => {

@@ -3,22 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
-import type { AtlasData, UniverseData, StarSystemInfo, ShipState, ActiveEvent } from "@/lib/types/game";
+import type { AtlasData, UniverseData, StarSystemInfo, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { SystemDetailPanel } from "@/components/map/system-detail-panel";
-import { CompactTransitCard } from "@/components/map/compact-transit-card";
-import { Button } from "@/components/ui/button";
-import { RoutePreviewPanel } from "@/components/map/route-preview-panel";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
-import { useNavigationState } from "@/lib/hooks/use-navigation-state";
 import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useMapMode } from "@/lib/hooks/use-map-mode";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
-import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
@@ -33,18 +28,12 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 
 interface StarMapProps {
   atlas: AtlasData;
-  ships: ShipState[];
-  onNavigateShip: (shipId: string, route: string[]) => Promise<void>;
-  initialSelectedShipId?: string;
   initialSelectedSystemId?: string;
   events?: ActiveEvent[];
 }
 
 export function StarMap({
   atlas,
-  ships,
-  onNavigateShip,
-  initialSelectedShipId,
   initialSelectedSystemId,
   events = [],
 }: StarMapProps) {
@@ -84,10 +73,6 @@ export function StarMap({
     }
     return gated;
   }, [populationBySystem, visibleSystemIds]);
-
-  // ── Live tick + in-transit marker selection ───────────────────
-  const { currentTick } = useTickContext();
-  const [selectedTransitId, setSelectedTransitId] = useState<string | null>(null);
 
   // ── Price overlay control state (good picker + comparison panel) ──
   const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
@@ -192,16 +177,6 @@ export function StarMap({
     initialSelectedSystemId,
   });
 
-  // ── Navigation state ──────────────────────────────────────────
-  const navigation = useNavigationState({
-    connections: allConnections,
-    systems: universe.systems,
-    onNavigateShip,
-  });
-
-  const { mode } = navigation;
-  const isNavigationActive = mode.phase !== "default";
-
   // Hide tier-1 quick-preview when a tier-2 panel route is active
   const pathname = usePathname();
   const isPanelOpen = pathname !== "/";
@@ -209,41 +184,17 @@ export function StarMap({
   // ── Derived map data ────────────────────────────────────────────
   const mapData = useMapData({
     universe,
-    ships,
     events,
     visibleSystemIds,
     dynamicSystems,
     tradeFlowEdges: marketEdges,
     logisticsEdges,
     selectedSystem: view.selectedSystem,
-    navigationMode: mode,
-    isNavigationActive,
     systemRegionMap,
     regionMap,
     priceHeatmap: heatmapData,
     priceMode,
   });
-
-  // ── Selected in-transit unit + ETA (drives the compact card) ──
-  const selectedTransit = useMemo(
-    () => mapData.transitUnits.find((u) => u.id === selectedTransitId) ?? null,
-    [mapData.transitUnits, selectedTransitId],
-  );
-  const selectedTransitEta = selectedTransit
-    ? Math.max(0, selectedTransit.arrivalTick - currentTick)
-    : 0;
-
-  // ── Auto-select ship from URL query param on mount ───────────────
-  useEffect(() => {
-    if (!initialSelectedShipId) return;
-    const ship = ships.find(
-      (s) => s.id === initialSelectedShipId && s.status === "docked",
-    );
-    if (ship) {
-      navigation.selectShip(ship);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSelectedShipId]);
 
   // ── Destructure stable references for callback deps ──────────
   const {
@@ -257,38 +208,14 @@ export function StarMap({
       const fullSystem = universe.systems.find((s) => s.id === system.id);
       // Guard: viewport detail hasn't loaded yet — name is empty placeholder
       if (!fullSystem || fullSystem.name === "") return;
-
-      // Navigation logic — destination selection stays live in both
-      // unit_selected and route_preview so the player can freely re-pick a
-      // destination (re-previewing the route) until they confirm.
-      if (mode.phase === "unit_selected" || mode.phase === "route_preview") {
-        if (!mode.reachable.has(system.id) && system.id !== mode.ship.systemId) {
-          return;
-        }
-        if (system.id === mode.ship.systemId) {
-          navigation.cancel();
-          return;
-        }
-        navigation.selectDestination(fullSystem);
-        return;
-      }
-
-      // Default mode — open system detail panel
       selectSystem(fullSystem);
     },
-    [mode, navigation, universe.systems, selectSystem],
+    [universe.systems, selectSystem],
   );
 
   const onEmptyClick = useCallback(() => {
-    setSelectedTransitId(null);
-    if (mode.phase === "default") {
-      closeSystem();
-    }
-  }, [mode.phase, closeSystem]);
-
-  const onTransitClick = useCallback((id: string | null) => {
-    setSelectedTransitId((prev) => (prev === id ? null : id));
-  }, []);
+    closeSystem();
+  }, [closeSystem]);
 
   // ── Center target (reactive — responds to systemId URL changes) ──
   type CenterTarget = { x: number; y: number; zoom: number };
@@ -319,7 +246,6 @@ export function StarMap({
         atlasData={atlas}
         mapData={mapData}
         selectedSystem={selectedSystem}
-        navigationMode={mode}
         onSystemClick={onSystemClick}
         onEmptyClick={onEmptyClick}
         centerTarget={centerTarget}
@@ -327,13 +253,7 @@ export function StarMap({
         regionInfos={regionInfos}
         mapMode={mapMode}
         onViewportChange={onViewportChange}
-        connections={allConnections}
-        currentTick={currentTick}
-        showShipRoutes={overlays.shipRoutes}
-        showFleet={overlays.fleet}
         showEvents={overlays.events}
-        selectedTransitId={selectedTransitId}
-        onTransitClick={onTransitClick}
         stabilityBySystem={visibleStability}
         populationBySystem={visiblePopulation}
       />
@@ -362,61 +282,16 @@ export function StarMap({
         setPriceMode={setPriceMode}
       />
 
-      {/* Navigation mode banner */}
-      {mode.phase === "unit_selected" && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-3 rounded-lg border border-cyan-500/30 bg-gray-900/90 backdrop-blur px-4 py-2 shadow-lg">
-            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-sm text-text-primary">
-              Select a destination for <span className="font-semibold text-cyan-300">{mode.ship.name}</span>
-            </span>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={navigation.cancel}
-              className="ml-2"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Route preview panel */}
-      {mode.phase === "route_preview" && (
-        <RoutePreviewPanel
-          ship={mode.ship}
-          destination={mode.destination}
-          route={mode.route}
-          connections={allConnections}
-          systems={universe.systems}
-          isNavigating={navigation.isNavigating}
-          onConfirm={navigation.confirmNavigation}
-          onCancel={navigation.cancel}
-        />
-      )}
-
-      {/* Compact in-transit ship card (shown when a marker is selected) */}
-      {selectedTransit && (
-        <CompactTransitCard
-          unit={selectedTransit}
-          etaTicks={selectedTransitEta}
-          onClose={() => setSelectedTransitId(null)}
-        />
-      )}
-
-      {/* Detail panel overlay (hidden during navigation mode or when a panel route is open) */}
-      {!isNavigationActive && !isPanelOpen && (
+      {/* Detail panel overlay (hidden when a panel route is open) */}
+      {!isPanelOpen && (
         <SystemDetailPanel
           system={selectedSystem}
-          shipsHere={mapData.shipsAtSelected}
           regionName={mapData.selectedRegionName}
           factionName={mapData.selectedFactionName}
           gatewayTargetRegions={mapData.selectedGatewayTargets}
           activeEvents={mapData.eventsAtSelected}
           visibility={mapData.selectedVisibility}
           onClose={closeSystem}
-          onNavigateShip={navigation.selectShip}
         />
       )}
 

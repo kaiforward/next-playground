@@ -24,7 +24,7 @@ export class ConnectionObject extends Container {
   ) {
     // Style fingerprint: skip redraw when only style-relevant flags are unchanged
     // Positions are immutable (static tile data), so only style flags matter
-    const fingerprint = `${data.isGateway}|${data.isRoute}|${data.isDimmed}`;
+    const fingerprint = `${data.isGateway}`;
     if (this.connectionId === data.id && fingerprint === this.styleFingerprint) return;
     this.connectionId = data.id;
     this.styleFingerprint = fingerprint;
@@ -39,14 +39,9 @@ export class ConnectionObject extends Container {
         this.line.lineTo(toX, toY);
         this.line.stroke({ color: s.color, width: s.width, alpha: s.alpha });
       }
-    } else if (data.isRoute) {
-      // Solid line for the active route
-      this.line.moveTo(fromX, fromY);
-      this.line.lineTo(toX, toY);
-      this.line.stroke({ color: EDGE.route.color, width: EDGE.route.width, alpha: EDGE.route.alpha });
     } else {
       // Dashed line for ordinary connections
-      const style = data.isDimmed ? EDGE.dimmed : EDGE.default;
+      const style = EDGE.default;
       drawDashedLine(this.line, fromX, fromY, toX, toY, style.color, style.alpha, style.width);
     }
   }

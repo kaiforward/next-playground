@@ -1,6 +1,4 @@
 import type {
-  FleetState,
-  ShipState,
   GameWorldState,
   UniverseData,
   AtlasData,
@@ -11,9 +9,6 @@ import type {
   MarketComparisonEntry,
   GoodInfo,
   ActiveEvent,
-  TraitId,
-  TraitCategory,
-  QualityTier,
   SunClass,
   GoodTier,
   BodyArchetypeId,
@@ -32,7 +27,6 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
-export type FleetResponse = ApiResponse<FleetState>;
 export type GameWorldResponse = ApiResponse<GameWorldState>;
 export type SavesResponse = ApiResponse<SaveInfo[]>;
 export type SaveGameResponse = ApiResponse<{ name: string; tick: number }>;
@@ -136,21 +130,12 @@ export interface SystemCadence {
 }
 export type SystemCadenceResponse = ApiResponse<SystemCadence>;
 export type SystemLogisticsResponse = ApiResponse<SystemLogisticsData>;
-/** Enriched trait data returned from system detail API. */
-export interface SystemTraitResponse {
-  traitId: TraitId;
-  quality: QualityTier;
-  name: string;
-  category: TraitCategory;
-  description: string;
-}
 
 /** Full system detail — discriminated union on visibility. */
 export type SystemDetailData =
   | (StarSystemInfo & {
       visibility: "visible";
       station: { id: string; name: string } | null;
-      traits: SystemTraitResponse[];
     })
   | {
       id: string;
@@ -262,38 +247,3 @@ export type FactionListResponse = ApiResponse<FactionSummary[]>;
 export type FactionDetailResponse = ApiResponse<FactionDetail>;
 export type RelationsMatrixResponse = ApiResponse<RelationsMatrixData>;
 
-export interface ShipNavigateResult {
-  ship: ShipState;
-  fuelUsed: number;
-  travelDuration: number;
-}
-export type ShipNavigateResponse = ApiResponse<ShipNavigateResult>;
-
-// ── Requests ─────────────────────────────────────────────────────
-
-export interface ShipNavigateRequest {
-  route: string[]; // ordered [origin, ...hops, destination]
-}
-
-export interface ShipRefuelRequest {
-  amount: number;
-}
-
-export interface ShipRefuelResult {
-  ship: ShipState;
-  creditSpent: number;
-}
-export type ShipRefuelResponse = ApiResponse<ShipRefuelResult>;
-
-// ── Auth types ──────────────────────────────────────────────────
-
-export interface RegisterRequest {
-  name: string;
-  email: string;
-  password: string;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}

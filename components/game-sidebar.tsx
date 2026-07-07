@@ -7,7 +7,6 @@ import { useDialog } from "@/components/ui/dialog";
 import { SaveGameDialog } from "@/components/save-game-dialog";
 import { SpeedControls } from "@/components/speed-controls";
 import {
-  Ship,
   Radio,
   ChevronLeft,
   ChevronRight,
@@ -27,10 +26,6 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
 }
-
-const FLEET_NAV: NavItem[] = [
-  { href: "/fleet", label: "Fleet", icon: Ship },
-];
 
 const ACTIVITY_NAV: NavItem[] = [
   { href: "/events", label: "Events", icon: Radio },
@@ -101,7 +96,7 @@ export function GameSidebar({
 
   // Longest-prefix match across all nav hrefs so nested entries
   // (e.g. /factions + /factions/[id]) don't both highlight.
-  const allHrefs = [...FLEET_NAV, ...ACTIVITY_NAV, ...POLITICS_NAV].map((n) => n.href);
+  const allHrefs = [...ACTIVITY_NAV, ...POLITICS_NAV].map((n) => n.href);
   const activeHref = allHrefs
     .filter((h) => pathname === h || pathname.startsWith(h + "/"))
     .reduce((best, h) => (h.length > best.length ? h : best), "");
@@ -124,16 +119,6 @@ export function GameSidebar({
           )}
         </Link>
       </div>
-
-      {/* Fleet section */}
-      {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Fleet</SectionHeader>}
-      <nav aria-label="Fleet navigation" className="flex flex-col gap-0.5">
-        {FLEET_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
-        ))}
-      </nav>
-
-      <Divider />
 
       {/* Activity section */}
       {!collapsed && <SectionHeader className="px-3 pt-3 pb-1 text-[10px]">Activity</SectionHeader>}

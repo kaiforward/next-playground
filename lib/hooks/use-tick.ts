@@ -28,7 +28,6 @@ interface UseTickResult {
   achievedTps: number;
   isConnected: boolean;
   subscribeToEvent: (eventName: string, cb: EventCallback) => () => void;
-  subscribeToArrivals: (cb: (shipIds: string[]) => void) => () => void;
 }
 
 /**
@@ -105,19 +104,5 @@ export function useTick(): UseTickResult {
     [],
   );
 
-  // Backward compat wrapper — subscribes to "shipArrived" events
-  const subscribeToArrivals = useCallback(
-    (cb: (shipIds: string[]) => void) => {
-      return subscribeToEvent("shipArrived", (events) => {
-        const shipIds = events
-          .filter((e): e is { shipId: string } =>
-            typeof e === "object" && e !== null && "shipId" in e && typeof e.shipId === "string")
-          .map((e) => e.shipId);
-        cb(shipIds);
-      });
-    },
-    [subscribeToEvent],
-  );
-
-  return { currentTick, speed, achievedTps, isConnected, subscribeToEvent, subscribeToArrivals };
+  return { currentTick, speed, achievedTps, isConnected, subscribeToEvent };
 }

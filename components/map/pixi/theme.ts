@@ -12,65 +12,18 @@ export const ECONOMY_COLORS: Record<EconomyType, { core: number; glow: number }>
   core:         { core: 0xd8b4fe, glow: 0xa855f7 },  // purple-300 / purple-500
 };
 
-// ── Navigation state colors ──────────────────────────────────────
-
-export const NAV_COLORS = {
-  origin:      0x22d3ee,  // cyan-400
-  reachable:   0xffffff,
-  unreachable: 0x94a3b8,  // slate-400 (grayed)
-  route_hop:   0x38bdf8,  // sky-400
-  destination: 0x34d399,  // emerald-400
-} as const;
-
 // ── Territory (universe view) ────────────────────────────────────
 
 export const TERRITORY = {
   fillAlpha: 0.08,
-  playerFillAlpha: 0.15,
   strokeAlpha: 0.3,
   strokeWidth: 2,
-} as const;
-
-// ── Fleet presence dots (zoomed-out ship positions) ─────────────
-
-export const FLEET_DOTS = {
-  color: 0x38bdf8,       // sky-400
-  fillAlpha: 0.7,
-  radius: 18,            // world-space radius
-  glowColor: 0x38bdf8,
-  glowAlpha: 0.15,
-  glowRadius: 50,
-} as const;
-
-// ── Fleet markers (docked pill + in-transit marker + routes) ─────
-// Colours/sizes are the binding values from the v2 mockup
-// (docs/design/planned/ship-map-ux/mockup.html).
-export const FLEET = {
-  pillFill: 0x38bdf8,     // sky-400 — ship pill body (docked + in-transit)
-  pillContent: 0x0a1018,  // near-black — ship glyph drawn on the pill
-  pillCorner: 2,          // matches the price-heatmap badge corner
-  markerHeight: 18,       // pill height (world units, before counter-scale)
-  markerMinWidth: 22,     // pill body width (excl. nose)
-  noseLength: 9,          // length of the connected direction nose
-  chevronSize: 8,         // inner ship glyph size
-  hitRadius: 16,          // marker pointer hit radius
-  badgeRadius: 7,         // cluster count badge radius
-  clusterBadge: 0xd06a42, // copper accent — cluster count badge
-  clusterThresholdPx: 26, // SCREEN-space merge distance (÷ zoom for world)
-  markerScreenScale: 1,   // markers held at constant screen size (÷ zoom)
-  // Route widths are the MIN screen px (when zoomed out); they grow with zoom so
-  // the line stays legible at close range — see strokePath in fleet-transit-layer.
-  routeHover:  { color: 0x38bdf8, alpha: 0.5, width: 3.5 },
-  routeActive: { color: 0x22d3ee, alpha: 0.9, width: 4 },
-  routeAll:    { color: 0x38bdf8, alpha: 0.3, width: 3 },
 } as const;
 
 // ── Edge colors ──────────────────────────────────────────────────
 
 export const EDGE = {
   default:  { color: 0x94a3b8, alpha: 0.4,  width: 1.5 },
-  dimmed:   { color: 0x94a3b8, alpha: 0.12, width: 1.0 },
-  route:    { color: 0x63b3ed, alpha: 0.9,  width: 2.5 },
   // Gateway trunk routes — amber "lit pathway": a wide soft glow under a crisp
   // core line. Amber matches TEXT_COLORS.gateway so gateway edges and labels
   // share one identity (replaces the old per-system fuchsia gateway ring).
@@ -121,7 +74,6 @@ export const SIZES = {
   systemHitRadius:    20,
   systemLabelSize:    14,
   systemEconLabelSize: 11,
-  systemShipLabelSize: 9,
   regionWidth:       180,
   regionHeight:      100,
   regionCornerRadius: 12,
@@ -129,14 +81,13 @@ export const SIZES = {
   regionSubLabelSize: 10,
   gatewayDotRadius:    5,
   eventDotRadius:      4,
-  fuelLabelSize:      10,
   dashLength:          6,
   dashGap:             4,
 } as const;
 
 // ── Glyph radial budget (world units, glyph-local) ───────────────
-// Each concentric element owns a fixed radius band so price, fleet, and
-// navigation indicators never collide. See docs map-layer-reconciliation §2.
+// Each concentric element owns a fixed radius band so the price halo and the
+// selection ring never collide.
 export const GLYPH = {
   coreRadius:        12,   // economy core (unchanged, matches SIZES.systemCoreRadius)
   haloRadius:        20,   // soft-body lens (was the 40px glow — pulled in)
@@ -145,11 +96,8 @@ export const GLYPH = {
   haloUndevelopedAlpha: 0.06, // dimmed glow for undeveloped systems (no live economy)
   undevelopedRingWidth: 2.5,  // hollow-core stroke for undeveloped systems
   undevelopedFillAlpha: 0.15, // faint core fill so the hollow marker doesn't read as a hole
-  fleetRingRadius:   28,   // sky-blue ring when the player has fleet docked here
-  fleetRingWidth:    3,
   navRingRadius:     34,   // outermost, dashed
-  navRingWidth:      3,
-  selectedRingWidth: 4,    // selection ring — brighter + thicker than nav rings
+  selectedRingWidth: 4,    // selection ring — bright white dashed focus ring
 } as const;
 
 // ── Unified corner-pill geometry (all four corners share this) ───
@@ -157,12 +105,11 @@ export const PILL = {
   height:    18,
   corner:    5,
   padX:      5,
-  gap:       3,   // vertical gap when stacking (ships+convoys)
+  gap:       3,   // gap between a pill's icon and its count text
   offset:    4,   // radial gap between pill edge and core
-  glyphSize: 9,   // inner ship chevron / icon box
 } as const;
 
-// ── Corner-pill anchors (top-left fleet, top-right price, bottom-right event) ─
+// ── Corner-pill anchors (top-right price, bottom-right event) ───
 // Each pill's inner corner (the one nearest the core) sits on the 45° diagonal,
 // just outside the halo — so pills read as orbiting the glyph rather than
 // crowding the core. The vertical anchor is the horizontal one plus half a pill
@@ -198,8 +145,6 @@ export const ANIM = {
   fitViewDuration:    400,   // ms
   setCenterDuration:  300,   // ms
   viewTransitionMs:   200,   // layer fade in/out
-  particleSpeed:     100,    // pixels per second
-  particlesPerEdge:    5,
   twinkleMinPeriod:  3000,   // ms
   twinkleMaxPeriod:  8000,
   hoverScale:         1.05,
@@ -298,6 +243,5 @@ export const TEXT_COLORS = {
   primary:   0xf1f5f9,  // slate-100
   secondary: 0x94a3b8,  // slate-400
   tertiary:  0x64748b,  // slate-500
-  ship:      0xfde047,  // yellow-300
   gateway:   0xf59e0b,  // amber-500
 } as const;

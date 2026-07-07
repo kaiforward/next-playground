@@ -67,11 +67,6 @@ describe("computeLOD — unchanged adjacent curves (regression guards)", () => {
     expect(computeLOD(0.3).tradeFlowAlpha).toBe(0);
     expect(computeLOD(0.7).tradeFlowAlpha).toBe(1);
   });
-
-  it("fleetDotAlpha still fades out across 0.3 → 0.5", () => {
-    expect(computeLOD(0.25).fleetDotAlpha).toBe(1);
-    expect(computeLOD(0.55).fleetDotAlpha).toBe(0);
-  });
 });
 
 describe("pill content staging", () => {
@@ -94,7 +89,6 @@ describe("system text shares one 0.8 → 0.9 fade band", () => {
     const lod = computeLOD(0.8);
     expect(lod.showSystemNames).toBe(false);
     expect(lod.showEconomyLabels).toBe(false);
-    expect(lod.showFuelLabels).toBe(false);
     expect(lod.showPillContent).toBe(false);
     expect(lod.systemNameAlpha).toBe(0);
     expect(lod.detailAlpha).toBe(0);

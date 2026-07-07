@@ -32,7 +32,6 @@ export function getDynamicData(): { systems: DynamicTileSystem[] } {
     return {
       id: s.id,
       eventTypeIds: typeArray,
-      hasPlayerShips: false,
       danger,
     };
   });

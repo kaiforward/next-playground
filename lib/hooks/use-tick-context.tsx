@@ -12,7 +12,6 @@ interface TickContextValue {
   achievedTps: number;
   isConnected: boolean;
   subscribeToEvent: (eventName: string, cb: EventCallback) => () => void;
-  subscribeToArrivals: (cb: (shipIds: string[]) => void) => () => void;
 }
 
 const TickContext = createContext<TickContextValue | null>(null);
