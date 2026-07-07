@@ -35,7 +35,7 @@ function buildRows(lod: LODState): DebugRow[] {
       active: lod.showSystemNames && lod.systemNameAlpha > VISIBLE,
     },
     {
-      label: "econ/fuel labels",
+      label: "econ labels",
       value: lod.showEconomyLabels ? a2(lod.detailAlpha) : "off",
       active: lod.showEconomyLabels && lod.detailAlpha > VISIBLE,
     },
@@ -46,14 +46,8 @@ function buildRows(lod: LODState): DebugRow[] {
       value: lod.showRegionLabels ? a2(lod.regionLabelAlpha) : "off",
       active: lod.showRegionLabels && lod.regionLabelAlpha > VISIBLE,
     },
-    {
-      label: "fleet dots",
-      value: lod.showFleetDots ? a2(lod.fleetDotAlpha) : "off",
-      active: lod.showFleetDots && lod.fleetDotAlpha > VISIBLE,
-    },
     { label: "trade flow", value: a2(lod.tradeFlowAlpha), active: lod.tradeFlowAlpha > VISIBLE },
     { label: "glow", value: lod.showGlow ? "ON" : "off", active: lod.showGlow },
-    { label: "effects", value: lod.showEffects ? "ON" : "off", active: lod.showEffects },
     {
       label: "pill content",
       value: lod.showPillContent ? a2(lod.pillContentAlpha) : "off",

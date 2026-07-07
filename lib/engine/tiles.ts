@@ -2,11 +2,10 @@
  * Pure tile grid math for the scalable map system.
  * No DB dependency — all functions are deterministic and unit-testable.
  *
- * The map (7000×7000 world units) is divided into a fixed grid of tiles.
- * Grid dimensions target ~40 systems per tile at 10K systems scale.
+ * The map (mapSize × mapSize world units, from the world's meta) is divided
+ * into a fixed 16×16 grid of tiles; tile size scales with the generated map.
  */
 
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import type { ViewportBounds } from "@/lib/types/game";
 
 // ── Constants ────────────────────────────────────────────────────
@@ -16,12 +15,6 @@ export const TILE_COLS = 16;
 
 /** Number of tile rows across the map. */
 export const TILE_ROWS = 16;
-
-/** Width of a single tile in world units. */
-export const TILE_WIDTH = UNIVERSE_GEN.MAP_SIZE / TILE_COLS;
-
-/** Height of a single tile in world units. */
-export const TILE_HEIGHT = UNIVERSE_GEN.MAP_SIZE / TILE_ROWS;
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -33,24 +26,29 @@ export interface TileCoord {
 // ── Functions ────────────────────────────────────────────────────
 
 /**
- * Which tile a system belongs to, given its world-space coordinates.
- * Clamps to valid grid range — coordinates outside the map snap to edge tiles.
+ * Which tile a system belongs to, given its world-space coordinates and the
+ * world's map size. Clamps to valid grid range — coordinates outside the map
+ * snap to edge tiles.
  */
-export function systemToTile(x: number, y: number): TileCoord {
-  const col = Math.min(Math.max(Math.floor(x / TILE_WIDTH), 0), TILE_COLS - 1);
-  const row = Math.min(Math.max(Math.floor(y / TILE_HEIGHT), 0), TILE_ROWS - 1);
+export function systemToTile(x: number, y: number, mapSize: number): TileCoord {
+  const tileWidth = mapSize / TILE_COLS;
+  const tileHeight = mapSize / TILE_ROWS;
+  const col = Math.min(Math.max(Math.floor(x / tileWidth), 0), TILE_COLS - 1);
+  const row = Math.min(Math.max(Math.floor(y / tileHeight), 0), TILE_ROWS - 1);
   return { col, row };
 }
 
 /**
  * World-space bounding box for a given tile.
  */
-export function tileBounds(col: number, row: number): ViewportBounds {
+export function tileBounds(col: number, row: number, mapSize: number): ViewportBounds {
+  const tileWidth = mapSize / TILE_COLS;
+  const tileHeight = mapSize / TILE_ROWS;
   return {
-    minX: col * TILE_WIDTH,
-    minY: row * TILE_HEIGHT,
-    maxX: (col + 1) * TILE_WIDTH,
-    maxY: (row + 1) * TILE_HEIGHT,
+    minX: col * tileWidth,
+    minY: row * tileHeight,
+    maxX: (col + 1) * tileWidth,
+    maxY: (row + 1) * tileHeight,
   };
 }
 
@@ -60,11 +58,13 @@ export function tileBounds(col: number, row: number): ViewportBounds {
  * Uses half-open [min, max) convention — a frustum edge exactly on a tile
  * boundary does not include the next tile (consistent with systemToTile).
  */
-export function frustumToTiles(bounds: ViewportBounds): TileCoord[] {
-  const minCol = Math.min(Math.max(Math.floor(bounds.minX / TILE_WIDTH), 0), TILE_COLS - 1);
-  const maxCol = Math.min(Math.max(Math.ceil(bounds.maxX / TILE_WIDTH) - 1, 0), TILE_COLS - 1);
-  const minRow = Math.min(Math.max(Math.floor(bounds.minY / TILE_HEIGHT), 0), TILE_ROWS - 1);
-  const maxRow = Math.min(Math.max(Math.ceil(bounds.maxY / TILE_HEIGHT) - 1, 0), TILE_ROWS - 1);
+export function frustumToTiles(bounds: ViewportBounds, mapSize: number): TileCoord[] {
+  const tileWidth = mapSize / TILE_COLS;
+  const tileHeight = mapSize / TILE_ROWS;
+  const minCol = Math.min(Math.max(Math.floor(bounds.minX / tileWidth), 0), TILE_COLS - 1);
+  const maxCol = Math.min(Math.max(Math.ceil(bounds.maxX / tileWidth) - 1, 0), TILE_COLS - 1);
+  const minRow = Math.min(Math.max(Math.floor(bounds.minY / tileHeight), 0), TILE_ROWS - 1);
+  const maxRow = Math.min(Math.max(Math.ceil(bounds.maxY / tileHeight) - 1, 0), TILE_ROWS - 1);
 
   const tiles: TileCoord[] = [];
   for (let row = minRow; row <= maxRow; row++) {

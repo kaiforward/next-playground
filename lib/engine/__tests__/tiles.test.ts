@@ -2,30 +2,23 @@ import { describe, it, expect } from "vitest";
 import {
   TILE_COLS,
   TILE_ROWS,
-  TILE_WIDTH,
-  TILE_HEIGHT,
   systemToTile,
   tileBounds,
   frustumToTiles,
 } from "../tiles";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+
+// All cases run against an explicit mapSize — tile geometry is a pure function
+// of the world's generated extent, not a build-time constant.
+const MAP_SIZE = 7000;
+const TILE_WIDTH = MAP_SIZE / TILE_COLS;
+const TILE_HEIGHT = MAP_SIZE / TILE_ROWS;
 
 // ── Constants ────────────────────────────────────────────────────
 
 describe("tile constants", () => {
-  it("grid covers the full map", () => {
-    expect(TILE_COLS * TILE_WIDTH).toBe(UNIVERSE_GEN.MAP_SIZE);
-    expect(TILE_ROWS * TILE_HEIGHT).toBe(UNIVERSE_GEN.MAP_SIZE);
-  });
-
   it("grid is 16×16", () => {
     expect(TILE_COLS).toBe(16);
     expect(TILE_ROWS).toBe(16);
-  });
-
-  it("each tile is 437.5 world units", () => {
-    expect(TILE_WIDTH).toBe(UNIVERSE_GEN.MAP_SIZE / 16);
-    expect(TILE_HEIGHT).toBe(UNIVERSE_GEN.MAP_SIZE / 16);
   });
 });
 
@@ -33,40 +26,46 @@ describe("tile constants", () => {
 
 describe("systemToTile", () => {
   it("maps origin to tile (0, 0)", () => {
-    expect(systemToTile(0, 0)).toEqual({ col: 0, row: 0 });
+    expect(systemToTile(0, 0, MAP_SIZE)).toEqual({ col: 0, row: 0 });
   });
 
   it("maps coordinates within the first tile", () => {
-    expect(systemToTile(100, 200)).toEqual({ col: 0, row: 0 });
+    expect(systemToTile(100, 200, MAP_SIZE)).toEqual({ col: 0, row: 0 });
   });
 
   it("maps coordinates to the correct interior tile", () => {
     // x=2000 / 437.5 = 4.57 → col 4
     // y=3500 / 437.5 = 8.0  → row 8 (exact boundary → belongs to tile 8)
-    expect(systemToTile(2000, 3500)).toEqual({ col: 4, row: 8 });
+    expect(systemToTile(2000, 3500, MAP_SIZE)).toEqual({ col: 4, row: 8 });
   });
 
   it("maps coordinates near max to the last tile", () => {
-    expect(systemToTile(6999, 6999)).toEqual({ col: 15, row: 15 });
+    expect(systemToTile(6999, 6999, MAP_SIZE)).toEqual({ col: 15, row: 15 });
   });
 
   it("clamps coordinates at exact map size to last tile", () => {
-    expect(systemToTile(UNIVERSE_GEN.MAP_SIZE, UNIVERSE_GEN.MAP_SIZE)).toEqual({
+    expect(systemToTile(MAP_SIZE, MAP_SIZE, MAP_SIZE)).toEqual({
       col: 15,
       row: 15,
     });
   });
 
   it("clamps negative coordinates to tile (0, 0)", () => {
-    expect(systemToTile(-100, -50)).toEqual({ col: 0, row: 0 });
+    expect(systemToTile(-100, -50, MAP_SIZE)).toEqual({ col: 0, row: 0 });
   });
 
   it("clamps coordinates beyond map to last tile", () => {
-    expect(systemToTile(10000, 8000)).toEqual({ col: 15, row: 15 });
+    expect(systemToTile(10000, 8000, MAP_SIZE)).toEqual({ col: 15, row: 15 });
   });
 
   it("handles exact tile boundary — belongs to next tile", () => {
-    expect(systemToTile(TILE_WIDTH, 0)).toEqual({ col: 1, row: 0 });
+    expect(systemToTile(TILE_WIDTH, 0, MAP_SIZE)).toEqual({ col: 1, row: 0 });
+  });
+
+  it("scales tile geometry with mapSize", () => {
+    // Same point lands in a different tile on a larger map.
+    expect(systemToTile(2000, 3500, MAP_SIZE)).toEqual({ col: 4, row: 8 });
+    expect(systemToTile(2000, 3500, 25_000)).toEqual({ col: 1, row: 2 });
   });
 });
 
@@ -74,7 +73,7 @@ describe("systemToTile", () => {
 
 describe("tileBounds", () => {
   it("returns origin bounds for tile (0, 0)", () => {
-    expect(tileBounds(0, 0)).toEqual({
+    expect(tileBounds(0, 0, MAP_SIZE)).toEqual({
       minX: 0,
       minY: 0,
       maxX: TILE_WIDTH,
@@ -83,7 +82,7 @@ describe("tileBounds", () => {
   });
 
   it("returns correct bounds for an interior tile", () => {
-    const bounds = tileBounds(3, 7);
+    const bounds = tileBounds(3, 7, MAP_SIZE);
     expect(bounds).toEqual({
       minX: 3 * TILE_WIDTH,
       minY: 7 * TILE_HEIGHT,
@@ -93,15 +92,15 @@ describe("tileBounds", () => {
   });
 
   it("returns bounds covering the far corner for last tile", () => {
-    const bounds = tileBounds(15, 15);
-    expect(bounds.maxX).toBe(UNIVERSE_GEN.MAP_SIZE);
-    expect(bounds.maxY).toBe(UNIVERSE_GEN.MAP_SIZE);
+    const bounds = tileBounds(15, 15, MAP_SIZE);
+    expect(bounds.maxX).toBe(MAP_SIZE);
+    expect(bounds.maxY).toBe(MAP_SIZE);
   });
 
   it("tile bounds have consistent width and height", () => {
     for (let col = 0; col < TILE_COLS; col++) {
       for (let row = 0; row < TILE_ROWS; row++) {
-        const b = tileBounds(col, row);
+        const b = tileBounds(col, row, MAP_SIZE);
         expect(b.maxX - b.minX).toBeCloseTo(TILE_WIDTH);
         expect(b.maxY - b.minY).toBeCloseTo(TILE_HEIGHT);
       }
@@ -113,7 +112,7 @@ describe("tileBounds", () => {
 
 describe("frustumToTiles", () => {
   it("returns a single tile for a small frustum", () => {
-    const tiles = frustumToTiles({ minX: 100, minY: 100, maxX: 200, maxY: 200 });
+    const tiles = frustumToTiles({ minX: 100, minY: 100, maxX: 200, maxY: 200 }, MAP_SIZE);
     expect(tiles).toEqual([{ col: 0, row: 0 }]);
   });
 
@@ -124,7 +123,7 @@ describe("frustumToTiles", () => {
       minY: 100,
       maxX: 500,
       maxY: 200,
-    });
+    }, MAP_SIZE);
     expect(tiles).toEqual([
       { col: 0, row: 0 },
       { col: 1, row: 0 },
@@ -137,7 +136,7 @@ describe("frustumToTiles", () => {
       minY: 400,
       maxX: 500,
       maxY: 500,
-    });
+    }, MAP_SIZE);
     expect(tiles).toHaveLength(4);
     expect(tiles).toContainEqual({ col: 0, row: 0 });
     expect(tiles).toContainEqual({ col: 1, row: 0 });
@@ -150,14 +149,14 @@ describe("frustumToTiles", () => {
     const tiles = frustumToTiles({
       minX: 0,
       minY: 0,
-      maxX: UNIVERSE_GEN.MAP_SIZE - 1,
-      maxY: UNIVERSE_GEN.MAP_SIZE - 1,
-    });
+      maxX: MAP_SIZE - 1,
+      maxY: MAP_SIZE - 1,
+    }, MAP_SIZE);
     expect(tiles).toHaveLength(TILE_COLS * TILE_ROWS);
   });
 
   it("clamps frustum that extends beyond map bounds", () => {
-    const tiles = frustumToTiles({ minX: -500, minY: -500, maxX: 8000, maxY: 8000 });
+    const tiles = frustumToTiles({ minX: -500, minY: -500, maxX: 8000, maxY: 8000 }, MAP_SIZE);
     expect(tiles).toHaveLength(TILE_COLS * TILE_ROWS);
     expect(tiles[0]).toEqual({ col: 0, row: 0 });
     expect(tiles[tiles.length - 1]).toEqual({ col: 15, row: 15 });
@@ -171,7 +170,7 @@ describe("frustumToTiles", () => {
       minY: 0,
       maxX: TILE_WIDTH,
       maxY: TILE_HEIGHT,
-    });
+    }, MAP_SIZE);
     expect(tiles).toEqual([{ col: 0, row: 0 }]);
   });
 
@@ -181,7 +180,7 @@ describe("frustumToTiles", () => {
       minY: 0,
       maxX: TILE_WIDTH + 0.001,
       maxY: TILE_HEIGHT + 0.001,
-    });
+    }, MAP_SIZE);
     expect(tiles).toHaveLength(4);
     expect(tiles).toContainEqual({ col: 0, row: 0 });
     expect(tiles).toContainEqual({ col: 1, row: 0 });
@@ -196,7 +195,7 @@ describe("frustumToTiles", () => {
       minY: 0,
       maxX: TILE_WIDTH * 2 + 1,
       maxY: TILE_HEIGHT * 2 + 1,
-    });
+    }, MAP_SIZE);
     expect(tiles).toEqual([
       { col: 0, row: 0 },
       { col: 1, row: 0 },
@@ -215,23 +214,28 @@ describe("frustumToTiles", () => {
 
 describe("round-trip: systemToTile → tileBounds", () => {
   it("system coordinates fall within the bounds of its tile", () => {
-    const testPoints = [
+    // Points as map-size fractions so the invariant holds at every extent.
+    const testFractions = [
       [0, 0],
-      [100, 200],
-      [3500, 3500],
-      [6999, 6999],
-      [TILE_WIDTH, 0],
-      [0, TILE_HEIGHT],
-      [TILE_WIDTH * 7.5, TILE_HEIGHT * 3.2],
+      [0.014, 0.028],
+      [0.5, 0.5],
+      [0.9999, 0.9999],
+      [1 / 16, 0],
+      [0, 1 / 16],
+      [7.5 / 16, 3.2 / 16],
     ] as const;
 
-    for (const [x, y] of testPoints) {
-      const tile = systemToTile(x, y);
-      const bounds = tileBounds(tile.col, tile.row);
-      expect(x).toBeGreaterThanOrEqual(bounds.minX);
-      expect(x).toBeLessThan(bounds.maxX);
-      expect(y).toBeGreaterThanOrEqual(bounds.minY);
-      expect(y).toBeLessThan(bounds.maxY);
+    for (const mapSize of [MAP_SIZE, 25_000, 3772]) {
+      for (const [fx, fy] of testFractions) {
+        const x = fx * mapSize;
+        const y = fy * mapSize;
+        const tile = systemToTile(x, y, mapSize);
+        const bounds = tileBounds(tile.col, tile.row, mapSize);
+        expect(x).toBeGreaterThanOrEqual(bounds.minX);
+        expect(x).toBeLessThan(bounds.maxX);
+        expect(y).toBeGreaterThanOrEqual(bounds.minY);
+        expect(y).toBeLessThan(bounds.maxY);
+      }
     }
   });
 
@@ -243,14 +247,14 @@ describe("round-trip: systemToTile → tileBounds", () => {
     ] as const;
 
     for (const [x, y] of points) {
-      const tile = systemToTile(x, y);
+      const tile = systemToTile(x, y, MAP_SIZE);
       // Create a small frustum around the point
       const tiles = frustumToTiles({
         minX: x - 50,
         minY: y - 50,
         maxX: x + 50,
         maxY: y + 50,
-      });
+      }, MAP_SIZE);
       expect(tiles).toContainEqual(tile);
     }
   });

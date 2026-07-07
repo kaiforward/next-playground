@@ -19,7 +19,6 @@ import type {
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole } from "@/lib/constants/ships";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
-import type { UniverseScale } from "@/lib/constants/universe-gen";
 import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
 
 // ── Lookup sets (built once) ────────────────────────────────────
@@ -171,10 +170,6 @@ export function toEventTypeId(value: string): EventTypeId {
   return value;
 }
 
-const UNIVERSE_SCALES: ReadonlySet<string> = new Set<UniverseScale>([
-  "default", "10k",
-]);
-
 const SUN_CLASS_IDS: ReadonlySet<string> = new Set(Object.keys(SUN_CLASSES));
 const BODY_ARCHETYPE_IDS: ReadonlySet<string> = new Set(Object.keys(BODY_ARCHETYPES));
 
@@ -196,15 +191,6 @@ export function toBodyArchetypeId(value: string): BodyArchetypeId {
     throw new Error(`Invalid body archetype id: "${value}"`);
   }
   return value as BodyArchetypeId;
-}
-
-
-export function toUniverseScale(value: string): UniverseScale {
-  if (!UNIVERSE_SCALES.has(value)) {
-    const valid = [...UNIVERSE_SCALES].join(", ");
-    throw new Error(`Invalid universe scale: "${value}". Valid values: ${valid}`);
-  }
-  return value as UniverseScale;
 }
 
 // ── Constant arrays (avoids Object.keys() + as casts) ───────────

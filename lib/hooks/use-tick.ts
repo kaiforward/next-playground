@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { TickBroadcast } from "@/lib/world/tick-loop";
+import { apiFetch } from "@/lib/query/fetcher";
+import type { Speed, TickBroadcast } from "@/lib/world/tick-loop";
+import type { GameWorldState } from "@/lib/types/game";
 
 type EventCallback = (events: unknown[]) => void;
 
@@ -14,6 +16,8 @@ function isTickBroadcast(value: unknown): value is TickBroadcast {
     typeof value.currentTick === "number" &&
     "speed" in value &&
     (typeof value.speed === "string" || typeof value.speed === "number") &&
+    "achievedTps" in value &&
+    typeof value.achievedTps === "number" &&
     "events" in value &&
     typeof value.events === "object" &&
     value.events !== null
@@ -22,9 +26,10 @@ function isTickBroadcast(value: unknown): value is TickBroadcast {
 
 interface UseTickResult {
   currentTick: number;
+  speed: Speed;
+  achievedTps: number;
   isConnected: boolean;
   subscribeToEvent: (eventName: string, cb: EventCallback) => () => void;
-  subscribeToArrivals: (cb: (shipIds: string[]) => void) => () => void;
 }
 
 /**
@@ -35,18 +40,22 @@ interface UseTickResult {
  */
 export function useTick(): UseTickResult {
   const [currentTick, setCurrentTick] = useState(0);
+  const [speed, setSpeed] = useState<Speed>("paused");
+  const [achievedTps, setAchievedTps] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const eventListeners = useRef<Map<string, Set<EventCallback>>>(new Map());
 
-  // Seed currentTick from world state so transit indicators are correct
-  // before the SSE connection establishes
+  // Seed tick/speed/TPS from world state so the sidebar is correct before the
+  // SSE connection establishes. apiFetch types the response as GameWorldState,
+  // so speed lands as a real `Speed` (no untyped `any` into setSpeed).
   useEffect(() => {
-    fetch("/api/game/world")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.data?.meta?.currentTick) setCurrentTick(json.data.meta.currentTick);
+    apiFetch<GameWorldState>("/api/game/world")
+      .then((state) => {
+        setCurrentTick(state.meta.currentTick);
+        setSpeed(state.speed);
+        setAchievedTps(state.achievedTps);
       })
-      .catch(() => {}); // SSE will provide the value shortly anyway
+      .catch(() => {}); // SSE will provide the values shortly anyway
   }, []);
 
   useEffect(() => {
@@ -60,6 +69,8 @@ export function useTick(): UseTickResult {
         if (!isTickBroadcast(parsed)) return;
         const event = parsed;
         setCurrentTick(event.currentTick);
+        setSpeed(event.speed);
+        setAchievedTps(event.achievedTps);
 
         // Dispatch global events to listeners
         for (const [eventName, eventList] of Object.entries(event.events)) {
@@ -96,19 +107,5 @@ export function useTick(): UseTickResult {
     [],
   );
 
-  // Backward compat wrapper — subscribes to "shipArrived" events
-  const subscribeToArrivals = useCallback(
-    (cb: (shipIds: string[]) => void) => {
-      return subscribeToEvent("shipArrived", (events) => {
-        const shipIds = events
-          .filter((e): e is { shipId: string } =>
-            typeof e === "object" && e !== null && "shipId" in e && typeof e.shipId === "string")
-          .map((e) => e.shipId);
-        cb(shipIds);
-      });
-    },
-    [subscribeToEvent],
-  );
-
-  return { currentTick, isConnected, subscribeToEvent, subscribeToArrivals };
+  return { currentTick, speed, achievedTps, isConnected, subscribeToEvent };
 }

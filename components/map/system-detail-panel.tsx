@@ -1,15 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EconomyBadge } from "@/components/ui/economy-badge";
-import type { StarSystemInfo, ShipState, ActiveEvent, SystemVisibility } from "@/lib/types/game";
+import type { StarSystemInfo, ActiveEvent, SystemVisibility } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { TraitList } from "@/components/ui/trait-list";
 import { SectionHeader } from "@/components/ui/section-header";
-import { CompactShipCard } from "@/components/map/compact-ship-card";
 import { enrichTraits } from "@/lib/utils/traits";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 
@@ -20,39 +18,24 @@ interface GatewayTarget {
 
 interface SystemDetailPanelProps {
   system: StarSystemInfo | null;
-  shipsHere: ShipState[];
   regionName?: string;
   factionName?: string;
   gatewayTargetRegions?: GatewayTarget[];
   activeEvents?: ActiveEvent[];
   visibility: SystemVisibility;
   onClose: () => void;
-  /** Triggers nav-mode for the given ship without leaving the map. */
-  onNavigateShip: (ship: ShipState) => void;
 }
-
-const MAX_VISIBLE_PER_SECTION = 3;
 
 export function SystemDetailPanel({
   system,
-  shipsHere,
   regionName,
   factionName,
   gatewayTargetRegions,
   activeEvents,
   visibility,
   onClose,
-  onNavigateShip,
 }: SystemDetailPanelProps) {
   if (!system) return null;
-
-  // Only idle ships are actionable from the panel.
-  const idleShips = shipsHere.filter(
-    (s) => s.status === "docked" && !s.disabled,
-  );
-
-  const visibleShips = idleShips.slice(0, MAX_VISIBLE_PER_SECTION);
-  const hiddenShips = idleShips.length - visibleShips.length;
 
   return (
     <Dialog
@@ -149,40 +132,6 @@ export function SystemDetailPanel({
 
             {/* Active events */}
             {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
-
-            {/* Ships Here */}
-            {idleShips.length > 0 && (
-              <div>
-                <SectionHeader className="mb-2 flex items-center justify-between">
-                  <span>Ships Here</span>
-                  <span className="font-normal text-text-tertiary normal-case tracking-normal">
-                    {idleShips.length}
-                  </span>
-                </SectionHeader>
-                <div className="flex flex-col gap-1.5">
-                  {visibleShips.map((s) => (
-                    <CompactShipCard
-                      key={s.id}
-                      ship={s}
-                      systemId={system.id}
-                      onNavigate={onNavigateShip}
-                    />
-                  ))}
-                  {hiddenShips > 0 && (
-                    <Link
-                      href={`/system/${system.id}/ships`}
-                      className="text-xs text-text-accent hover:text-accent-muted text-center py-1"
-                    >
-                      View all {idleShips.length} ships &rarr;
-                    </Link>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {idleShips.length === 0 && (
-              <p className="text-sm text-text-tertiary">No idle ships docked here.</p>
-            )}
 
             {/* System traits */}
             {system.traits && system.traits.length > 0 && (

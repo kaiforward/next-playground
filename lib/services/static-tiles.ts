@@ -7,10 +7,11 @@ import type { StaticTileSystem } from "@/lib/types/game";
  * This data is immutable (never changes during gameplay) and cached forever by the browser.
  */
 export function getStaticTile(col: number, row: number): { systems: StaticTileSystem[] } {
-  const bounds = tileBounds(col, row);
+  const world = getWorld();
+  const bounds = tileBounds(col, row, world.meta.mapSize);
 
   return {
-    systems: getWorld()
+    systems: world
       .systems.filter(
         (s) => s.x >= bounds.minX && s.x < bounds.maxX && s.y >= bounds.minY && s.y < bounds.maxY,
       )

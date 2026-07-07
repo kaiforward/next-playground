@@ -1,11 +1,9 @@
 "use client";
 
-import { use, useMemo } from "react";
+import { use } from "react";
 import { usePathname } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
-import { useFleet } from "@/lib/hooks/use-fleet";
-import { getDockedShips } from "@/lib/utils/fleet";
-import { SYSTEM_TABS, type SystemTabSegment } from "@/lib/constants/system-tabs";
+import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,25 +21,15 @@ function SystemPanelContent({
   children: React.ReactNode;
 }) {
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
-  const { fleet } = useFleet();
   const pathname = usePathname();
 
-  const dockedShipCount = useMemo(
-    () => getDockedShips(fleet.ships, systemId).length,
-    [fleet.ships, systemId],
-  );
-
   const basePath = `/system/${systemId}`;
-  const tabBadges: Partial<Record<SystemTabSegment, number>> = {
-    ships: dockedShipCount,
-  };
   const tabs = SYSTEM_TABS.map((tab) => {
     const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;
     return {
       label: tab.label,
       href,
       active: tab.segment ? pathname.startsWith(href) : pathname === basePath,
-      badge: tabBadges[tab.segment] ?? 0,
     };
   });
 
@@ -84,7 +72,6 @@ function SystemPanelContent({
             key={tab.href}
             href={tab.href}
             active={tab.active}
-            count={tab.badge}
           >
             {tab.label}
           </TabLink>

@@ -3,11 +3,9 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getUniverse, getSystemDetail, getSystemSubstrate } from "@/lib/services/universe";
 import { ServiceError } from "@/lib/services/errors";
-import { TRAITS } from "@/lib/constants/traits";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import type { World, WorldSystem } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
-import type { SystemTraitResponse } from "@/lib/types/api";
 
 let world: World;
 
@@ -137,7 +135,7 @@ describe("getUniverse", () => {
 });
 
 describe("getSystemDetail", () => {
-  it("resolves trait display fields, visibility, and station", () => {
+  it("returns trait facts, visibility, and station", () => {
     expect(world.traits.length).toBeGreaterThan(0);
     const trait = world.traits[0];
     const data = getSystemDetail(trait.systemId);
@@ -146,17 +144,10 @@ describe("getSystemDetail", () => {
     if (data.visibility !== "visible") throw new Error("expected visible");
     expect(data.station).toBeNull();
 
-    const traitDef = TRAITS[trait.traitId];
-    // Extracted to an explicitly-typed local: `data.traits`'s inferred type is
-    // the intersection of StarSystemInfo's optional `traits?: SystemTraitInfo[]`
-    // and the visible branch's `traits: SystemTraitResponse[]` override, which
-    // resolves `.find()`'s return type to the narrower SystemTraitInfo (no
-    // display fields) unless re-typed at the boundary like this.
-    const traits: SystemTraitResponse[] = data.traits;
-    const resolved = traits.find((t) => t.traitId === trait.traitId)!;
-    expect(resolved.name).toBe(traitDef.name);
-    expect(resolved.category).toBe(traitDef.category);
-    expect(resolved.description).toBe(traitDef.descriptions[trait.quality]);
+    // Display data (name/category/description) is enriched client-side from
+    // the TRAITS catalog — the API carries only the facts.
+    const resolved = data.traits?.find((t) => t.traitId === trait.traitId);
+    expect(resolved).toEqual({ traitId: trait.traitId, quality: trait.quality });
   });
 
   it("throws ServiceError(404) for an unknown system", () => {

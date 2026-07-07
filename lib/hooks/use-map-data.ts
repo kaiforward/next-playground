@@ -4,25 +4,16 @@ import { useMemo } from "react";
 import type {
   UniverseData,
   StarSystemInfo,
-  ShipState,
   ActiveEvent,
   DynamicTileSystem,
   EconomyType,
   SystemVisibility,
 } from "@/lib/types/game";
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
-import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 import { priceRampColorPixi } from "@/lib/utils/price-ramp";
 
 // ── Types ───────────────────────────────────────────────────────
-
-export type NavigationNodeState =
-  | "origin"
-  | "reachable"
-  | "unreachable"
-  | "route_hop"
-  | "destination";
 
 export interface SystemEventInfo {
   type: string;
@@ -40,27 +31,13 @@ export interface SystemNodeData {
    *  as a hollow marker — labelled potential, not a live economy. */
   developed: boolean;
   regionId: string;
-  /** Docked player ships at this system — fleet-presence checks + the blue docked pill. */
-  shipCount: number;
   isGateway: boolean;
   visibility: SystemVisibility;
-  navigationState?: NavigationNodeState;
   activeEvents?: SystemEventInfo[];
   /** Price-ramp tint for the active heatmap good, or null when none/overlay off. */
   priceTint: number | null;
   /** Signed % deviation from base price for the active heatmap good, or null when none. */
   priceDelta: number | null;
-}
-
-export interface TransitUnit {
-  id: string;
-  name: string;
-  originSystemId: string;
-  destinationSystemId: string;
-  destinationName: string;
-  departureTick: number;
-  arrivalTick: number;
-  speed: number;
 }
 
 export interface ConnectionData {
@@ -69,8 +46,6 @@ export interface ConnectionData {
   toId: string;
   fuelCost: number;
   isGateway: boolean;
-  isRoute: boolean;
-  isDimmed: boolean;
 }
 
 export interface MapData {
@@ -85,8 +60,6 @@ export interface MapData {
   /** Per-system price data for the active heatmap good. Null when overlay is off. */
   priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
   // Detail panel data
-  shipsAtSelected: ShipState[];
-  transitUnits: TransitUnit[];
   eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
@@ -99,15 +72,12 @@ export interface MapData {
 
 interface UseMapDataOptions {
   universe: UniverseData;
-  ships: ShipState[];
   events: ActiveEvent[];
   visibleSystemIds: Set<string>;
   dynamicSystems: DynamicTileSystem[];
   tradeFlowEdges: TradeFlowEdgeInfo[];
   logisticsEdges: TradeFlowEdgeInfo[];
   selectedSystem: StarSystemInfo | null;
-  navigationMode: NavigationMode;
-  isNavigationActive: boolean;
   systemRegionMap: Map<string, string>;
   regionMap: Map<string, { id: string; name: string }>;
   priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
@@ -135,64 +105,17 @@ function keyByCanonicalPair(
 
 export function useMapData({
   universe,
-  ships,
   events,
   visibleSystemIds,
   dynamicSystems,
   tradeFlowEdges,
   logisticsEdges,
   selectedSystem,
-  navigationMode: mode,
-  isNavigationActive,
   systemRegionMap,
   regionMap,
   priceHeatmap,
   priceMode,
 }: UseMapDataOptions): MapData {
-  // ── Ship counts per system (docked only) ──────────────────────
-  const shipsAtSystem = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const ship of ships) {
-      if (ship.status === "docked") {
-        map.set(ship.systemId, (map.get(ship.systemId) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [ships]);
-
-  // ── Ships docked at selected system ───────────────────────────
-  const shipsAtSelected = useMemo(
-    () =>
-      selectedSystem
-        ? ships.filter(
-            (s) => s.status === "docked" && s.systemId === selectedSystem.id,
-          )
-        : [],
-    [selectedSystem, ships],
-  );
-
-  // ── In-transit ships for map markers ──────────────────────────
-  const transitUnits = useMemo((): TransitUnit[] => {
-    const nameById = new Map(universe.systems.map((s) => [s.id, s.name]));
-    const out: TransitUnit[] = [];
-
-    for (const ship of ships) {
-      if (ship.status !== "in_transit") continue;
-      if (!ship.destinationSystemId || ship.departureTick === null || ship.arrivalTick === null) continue;
-      out.push({
-        id: ship.id,
-        name: ship.name,
-        originSystemId: ship.systemId,
-        destinationSystemId: ship.destinationSystemId,
-        destinationName: nameById.get(ship.destinationSystemId) ?? "Unknown",
-        departureTick: ship.departureTick,
-        arrivalTick: ship.arrivalTick,
-        speed: ship.speed,
-      });
-    }
-    return out;
-  }, [ships, universe.systems]);
-
   // ── Events per system (from dynamic data) ────────────────────
   const eventsPerSystem = useMemo(() => {
     const map = new Map<string, SystemEventInfo[]>();
@@ -217,55 +140,6 @@ export function useMapData({
     return events.filter((e) => e.systemId === selectedSystem.id);
   }, [selectedSystem, events, visibleSystemIds]);
 
-  // ── Node navigation states (all systems) ──────────────────────
-  const nodeNavigationStates = useMemo((): Map<string, NavigationNodeState> => {
-    const states = new Map<string, NavigationNodeState>();
-
-    if (mode.phase === "unit_selected") {
-      const originId = mode.ship.systemId;
-      for (const system of universe.systems) {
-        if (system.id === originId) {
-          states.set(system.id, "origin");
-        } else if (mode.reachable.has(system.id)) {
-          states.set(system.id, "reachable");
-        } else {
-          states.set(system.id, "unreachable");
-        }
-      }
-    } else if (mode.phase === "route_preview") {
-      const originId = mode.ship.systemId;
-      const destId = mode.destination.id;
-      const routeSet = new Set(mode.route.path);
-
-      for (const system of universe.systems) {
-        if (system.id === originId) {
-          states.set(system.id, "origin");
-        } else if (system.id === destId) {
-          states.set(system.id, "destination");
-        } else if (routeSet.has(system.id)) {
-          states.set(system.id, "route_hop");
-        } else if (mode.reachable.has(system.id)) {
-          states.set(system.id, "reachable");
-        } else {
-          states.set(system.id, "unreachable");
-        }
-      }
-    }
-
-    return states;
-  }, [mode, universe.systems]);
-
-  // ── Route edges set ───────────────────────────────────────────
-  const routeEdgeSet = useMemo((): Set<string> => {
-    if (mode.phase !== "route_preview") return new Set();
-    const set = new Set<string>();
-    for (let i = 0; i < mode.route.path.length - 1; i++) {
-      const key = [mode.route.path[i], mode.route.path[i + 1]].sort().join("--");
-      set.add(key);
-    }
-    return set;
-  }, [mode]);
-
   // ── System nodes (all systems) ────────────────────────────────
   const systems = useMemo((): SystemNodeData[] => {
     return universe.systems.map((system) => {
@@ -285,16 +159,14 @@ export function useMapData({
         economyType: system.economyType,
         developed: system.developed ?? true,
         regionId: system.regionId,
-        shipCount: shipsAtSystem.get(system.id) ?? 0,
         isGateway: system.isGateway,
         visibility,
-        navigationState: nodeNavigationStates.get(system.id),
         activeEvents: eventsPerSystem.get(system.id),
         priceTint,
         priceDelta,
       };
     });
-  }, [universe.systems, shipsAtSystem, nodeNavigationStates, eventsPerSystem, visibleSystemIds, priceHeatmap, priceMode]);
+  }, [universe.systems, eventsPerSystem, visibleSystemIds, priceHeatmap, priceMode]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
@@ -306,20 +178,17 @@ export function useMapData({
       if (seen.has(pairKey)) continue;
       seen.add(pairKey);
 
-      const isRouteEdge = routeEdgeSet.has(pairKey);
       result.push({
         id: conn.id,
         fromId: conn.fromSystemId,
         toId: conn.toSystemId,
         fuelCost: conn.fuelCost,
         isGateway: systemRegionMap.get(conn.fromSystemId) !== systemRegionMap.get(conn.toSystemId),
-        isRoute: isRouteEdge,
-        isDimmed: isNavigationActive && !isRouteEdge,
       });
     }
 
     return result;
-  }, [universe.connections, systemRegionMap, routeEdgeSet, isNavigationActive]);
+  }, [universe.connections, systemRegionMap]);
 
   // ── Gateway target regions ────────────────────────────────────
   const selectedGatewayTargets = useMemo(() => {
@@ -381,8 +250,6 @@ export function useMapData({
     flowEdges,
     logisticsFlowEdges,
     priceHeatmap,
-    shipsAtSelected,
-    transitUnits,
     eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,

@@ -13,16 +13,11 @@ import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
 import { StabilityTerritoryLayer } from "./layers/stability-territory-layer";
 import { PopulationTerritoryLayer } from "./layers/population-territory-layer";
-import { FleetDotLayer } from "./layers/fleet-dot-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
-import { EffectLayer } from "./layers/effect-layer";
-import { FleetTransitLayer } from "./layers/fleet-transit-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
 import type { MapData } from "@/lib/hooks/use-map-data";
-import type { ConnectionInfo } from "@/lib/engine/navigation";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
-import type { NavigationMode } from "@/lib/hooks/use-navigation-state";
 import type { ViewportBounds } from "@/lib/types/game";
 import type { MapMode } from "@/lib/types/map";
 
@@ -30,7 +25,6 @@ export interface PixiMapCanvasProps {
   atlasData: AtlasData;
   mapData: MapData;
   selectedSystem: StarSystemInfo | null;
-  navigationMode: NavigationMode;
   onSystemClick: (system: StarSystemInfo) => void;
   onEmptyClick: () => void;
   centerTarget?: { x: number; y: number; zoom: number };
@@ -42,15 +36,8 @@ export interface PixiMapCanvasProps {
    */
   mapMode?: MapMode;
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
-  connections: ConnectionInfo[];
-  currentTick: number;
-  showShipRoutes: boolean;
-  /** Ambient display of docked-fleet pills (still reveal on hover/select). */
-  showFleet: boolean;
   /** Ambient display of the event pill (still reveals on hover/select). */
   showEvents: boolean;
-  selectedTransitId: string | null;
-  onTransitClick: (unitId: string | null) => void;
   /** Per-system unrest (0…1) for the stability choropleth, or empty when mode is off. */
   stabilityBySystem?: Map<string, number>;
   /** Per-system population for the population choropleth, or empty when mode is off. */
@@ -71,18 +58,14 @@ interface PixiRefs {
   politicalTerritoryLayer: PoliticalTerritoryLayer;
   stabilityTerritoryLayer: StabilityTerritoryLayer;
   populationTerritoryLayer: PopulationTerritoryLayer;
-  fleetDotLayer: FleetDotLayer;
   tradeFlowLayer: TradeFlowLayer;
   logisticsFlowLayer: TradeFlowLayer;
-  fleetTransitLayer: FleetTransitLayer;
-  effectLayer: EffectLayer;
 }
 
 export function PixiMapCanvas({
   atlasData,
   mapData,
   selectedSystem,
-  navigationMode,
   onSystemClick,
   onEmptyClick,
   centerTarget,
@@ -90,13 +73,7 @@ export function PixiMapCanvas({
   regionInfos,
   mapMode = "political",
   onViewportChange,
-  connections,
-  currentTick,
-  showShipRoutes,
-  showFleet,
   showEvents,
-  selectedTransitId,
-  onTransitClick,
   stabilityBySystem,
   populationBySystem,
 }: PixiMapCanvasProps) {
@@ -110,12 +87,6 @@ export function PixiMapCanvas({
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
-
-  const onTransitClickRef = useRef(onTransitClick);
-  onTransitClickRef.current = onTransitClick;
-
-  const currentTickRef = useRef(currentTick);
-  currentTickRef.current = currentTick;
 
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
@@ -200,9 +171,9 @@ export function PixiMapCanvas({
       const territoryLayer = new TerritoryLayer();
       world.addChild(territoryLayer.container);
 
-      // Political layer sits above the economy territory layer but below the
-      // fleet dots. Both layers receive sync data; only one is visible at a
-      // time (controlled via `politicalOverlay` prop / setActive()).
+      // Political layer sits above the economy territory layer. Both layers
+      // receive sync data; only one is visible at a time (controlled via the
+      // `mapMode` prop / setActive()).
       const politicalTerritoryLayer = new PoliticalTerritoryLayer();
       world.addChild(politicalTerritoryLayer.container);
 
@@ -216,20 +187,8 @@ export function PixiMapCanvas({
       const populationTerritoryLayer = new PopulationTerritoryLayer();
       world.addChild(populationTerritoryLayer.container);
 
-      const fleetDotLayer = new FleetDotLayer();
-      world.addChild(fleetDotLayer.container);
-
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
-
-      // Fleet transit markers + routes sit above system glyphs but below the
-      // navigation effect layer. Price now renders inside the system glyph
-      // (halo lens + top-right pill), so there's no standalone price layer.
-      const fleetTransitLayer = new FleetTransitLayer();
-      world.addChild(fleetTransitLayer.container);
-
-      const effectLayer = new EffectLayer();
-      world.addChild(effectLayer.container);
 
       // Setup interactions
       interactionCleanup = setupInteractions({
@@ -238,8 +197,6 @@ export function PixiMapCanvas({
         getCallbacks: () => callbacksRef.current,
         getMapData: () => mapDataRef.current,
       });
-
-      fleetTransitLayer.setOnClick((id) => onTransitClickRef.current(id));
 
       // Keep camera screen size in sync with Pixi's own resize
       app.renderer.on("resize", onResize);
@@ -294,7 +251,6 @@ export function PixiMapCanvas({
         politicalTerritoryLayer.updateVisibility(lod);
         stabilityTerritoryLayer.updateVisibility(lod);
         populationTerritoryLayer.updateVisibility(lod);
-        fleetDotLayer.updateVisibility(lod);
 
         // Trade-flow overlay: layer alpha multiplies the system fade so the
         // overlay disappears alongside its host systems at universe zoom.
@@ -304,19 +260,10 @@ export function PixiMapCanvas({
         logisticsFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
         if (logisticsFlowLayer.container.visible) logisticsFlowLayer.update(dtMs);
 
-        // Fleet transit markers — always-on across zoom levels
-        fleetTransitLayer.setTick(currentTickRef.current);
-        fleetTransitLayer.update(dtMs, camera.zoom, frustum);
-        fleetTransitLayer.updateVisibility(1);
-
-        // Effect layer visibility based on LOD
-        effectLayer.container.visible = lod.showEffects;
-
         const isZooming = Math.abs(camera.zoom - prevZoom) > 0.0005;
         prevZoom = camera.zoom;
 
         starfield.update(camera.x, camera.y, dtMs, isZooming);
-        if (lod.showEffects) effectLayer.update(dtMs);
       });
 
       // Store refs and signal ready
@@ -324,8 +271,7 @@ export function PixiMapCanvas({
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
         politicalTerritoryLayer, stabilityTerritoryLayer, populationTerritoryLayer,
-        fleetDotLayer, tradeFlowLayer,
-        logisticsFlowLayer, fleetTransitLayer, effectLayer,
+        tradeFlowLayer, logisticsFlowLayer,
       };
       setPixiReady(true);
     })();
@@ -348,11 +294,8 @@ export function PixiMapCanvas({
           refs.populationTerritoryLayer.destroy();
           refs.tradeFlowLayer.destroy();
           refs.logisticsFlowLayer.destroy();
-          refs.fleetTransitLayer.destroy();
-          refs.effectLayer.destroy();
           refs.starfield.destroy();
           refs.pointCloudLayer.destroy();
-          refs.fleetDotLayer.destroy();
         }
         app.destroy(true, { children: true });
       }
@@ -377,11 +320,12 @@ export function PixiMapCanvas({
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
 
-    p.territoryLayer.sync(atlasData.systems, regionInfos);
-    p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions);
-    p.stabilityTerritoryLayer.sync(atlasData.systems);
-    p.populationTerritoryLayer.sync(atlasData.systems);
-  }, [atlasData.systems, atlasData.factions, pixiReady, regionInfos]);
+    const mapSize = atlasData.meta.mapSize;
+    p.territoryLayer.sync(atlasData.systems, regionInfos, mapSize);
+    p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions, mapSize);
+    p.stabilityTerritoryLayer.sync(atlasData.systems, mapSize);
+    p.populationTerritoryLayer.sync(atlasData.systems, mapSize);
+  }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
   // Five modes: "political" shows the faction layer, "regions" shows the economy
@@ -397,20 +341,6 @@ export function PixiMapCanvas({
     p.populationTerritoryLayer.container.visible = mapMode === "population";
   }, [mapMode, pixiReady]);
 
-  // ── Update player presence highlights (lightweight fill-only redraw) ──
-  useEffect(() => {
-    const p = pixiRef.current;
-    if (!p || !pixiReady) return;
-
-    const playerRegionIds = new Set<string>();
-    for (const sys of mapData.systems) {
-      if (sys.shipCount > 0) {
-        playerRegionIds.add(sys.regionId);
-      }
-    }
-    p.territoryLayer.setPlayerPresence(playerRegionIds);
-  }, [mapData.systems, pixiReady]);
-
   // ── Stability choropleth fills (lightweight redraw on data change) ──
   useEffect(() => {
     const p = pixiRef.current;
@@ -425,17 +355,6 @@ export function PixiMapCanvas({
     p.populationTerritoryLayer.setPopulation(populationBySystem ?? new Map());
   }, [populationBySystem, pixiReady]);
 
-  // ── Sync fleet presence dots (systems with ships) ──────────────────
-  useEffect(() => {
-    const p = pixiRef.current;
-    if (!p || !pixiReady) return;
-
-    const shipPositions = mapData.systems
-      .filter((s) => s.shipCount > 0)
-      .map((s) => ({ x: s.x, y: s.y }));
-    p.fleetDotLayer.sync(shipPositions);
-  }, [mapData.systems, pixiReady]);
-
   // ── Sync map data → system objects + connections ──────────────────
   useEffect(() => {
     const p = pixiRef.current;
@@ -446,31 +365,16 @@ export function PixiMapCanvas({
     p.connectionLayer.sync(mapData.connections, mapData.systems);
     p.tradeFlowLayer.sync(mapData.systems, mapData.flowEdges);
     p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges);
-    const routePath = navigationMode.phase === "route_preview" ? navigationMode.route.path : undefined;
-    p.effectLayer.syncRoute(mapData.connections, mapData.systems, routePath);
+  }, [mapData, selectedSystem, pixiReady]);
 
-    const transitPositions = new Map(mapData.systems.map((s) => [s.id, { x: s.x, y: s.y }]));
-    p.fleetTransitLayer.sync(mapData.transitUnits, transitPositions, connections);
-  }, [mapData, selectedSystem, navigationMode, pixiReady, connections]);
-
-  // ── Propagate transit selection / route overlay (cheap setters only) ──
-  // Kept separate from the data sync above so toggling selection or the
-  // ship-routes overlay doesn't re-run every layer's sync().
+  // ── Propagate the events overlay flag to the system layer ──
+  // Gates ambient display of the event pill. Cheap setter — kept out of the
+  // data sync so toggling the overlay doesn't re-run every sync.
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
-    p.fleetTransitLayer.setSelected(selectedTransitId);
-    p.fleetTransitLayer.setShowAllRoutes(showShipRoutes);
-  }, [selectedTransitId, showShipRoutes, pixiReady]);
-
-  // ── Propagate fleet/events overlay flags to the system layer ──
-  // Gates ambient display of the docked-fleet and event pills. Cheap setter —
-  // kept out of the data sync so toggling an overlay doesn't re-run every sync.
-  useEffect(() => {
-    const p = pixiRef.current;
-    if (!p || !pixiReady) return;
-    p.systemLayer.setOverlayVisibility({ fleet: showFleet, events: showEvents });
-  }, [showFleet, showEvents, pixiReady]);
+    p.systemLayer.setOverlayVisibility({ events: showEvents });
+  }, [showEvents, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

@@ -12,8 +12,7 @@ export default async function GameLayout({
   children: React.ReactNode;
   panel: React.ReactNode;
 }) {
-  // No world loaded → the start screen owns world creation. (The dev-bootstrap
-  // in instrumentation.ts makes this unreachable until the start screen ships.)
+  // No world loaded → the start screen owns world creation and loading.
   if (!hasWorld()) {
     redirect("/start");
   }

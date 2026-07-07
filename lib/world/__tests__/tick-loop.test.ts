@@ -5,7 +5,8 @@ import * as path from "node:path";
 import { TickLoop, type TickBroadcast } from "@/lib/world/tick-loop";
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld, setWorld, clearWorld } from "@/lib/world/store";
-import { setSavesDirForTesting, AUTOSAVE_NAME, writeSave } from "@/lib/world/save-files";
+import { setSavesDirForTesting, writeSave } from "@/lib/world/save-files";
+import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { runWorldTick } from "@/lib/world/tick";
 
 // Wraps the real implementations in a `vi.fn` so most tests exercise genuine
@@ -38,10 +39,14 @@ beforeEach(() => {
   loop = new TickLoop();
 });
 
-afterEach(() => {
+afterEach(async () => {
   loop.stop();
-  clearWorld();
+  // The pause/cadence autosave is fire-and-forget; wait for it to settle so a
+  // slow write can't land in the shared saves dir during the next test and
+  // race its autosave (all tests write the same AUTOSAVE_NAME file).
   vi.useRealTimers();
+  await loop.whenAutosaveSettled();
+  clearWorld();
 });
 
 describe("TickLoop", () => {
