@@ -9,13 +9,13 @@ You look for **approach-level** problems — issues whose fix requires rewriting
 - **Pattern drift** — a new approach that contradicts an established one in the codebase (e.g., a new data-fetching path that isn't `useSuspenseQuery + QueryBoundary`; a new form that isn't `components/form/` + RHF + Zod)
 - **Library / framework misuse** — hand-rolled solutions where the project's stack has an idiom (e.g., custom client cache when TanStack Query is the standard; raw `<dialog>` handling when `components/ui/dialog.tsx` exists; custom retry logic when the existing pattern handles it)
 - **Module-boundary violations** — code crossing the layered architecture lines:
-  - `lib/engine/` must be pure — no DB imports
-  - `lib/tick/processors/` must access DB only through the `World` interface + adapter, never Prisma directly
-  - `lib/services/` is where DB and business logic live; route handlers (`app/api/`) are thin wrappers
+  - `lib/engine/` must be pure — no `fs` / `process.env` / Node-edge imports (except the sanctioned dynamic `import()`)
+  - `lib/tick/processors/` bodies must access world state only through their typed `World` interface (`lib/tick/world/`) + the in-memory adapter (`lib/tick/adapters/memory/`), never the raw store or adapter internals directly
+  - `lib/services/` owns world-state reads and business logic; route handlers (`app/api/`) are thin wrappers over the in-memory store
 - **Type-safety bypass at scale** — `unknown`, `Record<string, unknown>`, or broad `as` casts proliferating through service returns
 - **Missing critical abstraction** — e.g., a new mutating route without a service layer
 
-You do **not** catch line-level bugs, missing Zod, single-file conventions, or N+1 queries. Other reviewers handle those.
+You do **not** catch line-level bugs, missing Zod, single-file conventions, or per-tick perf costs. Other reviewers handle those.
 
 ## Severity rubric — apply this for every finding
 
@@ -35,7 +35,7 @@ You do **not** catch line-level bugs, missing Zod, single-file conventions, or N
 
 Clear architectural drift but localized:
 - 20 `as` casts across files — each is a one-line fix
-- One stray Prisma import in a processor that just needs the existing adapter path
+- One stray static `fs`/`process.env` import in a pure-path module that just needs the dynamic-`import()` escape hatch
 - Single hand-rolled utility duplicating one in `lib/utils/`
 - Inconsistent error shape in one route
 

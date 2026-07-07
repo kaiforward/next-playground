@@ -6,7 +6,7 @@
 
 ## Purpose
 
-A project-local code review skill that uses a team of specialized agents to review a PR or local branch in parallel. Each agent reviews through a single narrow lens (security, database integrity, data contract, conventions, etc.). An architect agent runs first and can halt the pipeline if it detects an architectural problem severe enough to require approach-level rework.
+A project-local code review skill that uses a team of specialized agents to review a PR or local branch in parallel. Each agent reviews through a single narrow lens (boundary-safety, world/tick integrity, data contract, conventions, etc.). An architect agent runs first and can halt the pipeline if it detects an architectural problem severe enough to require approach-level rework.
 
 The goal: catch more issues than a single general-purpose reviewer, with cost controlled by per-agent model selection, file-pattern skip-gates, and tiered LLM validation of findings.
 
@@ -16,7 +16,7 @@ The goal: catch more issues than a single general-purpose reviewer, with cost co
 /uber-review                          # review current local branch vs main
 /uber-review <PR#>                    # review GitHub PR; post summary comment back
 /uber-review --effort=quick|standard|deep
-/uber-review --only=security,db-integrity
+/uber-review --only=boundary-safety,world-integrity
 /uber-review --skip-architect         # skip the architect/gate pass
 /uber-review --threshold=N            # confidence floor for inclusion (default 70)
 /uber-review --chunk-size=N           # target chunk size (default 20)
@@ -28,7 +28,7 @@ The goal: catch more issues than a single general-purpose reviewer, with cost co
 |--------|-----------|---------------------|----------------------|
 | `quick` | Sonnet | Haiku | Haiku |
 | `standard` (default) | Opus | Sonnet | Haiku |
-| `deep` | Opus | Sonnet (+ Opus for data-contract & security) | Haiku |
+| `deep` | Opus | Sonnet (+ Opus for data-contract & boundary-safety) | Haiku |
 
 `quick` is a smoke-test pass; `standard` is the everyday setting; `deep` is for pre-merge review of large or sensitive changes.
 
@@ -90,13 +90,13 @@ agents'.
 |---|-------|------|---------------|
 | 0 | **Architect** | Approach-level / pattern drift / library misuse / module-boundary violations. Gates pipeline. | Opus |
 | 1 | **Conventions** | Project guardrails: no `as` casts, no `unknown`, no non-null `!`, generics stay generic, form components used instead of raw `<input>`, `"use client"` only where needed | Haiku |
-| 2 | **DB integrity** | Prisma transactions, optimistic locking, TOCTOU (re-read inside `$transaction`), atomic `{ increment }` updates, N+1 inside `$transaction`, PostgreSQL transaction timeouts | Sonnet |
-| 3 | **Data contract** | Types flowing DB → service → API → hook → component. Guards used only at the boundary. Service-returned types not re-validated downstream. | Sonnet |
-| 4 | **Security** | Auth gates (`requirePlayer`), Zod validation at boundaries, never trusting client state for writes, cache headers (`private` on auth-gated routes, never `immutable` on APIs) | Sonnet |
+| 2 | **World integrity** | In-memory world & tick integrity: JSON-serialization safety (no `Map`/`Set`/`Date`/`Infinity`/`NaN` in `World`), deterministic seeded tick math, atomic tick, the `save-files.ts` dynamic-import guardrail, processors going through the `World` interface + adapter | Sonnet |
+| 3 | **Data contract** | Types flowing store/adapter → service → API → hook → component. Guards used only at the boundary. Service-returned types not re-validated downstream. | Sonnet |
+| 4 | **Boundary safety** | Zod validation at API/form boundaries, never trusting client state for writes, save-name path safety, no `immutable` cache on APIs, server-only env not leaking to the client bundle | Sonnet |
 | 5 | **Silent failures** | Swallowed errors, missing `await`, async callbacks typed as `() => void`, `.sort()` on render, throttle-vs-debounce traps, SSE-driven state without REST seed | Haiku |
 | 6 | **User journey (UI/UX)** | Hydration safety, `QueryBoundary` usage, accessibility on actionable elements, loading/error boundaries, navigation flow | Sonnet |
 | 7 | **Tests** | Engine/service/processor changes have appropriate Vitest coverage and meaningful assertions. Flags missing coverage. | Sonnet |
-| 8 | **Performance** | N+1 queries, missing memoization, expensive renders, viewport-keyed queries causing flicker, Pixi callbacks debounced where throttle is needed | Sonnet |
+| 8 | **Performance** | Expensive per-tick work / peak-latency concentration, missing memoization, expensive renders, viewport-keyed queries causing flicker, Pixi callbacks debounced where throttle is needed | Sonnet |
 
 ## Architect severity rubric
 
@@ -113,15 +113,15 @@ agents'.
 4. **If torn between `blocker` and `major`, choose `major`.** False blockers are more expensive than missed blockers — a missed blocker still surfaces in downstream findings, but a false blocker halts the review entirely.
 
 **Example blocker triggers in this codebase:**
-- Engine code imports Prisma → restructure required (push data through World interface)
-- New mutating API route does DB work inline → extract a service; restructure the handler
+- Engine/world code statically imports `fs`/`process.env` in the pure path → restructure behind a dynamic `import()`
+- New mutating API route touches the world store inline → extract a service; restructure the handler
 - New data-fetching pattern used across many components instead of `useSuspenseQuery + QueryBoundary` → each consumer must be rewritten
 - A service returns `Record<string, unknown>` that propagates → fix retypes the service AND rewrites every consumer's destructuring
-- Tick processor body calls Prisma directly → split into World interface + adapter + pure body
+- Tick processor body reaches into raw world state / an adapter directly → split into World interface + memory adapter + pure body
 
 **Example major (not blocker):**
 - 20 `as` casts across files — each is a one-line fix
-- One stray Prisma import in a processor that just needs the existing adapter path
+- One stray static `fs`/`process.env` import in a pure-path module that just needs the dynamic-`import()` escape hatch
 - Single hand-rolled utility duplicating one in `lib/utils/`
 - Inconsistent error shape in one route
 
@@ -151,8 +151,8 @@ If PR > 20 files:
 
        Recognized layer prefixes:
          lib/services/, lib/hooks/, lib/engine/, lib/tick/processors/,
-         lib/tick/world/, lib/tick/adapters/{prisma,memory}/,
-         app/api/game/, app/(game)/, app/(auth)/, components/
+         lib/tick/world/, lib/tick/adapters/memory/,
+         app/api/game/, app/(game)/, components/
 
     2. Group files by feature stem → semantic clusters.
 
@@ -162,9 +162,9 @@ If PR > 20 files:
          • If a cluster is >35 → split by layer within the feature (engine/services first,
            then api, then UI), keeping each split ≤35
 
-    4. Files not matching any layer prefix (prisma/schema.prisma, package.json,
-       lib/utils/foo.ts, root configs) → "shared" chunk, capped at 20 alphabetically
-       if needed.
+    4. Files not matching any layer prefix (package.json, lib/utils/foo.ts,
+       lib/world/save.ts, root configs) → "shared" chunk, capped at 20
+       alphabetically if needed.
 ```
 
 **Architect always sees the full diff**, never chunked. Chunking would defeat its big-picture view.
@@ -177,14 +177,14 @@ Every reviewer emits a JSON array of findings:
 
 ```jsonc
 {
-  "agent": "security",                          // identifies the reviewer
-  "file": "lib/services/ships.ts",              // repo-relative path
+  "agent": "boundary-safety",                   // identifies the reviewer
+  "file": "app/api/game/save/route.ts",         // repo-relative path
   "line": "42-48",                              // single line "42" or range "42-48"
   "category": "missing-zod-validation",         // free-form short slug
   "severity": "major",                          // blocker | major | minor | info
-  "message": "POST handler trusts client-supplied buyerId without Zod validation; could let one player purchase ships for another.",
-  "evidence": "L46 reads request.body.buyerId directly into the Prisma create with no schema parse.",
-  "suggested_fix": "Parse body through buyShipSchema; reject if buyerId !== session player id."
+  "message": "POST handler reads the client-supplied save name straight into the file path without a Zod parse; a name like '../foo' escapes the saves directory.",
+  "evidence": "L46 passes request body `name` directly to writeSave with no schema parse or path check.",
+  "suggested_fix": "Parse the body through saveNameSchema (reject separators / '..' / empty) before building the path."
 }
 ```
 
@@ -216,28 +216,27 @@ Every reviewer emits a JSON array of findings:
 | Reviewer | Runs when chunk contains... |
 |----------|------------------------------|
 | Architect | Always (runs once on full PR, not per chunk) |
-| Conventions | Any `.ts` / `.tsx` source file; skips docs-only / schema-only / config-only chunks |
-| DB integrity | `prisma/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/adapters/prisma/`, `lib/tick/world/` |
-| Data contract | Files spanning ≥2 layers from {prisma, services, tick, app/api, hooks, components, app pages} |
-| Security | `app/api/`, `lib/services/`, `lib/schemas/`, `app/(auth)/`, `prisma/`, or any `.ts`/`.tsx` source file that imports from `lib/auth/` or references `requirePlayer` / `getServerSession` / `session.*` (grep restricted to source files — markdown/docs that merely describe these keywords do not trigger) |
-| Silent failures | Any `.ts` / `.tsx` source file; skips docs-only / schema-only chunks |
-| User journey | `app/(game)/`, `app/(auth)/`, `components/` |
+| Conventions | Any `.ts` / `.tsx` source file; skips docs-only / config-only chunks |
+| World integrity | `lib/world/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/`, `lib/engine/`, `lib/services/` |
+| Data contract | Files spanning ≥2 layers from {lib/world, services, tick, app/api, hooks, components, app pages} |
+| Boundary safety | `app/api/`, `lib/services/`, `lib/schemas/`, `lib/world/` (save/load), or any `.ts`/`.tsx` source file that reads `process.env`, sets a `Cache-Control` header, or builds a save-file path (grep restricted to source files — markdown/docs that merely describe these do not trigger) |
+| Silent failures | Any `.ts` / `.tsx` source file; skips docs-only chunks |
+| User journey | `app/(game)/`, `components/` |
 | Tests | Source changes in `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/` (regardless of whether matching test files are present) |
-| Performance | Any `.ts` / `.tsx` source file; skips docs-only / schema-only chunks |
+| Performance | Any `.ts` / `.tsx` source file; skips docs-only chunks |
 
 **File classification (used by skip-gates):**
 - *docs* — `*.md`, `LICENSE`, `*.txt`
-- *schema* — `prisma/schema.prisma`, `prisma/migrations/**`
 - *config* — `package.json`, `package-lock.json`, `tsconfig*.json`, `next.config.*`, `eslint.config.*`, `vitest.config.*`, `prettier.config.*`, `.env.*`, `*.config.{ts,js,mjs}`, `Dockerfile*`, `Makefile`, `*.{yaml,yml}`, `.github/**`, dotfile configs (`.gitignore`, `.gitattributes`, `.dockerignore`, `.editorconfig`, `.npmrc`, `.nvmrc`, `.prettierrc*`, `.eslintrc*`)
-- *source* — anything else under `lib/`, `app/`, `components/`, `prisma/seed.ts`, etc.
+- *source* — anything else under `lib/`, `app/`, `components/`, etc.
 - *asset* — images (incl. `*.ico`, `*.gif`, `*.avif`), fonts, public assets
 
-A chunk is "docs-only" if every file is *docs*; "schema-only" if every file is *schema* (or *schema* + *docs*); "config-only" if every file is *config* (or *config* + *docs*).
+A chunk is "docs-only" if every file is *docs*; "config-only" if every file is *config* (or *config* + *docs*).
 
 **Edge cases:**
 - Docs-only PR: only architect runs.
-- Schema-only PR: architect + DB integrity + security run.
-- UI-only PR: architect + conventions + data contract (if multi-layer) + security + silent failures + user journey + perf.
+- Config-only PR: only architect runs (no source reviewers gate on config).
+- UI-only PR: architect + conventions + data contract (if multi-layer) + boundary-safety (if it reads env / sets cache headers) + silent failures + user journey + perf.
 
 The orchestrator logs which reviewers skipped each chunk and why, so the user can audit gating if findings seem missing.
 
@@ -279,9 +278,9 @@ No inline per-line comments — too noisy, too slow.
 ├── prompts/
 │   ├── architect.md
 │   ├── conventions.md
-│   ├── db-integrity.md
+│   ├── world-integrity.md
 │   ├── data-contract.md
-│   ├── security.md
+│   ├── boundary-safety.md
 │   ├── silent-failures.md
 │   ├── user-journey.md
 │   ├── tests.md

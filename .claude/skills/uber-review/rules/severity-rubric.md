@@ -6,7 +6,7 @@ You are reviewing a code diff. Your lens applies to **executable code only** —
 
 Specifically:
 - A markdown file that *describes* a convention (e.g., shows a "do not do this" example like `as Foo`, `Record<string, unknown>`, `Cache-Control: immutable`) is **not** a violation of that convention. It is documentation.
-- A skill prompt that references function names like `requirePlayer`, `getServerSession`, `session.player.id` is **describing** what the security reviewer should look for in real code, not introducing an auth surface itself.
+- A skill prompt or doc that references patterns like `Cache-Control: immutable`, `process.env.X`, or `Math.random()` is **describing** what a reviewer should look for in real code, not introducing the problem itself.
 - If the entire chunk you receive is non-executable (e.g., docs-only or prompts-only), return `[]`. Do not synthesize findings from prose.
 
 Verify each candidate finding against the actual changed code path — if the cited line is inside a fenced code block, a markdown bullet, a heading, or a docstring describing a pattern, it is not a violation.
@@ -21,7 +21,7 @@ A clear correctness bug or contract violation whose fix requires **substantial r
 
 Examples:
 - A service silently swallows errors that the caller needs to see (callers all need updating)
-- An auth gate is missing on a mutating route that creates user data
+- A processor writes `Infinity`/`NaN` into `World` state so every save silently corrupts, and the fix restructures the tick math across its callers
 - A type signature is so wrong that consumers crash at runtime
 
 ## `major`
