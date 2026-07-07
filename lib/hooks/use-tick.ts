@@ -1,9 +1,24 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { TickEvent } from "@/lib/types/api";
+import type { TickBroadcast } from "@/lib/world/tick-loop";
 
 type EventCallback = (events: unknown[]) => void;
+
+/** Narrows a parsed SSE frame before it's trusted as a TickBroadcast. */
+function isTickBroadcast(value: unknown): value is TickBroadcast {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "currentTick" in value &&
+    typeof value.currentTick === "number" &&
+    "speed" in value &&
+    (typeof value.speed === "string" || typeof value.speed === "number") &&
+    "events" in value &&
+    typeof value.events === "object" &&
+    value.events !== null
+  );
+}
 
 interface UseTickResult {
   currentTick: number;
@@ -29,7 +44,7 @@ export function useTick(): UseTickResult {
     fetch("/api/game/world")
       .then((res) => res.json())
       .then((json) => {
-        if (json.data?.currentTick) setCurrentTick(json.data.currentTick);
+        if (json.data?.meta?.currentTick) setCurrentTick(json.data.meta.currentTick);
       })
       .catch(() => {}); // SSE will provide the value shortly anyway
   }, []);
@@ -41,21 +56,13 @@ export function useTick(): UseTickResult {
 
     es.onmessage = (e) => {
       try {
-        const event: TickEvent = JSON.parse(e.data);
+        const parsed: unknown = JSON.parse(e.data);
+        if (!isTickBroadcast(parsed)) return;
+        const event = parsed;
         setCurrentTick(event.currentTick);
 
         // Dispatch global events to listeners
         for (const [eventName, eventList] of Object.entries(event.events)) {
-          const listeners = eventListeners.current.get(eventName);
-          if (listeners && eventList.length > 0) {
-            for (const cb of listeners) cb(eventList);
-          }
-        }
-
-        // Dispatch player-scoped events to listeners
-        for (const [eventName, eventList] of Object.entries(
-          event.playerEvents,
-        )) {
           const listeners = eventListeners.current.get(eventName);
           if (listeners && eventList.length > 0) {
             for (const cb of listeners) cb(eventList);

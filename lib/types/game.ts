@@ -2,6 +2,8 @@
 
 import type { ShipSize, ShipRole } from "@/lib/constants/ships";
 import type { EventTypeId } from "@/lib/constants/events";
+import type { WorldMeta } from "@/lib/world/types";
+import type { Speed } from "@/lib/world/tick-loop";
 
 export type { ShipSize, ShipRole };
 
@@ -199,9 +201,9 @@ export interface FleetState {
 }
 
 export interface GameWorldState {
-  currentTick: number;
-  tickRate: number;
-  startingSystemId: string | null;
+  meta: WorldMeta;
+  speed: Speed;
+  achievedTps: number;
 }
 
 export interface SystemTraitInfo {

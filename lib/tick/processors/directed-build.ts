@@ -1,7 +1,4 @@
-import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
-import { PrismaDirectedBuildWorld } from "@/lib/tick/adapters/prisma/directed-build";
-import { loadHopDistances } from "@/lib/services/hop-distances";
-import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import type { TickContext, TickProcessorResult } from "../types";
 import { shardRange } from "@/lib/tick/shard";
 import { planFactionBuilds, type BuildSystemState } from "@/lib/engine/directed-build";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -97,32 +94,3 @@ export async function runDirectedBuildProcessor(
 
   return {};
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-/**
- * Live tick processor. Mirrors directedLogisticsProcessor: build the Prisma
- * world from ctx.tx, load the cached hop distances into a RouteCost, and run the
- * pure body. frequency:1 — the per-faction shard window is computed inside the
- * body from ctx.tick + interval. Runs AFTER directed-logistics so it only fills
- * structural gaps logistics could not serve.
- */
-export const directedBuildProcessor: TickProcessor = {
-  name: "directed-build",
-  frequency: 1,
-  dependsOn: ["directed-logistics"],
-
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaDirectedBuildWorld(ctx.tx);
-    const hops = await loadHopDistances();
-    const routeCost: RouteCost = (fromId, toId) => {
-      const h = hops.get(fromId)?.get(toId);
-      if (h === undefined || h > DIRECTED_BUILD.MAX_HOPS) return null;
-      return h * DIRECTED_BUILD.HOP_WEIGHT;
-    };
-    return runDirectedBuildProcessor(world, ctx, {
-      interval: DIRECTED_BUILD.INTERVAL,
-      routeCost,
-    });
-  },
-};

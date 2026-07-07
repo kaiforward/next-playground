@@ -1,60 +1,36 @@
-import { prisma } from "@/lib/prisma";
+import { getWorld } from "@/lib/world/store";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { GOODS } from "@/lib/constants/goods";
 import { ServiceError } from "./errors";
-import { getPlayerVisibility } from "./visibility-cache";
 import type { MarketComparisonEntry } from "@/lib/types/game";
 
 /**
- * Returns price/stock for one good across all systems visible to the player.
- * Stock is floored for display (matching getMarket); the mid price is derived
- * from stock via the good's price curve.
+ * Returns price/stock for one good across all systems. Stock is floored for
+ * display (matching getMarket); the mid price is derived from stock via the
+ * good's price curve.
  *
- * `goodId` is the database CUID. Clients that don't have a CUID handy (e.g. the
- * map overlay picker) should fetch the catalog via `useGoods()` first.
- *
+ * `goodId` is the goods-catalog key (e.g. "food").
  * Throws ServiceError(404) if the good does not exist.
  */
-export async function getMarketComparison(
-  playerId: string,
+export function getMarketComparison(
   goodId: string,
-): Promise<{ goodId: string; entries: MarketComparisonEntry[] }> {
-  const good = await prisma.good.findUnique({
-    where: { id: goodId },
-    select: { id: true, basePrice: true, priceFloor: true, priceCeiling: true },
-  });
-
+): { goodId: string; entries: MarketComparisonEntry[] } {
+  const good = Object.hasOwn(GOODS, goodId) ? GOODS[goodId] : undefined;
   if (!good) {
     throw new ServiceError("Good not found.", 404);
   }
 
-  const { visibleSet } = await getPlayerVisibility(playerId);
-  if (visibleSet.size === 0) {
-    return { goodId: good.id, entries: [] };
-  }
+  const entries: MarketComparisonEntry[] = getWorld()
+    .markets.filter((m) => m.goodId === goodId)
+    .map((m) => ({
+      systemId: m.systemId,
+      basePrice: good.basePrice,
+      currentPrice: spotPrice(
+        curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, m.demandRate, m.anchorMult),
+        m.stock,
+      ),
+      stock: Math.floor(m.stock),
+    }));
 
-  const visibleIds = [...visibleSet];
-
-  // Stations are 1:1 with systems by `systemId`. Query markets for this good
-  // whose station's system is visible.
-  const markets = await prisma.stationMarket.findMany({
-    where: {
-      goodId: good.id,
-      station: { systemId: { in: visibleIds } },
-    },
-    select: {
-      stock: true,
-      anchorMult: true,
-      demandRate: true,
-      station: { select: { systemId: true } },
-    },
-  });
-
-  const entries: MarketComparisonEntry[] = markets.map((m) => ({
-    systemId: m.station.systemId,
-    basePrice: good.basePrice,
-    currentPrice: spotPrice(curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, m.demandRate, m.anchorMult), m.stock),
-    stock: Math.floor(m.stock),
-  }));
-
-  return { goodId: good.id, entries };
+  return { goodId, entries };
 }

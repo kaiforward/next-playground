@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { apiFetch, ApiError, isAuthError } from "../fetcher";
+import { apiFetch, ApiError } from "../fetcher";
 
 /** Stub global fetch to return a fresh Response (status + JSON body) per call. */
 function mockFetch(status: number, body: unknown) {
@@ -38,27 +38,5 @@ describe("apiFetch", () => {
     if (err instanceof ApiError) {
       expect(err.status).toBe(500);
     }
-  });
-});
-
-// ── isAuthError ─────────────────────────────────────────────────
-
-describe("isAuthError", () => {
-  it("is true for a 401 ApiError", () => {
-    expect(isAuthError(new ApiError("Not authenticated.", 401))).toBe(true);
-  });
-
-  it("is false for a non-401 ApiError", () => {
-    expect(isAuthError(new ApiError("Boom", 500))).toBe(false);
-  });
-
-  it("is false for a plain Error", () => {
-    expect(isAuthError(new Error("Not authenticated."))).toBe(false);
-  });
-
-  it("is false for non-error values", () => {
-    expect(isAuthError(null)).toBe(false);
-    expect(isAuthError(undefined)).toBe(false);
-    expect(isAuthError("401")).toBe(false);
   });
 });

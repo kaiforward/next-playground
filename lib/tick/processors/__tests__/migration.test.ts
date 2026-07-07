@@ -22,7 +22,7 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
   };
 }
 const conn = (a: string, b: string, fuelCost = 10): SimConnection => ({ fromSystemId: a, toSystemId: b, fuelCost });
-const ctx = (tick: number): TickContext => ({ tx: undefined as never, tick, results: new Map() });
+const ctx = (tick: number): TickContext => ({ tick, results: new Map() });
 
 describe("migration processor", () => {
   it("relocates population from a tense full system to a calm roomy neighbour, conserved", async () => {

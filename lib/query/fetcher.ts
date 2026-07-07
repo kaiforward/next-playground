@@ -2,8 +2,7 @@ import type { ApiResponse } from "@/lib/types/api";
 
 /**
  * Error thrown by the API wrappers, carrying the HTTP status alongside the
- * message. The status lets the global query-cache handler recognise auth
- * failures (401) and redirect, rather than surfacing them as generic errors.
+ * message so callers can branch on it (e.g. 409 "no world loaded").
  */
 export class ApiError extends Error {
   constructor(
@@ -13,11 +12,6 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
-}
-
-/** True for a 401 ApiError — i.e. the session is no longer valid. */
-export function isAuthError(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 401;
 }
 
 /**

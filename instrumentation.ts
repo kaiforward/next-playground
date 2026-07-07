@@ -3,9 +3,15 @@ export async function onRequestError() {
 }
 
 export async function register() {
-  // Only start the tick engine on the server (not during build or in Edge runtime)
+  // Server only (not during build or in Edge runtime)
   if (typeof window === "undefined" && process.env.NEXT_RUNTIME === "nodejs") {
-    const { tickEngine } = await import("@/lib/tick/engine");
-    tickEngine.start();
+    // Dev-bootstrap: boot a default world so the app is immediately playable.
+    // The start screen (new game / load save) supersedes this as the entry
+    // point once it exists.
+    const { hasWorld, setWorld } = await import("@/lib/world/store");
+    if (!hasWorld()) {
+      const { generateWorld } = await import("@/lib/world/gen");
+      setWorld(generateWorld({ systemCount: 600, seed: 42 }));
+    }
   }
 }

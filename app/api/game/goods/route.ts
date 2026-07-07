@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { requirePlayer, isErrorResponse } from "@/lib/api/require-player";
 import { withServiceErrors } from "@/lib/api/with-service-errors";
 import { getGoods } from "@/lib/services/goods";
 import type { GoodsResponse } from "@/lib/types/api";
@@ -15,10 +14,7 @@ import type { GoodsResponse } from "@/lib/types/api";
  */
 export function GET() {
   return withServiceErrors("GET /api/game/goods", async () => {
-    const auth = await requirePlayer();
-    if (isErrorResponse(auth)) return auth;
-
-    const goods = await getGoods();
+    const goods = getGoods();
     return NextResponse.json<GoodsResponse>(
       { data: { goods } },
       { headers: { "Cache-Control": "private, no-cache" } },

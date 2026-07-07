@@ -1,6 +1,5 @@
-import { prisma } from "@/lib/prisma";
+import { getWorld } from "@/lib/world/store";
 import type { AtlasData, GovernmentType, RegionInfo } from "@/lib/types/game";
-import { toEconomyType, toGovernmentType } from "@/lib/types/guards";
 import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
 /**
@@ -10,59 +9,24 @@ import { deriveRegionDominantFaction } from "@/lib/utils/region";
  * Each region's government is derived from its dominant owning faction
  * rather than stored on the region itself.
  */
-export async function getAtlas(): Promise<AtlasData> {
-  const [regions, systems, connections, factions] = await Promise.all([
-    prisma.region.findMany({
-      select: {
-        id: true,
-        name: true,
-        dominantEconomy: true,
-        x: true,
-        y: true,
-      },
-    }),
-    prisma.starSystem.findMany({
-      select: {
-        id: true,
-        x: true,
-        y: true,
-        regionId: true,
-        economyType: true,
-        isGateway: true,
-        factionId: true,
-        popCap: true,
-      },
-    }),
-    prisma.systemConnection.findMany({
-      select: {
-        id: true,
-        fromSystemId: true,
-        toSystemId: true,
-        fuelCost: true,
-      },
-    }),
-    prisma.faction.findMany({
-      select: { id: true, name: true, color: true, governmentType: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+export function getAtlas(): AtlasData {
+  const world = getWorld();
+  const factions = [...world.factions].sort((a, b) => a.name.localeCompare(b.name));
 
   const factionGovById = new Map<string, GovernmentType>(
-    factions.map((f) => [f.id, toGovernmentType(f.governmentType)]),
+    factions.map((f) => [f.id, f.governmentType]),
   );
-  const factionNameById = new Map<string, string>(
-    factions.map((f) => [f.id, f.name]),
-  );
+  const factionNameById = new Map<string, string>(factions.map((f) => [f.id, f.name]));
 
   const systemFactionsByRegion = new Map<string, string[]>();
-  for (const s of systems) {
+  for (const s of world.systems) {
     if (!s.factionId) continue;
     const list = systemFactionsByRegion.get(s.regionId) ?? [];
     list.push(s.factionId);
     systemFactionsByRegion.set(s.regionId, list);
   }
 
-  const regionInfos: RegionInfo[] = regions.map((r) => {
+  const regionInfos: RegionInfo[] = world.regions.map((r) => {
     const dominantFactionId = deriveRegionDominantFaction(
       systemFactionsByRegion.get(r.id) ?? [],
       factionNameById,
@@ -73,7 +37,7 @@ export async function getAtlas(): Promise<AtlasData> {
     return {
       id: r.id,
       name: r.name,
-      dominantEconomy: toEconomyType(r.dominantEconomy),
+      dominantEconomy: r.dominantEconomy,
       dominantFactionId,
       dominantGovernmentType: dominantGov,
       x: r.x,
@@ -83,20 +47,20 @@ export async function getAtlas(): Promise<AtlasData> {
 
   return {
     regions: regionInfos,
-    systems: systems.map((s) => ({
+    systems: world.systems.map((s) => ({
       id: s.id,
       x: s.x,
       y: s.y,
       regionId: s.regionId,
       factionId: s.factionId,
-      economyType: toEconomyType(s.economyType),
+      economyType: s.economyType,
       isGateway: s.isGateway,
       developed: s.popCap > 0,
     })),
-    connections: connections.map((c) => ({
-      id: c.id,
-      fromSystemId: c.fromSystemId,
-      toSystemId: c.toSystemId,
+    connections: world.connections.map((c) => ({
+      id: `${c.fromId}:${c.toId}`,
+      fromSystemId: c.fromId,
+      toSystemId: c.toId,
       fuelCost: c.fuelCost,
     })),
     factions: factions.map((f) => ({

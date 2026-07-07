@@ -1,4 +1,4 @@
-import type { TickProcessorResult, GlobalEventMap, PlayerEventMap } from "./types";
+import type { TickProcessorResult, GlobalEventMap } from "./types";
 
 /**
  * Merge global events from a single processor result into a target accumulator.
@@ -15,21 +15,7 @@ export function mergeGlobalEvents(
   if (src.eventNotifications) {
     target.eventNotifications = target.eventNotifications ? [...target.eventNotifications, ...src.eventNotifications] : [...src.eventNotifications];
   }
-}
-
-/**
- * Merge player events from a single processor result into a target accumulator.
- */
-export function mergePlayerEvents(
-  target: Map<string, Partial<PlayerEventMap>>,
-  result: TickProcessorResult,
-): void {
-  if (!result.playerEvents) return;
-  for (const [playerId, events] of result.playerEvents) {
-    const existing = target.get(playerId) ?? {};
-    if (events.shipArrived) {
-      existing.shipArrived = existing.shipArrived ? [...existing.shipArrived, ...events.shipArrived] : [...events.shipArrived];
-    }
-    target.set(playerId, existing);
+  if (src.shipArrived) {
+    target.shipArrived = target.shipArrived ? [...target.shipArrived, ...src.shipArrived] : [...src.shipArrived];
   }
 }
