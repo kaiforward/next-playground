@@ -1,6 +1,6 @@
 # System Substrate & Traits
 
-Status: **Active** — physical substrate + narrative features shipped. The substrate uses the **available-space model** (Economy Substrate v2): each body has a finite *available space* partitioned into per-resource **deposit slots** (each carrying a **quality band**) and **general space** (a **habitable fraction** of which caps population). A seeded industrial base (`SystemBuilding` counts) is built onto that space and drives capacity-driven, input-gated production. Full substrate detail: [the available-space model](./economy-substrate-v2-available-space.md).
+Status: **Active** — physical substrate + narrative features shipped. The substrate uses the **available-space model** (Economy Substrate v2): each body has a finite *available space* partitioned into per-resource **deposit slots** (each carrying a **quality band**) and **general space** (a **habitable fraction** of which caps population). A seeded industrial base (`WorldBuilding` counts) is built onto that space and drives capacity-driven, input-gated production. Full substrate detail: [the available-space model](./economy-substrate-v2-available-space.md).
 
 What makes each system unique now has two layers:
 
@@ -62,13 +62,13 @@ Per-body slots, qualities, and spaces are **collapsed to per-system aggregates**
 
 ### 1.5 Build-out & industrial base
 
-The seeding allocator builds an **industrial base** onto a system's available space — abstract per-`(system, buildingType)` **counts** in `SystemBuilding` rows, seeded at world-gen and **downward-mutable** at runtime — the infrastructure-decay processor shrinks a count toward what is actively *used* (see [economy.md](./economy.md#infrastructure-decay)), but never *raises* one; runtime construction (growth) is the SP5 agency layer. Building types correspond one-to-one with output goods, plus one singleton `housing` (population-centre) type. Each carries `outputPerUnit`, `labourPerUnit`, `spaceCost`, and `inputs` (recipe). Allocator rules:
+The seeding allocator builds an **industrial base** onto a system's available space — abstract per-`(system, buildingType)` **counts** in `WorldBuilding` rows, seeded at world-gen and **downward-mutable** at runtime — the infrastructure-decay processor shrinks a count toward what is actively *used* (see [economy.md](./economy.md#infrastructure-decay)), but never *raises* one; runtime construction (growth) is the SP5 agency layer. Building types correspond one-to-one with output goods, plus one singleton `housing` (population-centre) type. Each carries `outputPerUnit`, `labourPerUnit`, `spaceCost`, and `inputs` (recipe). Allocator rules:
 
 - **Tier-0 extractors** — sit on **dedicated deposit slots**; count is bounded by the resource's `slotCap`, and runtime output is multiplied by its `yieldMult`.
 - **Tier-1+ manufacturers** — sit on fungible **general space**, bounded by it; input-gated at runtime (each draws its recipe inputs from local stock and throttles on the scarcest — the SP3 cascade; see [economy.md](./economy.md) §Supply Chain & Input-Gating).
 - **Population centres** — sit on **habitable space**, sized to staff the system's labour demand. Industry is **gated on habitability**: a system with no habitable land builds **nothing** — it stays a pristine undeveloped deposit field for SP5 to colonise — so only habitable systems develop.
 
-**Built ≤ available** everywhere — seeding fills well below the slot/space ceilings, leaving visible headroom for SP5 faction build-out. `SystemBuilding` rows are the source of the capacity-driven production formula (see [economy.md](./economy.md) §Production & Consumption).
+**Built ≤ available** everywhere — seeding fills well below the slot/space ceilings, leaving visible headroom for SP5 faction build-out. `WorldBuilding` rows are the source of the capacity-driven production formula (see [economy.md](./economy.md) §Production & Consumption).
 
 ---
 
@@ -85,7 +85,7 @@ Economy type is **not assigned** — it is a derived label. `deriveEconomyTypeLa
 
 Because raw building blocks are needed in huge volume and most bodies carry *some* extractable deposit, the galaxy is **extraction-dominant by design** — a large majority of systems read `extraction`. This is the intended barren-but-alive shape, not a generation flaw; finer labelling ("ore extraction" vs "gas extraction") is a presentation concern (P7), not a distribution to fake.
 
-> **Display-only label**: nothing in the economy tick reads economy type. Production derives from the `SystemBuilding` counts, `labourFulfillment`, and per-resource `yieldMult` (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
+> **Display-only label**: nothing in the economy tick reads economy type. Production derives from the `WorldBuilding` counts, `labourFulfillment`, and per-resource `yieldMult` (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
 
 ---
 

@@ -2,7 +2,7 @@
 
 Status: **Active** — shipped (core ship system).
 
-Ship classes, roles, and stats. Since the pivot Phase 1 teardown, ships are travel assets only: cargo, upgrades, purchase, repair, and the arrival danger pipeline are gone. Combat-facing stats (hull, shields, firepower, evasion, stealth) remain on the roster but are inert until the war layer lands, when ships return as faction assets.
+Ship classes, roles, and stats. Ships are travel assets only — there is no cargo, upgrades, purchase, repair, or arrival danger pipeline. Combat-facing stats (hull, shields, firepower, evasion, stealth) remain on the roster but are inert until the war layer; ships become faction assets when the war layer is built.
 
 **Design principle**: Size is the foundation. A ship's size category determines its baseline stat profile — small ships are fast, evasive, and stealthy; large ships absorb damage but can't hide or dodge. Ship classes specialise within their size category by role.
 
@@ -79,7 +79,7 @@ Twelve classes total. Exact stat values live in `lib/constants/ships.ts`.
 ## 4. Ship Lifecycle
 
 - **Starter ship**: New players spawn with a free Shuttle. Fleets are otherwise fixed — purchase died with the shipyard (ships return as faction assets in the war layer). The dev teleport tool remains for testing.
-- **Disabled flag**: `disabled` persists on the model but nothing sets it — no system damages hulls since the arrival pipeline was removed.
+- **Disabled flag**: `disabled` persists on the ship row but nothing sets it — no system damages hulls (there is no arrival danger pipeline).
 
 ---
 

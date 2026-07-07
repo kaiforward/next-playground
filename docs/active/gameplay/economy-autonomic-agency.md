@@ -130,7 +130,7 @@ transfer fails. Only matched transfers are pathed (bounded by the pool), never a
 
 ## Autonomic build (grows infrastructure)
 
-SP3.5 decay only ever moves `SystemBuilding.count` **down**, toward what is used. *What* to build and
+SP3.5 decay only ever moves `WorldBuilding.count` **down**, toward what is used. *What* to build and
 *where* is a faction decision, not an automatic erosion — so growth is this slice. A system's **potential**
 is set by its physical substrate and gated by viability, in a strict physical chain:
 
@@ -191,7 +191,7 @@ scaling moved/built volume to wall-clock. Two processors join the tick pipeline:
 - **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, apply silent
   stock deltas + `logistics` flow rows.
 - **`directedBuild`** (`dependsOn: directed-logistics`) — proactive housing + labour-gated industry,
-  applied as upward `SystemBuilding.count` increments (continuous Float; removal stays decay's job).
+  applied as upward `WorldBuilding.count` increments (continuous Float; removal stays decay's job).
 
 Both reuse the existing fixed-interval shard machinery and the shared market-state derivation. See the
 [tick engine](../engineering/tick-engine.md) for the full processor order.

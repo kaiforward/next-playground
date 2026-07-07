@@ -6,10 +6,12 @@ The game clock and processor pipeline that advances the simulation. All game sta
 
 ## Game Clock
 
-- **Tick rate**: 5000ms (5 seconds) between ticks in production. Configurable via dev tools for testing.
-- **Polling**: Engine checks every 1000ms if enough real time has elapsed to advance.
-- **Advancement**: When elapsed >= tick rate, the tick counter increments and all active processors run.
-- **Concurrency safety**: Optimistic locking ensures only one server instance advances the tick (important for multi-instance deployments).
+The tick advances against an **in-memory world** paced by a single in-process loop (`TickLoop`, `lib/world/tick-loop.ts`) — see [single-player-runtime.md](./single-player-runtime.md) for the store, save format, and lifecycle.
+
+- **Speed dial**: cadence is a pure game-feel control — `paused · 1 tick/s · 5 ticks/s · max`. There is no fixed real-time tick rate.
+- **Max speed**: a yielding loop — tick for a ~50 ms budget, then yield the event loop so HTTP requests and the map stay responsive; the UI reports *achieved* ticks/sec rather than promising a rate.
+- **Advancement**: each fire increments `meta.currentTick` and runs `runWorldTick` (all active processors). One loop owns advancement, so ticks never contend — there is no optimistic lock and no multi-instance coordination.
+- **Determinism**: `Date.now`/timers pace the loop only; tick math takes a seeded per-tick RNG (`tickRng(seed, tick)`) and never reads the wall clock.
 
 ---
 
@@ -30,43 +32,37 @@ Events ────────────────────────�
   └→ Relations (depends on: events, every 3 ticks)
 ```
 
-**Economy → Population in-memory handoff:** the economy processor records per-system satisfaction (`delivered_g / demanded_g` for each good it processes this tick) into `ctx.results` — a transient in-memory store that lives only for the duration of that tick. The population processor reads this from `ctx.results` in the same tick to compute dissatisfaction `D` and update `unrest` without an extra database round-trip. This data is never persisted or broadcast to clients.
+**Economy → Population in-memory handoff:** the economy processor records per-system satisfaction (`delivered_g / demanded_g` for each good it processes this tick) into `ctx.results` — a transient in-memory store that lives only for the duration of that tick. The population processor reads this from `ctx.results` in the same tick to compute dissatisfaction `D` and update `unrest` — no second pass over world state. This data is never persisted or broadcast to clients.
 
 ### Processor Details
 
 | Processor | Frequency | Dependencies | What It Does |
 |---|---|---|---|
-| Ship Arrivals | Every tick | None | Docks ships that have reached their arrival tick (status → docked, destination/arrival columns cleared) and emits per-player `shipArrived` events |
+| Ship Arrivals | Every tick | None | Docks ships that have reached their arrival tick (status → docked, destination/arrival fields cleared) and emits `shipArrived` events. Currently dormant — world-gen seeds no ships (player fleets are planned) — but present in the pipeline |
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
 | Economy | Every tick | Events | Processes ~`total/ECONOMY_UPDATE_INTERVAL` systems each tick (sorted by id via `shardRange`), so every system refreshes every `ECONOMY_UPDATE_INTERVAL` (24) ticks at any scale. Applies event modifiers and government effects to each market's stock; applies strike suppression to production (derived from last tick's `unrest`). Applied rates × `catchUpFactor` (= 1 at the reference interval). Records per-system satisfaction (`delivered / demanded`) into `ctx.results` for the population processor |
-| Trade Flow | Every tick (fixed-interval edge shard) | Economy | Simulates inter-system goods flow over the **intra-faction** edge graph (region lines ignored, faction borders closed), distance-attenuated by fuel cost. Each tick processes `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` over the stable edge order — full sweep takes `ECONOMY_UPDATE_INTERVAL` ticks at any scale. Per-edge amount × `catchUpFactor`. Mutates stock at both endpoints, appends flow events, increments per-system volume. Recent player trade volume throttles edge budget toward zero (per-edge displacement). See [trade-simulation.md](../gameplay/trade-simulation.md) |
-| Infrastructure Decay | Every tick (economy shard) | Economy | Shrinks `SystemBuilding.count` **downward only** toward what is *used* — disuse decay where built exceeds staffed-and-selling (`count × min(labourFulfillment, outputUptake)`) or housing occupancy (`population / POP_CENTRE_DENSITY`), plus a catastrophic unrest teardown above θ_decay. Acts only on the economy's just-processed shard (read off `ctx.results`, incl. per-good output uptake); batches `count` deltas via `unnest()` and recomputes `popCap` live from the surviving housing. Never raises a count or goes below 0 |
-| Population | Every tick | Economy, Infrastructure Decay | Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline against the **live** post-decay `popCap`; housing-overshoot (`population > popCap`, the unrest-snowball case) sheds the excess as unrest-weighted death (the conserved migration half rides the migration processor); rewrites `StationMarket.demandRate` for each system's new population level |
+| Trade Flow | Every tick (fixed-interval edge shard) | Economy | Simulates inter-system goods flow over the **intra-faction** edge graph (region lines ignored, faction borders closed), distance-attenuated by fuel cost. Each tick processes `shardRange(totalEdges, tick, ECONOMY_UPDATE_INTERVAL)` over the stable edge order — full sweep takes `ECONOMY_UPDATE_INTERVAL` ticks at any scale. Per-edge amount × `catchUpFactor`. Mutates stock at both endpoints, appends flow events, increments per-system volume. See [trade-simulation.md](../gameplay/trade-simulation.md) |
+| Infrastructure Decay | Every tick (economy shard) | Economy | Shrinks `WorldBuilding.count` **downward only** toward what is *used* — disuse decay where built exceeds staffed-and-selling (`count × min(labourFulfillment, outputUptake)`) or housing occupancy (`population / POP_CENTRE_DENSITY`), plus a catastrophic unrest teardown above θ_decay. Acts only on the economy's just-processed shard (read off `ctx.results`, incl. per-good output uptake); applies `count` deltas in one pass and recomputes `popCap` live from the surviving housing. Never raises a count or goes below 0 |
+| Population | Every tick | Economy, Infrastructure Decay | Reads per-system satisfaction from `ctx.results`; updates `unrest` (convex demand-weighted dissatisfaction integral); applies logistic population growth/decline against the **live** post-decay `popCap`; housing-overshoot (`population > popCap`, the unrest-snowball case) sheds the excess as unrest-weighted death (the conserved migration half rides the migration processor); rewrites `WorldMarket.demandRate` for each system's new population level |
 | Migration | Every tick (fixed-interval edge shard) | Population | Relocates population (conserved) along the same intra-faction open-edge topology + fixed-interval edge shard as trade-flow; population flows down-unrest / up-headroom (`popCap − population`), distance-attenuated, per-edge amount × `catchUpFactor`. Gateways throttle migration as they do goods. Produces boom/bust geography over time |
 | Directed Logistics | Every tick (economy shard) | Economy | Silent, budgeted surplus→deficit goods redistribution within each faction — routes stock from surplus systems to deficit systems the passive trade flow can't reach. See [economy-autonomic-agency.md](../gameplay/economy-autonomic-agency.md) |
 | Directed Build | Every tick (economy shard) | Directed Logistics | Autonomic construction: proactive housing where population wants to grow, labour-gated industry where staffing and input self-supply support it. See [economy-autonomic-agency.md](../gameplay/economy-autonomic-agency.md) |
 | Relations | Every 3 ticks | Events | Drifts every faction pair's relation score (border length, cross-faction trade, doctrine, common enemies). Spawns `border_conflict`/`pact_under_negotiation`/`alliance_dissolved` events on threshold crossings, then resolves relations-owned event windows (forms/dissolves alliances, expires events). See [faction-system.md](../gameplay/faction-system.md) |
 
 ### Execution Model
-- All processors run inside a single transaction — all updates commit atomically
-- If one processor fails, the error is re-thrown and the entire tick transaction aborts (PostgreSQL invalidates the connection after any query error, so continuing would cascade failures). The tick counter only advances if all processors succeed.
-- Performance is monitored via per-processor timing logged after each tick
+- `runWorldTick` (`lib/world/tick.ts`) runs the processor bodies against in-memory adapters and produces the next world. It is the **one shared tick body** — the live loop and the calibration harness both call it (see [processor-architecture.md](./processor-architecture.md)).
+- Atomicity comes from the store, not a transaction: the loop only `setWorld`s a **fully-successful** tick. If any processor throws, the error propagates, the loop **hard-pauses**, the broken world is never committed or autosaved, and `currentTick` does not advance.
+- Signals hand off between stages through the transient in-memory `TickContext.results` map (never persisted, never broadcast).
 
 ---
 
 ## Event Delivery (SSE)
 
-After all processors complete, results are broadcast to connected clients via Server-Sent Events.
+After a successful tick, the `TickLoop` broadcasts a `TickBroadcast` frame (`{ currentTick, speed, achievedTps, events }`) to SSE subscribers. Single-player, so the stream is **single-client transport** — the old multiplayer fan-out and per-player event scoping are gone.
 
-### Two Event Scopes
-- **Global events**: Broadcast to every connected client (economy ticks, event notifications)
-- **Player-scoped events**: Sent only to the specific player (ship arrivals)
-
-### Client Integration
-- Clients connect to SSE endpoint on page load
-- Initial tick state is seeded from a REST endpoint (so transit ETAs are correct before SSE connects)
-- Client-side hook dispatches events to listeners
-- Query invalidation hook automatically refreshes relevant TanStack Query caches when events arrive (e.g., ship arrival invalidates fleet + market data)
+- **Throttled to ~4 emits/sec** (250 ms, latest-wins) so `max` speed can't melt the client — per-tick delivery was never a contract.
+- A connecting client seeds its tick state from `GET /api/game/world` so its position is correct before the first frame.
+- A client-side hook dispatches events to listeners; a query-invalidation hook refreshes the relevant TanStack Query caches as the world advances.
 
 ---
 
@@ -82,7 +78,7 @@ The economy, trade-flow, and migration processors all run every tick but each on
 
 | Knob | Meaning | Default |
 |---|---|---|
-| **Tick rate** | wall-clock ms per tick | 5000ms |
+| **Tick rate** | wall-clock pacing per tick | player speed dial (`paused` / `1`/s / `5`/s / `max`) |
 | **Update interval** | game-ticks between refreshes per item | `ECONOMY_UPDATE_INTERVAL` = 24 (economy/flow/migration) |
 | **Throughput / shard size** | items processed per tick | *derived* (`total / interval`); ceiling is the perf limit |
 

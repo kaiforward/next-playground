@@ -215,7 +215,7 @@ as an explicit **SP4 phase** ("Population ← economic viability", see
 Deposit slots + quality bands are generated **per body**, then **collapsed to per-system aggregates**
 denormalised onto `StarSystem` — an extractor-slot **cap** (`slot*` columns) and an **effective-yield
 multiplier** (`yield*` columns) per resource — so the per-tick economy never joins the bodies table.
-`SystemBuilding` stays system-level; per-body slots/quality are generation-time concepts that never reach
+`WorldBuilding` stays system-level; per-body slots/quality are generation-time concepts that never reach
 the hot path individually. Goods that share a resource (food/textiles ← arable) share its slot cap and
 quality. The seeder fills **best-quality slots first**, so a system's effective yield = mean quality of
 its *filled* slots (`1.0` when none are filled). The live tick adds exactly one new production term: a

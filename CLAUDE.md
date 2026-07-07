@@ -1,49 +1,44 @@
 # Stellar Trader
 
-Browser-based multiplayer space trading game.
+Single-player grand-strategy game (working title pending) in a procedurally generated galaxy — colonise, develop worlds under physical constraints, and steer a living simulated economy. It runs as an **in-memory, no-login local simulation**. Being re-conceived from a browser-based multiplayer space-trading game; the roadmap is in `docs/planned/grand-strategy-vision.md`.
 
 **Important**: Read `docs/SPEC.md` at the start of every session to understand the full game, all active systems, and how they interact. The SPEC is the functional source of truth — this file is the code reference.
 
 ## Skills
 
-- `/bootstrap` — Run environment checks (node, deps, database, env, outdated packages, build)
+- `/bootstrap` — Run environment checks (node, deps, env, outdated packages, build)
 
 ## Commands
 
 - `npm run dev` — Start dev server (Turbopack)
-- `npm run build` — Production build
+- `npm run build` — Production build. **Use `npx next build --webpack` as the PR build gate** (Turbopack build has other quirks; webpack is the stable gate).
 - `npx vitest run` — Run unit tests
-- `npm run simulate` — Quick sanity check (all strategies, 500 ticks, seed 42). **Main game economy only** — does not simulate mini-games.
-- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`). Main game economy only.
+- `npm run simulate` — Quick headless sanity check over the real tick (`lib/engine/simulator/runner.ts`). Reports intrinsic economy-health metrics.
+- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`).
 
-The simulator is a **calibration harness**, not a game feature — it runs the same economy tick the live game does, with synthetic "bots" providing trading pressure (`lib/engine/simulator/bot.ts`). There are no NPC bots in the live game; the simulator is for validating economy changes against equilibrium targets before they hit players.
-
-- `npx prisma db seed` — Seed database (scale controlled by `UNIVERSE_SCALE` in `.env`: `"default"` = 600 systems/7K map, `"10k"` = 10,000 systems/25K map)
-- `npx prisma db push` — Push schema changes to PostgreSQL
+The simulator is a **calibration harness**, not a game feature — it runs `runWorldTick` (the exact tick the live loop runs) headlessly and reports economy-health metrics for validating changes before they ship. There is only one tick body, so the harness and the live game run literally the same code (no sim-only "bots" or strategies). World generation is `generateWorld(systemCount, seed)` (`lib/world/gen.ts`) invoked in-process on **New game**; there is no seed script and no database.
 
 ## Tech Stack
 
-Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, PostgreSQL via Prisma 7 (`prisma-client` generator + `@prisma/adapter-pg`), NextAuth v5 (JWT/Credentials), TanStack Query v5 (Suspense mode), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4.
-
-**Prisma 7 gotcha**: Seed command lives in `prisma.config.ts` under `migrations.seed`, not in `package.json`. Command: `npx tsx --tsconfig tsconfig.json prisma/seed.ts`.
+Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, TanStack Query v5 (Suspense mode), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4. **No database and no auth** — the world is an in-memory singleton in the server process, persisted as JSON save files on local disk.
 
 ## Project Structure
 
 Core layers (fixed roles — see CLAUDE.md conventions for rules):
-- `lib/engine/` — Pure game logic. Zero DB dependency. Test with Vitest.
-- `lib/services/` — All DB access and business logic. Route handlers are thin wrappers.
-- `lib/tick/` — Tick engine and processor pipeline. Each processor splits into a typed `World` interface (`lib/tick/world/`), a Prisma adapter (`lib/tick/adapters/prisma/`), an in-memory adapter when the simulator needs it (`lib/tick/adapters/memory/`), and a pure processor body (`lib/tick/processors/`). Live and sim run the same body. See `docs/active/engineering/processor-architecture.md`.
-- `app/api/game/` — Thin HTTP wrappers: auth check → call service → NextResponse.json.
-- `app/(game)/` — Game UI pages. `app/(auth)/` — Auth pages.
-- `prisma/` — Schema and seed script.
+- `lib/engine/` — Pure game logic. Zero I/O (no `fs`, no `process.env`, no DB). Test with Vitest.
+- `lib/world/` — Single-player runtime substrate: the in-memory world store (`store.ts`, a globalThis singleton), world-gen (`gen.ts`), save/load (`save.ts` pure + `save-files.ts`, the only `fs` importer in `lib/`), the tick loop (`tick-loop.ts`), and the one shared tick body `runWorldTick` (`tick.ts`). See `docs/active/engineering/single-player-runtime.md`.
+- `lib/services/` — All world-state reads and business logic (read the in-memory world; no DB). Route handlers are thin wrappers.
+- `lib/tick/` — Processor pipeline. Each processor splits into a typed `World` interface (`lib/tick/world/`), a single in-memory adapter (`lib/tick/adapters/memory/`), and a pure processor body (`lib/tick/processors/`). `runWorldTick` drives them; the live game and the calibration harness run the same bodies. See `docs/active/engineering/processor-architecture.md`.
+- `app/api/game/` — Thin HTTP wrappers: call service → NextResponse.json (no auth).
+- `app/(game)/` — Game UI pages. `app/start/` — start screen (Continue / Load / New game).
 
 ## Docs
 
 Functional spec: `docs/SPEC.md` — master game spec with system interaction map. Read this first.
 
 Design docs (under `docs/`):
-- `docs/active/` — Implemented systems, split by type: `gameplay/` (economy, events, trading, trade-simulation, navigation, universe, system-traits, faction-system, combat, notifications, …), `engineering/` (tick-engine, processor-architecture, map-data-loading), `design-system/` (theme)
-- `docs/planned/` — Designed but not yet built (war-system, facilities, production, player-progression, multiplayer-infrastructure, …)
+- `docs/active/` — Implemented systems, split by type: `gameplay/` (economy + specialisation, events, trade-simulation, navigation, universe, system-traits, faction-system, ship-roster, …), `engineering/` (single-player-runtime, tick-engine, processor-architecture, map-data-loading), `design-system/` (theme)
+- `docs/planned/` — Designed but not yet built (grand-strategy-vision, economy-simulation-vision, economy-specialisation, war-system, …)
 - `docs/build-plans/` — Transient, code-heavy build plans for in-flight features. **Delete each once its feature ships** — the functional spec moves to `docs/active/` and the code is the source of truth. Functional roadmaps that merely order unbuilt features go in `docs/planned/`, not here.
 - `docs/BACKLOG.md` — Actionable work items (delete when shipped)
 
@@ -51,24 +46,23 @@ Design docs (under `docs/`):
 
 These apply to every layer — components, hooks, services, engine, processors, constants.
 
-- **Separation of concerns** — Each layer has one job. Components render UI. Hooks manage data fetching and client state. Services own business logic and DB access. Engine functions are pure computation. Route handlers are thin wrappers. Prefer additional boilerplate (hooks, schemas, services) over mixing concerns in a single file.
+- **Separation of concerns** — Each layer has one job. Components render UI. Hooks manage data fetching and client state. Services own business logic and world-state access. Engine functions are pure computation. Route handlers are thin wrappers. Prefer additional boilerplate (hooks, schemas, services) over mixing concerns in a single file.
 - **DRY (Don't Repeat Yourself)** — When logic, markup, or configuration appears in more than one place, extract it. Shared UI goes in `components/ui/` or `components/form/`. Shared business logic goes in `lib/utils/` or `lib/engine/`. Shared types go in `lib/types/`. The second occurrence is the signal to extract — don't wait for a third.
 - **KISS (Keep It Simple)** — Solve the current problem with the minimum necessary complexity. Don't add indirection, abstraction, or configuration for hypothetical future needs. A straightforward 20-line function is better than a clever 5-line one. When choosing between approaches, pick the one that's easiest to read, debug, and delete.
 - **Reusability** — Design interfaces (props, function signatures, types) for the next 10 uses, not just the current one. Use typed props, discriminated unions, and explicit accessor functions over loose string keys or open-ended config objects.
-- **Security** — Validate at system boundaries (API routes, form schemas). Use Prisma transactions with optimistic locking for mutations. Never trust client state for writes.
+- **Security** — Validate at system boundaries (API routes, form schemas — e.g. New-game system count and save names are Zod-validated at the route). The in-memory world is advanced only by the single-owner tick loop and mutated by services through the world store; never trust client state for writes.
 
 ## Conventions
 
 - **No `as` type assertions** — The only permitted uses of `as` are `as const` and inside runtime type guard functions (`lib/types/guards.ts`) that validate before returning. All other `as` casts are strictly forbidden. If TypeScript can't infer the type, fix the types at the source rather than casting at the consumer.
-- **Type at the boundary, trust downstream** — Prisma returns strings for union fields; validate these once in the service layer using guards from `lib/types/guards.ts`. Services return fully typed data — components, hooks, and processors never re-validate types that were already validated upstream. If a component needs a type guard, the service isn't returning the right type.
-- **No `unknown` in the codebase** — `Record<string, unknown>`, `unknown`, and untyped maps/arrays are banned everywhere: components, hooks, services, processors, engine, constants. The only exception is `JSON.parse` results at system boundaries (API routes, sessionStorage), which must be narrowed immediately with `typeof`/`in` checks — never stored as `unknown`. If a type is too loose, fix it at the source: use Prisma-generated types for where clauses (`Prisma.ModelWhereInput`), typed event maps for event data, specific value unions for filter params. Extra boilerplate is always preferable to `unknown`.
+- **Type at the boundary, trust downstream** — Untyped data enters only at true boundaries (save-file `deserialize`, API `JSON.parse`); narrow it once with guards from `lib/types/guards.ts`, and the in-memory tick adapters narrow any string-typed row columns to unions on the way to a processor body. Services return fully typed data — components, hooks, and processors never re-validate types that were already validated upstream. If a component needs a type guard, the service isn't returning the right type.
+- **No `unknown` in the codebase** — `Record<string, unknown>`, `unknown`, and untyped maps/arrays are banned everywhere: components, hooks, services, processors, engine, constants. The only exception is `JSON.parse` results at system boundaries (API routes, save-file `deserialize`, sessionStorage), which must be narrowed immediately with `typeof`/`in` checks — never stored as `unknown`. If a type is too loose, fix it at the source: hand-owned `World` row types (`lib/world/types.ts`), typed event maps for event data, specific value unions for filter params. Extra boilerplate is always preferable to `unknown`.
 - **Generics must stay generic** — Generic components like `DataTable<T>` must work with `T` directly, never intersect it with `Record<string, unknown>` or widen it to weaken type safety. Use typed accessors (`render(row: T)`, `getValue(row: T)`) instead of string-key property access. If a generic component needs to access row data, require explicit accessor functions — never cast `T` to access properties by dynamic key.
-- Engine functions are pure — no DB imports. Test with Vitest.
-- Prisma singleton in `lib/prisma.ts` — always use this, never create new clients.
-- Prisma Client imported from `@/app/generated/prisma/client`.
+- Engine functions are pure — no `fs`/`process.env`/DB imports. Test with Vitest.
+- World state is read from the in-memory store (`lib/world/store.ts`, `getWorld()`), never a DB. The world is JSON-serializable — no `Map`/`Set`/`Date`/class instances in `World`.
 - Tailwind v4 theme is in `globals.css` (`@theme inline {}`), no tailwind.config.js.
 - API responses use `ApiResponse<T>` format: `{ data?: T, error?: string }`.
-- Services layer (`lib/services/`) holds all DB/business logic. Route handlers are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions.
+- Services layer (`lib/services/`) holds all world-state/business logic. Route handlers are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions.
 - **Discriminated unions for result types** — `{ ok: true; data } | { ok: false; error }`, never `{ ok: boolean; data?; error? }`.
 - **Avoid the postfix `!` non-null assertion** — strip `null | undefined` with a real check, not `foo!`. Exception: `find(...)!` in tests is an accepted project idiom.
 - Client data fetching uses TanStack Query hooks (`lib/hooks/`) with `useSuspenseQuery`. Pages/components wrap data-fetching sections in `QueryBoundary` instead of inline loading/error checks. Query keys are centralized in `lib/query/keys.ts`. Ship arrival invalidation is centralized in `useTickInvalidation` — pages do not subscribe to arrivals individually.
@@ -78,18 +72,15 @@ These apply to every layer — components, hooks, services, engine, processors, 
 
 Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't think to check, so check here. (The `/uber-review` skill's `rules/code-standards.md` is the review-time projection of these + the Conventions above; when you add a rule here, add its review slug there.)
 
-**Prisma 7 / PostgreSQL**
-- `new PrismaClient()` needs a driver adapter (`@prisma/adapter-pg`) or it throws — the `prisma-client` generator uses the client engine.
-- Set `{ timeout: 30_000 }` on `$transaction()`; the 5000ms default is blown by tick processors at 10K scale.
-- A single query error aborts the whole transaction — you can't catch it and keep querying the same `tx`. Processor errors inside `$transaction` must re-throw (don't advance the tick counter on a no-op commit).
-- Batch all writes inside a transaction — per-iteration `create`/`update`/`findMany` is an N+1 time bomb that passes unit tests (tiny universe) but blows the 30s timeout at 10K. Collect into arrays, then `createManyAndReturn` / `createMany` / `unnest()` UPDATE (see `events.ts`, `economy.ts`).
-- Bulk SQL: multi-arg `unnest($1::t[], $2::t[]) AS batch(a, b)` (stops at the shortest array; separate `unnest()`s pad NULLs). Guard `NaN`/`Infinity` before raw SQL — PG rejects them and aborts the tx.
-- `Number.MAX_SAFE_INTEGER`/`Infinity` overflow Prisma `Int` (`int4` max ~2.1B; PG throws `P2020`, SQLite silently accepted them). Use `2_000_000_000` for "never" sentinels; the tick counter is `int4`. Overflow surfaces only through the live adapter — in-memory test adapters mask it.
-- A `findMany`/`findUnique` that pulls **multiple sibling relations** makes Prisma issue them as **concurrent sub-queries on one connection** — pg deprecates that (`client.query()` while the connection is busy; removed in pg@9). Add `relationLoadStrategy: "join"` (one LATERAL JOIN, no concurrency, fewer round-trips; needs the `relationJoins` generator preview feature). Most relevant on the tick / `$transaction` hot path (`getArrivingShips`, `getActiveBattlesDue`).
+**In-memory world & save files**
+- The world is **process state** — a full dev-server restart (not HMR) loses unsaved progress. The `TickLoop` autosaves every 60 s while running + on pause, and the store is a `globalThis` singleton so HMR survives — a restart doesn't. (Turbopack's persistent cache can even re-run a deleted `instrumentation.ts` after a restart; `rm -rf .next` if boot behaviour looks stale.)
+- `World` must stay **JSON-serializable**: no `Map`/`Set`/`Date`/class instances, and no `Infinity`/`NaN` in world state — `JSON.stringify` turns those into `null`, silently corrupting a save. Guard tick math that could produce them.
+- `save-files.ts` is the only `fs` importer in `lib/` — keep it (and any Node-edge code) behind a **dynamic** `import()` from the pure path so the engine/services/world-gen graph stays worker-portable (path-B guardrail). Static `fs`/`process.env` imports in `lib/engine`, `lib/services`, or `lib/world` (except `save-files.ts`) break that.
+- A failing tick **hard-pauses** the loop and never commits the broken world (no `setWorld`, no autosave) — atomicity comes from the store accepting only a fully-successful tick, not a transaction.
+- Determinism: tick math uses seeded RNG (`tickRng(seed, tick)`); never read `Date.now`/`Math.random`/`new Date()` inside a processor body (wall-clock is for pacing/autosave/logging only).
 
 **Testing / Vitest**
-- The `unit` project sets NO `DATABASE_URL`, and `lib/prisma.ts` throws at module-load when it's unset. Never **statically** import `@/lib/prisma` (directly or transitively) into a unit-tested module graph — the test fails to load ("no tests run"). Keep prisma-tainted deps as **dynamic** imports inside function bodies (`const { prisma } = await import("@/lib/prisma")`). A shell that exports `DATABASE_URL` masks this — verify with `unset DATABASE_URL; npx vitest run --project unit <test>`.
-- The `unit` project runs both `lib/**` and `components/**` `*.test.ts`; `*.integration.test.ts` is a separate Postgres project. No jsdom — DOM-touching tests need an inline `globalThis` stub in `beforeAll`.
+- The `unit` project runs both `lib/**` and `components/**` `*.test.ts`. There is no longer an integration/Postgres project (deleted with the DB). No jsdom — DOM-touching tests need an inline `globalThis` stub in `beforeAll`.
 
 **Next.js 16 / React / TanStack Query**
 - `useSuspenseQuery` fires during SSR render (not in an effect) — relative-URL `fetch()` crashes on the server; `QueryBoundary`'s mounted guard defers children past hydration.
@@ -101,16 +92,14 @@ Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't
 - Zod v4: `superRefine` uses `code: "custom"` (string) and runs only after base validation passes.
 - RHF: a resolver swapped via `useMemo` does NOT auto-revalidate — `useEffect` + `trigger()`.
 - react-error-boundary v5 `fallbackRender`: `error` is `unknown` — coerce `error instanceof Error ? error : new Error(String(error))`.
-- A server-only env read at module load (`process.env.X`) is `undefined` in the **client bundle** unless `NEXT_PUBLIC_*` or listed in `next.config.ts` `env` — so a client component that reads its *resolved value* (directly, or via a transitively-imported constant derived from it) silently falls back to the default client-side while the server uses the real value. The trigger is the client **reading the value**, not merely importing the module (importing a module that derives `X` but reading only unscaled siblings is safe). Prefer keeping such envs **server-only** and having the client consume already-resolved data from the API; expose via `next.config.ts` only when the client genuinely must recompute from the env itself (`UNIVERSE_SCALE` → tile geometry). `ECONOMY_SCALE` is intentionally server-only for this reason.
+- A server-only env read at module load (`process.env.X`) is `undefined` in the **client bundle** unless `NEXT_PUBLIC_*` or listed in `next.config.ts` `env` — so a client component that reads its *resolved value* (directly, or via a transitively-imported constant derived from it) silently falls back to the default client-side while the server uses the real value. The trigger is the client **reading the value**, not merely importing the module (importing a module that derives `X` but reading only unscaled siblings is safe). Prefer keeping such envs **server-only** and having the client consume already-resolved data from the API; expose via `next.config.ts` only when the client genuinely must recompute from the env itself. `ECONOMY_SCALE` is intentionally server-only for this reason. (Map extent is not such a case: it rides in generated world state as `meta.mapSize` and the client reads it from the atlas rather than recomputing from an env.)
 
 **Caching / API / data shapes**
-- Never `Cache-Control: public` on auth-gated routes (behind `requirePlayer()`) — shared caches could cross-serve users; use `private`.
-- Never `Cache-Control: immutable` on API responses (it's for hashed static assets) — causes stale data after reseeds; use `no-cache`/`max-age` and let TanStack `staleTime` handle in-memory caching.
-- TOCTOU: re-read state inside `prisma.$transaction` before writing; never compute from a pre-tx snapshot; use `{ increment }` for atomic numeric updates.
+- Never `Cache-Control: immutable` on API responses (it's for hashed static assets) — a **New game** replaces the whole world, so `immutable`/long `max-age` would serve stale system ids that mismatch live tile/dynamic data; use `no-cache`/`max-age` and let TanStack `staleTime` handle in-memory caching. Routes are no longer auth-gated, so the old `public`-cross-serves-users hazard is gone, but `private, no-cache` stays the sensible default.
 - `ECONOMY_PRODUCTION`/`ECONOMY_CONSUMPTION` are `Record<EconomyType, Record<string, number>>` — use `getProducedGoods()`/`getConsumedGoods()` or the `in` operator, never `.includes()` (fails silently on a Record).
 
 **Map / Pixi** (skip unless touching the map / WebGL surface)
-- `UNIVERSE_SCALE` is in `next.config.ts` `env` because the client recomputes tile geometry from it — see the client-bundle env rule under *Next.js 16 / React / TanStack Query*; without it the client defaults while the server uses the real scale and tile features break silently.
+- Map extent (`mapSize`) comes from the atlas (`meta.mapSize`, generated from system count) — the client computes tile geometry from that value, not an env var. Pass it through explicitly (`systemToTile`/`tileBounds`/`frustumToTiles` all take `mapSize`); there is no module-level `UNIVERSE_SCALE`/tile-size constant anymore.
 - Pixi rasterizes small text / sharp corners as aliased mush — map markers use rounded corners + zoom-gated text. Deliberate departure from Foundry's no-rounding rule, which is HTML-only; the WebGL map is its own surface.
 - Throttle (leading+trailing), not debounce, for Pixi-ticker→`setState` (debounce never fires during continuous zoom).
 - Frustum-gate object *creation*, not just visibility — `SystemObject` is expensive; create only in-frustum, batched per frame.
@@ -119,7 +108,6 @@ Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't
 - Native `<dialog>` modal: never set `m-0`/`inset-auto` — it breaks `showModal()` UA centering.
 
 **Misc**
-- An esbuild-bundled worker thread has its own module-level state — module caches (e.g. hop distances) are naturally per-process.
 - **Tailwind v4 (`@tailwindcss/oxide`) auto-scans the whole project — incl. `docs/*.md` — for class candidates.** A backslash-hex sequence in scanned prose (a Windows path like `…\c5612caa…`, a regex `\d`/`\c`) is read as a CSS escape and rejected as `Invalid code point <n>` at `globals.css:1:1`, aborting `npm run build`. `docs/` is excluded via `@source not "../docs"` in `globals.css`; keep non-source prose out of the scan (or add another `@source not`). Note this only surfaces on a real `next build` (Turbopack) — `tsc` and Vitest stay green — and only on a branch whose offending doc was actually pushed, so CI catches it but local `tsc`-only checks won't.
 
 ## UI Components
@@ -158,5 +146,6 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 ## Troubleshooting
 
 When hitting errors, don't fix symptoms directly. Step back and search for the canonical
-implementation pattern for the specific tool combination (e.g. "Next.js 16 + Prisma 7 + PostgreSQL
-setup"). Official docs and standard patterns resolve issues faster than iterating on type errors.
+implementation pattern for the specific tool combination (e.g. "Next.js 16 App Router + TanStack
+Query Suspense setup"). Official docs and standard patterns resolve issues faster than iterating on
+type errors.

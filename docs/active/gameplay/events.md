@@ -66,14 +66,14 @@ Events apply modifiers that alter market behavior.
 | Anchor shift | Multiplies a good's pricing anchor (`targetStock`) for the event's duration. `>1` raises the anchor → higher prices (surfaces in UI as "demand up"); `<1` lowers it → cheaper ("demand down"). `goodId: null` applies to all goods. Multiple anchor shifts on the same good compound (multiply). | War active conflict: fuel x2.5, machinery x2.0 |
 | Rate multiplier | Scales production or consumption rate | War: production x0.4 (60% reduction) |
 
-The anchor for each good is stored as `StationMarket.anchorMult` (default `1`). The economy processor recomputes it every tick from the system's active anchor-shift modifiers (same writer/cadence as `stock`) and writes it alongside stock. Reads are pure: price, trade limits, and trade-flow calculations all derive `targetStock = getTargetStock(good) × anchorMult`. Modifiers are aggregated per system: anchor shifts multiply together, rate multipliers multiply together. Caps: anchor multiplier [0.1, 4.0], rate multiplier [0.1, 3.0].
+The anchor for each good is stored as `WorldMarket.anchorMult` (default `1`). The economy processor recomputes it every tick from the system's active anchor-shift modifiers (same writer/cadence as `stock`) and writes it alongside stock. Reads are pure: price, trade limits, and trade-flow calculations all derive `targetStock = getTargetStock(good) × anchorMult`. Modifiers are aggregated per system: anchor shifts multiply together, rate multipliers multiply together. Caps: anchor multiplier [0.1, 4.0], rate multiplier [0.1, 3.0].
 
 ### Shocks
 One-time market jolts applied when a phase starts. Directly modify supply or demand at the system (e.g., Plague Outbreak: -30 food supply instantly). Not repeated — only fire once per phase transition.
 
 ---
 
-## Player Visibility
+## Event Surfaces
 
 - **Notifications**: SSE broadcasts on event spawn, phase transition, expiration, and spread. Displayed as toasts and in the Activity Panel ship log.
 - **Map markers**: Active events show colored borders/icons on system nodes. Color and icon vary by event type (red for war, amber for plague, green for mining, etc.).
