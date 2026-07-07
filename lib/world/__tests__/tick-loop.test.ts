@@ -5,7 +5,22 @@ import * as path from "node:path";
 import { TickLoop, type TickBroadcast } from "@/lib/world/tick-loop";
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld, setWorld, clearWorld } from "@/lib/world/store";
-import { setSavesDirForTesting, AUTOSAVE_NAME } from "@/lib/world/save-files";
+import { setSavesDirForTesting, AUTOSAVE_NAME, writeSave } from "@/lib/world/save-files";
+import { runWorldTick } from "@/lib/world/tick";
+
+// Wraps the real implementations in a `vi.fn` so most tests exercise genuine
+// tick/save behaviour (the default, calling `actual`), while the error-path
+// and re-entrancy tests below override individual calls with
+// `mockRejectedValueOnce`/`mockImplementationOnce`.
+vi.mock("@/lib/world/tick", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/world/tick")>();
+  return { ...actual, runWorldTick: vi.fn(actual.runWorldTick) };
+});
+
+vi.mock("@/lib/world/save-files", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/world/save-files")>();
+  return { ...actual, writeSave: vi.fn(actual.writeSave) };
+});
 
 let savesDir: string;
 let loop: TickLoop;
@@ -16,6 +31,9 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  // Only clears call history (not the wrapped implementations above), so
+  // each test starts from a clean call count without losing the passthrough.
+  vi.clearAllMocks();
   setWorld(generateWorld({ systemCount: 60, seed: 7 }));
   loop = new TickLoop();
 });
@@ -140,5 +158,53 @@ describe("TickLoop", () => {
     expect(snapshot.currentTick).toBe(getWorld().meta.currentTick);
     expect(snapshot.speed).toBe(1);
     expect(snapshot.events).toEqual({});
+  });
+
+  it("pauses, stops pacing, skips autosave, and still emits a snapshot when a tick fails", async () => {
+    vi.useFakeTimers();
+    vi.mocked(runWorldTick).mockRejectedValueOnce(new Error("boom"));
+    const received: TickBroadcast[] = [];
+    loop.subscribe((e) => received.push(e));
+
+    loop.setSpeed(1);
+    await vi.advanceTimersByTimeAsync(1_100);
+
+    expect(loop.getSpeed()).toBe("paused");
+    expect(getWorld().meta.currentTick).toBe(0);
+    expect(vi.mocked(writeSave)).not.toHaveBeenCalled();
+    expect(received.at(-1)?.speed).toBe("paused");
+
+    // Pacing is stopped: further elapsed time doesn't run more ticks.
+    const callsAfterFailure = vi.mocked(runWorldTick).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(getWorld().meta.currentTick).toBe(0);
+    expect(vi.mocked(runWorldTick)).toHaveBeenCalledTimes(callsAfterFailure);
+  });
+
+  it("skips an overlapping tickOnce instead of double-applying it", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(runWorldTick).mockImplementationOnce(async (world) => {
+      await gate;
+      return {
+        world: { ...world, meta: { ...world.meta, currentTick: world.meta.currentTick + 1 } },
+        events: { currentTick: world.meta.currentTick + 1, events: {} },
+        markets: [],
+      };
+    });
+
+    // Real timers: precise pause control on an indefinitely-pending mock
+    // doesn't play well with fake-timer microtask flushing (see the "at
+    // 'max'" test above for the same tradeoff).
+    loop.setSpeed(5); // 200ms interval — two fires should land before we release the gate.
+    await new Promise<void>((resolve) => setTimeout(resolve, 450));
+    expect(vi.mocked(runWorldTick)).toHaveBeenCalledTimes(1);
+
+    release();
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    expect(getWorld().meta.currentTick).toBe(1);
   });
 });
