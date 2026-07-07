@@ -1,16 +1,9 @@
 import type {
   TickContext,
-  TickProcessor,
   TickProcessorResult,
   EventNotificationPayload,
 } from "../types";
-import {
-  EVENT_SPAWN_INTERVAL,
-  scaleEventCaps,
-  type EventPhaseDefinition,
-  type EventTypeId,
-} from "@/lib/constants/events";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import type { EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import {
   checkPhaseTransition,
   buildModifiersForPhase,
@@ -33,7 +26,6 @@ const RELATIONS_OWNED_LIFECYCLE: ReadonlySet<EventTypeId> = new Set<EventTypeId>
   "pact_under_negotiation",
   "alliance_dissolved",
 ]);
-import { PrismaEventsWorld } from "@/lib/tick/adapters/prisma/events";
 import type {
   EventCreate,
   EventsProcessorParams,
@@ -407,29 +399,3 @@ export async function runEventsProcessor(
       notifications.length > 0 ? { eventNotifications: notifications } : {},
   };
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-const {
-  maxEventsGlobal,
-  maxEventsPerSystem,
-  batchSize,
-  definitions: SCALED_DEFINITIONS,
-} = scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
-
-export const eventsProcessor: TickProcessor = {
-  name: "events",
-  frequency: 1,
-
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaEventsWorld(ctx.tx);
-    return runEventsProcessor(world, ctx, {
-      rng: Math.random,
-      caps: { maxEventsGlobal, maxEventsPerSystem },
-      batchSize,
-      spawnInterval: EVENT_SPAWN_INTERVAL,
-      definitions: SCALED_DEFINITIONS,
-      spawnEnabled: true,
-    });
-  },
-};

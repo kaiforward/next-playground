@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { getWorld } from "@/lib/world/store";
 import { ServiceError } from "./errors";
+import { economyShardRankById, logisticsFactionShardKeys } from "./world-index";
 import { shardGroupForIndex } from "@/lib/tick/shard";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
@@ -11,34 +12,28 @@ import type { SystemCadence } from "@/lib/types/api";
  * these with the live tick (see `ticksUntilShard`); the groups themselves never
  * change for a fixed universe, so the client caches them with staleTime Infinity.
  *
- *  - economy: per-SYSTEM shard over id-asc order (the order the economy processor
- *    shards, see lib/tick/adapters/prisma/economy.ts getSystemIds) — when this
+ * Both orderings come from the shared shard-order helpers the tick adapters
+ * consume (`lib/engine/shard-order.ts`), so the countdown can't drift from the
+ * order the processors actually run:
+ *  - economy: per-SYSTEM shard over the economy shard order — when this
  *    system's markets / production / consumption refresh.
- *  - logistics: per-FACTION shard over the directed-logistics faction-key order
- *    (PrismaDirectedLogisticsWorld.getFactionShardKeys: factionIds by localeCompare,
- *    null/independents last) — when this faction's surplus→deficit redistribution
- *    and autonomic build run (build shares the same shard).
+ *  - logistics: per-FACTION shard over the faction shard keys — when this
+ *    faction's surplus→deficit redistribution and autonomic build run (build
+ *    shares the same shard).
  */
-export async function getSystemCadence(systemId: string): Promise<SystemCadence> {
-  const system = await prisma.starSystem.findUnique({
-    where: { id: systemId },
-    select: { factionId: true },
-  });
+export function getSystemCadence(systemId: string): SystemCadence {
+  const world = getWorld();
+  const system = world.systems.find((s) => s.id === systemId);
   if (!system) throw new ServiceError("System not found.", 404);
 
-  const [systemCount, systemRank, factionRows] = await Promise.all([
-    prisma.starSystem.count(),
-    prisma.starSystem.count({ where: { id: { lt: systemId } } }),
-    prisma.starSystem.findMany({ distinct: ["factionId"], select: { factionId: true } }),
-  ]);
+  const shardRanks = economyShardRankById();
+  const economyShardGroup = shardGroupForIndex(
+    shardRanks.get(systemId) ?? 0,
+    shardRanks.size,
+    ECONOMY_UPDATE_INTERVAL,
+  );
 
-  const economyShardGroup = shardGroupForIndex(systemRank, systemCount, ECONOMY_UPDATE_INTERVAL);
-
-  // Replicate getFactionShardKeys' deterministic order exactly so the countdown
-  // matches the processor: non-null factionIds by localeCompare, null last.
-  const factionKeys = factionRows
-    .map((r) => r.factionId)
-    .sort((a, b) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b)));
+  const factionKeys = logisticsFactionShardKeys();
   const factionIndex = factionKeys.indexOf(system.factionId);
   const logisticsShardGroup =
     factionIndex < 0

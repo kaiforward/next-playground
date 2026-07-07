@@ -1,8 +1,6 @@
-import type { TickContext, TickProcessor, TickProcessorResult } from "../types";
+import type { TickContext, TickProcessorResult } from "../types";
 import { computeSystemDecay } from "@/lib/engine/infrastructure-decay";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
-import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { PrismaInfrastructureWorld } from "@/lib/tick/adapters/prisma/infrastructure";
 import type {
   InfrastructureWorld,
   InfrastructureProcessorParams,
@@ -54,16 +52,3 @@ export async function runInfrastructureDecayProcessor(
   await world.applyPopCapUpdates(popCapUpdates);
   return {};
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-export const infrastructureDecayProcessor: TickProcessor = {
-  name: "infrastructure-decay",
-  // Runs every tick; only acts on the economy's just-processed shard (read off signals).
-  frequency: 1,
-  dependsOn: ["economy"],
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaInfrastructureWorld(ctx.tx);
-    return runInfrastructureDecayProcessor(world, ctx, { decay: INFRASTRUCTURE_DECAY_PARAMS });
-  },
-};

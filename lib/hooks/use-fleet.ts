@@ -1,15 +1,20 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
 import type { FleetState } from "@/lib/types/game";
 
-export function useFleet() {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.fleet,
-    queryFn: () => apiFetch<FleetState>("/api/game/fleet"),
-  });
+/**
+ * The player fleet died with the pivot — its API route and service are gone,
+ * and the ship/fleet UI that still consumes this hook is removed next. Until
+ * then, serve the honest empty state (a fresh world seeds no ships) so every
+ * consumer renders instead of choking on a 404.
+ */
+const EMPTY_FLEET: FleetState = {
+  id: "fleet",
+  userId: "",
+  credits: 0,
+  ships: [],
+};
 
-  return { fleet: data };
+export function useFleet() {
+  return { fleet: EMPTY_FLEET };
 }

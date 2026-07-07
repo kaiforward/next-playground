@@ -28,7 +28,7 @@ function market(systemId: string, goodId: string): SimMarketEntry {
   return { systemId, goodId, basePrice: 100, stock: 100, anchorMult: 1, demandRate: 1, priceFloor: 10, priceCeiling: 500, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>): TickContext {
-  return { tx: undefined as never, tick: 0, results: new Map([["economy", { economySignals: { dissatisfactionBySystem: d, outputUptakeBySystem: new Map() } }]]) };
+  return { tick: 0, results: new Map([["economy", { economySignals: { dissatisfactionBySystem: d, outputUptakeBySystem: new Map() } }]]) };
 }
 
 describe("population processor", () => {
@@ -114,7 +114,7 @@ describe("population processor", () => {
   it("no-ops when the economy left no signals", async () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000)], markets: [] });
     const before = world.systems[0].population;
-    await runPopulationProcessor(world, { tx: undefined as never, tick: 0, results: new Map() }, PARAMS);
+    await runPopulationProcessor(world, { tick: 0, results: new Map() }, PARAMS);
     expect(world.systems[0].population).toBe(before);
   });
   it("no-ops when the economy signal map is present but empty", async () => {

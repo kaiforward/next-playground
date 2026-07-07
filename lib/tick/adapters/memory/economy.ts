@@ -8,6 +8,7 @@ import { consumptionRate } from "@/lib/engine/physical-economy";
 import { computeSystemLabourSnapshot, buildingProduction } from "@/lib/engine/industry";
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { toTraitId, toQualityTier } from "@/lib/types/guards";
+import { economyShardOrder } from "@/lib/engine/shard-order";
 import type {
   SimMarketEntry,
   SimSystem,
@@ -41,9 +42,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
   }
 
   getSystemIds(): Promise<string[]> {
-    return Promise.resolve(
-      this.systems.map((s) => s.id).sort((a, b) => a.localeCompare(b)),
-    );
+    return Promise.resolve(economyShardOrder(this.systems));
   }
 
   getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {

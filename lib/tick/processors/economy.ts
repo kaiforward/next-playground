@@ -1,31 +1,24 @@
 import type {
   TickContext,
-  TickProcessor,
   TickProcessorResult,
   EconomySignals,
 } from "../types";
 import {
   selfLimitingFactor,
   outputUptake,
-  type EconomySimParams,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
 import { simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
-import { MODIFIER_CAPS } from "@/lib/constants/events";
 import type { ModifierRow } from "@/lib/engine/events";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
-import { PrismaEconomyWorld } from "@/lib/tick/adapters/prisma/economy";
 import type {
   EconomyProcessorParams,
   EconomyWorld,
   MarketUpdate,
 } from "@/lib/tick/world/economy-world";
 import { dissatisfaction, strikeMultiplier, type GoodSatisfaction } from "@/lib/engine/population";
-import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { shardRange, catchUpFactor } from "@/lib/tick/shard";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
 
@@ -184,28 +177,3 @@ export async function runEconomyProcessor(
     economySignals,
   };
 }
-
-// ── Live-game wiring ──────────────────────────────────────────────
-
-const simParams: EconomySimParams = {
-  noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
-  holdCover: ECONOMY_CONSTANTS.HOLD_COVER,
-};
-
-export const economyProcessor: TickProcessor = {
-  name: "economy",
-  // Runs every tick; the fixed-interval system shard happens inside runEconomyProcessor.
-  frequency: 1,
-  dependsOn: ["events"],
-
-  async process(ctx): Promise<TickProcessorResult> {
-    const world = new PrismaEconomyWorld(ctx.tx);
-    return runEconomyProcessor(world, ctx, {
-      rng: Math.random,
-      interval: ECONOMY_UPDATE_INTERVAL,
-      simParams,
-      modifierCaps: MODIFIER_CAPS,
-      strikeParams: STRIKE_PARAMS,
-    });
-  },
-};

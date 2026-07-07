@@ -21,7 +21,6 @@ import type {
   PopulationEntry,
   ResourceVector,
 } from "./game";
-import type { GlobalEventMap, PlayerEventMap } from "@/lib/tick/types";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 
 // ── Responses ────────────────────────────────────────────────────
@@ -263,18 +262,6 @@ export interface ShipNavigateResult {
   travelDuration: number;
 }
 export type ShipNavigateResponse = ApiResponse<ShipNavigateResult>;
-
-/** Client-facing tick event (per-player filtered by SSE route). */
-export interface TickEvent {
-  currentTick: number;
-  tickRate: number;
-  /** Merged global events from all processors. */
-  events: Partial<GlobalEventMap>;
-  /** Player-scoped events (filtered to this client). */
-  playerEvents: Partial<PlayerEventMap>;
-  /** Which processors ran this tick (dev/debug only). */
-  processors?: string[];
-}
 
 // ── Requests ─────────────────────────────────────────────────────
 

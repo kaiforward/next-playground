@@ -10,7 +10,10 @@ export function GET(
 ) {
   return withServiceErrors("GET /api/game/market/[systemId]", async () => {
     const { systemId } = await params;
-    const data = await getMarket(systemId);
-    return NextResponse.json<MarketResponse>({ data });
+    const data = getMarket(systemId);
+    return NextResponse.json<MarketResponse>(
+      { data },
+      { headers: { "Cache-Control": "private, no-cache" } },
+    );
   });
 }

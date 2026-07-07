@@ -17,7 +17,7 @@ import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
-  return { tx: undefined as never, tick, results: new Map() };
+  return { tick, results: new Map() };
 }
 
 function makeParams(

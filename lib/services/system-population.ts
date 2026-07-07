@@ -1,6 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { getWorld } from "@/lib/world/store";
+import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
-import { getPlayerVisibility } from "@/lib/services/visibility-cache";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { demandFootprint } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
@@ -10,33 +10,16 @@ import type { SystemPopulationData } from "@/lib/types/api";
 
 /**
  * Dynamic population & social state for one system — population, popCap, unrest,
- * a strike flag, and the demand footprint. Visibility-gated (an unsurveyed system
- * returns `{ visibility: "unknown" }` so a direct URL can't leak survey data),
- * mirroring getSystemSubstrate. Unlike the substrate read, these fields change
- * every economy tick, so the hook (`useSystemPopulation`) is tick-invalidated.
+ * a strike flag, and the demand footprint. Unlike the substrate read, these
+ * fields change every economy tick, so the hook (`useSystemPopulation`) is
+ * tick-invalidated.
  */
-export async function getSystemPopulation(
-  playerId: string,
-  systemId: string,
-): Promise<SystemPopulationData> {
-  const [{ visibleSet }, system] = await Promise.all([
-    getPlayerVisibility(playerId),
-    prisma.starSystem.findUnique({
-      where: { id: systemId },
-      select: {
-        population: true,
-        popCap: true,
-        unrest: true,
-        buildings: { select: { buildingType: true, count: true } },
-      },
-    }),
-  ]);
-
+export function getSystemPopulation(systemId: string): SystemPopulationData {
+  const world = getWorld();
+  const system = world.systems.find((s) => s.id === systemId);
   if (!system) throw new ServiceError("System not found.", 404);
-  if (!visibleSet.has(systemId)) return { visibility: "unknown" };
 
-  const buildings: Record<string, number> = {};
-  for (const b of system.buildings) buildings[b.buildingType] = b.count;
+  const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
   const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
 
   // Full consumption footprint (already filtered to consumed goods, demand-sorted).
