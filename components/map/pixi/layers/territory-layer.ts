@@ -2,7 +2,6 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
 import { BG_COLOR, ECONOMY_COLORS, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
 import { computeTerritoryPolygons } from "../territory-utils";
 import type { AtlasSystem, EconomyType } from "@/lib/types/game";
 
@@ -40,7 +39,7 @@ export class TerritoryLayer {
    * Compute and render filled territory polygons per region.
    * Called when system data changes (not per frame).
    */
-  sync(systems: AtlasSystem[], regions: RegionInfo[]) {
+  sync(systems: AtlasSystem[], regions: RegionInfo[], mapSize: number) {
     if (systems.length < 3) {
       this.clear();
       return;
@@ -49,8 +48,7 @@ export class TerritoryLayer {
     // Build Delaunay triangulation from system positions
     const points: [number, number][] = systems.map((s) => [s.x, s.y]);
     const delaunay = Delaunay.from(points);
-    const size = UNIVERSE_GEN.MAP_SIZE;
-    const voronoi = delaunay.voronoi([0, 0, size, size]);
+    const voronoi = delaunay.voronoi([0, 0, mapSize, mapSize]);
 
     // Compute dominant economy per region for fill tinting
     const regionEconomyCounts = new Map<string, Map<EconomyType, number>>();

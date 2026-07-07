@@ -9,7 +9,8 @@ export const queryKeys = {
   devEconomy: ["devEconomy"] as const,
   // Atlas + progressive loading
   atlas: ["atlas"] as const,
-  staticTile: (col: number, row: number, scale: string) => ["staticTile", col, row, scale] as const,
+  staticTile: (col: number, row: number, mapSize: number) =>
+    ["staticTile", col, row, mapSize] as const,
   // Visibility + dynamic data (separated concerns)
   visibility: ["visibility"] as const,
   dynamicVisible: ["dynamicVisible"] as const,

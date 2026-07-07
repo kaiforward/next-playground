@@ -320,11 +320,12 @@ export function PixiMapCanvas({
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
 
-    p.territoryLayer.sync(atlasData.systems, regionInfos);
-    p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions);
-    p.stabilityTerritoryLayer.sync(atlasData.systems);
-    p.populationTerritoryLayer.sync(atlasData.systems);
-  }, [atlasData.systems, atlasData.factions, pixiReady, regionInfos]);
+    const mapSize = atlasData.meta.mapSize;
+    p.territoryLayer.sync(atlasData.systems, regionInfos, mapSize);
+    p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions, mapSize);
+    p.stabilityTerritoryLayer.sync(atlasData.systems, mapSize);
+    p.populationTerritoryLayer.sync(atlasData.systems, mapSize);
+  }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
   // Five modes: "political" shows the faction layer, "regions" shows the economy

@@ -52,7 +52,7 @@ function mintId(minter: IdMinter, prefix: string): string {
  * caller (the config's own `SEED` stays pinned at the `BASE_CONFIG` default
  * and is not the per-world seed).
  */
-function buildGenParams(
+export function buildGenParams(
   seed: number,
   config: ReturnType<typeof genConfigForSystemCount>,
 ): GenParams {

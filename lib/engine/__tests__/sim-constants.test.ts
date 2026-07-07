@@ -11,7 +11,7 @@ import {
   MODIFIER_CAPS,
 } from "@/lib/constants/events";
 import { SHIP_TYPES } from "@/lib/constants/ships";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { genConfigForSystemCount, DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 
 describe("SimConstants", () => {
   describe("resolveConstants() defaults", () => {
@@ -65,14 +65,15 @@ describe("SimConstants", () => {
       }
     });
 
-    it("universe matches UNIVERSE_GEN", () => {
+    it("universe matches the default-count generation config", () => {
+      const config = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
       const c = resolveConstants();
-      expect(c.universe.regionCount).toBe(UNIVERSE_GEN.REGION_COUNT);
-      expect(c.universe.totalSystems).toBe(UNIVERSE_GEN.TOTAL_SYSTEMS);
-      expect(c.universe.intraRegionBaseFuel).toBe(UNIVERSE_GEN.INTRA_REGION_BASE_FUEL);
-      expect(c.universe.gatewayFuelMultiplier).toBe(UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER);
-      expect(c.universe.gatewaysPerBorder).toBe(UNIVERSE_GEN.GATEWAYS_PER_BORDER);
-      expect(c.universe.intraRegionExtraEdges).toBe(UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES);
+      expect(c.universe.regionCount).toBe(config.REGION_COUNT);
+      expect(c.universe.totalSystems).toBe(config.TOTAL_SYSTEMS);
+      expect(c.universe.intraRegionBaseFuel).toBe(config.INTRA_REGION_BASE_FUEL);
+      expect(c.universe.gatewayFuelMultiplier).toBe(config.GATEWAY_FUEL_MULTIPLIER);
+      expect(c.universe.gatewaysPerBorder).toBe(config.GATEWAYS_PER_BORDER);
+      expect(c.universe.intraRegionExtraEdges).toBe(config.INTRA_REGION_EXTRA_EDGES);
     });
 
     it("pricing has correct read-only values", () => {

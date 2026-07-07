@@ -3,8 +3,9 @@
  * distribution, galaxy-wide deposit slot-cap totals, and the weakest region's
  * arable (food) slot share. Run: npx tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts
  */
-import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
-import { UNIVERSE_GEN, REGION_NAMES } from "@/lib/constants/universe-gen";
+import { generateUniverse } from "@/lib/engine/universe-gen";
+import { genConfigForSystemCount, DEFAULT_SYSTEM_COUNT, REGION_NAMES } from "@/lib/constants/universe-gen";
+import { buildGenParams } from "@/lib/world/gen";
 import { RESOURCE_TYPES, sumResourceVectors } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 import { SUBSTRATE_GEN, QUALITY_BANDS } from "@/lib/constants/substrate-gen";
@@ -13,22 +14,8 @@ import type { SunClass, QualityBandId } from "@/lib/types/game";
 const SUN_CLASSES: readonly SunClass[] = ["blue_white", "yellow", "orange_dwarf", "red_dwarf"] as const;
 const BAND_IDS: readonly QualityBandId[] = ["poor", "average", "good", "rich"] as const;
 
-const params: GenParams = {
-  seed: UNIVERSE_GEN.SEED,
-  regionCount: UNIVERSE_GEN.REGION_COUNT,
-  totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
-  mapSize: UNIVERSE_GEN.MAP_SIZE,
-  mapPadding: UNIVERSE_GEN.MAP_PADDING,
-  poissonMinDistance: UNIVERSE_GEN.POISSON_MIN_DISTANCE,
-  poissonKCandidates: UNIVERSE_GEN.POISSON_K_CANDIDATES,
-  regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
-  extraEdgeFraction: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
-  gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
-  gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
-  intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
-  maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
-  minorFactionCount: UNIVERSE_GEN.MINOR_FACTION_COUNT,
-};
+const config = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
+const params = buildGenParams(config.SEED, config);
 
 const u = generateUniverse(params, REGION_NAMES);
 

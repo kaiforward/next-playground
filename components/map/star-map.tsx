@@ -38,7 +38,9 @@ export function StarMap({
   events = [],
 }: StarMapProps) {
   // ── Progressive data loading ────────────────────────────────────
-  const { systems: tileSystems, onViewportChange, active, zoom } = useStaticTiles();
+  const { systems: tileSystems, onViewportChange, active, zoom } = useStaticTiles(
+    atlas.meta.mapSize,
+  );
   const { showMapDebug } = useDevOverlay();
   const { visibleSystemIds } = useVisibility();
   const { dynamicSystems } = useDynamicData(active);

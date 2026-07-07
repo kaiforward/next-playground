@@ -301,6 +301,8 @@ export interface AtlasFaction {
 }
 
 export interface AtlasData {
+  /** World identity + extent — the client derives tile geometry from mapSize. */
+  meta: { mapSize: number; systemCount: number; seed: number };
   regions: RegionInfo[];
   systems: AtlasSystem[];
   connections: SystemConnectionInfo[];

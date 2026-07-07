@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import type { SimConfig, SimResults } from "./types";
 
 // ── Zod schema ───────────────────────────────────────────────────
@@ -18,7 +18,7 @@ export const ExperimentConfigSchema = z.object({
   label: z.string().optional(),
   seed: z.number().int().default(42),
   ticks: z.number().int().min(1).default(500),
-  systemCount: z.number().int().min(1).default(UNIVERSE_GEN.TOTAL_SYSTEMS),
+  systemCount: z.number().int().min(1).default(DEFAULT_SYSTEM_COUNT),
 });
 
 export type ExperimentConfig = z.infer<typeof ExperimentConfigSchema>;

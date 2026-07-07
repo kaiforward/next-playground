@@ -14,7 +14,7 @@ import {
 } from "@/lib/constants/events";
 import { SHIP_TYPES } from "@/lib/constants/ships";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { UNIVERSE_GEN } from "@/lib/constants/universe-gen";
+import { genConfigForSystemCount, DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
 import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
@@ -119,6 +119,9 @@ export type SimConstantOverrides = {
 
 // ── Resolution ───────────────────────────────────────────────────
 
+/** Default-scale generation config — the anchor the constants snapshot reports. */
+const DEFAULT_GEN_CONFIG = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
+
 function buildDefaults(): SimConstants {
   const goods: SimConstants["goods"] = {};
   for (const [key, def] of Object.entries(GOODS)) {
@@ -163,7 +166,9 @@ function buildDefaults(): SimConstants {
       refuelCostPerUnit: REFUEL_COST_PER_UNIT,
     },
     events: (() => {
-      const scaled = scaleEventCaps(UNIVERSE_GEN.TOTAL_SYSTEMS);
+      // Snapshot anchored at the default system count — the live tick scales
+      // event caps from the actual world size (`scaleEventCaps(world.systems.length)`).
+      const scaled = scaleEventCaps(DEFAULT_GEN_CONFIG.TOTAL_SYSTEMS);
       return {
         spawnInterval: EVENT_SPAWN_INTERVAL,
         maxPerSystem: scaled.maxEventsPerSystem,
@@ -174,12 +179,12 @@ function buildDefaults(): SimConstants {
     })(),
     ships,
     universe: {
-      regionCount: UNIVERSE_GEN.REGION_COUNT,
-      totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
-      intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
-      gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
-      gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
-      intraRegionExtraEdges: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
+      regionCount: DEFAULT_GEN_CONFIG.REGION_COUNT,
+      totalSystems: DEFAULT_GEN_CONFIG.TOTAL_SYSTEMS,
+      intraRegionBaseFuel: DEFAULT_GEN_CONFIG.INTRA_REGION_BASE_FUEL,
+      gatewayFuelMultiplier: DEFAULT_GEN_CONFIG.GATEWAY_FUEL_MULTIPLIER,
+      gatewaysPerBorder: DEFAULT_GEN_CONFIG.GATEWAYS_PER_BORDER,
+      intraRegionExtraEdges: DEFAULT_GEN_CONFIG.INTRA_REGION_EXTRA_EDGES,
     },
     tradeFlow: {
       distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,

@@ -1,5 +1,3 @@
-import { toUniverseScale } from "@/lib/types/guards";
-
 /** Shape of tuneable universe generation parameters. */
 interface UniverseGenConfig {
   SEED: number;
@@ -20,7 +18,7 @@ interface UniverseGenConfig {
   MINOR_FACTION_COUNT: number;
 }
 
-// ── Scale presets ───────────────────────────────────────────────
+// ── Anchor configs ──────────────────────────────────────────────
 
 /** Default universe: 600 systems in a 7000×7000 map. */
 const BASE_CONFIG: UniverseGenConfig = {
@@ -40,11 +38,9 @@ const BASE_CONFIG: UniverseGenConfig = {
   MINOR_FACTION_COUNT: 12,
 };
 
-export type UniverseScale = "default" | "10k";
-
 /**
- * 10k-preset knob values, typed as concrete numbers (not Partial<UniverseGenConfig>)
- * so genConfigForSystemCount can read them as interpolation anchors without a cast.
+ * 10k anchor knob values, typed as concrete numbers so genConfigForSystemCount
+ * can read them as interpolation anchors without a cast.
  * 10K: 10,000 systems in a 25,000×25,000 map (16×16 grid → ~39 systems/tile).
  */
 const TEN_K_OVERRIDES = {
@@ -55,24 +51,11 @@ const TEN_K_OVERRIDES = {
   MINOR_FACTION_COUNT: 18,
 } as const;
 
-/** Scale preset overrides. Each key maps to fields that differ from BASE_CONFIG. */
-const SCALE_OVERRIDES: Record<UniverseScale, Partial<UniverseGenConfig>> = {
-  default: {},
-  "10k": TEN_K_OVERRIDES,
-};
-
-function resolveScale(): UniverseScale {
-  return toUniverseScale(process.env.UNIVERSE_SCALE ?? "default");
-}
-
-/** Active scale preset, resolved from UNIVERSE_SCALE env var. */
-export const ACTIVE_SCALE: UniverseScale = resolveScale();
-
-/** Tuneable universe generation parameters (merged with active scale preset). */
-export const UNIVERSE_GEN: UniverseGenConfig = {
-  ...BASE_CONFIG,
-  ...SCALE_OVERRIDES[ACTIVE_SCALE],
-};
+/**
+ * Default system count for a new game — the BASE_CONFIG anchor. Start-screen
+ * default, simulator default, and calibration instruments all key off this.
+ */
+export const DEFAULT_SYSTEM_COUNT = BASE_CONFIG.TOTAL_SYSTEMS;
 
 // ── Continuous generation config (arbitrary system count) ──────
 

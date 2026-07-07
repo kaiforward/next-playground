@@ -19,9 +19,11 @@ import {
   type GenParams,
 } from "../lib/engine/universe-gen";
 import {
-  UNIVERSE_GEN,
+  genConfigForSystemCount,
+  DEFAULT_SYSTEM_COUNT,
   REGION_NAMES,
 } from "../lib/constants/universe-gen";
+import { buildGenParams } from "../lib/world/gen";
 import { QUALITY_TIERS, TRAITS } from "../lib/constants/traits";
 import type { EconomyType, QualityTier } from "../lib/types/game";
 import { ALL_QUALITY_TIERS } from "../lib/types/guards";
@@ -33,22 +35,8 @@ const SEED_COUNT = seedCountIdx >= 0 ? parseInt(process.argv[seedCountIdx + 1], 
 
 const SEEDS = Array.from({ length: SEED_COUNT }, (_, i) => i + 1);
 
-const DEFAULT_PARAMS: GenParams = {
-  seed: 0, // overridden per run
-  regionCount: UNIVERSE_GEN.REGION_COUNT,
-  totalSystems: UNIVERSE_GEN.TOTAL_SYSTEMS,
-  mapSize: UNIVERSE_GEN.MAP_SIZE,
-  mapPadding: UNIVERSE_GEN.MAP_PADDING,
-  poissonMinDistance: UNIVERSE_GEN.POISSON_MIN_DISTANCE,
-  poissonKCandidates: UNIVERSE_GEN.POISSON_K_CANDIDATES,
-  regionMinDistance: UNIVERSE_GEN.REGION_MIN_DISTANCE,
-  extraEdgeFraction: UNIVERSE_GEN.INTRA_REGION_EXTRA_EDGES,
-  gatewayFuelMultiplier: UNIVERSE_GEN.GATEWAY_FUEL_MULTIPLIER,
-  gatewaysPerBorder: UNIVERSE_GEN.GATEWAYS_PER_BORDER,
-  intraRegionBaseFuel: UNIVERSE_GEN.INTRA_REGION_BASE_FUEL,
-  maxPlacementAttempts: UNIVERSE_GEN.MAX_PLACEMENT_ATTEMPTS,
-  minorFactionCount: UNIVERSE_GEN.MINOR_FACTION_COUNT,
-};
+const DEFAULT_GEN_CONFIG = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
+const DEFAULT_PARAMS: GenParams = buildGenParams(0 /* overridden per run */, DEFAULT_GEN_CONFIG);
 
 // ── Accumulator types ────────────────────────────────────────────
 
@@ -140,7 +128,7 @@ function analyzeSeed(seed: number): SeedResult {
 function run() {
   console.log(`\n=== Layer 0 Distribution Validation ===`);
   console.log(`Seeds: ${SEED_COUNT} (${SEEDS[0]}..${SEEDS[SEEDS.length - 1]})`);
-  console.log(`Systems per seed: ${UNIVERSE_GEN.TOTAL_SYSTEMS}\n`);
+  console.log(`Systems per seed: ${DEFAULT_PARAMS.totalSystems}\n`);
 
   const results: SeedResult[] = [];
   const start = Date.now();
@@ -205,7 +193,7 @@ function run() {
   // ── Region coherence ─────────────────────────────────────────
   const totalCoherenceViolations = results.reduce((s, r) => s + r.coherenceViolations, 0);
   const totalMonotonous = results.reduce((s, r) => s + r.monotonousRegions, 0);
-  const totalRegions = results.length * UNIVERSE_GEN.REGION_COUNT;
+  const totalRegions = results.length * DEFAULT_PARAMS.regionCount;
 
   console.log("── Region Economy Spread ──");
   console.log(`Total regions checked: ${totalRegions}`);
