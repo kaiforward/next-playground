@@ -3,7 +3,7 @@
  *
  * Adapters in `lib/tick/adapters/{prisma,memory}/events.ts` implement it.
  * See `docs/design/active/processor-architecture.md` and
- * `lib/tick/world/trade-flow-world.ts` for the broader pattern.
+ * `lib/tick/world/migration-world.ts` for the broader pattern.
  */
 
 import type {

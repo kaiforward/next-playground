@@ -8,7 +8,7 @@
  *
  * Stage order is the processors' dependency topological order:
  * ship-arrivals → events → economy → infrastructure-decay →
- * population → migration → trade-flow → directed-logistics → directed-build
+ * population → migration → directed-logistics → directed-build
  * → relations. Economy signals flow between stages via the in-memory
  * `TickContext.results` map.
  *
@@ -37,7 +37,7 @@ import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resource
 import type { ClaimCandidate, DevelopCandidate } from "@/lib/engine/expansion";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
-import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
+import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
@@ -49,7 +49,6 @@ import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
 import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runMigrationProcessor } from "@/lib/tick/processors/migration";
-import { runTradeFlowProcessor } from "@/lib/tick/processors/trade-flow";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
 import { runRelationsProcessor } from "@/lib/tick/processors/relations";
@@ -60,7 +59,6 @@ import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
-import { InMemoryTradeFlowWorld } from "@/lib/tick/adapters/memory/trade-flow";
 import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
 import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
@@ -462,7 +460,7 @@ function rebuildWorldModifiers(
 
 /**
  * Run one world tick: ship-arrivals → events → economy → infrastructure-decay
- * → population → migration → trade-flow → directed-logistics →
+ * → population → migration → directed-logistics →
  * directed-build → relations (gated by `RELATIONS_FREQUENCY`). Pure and
  * immutable-spread style — never mutates `world`; returns the next world plus
  * this tick's broadcast events.
@@ -591,9 +589,7 @@ export async function runWorldTick(
     processorsRun.push("population");
   }
 
-  // ── migration & trade-flow share one open-edges computation — faction
-  // ownership doesn't change between these two stages within a tick, so the
-  // same-faction edge set migration computes is still valid for trade-flow ──
+  // ── open edges (faction-bounded) — consumed by migration ──
   const sysFactionForEdges = new Map(systems.map((s) => [s.id, s.factionId]));
   const openEdges: EdgeView[] = buildOpenEdges(connections, sysFactionForEdges);
 
@@ -606,31 +602,6 @@ export async function runWorldTick(
     });
     systems = migWorld.systems;
     processorsRun.push("migration");
-  }
-
-  // ── trade-flow ──
-  {
-    const flowWorld = new InMemoryTradeFlowWorld({ systems, markets, flowEvents }, connections, openEdges);
-    await runTradeFlowProcessor(flowWorld, newTickCtx(), {
-      interval: ECONOMY_UPDATE_INTERVAL,
-      flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
-      gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
-      gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
-      flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
-      distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
-    });
-    markets = flowWorld.markets;
-    // flowType now round-trips structurally through SimFlowEvent (no more
-    // object-identity side channel — see FlowEventInsert/SimFlowEvent).
-    flowEvents = flowWorld.flowEvents.map((f) => ({
-      tick: f.tick,
-      fromSystemId: f.fromSystemId,
-      toSystemId: f.toSystemId,
-      goodId: f.goodId,
-      quantity: f.quantity,
-      flowType: f.flowType,
-    }));
-    processorsRun.push("trade-flow");
   }
 
   // directed-logistics and directed-build share one hop-BFS, run at the
@@ -670,6 +641,11 @@ export async function runWorldTick(
     dlStockUpdates = dlWorld.stockUpdates;
     const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows.map((f) => ({ ...f, flowType: "logistics" }));
     flowEvents = [...flowEvents, ...newLogisticsFlows];
+    // Prune the flow-event log to the overlay/logistics retention window. The
+    // deleted trade-flow processor used to be the sole pruner; directed-logistics
+    // is now the only writer, so pruning happens here after the append.
+    const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
+    flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
     processorsRun.push("directed-logistics");
   }
 

@@ -1,7 +1,7 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { migrationFlow, type MigrationNode } from "@/lib/engine/migration";
 import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
-import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
+import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type {
   MigrationDelta, MigrationProcessorParams, MigrationWorld,
 } from "@/lib/tick/world/migration-world";
