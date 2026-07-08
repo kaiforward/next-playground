@@ -7,12 +7,36 @@ import type {
   DirectedBuildWorld,
   SystemBuildRow,
   BuildBuildingUpdate,
+  SystemClaim,
+  SystemDevelopment,
 } from "@/lib/tick/world/directed-build-world";
+import {
+  proposeFactionClaims,
+  resolveClaims,
+  planFactionDevelopments,
+  type ClaimCandidate,
+  type ClaimProposal,
+  type DevelopCandidate,
+  type ExpansionParams,
+  type DevelopParams,
+} from "@/lib/engine/expansion";
+import type { RNG } from "@/lib/engine/universe-gen";
 
 export interface DirectedBuildProcessorParams {
   interval: number;
   /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
   routeCost: RouteCost;
+  /** Claim step (control tier). Omitted → no claim phase (the build-only path used by engine/adapter tests). */
+  claim?: {
+    reachProvider: (factionId: string) => ClaimCandidate[];
+    rng: RNG;
+    params: ExpansionParams;
+  };
+  /** Develop step (developed tier + colony seed). Omitted → no develop phase. */
+  develop?: {
+    candidateProvider: (factionId: string) => DevelopCandidate[];
+    params: DevelopParams;
+  };
 }
 
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */
@@ -51,6 +75,31 @@ export async function runDirectedBuildProcessor(
   const { start, end } = pulseShard(factionKeys.length, ctx.tick, params.interval);
   const dueKeys = factionKeys.slice(start, end);
   if (dueKeys.length === 0) return {};
+
+  // ── Claim phase (control tier): every due faction proposes its best in-reach claim; conflicts
+  // resolve deterministically (score, seeded-RNG ties); winners are written as ownership assignments.
+  // Newly claimed systems are `controlled` (not developed), so the build phase ignores them this pulse. ──
+  if (params.claim) {
+    const proposals: ClaimProposal[] = [];
+    for (const key of dueKeys) {
+      if (key === null) continue;
+      proposals.push(...proposeFactionClaims(key, params.claim.reachProvider(key), params.claim.params));
+    }
+    const resolved: SystemClaim[] = resolveClaims(proposals, params.claim.rng);
+    if (resolved.length > 0) await world.applyClaims(resolved);
+  }
+
+  // ── Develop phase (developed tier): each due faction develops its best controlled system(s) —
+  // intra-faction, so no cross-faction resolution. The colony seed is conserved (transferred from the
+  // source in tick.ts). Systems developed this pulse become build-eligible next pulse. ──
+  if (params.develop) {
+    const developments: SystemDevelopment[] = [];
+    for (const key of dueKeys) {
+      if (key === null) continue;
+      developments.push(...planFactionDevelopments(params.develop.candidateProvider(key), params.develop.params));
+    }
+    if (developments.length > 0) await world.applyDevelopments(developments);
+  }
 
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
