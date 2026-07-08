@@ -4,6 +4,7 @@ import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
   TradeFlowEdges,
   SystemLogisticsData,
@@ -63,7 +64,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const minTick = currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
   const system = world.systems.find((s) => s.id === systemId);
-  if (!system) return { visibility: "unknown" };
+  if (!system || !isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
   const flows = (flowEventsBySystem().get(systemId) ?? []).filter((f) => f.tick > minTick);
 

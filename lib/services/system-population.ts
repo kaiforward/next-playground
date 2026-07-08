@@ -5,6 +5,7 @@ import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { demandFootprint } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { consumptionBreakdown } from "@/lib/engine/physical-economy";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import { GOODS } from "@/lib/constants/goods";
 import type { SystemPopulationData } from "@/lib/types/api";
 
@@ -18,6 +19,7 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) throw new ServiceError("System not found.", 404);
+  if (!isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
   const basis = computeSystemLabourSnapshot(buildings, system.population).basis;

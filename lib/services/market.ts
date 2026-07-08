@@ -4,6 +4,7 @@ import { buildMarketEntry } from "./market-entry";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GOODS } from "@/lib/constants/goods";
 import { ServiceError } from "./errors";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import type { MarketEntry } from "@/lib/types/game";
 
 /**
@@ -17,6 +18,9 @@ export function getMarket(systemId: string): { stationId: string; entries: Marke
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) {
     throw new ServiceError("System not found.", 404);
+  }
+  if (!isEconomicallyActive(system.control)) {
+    return { stationId: systemId, entries: [] };
   }
 
   const faction = system.factionId
