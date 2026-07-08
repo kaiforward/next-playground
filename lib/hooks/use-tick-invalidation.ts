@@ -22,6 +22,9 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.tradeFlow });
         queryClient.invalidateQueries({ queryKey: queryKeys.stability });
         queryClient.invalidateQueries({ queryKey: queryKeys.populationMap });
+        // Ownership moves on the same monthly pulse (claim/develop) — refresh the political
+        // territory + filled/hollow markers so the map paints expansion live.
+        queryClient.invalidateQueries({ queryKey: queryKeys.ownership });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemPopulationAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemIndustryAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemLogisticsAll });

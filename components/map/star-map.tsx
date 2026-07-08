@@ -17,6 +17,7 @@ import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
 import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
+import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { useStability } from "@/lib/hooks/use-stability";
 import { usePopulation } from "@/lib/hooks/use-population";
@@ -44,6 +45,10 @@ export function StarMap({
   const { showMapDebug } = useDevOverlay();
   const { visibleSystemIds } = useVisibility();
   const { dynamicSystems } = useDynamicData(active);
+  // Live ownership (faction + developed tier) — tick-invalidated on the monthly claim/develop pulse.
+  // Overlaid onto the static atlas so territory + markers repaint as factions expand (the atlas itself
+  // stays staleTime:Infinity — only ownership rides the dynamic path).
+  const ownership = useOwnership();
 
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
@@ -103,12 +108,27 @@ export function StarMap({
   // Cached goods catalog — staleTime: Infinity, ~12 rows, one fetch per session.
   const goods = useGoods();
 
-  // Merge atlas (positions) with static tile data (names + economy)
+  // Overlay live ownership (factionId + developed) onto the static atlas. The base atlas is fetched
+  // once (staleTime:Infinity); ownership refetches on the monthly pulse, so a new liveAtlas identity
+  // here is what drives the territory + marker layers to repaint expansion. Falls back to the atlas
+  // as-is before ownership has loaded.
+  const liveAtlas = useMemo((): AtlasData => {
+    if (ownership.size === 0) return atlas;
+    return {
+      ...atlas,
+      systems: atlas.systems.map((as) => {
+        const own = ownership.get(as.id);
+        return own ? { ...as, factionId: own.factionId, developed: own.developed } : as;
+      }),
+    };
+  }, [atlas, ownership]);
+
+  // Merge atlas (positions + live ownership) with static tile data (names + economy)
   const mergedSystems = useMemo((): StarSystemInfo[] => {
     const nameMap = new Map(
       tileSystems.map((s) => [s.id, s]),
     );
-    return atlas.systems.map((as) => {
+    return liveAtlas.systems.map((as) => {
       const tileData = nameMap.get(as.id);
       return {
         id: as.id,
@@ -123,7 +143,7 @@ export function StarMap({
         description: "",
       };
     });
-  }, [atlas.systems, tileSystems]);
+  }, [liveAtlas.systems, tileSystems]);
 
   // Build UniverseData-compatible structure from atlas + viewport detail.
   // Atlas factions carry only id/name/color; `governmentType` is left null
@@ -245,7 +265,7 @@ export function StarMap({
   return (
     <div className={`relative h-full w-full ${view.mapReady ? "opacity-100" : "opacity-0"}`}>
       <PixiMapCanvas
-        atlasData={atlas}
+        atlasData={liveAtlas}
         mapData={mapData}
         selectedSystem={selectedSystem}
         onSystemClick={onSystemClick}

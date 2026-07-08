@@ -14,7 +14,7 @@
 
 import type { EventTypeId } from "@/lib/constants/events";
 import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
-import type { World } from "@/lib/world/types";
+import type { World, SystemControl } from "@/lib/world/types";
 
 // ── Adapter row shapes ──────────────────────────────────────────
 
@@ -30,6 +30,8 @@ export interface SimSystem {
   regionId: string;
   /** Owning faction's stable id, or null for independent systems. Drives the faction-bounded flow topology. */
   factionId: string | null;
+  /** Three-state ownership — gates development builds and the claim/develop expansion steps. */
+  control: SystemControl;
   /** Owning faction's government — sourced per-system. */
   governmentType: GovernmentType;
   /** Abstract population magnitude — drives labour + per-capita consumption. */

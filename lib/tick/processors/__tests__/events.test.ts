@@ -41,6 +41,7 @@ function makeSystem(id: string, regionId: string): SimSystem {
     economyType: "extraction",
     regionId,
     factionId: "faction-0",
+    control: "developed",
     governmentType: "frontier",
     population: 0,
     popCap: 1000,

@@ -190,8 +190,17 @@ scaling moved/built volume to wall-clock. Two processors join the tick pipeline:
 
 - **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, apply silent
   stock deltas + `logistics` flow rows.
-- **`directedBuild`** (`dependsOn: directed-logistics`) — proactive housing + labour-gated industry,
-  applied as upward `WorldBuilding.count` increments (continuous Float; removal stays decay's job).
+- **`directedBuild`** (`dependsOn: directed-logistics`) — on the same monthly pulse, before its build
+  step, each faction runs one **claim** and one **develop** step to grow its territory (see the
+  [faction-system](./faction-system.md#territorial-expansion-claim-and-develop) control-flag model):
+  claim scores in-reach unclaimed systems (substrate × proximity, absolute so factions compare
+  directly) and proposes one per faction, with cross-faction conflicts resolved deterministically
+  (highest score, seeded-RNG tiebreak); develop ranks a faction's own controlled systems by substrate
+  and flips its best one to `developed`, seeding a conserved colony population from the nearest
+  same-faction developed system. Only after these two steps does the build step run — the develop-gate
+  everywhere is `system.control === "developed"`, so a system claimed this pulse is build-eligible only
+  once it has also been developed. Builds are applied as upward `WorldBuilding.count` increments
+  (continuous Float; removal stays decay's job).
 
 Both reuse the existing fixed-interval shard machinery and the shared market-state derivation. See the
 [tick engine](../engineering/tick-engine.md) for the full processor order.
@@ -239,8 +248,7 @@ faction budget with per-system pacing; both processors on the 48-tick agency clo
   demand *term* is in v1; the prioritisation strategy on top is deferred).
 - **Full "Population ← economic viability"** (food + jobs carrying capacity as the dominant growth lever)
   → SP4; the "fed and calm" gate is a deliberately narrow slice of it.
-- **Habitat / terraforming** that *raises* a world's habitable ceiling; **colonising un-owned space**
-  (settling beyond a faction's existing systems) → later / Stage 2 emergent territory.
+- **Habitat / terraforming** that *raises* a world's habitable ceiling → later.
 - **Faction `factionId` mutation** (capture/rebellion) and the `topology.ts getOpenEdges()` cache-
   invalidation it would force → SP5-full / war.
 

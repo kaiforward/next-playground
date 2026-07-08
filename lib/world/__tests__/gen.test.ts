@@ -153,3 +153,19 @@ describe("generateWorld", () => {
     expect(worldA).not.toEqual(worldB);
   });
 });
+
+describe("generateWorld: control flag", () => {
+  it("seeds each faction homeworld as developed and every other system as unclaimed", () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
+    for (const s of world.systems) {
+      if (homeworldIds.has(s.id)) {
+        expect(s.control).toBe("developed");
+        expect(s.factionId).not.toBeNull();
+      } else {
+        expect(s.control).toBe("unclaimed");
+        expect(s.factionId).toBeNull();
+      }
+    }
+  });
+});
