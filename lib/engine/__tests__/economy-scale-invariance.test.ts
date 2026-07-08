@@ -8,11 +8,10 @@ async function loadAtScale(scale: string) {
   const physical = await import("@/lib/constants/physical-economy");
   const market = await import("@/lib/constants/market-economy");
   const industryConsts = await import("@/lib/constants/industry");
-  const tradeSim = await import("@/lib/constants/trade-simulation");
   const logistics = await import("@/lib/constants/directed-logistics");
   const industryEngine = await import("@/lib/engine/industry");
   const pricing = await import("@/lib/engine/market-pricing");
-  return { physical, market, industryConsts, tradeSim, logistics, industryEngine, pricing };
+  return { physical, market, industryConsts, logistics, industryEngine, pricing };
 }
 
 // A representative market priced through the real seed/pricing path. demandRate
@@ -75,7 +74,6 @@ describe("ECONOMY_SCALE invariance", () => {
     expect(x10.industryConsts.PRODUCTION_STORAGE_PER_UNIT).toBeCloseTo(base.industryConsts.PRODUCTION_STORAGE_PER_UNIT * 10);
     expect(x10.industryConsts.POP_CENTRE_STORAGE_DEFAULT).toBeCloseTo(base.industryConsts.POP_CENTRE_STORAGE_DEFAULT * 10);
     expect(x10.industryConsts.POP_CENTRE_STORAGE.food).toBeCloseTo(base.industryConsts.POP_CENTRE_STORAGE.food * 10);
-    expect(x10.tradeSim.TRADE_SIMULATION.FLOW_BUDGET).toBeCloseTo(base.tradeSim.TRADE_SIMULATION.FLOW_BUDGET * 10);
     expect(x10.logistics.DIRECTED_LOGISTICS.GENERATION_PER_POP).toBeCloseTo(base.logistics.DIRECTED_LOGISTICS.GENERATION_PER_POP * 10);
   });
 
