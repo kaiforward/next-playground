@@ -16,7 +16,8 @@ const EDGE_TICK = 0;
 
 function sys(id: string, factionId: string | null, population: number, popCap: number, unrest: number): SimSystem {
   return {
-    id, name: id, economyType: "extraction", regionId: "r1", factionId, governmentType: "federation",
+    id, name: id, economyType: "extraction", regionId: "r1", factionId,
+    control: factionId ? "developed" : "unclaimed", governmentType: "federation",
     population, popCap, unrest, traits: [], buildings: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };

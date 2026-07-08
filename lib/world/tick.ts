@@ -149,6 +149,7 @@ export function toSimSystems(world: World): SimSystem[] {
     economyType: s.economyType,
     regionId: s.regionId,
     factionId: s.factionId,
+    control: s.control,
     // Every seeded system has a non-null factionId; the fallback covers the
     // same edge case the Prisma adapter guards (a mid-write gap).
     governmentType: s.factionId
@@ -206,7 +207,16 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], simSystems: SimSyste
   return worldSystems.map((s) => {
     const sim = byId.get(s.id);
     if (!sim) return s;
-    return { ...s, population: sim.population, popCap: sim.popCap, unrest: sim.unrest };
+    // factionId + control propagate so the claim/develop expansion steps persist; for every
+    // unchanged system they equal the original.
+    return {
+      ...s,
+      factionId: sim.factionId,
+      control: sim.control,
+      population: sim.population,
+      popCap: sim.popCap,
+      unrest: sim.unrest,
+    };
   });
 }
 
