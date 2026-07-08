@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
-import type { SystemBuildRow } from "@/lib/tick/world/directed-build-world";
+import type { SystemBuildRow, SystemClaim, SystemDevelopment } from "@/lib/tick/world/directed-build-world";
 import { emptyResourceVector } from "@/lib/engine/resources";
 
 function row(systemId: string, factionId: string | null): SystemBuildRow {
@@ -28,5 +28,22 @@ describe("MemoryDirectedBuildWorld", () => {
     const w = new MemoryDirectedBuildWorld([row("A", "f1")]);
     await w.applyBuildingIncreases([{ systemId: "A", buildingType: "food", count: 3.5 }]);
     expect(w.buildingUpdates).toEqual([{ systemId: "A", buildingType: "food", count: 3.5 }]);
+  });
+});
+
+describe("MemoryDirectedBuildWorld: claim + develop capture", () => {
+  it("captures applied claims and developments for write-back", async () => {
+    const world = new MemoryDirectedBuildWorld([]);
+    const claims: SystemClaim[] = [{ systemId: "s1", factionId: "f1" }];
+    const devs: SystemDevelopment[] = [{ systemId: "s2", sourceSystemId: "home", seedPop: 50 }];
+    await world.applyClaims(claims);
+    await world.applyDevelopments(devs);
+    expect(world.claims).toEqual(claims);
+    expect(world.developments).toEqual(devs);
+  });
+  it("starts with no claims or developments", () => {
+    const world = new MemoryDirectedBuildWorld([]);
+    expect(world.claims).toEqual([]);
+    expect(world.developments).toEqual([]);
   });
 });
