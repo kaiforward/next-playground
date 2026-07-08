@@ -21,9 +21,9 @@ Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-
 | §2.1 Alliance Mechanics — formation/dissolution | **Partially implemented** | Event-gated formation + dissolution shipped. Alliance capacity (slots), mutual defense, shared trade bonuses planned (War). |
 | §3 Player-Faction Reputation | **Not present** | There is no personal reputation; player↔faction standing is part of the planned diplomacy layer. |
 | §4 War and Conflict | **Border conflicts only** | `border_conflict` events fire from the relations processor. Full war mechanics planned (War sub-project). |
-| §5 Homeworlds | **Partially implemented** | Homeworlds exist, selected by trait quality, used as flood-fill seeds. Defense bonuses, unique facilities, conquest planned (War / Facilities). |
+| §5 Homeworlds | **Implemented** | One developed homeworld per faction, spaced + seed-biased; every other system starts unclaimed. Defense bonuses, unique facilities, conquest planned (War / Facilities). |
 | §6 Initial Faction Roster | **Implemented** | 8 majors per the table below. Relations seeded at 0 and drifted by the processor (not pre-seeded with doctrine/government nudges). |
-| §7 Minor Factions | **Implemented (soft constraints)** | 12 minors at default scale, 18 at 10k. Archetype placement biases shipped. Hard constraint enforcement (no-borders-more-than-2-majors etc.) is best-effort, not guaranteed. Faction spawning events planned. |
+| §7 Minor Factions | **Implemented** | 12 minors at default scale, 18 at 10k. Same single-homeworld treatment as majors; major/minor status emerges from expansion. Faction spawning events planned. |
 | §8 System Scale + Map Structure | **Implemented (different scales)** | 600 systems (default) / 10K (10k). LOD-based zoom + map-mode toggle, no separate region page. |
 
 ---
@@ -59,7 +59,7 @@ Status is a function of a faction's *share* of total factioned systems, with hys
 | Regional | ≥ 2.5% | < 1.6% | 15 / 10 | 250 / 160 |
 | Minor | > 0 systems | 0 (destroyed/exiled) | any positive | any positive |
 
-Share-based thresholds are scale-independent — a 90-system faction is "regional" at default scale (15% share, hits Dominant) but "minor" at 10K (0.9% share, below Regional). At default scale these reproduce the original absolute targets (80/40/15) within rounding.
+Share-based thresholds are scale-independent — a 90-system faction is "regional" at default scale (15% share, hits Dominant) but "minor" at 10K (0.9% share, below Regional). At default scale these reproduce the original absolute targets (80/40/15) within rounding. The share denominator is the count of *factioned* (owned) systems, which starts small — every faction begins with one homeworld — and grows as factions claim territory, so all factions start near-equal and the absolute-count columns describe a substantially-settled galaxy, not the opening state.
 
 Status determines:
 - Economic bonuses (larger factions have stronger economies but more to defend)
@@ -87,7 +87,7 @@ The exact formula is an implementation detail, but the principle is: military ou
 
 Doctrine defines how a faction behaves toward other factions. Each faction has one primary doctrine.
 
-**Status: Implemented (narrow behavioral surface).** `DOCTRINES` definitions in `lib/constants/doctrines.ts`; doctrine-pair compatibility in `lib/constants/relations.ts` (`DOCTRINE_COMPATIBILITY`); doctrine-rank tiebreak in `lib/engine/faction-gen.ts` (drives contested-system flood-fill).
+**Status: Implemented (narrow behavioral surface).** `DOCTRINES` definitions in `lib/constants/doctrines.ts`; doctrine-pair compatibility in `lib/constants/relations.ts` (`DOCTRINE_COMPATIBILITY`).
 
 **Key design rule**: All factions are warlike. The aggression spread between doctrines is narrow — the difference is what *triggers* conflict and how they fight, not whether they fight. Even the most defensive doctrine will wage war under the right conditions. War exhaustion and attacker cost asymmetry (see [war-system.md](../../planned/war-system.md) §3) keep aggressive doctrines from steamrolling reactive ones.
 
@@ -289,14 +289,15 @@ Relations (§2) drive both layers — negative drift pushes factions through bor
 
 ## 5. Homeworlds
 
-Every faction has a homeworld — their capital system.
+Each faction starts as a **single developed homeworld** — its capital and, at world-gen, its only owned system.
 
-**Status: Implemented (selection + storage only).** Selected during world-gen by `selectHomeworld()` in `lib/engine/faction-gen.ts` (highest aggregate trait quality in the faction's anchor region, with core/industrial/tech economy bias). Stored as `Faction.homeworldId` (unique FK to `StarSystem`).
+**Status: Implemented.** Homeworlds are placed by `placeHomeworlds()` in `lib/engine/faction-gen.ts`: one per faction, scored from raw substrate for a good home (habitable base, resource diversity, low danger, trait quality) and spaced apart by a relaxing min-distance threshold, so no faction starts on a dud and rivals begin separated. Stored as `Faction.homeworldId` (unique reference to a system).
 
-### Homeworld Properties
+### Starting condition
 
-- **Stored and selectable**: homeworlds exist, are unique per faction, and serve as flood-fill seeds for territory assignment.
-- **Economic hub** (partial — emergent only): because homeworlds are selected by trait quality, they tend to be the richest systems in their region. There is no explicit "homeworld bonus" applied on top.
+- **One developed homeworld per faction; the rest of the galaxy is unclaimed.** Every non-homeworld system starts `factionId: null`, unpopulated, and unbuilt — inert frontier. Factions grow by claiming and developing territory outward from their homeworld (see [substrate-reset.md](../../planned/substrate-reset.md)).
+- **Developed at gen**: each homeworld carries its substrate industry plus a seeded outpost + space-station facility, so it is ungated and its economy runs and grows from the start.
+- **Economic hub** (emergent): because homeworlds are seed-biased toward good substrate, they tend to be the richest system a faction holds. There is no explicit "homeworld bonus" applied on top.
 
 > **Planned (War / Facilities):** homeworld defense bonuses, unique faction-specific facilities at homeworlds, and homeworld-conquest mechanics (faction-in-exile, picking a new capital, cornered-animal bonuses, rebel resurrection) all depend on later sub-projects. The design intent is preserved below as the eventual target.
 
@@ -355,29 +356,11 @@ All faction names, lore, and color choices are provisional. The roster will grow
 
 ## 7. Minor Factions
 
-**Status: Implemented (soft constraints).** Procedural generation in `lib/engine/faction-gen.ts`; archetype distribution in `MINOR_ARCHETYPE_DISTRIBUTION` (`lib/constants/factions.ts`).
+**Status: Implemented.** Procedural generation in `lib/engine/faction-gen.ts`.
 
 12 minor factions at default universe scale, 18 at 10K scale. Both values come from `UNIVERSE_GEN.MINOR_FACTION_COUNT` and scale with the universe preset. Minors use the same doctrine pool as majors — doctrine behavior scales with territory size, not faction category. An expansionist minor is a regional nuisance; an expansionist major is a galactic threat. Minor governments and doctrines are picked randomly from the full pool at world-gen time.
 
-**Starting size**: minimum 5 systems per minor, enforced by `enforceMinorMinimum()` (post-flood-fill, any minor below the floor claims its nearest systems away from neighboring majors). Upper bound emerges from flood-fill — no hard cap.
-
-### Placement Archetypes
-
-Minor factions are distributed across four archetypes based on their position relative to major factions. Proportions in `MINOR_ARCHETYPE_DISTRIBUTION` add up to all `MINOR_FACTION_COUNT` slots — `ceil(N × proportion)` for the first three, remainder goes to cluster.
-
-| Archetype | Proportion | Default (N=12) | 10K (N=18) | Position | Gameplay role |
-|---|---|---|---|---|---|
-| Buffer state | 0.33 | 4 | 6 | Near midpoint of two major homeworlds | Politically interesting. Courted or threatened by both neighbors. Survives by playing sides |
-| Frontier independent | 0.33 | 4 | 6 | Furthest from map center (top 20% sampled) | Growth story. Unclaimed space to expand into. Safe but isolated early on |
-| Enclave | 0.20 | 3 | 4 | Same region as a randomly-chosen major homeworld | At risk of absorption. Hegemonic factions pressure these first |
-| Cluster | remainder | 1 | 2 | Furthest from all major homeworlds (top 30% sampled) | Weak individually, strong together. Natural target for player-driven alliances |
-
-**Seed constraints (soft / best-effort):**
-- *Designed*: no minor borders more than 2 majors. *Today*: archetype placement biases toward this but does not strictly enforce it post-flood-fill.
-- *Designed*: every minor has systems not directly adjacent to a major faction's border. *Today*: same — biased, not enforced.
-- *Designed*: frontier minors have unclaimed space on at least one side. *Today*: handled implicitly by the "top 20% furthest from center" sampling.
-
-The cluster archetype is intended for 2+ adjacent minors that can form natural alliances. At default scale only one cluster slot is allocated (after the buffer/frontier/enclave ceil-rounding eats most of the budget); at 10K scale there are 2. This is acceptable per the implementation note — a 1-faction cluster is fine for Foundation.
+**Starting size**: minors get the same single-homeworld treatment as majors — one developed homeworld, spaced and seed-biased alongside every other faction's. There is no seeded territory floor and no seeded major/minor size difference: **status emerges from expansion** (§1). A minor is simply a faction whose identity (name/government/doctrine) reads as regional; whether it stays small or grows into a power is settled on the map.
 
 ### Faction Spawning (Planned)
 
@@ -403,7 +386,7 @@ System count is chosen per game on the New-game screen (50–20,000; default 600
 | 600 (default) | 7,000 × 7,000 | 24 | 8 | 12 |
 | ~10,000 (stress test) | 25,000 × 25,000 | 60 | 8 | 18 |
 
-The original design target was 1K–2K systems. The universe-scaling work landed both a snappy small default (600) and a large stress-test scale (~10K, validates tile/LOD rendering). There is no discrete preset anymore — the count is continuous, and share-based status thresholds (§1) and percentage-based archetype distributions (§7) make every scale behave correctly without hand-tuning.
+The original design target was 1K–2K systems. The universe-scaling work landed both a snappy small default (600) and a large stress-test scale (~10K, validates tile/LOD rendering). There is no discrete preset anymore — the count is continuous, and share-based status thresholds (§1) and the percentage-scaled minor count (§7) make every scale behave correctly without hand-tuning.
 
 ### Map Structure (Implemented)
 

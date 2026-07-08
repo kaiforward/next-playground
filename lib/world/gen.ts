@@ -125,7 +125,10 @@ export function generateWorld(options: GenerateWorldOptions): World {
     y: s.y,
     description: s.description,
     regionId: regionIds[s.regionIndex],
-    factionId: factionIds[universe.systemFactionAssignments[s.index]],
+    factionId:
+      universe.systemFactionAssignments[s.index] === -1
+        ? null
+        : factionIds[universe.systemFactionAssignments[s.index]],
     isGateway: s.isGateway,
     sunClass: s.sunClass,
     population: s.population,

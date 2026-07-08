@@ -16,7 +16,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY,
   VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, SKILL1_PER_SCHOOL, SKILL2_PER_INSTITUTE, labourTotal,
-  FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
+  FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT, hasStationFacility,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import {
@@ -349,8 +349,14 @@ export function planFactionBuilds(
   if (budget <= 0) return [];
 
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
+  // Only developed systems (those holding a space-station facility) can host builds —
+  // unclaimed and outpost-only systems are skipped here, gating both the housing and
+  // industry passes in one place. Deficit/surplus detection below still reads all `systems`.
   const working = new Map<string, BuildSystemState>();
-  for (const s of systems) working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
+  for (const s of systems) {
+    if (!hasStationFacility(s.buildings)) continue;
+    working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
+  }
 
   const builds: PlannedBuild[] = [];
 

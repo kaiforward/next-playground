@@ -4,6 +4,7 @@ import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-bu
 import type { SystemBuildRow } from "@/lib/tick/world/directed-build-world";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { SPACE_STATION_TYPE } from "@/lib/constants/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
 const reachable: RouteCost = () => 1;
@@ -35,7 +36,7 @@ function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[]
       generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
     },
     {
-      systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { food: bFood, housing: bHousing },
+      systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { food: bFood, housing: bHousing, [SPACE_STATION_TYPE]: 1 },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
       generalSpace: 100, habitableSpace: 100, markets: [],
     },
@@ -88,7 +89,7 @@ describe("runDirectedBuildProcessor", () => {
         generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
       },
       {
-        systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: {},
+        systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { [SPACE_STATION_TYPE]: 1 },
         yields: unitResourceVector(), slotCap: builderSlots(10),
         generalSpace: 0, habitableSpace: 0, markets: [],
       },
@@ -102,7 +103,7 @@ describe("runDirectedBuildProcessor", () => {
 
   it("returns no writes when there are no structural deficits", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: { [SPACE_STATION_TYPE]: 1 },
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
       markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → balanced; no habitable land → no proactive housing → no writes
     }];

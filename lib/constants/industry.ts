@@ -23,6 +23,10 @@ import { scaleValue, scaleRecord } from "@/lib/constants/economy-scale";
 export const HOUSING_TYPE = "housing";
 export const VOCATIONAL_SCHOOL_TYPE = "vocational_school";
 export const RESEARCH_INSTITUTE_TYPE = "research_institute";
+/** Control marker — cheap sovereignty over an owned system; produces/houses/staffs nothing. */
+export const OUTPOST_TYPE = "outpost";
+/** Development gate — an expensive orbital facility that unlocks the other build types in-system. */
+export const SPACE_STATION_TYPE = "space_station";
 /** The two academy building type ids, in grade order. */
 export const ACADEMY_TYPES: string[] = [VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE];
 
@@ -234,6 +238,8 @@ export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
   ...buildProductionTypes(),
   ...buildComplexTypes(),
   [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: POP_CENTRE_DENSITY },
+  [OUTPOST_TYPE]: { spaceCost: 1.0 },
+  [SPACE_STATION_TYPE]: { spaceCost: 3.0 },
   [VOCATIONAL_SCHOOL_TYPE]: {
     spaceCost: 1.5,
     labour: { unskilled: 15, skill1: 0, skill2: 0 },
@@ -282,4 +288,14 @@ export function sizeFactor(size: number): number {
  */
 export function effectiveSpaceCost(buildingType: string): number {
   return BUILDING_TYPES[buildingType]?.spaceCost ?? DEFAULT_SPACE_COST;
+}
+
+/**
+ * A system can host development builds (housing, extractors, factories, academies,
+ * complexes) only once it holds a space-station facility. Unclaimed and
+ * controlled-but-undeveloped (outpost-only) systems have none, so directed build
+ * skips them. The facility is seeded on every faction homeworld at world-gen.
+ */
+export function hasStationFacility(buildings: Record<string, number>): boolean {
+  return (buildings[SPACE_STATION_TYPE] ?? 0) > 0;
 }
