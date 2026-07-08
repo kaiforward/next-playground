@@ -186,9 +186,9 @@ export interface StarSystemInfo {
   /** Owning faction (null only in the transient seed state before factions are assigned). */
   factionId: string | null;
   isGateway: boolean;
-  /** Whether the system carries any population capacity (popCap > 0). Undeveloped
-   *  systems (~2%) have a substrate economy-type label but no built economy. Loaded
-   *  by the atlas/map path; absent on lighter paths that don't query popCap. */
+  /** True when the system is developed (control === 'developed'). Undeveloped
+   *  systems have a substrate economy-type label but no open build-gate. Loaded
+   *  by the atlas/map path; absent on lighter paths that don't query control. */
   developed?: boolean;
   traits?: SystemTraitInfo[];
 }
@@ -287,8 +287,8 @@ export interface AtlasSystem {
   factionId: string | null;
   economyType: EconomyType;
   isGateway: boolean;
-  /** Whether the system has any population capacity (popCap > 0). Undeveloped systems
-   *  carry a substrate-derived economy-type label but no built economy — the map draws
+  /** True when the system is developed (control === 'developed'). Undeveloped systems
+   *  carry a substrate-derived economy-type label but remain unopened — the map draws
    *  them as a hollow marker. */
   developed: boolean;
 }
