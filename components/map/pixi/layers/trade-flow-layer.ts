@@ -1,14 +1,14 @@
 import { Container } from "pixi.js";
 import { TradeFlowEdge, type FlowEdgeStyle } from "../objects/trade-flow-edge";
 import { getGoodColor } from "@/lib/constants/good-colors";
-import { TRADE_FLOW, LOGISTICS_FLOW } from "../theme";
+import { LOGISTICS_FLOW } from "../theme";
 import { arcPolyline, type Point } from "../flow-arc";
 import type { Frustum } from "../frustum";
 import type { LODState } from "../lod";
 import type { SystemNodeData } from "@/lib/hooks/use-map-data";
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 
-/** Per-overlay rendering config — market (straight) vs logistics (arced). */
+/** Rendering config for the directed-logistics flow particles. */
 export interface FlowLayerConfig {
   /** Build the particle path between net-from and net-to endpoints. */
   buildPath: (from: Point, to: Point) => Point[];
@@ -19,25 +19,6 @@ export interface FlowLayerConfig {
   /** Global particle budget for this layer. */
   maxTotalParticles: number;
 }
-
-/** Market diffusion: straight 2-point path, small ambient dots, no glow/arrow. */
-export const MARKET_FLOW_CONFIG: FlowLayerConfig = {
-  buildPath: (from, to) => [from, to],
-  style: {
-    particleRadius: TRADE_FLOW.particleRadius,
-    particleAlpha: TRADE_FLOW.particleAlpha,
-    particleSpeed: TRADE_FLOW.particleSpeed,
-    glowBlur: 0,
-    drawPath: false,
-    pathAlpha: 0,
-    arrowhead: false,
-    arrowSize: 0,
-  },
-  minParticlesPerEdge: TRADE_FLOW.minParticlesPerEdge,
-  volumePerExtraParticle: TRADE_FLOW.volumePerExtraParticle,
-  maxParticlesPerEdge: TRADE_FLOW.maxParticlesPerEdge,
-  maxTotalParticles: TRADE_FLOW.maxTotalParticles,
-};
 
 /** Directed logistics: arced path, larger glowing convoys, route line + arrow. */
 export const LOGISTICS_FLOW_CONFIG: FlowLayerConfig = {
@@ -60,9 +41,8 @@ export const LOGISTICS_FLOW_CONFIG: FlowLayerConfig = {
 };
 
 /**
- * Pixi layer that renders a flow overlay. Config-parameterised so one class
- * serves both market diffusion and directed logistics (different path geometry
- * + particle style). See `MARKET_FLOW_CONFIG` and `LOGISTICS_FLOW_CONFIG`.
+ * Pixi layer that renders the directed-logistics flow overlay. Config-parameterised
+ * (see `LOGISTICS_FLOW_CONFIG`) so the path geometry + particle style stay data-driven.
  *
  * Lifecycle mirrors the prior single-overlay layer: `sync` diffs the live edge
  * set, `updateVisibility` culls + sets LOD alpha, `update` advances particles.
@@ -73,7 +53,7 @@ export class TradeFlowLayer {
   readonly container = new Container();
   private edges = new Map<string, TradeFlowEdge>();
 
-  constructor(private config: FlowLayerConfig = MARKET_FLOW_CONFIG) {}
+  constructor(private config: FlowLayerConfig = LOGISTICS_FLOW_CONFIG) {}
 
   sync(systems: SystemNodeData[], flowEdges: Map<string, TradeFlowEdgeInfo>) {
     if (flowEdges.size === 0) {

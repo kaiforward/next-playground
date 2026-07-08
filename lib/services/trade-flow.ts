@@ -17,8 +17,8 @@ import {
 } from "@/lib/engine/logistics";
 
 /**
- * Returns the two map-overlay edge sets (market diffusion + directed logistics)
- * aggregated over the last `FLOW_HISTORY_TICKS`.
+ * Returns the directed-logistics map-overlay edge set, aggregated over the last
+ * `FLOW_HISTORY_TICKS`.
  */
 export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
@@ -44,12 +44,13 @@ export function getTradeFlowEdges(): TradeFlowEdges {
   }
 
   const allSystemIds = new Set(world.systems.map((s) => s.id));
-  return buildFlowEdges(
+  const { logisticsEdges } = buildFlowEdges(
     [...grouped.values()],
     allSystemIds,
     TRADE_SIMULATION.ROUTE_INFERENCE_FLOOR,
     TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
   );
+  return { logisticsEdges };
 }
 
 /**

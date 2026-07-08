@@ -49,9 +49,8 @@ export interface TradeFlowEdgeInfo {
   /** Per-good magnitude (both directions summed). */
   perGood: Record<string, number>;
 }
-/** The two overlay edge sets the map renders — market diffusion and directed logistics. */
+/** The directed-logistics overlay edge set the map renders. */
 export interface TradeFlowEdges {
-  marketEdges: TradeFlowEdgeInfo[];
   logisticsEdges: TradeFlowEdgeInfo[];
 }
 export type TradeFlowResponse = ApiResponse<TradeFlowEdges>;

@@ -113,23 +113,23 @@ describe("getSystemLogistics", () => {
 });
 
 describe("getTradeFlowEdges", () => {
-  it("aggregates window flows into market and logistics edge sets", () => {
-    // The per-good window total must clear ROUTE_INFERENCE_FLOOR for the edge
-    // to render — inject a flow comfortably above it.
+  it("aggregates window flows into the logistics edge set", () => {
+    // The per-good window total must clear LOGISTICS_ROUTE_FLOOR for the edge
+    // to render — inject a logistics flow comfortably above it.
     setWorld({
       ...world,
       flowEvents: [
-        { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 40, flowType: "market" },
+        { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 40, flowType: "logistics" },
       ],
     });
     const edges = getTradeFlowEdges();
 
-    const marketEdge = edges.marketEdges.find(
+    const logisticsEdge = edges.logisticsEdges.find(
       (e) =>
         (e.fromSystemId === system.id && e.toSystemId === partnerA.id) ||
         (e.fromSystemId === partnerA.id && e.toSystemId === system.id),
     );
-    expect(marketEdge).toBeDefined();
-    expect(marketEdge!.totalVolume).toBeGreaterThan(0);
+    expect(logisticsEdge).toBeDefined();
+    expect(logisticsEdge!.totalVolume).toBeGreaterThan(0);
   });
 });

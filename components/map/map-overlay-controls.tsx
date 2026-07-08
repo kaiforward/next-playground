@@ -23,7 +23,7 @@ const MODE_LABELS: Record<MapMode, string> = {
 };
 
 /** Overlays whose colour mapping isn't self-evident carry a hover/focus legend. */
-type LegendKind = "price" | "tradeFlow" | "logistics";
+type LegendKind = "price" | "logistics";
 
 interface OverlayDef {
   key: MapOverlayKey;
@@ -41,7 +41,6 @@ interface OverlayDef {
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
   { key: "events", label: "Events", swatch: "#f59e0b" }, // EVENT_DOT_COLORS.amber
   { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium, legend: "price" },
-  { key: "tradeFlow", label: "Trade Flows", swatch: pixiHexToCss(TIER_COLOR[2]), legend: "tradeFlow" },
   { key: "logistics", label: "Logistics", swatch: pixiHexToCss(TIER_COLOR[1]), legend: "logistics" },
 ];
 
@@ -141,7 +140,6 @@ function SectionHeading({ children }: { children: string }) {
 /** Legend body for a tooltip — the surrounding box is supplied by TooltipContent. */
 function OverlayLegend({ kind }: { kind: LegendKind }) {
   if (kind === "price") return <PriceRampLegend />;
-  if (kind === "tradeFlow") return <TradeFlowLegend />;
   return <LogisticsLegend />;
 }
 
@@ -245,17 +243,6 @@ function TierSwatchList() {
   );
 }
 
-function TradeFlowLegend() {
-  return (
-    <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-        Good Tier
-      </h5>
-      <TierSwatchList />
-    </div>
-  );
-}
-
 function LogisticsLegend() {
   return (
     <div>
@@ -265,7 +252,7 @@ function LogisticsLegend() {
       <TierSwatchList />
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
         Curved arc = a faction haul across systems; the arrow points to the
-        importing system. Straight dots are market diffusion.
+        importing system.
       </p>
     </div>
   );
