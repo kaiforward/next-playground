@@ -3,9 +3,12 @@ import {
   scoreClaimCandidate,
   proposeFactionClaims,
   resolveClaims,
+  planFactionDevelopments,
   type ClaimCandidate,
   type ClaimProposal,
   type ExpansionParams,
+  type DevelopCandidate,
+  type DevelopParams,
 } from "@/lib/engine/expansion";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
@@ -81,5 +84,36 @@ describe("resolveClaims", () => {
     const winB = resolveClaims([...tied].reverse(), mulberry32(42))[0].factionId;
     expect(winA).toBe(winB);
     expect(["f1", "f2"]).toContain(winA);
+  });
+});
+
+const DEV_PARAMS: DevelopParams = {
+  maxDevelopsPerPulse: 1, habitableFloor: 1, seedPop: 50, weights: WEIGHTS,
+};
+function devCand(p: Partial<DevelopCandidate> & { systemId: string }): DevelopCandidate {
+  return { habitableSpace: 10, resourceDiversity: 0, traitQuality: 0, sourceSystemId: "home", ...p };
+}
+
+describe("planFactionDevelopments", () => {
+  it("develops the highest-substrate controlled system, capped, seeding from its source", () => {
+    const out = planFactionDevelopments(
+      [devCand({ systemId: "poor", habitableSpace: 2 }), devCand({ systemId: "rich", habitableSpace: 200, resourceDiversity: 4 })],
+      DEV_PARAMS,
+    );
+    expect(out).toEqual([{ systemId: "rich", sourceSystemId: "home", seedPop: 50 }]);
+  });
+  it("skips a system below the habitable floor", () => {
+    expect(planFactionDevelopments([devCand({ systemId: "rock", habitableSpace: 0 })], DEV_PARAMS)).toEqual([]);
+  });
+  it("skips a system with no reachable developed source", () => {
+    expect(planFactionDevelopments([devCand({ systemId: "island", sourceSystemId: null })], DEV_PARAMS)).toEqual([]);
+  });
+  it("is deterministic and ranks by (score, systemId) regardless of input order", () => {
+    const a = devCand({ systemId: "a", habitableSpace: 100 });
+    const b = devCand({ systemId: "b", habitableSpace: 100 });
+    const fwd = planFactionDevelopments([a, b], { ...DEV_PARAMS, maxDevelopsPerPulse: 2 });
+    const rev = planFactionDevelopments([b, a], { ...DEV_PARAMS, maxDevelopsPerPulse: 2 });
+    expect(fwd.map((d) => d.systemId)).toEqual(["a", "b"]);
+    expect(rev.map((d) => d.systemId)).toEqual(["a", "b"]);
   });
 });
