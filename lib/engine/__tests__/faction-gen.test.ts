@@ -8,7 +8,7 @@ import type { EconomyType } from "@/lib/types/game";
 // (index, x, y, habitableSpace, bodyDanger, traits, slotCap) matter; the rest are inert defaults.
 function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
   return {
-    index: p.index, name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
+    name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
     bodies: [], popCap: 0, population: 0, bodyDanger: 0, traits: [], buildings: {},
     availableSpace: 0, generalSpace: 0, habitableSpace: 0,
     slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),

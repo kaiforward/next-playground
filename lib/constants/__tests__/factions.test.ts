@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { FACTION_ROSTER, MINOR_ARCHETYPE_DISTRIBUTION } from "../factions";
+import { FACTION_ROSTER } from "../factions";
 import { ALL_GOVERNMENT_TYPES, isDoctrine } from "@/lib/types/guards";
 
 describe("FACTION_ROSTER", () => {
@@ -32,24 +32,5 @@ describe("FACTION_ROSTER", () => {
     for (const f of FACTION_ROSTER) {
       expect(f.color).toMatch(/^#[0-9a-fA-F]{6}$/);
     }
-  });
-});
-
-describe("MINOR_ARCHETYPE_DISTRIBUTION", () => {
-  it("declares the four archetypes in the expected order", () => {
-    const archetypes = MINOR_ARCHETYPE_DISTRIBUTION.map((a) => a.archetype);
-    expect(archetypes).toEqual(["buffer", "frontier", "enclave", "cluster"]);
-  });
-
-  it("cluster absorbs the remainder (declared proportion is 0)", () => {
-    const cluster = MINOR_ARCHETYPE_DISTRIBUTION.find((a) => a.archetype === "cluster");
-    expect(cluster?.proportion).toBe(0);
-  });
-
-  it("non-cluster proportions sum to less than 1.0 so cluster gets a real share", () => {
-    const sum = MINOR_ARCHETYPE_DISTRIBUTION
-      .filter((a) => a.archetype !== "cluster")
-      .reduce((acc, a) => acc + a.proportion, 0);
-    expect(sum).toBeLessThan(1.0);
   });
 });

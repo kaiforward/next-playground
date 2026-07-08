@@ -113,33 +113,6 @@ export const MINOR_NOUNS: readonly string[] = [
   "Cartel", "Echelon", "Compact", "Junta", "Bloc", "Covenant",
 ] as const;
 
-// ── Minor faction archetypes ─────────────────────────────────────
-
-export type MinorFactionArchetype = "buffer" | "frontier" | "enclave" | "cluster";
-
-/**
- * Proportional split for procedural minor placement, per faction-system.md §7.1.
- * World-gen assigns ceil(N × proportion)
- * to each archetype in declaration order; "cluster" absorbs the remainder so the
- * totals match the configured `MINOR_FACTION_COUNT` exactly.
- */
-export const MINOR_ARCHETYPE_DISTRIBUTION: readonly {
-  archetype: MinorFactionArchetype;
-  proportion: number;
-}[] = [
-  { archetype: "buffer", proportion: 0.33 },
-  { archetype: "frontier", proportion: 0.33 },
-  { archetype: "enclave", proportion: 0.2 },
-  { archetype: "cluster", proportion: 0 },
-] as const;
-
-/**
- * Per faction-system.md §7.1: minors start at 5–30 systems each. World-gen
- * post-processes flood-fill ownership to bring any minor below this floor up
- * to it by flipping its closest systems away from neighboring majors.
- */
-export const MIN_MINOR_TERRITORY = 5;
-
 // ── Emergent-civ homeworld placement ─────────────────────────────
 /**
  * Homeworlds are the only seeded ownership under emergent world-gen: one decent,

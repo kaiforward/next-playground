@@ -22,6 +22,7 @@ import {
 import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
+import { OUTPOST_TYPE, SPACE_STATION_TYPE } from "@/lib/constants/industry";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -547,53 +548,28 @@ describe("faction generation", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("every system is assigned to some faction", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    expect(u.systemFactionAssignments).toHaveLength(u.systems.length);
-    for (const idx of u.systemFactionAssignments) {
-      expect(idx).toBeGreaterThanOrEqual(0);
-      expect(idx).toBeLessThan(u.factions.length);
+  it("owns only faction homeworlds; every other system is unclaimed (-1)", () => {
+    const u = generateUniverse(defaultParams(), REGION_NAMES);
+    const homeworlds = new Set(u.factions.map((f) => f.homeworldSystemIndex));
+    for (let i = 0; i < u.systems.length; i++) {
+      if (homeworlds.has(i)) expect(u.systemFactionAssignments[i]).toBeGreaterThanOrEqual(0);
+      else expect(u.systemFactionAssignments[i]).toBe(-1);
     }
+    const owned = u.systemFactionAssignments.filter((a) => a >= 0).length;
+    expect(owned).toBe(u.factions.length); // exactly one owned system per faction
   });
 
-  it("every minor faction holds at least 5 systems (minimum floor)", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    const sizeByFaction = new Map<number, number>();
-    for (const f of u.systemFactionAssignments) {
-      sizeByFaction.set(f, (sizeByFaction.get(f) ?? 0) + 1);
-    }
-    for (const f of u.factions) {
-      if (f.isMajor) continue;
-      const size = sizeByFaction.get(f.index) ?? 0;
-      expect(size).toBeGreaterThanOrEqual(5);
-    }
-  });
-
-  it("minor archetypes total to the configured count", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    const minors = u.factions.filter((f) => !f.isMajor);
-    expect(minors.length).toBe(params.minorFactionCount);
-    for (const m of minors) {
-      expect(m.archetype).not.toBeNull();
-    }
-  });
-
-  it("frontier minors are placed near the map edge", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    const center = params.mapSize / 2;
-    const frontierMinors = u.factions.filter(
-      (f) => !f.isMajor && f.archetype === "frontier",
-    );
-    // Each frontier minor's homeworld lies in the outer 40% of map radius —
-    // the placement algorithm samples from the top-20% distance-from-center pool.
-    for (const fm of frontierMinors) {
-      const hw = u.systems[fm.homeworldSystemIndex];
-      const d = distance(hw.x, hw.y, center, center);
-      expect(d).toBeGreaterThan(center * 0.4);
+  it("develops each homeworld (outpost + station) and leaves every other system unpopulated & unbuilt", () => {
+    const u = generateUniverse(defaultParams(), REGION_NAMES);
+    const homeworlds = new Set(u.factions.map((f) => f.homeworldSystemIndex));
+    for (const s of u.systems) {
+      if (homeworlds.has(s.index)) {
+        expect(s.buildings[SPACE_STATION_TYPE]).toBeGreaterThan(0);
+        expect(s.buildings[OUTPOST_TYPE]).toBeGreaterThan(0);
+      } else {
+        expect(s.population).toBe(0);
+        expect(Object.keys(s.buildings)).toHaveLength(0);
+      }
     }
   });
 });
