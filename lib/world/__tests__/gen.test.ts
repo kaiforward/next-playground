@@ -42,14 +42,27 @@ describe("generateWorld", () => {
     }
   });
 
-  it("assigns every system a factionId that resolves to a real faction (current gen never leaves a system unclaimed)", () => {
+  it("owns only faction homeworlds — every other system is null, unpopulated, and unbuilt", () => {
     const factionIds = new Set(world.factions.map((f) => f.id));
+    const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
+    const buildingsBySystem = new Map<string, number>();
+    for (const b of world.buildings) {
+      buildingsBySystem.set(b.systemId, (buildingsBySystem.get(b.systemId) ?? 0) + 1);
+    }
+
+    let ownedCount = 0;
     for (const sys of world.systems) {
-      expect(sys.factionId).not.toBeNull();
-      if (sys.factionId !== null) {
-        expect(factionIds.has(sys.factionId)).toBe(true);
+      if (homeworldIds.has(sys.id)) {
+        ownedCount++;
+        expect(sys.factionId).not.toBeNull();
+        if (sys.factionId !== null) expect(factionIds.has(sys.factionId)).toBe(true);
+      } else {
+        expect(sys.factionId).toBeNull();
+        expect(sys.population).toBe(0);
+        expect(buildingsBySystem.get(sys.id) ?? 0).toBe(0);
       }
     }
+    expect(ownedCount).toBe(world.factions.length); // one owned homeworld per faction
   });
 
   it("sets a valid dominantEconomy on every region, matching the mode of its systems' economyType", () => {

@@ -35,7 +35,7 @@ describe("serializeWorld / deserializeWorld", () => {
   });
 
   it("rejects a well-formed JSON object missing world.meta", () => {
-    const json = JSON.stringify({ formatVersion: 1, world: { systems: [] } });
+    const json = JSON.stringify({ formatVersion: 2, world: { systems: [] } });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
@@ -43,7 +43,7 @@ describe("serializeWorld / deserializeWorld", () => {
   it("rejects a world whose meta is missing mapSize (tile geometry depends on it)", () => {
     const { seed, systemCount, currentTick, startingSystemId } = world.meta;
     const json = JSON.stringify({
-      formatVersion: 1,
+      formatVersion: 2,
       world: { ...world, meta: { seed, systemCount, currentTick, startingSystemId } },
     });
     const result = deserializeWorld(json);
@@ -51,7 +51,7 @@ describe("serializeWorld / deserializeWorld", () => {
   });
 
   it("rejects a save with an unsupported formatVersion", () => {
-    const json = JSON.stringify({ formatVersion: 2, world });
+    const json = JSON.stringify({ formatVersion: 99, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });

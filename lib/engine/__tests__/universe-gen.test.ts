@@ -11,9 +11,13 @@ import {
   generateSystems,
   generateConnections,
   generateUniverse,
+  selectStartingSystem,
   type GenParams,
   type GeneratedRegion,
+  type GeneratedSystem,
 } from "../universe-gen";
+import type { GeneratedFaction } from "../faction-gen";
+import { emptyResourceVector } from "@/lib/engine/resources";
 import {
   genConfigForSystemCount,
   DEFAULT_SYSTEM_COUNT,
@@ -22,6 +26,7 @@ import {
 import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
+import { OUTPOST_TYPE, SPACE_STATION_TYPE } from "@/lib/constants/industry";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -29,6 +34,28 @@ const DEFAULT_GEN_CONFIG = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
 
 function defaultParams(): GenParams {
   return buildGenParams(DEFAULT_GEN_CONFIG.SEED, DEFAULT_GEN_CONFIG);
+}
+
+/** Minimal GeneratedSystem for unit tests — only the fields under test matter; rest are inert defaults. */
+function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
+  return {
+    name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
+    bodies: [], popCap: 0, population: 0, bodyDanger: 0, traits: [], buildings: {},
+    availableSpace: 0, generalSpace: 0, habitableSpace: 0,
+    slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
+    x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
+    ...p,
+  };
+}
+
+/** Minimal GeneratedFaction for unit tests. Defaults to a federation major. */
+function mkFaction(p: Partial<GeneratedFaction> & { index: number }): GeneratedFaction {
+  return {
+    key: `f${p.index}`, name: `F${p.index}`, description: "",
+    governmentType: "federation", doctrine: "expansionist",
+    color: "#000000", isMajor: true, homeworldSystemIndex: p.index,
+    ...p,
+  };
 }
 
 /** BFS reachability from a start node in a directed adjacency list. */
@@ -443,22 +470,21 @@ describe("selectStartingSystem", () => {
     expect(startFaction.governmentType).toBe("federation");
   });
 
-  it("prefers a core-type system within Federation territory when available", () => {
-    const params = defaultParams();
-    const universe = generateUniverse(params, REGION_NAMES);
-    const startSys = universe.systems[universe.startingSystemIndex];
-
-    // Find the federation major; if it owns any core systems, the start must be core.
-    const fedFaction = universe.factions.find(
-      (f) => f.isMajor && f.governmentType === "federation",
-    )!;
-    const fedOwnedSystems = universe.systems.filter(
-      (s) => universe.systemFactionAssignments[s.index] === fedFaction.index,
-    );
-    const fedCoreSystems = fedOwnedSystems.filter((s) => s.economyType === "core");
-    if (fedCoreSystems.length > 0) {
-      expect(startSys.economyType).toBe("core");
-    }
+  it("prefers a core-economy system closest to map center among a faction's candidates", () => {
+    // Under homeworld-only world-gen a faction owns a single system, so generateUniverse
+    // can't hand selectStartingSystem multiple candidates. Exercise the core + proximity
+    // tie-break directly: a federation major owning four systems — the nearest to center is
+    // non-core, plus core systems near and far — must yield the near core (index 2), proving
+    // core preference wins over raw proximity.
+    const fed = mkFaction({ index: 0, isMajor: true, governmentType: "federation" });
+    const systems = [
+      mkSys({ index: 0, x: 90, y: 90, economyType: "core" }),       // core but far from center (50,50)
+      mkSys({ index: 1, x: 52, y: 50, economyType: "extraction" }), // nearest to center, but not core
+      mkSys({ index: 2, x: 55, y: 50, economyType: "core" }),       // core and near center → winner
+      mkSys({ index: 3, x: 10, y: 10, economyType: "core" }),       // core but far
+    ];
+    const assignments = [fed.index, fed.index, fed.index, fed.index];
+    expect(selectStartingSystem(systems, [fed], assignments, 100)).toBe(2);
   });
 });
 
@@ -547,53 +573,28 @@ describe("faction generation", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("every system is assigned to some faction", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    expect(u.systemFactionAssignments).toHaveLength(u.systems.length);
-    for (const idx of u.systemFactionAssignments) {
-      expect(idx).toBeGreaterThanOrEqual(0);
-      expect(idx).toBeLessThan(u.factions.length);
+  it("owns only faction homeworlds; every other system is unclaimed (-1)", () => {
+    const u = generateUniverse(defaultParams(), REGION_NAMES);
+    const homeworlds = new Set(u.factions.map((f) => f.homeworldSystemIndex));
+    for (let i = 0; i < u.systems.length; i++) {
+      if (homeworlds.has(i)) expect(u.systemFactionAssignments[i]).toBeGreaterThanOrEqual(0);
+      else expect(u.systemFactionAssignments[i]).toBe(-1);
     }
+    const owned = u.systemFactionAssignments.filter((a) => a >= 0).length;
+    expect(owned).toBe(u.factions.length); // exactly one owned system per faction
   });
 
-  it("every minor faction holds at least 5 systems (minimum floor)", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    const sizeByFaction = new Map<number, number>();
-    for (const f of u.systemFactionAssignments) {
-      sizeByFaction.set(f, (sizeByFaction.get(f) ?? 0) + 1);
-    }
-    for (const f of u.factions) {
-      if (f.isMajor) continue;
-      const size = sizeByFaction.get(f.index) ?? 0;
-      expect(size).toBeGreaterThanOrEqual(5);
-    }
-  });
-
-  it("minor archetypes total to the configured count", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    const minors = u.factions.filter((f) => !f.isMajor);
-    expect(minors.length).toBe(params.minorFactionCount);
-    for (const m of minors) {
-      expect(m.archetype).not.toBeNull();
-    }
-  });
-
-  it("frontier minors are placed near the map edge", () => {
-    const params = defaultParams();
-    const u = generateUniverse(params, REGION_NAMES);
-    const center = params.mapSize / 2;
-    const frontierMinors = u.factions.filter(
-      (f) => !f.isMajor && f.archetype === "frontier",
-    );
-    // Each frontier minor's homeworld lies in the outer 40% of map radius —
-    // the placement algorithm samples from the top-20% distance-from-center pool.
-    for (const fm of frontierMinors) {
-      const hw = u.systems[fm.homeworldSystemIndex];
-      const d = distance(hw.x, hw.y, center, center);
-      expect(d).toBeGreaterThan(center * 0.4);
+  it("develops each homeworld (outpost + station) and leaves every other system unpopulated & unbuilt", () => {
+    const u = generateUniverse(defaultParams(), REGION_NAMES);
+    const homeworlds = new Set(u.factions.map((f) => f.homeworldSystemIndex));
+    for (const s of u.systems) {
+      if (homeworlds.has(s.index)) {
+        expect(s.buildings[SPACE_STATION_TYPE]).toBeGreaterThan(0);
+        expect(s.buildings[OUTPOST_TYPE]).toBeGreaterThan(0);
+      } else {
+        expect(s.population).toBe(0);
+        expect(Object.keys(s.buildings)).toHaveLength(0);
+      }
     }
   });
 });

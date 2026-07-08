@@ -9,10 +9,10 @@ import { generateSubstrate, type GeneratedBody } from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
 import {
   generateFactions,
-  assignSystemFactions,
+  assignHomeworldOwnership,
   type GeneratedFaction,
 } from "./faction-gen";
-import { MIN_MINOR_TERRITORY } from "@/lib/constants/factions";
+import { OUTPOST_TYPE, SPACE_STATION_TYPE } from "@/lib/constants/industry";
 
 // ── Output types ────────────────────────────────────────────────
 
@@ -647,6 +647,29 @@ export function generateConnections(
   return { connections, systems: updatedSystems };
 }
 
+// ── Emergent starting condition ─────────────────────────────────
+
+/**
+ * Apply the emergent starting condition to the freshly-scattered systems: develop
+ * each faction homeworld (its substrate industry plus a seeded outpost + space-station
+ * facility, so it's ungated and can grow), and zero every other system's population
+ * and buildings. The physical substrate (space, slots, yields, danger, traits) is
+ * left intact — expansion grows into it. Mutates `systems` in place.
+ */
+export function applyEmergentStartingCondition(
+  systems: GeneratedSystem[],
+  homeworldIndices: Set<number>,
+): void {
+  for (const s of systems) {
+    if (homeworldIndices.has(s.index)) {
+      s.buildings = { ...s.buildings, [OUTPOST_TYPE]: 1, [SPACE_STATION_TYPE]: 1 };
+    } else {
+      s.population = 0;
+      s.buildings = {};
+    }
+  }
+}
+
 // ── Starting system selection ───────────────────────────────────
 
 /**
@@ -707,18 +730,15 @@ export function generateUniverse(
   const rawSystems = generateSystems(rng, regions, params);
   const { connections, systems } = generateConnections(rng, rawSystems, regions, params);
 
-  const factions = generateFactions(rng, regions, systems, {
+  const factions = generateFactions(rng, systems, {
     minorFactionCount: params.minorFactionCount,
     mapSize: params.mapSize,
-    minMinorTerritory: MIN_MINOR_TERRITORY,
   });
 
-  const systemFactionAssignments = assignSystemFactions(
-    systems,
-    connections,
-    factions,
-    { minMinorTerritory: MIN_MINOR_TERRITORY },
-  );
+  const homeworldIndices = new Set(factions.map((f) => f.homeworldSystemIndex));
+  applyEmergentStartingCondition(systems, homeworldIndices);
+
+  const systemFactionAssignments = assignHomeworldOwnership(systems.length, factions);
 
   const startingSystemIndex = selectStartingSystem(
     systems,

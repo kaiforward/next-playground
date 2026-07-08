@@ -113,29 +113,21 @@ export const MINOR_NOUNS: readonly string[] = [
   "Cartel", "Echelon", "Compact", "Junta", "Bloc", "Covenant",
 ] as const;
 
-// ── Minor faction archetypes ─────────────────────────────────────
-
-export type MinorFactionArchetype = "buffer" | "frontier" | "enclave" | "cluster";
-
+// ── Emergent-civ homeworld placement ─────────────────────────────
 /**
- * Proportional split for procedural minor placement, per faction-system.md §7.1.
- * World-gen assigns ceil(N × proportion)
- * to each archetype in declaration order; "cluster" absorbs the remainder so the
- * totals match the configured `MINOR_FACTION_COUNT` exactly.
+ * Homeworlds are the only seeded ownership under emergent world-gen: one decent,
+ * well-spaced home per faction, chosen from raw substrate. Weights + spacing are a
+ * coarse first-cut (simulator-validated for coherence, not tuned — SP3 moves the
+ * calibration target). Score terms are normalized to [0,1] across the candidate
+ * pool so the weights are directly comparable.
  */
-export const MINOR_ARCHETYPE_DISTRIBUTION: readonly {
-  archetype: MinorFactionArchetype;
-  proportion: number;
-}[] = [
-  { archetype: "buffer", proportion: 0.33 },
-  { archetype: "frontier", proportion: 0.33 },
-  { archetype: "enclave", proportion: 0.2 },
-  { archetype: "cluster", proportion: 0 },
-] as const;
-
-/**
- * Per faction-system.md §7.1: minors start at 5–30 systems each. World-gen
- * post-processes flood-fill ownership to bring any minor below this floor up
- * to it by flipping its closest systems away from neighboring majors.
- */
-export const MIN_MINOR_TERRITORY = 5;
+export const HOMEWORLD_PLACEMENT = {
+  /** Aspirational minimum spacing between homeworlds, as a fraction of mapSize. */
+  MIN_DISTANCE_FRACTION: 0.18,
+  /** Threshold multiplier applied each time the full set can't be placed at the current spacing. */
+  RELAX_RATE: 0.85,
+  /** Relaxation steps before falling back to pure quality order (spacing ignored). */
+  MAX_RELAX_STEPS: 12,
+  /** Seed-bias weights over the four normalized substrate terms. */
+  SCORE_WEIGHTS: { habitable: 1.0, diversity: 0.8, trait: 0.5, danger: 0.7 },
+} as const;

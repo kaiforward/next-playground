@@ -18,6 +18,9 @@ import {
   COMPLEX_TYPES,
   ANCHOR_FOOTPRINT,
   ANCHOR_UNSKILLED_LABOUR,
+  OUTPOST_TYPE,
+  SPACE_STATION_TYPE,
+  hasStationFacility,
 } from "@/lib/constants/industry";
 
 describe("BUILDING_TYPES catalog", () => {
@@ -128,5 +131,30 @@ describe("specialisation families", () => {
       expect(def?.outputGood).toBeUndefined(); // produces no good
       expect(def?.resource).toBeUndefined();   // not an extractor → bills to general space
     }
+  });
+});
+
+describe("ownership building types", () => {
+  it("registers outpost and space-station as non-producing catalog entries", () => {
+    for (const type of [OUTPOST_TYPE, SPACE_STATION_TYPE]) {
+      const def = BUILDING_TYPES[type];
+      expect(def, type).toBeDefined();
+      expect(def.outputGood, type).toBeUndefined();   // control markers produce nothing
+      expect(def.popProvided, type).toBeUndefined();   // and house nobody
+      expect(def.labour, type).toBeUndefined();        // and staff nobody
+      expect(def.spaceCost, type).toBeGreaterThan(0);
+    }
+  });
+
+  it("the station is a heavier build than the outpost (dev gate vs cheap marker)", () => {
+    expect(BUILDING_TYPES[SPACE_STATION_TYPE].spaceCost)
+      .toBeGreaterThan(BUILDING_TYPES[OUTPOST_TYPE].spaceCost);
+  });
+
+  it("hasStationFacility is true only when a station is present", () => {
+    expect(hasStationFacility({})).toBe(false);
+    expect(hasStationFacility({ [OUTPOST_TYPE]: 1 })).toBe(false);
+    expect(hasStationFacility({ [SPACE_STATION_TYPE]: 1 })).toBe(true);
+    expect(hasStationFacility({ [SPACE_STATION_TYPE]: 0 })).toBe(false);
   });
 });

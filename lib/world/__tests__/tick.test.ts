@@ -159,8 +159,23 @@ describe("runWorldTick — per-stage wiring", () => {
     expect(after.buildings).not.toEqual(world.buildings);
   });
 
-  it("trade-flow/directed-logistics: produces flow events over 50 ticks", async () => {
-    const world = generateWorld({ systemCount: 100, seed: 42 });
+  it("trade-flow/directed-logistics: produces flow events once territory is connected", async () => {
+    // A homeworld-only galaxy has no same-faction adjacencies, so no cross-system flows arise
+    // until a faction connects developed territory. Put two developed homeworlds in one faction
+    // and link them directly, so their differing production drives directed-logistics + trade-flow.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const world = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
     const after = await runTicks(world, 50);
 
     expect(after.flowEvents.length).toBeGreaterThan(0);

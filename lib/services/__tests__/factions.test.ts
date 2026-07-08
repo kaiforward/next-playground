@@ -145,17 +145,18 @@ describe("getFactionDetail", () => {
   });
 
   it("orders the territory sample with gateways first", () => {
-    const faction = world.factions.find(
-      (f) => world.systems.filter((s) => s.factionId === f.id).length >= 2,
-    )!;
-    const owned = world.systems.filter((s) => s.factionId === faction.id);
-
-    // Force exactly one owned system to be a gateway (a non-first one by name,
-    // so ordering is observable).
-    const target = owned[owned.length - 1];
+    // A homeworld-only galaxy owns one system per faction; grant one faction a second
+    // owned system and force that second one to be the sole gateway, so gateway-first
+    // ordering in the territory sample is observable.
+    const faction = world.factions[0];
+    const target = world.systems.find((s) => s.factionId !== faction.id)!;
     setWorld({
       ...world,
-      systems: world.systems.map((s) => ({ ...s, isGateway: s.id === target.id })),
+      systems: world.systems.map((s) =>
+        s.id === target.id
+          ? { ...s, factionId: faction.id, isGateway: true }
+          : { ...s, isGateway: false },
+      ),
     });
 
     const detail = getFactionDetail(faction.id);
