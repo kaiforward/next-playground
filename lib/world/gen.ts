@@ -129,6 +129,8 @@ export function generateWorld(options: GenerateWorldOptions): World {
       universe.systemFactionAssignments[s.index] === -1
         ? null
         : factionIds[universe.systemFactionAssignments[s.index]],
+    control:
+      universe.systemFactionAssignments[s.index] === -1 ? "unclaimed" : "developed",
     isGateway: s.isGateway,
     sunClass: s.sunClass,
     population: s.population,

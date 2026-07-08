@@ -47,6 +47,10 @@ export interface WorldRegion {
 
 // ── Systems ─────────────────────────────────────────────────────
 
+/** Three-state system ownership. `unclaimed` = empty frontier (factionId null); `controlled` =
+ * owned, border-closing, inert until developed; `developed` = development builds are allowed. */
+export type SystemControl = "unclaimed" | "controlled" | "developed";
+
 export interface WorldSystem {
   id: string;
   name: string;
@@ -57,6 +61,8 @@ export interface WorldSystem {
   regionId: string;
   /** Owning faction's id, or null for independent systems. */
   factionId: string | null;
+  /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
+  control: SystemControl;
   isGateway: boolean;
 
   // ── Physical substrate ──
