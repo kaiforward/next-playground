@@ -42,16 +42,39 @@ describe("placeHomeworlds", () => {
     expect(placeHomeworlds([a, b, c], 2, 100)).toEqual([0, 2]);
   });
 
-  it("relaxes gracefully — still returns `count` when spacing cannot be satisfied", () => {
-    // Three systems all within the initial threshold of each other → relaxation lets all fit.
+  it("succeeds via relaxation — returns a spaced set once the threshold relaxes enough", () => {
+    // mapSize 100 → initial spacing threshold 18. The A/C/D triangle has min pairwise
+    // distance 10, so no 3-system spacing holds until the threshold relaxes below 10 —
+    // reached mid-loop at step 4 (18 × 0.85^4 ≈ 9.4), not at step 0 and not via the
+    // give-up fallback. B sits ~1.4 from A: high-scoring enough to be a top-3 pick but too
+    // close to be spaced, so a relaxed pick must drop it for the spaced {A,C,D}. The
+    // fallback (top-3 by score) would instead keep B — which is what this asserts against.
+    const a = mkSys({ index: 0, x: 0, y: 0, habitableSpace: 100 });
+    const b = mkSys({ index: 1, x: 1, y: 1, habitableSpace: 90 });
+    const c = mkSys({ index: 2, x: 0, y: 10, habitableSpace: 50 });
+    const d = mkSys({ index: 3, x: 10, y: 0, habitableSpace: 40 });
+    const hw = placeHomeworlds([a, b, c, d], 3, 100);
+    expect([...hw].sort((x, y) => x - y)).toEqual([0, 2, 3]);
+    expect(hw).not.toContain(1); // spacing preserved via relaxation, not the top-3-by-score fallback
+  });
+
+  it("falls back to top-scoring order when even full relaxation can't space `count` apart", () => {
+    // Three systems packed tighter (min pairwise ≈2.24) than the most-relaxed threshold
+    // (18 × 0.85^12 ≈ 2.56 at mapSize 100), so spacing is never satisfiable: the loop
+    // exhausts every relax step and returns the top-`count`-by-substrate fallback.
     const cluster = [
       mkSys({ index: 0, x: 10, y: 10, habitableSpace: 30 }),
       mkSys({ index: 1, x: 12, y: 11, habitableSpace: 20 }),
       mkSys({ index: 2, x: 11, y: 13, habitableSpace: 10 }),
     ];
-    const hw = placeHomeworlds(cluster, 3, 100);
-    expect(hw).toHaveLength(3);
-    expect(new Set(hw).size).toBe(3);
+    expect(placeHomeworlds(cluster, 3, 100)).toEqual([0, 1, 2]); // ranked by habitableSpace, spacing given up
+  });
+
+  it("throws when there are fewer systems than requested homeworlds", () => {
+    // Fail loud rather than silently returning a short array — a shortfall would otherwise
+    // put `undefined` into a faction's homeworldSystemIndex and corrupt ownership downstream.
+    const systems = [mkSys({ index: 0, x: 0, y: 0 }), mkSys({ index: 1, x: 50, y: 50 })];
+    expect(() => placeHomeworlds(systems, 3, 100)).toThrow(/cannot place/);
   });
 
   it("is deterministic — same input produces the same placement", () => {

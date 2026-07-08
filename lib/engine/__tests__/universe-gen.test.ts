@@ -11,9 +11,13 @@ import {
   generateSystems,
   generateConnections,
   generateUniverse,
+  selectStartingSystem,
   type GenParams,
   type GeneratedRegion,
+  type GeneratedSystem,
 } from "../universe-gen";
+import type { GeneratedFaction } from "../faction-gen";
+import { emptyResourceVector } from "@/lib/engine/resources";
 import {
   genConfigForSystemCount,
   DEFAULT_SYSTEM_COUNT,
@@ -30,6 +34,28 @@ const DEFAULT_GEN_CONFIG = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
 
 function defaultParams(): GenParams {
   return buildGenParams(DEFAULT_GEN_CONFIG.SEED, DEFAULT_GEN_CONFIG);
+}
+
+/** Minimal GeneratedSystem for unit tests — only the fields under test matter; rest are inert defaults. */
+function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
+  return {
+    name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
+    bodies: [], popCap: 0, population: 0, bodyDanger: 0, traits: [], buildings: {},
+    availableSpace: 0, generalSpace: 0, habitableSpace: 0,
+    slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
+    x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
+    ...p,
+  };
+}
+
+/** Minimal GeneratedFaction for unit tests. Defaults to a federation major. */
+function mkFaction(p: Partial<GeneratedFaction> & { index: number }): GeneratedFaction {
+  return {
+    key: `f${p.index}`, name: `F${p.index}`, description: "",
+    governmentType: "federation", doctrine: "expansionist",
+    color: "#000000", isMajor: true, homeworldSystemIndex: p.index,
+    ...p,
+  };
 }
 
 /** BFS reachability from a start node in a directed adjacency list. */
@@ -444,22 +470,21 @@ describe("selectStartingSystem", () => {
     expect(startFaction.governmentType).toBe("federation");
   });
 
-  it("prefers a core-type system within Federation territory when available", () => {
-    const params = defaultParams();
-    const universe = generateUniverse(params, REGION_NAMES);
-    const startSys = universe.systems[universe.startingSystemIndex];
-
-    // Find the federation major; if it owns any core systems, the start must be core.
-    const fedFaction = universe.factions.find(
-      (f) => f.isMajor && f.governmentType === "federation",
-    )!;
-    const fedOwnedSystems = universe.systems.filter(
-      (s) => universe.systemFactionAssignments[s.index] === fedFaction.index,
-    );
-    const fedCoreSystems = fedOwnedSystems.filter((s) => s.economyType === "core");
-    if (fedCoreSystems.length > 0) {
-      expect(startSys.economyType).toBe("core");
-    }
+  it("prefers a core-economy system closest to map center among a faction's candidates", () => {
+    // Under homeworld-only world-gen a faction owns a single system, so generateUniverse
+    // can't hand selectStartingSystem multiple candidates. Exercise the core + proximity
+    // tie-break directly: a federation major owning four systems — the nearest to center is
+    // non-core, plus core systems near and far — must yield the near core (index 2), proving
+    // core preference wins over raw proximity.
+    const fed = mkFaction({ index: 0, isMajor: true, governmentType: "federation" });
+    const systems = [
+      mkSys({ index: 0, x: 90, y: 90, economyType: "core" }),       // core but far from center (50,50)
+      mkSys({ index: 1, x: 52, y: 50, economyType: "extraction" }), // nearest to center, but not core
+      mkSys({ index: 2, x: 55, y: 50, economyType: "core" }),       // core and near center → winner
+      mkSys({ index: 3, x: 10, y: 10, economyType: "core" }),       // core but far
+    ];
+    const assignments = [fed.index, fed.index, fed.index, fed.index];
+    expect(selectStartingSystem(systems, [fed], assignments, 100)).toBe(2);
   });
 });
 

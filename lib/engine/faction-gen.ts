@@ -142,11 +142,18 @@ function homeworldResourceDiversity(slotCap: ResourceVector): number {
  * of normalized (habitable base, resource diversity, trait quality) minus normalized
  * danger; greedy-select highest score first, requiring each pick to sit at least the
  * spacing threshold from all prior picks. The threshold relaxes on failure so a dense
- * galaxy degrades to "as spaced as it can be" rather than throwing. Deterministic:
- * scores derive from already-seeded substrate; ties break on index.
+ * galaxy degrades to "as spaced as it can be" rather than throwing on tight spacing; it
+ * throws only when there are fewer systems than requested homeworlds, since each faction
+ * needs a distinct one. Deterministic: scores derive from already-seeded substrate; ties
+ * break on index.
  */
 export function placeHomeworlds(systems: GeneratedSystem[], count: number, mapSize: number): number[] {
-  if (count <= 0 || systems.length === 0) return [];
+  if (count <= 0) return [];
+  if (count > systems.length) {
+    throw new Error(
+      `placeHomeworlds: cannot place ${count} distinct homeworlds among ${systems.length} systems`,
+    );
+  }
 
   let maxHab = 1, maxDanger = 1, maxTrait = 1;
   for (const s of systems) {
@@ -180,7 +187,8 @@ export function placeHomeworlds(systems: GeneratedSystem[], count: number, mapSi
     if (picked.length === count) return picked.map((p) => p.idx);
     threshold *= HOMEWORLD_PLACEMENT.RELAX_RATE;
   }
-  // Fully relaxed and still short (fewer than `count` spaceable systems) → take the top-scoring.
+  // Fully relaxed and still can't space `count` apart → give up on spacing and take the top
+  // `count` by substrate quality. `count <= systems.length` (guarded above), so this is exactly `count`.
   return scored.slice(0, count).map((p) => p.idx);
 }
 
