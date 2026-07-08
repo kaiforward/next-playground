@@ -11,6 +11,7 @@ import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { classifyMarketState, surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
 import { dissatisfaction } from "@/lib/engine/population";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -357,7 +358,7 @@ export function planFactionBuilds(
   // Deficit/surplus detection below still reads all `systems`.
   const working = new Map<string, BuildSystemState>();
   for (const s of systems) {
-    if (s.control !== "developed") continue;
+    if (!isEconomicallyActive(s.control)) continue;
     working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
   }
 

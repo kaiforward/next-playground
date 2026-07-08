@@ -36,6 +36,7 @@ import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { ClaimCandidate, DevelopCandidate } from "@/lib/engine/expansion";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -589,13 +590,26 @@ export async function runWorldTick(
     processorsRun.push("population");
   }
 
-  // ── open edges (faction-bounded) — consumed by migration ──
+  // ── economy-participation gate (developed only) ──
+  // The three economy selection paths gate through isEconomicallyActive: the economy
+  // adapter's getSystemIds (which cascades to infrastructure-decay + population),
+  // migration's open edges (below), and directed-logistics' participants (below).
+  // directed-build keeps the full `systems` — it needs unclaimed/controlled to claim
+  // and develop.
+  const developedSystemIds = new Set(
+    systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
+  );
+
+  // ── open edges (faction-bounded, then gated to developed-both for migration) ──
   const sysFactionForEdges = new Map(systems.map((s) => [s.id, s.factionId]));
   const openEdges: EdgeView[] = buildOpenEdges(connections, sysFactionForEdges);
+  const migrationEdges = openEdges.filter(
+    (e) => developedSystemIds.has(e.aSystemId) && developedSystemIds.has(e.bSystemId),
+  );
 
   // ── migration ──
   {
-    const migWorld = new InMemoryMigrationWorld({ systems }, connections, openEdges);
+    const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
     await runMigrationProcessor(migWorld, newTickCtx(), {
       interval: ECONOMY_UPDATE_INTERVAL,
       flow: MIGRATION_PARAMS,
@@ -631,7 +645,11 @@ export async function runWorldTick(
       const h = hops.get(f)?.get(t);
       return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
     };
-    const rows = buildLogisticsRows(systems, logisticsMarketRows);
+    // Directed-logistics moves goods only between developed systems.
+    const rows = buildLogisticsRows(
+      systems.filter((s) => isEconomicallyActive(s.control)),
+      logisticsMarketRows,
+    );
     const dlWorld = new MemoryDirectedLogisticsWorld(rows);
     await runDirectedLogisticsProcessor(dlWorld, { tick }, {
       interval: DIRECTED_LOGISTICS.INTERVAL,

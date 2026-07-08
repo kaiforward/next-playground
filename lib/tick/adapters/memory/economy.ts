@@ -9,6 +9,7 @@ import { computeSystemLabourSnapshot, buildingProduction } from "@/lib/engine/in
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { toTraitId, toQualityTier } from "@/lib/types/guards";
 import { economyShardOrder } from "@/lib/engine/shard-order";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
   SimMarketEntry,
   SimSystem,
@@ -42,7 +43,13 @@ export class InMemoryEconomyWorld implements EconomyWorld {
   }
 
   getSystemIds(): Promise<string[]> {
-    return Promise.resolve(economyShardOrder(this.systems));
+    // Only developed systems participate in the economy. Non-developed systems stay
+    // in `this.systems`/`this.markets` untouched (frozen) — they are simply never
+    // selected here, and the population/infrastructure-decay processors key off this
+    // set's dissatisfaction signals, so gating here cascades to both.
+    return Promise.resolve(
+      economyShardOrder(this.systems.filter((s) => isEconomicallyActive(s.control))),
+    );
   }
 
   getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
