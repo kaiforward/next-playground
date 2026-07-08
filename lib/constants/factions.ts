@@ -139,3 +139,22 @@ export const MINOR_ARCHETYPE_DISTRIBUTION: readonly {
  * to it by flipping its closest systems away from neighboring majors.
  */
 export const MIN_MINOR_TERRITORY = 5;
+
+// ── Emergent-civ homeworld placement ─────────────────────────────
+/**
+ * Homeworlds are the only seeded ownership under emergent world-gen: one decent,
+ * well-spaced home per faction, chosen from raw substrate. Weights + spacing are a
+ * coarse first-cut (simulator-validated for coherence, not tuned — SP3 moves the
+ * calibration target). Score terms are normalized to [0,1] across the candidate
+ * pool so the weights are directly comparable.
+ */
+export const HOMEWORLD_PLACEMENT = {
+  /** Aspirational minimum spacing between homeworlds, as a fraction of mapSize. */
+  MIN_DISTANCE_FRACTION: 0.18,
+  /** Threshold multiplier applied each time the full set can't be placed at the current spacing. */
+  RELAX_RATE: 0.85,
+  /** Relaxation steps before falling back to pure quality order (spacing ignored). */
+  MAX_RELAX_STEPS: 12,
+  /** Seed-bias weights over the four normalized substrate terms. */
+  SCORE_WEIGHTS: { habitable: 1.0, diversity: 0.8, trait: 0.5, danger: 0.7 },
+} as const;

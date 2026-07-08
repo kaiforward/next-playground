@@ -8,15 +8,17 @@
  * See docs/design/active/faction-system.md §6 + §7.1 for the design intent.
  */
 
-import type { Doctrine, EconomyType, GovernmentType } from "@/lib/types/game";
+import type { Doctrine, EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
 import { ALL_DOCTRINES, ALL_GOVERNMENT_TYPES, toDoctrine, toGovernmentType } from "@/lib/types/guards";
 import {
   FACTION_ROSTER,
   MINOR_ADJECTIVES,
   MINOR_NOUNS,
   MINOR_ARCHETYPE_DISTRIBUTION,
+  HOMEWORLD_PLACEMENT,
   type MinorFactionArchetype,
 } from "@/lib/constants/factions";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
 import type {
   RNG,
   GeneratedConnection,
@@ -149,6 +151,68 @@ export function generateFactions(
   }
 
   return factions;
+}
+
+// ── Homeworld placement (spaced + seed-biased) ──────────────────
+
+function homeworldTraitQuality(s: GeneratedSystem): number {
+  let q = 0;
+  for (const t of s.traits) q += t.quality;
+  return q;
+}
+
+/** Count of resources this system has any deposit slot for — the "resource diversity" term. */
+function homeworldResourceDiversity(slotCap: ResourceVector): number {
+  let n = 0;
+  for (const r of RESOURCE_TYPES) if (slotCap[r] > 0) n++;
+  return n;
+}
+
+/**
+ * Pick one well-spaced, high-substrate homeworld per faction. Score = weighted sum
+ * of normalized (habitable base, resource diversity, trait quality) minus normalized
+ * danger; greedy-select highest score first, requiring each pick to sit at least the
+ * spacing threshold from all prior picks. The threshold relaxes on failure so a dense
+ * galaxy degrades to "as spaced as it can be" rather than throwing. Deterministic:
+ * scores derive from already-seeded substrate; ties break on index.
+ */
+export function placeHomeworlds(systems: GeneratedSystem[], count: number, mapSize: number): number[] {
+  if (count <= 0 || systems.length === 0) return [];
+
+  let maxHab = 1, maxDanger = 1, maxTrait = 1;
+  for (const s of systems) {
+    if (s.habitableSpace > maxHab) maxHab = s.habitableSpace;
+    if (s.bodyDanger > maxDanger) maxDanger = s.bodyDanger;
+    const tq = homeworldTraitQuality(s);
+    if (tq > maxTrait) maxTrait = tq;
+  }
+
+  const w = HOMEWORLD_PLACEMENT.SCORE_WEIGHTS;
+  const scored = systems
+    .map((s) => ({
+      idx: s.index,
+      x: s.x,
+      y: s.y,
+      score:
+        w.habitable * (s.habitableSpace / maxHab) +
+        w.diversity * (homeworldResourceDiversity(s.slotCap) / RESOURCE_TYPES.length) +
+        w.trait * (homeworldTraitQuality(s) / maxTrait) -
+        w.danger * (s.bodyDanger / maxDanger),
+    }))
+    .sort((a, b) => b.score - a.score || a.idx - b.idx);
+
+  let threshold = mapSize * HOMEWORLD_PLACEMENT.MIN_DISTANCE_FRACTION;
+  for (let step = 0; step <= HOMEWORLD_PLACEMENT.MAX_RELAX_STEPS; step++) {
+    const picked: { idx: number; x: number; y: number }[] = [];
+    for (const c of scored) {
+      if (picked.length === count) break;
+      if (picked.every((p) => distance(c.x, c.y, p.x, p.y) >= threshold)) picked.push(c);
+    }
+    if (picked.length === count) return picked.map((p) => p.idx);
+    threshold *= HOMEWORLD_PLACEMENT.RELAX_RATE;
+  }
+  // Fully relaxed and still short (fewer than `count` spaceable systems) → take the top-scoring.
+  return scored.slice(0, count).map((p) => p.idx);
 }
 
 // ── Anchor region selection (max-distance sampling) ─────────────
