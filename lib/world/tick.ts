@@ -388,17 +388,23 @@ function applyClaims(systems: SimSystem[], claims: SystemClaim[]): SimSystem[] {
 
 /** Apply developments: the target flips to `developed`; the colony seed is transferred (conserved,
  * capped by what the source can spare) from its source system. The `: SimSystem` annotation narrows
- * the `"developed"` literal. */
-function applyDevelopments(systems: SimSystem[], developments: SystemDevelopment[]): SimSystem[] {
+ * the `"developed"` literal. `available` tracks each source's remaining spendable population across
+ * the loop so two developments sharing a source draw from the same (shrinking) balance rather than
+ * both reading the original snapshot — otherwise a shared source would have its seed double-counted
+ * and mint population that was never conserved. */
+export function applyDevelopments(systems: SimSystem[], developments: SystemDevelopment[]): SimSystem[] {
   if (developments.length === 0) return systems;
   const bySystem = new Map(systems.map((s) => [s.id, s]));
   const popDelta = new Map<string, number>();
   const developed = new Set<string>();
+  const available = new Map<string, number>();
   for (const d of developments) {
     const source = bySystem.get(d.sourceSystemId);
     const target = bySystem.get(d.systemId);
     if (!source || !target) continue;
-    const moved = Math.min(d.seedPop, Math.max(0, source.population));
+    const remaining = available.get(d.sourceSystemId) ?? Math.max(0, source.population);
+    const moved = Math.min(d.seedPop, remaining);
+    available.set(d.sourceSystemId, remaining - moved);
     popDelta.set(d.sourceSystemId, (popDelta.get(d.sourceSystemId) ?? 0) - moved);
     popDelta.set(d.systemId, (popDelta.get(d.systemId) ?? 0) + moved);
     developed.add(d.systemId);

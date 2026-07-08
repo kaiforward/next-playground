@@ -41,11 +41,12 @@ describe("runWorldTick: expansion (claim + develop)", () => {
     expect(own(a)).toEqual(own(b));
   });
 
-  it("conserves galaxy population across a develop (seed is transferred, not minted)", async () => {
+  it("keeps population finite and non-negative across develop pulses", async () => {
     const before = generateWorld({ systemCount: 90, seed: 11 });
     const total = (w: World) => w.systems.reduce((n, s) => n + s.population, 0);
-    // The develop transfer itself is conserved; the economy may grow/shrink pop, so compare only the
-    // single pulse where a develop first fires by asserting no NaN and a finite, non-negative total.
+    // The economy grows/shrinks pop tick to tick, so this only checks the pulse stays sane (no NaN,
+    // no negative population) — the develop transfer's conservation itself is unit-tested directly
+    // against `applyDevelopments` in apply-developments.test.ts.
     const after = await advance(before, MONTH_LENGTH * 2);
     expect(Number.isFinite(total(after))).toBe(true);
     for (const s of after.systems) expect(s.population).toBeGreaterThanOrEqual(0);
