@@ -4,6 +4,7 @@
  * cross-faction conflicts deterministically, and plans developments of a faction's own controlled
  * systems. Zero I/O; the reach/candidate data is supplied by providers built in the tick body.
  */
+import type { RNG } from "@/lib/engine/universe-gen";
 
 /** One in-reach unclaimed system a faction could claim, with its score inputs. */
 export interface ClaimCandidate {
@@ -69,4 +70,35 @@ export function proposeFactionClaims(
     .filter((p) => p.score >= params.scoreFloor)
     .sort((a, b) => b.score - a.score || a.systemId.localeCompare(b.systemId))
     .slice(0, Math.max(0, params.maxClaimsPerPulse));
+}
+
+/** Score-equality tolerance for the tie-break — floats from the scorer never compare exactly. */
+const SCORE_EPS = 1e-9;
+
+/**
+ * Two-phase claim resolution: group proposals by target, award each target to its highest-scoring
+ * proposer, break exact ties with a single seeded RNG draw over the (sorted) tied factions. Targets
+ * are iterated in sorted systemId order and tied factions in sorted id order BEFORE any draw, so the
+ * RNG draw sequence — and thus the outcome — depends only on the world and seed, never on proposal or
+ * Map iteration order. Returns one ResolvedClaim per distinct target.
+ */
+export function resolveClaims(proposals: ClaimProposal[], rng: RNG): ResolvedClaim[] {
+  const byTarget = new Map<string, ClaimProposal[]>();
+  for (const p of proposals) {
+    const list = byTarget.get(p.systemId);
+    if (list) list.push(p);
+    else byTarget.set(p.systemId, [p]);
+  }
+  const entries = [...byTarget.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const resolved: ResolvedClaim[] = [];
+  for (const [systemId, contenders] of entries) {
+    let maxScore = -Infinity;
+    for (const c of contenders) if (c.score > maxScore) maxScore = c.score;
+    const tied = contenders
+      .filter((c) => maxScore - c.score <= SCORE_EPS)
+      .sort((a, b) => a.factionId.localeCompare(b.factionId));
+    const winner = tied.length === 1 ? tied[0] : tied[Math.floor(rng() * tied.length)];
+    resolved.push({ systemId, factionId: winner.factionId });
+  }
+  return resolved;
 }

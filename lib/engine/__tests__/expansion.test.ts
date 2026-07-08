@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   scoreClaimCandidate,
   proposeFactionClaims,
+  resolveClaims,
   type ClaimCandidate,
+  type ClaimProposal,
   type ExpansionParams,
 } from "@/lib/engine/expansion";
+import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const WEIGHTS = { habitable: 1.0, diversity: 3.0, trait: 2.0, proximity: 0.5 };
 const PARAMS: ExpansionParams = { maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: WEIGHTS };
@@ -45,5 +48,38 @@ describe("proposeFactionClaims", () => {
     const reverse = proposeFactionClaims("f1", [b, a], { ...PARAMS, maxClaimsPerPulse: 2 });
     expect(forward.map((p) => p.systemId)).toEqual(["a", "b"]);
     expect(reverse.map((p) => p.systemId)).toEqual(["a", "b"]);
+  });
+});
+
+describe("resolveClaims", () => {
+  it("gives an uncontested target to its sole proposer", () => {
+    expect(resolveClaims([{ factionId: "f1", systemId: "s1", score: 5 }], mulberry32(1)))
+      .toEqual([{ systemId: "s1", factionId: "f1" }]);
+  });
+  it("awards a contested target to the highest score (not proposal order)", () => {
+    const proposals: ClaimProposal[] = [
+      { factionId: "f1", systemId: "s1", score: 3 },
+      { factionId: "f2", systemId: "s1", score: 9 },
+    ];
+    expect(resolveClaims(proposals, mulberry32(1))).toEqual([{ systemId: "s1", factionId: "f2" }]);
+    expect(resolveClaims([...proposals].reverse(), mulberry32(1))).toEqual([{ systemId: "s1", factionId: "f2" }]);
+  });
+  it("resolves each distinct target independently", () => {
+    const proposals: ClaimProposal[] = [
+      { factionId: "f1", systemId: "s1", score: 5 },
+      { factionId: "f2", systemId: "s2", score: 5 },
+    ];
+    const out = resolveClaims(proposals, mulberry32(1)).sort((a, b) => a.systemId.localeCompare(b.systemId));
+    expect(out).toEqual([{ systemId: "s1", factionId: "f1" }, { systemId: "s2", factionId: "f2" }]);
+  });
+  it("breaks exact ties deterministically with the seeded RNG, independent of proposal order", () => {
+    const tied: ClaimProposal[] = [
+      { factionId: "f1", systemId: "s1", score: 5 },
+      { factionId: "f2", systemId: "s1", score: 5 },
+    ];
+    const winA = resolveClaims(tied, mulberry32(42))[0].factionId;
+    const winB = resolveClaims([...tied].reverse(), mulberry32(42))[0].factionId;
+    expect(winA).toBe(winB);
+    expect(["f1", "f2"]).toContain(winA);
   });
 });
