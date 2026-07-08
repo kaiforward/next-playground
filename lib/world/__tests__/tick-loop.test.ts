@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { TickLoop, type TickBroadcast } from "@/lib/world/tick-loop";
@@ -31,10 +31,15 @@ beforeAll(async () => {
   setSavesDirForTesting(savesDir);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   // Only clears call history (not the wrapped implementations above), so
   // each test starts from a clean call count without losing the passthrough.
   vi.clearAllMocks();
+  // Every test writes the same AUTOSAVE_NAME file in the shared dir. Remove any
+  // leftover from a prior test so a file-reading assertion (vi.waitFor) can only
+  // ever observe this test's own autosave (retrying while absent) rather than a
+  // stale higher-tick file racing the current write.
+  await rm(path.join(savesDir, `${AUTOSAVE_NAME}.json`), { force: true });
   setWorld(generateWorld({ systemCount: 60, seed: 7 }));
   loop = new TickLoop();
 });
