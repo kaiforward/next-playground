@@ -31,8 +31,10 @@ import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
+import type { ClaimCandidate, DevelopCandidate } from "@/lib/engine/expansion";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
@@ -71,7 +73,12 @@ import type {
 } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
-import type { SystemBuildRow, BuildBuildingUpdate } from "@/lib/tick/world/directed-build-world";
+import type {
+  SystemBuildRow,
+  BuildBuildingUpdate,
+  SystemClaim,
+  SystemDevelopment,
+} from "@/lib/tick/world/directed-build-world";
 
 import type {
   SimConnection,
@@ -353,6 +360,61 @@ function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpda
   });
 }
 
+/** Count of resources this system has any deposit slot for — a claim/develop score input. */
+function countResourceDiversity(s: SimSystem): number {
+  let n = 0;
+  for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) n++;
+  return n;
+}
+/** Σ of the system's trait qualities — a claim/develop score input. */
+function sumTraitQuality(s: SimSystem): number {
+  let q = 0;
+  for (const t of s.traits) q += t.quality;
+  return q;
+}
+
+/** Apply resolved claims: the target becomes `controlled` and owned by the winning faction. The
+ * `: SimSystem` return annotation contextually narrows the `"controlled"` literal to `SystemControl`
+ * (no `as`). */
+function applyClaims(systems: SimSystem[], claims: SystemClaim[]): SimSystem[] {
+  if (claims.length === 0) return systems;
+  const factionBySystem = new Map(claims.map((c) => [c.systemId, c.factionId]));
+  return systems.map((s): SimSystem => {
+    const factionId = factionBySystem.get(s.id);
+    if (factionId === undefined) return s;
+    return { ...s, factionId, control: "controlled" };
+  });
+}
+
+/** Apply developments: the target flips to `developed`; the colony seed is transferred (conserved,
+ * capped by what the source can spare) from its source system. The `: SimSystem` annotation narrows
+ * the `"developed"` literal. */
+function applyDevelopments(systems: SimSystem[], developments: SystemDevelopment[]): SimSystem[] {
+  if (developments.length === 0) return systems;
+  const bySystem = new Map(systems.map((s) => [s.id, s]));
+  const popDelta = new Map<string, number>();
+  const developed = new Set<string>();
+  for (const d of developments) {
+    const source = bySystem.get(d.sourceSystemId);
+    const target = bySystem.get(d.systemId);
+    if (!source || !target) continue;
+    const moved = Math.min(d.seedPop, Math.max(0, source.population));
+    popDelta.set(d.sourceSystemId, (popDelta.get(d.sourceSystemId) ?? 0) - moved);
+    popDelta.set(d.systemId, (popDelta.get(d.systemId) ?? 0) + moved);
+    developed.add(d.systemId);
+  }
+  return systems.map((s): SimSystem => {
+    const delta = popDelta.get(s.id) ?? 0;
+    const nowDeveloped = developed.has(s.id);
+    if (delta === 0 && !nowDeveloped) return s;
+    return {
+      ...s,
+      population: Math.max(0, s.population + delta),
+      control: nowDeveloped ? "developed" : s.control,
+    };
+  });
+}
+
 // ── Relations-owned events (border_conflict, pact_under_negotiation,
 // alliance_dissolved) — the only WorldEvent rows carrying metadata ─────
 
@@ -575,7 +637,7 @@ export async function runWorldTick(
       key: world.connections,
       hops: computeBoundedHopDistances(
         connections,
-        Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS),
+        Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
       ),
     };
   }
@@ -611,13 +673,83 @@ export async function runWorldTick(
       const h = hops.get(f)?.get(t);
       return h === undefined || h > DIRECTED_BUILD.MAX_HOPS ? null : h * DIRECTED_BUILD.HOP_WEIGHT;
     };
+
+    // Ownership lookups reused by both providers.
+    const factionBySystem = new Map(systems.map((s) => [s.id, s.factionId]));
+    const controlBySystem = new Map(systems.map((s) => [s.id, s.control]));
+    const simById = new Map(systems.map((s) => [s.id, s]));
+
+    // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
+    const reachProvider = (factionId: string): ClaimCandidate[] => {
+      const minHopByCandidate = new Map<string, number>();
+      for (const s of systems) {
+        if (s.factionId !== factionId) continue;
+        const neighbours = hops.get(s.id);
+        if (!neighbours) continue;
+        for (const [destId, h] of neighbours) {
+          if (h <= 0 || h > EXPANSION.REACH_JUMPS) continue;
+          if (factionBySystem.get(destId) !== null) continue; // only unclaimed
+          const prev = minHopByCandidate.get(destId);
+          if (prev === undefined || h < prev) minHopByCandidate.set(destId, h);
+        }
+      }
+      const candidates: ClaimCandidate[] = [];
+      for (const [candidateId, minHops] of minHopByCandidate) {
+        const cand = simById.get(candidateId);
+        if (!cand) continue;
+        candidates.push({
+          systemId: candidateId, minHops,
+          habitableSpace: cand.habitableSpace,
+          resourceDiversity: countResourceDiversity(cand),
+          traitQuality: sumTraitQuality(cand),
+        });
+      }
+      return candidates;
+    };
+
+    // Develop-candidate provider: a faction's CONTROLLED systems, each tagged with the nearest
+    // developed same-faction system as the conserved colony-seed source (null if none reachable).
+    const developProvider = (factionId: string): DevelopCandidate[] => {
+      const candidates: DevelopCandidate[] = [];
+      for (const s of systems) {
+        if (s.factionId !== factionId || s.control !== "controlled") continue;
+        const neighbours = hops.get(s.id);
+        let sourceSystemId: string | null = null;
+        let bestHop = Infinity;
+        if (neighbours) {
+          for (const [destId, h] of neighbours) {
+            if (h <= 0) continue;
+            if (factionBySystem.get(destId) !== factionId) continue;
+            if (controlBySystem.get(destId) !== "developed") continue;
+            if (h < bestHop) { bestHop = h; sourceSystemId = destId; }
+          }
+        }
+        candidates.push({
+          systemId: s.id, habitableSpace: s.habitableSpace,
+          resourceDiversity: countResourceDiversity(s), traitQuality: sumTraitQuality(s),
+          sourceSystemId,
+        });
+      }
+      return candidates;
+    };
+
     const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
     const dbWorld = new MemoryDirectedBuildWorld(rows);
     await runDirectedBuildProcessor(dbWorld, { tick }, {
       interval: DIRECTED_BUILD.INTERVAL,
       routeCost,
+      claim: {
+        reachProvider, rng,
+        params: { maxClaimsPerPulse: EXPANSION.MAX_CLAIMS_PER_PULSE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
+      },
+      develop: {
+        candidateProvider: developProvider,
+        params: { maxDevelopsPerPulse: EXPANSION.MAX_DEVELOPS_PER_PULSE, habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR, seedPop: EXPANSION.COLONY_SEED_POP, weights: EXPANSION.SCORE_WEIGHTS },
+      },
     });
     systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
+    systems = applyClaims(systems, dbWorld.claims);
+    systems = applyDevelopments(systems, dbWorld.developments);
     processorsRun.push("directed-build");
   }
 
