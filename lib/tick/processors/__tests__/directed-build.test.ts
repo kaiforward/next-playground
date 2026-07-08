@@ -4,8 +4,9 @@ import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-bu
 import type { SystemBuildRow } from "@/lib/tick/world/directed-build-world";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { SPACE_STATION_TYPE } from "@/lib/constants/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { ClaimCandidate, DevelopCandidate, ExpansionParams, DevelopParams } from "@/lib/engine/expansion";
+import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const reachable: RouteCost = () => 1;
 
@@ -31,12 +32,13 @@ function builderSlots(n: number) {
 function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[] {
   return [
     {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
     },
     {
-      systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { food: bFood, housing: bHousing, [SPACE_STATION_TYPE]: 1 },
+      systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0,
+      buildings: { food: bFood, housing: bHousing },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
       generalSpace: 100, habitableSpace: 100, markets: [],
     },
@@ -84,12 +86,12 @@ describe("runDirectedBuildProcessor", () => {
     // arable cap and ample budget must end at ≤ 10 food, never more, on the pulse boundary.
     const rows: SystemBuildRow[] = [
       {
-        systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+        systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
       },
       {
-        systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { [SPACE_STATION_TYPE]: 1 },
+        systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: builderSlots(10),
         generalSpace: 0, habitableSpace: 0, markets: [],
       },
@@ -103,12 +105,72 @@ describe("runDirectedBuildProcessor", () => {
 
   it("returns no writes when there are no structural deficits", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: { [SPACE_STATION_TYPE]: 1 },
+      systemId: "A", factionId: "f1", control: "developed", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
       markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → balanced; no habitable land → no proactive housing → no writes
     }];
     const w = new MemoryDirectedBuildWorld(balanced);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
     expect(w.buildingUpdates).toHaveLength(0);
+  });
+});
+
+const EXP_PARAMS: ExpansionParams = {
+  maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
+};
+const DEV_PARAMS: DevelopParams = {
+  maxDevelopsPerPulse: 1, habitableFloor: 1, seedPop: 50, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
+};
+
+// One developed owned system so the faction is in the shard, with no build needs.
+function ownedOnly(factionId: string): SystemBuildRow {
+  return {
+    systemId: `${factionId}-home`, factionId, control: "developed", population: 100, unrest: 0,
+    buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+    generalSpace: 0, habitableSpace: 0, markets: [],
+  };
+}
+
+describe("runDirectedBuildProcessor: claim + develop phase", () => {
+  it("claims the best in-reach candidate on a due tick", async () => {
+    const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
+    const reachProvider = (f: string): ClaimCandidate[] =>
+      f === "f1" ? [
+        { systemId: "u-poor", minHops: 1, habitableSpace: 5, resourceDiversity: 0, traitQuality: 0 },
+        { systemId: "u-rich", minHops: 1, habitableSpace: 200, resourceDiversity: 4, traitQuality: 0 },
+      ] : [];
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      claim: { reachProvider, rng: mulberry32(1), params: EXP_PARAMS },
+    });
+    expect(w.claims).toEqual([{ systemId: "u-rich", factionId: "f1" }]);
+  });
+
+  it("develops the best controlled candidate on a due tick", async () => {
+    const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
+    const candidateProvider = (f: string): DevelopCandidate[] =>
+      f === "f1" ? [{ systemId: "c1", habitableSpace: 100, resourceDiversity: 2, traitQuality: 0, sourceSystemId: "f1-home" }] : [];
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      develop: { candidateProvider, params: DEV_PARAMS },
+    });
+    expect(w.developments).toEqual([{ systemId: "c1", sourceSystemId: "f1-home", seedPop: 50 }]);
+  });
+
+  it("claims/develops nothing off the pulse boundary", async () => {
+    const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
+    await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      claim: { reachProvider: () => [{ systemId: "u1", minHops: 1, habitableSpace: 100, resourceDiversity: 3, traitQuality: 0 }], rng: mulberry32(1), params: EXP_PARAMS },
+    });
+    expect(w.claims).toHaveLength(0);
+  });
+
+  it("claims/develops nothing when no claim/develop param is supplied (existing build path)", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
+    expect(w.claims).toHaveLength(0);
+    expect(w.developments).toHaveLength(0);
+    expect(countOf(w, "B", "food")).toBeGreaterThan(0); // build phase still runs
   });
 });

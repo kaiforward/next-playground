@@ -56,6 +56,7 @@ function makeSimSystem(id: string, factionId: string | null): SimSystem {
     economyType: "agricultural",
     regionId: "region-1",
     factionId,
+    control: factionId ? "developed" : "unclaimed",
     governmentType: "federation",
     population: 100,
     popCap: 200,

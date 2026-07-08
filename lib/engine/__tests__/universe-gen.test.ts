@@ -12,6 +12,7 @@ import {
   generateConnections,
   generateUniverse,
   selectStartingSystem,
+  applyEmergentStartingCondition,
   type GenParams,
   type GeneratedRegion,
   type GeneratedSystem,
@@ -26,7 +27,6 @@ import {
 import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
-import { OUTPOST_TYPE, SPACE_STATION_TYPE } from "@/lib/constants/industry";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -458,6 +458,28 @@ describe("generateConnections", () => {
   });
 });
 
+// ── Emergent starting condition ─────────────────────────────────
+
+describe("applyEmergentStartingCondition", () => {
+  it("leaves the homeworld's buildings and population unchanged, zeroes every other system", () => {
+    const systems = [
+      mkSys({ index: 0, population: 50, buildings: { shipyard: 2, farm: 1 } }),
+      mkSys({ index: 1, population: 30, buildings: { mine: 3 } }),
+    ];
+    const homeworldSnapshot = {
+      population: systems[0].population,
+      buildings: { ...systems[0].buildings },
+    };
+
+    applyEmergentStartingCondition(systems, new Set([0]));
+
+    expect(systems[0].population).toBe(homeworldSnapshot.population);
+    expect(systems[0].buildings).toEqual(homeworldSnapshot.buildings);
+    expect(systems[1].population).toBe(0);
+    expect(systems[1].buildings).toEqual({});
+  });
+});
+
 // ── Starting system ─────────────────────────────────────────────
 
 describe("selectStartingSystem", () => {
@@ -584,17 +606,13 @@ describe("faction generation", () => {
     expect(owned).toBe(u.factions.length); // exactly one owned system per faction
   });
 
-  it("develops each homeworld (outpost + station) and leaves every other system unpopulated & unbuilt", () => {
+  it("leaves every non-homeworld system unpopulated & unbuilt", () => {
     const u = generateUniverse(defaultParams(), REGION_NAMES);
     const homeworlds = new Set(u.factions.map((f) => f.homeworldSystemIndex));
     for (const s of u.systems) {
-      if (homeworlds.has(s.index)) {
-        expect(s.buildings[SPACE_STATION_TYPE]).toBeGreaterThan(0);
-        expect(s.buildings[OUTPOST_TYPE]).toBeGreaterThan(0);
-      } else {
-        expect(s.population).toBe(0);
-        expect(Object.keys(s.buildings)).toHaveLength(0);
-      }
+      if (homeworlds.has(s.index)) continue;
+      expect(s.population).toBe(0);
+      expect(Object.keys(s.buildings)).toHaveLength(0);
     }
   });
 });

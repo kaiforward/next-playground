@@ -7,7 +7,7 @@ import type { SimSystem, SimMarketEntry } from "@/lib/engine/simulator/types";
 function sys(overrides: Partial<SimSystem>): SimSystem {
   return {
     id: "s1", name: "S1", economyType: "extraction", regionId: "r1",
-    factionId: "f1", governmentType: "frontier",
+    factionId: "f1", control: "developed", governmentType: "frontier",
     population: 1000, popCap: 1200,
     traits: [], unrest: 0, buildings: { ore: 5 },
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,

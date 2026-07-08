@@ -8,6 +8,7 @@
  * The processor maps DB/sim rows into BuildSystemState and applies the returned PlannedBuild[].
  */
 import type { ResourceVector } from "@/lib/types/game";
+import type { SystemControl } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { classifyMarketState, surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { clamp } from "@/lib/utils/math";
@@ -16,7 +17,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY,
   VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, SKILL1_PER_SCHOOL, SKILL2_PER_INSTITUTE, labourTotal,
-  FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT, hasStationFacility,
+  FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import {
@@ -44,6 +45,8 @@ export interface BuildGoodState {
 export interface BuildSystemState {
   systemId: string;
   factionId: string | null;
+  /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
+  control: SystemControl;
   population: number;
   /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
   unrest: number;
@@ -349,12 +352,12 @@ export function planFactionBuilds(
   if (budget <= 0) return [];
 
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
-  // Only developed systems (those holding a space-station facility) can host builds —
-  // unclaimed and outpost-only systems are skipped here, gating both the housing and
-  // industry passes in one place. Deficit/surplus detection below still reads all `systems`.
+  // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
+  // systems are skipped here, gating both the housing and industry passes in one place.
+  // Deficit/surplus detection below still reads all `systems`.
   const working = new Map<string, BuildSystemState>();
   for (const s of systems) {
-    if (!hasStationFacility(s.buildings)) continue;
+    if (s.control !== "developed") continue;
     working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
   }
 

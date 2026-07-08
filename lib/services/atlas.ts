@@ -60,7 +60,7 @@ export function getAtlas(): AtlasData {
       factionId: s.factionId,
       economyType: s.economyType,
       isGateway: s.isGateway,
-      developed: s.popCap > 0,
+      developed: s.control === "developed",
     })),
     connections: world.connections.map((c) => ({
       id: `${c.fromId}:${c.toId}`,

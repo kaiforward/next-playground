@@ -21,7 +21,7 @@ Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-
 | §2.1 Alliance Mechanics — formation/dissolution | **Partially implemented** | Event-gated formation + dissolution shipped. Alliance capacity (slots), mutual defense, shared trade bonuses planned (War). |
 | §3 Player-Faction Reputation | **Not present** | There is no personal reputation; player↔faction standing is part of the planned diplomacy layer. |
 | §4 War and Conflict | **Border conflicts only** | `border_conflict` events fire from the relations processor. Full war mechanics planned (War sub-project). |
-| §5 Homeworlds | **Implemented** | One developed homeworld per faction, spaced + seed-biased; every other system starts unclaimed. Defense bonuses, unique facilities, conquest planned (War / Facilities). |
+| §5 Homeworlds | **Implemented** | One developed homeworld per faction, spaced + seed-biased; every other system starts unclaimed and grows via the monthly claim + develop steps. Defense bonuses, unique facilities, conquest planned (War / Facilities). |
 | §6 Initial Faction Roster | **Implemented** | 8 majors per the table below. Relations seeded at 0 and drifted by the processor (not pre-seeded with doctrine/government nudges). |
 | §7 Minor Factions | **Implemented** | 12 minors at default scale, 18 at 10k. Same single-homeworld treatment as majors; major/minor status emerges from expansion. Faction spawning events planned. |
 | §8 System Scale + Map Structure | **Implemented (different scales)** | 600 systems (default) / 10K (10k). LOD-based zoom + map-mode toggle, no separate region page. |
@@ -295,9 +295,20 @@ Each faction starts as a **single developed homeworld** — its capital and, at 
 
 ### Starting condition
 
-- **One developed homeworld per faction; the rest of the galaxy is unclaimed.** Every non-homeworld system starts `factionId: null`, unpopulated, and unbuilt — inert frontier. Factions grow by claiming and developing territory outward from their homeworld (see [substrate-reset.md](../../planned/substrate-reset.md)).
-- **Developed at gen**: each homeworld carries its substrate industry plus a seeded outpost + space-station facility, so it is ungated and its economy runs and grows from the start.
+- **Ownership is a three-state system `control` flag** (`unclaimed | controlled | developed`), not a building. `unclaimed` has no owner; `controlled` is owned and border-closing but economically inert; `developed` opens the build-gate and runs a normal economy.
+- **One developed homeworld per faction; the rest of the galaxy starts unclaimed.** Every non-homeworld system starts `factionId: null` and `control: "unclaimed"` — unpopulated and unbuilt, inert frontier. Only the homeworld starts `control: "developed"`, carrying its substrate industry ungated from the first tick. Factions grow the rest of their territory outward from there via the monthly claim and develop steps below.
 - **Economic hub** (emergent): because homeworlds are seed-biased toward good substrate, they tend to be the richest system a faction holds. There is no explicit "homeworld bonus" applied on top.
+
+### Territorial Expansion: Claim and Develop
+
+**Status: Implemented.** Engine in `lib/engine/expansion.ts`; wired into the directed-build processor's monthly pulse (`lib/tick/processors/directed-build.ts`, `lib/world/tick.ts`).
+
+Each faction's territory grows outward from what it already owns, one step of each kind per monthly pulse, before that pulse's build phase runs:
+
+- **Claim (`unclaimed → controlled`)**: every faction scores the unclaimed systems within `REACH_JUMPS` jumps of any system it already owns — reach extends from controlled and developed systems alike, and leapfrogging past a nearer unclaimed system is allowed — and proposes its single best in-reach candidate. The score is an **absolute** read of the candidate's habitable space, resource diversity, and trait quality, discounted by proximity, so two factions' proposals for the same system compare directly rather than against each faction's own pool. When multiple factions propose the same system, the highest score wins the claim; an exact tie is broken by a single seeded-RNG draw over the tied factions in sorted order, so the outcome is fully determined by the world seed. The winning system becomes `controlled` under the winning faction — owned and border-closing, but still inert until developed.
+- **Develop (`controlled → developed`)**: every faction ranks its own controlled systems by the same substrate score (proximity doesn't apply — a system's own worth is what matters) and develops its best one, gated on a minimum habitable-space floor and a reachable `developed` same-faction system to seed a colony from. Developing a system flips its `control` to `developed`, which is what opens its build-gate (`system.control === "developed"`), and transfers a small starter population to it from the nearest same-faction developed system — **conserved**, not minted: the seed population is subtracted from its source and added to the new colony, so total population is unchanged by the transfer.
+
+Both steps are capped to a small number of claims and developments per faction per pulse, so territory fills gradually rather than snapping to full control on the first pulse. Claiming and developing are bounded today by these per-pulse caps, the reach radius, and the score/habitable floors — not by a shared cost pool. A throughput-funded cost for claiming and developing territory (creating a tall-vs-wide expansion tension) is designed in [building-construction-model.md](../../planned/building-construction-model.md).
 
 > **Planned (War / Facilities):** homeworld defense bonuses, unique faction-specific facilities at homeworlds, and homeworld-conquest mechanics (faction-in-exile, picking a new capital, cornered-animal bonuses, rebel resurrection) all depend on later sub-projects. The design intent is preserved below as the eventual target.
 

@@ -27,8 +27,8 @@ export interface SystemNodeData {
   y: number;
   name: string;
   economyType: EconomyType;
-  /** Whether the system has a built economy (popCap > 0). Undeveloped systems render
-   *  as a hollow marker — labelled potential, not a live economy. */
+  /** True when the system is developed (control === 'developed'). Undeveloped systems render
+   *  as a hollow marker — labelled potential, not owned. */
   developed: boolean;
   regionId: string;
   isGateway: boolean;

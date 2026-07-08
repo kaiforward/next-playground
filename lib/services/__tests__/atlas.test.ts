@@ -52,7 +52,7 @@ describe("getAtlas", () => {
       factionId: system.factionId,
       economyType: system.economyType,
       isGateway: system.isGateway,
-      developed: system.popCap > 0,
+      developed: system.control === "developed",
     });
 
     const faction = world.factions[0];
@@ -122,5 +122,30 @@ describe("getAtlas", () => {
     const region = getAtlas().regions.find((r) => r.id === frontierRegionId)!;
     expect(region.dominantFactionId).toBeNull();
     expect(region.dominantGovernmentType).toBe("frontier");
+  });
+
+  it("derives developed flag from system.control, not popCap", () => {
+    // A controlled system with popCap > 0 should NOT be developed
+    // A developed system with popCap === 0 should be developed
+    const s1 = world.systems[0];
+    const s2 = world.systems[1];
+
+    const systems = world.systems.map((s) => {
+      if (s.id === s1.id) {
+        return { ...s, control: "controlled" as const, popCap: 100 };
+      }
+      if (s.id === s2.id) {
+        return { ...s, control: "developed" as const, popCap: 0 };
+      }
+      return s;
+    });
+    setWorld({ ...world, systems });
+
+    const atlas = getAtlas();
+    const controlled = atlas.systems.find((s) => s.id === s1.id)!;
+    const developed = atlas.systems.find((s) => s.id === s2.id)!;
+
+    expect(controlled.developed).toBe(false); // controlled, even with popCap > 0
+    expect(developed.developed).toBe(true); // developed, even with popCap === 0
   });
 });

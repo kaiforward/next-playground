@@ -56,6 +56,7 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
     economyType: "agricultural",
     regionId: "r1",
     factionId: "f1",
+    control: "developed",
     governmentType: "federation",
     population: 50,
     popCap: 1000,
@@ -76,6 +77,7 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
     economyType: "tech",
     regionId: "r1",
     factionId: "f1",
+    control: "developed",
     governmentType: "federation",
     population: 1000,
     popCap: 2000,
@@ -366,6 +368,7 @@ describe("economy processor: supply-chain input-gating", () => {
         economyType: "industrial",
         regionId: "r1",
         factionId: "f1",
+        control: "developed",
         governmentType: "federation",
         population: 65, // 2×25 (metals) + 1×15 (vocational_school) = exactly 65 → fulfillment = 1
         popCap: 200,

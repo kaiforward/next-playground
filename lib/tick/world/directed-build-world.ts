@@ -5,12 +5,15 @@
  * (the build planner needs all of a faction's systems at once), matching logistics.
  */
 import type { ResourceVector } from "@/lib/types/game";
+import type { SystemControl } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
 export interface SystemBuildRow {
   systemId: string;
   factionId: string | null;
+  /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
+  control: SystemControl;
   population: number;
   /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
   unrest: number;
@@ -34,6 +37,20 @@ export interface BuildBuildingUpdate {
   count: number;
 }
 
+/** One ownership assignment: an unclaimed system becomes owned by factionId (control tier). */
+export interface SystemClaim {
+  systemId: string;
+  factionId: string;
+}
+
+/** One development: a controlled system flips to developed and receives a conserved colony seed. */
+export interface SystemDevelopment {
+  systemId: string;
+  /** Developed same-faction system the seed population is transferred from. */
+  sourceSystemId: string;
+  seedPop: number;
+}
+
 export interface DirectedBuildWorld {
   /** Distinct faction groups (incl. one null/independents group) — drives the per-faction shard. */
   getFactionShardKeys(): Promise<Array<string | null>>;
@@ -41,4 +58,8 @@ export interface DirectedBuildWorld {
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemBuildRow[]>;
   /** Bulk absolute building-count writes (production goods + "housing"). */
   applyBuildingIncreases(updates: BuildBuildingUpdate[]): Promise<void>;
+  /** Ownership writes from the claim step (unclaimed → controlled). */
+  applyClaims(claims: SystemClaim[]): Promise<void>;
+  /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */
+  applyDevelopments(developments: SystemDevelopment[]): Promise<void>;
 }
