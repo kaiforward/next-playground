@@ -20,6 +20,7 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
   return {
     systemId: row.systemId,
     factionId: row.factionId,
+    control: row.control,
     population: row.population,
     unrest: row.unrest,
     buildings: row.buildings,

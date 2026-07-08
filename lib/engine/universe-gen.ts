@@ -12,7 +12,6 @@ import {
   assignHomeworldOwnership,
   type GeneratedFaction,
 } from "./faction-gen";
-import { OUTPOST_TYPE, SPACE_STATION_TYPE } from "@/lib/constants/industry";
 
 // ── Output types ────────────────────────────────────────────────
 
@@ -650,23 +649,21 @@ export function generateConnections(
 // ── Emergent starting condition ─────────────────────────────────
 
 /**
- * Apply the emergent starting condition to the freshly-scattered systems: develop
- * each faction homeworld (its substrate industry plus a seeded outpost + space-station
- * facility, so it's ungated and can grow), and zero every other system's population
- * and buildings. The physical substrate (space, slots, yields, danger, traits) is
- * left intact — expansion grows into it. Mutates `systems` in place.
+ * Apply the emergent starting condition to the freshly-scattered systems: each faction
+ * homeworld keeps its seeded substrate industry unchanged (its `control` flag already
+ * carries "developed", so directed build can grow it without a stamped building), and
+ * every other system's population and buildings are zeroed. The physical substrate
+ * (space, slots, yields, danger, traits) is left intact — expansion grows into it.
+ * Mutates `systems` in place.
  */
 export function applyEmergentStartingCondition(
   systems: GeneratedSystem[],
   homeworldIndices: Set<number>,
 ): void {
   for (const s of systems) {
-    if (homeworldIndices.has(s.index)) {
-      s.buildings = { ...s.buildings, [OUTPOST_TYPE]: 1, [SPACE_STATION_TYPE]: 1 };
-    } else {
-      s.population = 0;
-      s.buildings = {};
-    }
+    if (homeworldIndices.has(s.index)) continue; // homeworld keeps its seeded substrate industry
+    s.population = 0;
+    s.buildings = {};
   }
 }
 

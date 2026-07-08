@@ -4,7 +4,6 @@ import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-bu
 import type { SystemBuildRow } from "@/lib/tick/world/directed-build-world";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { SPACE_STATION_TYPE } from "@/lib/constants/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
 const reachable: RouteCost = () => 1;
@@ -31,12 +30,13 @@ function builderSlots(n: number) {
 function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[] {
   return [
     {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
     },
     {
-      systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { food: bFood, housing: bHousing, [SPACE_STATION_TYPE]: 1 },
+      systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0,
+      buildings: { food: bFood, housing: bHousing },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
       generalSpace: 100, habitableSpace: 100, markets: [],
     },
@@ -84,12 +84,12 @@ describe("runDirectedBuildProcessor", () => {
     // arable cap and ample budget must end at ≤ 10 food, never more, on the pulse boundary.
     const rows: SystemBuildRow[] = [
       {
-        systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: {},
+        systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
       },
       {
-        systemId: "B", factionId: "f1", population: 5000, unrest: 0, buildings: { [SPACE_STATION_TYPE]: 1 },
+        systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: builderSlots(10),
         generalSpace: 0, habitableSpace: 0, markets: [],
       },
@@ -103,7 +103,7 @@ describe("runDirectedBuildProcessor", () => {
 
   it("returns no writes when there are no structural deficits", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, buildings: { [SPACE_STATION_TYPE]: 1 },
+      systemId: "A", factionId: "f1", control: "developed", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
       markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → balanced; no habitable land → no proactive housing → no writes
     }];

@@ -285,6 +285,7 @@ function buildBuildRows(
   return systems.map((s) => ({
     systemId: s.id,
     factionId: s.factionId,
+    control: s.control,
     population: s.population,
     unrest: s.unrest,
     buildings: s.buildings,

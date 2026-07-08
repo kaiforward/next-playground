@@ -5,12 +5,15 @@
  * (the build planner needs all of a faction's systems at once), matching logistics.
  */
 import type { ResourceVector } from "@/lib/types/game";
+import type { SystemControl } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
 export interface SystemBuildRow {
   systemId: string;
   factionId: string | null;
+  /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
+  control: SystemControl;
   population: number;
   /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
   unrest: number;

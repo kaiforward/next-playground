@@ -26,7 +26,6 @@ import {
 import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
-import { OUTPOST_TYPE, SPACE_STATION_TYPE } from "@/lib/constants/industry";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -584,13 +583,12 @@ describe("faction generation", () => {
     expect(owned).toBe(u.factions.length); // exactly one owned system per faction
   });
 
-  it("develops each homeworld (outpost + station) and leaves every other system unpopulated & unbuilt", () => {
+  it("keeps each homeworld's seeded buildings and leaves every other system unpopulated & unbuilt", () => {
     const u = generateUniverse(defaultParams(), REGION_NAMES);
     const homeworlds = new Set(u.factions.map((f) => f.homeworldSystemIndex));
     for (const s of u.systems) {
       if (homeworlds.has(s.index)) {
-        expect(s.buildings[SPACE_STATION_TYPE]).toBeGreaterThan(0);
-        expect(s.buildings[OUTPOST_TYPE]).toBeGreaterThan(0);
+        expect(Object.keys(s.buildings).length).toBeGreaterThan(0);
       } else {
         expect(s.population).toBe(0);
         expect(Object.keys(s.buildings)).toHaveLength(0);
