@@ -17,14 +17,10 @@ import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 import { marketBand } from "@/lib/engine/market-pricing";
-import type { GovernmentDefinition } from "@/lib/constants/government";
 import type { ResourceVector } from "@/lib/types/game";
 
 /** Price-curve elasticity. k=1 reproduces the legacy demand/supply hyperbola. */
 export const DEFAULT_ELASTICITY = 1;
-
-/** Default bid-ask half-spread: buy = mid*(1+s), sell = mid*(1-s). */
-export const DEFAULT_SPREAD = 0.05;
 
 /**
  * Days of cover (stock ÷ local demand rate) at which a good's mid price equals
@@ -139,14 +135,4 @@ export function getInitialStock(
   const producerShare = total > 0 ? production / total : 0.5; // 1 producer, 0 consumer
   const coverMult = SEED_COVER_MIN + producerShare * (SEED_COVER_MAX - SEED_COVER_MIN);
   return Math.round(Math.max(band.minStock, Math.min(band.maxStock, band.targetStock * coverMult)));
-}
-
-/**
- * Bid-ask half-spread scaled by government margin policy. Repurposes the
- * government's `equilibriumSpreadPct` (frontier wide, authoritarian tight) to
- * scale the market spread now that the dual supply/demand band is gone.
- */
-export function getSpread(govDef?: GovernmentDefinition): number {
-  if (!govDef) return DEFAULT_SPREAD;
-  return Math.max(0, DEFAULT_SPREAD * (1 + govDef.equilibriumSpreadPct / 100));
 }

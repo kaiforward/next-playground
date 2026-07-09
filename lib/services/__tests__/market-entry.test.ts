@@ -1,17 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { buildMarketEntry, curveForGoodRow } from "@/lib/services/market-entry";
-import {
-  spotPrice,
-  quoteTrade,
-  curveForGood,
-} from "@/lib/engine/market-pricing";
-import {
-  getSpread,
-  TARGET_COVER,
-  DEFAULT_SPREAD,
-} from "@/lib/constants/market-economy";
+import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { TARGET_COVER } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
-import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 
 // "food" is a producer-cheap good; its DB row mirrors the GOODS constant.
 const FOOD = {
@@ -46,48 +37,20 @@ describe("curveForGoodRow", () => {
 describe("buildMarketEntry", () => {
   const stock = 140;
   const demandRate = 2;
-  const curve = curveForGood(
-    FOOD.basePrice,
-    FOOD.priceFloor,
-    FOOD.priceCeiling,
-    demandRate,
-  );
+  const curve = curveForGood(FOOD.basePrice, FOOD.priceFloor, FOOD.priceCeiling, demandRate);
 
-  it("prices a single buy/sell unit off the default spread when no government is given", () => {
+  it("builds the derived spot entry (no buy/sell/spread fields)", () => {
     const entry = buildMarketEntry("good-1", FOOD, stock, demandRate);
-    const spread = DEFAULT_SPREAD;
 
     expect(entry.goodId).toBe("good-1");
     expect(entry.goodName).toBe(FOOD.name);
     expect(entry.basePrice).toBe(FOOD.basePrice);
     expect(entry.currentPrice).toBe(spotPrice(curve, stock));
-    expect(entry.buyPrice).toBe(quoteTrade(curve, stock, 1, "buy", spread).totalPrice);
-    expect(entry.sellPrice).toBe(quoteTrade(curve, stock, 1, "sell", spread).totalPrice);
-
-    // Curve inputs exposed for client-side quote previews.
-    expect(entry.priceFloor).toBe(FOOD.priceFloor);
-    expect(entry.priceCeiling).toBe(FOOD.priceCeiling);
-    expect(entry.targetStock).toBe(curve.targetStock);
-    expect(entry.spread).toBe(spread);
-  });
-
-  it("applies the government bid-ask spread (non-default path)", () => {
-    // frontier widens the spread (+20%); authoritarian tightens it (−15%).
-    const gov = GOVERNMENT_TYPES.frontier;
-    const spread = getSpread(gov);
-    expect(spread).not.toBe(DEFAULT_SPREAD); // guards against silent no-op
-
-    const entry = buildMarketEntry("good-1", FOOD, stock, demandRate, gov);
-    expect(entry.buyPrice).toBe(quoteTrade(curve, stock, 1, "buy", spread).totalPrice);
-    expect(entry.sellPrice).toBe(quoteTrade(curve, stock, 1, "sell", spread).totalPrice);
-
-    // Wider spread ⇒ buy no lower / sell no higher than the default-spread
-    // quote. (>= / <= rather than strict, since a single cheap unit can tie
-    // after integer rounding — the exact-pin assertions above are the real
-    // guard; this only catches a spread inversion.)
-    const defaultEntry = buildMarketEntry("good-1", FOOD, stock, demandRate);
-    expect(entry.buyPrice).toBeGreaterThanOrEqual(defaultEntry.buyPrice);
-    expect(entry.sellPrice).toBeLessThanOrEqual(defaultEntry.sellPrice);
+    expect(entry.stock).toBe(stock);
+    // The trading fields are gone — the entry is the spot readout only.
+    expect(entry).not.toHaveProperty("buyPrice");
+    expect(entry).not.toHaveProperty("sellPrice");
+    expect(entry).not.toHaveProperty("spread");
   });
 
   it("floors stock so the player never sees fractional goods", () => {
@@ -95,24 +58,20 @@ describe("buildMarketEntry", () => {
     expect(entry.stock).toBe(140);
   });
 
-  it("anchorMult raises currentPrice at a stock level that is unclamped for both anchors", () => {
+  it("anchorMult raises currentPrice at a stock level unclamped for both anchors", () => {
     // food: basePrice=30, floor=0.5×=15, ceiling=2×=60; reference =
-    // TARGET_COVER×demandRate = 40×2 = 80. At stock=130 (above the reference,
-    // below 2×reference=160):
-    //   anchorMult=1 → 30*(80/130)^1 ≈ 18.5 → rounds to 18 (above floor ✓)
-    //   anchorMult=2 → 30*(160/130)^1 ≈ 36.9 → rounds to 37 (below ceiling ✓)
-    // Both are unclamped, so the shift is clearly visible in the output price.
+    // TARGET_COVER×demandRate = 40×2 = 80. At stock=130 (above 80, below 160):
+    //   anchorMult=1 → 30*(80/130)  ≈ 18.5 → 18 (above floor ✓)
+    //   anchorMult=2 → 30*(160/130) ≈ 36.9 → 37 (below ceiling ✓)
     const testStock = 130;
     const base = buildMarketEntry("good-1", FOOD, testStock, demandRate);
-    const shifted = buildMarketEntry("good-1", FOOD, testStock, demandRate, undefined, 2);
+    const shifted = buildMarketEntry("good-1", FOOD, testStock, demandRate, 2);
     expect(shifted.currentPrice).toBeGreaterThan(base.currentPrice);
   });
 
   it("default (no anchorMult arg) equals passing anchorMult=1 explicitly", () => {
     const entry = buildMarketEntry("good-1", FOOD, stock, demandRate);
-    const explicit = buildMarketEntry("good-1", FOOD, stock, demandRate, undefined, 1);
+    const explicit = buildMarketEntry("good-1", FOOD, stock, demandRate, 1);
     expect(entry.currentPrice).toBe(explicit.currentPrice);
-    expect(entry.buyPrice).toBe(explicit.buyPrice);
-    expect(entry.sellPrice).toBe(explicit.sellPrice);
   });
 });

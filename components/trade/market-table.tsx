@@ -45,20 +45,6 @@ export function MarketTable({
       render: (row) => <span className="font-mono">{row.stock}</span>,
     },
     {
-      key: "buyPrice",
-      label: "Buy",
-      sortable: true,
-      getValue: (row) => row.buyPrice,
-      render: (row) => <span className="font-mono text-text-secondary">{formatCredits(row.buyPrice)}</span>,
-    },
-    {
-      key: "sellPrice",
-      label: "Sell",
-      sortable: true,
-      getValue: (row) => row.sellPrice,
-      render: (row) => <span className="font-mono text-text-secondary">{formatCredits(row.sellPrice)}</span>,
-    },
-    {
       key: "priceTrend",
       label: "Trend",
       sortable: true,

@@ -1,14 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   TARGET_COVER,
-  getSpread,
   getInitialStock,
   demandRateForGood,
   totalDemandRateForGood,
   MIN_DEMAND,
   demandFootprint,
 } from "../market-economy";
-import { GOVERNMENT_TYPES } from "../government";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { inputDemandForGood, facilityStorageForGood } from "@/lib/engine/industry";
 import type { LabourState } from "@/lib/engine/industry";
@@ -161,20 +159,6 @@ describe("getInitialStock", () => {
     expect(seedProducer).toBeGreaterThanOrEqual(Math.floor(band.minStock));
     expect(seedProducer).toBeLessThanOrEqual(Math.ceil(band.maxStock));
     expect(seedProducer).toBeGreaterThan(seedConsumer); // producer is deeper-stocked (cheaper)
-  });
-});
-
-describe("getSpread", () => {
-  it("returns the default half-spread with no government", () => {
-    expect(getSpread()).toBe(0.05);
-  });
-
-  it("widens for frontier and tightens for authoritarian", () => {
-    const frontier = getSpread(GOVERNMENT_TYPES.frontier); // +20% -> 0.06
-    const auth = getSpread(GOVERNMENT_TYPES.authoritarian); // -15% -> 0.0425
-    expect(frontier).toBeCloseTo(0.06, 5);
-    expect(auth).toBeCloseTo(0.0425, 5);
-    expect(frontier).toBeGreaterThan(auth);
   });
 });
 

@@ -107,7 +107,7 @@ Seeded stock and industrial input-demand scale automatically (derived from the a
 | Symbol | File | Why |
 |---|---|---|
 | `DIRECTED_BUILD.GENERATION_PER_POP` (0.05) | `lib/constants/directed-build.ts` | **Building-denominated**, not goods. Budget is spent as building units (`budget -= units`); building counts are space-capped and don't scale. Scaling it would change construction *pace*, not magnitude — a dynamics change. |
-| `TARGET_COVER`, `DEFAULT_ELASTICITY` (k), `DEFAULT_SPREAD`, `SEED_COVER_MIN/MAX` | `lib/constants/market-economy.ts` | Pure ratios; ride S correctly. |
+| `TARGET_COVER`, `DEFAULT_ELASTICITY` (k), `SEED_COVER_MIN/MAX` | `lib/constants/market-economy.ts` | Pure ratios; ride S correctly. |
 | `classifyMarketState` thresholds (`SURPLUS_MARGIN`, `DEFICIT_FRACTION`), HIGH/LOW price thresholds, self-limiting / output-uptake curves, per-good `priceFloor`/`priceCeiling` | various | Dimensionless ratios. |
 | `HOP_WEIGHT` (1.0), `FUEL_WEIGHT` (0.1) | `lib/constants/directed-logistics.ts` | Goods-agnostic route cost. Scaling them *shrinks* `affordable` — the wrong direction; the logistics budget is the lever, not this. |
 

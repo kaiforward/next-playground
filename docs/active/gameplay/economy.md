@@ -1,8 +1,8 @@
 # Economy System
 
-The economy is a **single-stock** market simulation. Each `(station, good)` holds one value — `stock` — from which price, buy/sell rates, and the "how much can I trade" limits are all derived. Producers add stock (self-limiting near the ceiling), consumers drain it (self-limiting near the floor), and the spatial flow of goods between systems (directed logistics) is what separates cheap producer worlds from expensive consumer worlds. There is no second free-floating `demand` value and no mean-reversion — equilibrium emerges from production/consumption balance plus that spatial flow. (Each market does store a static per-system **demand rate**, but it only sets where the pricing curve is centred — it never evolves and never moves stock.)
+The economy is a **single-stock** market simulation. Each `(station, good)` holds one value — `stock` — from which price and the surplus/deficit signal directed logistics reads are derived. Producers add stock (self-limiting near the ceiling), consumers drain it (self-limiting near the floor), and the spatial flow of goods between systems (directed logistics) is what separates cheap producer worlds from expensive consumer worlds. There is no second free-floating `demand` value and no mean-reversion — equilibrium emerges from production/consumption balance plus that spatial flow. (Each market does store a static per-system **demand rate**, but it only sets where the pricing curve is centred — it never evolves and never moves stock.)
 
-See [Design Rationale](#design-rationale) below for why this replaced the legacy dual supply/demand model and how it kills the instant buy→resell exploit.
+See [Design Rationale](#design-rationale) below for why this replaced the legacy dual supply/demand model.
 
 ---
 
@@ -143,20 +143,19 @@ At seed/reset time each market's starting stock is **cover-based** (`getInitialS
 
 All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-| Government | Volatility | Eq. Spread | Danger | Consumption boosts |
-|---|---|---|---|---|
-| Federation | 0.8× | -10% | 0.00 | medicine |
-| Corporate | 0.9× | -5% | 0.02 | luxuries |
-| Authoritarian | 0.7× | -15% | 0.00 | weapons, fuel |
-| Frontier | 1.5× | +20% | 0.10 | — |
-| Cooperative | 0.7× | -10% | 0.00 | food, medicine |
-| Technocratic | 1.0× | +5% | 0.01 | electronics |
-| Militarist | 1.3× | +10% | 0.05 | weapons, fuel, machinery |
-| Theocratic | 0.8× | -5% | 0.03 | food, medicine, textiles |
+| Government | Volatility | Danger | Consumption boosts |
+|---|---|---|---|
+| Federation | 0.8× | 0.00 | medicine |
+| Corporate | 0.9× | 0.02 | luxuries |
+| Authoritarian | 0.7× | 0.00 | weapons, fuel |
+| Frontier | 1.5× | 0.10 | — |
+| Cooperative | 0.7× | 0.00 | food, medicine |
+| Technocratic | 1.0× | 0.01 | electronics |
+| Militarist | 1.3× | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.8× | 0.03 | food, medicine, textiles |
 
 ### Government Effects on Gameplay
 - **Volatility modifier**: Scales price-noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
-- **Spread modifier** (`equilibriumSpreadPct`): Scales the **bid-ask half-spread** `s` — the gap between buy and sell price. Frontier widens it (+20% → bigger round-trip cost / wider quotes), authoritarian tightens it (-15%). Replaces the legacy supply/demand-band spread now that there is a single stock value.
 - **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
 - **Consumption boosts**: Extra consumption per tick for specific goods (e.g., authoritarian +1 weapons consumption) — drains stock faster, raising price.
 
@@ -168,13 +167,11 @@ All 8 government types are implemented. Every type has trade-offs — buffs bala
 ```
 reference = TARGET_COVER × demandRate × anchorMult
 mid       = clamp( basePrice × (reference / stock) ^ k ,  floor, ceiling )
-buyUnit   = mid × (1 + s)        (what the player pays)
-sellUnit  = mid × (1 − s)        (what the player receives)
 ```
+`mid` is the price — a derived spot readout of the current stock, not a trading engine.
 - `reference` — the per-system days-of-supply level where mid = base (see [Per-System Pricing Reference](#per-system-pricing-reference-days-of-supply)).
 - `stock = reference` → mid = basePrice. Above → cheaper, below → more expensive. If stock ≤ 0, price hits the ceiling.
 - `k` — elasticity exponent (steepness of the curve). Default **1** (reproduces the legacy hyperbola); higher `k` makes price react more sharply to the same stock gap.
-- `s` — bid-ask half-spread. Default **0.05**, scaled by government (see above).
 - `floor` / `ceiling` — per-good price multipliers on base price.
 
 ### Market Pricing Band (per-market stock range)
@@ -189,15 +186,10 @@ maxStock    = targetStock / priceFloor ^ (1/k)              // demand headroom �
             + Σ_buildings ( count × storagePerUnit[building → good] )   // infrastructure depth & liquidity
 ```
 
-- **Demand-derived floor & anchor.** `minStock` is a *reserve*, not zero — a player buys everything above it (`stock − minStock`); as stock falls toward it, price climbs to the ceiling and the market holds its last reserve. Both `minStock` and `targetStock` scale with population, so the price point and the scarcity threshold track local demand.
+- **Demand-derived floor & anchor.** `minStock` is a *reserve*, not zero — the scarcity floor below which price ceilings out; directed logistics treats stock above the reserve (`stock − minStock`) as movable surplus. As stock falls toward the reserve, price climbs to the ceiling and the market holds its last reserve. Both `minStock` and `targetStock` scale with population, so the price point and the scarcity threshold track local demand.
 - **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`facilityStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `WorldMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
 
-This restores the cover model's intended invariant — **same days-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 days of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term. The bid-ask spread and buy/sell symmetry that block the resell exploit depend on the *curve*, not the band, and are unchanged.
-
-### Slippage (intra-trade pricing)
-A trade of `q` units moves stock from `S` to `S∓q`, and price moves the whole way. The trade is priced at the **average of the curve over the stock range it moves**, not a flat pre-trade snapshot — each unit is priced at the midpoint of the stock step it causes (`tradeAvgMidPrice` in `lib/engine/market-pricing.ts`).
-
-**Why round-trips don't profit:** a same-station buy→sell walks the identical curve segment down then back up (symmetric), so the player ends where they started minus the spread — a guaranteed small loss. Cross-system profit is untouched: buying at a surplus system walks a *low* segment of its curve, selling at a shortage system walks a *high* segment of a *different* curve. The geographic price gap is the profit; slippage only flattens prices *within* one station.
+This restores the cover model's intended invariant — **same days-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 days of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term.
 
 ### Per-Tick Simulation (runs once per economy-shard update)
 The economy processor groups the shard's markets **by system** and runs the coupled cascade on each (`simulateCoupledEconomyTick`). Within a system goods are processed in recipe-topological order so a fresh input feeds its consumer the same tick; each good's stock is updated:
@@ -214,7 +206,6 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 | Parameter | Value | Effect |
 |---|---|---|
 | Elasticity `k` | 1 | Curve steepness (price reaction to stock gap) |
-| Bid-ask spread `s` | 0.05 base | Buy/sell gap; scaled by government; makes round-trips lose |
 | Noise fraction | `NOISE_FRACTION` (≈0.02) of band width | Micro-volatility, relative to each market's band, scaled by volatility × government |
 | Stock band | per-market `[minStock, maxStock]` | Demand-derived floor reserve + infrastructure-derived ceiling (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) |
 | Production rate | capacity-driven, input-gated | `Σ count × outputPerUnit × labourFulfillment × inputGate`; scaled by self-limiting + strike suppression |
@@ -302,9 +293,6 @@ MIGRATION    run fifth  - relocates population (conserved) along the
 
 (goods move between systems separately, via directed logistics — see
  economy-autonomic-agency.md)
-
-PLAYER TRADES  anytime (not tick-locked) - buy lowers stock, sell raises
-               it (one stock delta); same per-market effect as a flow
 ```
 
 The economy→population **satisfaction handoff** (`ctx.results`) is purely in-memory and transient — it is not persisted and not broadcast to clients. It carries the per-system `delivered_g / demanded_g` measurements the economy tick records internally, which the population processor consumes in the same tick to update `unrest` and population.
@@ -321,7 +309,7 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                demand rate -> days-of-supply pricing reference;
                                net balance + facility storage -> per-market band
                                -> seed stock + import dependence;
-                               government -> volatility, spread, boosts
+                               government -> volatility, boosts
 2  Tick evolution (each tick)  input-gated self-limiting production (the
                                supply-chain cascade) + civilian consumption,
                                strike suppression (from unrest), noise,
@@ -348,15 +336,15 @@ Inter-system goods movement (directed logistics) is detailed in [economy-autonom
 
 ### Why single-stock
 
-The economy previously stored **two** independently-floating values per `(station, good)` — `supply` and `demand` — and priced as `basePrice × (demand / supply)`. That model carried a structural exploit and several awkwardnesses:
+Price, population satisfaction, and the surplus/deficit signal directed logistics reads all derive from **one** value per `(station, good)` — `stock` — a running balance that production raises and consumption drains, clamped to the per-market band. Price is a **derived spot readout**, not a trading engine: there is no personal buy/sell trading, so a market never quotes a price or defends itself against arbitrage.
 
-- **Snapshot pricing, no intra-trade slippage** — a trade's whole quantity executed at the single price computed *before* the trade, so a bulk buy never paid the rising prices it caused.
-- **Instant buy→resell** — draining supply toward zero pinned price to the ceiling, and the player sold the same units straight back at that ceiling for a near risk-free profit.
-- **Two free-floating numbers** — "demand" wasn't unmet need; it was a second mean-reverting value, so every event/government/prosperity modifier had to manipulate supply and demand targets in tandem to stay coherent.
+The earlier model stored **two** independently-floating values per `(station, good)` — `supply` and `demand` — and priced as `basePrice × (demand / supply)`, where "demand" was not unmet need but a second mean-reverting number. Every event, government, and health modifier had to manipulate both targets in tandem to stay coherent. Collapsing to a single stock value removes that coupling:
 
-The single-stock model replaces both numbers with one `stock` value from which price, trade limits, and the "demand" readout are all derived, and prices each trade at the **integrated average over the stock range it moves** (slippage) plus a **bid-ask spread `s`**. A same-station buy→sell then walks the identical curve segment down and back up — symmetric — so it always loses the spread, killing the round-trip *by construction* rather than by tuning a magic number. Cross-system profit is untouched: the geographic gap between two different systems' curves is the trade signal, restored every tick by production/consumption and spatial flow (see [Slippage](#slippage-intra-trade-pricing)).
+- **`demandRate`** is a static per-system pricing denominator (where the curve is centred), never a free-floating axis.
+- **Unmet need** surfaces as **satisfaction** (`delivered / demanded`), which feeds unrest and population — not as a second price input.
+- **Equilibrium** emerges from production/consumption balance plus spatial flow, not a mean-reversion target.
 
-This mirrors how comparable games solve it — slippage / marginal pricing (Mount & Blade, Elite) and a bid-ask spread (Port Royale, the finance no-arbitrage result) are the universal anti-exploit tools, and stock-based pricing where production/consumption directly move inventory is the X4 / Elite model.
+This is the X4 / Elite model — stock-based pricing where production and consumption directly move inventory.
 
 ---
 
