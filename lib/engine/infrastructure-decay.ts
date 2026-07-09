@@ -10,41 +10,25 @@
  *  - unrest (catastrophic): above a threshold, capacity is torn down even while in
  *    use — the infrastructure mirror of the population decline term, the snowball.
  *
- * "Used" depends on the building's role:
- *  - housing            → occupancy: population / POP_CENTRE_DENSITY (units the pop fills).
- *  - vocational_school / research_institute → how much of its OWN licensed skill
- *    capacity the system's skill demand actually draws on: count × min(1, skillDemand/skillCap).
- *    An academy licensing more than the system needs reads as idle and sheds, same
- *    as an over-built factory.
- *  - production (everything else) → staffed AND selling: count × min(effectiveFulfilment, outputUptake),
- *    where effectiveFulfilment is the skill-gated ratio for the good's tier — a
- *    tier-1/2 building that is headcount-full but skill-starved reads as idle too.
- *  - specialisation complex → how much of its rated family coverage the built
- *    factories draw: min(count, familyThroughput/ratedCoverage). Orphaned by a
- *    collapsed family (throughput → 0) → used → 0 → rots away like an idle academy.
+ * "Used" is a building's utilization in absolute units, resolved uniformly by
+ * `buildingUsed` (dispatched on the building's typed output): housing occupancy, an
+ * academy's skill-licence draw, a complex's family coverage, or a producer's
+ * staffed-and-selling capacity — all through one function, no per-type branch here.
  *
- * Decay is downward-only and floored at 0. Growth is deliberately excluded — that
- * is a deliberate, treasury-funded decision and belongs to SP5.
+ * Decay is downward-only and floored at 0. Growth is excluded — it is the
+ * directed-build processor's job.
  */
 import {
-  effectiveFulfilment,
+  buildingUsed,
   housingPopCap,
   labourParts,
   labourStateFromParts,
-  familyThroughput,
-  complexUsed,
+  type UtilizationContext,
 } from "@/lib/engine/industry";
-import {
-  BUILDING_TYPES,
-  HOUSING_TYPE,
-  POP_CENTRE_DENSITY,
-  RESEARCH_INSTITUTE_TYPE,
-  VOCATIONAL_SCHOOL_TYPE,
-  COMPLEX_BY_TYPE,
-  ANCHOR_RATED_COVERAGE,
-} from "@/lib/constants/industry";
-import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
+
+/** The housing-occupancy primitive lives in industry.ts; re-exported here for callers/tests that read it directly. */
+export { housingUsed } from "@/lib/engine/industry";
 
 export interface DecayParams {
   /** Fraction of idle capacity (count − used) that rots per run. Small → sticky. */
@@ -72,12 +56,7 @@ export interface SystemDecayResult {
   popCap: number;
 }
 
-/** Housing the current population fills, in building units. */
-export function housingUsed(population: number): number {
-  return Math.max(0, population) / POP_CENTRE_DENSITY;
-}
-
-/** Production capacity that is both staffed and selling. */
+/** Production capacity that is both staffed and selling. The market_good branch of `buildingUsed`. */
 export function productionUsed(count: number, labourFulfillment: number, outputUptake: number): number {
   return count * Math.min(labourFulfillment, outputUptake);
 }
@@ -107,34 +86,16 @@ export function decayedCount(count: number, used: number, unrest: number, params
  */
 export function computeSystemDecay(input: SystemDecayInput, params: DecayParams): SystemDecayResult {
   const { buildings, population, unrest } = input;
-  // One pass yields the headcount + skill demand/cap totals; reuse them for both the
-  // production fulfilment state and the academies' own used-ratio below.
+  // One labourParts pass feeds every building's utilization (the headcount gate, both skill
+  // ceilings, and the academies' own licence-draw ratios) via one shared context.
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
+  const ctx: UtilizationContext = { buildings, population, parts, state, outputUptake: input.outputUptake };
 
   const newCounts: Record<string, number> = {};
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
-    let used: number;
-    if (type === HOUSING_TYPE) {
-      used = housingUsed(population);
-    } else if (type === VOCATIONAL_SCHOOL_TYPE) {
-      // Academy's own "used" is the inverse ratio of production fulfilment: how much
-      // of ITS licensed capacity the system's skill-1 demand actually draws on.
-      used = count * (parts.skill1Cap > 0 ? Math.min(1, parts.skill1Demand / parts.skill1Cap) : 0);
-    } else if (type === RESEARCH_INSTITUTE_TYPE) {
-      used = count * (parts.skill2Cap > 0 ? Math.min(1, parts.skill2Demand / parts.skill2Cap) : 0);
-    } else if (COMPLEX_BY_TYPE[type]) {
-      // A complex's used = how much of its rated family coverage the built factories draw.
-      // Orphaned (family gone) → used 0 → rots away, freeing the space + the cap slot.
-      used = complexUsed(count, familyThroughput(buildings, COMPLEX_BY_TYPE[type]), ANCHOR_RATED_COVERAGE);
-    } else {
-      const outputGood = BUILDING_TYPES[type]?.outputGood;
-      const uptake = outputGood !== undefined ? input.outputUptake(outputGood) : 1;
-      const tier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
-      const fulfil = effectiveFulfilment(state, tier);
-      used = productionUsed(count, fulfil, uptake);
-    }
+    const used = buildingUsed(type, count, ctx);
     const next = decayedCount(count, used, unrest, params);
     if (next < count) newCounts[type] = next;
   }
