@@ -165,8 +165,9 @@ describe("planFactionBuilds", () => {
 
   it("proposes capacity up to the physical ceilings in one pass (no population-budget throttle)", () => {
     // A lone developed builder with a huge local rate deficit, ample deposits, and ample labour.
-    // The only bounds are deposits and labour — NOT a per-pass build budget. Build should reach the
-    // labour ceiling (pop ÷ per-unit ore labour = 100/10 = 10), not the old pop×GENERATION_PER_POP cap of 5.
+    // The only bounds are deposits and labour — the planner holds no per-pass build budget. Build
+    // reaches the labour ceiling (pop ÷ per-unit ore labour = 100/10 = 10), far above the handful a
+    // population-scaled budget would have admitted.
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const sys: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 100, unrest: 0,
@@ -174,7 +175,7 @@ describe("planFactionBuilds", () => {
       goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 100000, production: 0 }],
     };
     const oreUnits = countFor(planFactionBuilds([sys], rc), "A", "ore");
-    expect(oreUnits).toBeGreaterThan(5);                       // old budget (100 × 0.05) capped this at 5
+    expect(oreUnits).toBeGreaterThan(5);                          // a pop×0.05 budget would have capped this at 5
     expect(oreUnits).toBeLessThanOrEqual(100 / oreLabour + 1e-9); // labour ceiling: pop ÷ per-unit labour
   });
 
