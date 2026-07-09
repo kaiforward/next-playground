@@ -8,8 +8,6 @@ import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 export const DIRECTED_BUILD = {
   /** Ticks between agency sweeps: every faction plans builds on the monthly resolution pulse (matches logistics). */
   INTERVAL: ECONOMY_UPDATE_INTERVAL,
-  /** Build-unit budget a system contributes per cycle = population × this. Free + capacity-bounded in v1. */
-  GENERATION_PER_POP: 0.05,
   /** Reachability horizon, shared with logistics (tunable; see hop-cap note in the design). */
   MAX_HOPS: 4,
   /** Per-unit route cost = hops × this (proximity weight in placement scoring). */

@@ -69,11 +69,6 @@ export interface PlannedBuild {
   count: number;
 }
 
-/** This system's per-cycle build-unit budget (free, population-scaled in v1). */
-export function systemBuildGeneration(population: number): number {
-  return Math.max(0, population) * DIRECTED_BUILD.GENERATION_PER_POP;
-}
-
 /**
  * Build-side route cost over a bounded-hop distance map. A system reaches ITSELF at `selfCost`
  * (the cheapest positive route, so the planner's served ÷ cost scoring builds local self-supply
@@ -358,24 +353,22 @@ function complexLift(
 }
 
 /**
- * Greedy demand-pulled build planner for ONE faction's systems. Budget = Σ system
- * generation, spent as building units. For each structural-gap good, score candidate
- * sites by the reachable structural demand they can serve (capacity-bounded,
- * nearest-first), then spend the budget on the highest-scoring opportunities.
+ * Greedy demand-pulled build planner for ONE faction's systems. Proposes builds toward the physical
+ * ceilings only — capacity (deposit slots / general space), spare labour, and whole-level validity;
+ * the construction throughput pool (in the processor, via fundQueue) is the sole speed meter, so the
+ * planner never throttles by a population budget of its own. For each structural-gap good, score
+ * candidate sites by the reachable structural demand they can serve (capacity-bounded, nearest-first),
+ * then commit the highest-scoring opportunities.
  *
- * Each (site, good) opportunity's route-cost-sorted reachable deficits are static, so
- * they are computed ONCE and the budget is spent in a single descending-score pass —
- * never re-scanning every site×good per build. A faction owning hundreds of systems
- * would otherwise cost O(builds × sites × deficits) and take tens of seconds at 10k.
+ * Each (site, good) opportunity's route-cost-sorted reachable deficits are static, so they are computed
+ * ONCE and committed in a single descending-score pass — never re-scanning every site×good per build.
+ * A faction owning hundreds of systems would otherwise cost O(builds × sites × deficits) and take tens
+ * of seconds at 10k.
  */
 export function planFactionBuilds(
   systems: BuildSystemState[],
   routeCost: RouteCost,
 ): PlannedBuild[] {
-  let budget = 0;
-  for (const s of systems) budget += systemBuildGeneration(s.population);
-  if (budget <= 0) return [];
-
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
   // systems are skipped here, gating both the housing and industry passes in one place.
@@ -393,21 +386,16 @@ export function planFactionBuilds(
   // margin ahead of its current population. Housing draws general space, so it runs
   // before industry — habitable land is housing's by right; factories take what's left.
   for (const site of working.values()) {
-    if (budget <= 0) break;
     const want = plannedHousingUnits(site);
     if (want <= 0) continue;
-    // Whole levels only: you commit a whole housing level or none. Floor the paced want to the
-    // levels the budget can start this pulse; a sub-level want waits for the next pulse.
-    const levels = Math.floor(Math.min(want, budget));
+    // Whole levels only: you commit a whole housing level or none. A sub-level want waits.
+    const levels = Math.floor(want);
     if (levels < 1) continue;
     site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + levels;
     builds.push({ systemId: site.systemId, buildingType: HOUSING_TYPE, count: levels });
-    budget -= levels;
   }
 
   // ── Pass 2: labour-gated industry (industry follows the resident workforce). ──
-  if (budget <= 0) return builds;
-
   const structural = findStructuralDeficits(systems, routeCost);
   if (structural.length === 0) return builds;
 
@@ -479,7 +467,6 @@ export function planFactionBuilds(
   opportunities.sort((a, b) => b.score - a.score);
 
   for (const opp of opportunities) {
-    if (budget <= 0) break;
     const site = working.get(opp.systemId);
     if (!site) continue;
 
@@ -523,10 +510,10 @@ export function planFactionBuilds(
     // Whole-level convergence: floor the desired production to whole levels (you commission whole
     // levels), then round the academies and complex that GATE it UP — a gate must fully exist to
     // license/anchor the production it serves (a fractional school licenses nobody). Reduce the
-    // production levels until production + the whole-level gates fit the budget, the general space,
-    // and the spare labour, so a landed level is never unstaffable or over-footprint. Recomputing
-    // the lift per candidate level mirrors the fractional planner's convergence on whole levels.
-    let prodLevels = Math.floor(Math.min(capUnits, servedOutput / opp.perUnit, budget));
+    // production levels until production + the whole-level gates fit the general space and the spare
+    // labour, so a landed level is never unstaffable or over-footprint. Recomputing the lift per
+    // candidate level mirrors the fractional planner's convergence on whole levels.
+    let prodLevels = Math.floor(Math.min(capUnits, servedOutput / opp.perUnit));
     let schools = 0;
     let institutes = 0;
     let complexLevels = 0;
@@ -538,7 +525,6 @@ export function planFactionBuilds(
       institutes = a.institutes > 0 ? Math.ceil(a.institutes) : 0;
       complexType = c.complexType;
       complexLevels = c.count > 0 ? Math.ceil(c.count) : 0;
-      const unitsTotal = prodLevels + schools + institutes + complexLevels;
       const spaceTotal =
         prodLevels * prodSpacePerUnit +
         schools * effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE) +
@@ -549,7 +535,7 @@ export function planFactionBuilds(
         schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
         institutes * unskilledPerUnit(RESEARCH_INSTITUTE_TYPE) +
         (complexType ? complexLevels * unskilledPerUnit(complexType) : 0);
-      if (unitsTotal <= budget && spaceTotal <= remainingGeneral && labourNeeded <= spareLabour) break;
+      if (spaceTotal <= remainingGeneral && labourNeeded <= spareLabour) break;
     }
     if (prodLevels < 1) continue;
 
@@ -559,7 +545,6 @@ export function planFactionBuilds(
     if (complexType && complexLevels > 0) {
       site.buildings[complexType] = (site.buildings[complexType] ?? 0) + complexLevels;
       builds.push({ systemId: site.systemId, buildingType: complexType, count: complexLevels });
-      budget -= complexLevels;
     }
 
     for (const [type, count] of [
@@ -569,12 +554,10 @@ export function planFactionBuilds(
       if (count <= 0) continue;
       site.buildings[type] = (site.buildings[type] ?? 0) + count;
       builds.push({ systemId: site.systemId, buildingType: type, count });
-      budget -= count;
     }
 
     site.buildings[opp.goodId] = (site.buildings[opp.goodId] ?? 0) + prodLevels;
     builds.push({ systemId: site.systemId, buildingType: opp.goodId, count: prodLevels });
-    budget -= prodLevels;
 
     // Decrement the served structural demand (nearest-first) so later opportunities don't re-target it.
     let producedOutput = prodLevels * perUnit;

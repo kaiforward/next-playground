@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionQueue, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
+import { findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionQueue, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
@@ -18,17 +18,6 @@ function sysWith(partial: Partial<BuildSystemState>): BuildSystemState {
     ...partial,
   };
 }
-
-describe("systemBuildGeneration", () => {
-  it("scales the build budget linearly with population", () => {
-    expect(systemBuildGeneration(100)).toBeCloseTo(100 * DIRECTED_BUILD.GENERATION_PER_POP);
-  });
-
-  it("never returns a negative budget", () => {
-    expect(systemBuildGeneration(-50)).toBe(0);
-    expect(systemBuildGeneration(0)).toBe(0);
-  });
-});
 
 function buildSys(
   systemId: string,
@@ -172,6 +161,21 @@ describe("planFactionBuilds", () => {
     expect(foodUnits * OUTPUT_PER_UNIT.food).toBeLessThanOrEqual(20 + OUTPUT_PER_UNIT.food);
     // Far below the deposit-cap over-extraction the stock target would have driven.
     expect(foodUnits).toBeLessThan((TARGET_COVER * 20) / OUTPUT_PER_UNIT.food / 4);
+  });
+
+  it("proposes capacity up to the physical ceilings in one pass (no population-budget throttle)", () => {
+    // A lone developed builder with a huge local rate deficit, ample deposits, and ample labour.
+    // The only bounds are deposits and labour — NOT a per-pass build budget. Build should reach the
+    // labour ceiling (pop ÷ per-unit ore labour = 100/10 = 10), not the old pop×GENERATION_PER_POP cap of 5.
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 100, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ ore: 1000 }), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 100000, production: 0 }],
+    };
+    const oreUnits = countFor(planFactionBuilds([sys], rc), "A", "ore");
+    expect(oreUnits).toBeGreaterThan(5);                       // old budget (100 × 0.05) capped this at 5
+    expect(oreUnits).toBeLessThanOrEqual(100 / oreLabour + 1e-9); // labour ceiling: pop ÷ per-unit labour
   });
 
   it("builds tier-0 production at a site that can serve a reachable structural deficit", () => {
