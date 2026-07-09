@@ -1,9 +1,8 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard } from "@/lib/tick/shard";
 import { planFactionQueue, type BuildSystemState } from "@/lib/engine/directed-build";
-import { fundQueue } from "@/lib/engine/construction";
+import { fundQueue, factionThroughputPool } from "@/lib/engine/construction";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import { isEconomicallyActive } from "@/lib/engine/control";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
@@ -146,10 +145,7 @@ export async function runDirectedBuildProcessor(
   for (const [factionId, group] of byFaction) {
     // The faction's per-pulse throughput pool: developed systems fund it (controlled/unclaimed
     // systems are inert with population 0). The pool drains the queue; it never enqueues.
-    let pool = 0;
-    for (const r of group) {
-      if (isEconomicallyActive(r.control)) pool += Math.max(0, r.population) * params.construction.throughputPerPop;
-    }
+    const pool = factionThroughputPool(group, params.construction.throughputPerPop);
 
     const existing = openByFaction.get(factionId) ?? [];
     // Auto policy proposes new whole-level projects toward the ceilings, aware of what is in flight.

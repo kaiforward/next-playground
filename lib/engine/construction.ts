@@ -6,7 +6,26 @@
  * landing whole levels when their work completes. The planning half (which projects to enqueue toward
  * the physical ceilings) lives in `lib/engine/directed-build.ts`.
  */
-import type { WorldConstructionProject } from "@/lib/world/types";
+import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
+import { isEconomicallyActive } from "@/lib/engine/control";
+
+/**
+ * A faction's per-pulse construction throughput pool: Σ over its economically-active (developed)
+ * systems of population × throughputPerPop. Controlled/unclaimed systems are inert (population 0)
+ * and contribute nothing. This is the single pacing meter — the planner proposes toward physical
+ * ceilings; this pool decides how fast fundQueue drains the queue. A money/treasury gate stacks on
+ * top of this at the same seam later (docs/planned/economy-demand-driven-model.md §5).
+ */
+export function factionThroughputPool(
+  systems: Array<{ control: SystemControl; population: number }>,
+  throughputPerPop: number,
+): number {
+  let pool = 0;
+  for (const s of systems) {
+    if (isEconomicallyActive(s.control)) pool += Math.max(0, s.population) * throughputPerPop;
+  }
+  return pool;
+}
 
 /** One completed project's whole-level payload — applied as an integer count increment. */
 export interface LandedLevel {
