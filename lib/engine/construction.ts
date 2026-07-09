@@ -38,13 +38,17 @@ export function fundQueue(
   pool: number,
   cap: number,
 ): FundQueueResult {
-  let poolLeft = Math.max(0, pool);
+  // Coerce funding inputs to finite: a non-finite pool/cap (e.g. an upstream NaN population) would
+  // flow through Math.min into workDone and land NaN in World state, which JSON.stringify turns to
+  // null on save.
+  const safeCap = Number.isFinite(cap) ? Math.max(0, cap) : 0;
+  let poolLeft = Number.isFinite(pool) ? Math.max(0, pool) : 0;
   const open: WorldConstructionProject[] = [];
   const landed: LandedLevel[] = [];
 
   for (const p of projects) {
     const remaining = Math.max(0, p.workTotal - p.workDone);
-    const absorbed = Math.min(cap, remaining, poolLeft);
+    const absorbed = Math.min(safeCap, remaining, poolLeft);
     poolLeft -= absorbed;
     const workDone = p.workDone + absorbed;
 

@@ -164,13 +164,14 @@ describe("runWorldTick", () => {
     for (const u of after.constructionProjects) expect(Number.isInteger(u.levels)).toBe(true);
   });
 
-  it("round-trips building idleMonths across a tick (inert plumbing — decay does not yet consume it)", async () => {
+  it("round-trips building idleMonths across a non-decay tick (the field survives the sim serialize round-trip)", async () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const world = { ...base, buildings: base.buildings.map((b) => ({ ...b, idleMonths: 7 })) };
     const seeded = new Set(world.buildings.map((b) => `${b.systemId}|${b.buildingType}`));
     const { world: after } = await runWorldTick(world);
-    // Every building that existed at seed still carries its idleMonths unchanged (nothing in
-    // Phase A reads or writes it; the value merely survives the sim round-trip). Newly-built rows
+    // Infrastructure decay consumes idleMonths, but only on an economy-update tick (it is gated
+    // behind economySignals); this single tick from a fresh world is not one, so every building
+    // that existed at seed round-trips its idleMonths unchanged through the sim. Newly-built rows
     // are excluded — they start at 0.
     for (const b of after.buildings) {
       if (seeded.has(`${b.systemId}|${b.buildingType}`)) {
