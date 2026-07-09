@@ -267,6 +267,20 @@ export function allocateIndustry(input: AllocateInput, rng: RNG): AllocateResult
     }
   }
 
+  // ── 3c) Round to whole integer levels. ──
+  // Capacity is a discrete level count: construction lands whole levels and decay sheds whole
+  // levels, so the seed must be integral too. Floor (not round) every count — every fractional
+  // count already sits under a physical upper bound (extractors ≤ slotCap, factories + housing ≤
+  // general/habitable space, all industry ≤ the staffing budget), and flooring keeps each bound
+  // satisfied as an integer. A sub-level fractional site floors away and grows later via
+  // construction. yieldMult below stays on the pre-floor extractor placement on purpose — it
+  // measures the worked deposit grade (a property of the ground), independent of level rounding.
+  for (const type of Object.keys(buildings)) {
+    const level = Math.floor(buildings[type]);
+    if (level > 0) buildings[type] = level;
+    else delete buildings[type];
+  }
+
   // ── 4) popCap (full-fold) + per-resource effective yield. ──
   const popCap = housingPopCap(buildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR;
   const yieldMult = unitResourceVector();
