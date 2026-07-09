@@ -13,7 +13,7 @@
 
 import type { World } from "./types";
 
-export const SAVE_FORMAT_VERSION = 3;
+export const SAVE_FORMAT_VERSION = 4;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
 export const AUTOSAVE_NAME = "autosave";

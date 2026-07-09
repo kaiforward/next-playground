@@ -135,7 +135,29 @@ export interface WorldBuilding {
   systemId: string;
   /** Production-good type id, or "housing" | "vocational_school" | "research_institute". */
   buildingType: string;
+  /** Whole-integer level count. Grows only via landed construction projects; sheds whole levels via decay. */
   count: number;
+  /** Sustained-idle countdown for this (system, type): counts up while ≥1 whole level sits idle, resets on refill, sheds one level at the decay buffer. */
+  idleMonths: number;
+}
+
+/**
+ * One committed construction project: a queued order to build `levels` whole levels of `buildingType`
+ * at `systemId`, funded by `factionId`'s per-pulse throughput pool. Contributes zero capacity until
+ * `workDone` reaches `workTotal`, then lands all `levels` at once. Duration is emergent (work ÷ funded
+ * points), never a stored timer.
+ */
+export interface WorldConstructionProject {
+  id: string;
+  factionId: string;
+  systemId: string;
+  buildingType: string;
+  /** Whole levels this project lands on completion (integer ≥ 1). */
+  levels: number;
+  /** Total construction work to complete = levels × per-level work cost. */
+  workTotal: number;
+  /** Construction points accumulated so far, in [0, workTotal]. */
+  workDone: number;
 }
 
 export interface WorldTrait {
@@ -296,6 +318,8 @@ export interface World {
   systems: WorldSystem[];
   bodies: WorldBody[];
   buildings: WorldBuilding[];
+  /** Open (in-flight) construction projects across all factions; a landed/completed project is removed. */
+  constructionProjects: WorldConstructionProject[];
   traits: WorldTrait[];
   connections: WorldConnection[];
   markets: WorldMarket[];

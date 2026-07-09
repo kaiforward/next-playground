@@ -18,9 +18,14 @@ world its missing counterweight.
 
 **One rule:**
 
-> **Infrastructure decays toward what is actively *used*. The gap between *built* and *used* is what rots.**
+> **Built capacity is a whole-level ratchet: a level that sits idle past a hysteresis buffer sheds as a
+> whole level, and unrest above a threshold tears down a whole level outright.**
 
-That single rule, applied to a seeded world, sorts it into survivors and ruins **without any growth**:
+Built capacity is an **integer level count** (`WorldBuilding.count`). Utilization floats continuously
+underneath; while a *whole* level's worth of capacity sits unused, a per-`(system, type)` idle countdown
+ticks up, and only after a sustained-idle buffer does the marginal idle level tear down — the countdown
+resetting the moment the level refills, so a brief dip costs nothing. That rule, applied to a seeded
+world, sorts it into survivors and ruins **without any growth**:
 
 - A **viable** system sits at the natural equilibrium **built = used** — its factories are staffed, its
   output sells, its housing is occupied, its unrest is low. The built-vs-used gap is ~0, so **nothing
@@ -55,8 +60,8 @@ is what makes it move.
  labourFulfil. ──┘            │                         │
  market uptake ──────────────┘                          ▼
                                           ┌──────── NEW: decay ────────┐
-                  built − used  ──────────► (1) disuse decay  (gentle)  │ count ↓
-                  unrest > θ    ──────────► (2) unrest decay  (snowball)│ count ↓
+   idle ≥ buffer (whole level) ─────────► (1) idle contraction (buffered)│ count ↓
+                  unrest > θ    ──────────► (2) unrest teardown (snowball)│ count ↓
                                           └──────────────┬──────────────┘
                                                          ▼
                               housing count ↓ ─► popCap recompute ↓
@@ -73,10 +78,11 @@ only thing that can reverse it is later faction treasury spend (build-out + unre
 
 ## The decay model (detail)
 
-`WorldBuilding.count: Float` becomes a per-tick **read/write**, mutating **downward only**. It runs on the
-existing economy-shard cadence (the same fixed-interval shard as the economy and population processors, every
-`ECONOMY_UPDATE_INTERVAL` ticks) and reads the freshly-computed `labourFulfillment` and market state. Writes
-apply batched `count` deltas across the shard in one pass, never per-row.
+`WorldBuilding.count` is a whole-integer **level count**, mutated **downward only** and always by whole
+levels. Decay runs on the existing economy-shard cadence (the same fixed-interval shard as the economy and
+population processors, every `ECONOMY_UPDATE_INTERVAL` ticks ≈ one month) and reads the freshly-computed
+`labourFulfillment` and market state. Writes apply batched `count` + `idleMonths` deltas across the shard in
+one pass, never per-row.
 
 ### "Used" depends on the building's role
 
@@ -93,32 +99,34 @@ apply batched `count` deltas across the shard in one pass, never per-row.
 
 ### Two decay channels
 
-**(1) Disuse decay — gentle, autonomic, keeps the world tidy.** Built capacity above its used level rots
-toward it:
+**(1) Idle contraction — buffered, whole-level, keeps the world tidy.** While a whole level sits idle
+(`floor(count − used) ≥ 1`), a per-`(system, type)` idle countdown ticks up; when it reaches
+`idleBufferMonths`, the marginal idle level tears down (`count -= 1`) and the countdown resets:
 
 ```
-count ← count − disuseRate · max(0, count − used)
+idle ← (floor(count − used) ≥ 1) ? idle + 1 : 0        // resets on refill (hysteresis)
+if idle ≥ idleBufferMonths:  count ← count − 1;  idle ← 0
 ```
 
-Exponential decay toward `used` with a **small** `disuseRate` *is* the hysteresis — one bad tick removes only
-a sliver, so a transient labour dip or a single unsold tick never abandons a factory; only a *sustained* gap
-compounds down. No separate stored "abandonment" flag or integral is needed (mirroring how `strikeMultiplier`
-derives its regime from the unrest integral without its own state). `used` may be lightly smoothed so decay
-tracks the trend, not tick noise (calibration knob).
+The buffer *is* the hysteresis — a transient labour dip or a single unsold run costs nothing, because the
+countdown resets the moment the level refills; only a *sustained* idle level compounds down, one whole level
+per buffer period. The countdown state (`WorldBuilding.idleMonths`) is persisted; utilization itself is
+derived each run (no stored "abandonment" integral).
 
-**(2) Unrest decay — catastrophic, the snowball.** Above an unrest threshold, infrastructure is *actively
-destroyed even while in use* (riot, neglect, sabotage):
+**(2) Unrest teardown — catastrophic, the snowball.** Above an unrest threshold, a whole level is *torn down
+even while in use* (riot, neglect, sabotage):
 
 ```
-count ← count − unrestRate · count · max(0, unrest − θ_decay)
+if unrest > θ_decay:  count ← count − 1
 ```
 
-This is the infrastructure mirror of the population-decline term `declineRate · pop · unrest`. It is what turns
-a struggling system into a *dying* one: it doesn't wait for capacity to fall idle, it tears down working
-capacity, deepening the shortage that drives the unrest — a self-reinforcing spiral whose only exit (later) is
-treasury-funded rebuild + stability spend.
+This is the infrastructure mirror of the population-decline term `declineRate · pop · unrest`. It is what
+turns a struggling system into a *dying* one: it doesn't wait for capacity to fall idle, it tears down working
+capacity, deepening the shortage that drives the unrest — a self-reinforcing spiral. (Construction — what
+gets rebuilt, where — is the committed, throughput-paced project layer, not part of decay.)
 
-Decay never takes `count` below `0`. Both rates and `θ_decay` are simulator-tunable knobs (see Calibration).
+Decay never takes `count` below `0`, and only ever removes **whole levels**, so counts stay integer.
+`idleBufferMonths` and `θ_decay` are simulator-tunable knobs (see Calibration).
 
 ### `popCap` recomputes live
 
@@ -252,8 +260,8 @@ decline term as the non-conserved death sink); Industry panel rework.
 
 ## Open calibration knobs (all simulator-tunable)
 
-- `disuseRate` (how fast idle capacity rots) and any smoothing window on `used`.
-- `unrestRate` + `θ_decay` (unrest-decay onset and severity — the snowball's aggression).
+- `idleBufferMonths` (how many sustained-idle runs before the marginal idle level sheds — the buffer's stickiness).
+- `θ_decay` (unrest-teardown onset — how failed a system must be before it sheds working levels).
 - The `outputUptake` curve (how "chronically unsold" maps to a decay-eligible idle fraction).
 - Housing-overshoot displacement rate and the unrest-weighted migration-vs-death split (low unrest → flee,
   high unrest → perish).

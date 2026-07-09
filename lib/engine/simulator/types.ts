@@ -42,8 +42,10 @@ export interface SimSystem {
   traits: { traitId: string; quality: number }[];
   /** Unrest accumulator (0…1) — integral of demand-weighted dissatisfaction. */
   unrest: number;
-  /** Seeded industrial base — buildingType → count. */
+  /** Seeded industrial base — buildingType → whole-integer level count. */
   buildings: Record<string, number>;
+  /** Per-buildingType sustained-idle countdown (parallel to `buildings`); the decay buffer's state. */
+  buildingIdleMonths: Record<string, number>;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

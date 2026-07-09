@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
+import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionQueue, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
+import type { WorldConstructionProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, ANCHOR_FOOTPRINT, effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
@@ -700,12 +701,14 @@ function heavyDeficitScenario(): BuildSystemState[] {
   return [deficit, producer];
 }
 
-// Same shape, but a shortfall small enough that committed metals output stays below the
-// throughput floor (ANCHOR_MIN_THROUGHPUT) — no complex should co-build.
+// Same shape, but a shortfall that funds exactly ONE whole metals level (output 5), whose family
+// throughput (5) stays below the throughput floor (ANCHOR_MIN_THROUGHPUT 10) — production builds,
+// but no complex co-builds. (Two levels would reach the floor; whole-level granularity means the
+// deficit must clear one level's output to build anything at all.)
 function tinyHeavyDeficitScenario(): BuildSystemState[] {
   const systems = heavyDeficitScenario();
   const deficit = systems.find((s) => s.systemId === "A")!;
-  deficit.goods = [{ goodId: "metals", stock: 7, targetStock: 10, demand: 5 }];
+  deficit.goods = [{ goodId: "metals", stock: 0, targetStock: 7, demand: 5 }];
   return systems;
 }
 
@@ -803,6 +806,49 @@ describe("complex co-build", () => {
     const total = complexBuilds.reduce((s, b) => s + b.count, 0);
     expect(total).toBeLessThanOrEqual(1);
     expect(new Set(complexBuilds.map((b) => b.buildingType)).size).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("planFactionQueue", () => {
+  it("emits whole-level projects toward the ceilings (housing at a fed-and-calm developed system)", () => {
+    const site = sysWith({
+      control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    });
+    const projects = planFactionQueue([site], () => 1, []);
+    expect(projects.some((p) => p.buildingType === HOUSING_TYPE)).toBe(true);
+    for (const p of projects) {
+      expect(Number.isInteger(p.levels), `${p.buildingType} levels`).toBe(true);
+      expect(p.levels).toBeGreaterThanOrEqual(1);
+      expect(p.factionId).toBe("f1");
+    }
+  });
+
+  it("does not re-enqueue a level already in flight (subtracts open projects)", () => {
+    const site = sysWith({
+      control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    });
+    // Ten housing levels already under construction cover the whole pace-ahead target (popCap 200 ≫
+    // 100 × 1.25) — so no further housing should be enqueued while they build.
+    const open: WorldConstructionProject[] = [
+      { id: "h", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
+    ];
+    expect(planFactionQueue([site], () => 1, []).some((p) => p.buildingType === HOUSING_TYPE)).toBe(true);
+    expect(planFactionQueue([site], () => 1, open).some((p) => p.buildingType === HOUSING_TYPE)).toBe(false);
+  });
+
+  it("orders a co-built academy before the production level it gates", () => {
+    const projects = planFactionQueue(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, []);
+    const prodIdx = projects.findIndex((p) => p.buildingType === "electronics");
+    const schoolIdx = projects.findIndex((p) => p.buildingType === VOCATIONAL_SCHOOL_TYPE);
+    const instituteIdx = projects.findIndex((p) => p.buildingType === RESEARCH_INSTITUTE_TYPE);
+    expect(prodIdx).toBeGreaterThanOrEqual(0);
+    expect(schoolIdx).toBeGreaterThanOrEqual(0);
+    expect(instituteIdx).toBeGreaterThanOrEqual(0);
+    // The academies that license electronics are funded before the electronics levels themselves.
+    expect(schoolIdx).toBeLessThan(prodIdx);
+    expect(instituteIdx).toBeLessThan(prodIdx);
   });
 });
 

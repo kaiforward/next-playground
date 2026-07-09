@@ -20,7 +20,7 @@ const popOnly = (population: number): CivilianDemandBasis => ({
 function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed", governmentType: "federation",
-    population, popCap, unrest, traits: [], buildings,
+    population, popCap, unrest, traits: [], buildings, buildingIdleMonths: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }

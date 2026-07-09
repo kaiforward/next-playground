@@ -182,7 +182,11 @@ describe("allocateIndustry — available-space model", () => {
     const demand = labourDemand(r.buildings);
     if (demand > 0) {
       const wanted = demand / POP_CENTRE_DENSITY;
-      expect(r.buildings[HOUSING_TYPE] ?? 0).toBeCloseTo(wanted, 4);
+      const housing = r.buildings[HOUSING_TYPE] ?? 0;
+      // Housing is a whole level count sized to staff production: it covers at least the floored
+      // staffing target (integer seeding means it lands on the whole level, not the exact fraction).
+      expect(Number.isInteger(housing)).toBe(true);
+      expect(housing).toBeGreaterThanOrEqual(Math.floor(wanted));
     }
   });
 
@@ -201,6 +205,28 @@ describe("allocateIndustry — available-space model", () => {
     expect(a.yieldMult).toEqual(b.yieldMult);
     expect(a.popCap).toBe(b.popCap);
   });
+
+  it("seeds whole-integer building levels (construction/decay move whole levels)", () => {
+    // Every seeded count is an integer level — the invariant the discrete-level model rests on.
+    for (let seed = 20; seed < 30; seed++) {
+      const r = allocateIndustry(richInput(0.9), mulberry32(seed));
+      for (const [type, count] of Object.entries(r.buildings)) {
+        expect(Number.isInteger(count), `${type} @ seed ${seed} = ${count}`).toBe(true);
+        expect(count, `${type} @ seed ${seed}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("keeps integer extractors within the integer slotCap after rounding", () => {
+    const input = richInput(0.95);
+    const r = allocateIndustry(input, mulberry32(2));
+    const placed = extractorCountByResource(r.buildings);
+    for (const res of RESOURCE_TYPES) {
+      // Floor never rounds a per-resource extractor sum up past its (integer) slot cap.
+      expect(placed[res], res).toBeLessThanOrEqual(input.slotCap[res]);
+      expect(Number.isInteger(placed[res]), res).toBe(true);
+    }
+  });
 });
 
 describe("allocateIndustry — staffing self-consistency", () => {
@@ -208,7 +234,9 @@ describe("allocateIndustry — staffing self-consistency", () => {
     // Property check across varied inputs — including habitable-bound worlds.
     for (let seed = 30; seed < 40; seed++) {
       const r = allocateIndustry(richInput(0.9), mulberry32(seed));
-      expect(labourDemand(r.buildings), `seed ${seed}`).toBeLessThanOrEqual(r.popCap + 1e-6);
+      // Integer flooring can leave at most one whole housing level of labour unstaffed (the seed's
+      // fractional staffing was exact; flooring both sides bounds the gap by POP_CENTRE_DENSITY).
+      expect(labourDemand(r.buildings), `seed ${seed}`).toBeLessThanOrEqual(r.popCap + POP_CENTRE_DENSITY);
     }
   });
 
@@ -221,7 +249,7 @@ describe("allocateIndustry — staffing self-consistency", () => {
     const input: AllocateInput = { bodies, slotCap, generalSpace: 300, habitableSpace: 8, fill: 0.9 };
     const r = allocateIndustry(input, mulberry32(41));
     expect(r.popCap).toBeGreaterThan(0);
-    expect(labourDemand(r.buildings)).toBeLessThanOrEqual(r.popCap + 1e-6);
+    expect(labourDemand(r.buildings)).toBeLessThanOrEqual(r.popCap + POP_CENTRE_DENSITY);
   });
 
   it("seeds zero industry on a world with no habitable land (popCap 0 → truly dead)", () => {
@@ -259,18 +287,23 @@ describe("allocateIndustry — staffing self-consistency", () => {
       expectedMaxHousing * POP_CENTRE_DENSITY + SUBSTRATE_GEN.POP_BASELINE_FLOOR,
       4,
     );
-    // Staffing invariant still holds (step 3b scaled industry down to the reduced popCap).
-    expect(labourDemand(r.buildings)).toBeLessThanOrEqual(r.popCap + 1e-6);
+    // Staffing invariant still holds (step 3b scaled industry down; flooring leaves at most one
+    // whole housing level of slack).
+    expect(labourDemand(r.buildings)).toBeLessThanOrEqual(r.popCap + POP_CENTRE_DENSITY);
   });
 
-  it("leaves industry fully built when habitable/general space can staff it (demand == popCap)", () => {
-    // Generous space → housing meets labourDemand / POP_CENTRE_DENSITY → popCap == labourDemand,
-    // so the staffing scale is a no-op (the system is self-consistently fully staffable).
+  it("leaves industry fully built (not scaled down) when habitable/general space can staff it", () => {
+    // Generous space → the staffing scale is a no-op: housing is sized to fully staff production
+    // rather than being clamped below it. Under integer seeding the exact demand == popCap equality
+    // no longer holds (flooring many production levels leaves the system a little over-housed), so
+    // the faithful property is: housing covers the floored staffing need (no down-scaling).
     const bodies = [body({ ore: 6, arable: 4, water: 3, gas: 2 }, 1.0)];
     const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
     const input: AllocateInput = { bodies, slotCap, generalSpace: 10000, habitableSpace: 10000, fill: 0.9 };
     const r = allocateIndustry(input, mulberry32(43));
-    expect(labourDemand(r.buildings)).toBeCloseTo(r.popCap, 4);
+    const housing = r.buildings[HOUSING_TYPE] ?? 0;
+    expect(housing).toBeGreaterThanOrEqual(Math.floor(labourDemand(r.buildings) / POP_CENTRE_DENSITY));
+    expect(labourDemand(r.buildings)).toBeLessThanOrEqual(r.popCap + POP_CENTRE_DENSITY);
   });
 });
 

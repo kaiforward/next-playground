@@ -52,6 +52,7 @@ function makeSystem(
     traits: [],
     unrest: 0,
     buildings: {},
+    buildingIdleMonths: {},
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
