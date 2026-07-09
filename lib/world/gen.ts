@@ -167,6 +167,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
         systemId: systemIds[i],
         buildingType,
         count,
+        idleMonths: 0,
       })),
   );
 
@@ -232,6 +233,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     systems,
     bodies,
     buildings,
+    constructionProjects: [],
     traits,
     connections,
     markets,

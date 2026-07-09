@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { serializeWorld, deserializeWorld, sanitizeSaveName } from "../save";
+import { serializeWorld, deserializeWorld, sanitizeSaveName, SAVE_FORMAT_VERSION } from "../save";
+import type { World } from "../types";
 
 describe("sanitizeSaveName", () => {
   it("lowercases and strips everything but [a-z0-9-_]", () => {
@@ -54,5 +55,37 @@ describe("serializeWorld / deserializeWorld", () => {
     const json = JSON.stringify({ formatVersion: 99, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
+  });
+
+  it("is at save format version 4 (construction projects + idleMonths)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(4);
+  });
+
+  it("rejects a prior-version (v3) save — saves break on the shape bump", () => {
+    const json = JSON.stringify({ formatVersion: 3, world });
+    const result = deserializeWorld(json);
+    expect(result.ok).toBe(false);
+  });
+
+  it("round-trips construction projects + building idleMonths unchanged", () => {
+    const withConstruction: World = {
+      ...world,
+      constructionProjects: [
+        {
+          id: "proj-1",
+          factionId: world.factions[0].id,
+          systemId: world.systems[0].id,
+          buildingType: "housing",
+          levels: 2,
+          workTotal: 30,
+          workDone: 12,
+        },
+      ],
+      buildings: world.buildings.map((b, i) => ({ ...b, idleMonths: i === 0 ? 3 : 0 })),
+    };
+    const result = deserializeWorld(serializeWorld(withConstruction));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world).toStrictEqual(withConstruction);
   });
 });

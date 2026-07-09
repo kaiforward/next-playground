@@ -231,7 +231,7 @@ function flattenBuildings(simSystems: SimSystem[]): WorldBuilding[] {
   const rows: WorldBuilding[] = [];
   for (const s of simSystems) {
     for (const [buildingType, count] of Object.entries(s.buildings)) {
-      if (count > 0) rows.push({ systemId: s.id, buildingType, count });
+      if (count > 0) rows.push({ systemId: s.id, buildingType, count, idleMonths: 0 });
     }
   }
   return rows;
