@@ -2,6 +2,7 @@ import type {
   InfrastructureWorld,
   InfrastructureStateView,
   BuildingCountUpdate,
+  IdleMonthsUpdate,
   PopCapUpdate,
 } from "@/lib/tick/world/infrastructure-world";
 import type { SimSystem } from "@/lib/engine/simulator/types";
@@ -15,7 +16,11 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
   systems: SimSystem[];
 
   constructor(initial: { systems: SimSystem[] }) {
-    this.systems = initial.systems.map((s) => ({ ...s, buildings: { ...s.buildings } }));
+    this.systems = initial.systems.map((s) => ({
+      ...s,
+      buildings: { ...s.buildings },
+      buildingIdleMonths: { ...s.buildingIdleMonths },
+    }));
   }
 
   getInfrastructureState(systemIds: string[]): Promise<InfrastructureStateView[]> {
@@ -23,7 +28,13 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
     return Promise.resolve(
       this.systems
         .filter((s) => wanted.has(s.id))
-        .map((s) => ({ systemId: s.id, population: s.population, unrest: s.unrest, buildings: { ...s.buildings } })),
+        .map((s) => ({
+          systemId: s.id,
+          population: s.population,
+          unrest: s.unrest,
+          buildings: { ...s.buildings },
+          buildingIdleMonths: { ...s.buildingIdleMonths },
+        })),
     );
   }
 
@@ -44,6 +55,24 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
         buildings[type] = Math.min(buildings[type] ?? 0, Math.max(0, next));
       }
       return { ...s, buildings };
+    });
+    return Promise.resolve();
+  }
+
+  applyIdleMonths(updates: IdleMonthsUpdate[]): Promise<void> {
+    if (updates.length === 0) return Promise.resolve();
+    const bySystem = new Map<string, Map<string, number>>();
+    for (const u of updates) {
+      const m = bySystem.get(u.systemId) ?? new Map<string, number>();
+      m.set(u.buildingType, u.idleMonths);
+      bySystem.set(u.systemId, m);
+    }
+    this.systems = this.systems.map((s) => {
+      const m = bySystem.get(s.id);
+      if (!m) return s;
+      const buildingIdleMonths = { ...s.buildingIdleMonths };
+      for (const [type, idle] of m) buildingIdleMonths[type] = idle;
+      return { ...s, buildingIdleMonths };
     });
     return Promise.resolve();
   }

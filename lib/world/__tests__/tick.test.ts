@@ -89,6 +89,33 @@ describe("runWorldTick", () => {
     expect(events.currentTick).toBe(1);
   });
 
+  it("keeps every building count a non-negative integer across a long run (the level invariant)", async () => {
+    // The whole point of the discrete-level model: seeds are integer, construction lands whole
+    // levels, decay sheds whole levels — so no count is ever fractional at any tick.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    let world = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
+    for (let i = 0; i < 120; i++) {
+      const result = await runWorldTick(world);
+      world = result.world;
+      for (const bld of world.buildings) {
+        expect(Number.isInteger(bld.count), `tick ${i + 1}: ${bld.systemId}/${bld.buildingType} = ${bld.count}`).toBe(true);
+        expect(bld.count).toBeGreaterThan(0); // flattenBuildings drops count ≤ 0
+        expect(Number.isInteger(bld.idleMonths)).toBe(true);
+      }
+    }
+  });
+
   it("toSimSystems seeds buildingIdleMonths from WorldBuilding.idleMonths", () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const target = base.buildings[0].systemId;

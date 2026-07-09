@@ -1,22 +1,17 @@
 /**
- * Pure infrastructure-decay math — zero DB dependency.
+ * Pure whole-level infrastructure decay — zero DB dependency.
  *
- * One rule: infrastructure decays toward what is actively USED. The gap between
- * built (`count`) and used is what rots. Two channels:
- *  - disuse (gentle): built capacity above its used level rots toward it. A small
- *    `disuseRate` is itself the hysteresis — one idle tick removes only a sliver,
- *    only a sustained gap compounds down (mirrors how strikeMultiplier derives its
- *    regime from the unrest integral without its own stored state).
- *  - unrest (catastrophic): above a threshold, capacity is torn down even while in
- *    use — the infrastructure mirror of the population decline term, the snowball.
+ * Capacity is a ratchet: construction adds whole levels, decay removes whole levels. Each decay run
+ * measures a building's utilization (resolved uniformly by `buildingUsed`, dispatched on its typed
+ * output) and:
+ *  - idle contraction (buffered): while a whole level sits idle, a per-(system, type) countdown ticks
+ *    up; only after a sustained-idle buffer does the marginal idle level tear down — and the countdown
+ *    resets the moment it refills, so a brief dip costs nothing.
+ *  - unrest teardown (catastrophic): above a threshold a whole level tears down immediately, even if
+ *    in use — the discrete collapse (the infrastructure mirror of the population decline snowball).
  *
- * "Used" is a building's utilization in absolute units, resolved uniformly by
- * `buildingUsed` (dispatched on the building's typed output): housing occupancy, an
- * academy's skill-licence draw, a complex's family coverage, or a producer's
- * staffed-and-selling capacity — all through one function, no per-type branch here.
- *
- * Decay is downward-only and floored at 0. Growth is excluded — it is the
- * directed-build processor's job.
+ * Counts stay whole integers; decay is downward-only and floored at 0. Growth is the directed-build
+ * processor's job. popCap recomputes from the surviving housing.
  */
 import {
   buildingUsed,
@@ -31,17 +26,17 @@ import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 export { housingUsed } from "@/lib/engine/industry";
 
 export interface DecayParams {
-  /** Fraction of idle capacity (count − used) that rots per run. Small → sticky. */
-  disuseRate: number;
-  /** Unrest-driven teardown coefficient (per run, per unit count, per unit excess unrest). */
-  unrestRate: number;
-  /** θ_decay: unrest at or below this triggers no unrest teardown. */
+  /** Sustained-idle runs (≈ months) a level must stay idle before the marginal level tears down. ≥ 1. */
+  idleBufferMonths: number;
+  /** θ_decay: unrest strictly above this tears down a whole level immediately (the discrete collapse). */
   unrestThreshold: number;
 }
 
 export interface SystemDecayInput {
-  /** buildingType → count. */
+  /** buildingType → whole-integer level count. */
   buildings: Record<string, number>;
+  /** buildingType → current sustained-idle countdown (the decay buffer's state). */
+  buildingIdleMonths: Record<string, number>;
   population: number;
   /** Stored unrest integral 0…1. */
   unrest: number;
@@ -50,58 +45,57 @@ export interface SystemDecayInput {
 }
 
 export interface SystemDecayResult {
-  /** buildingType → new (strictly lower) count. Only entries that actually decayed. */
+  /** buildingType → new (strictly lower) integer count. Only entries that lost a whole level. */
   newCounts: Record<string, number>;
+  /** buildingType → new idle countdown. Only entries whose countdown changed. */
+  newIdleMonths: Record<string, number>;
   /** popCap recomputed from the post-decay housing count. */
   popCap: number;
 }
 
-/** Production capacity that is both staffed and selling. The market_good branch of `buildingUsed`. */
-export function productionUsed(count: number, labourFulfillment: number, outputUptake: number): number {
-  return count * Math.min(labourFulfillment, outputUptake);
-}
-
-/** Gentle disuse decay amount: the idle gap above `used`, scaled by the rate. */
-export function disuseDecay(count: number, used: number, rate: number): number {
-  return rate * Math.max(0, count - used);
-}
-
-/** Catastrophic unrest decay amount: working capacity torn down above the threshold. */
-export function unrestDecay(count: number, unrest: number, rate: number, threshold: number): number {
-  return rate * count * Math.max(0, unrest - threshold);
-}
-
-/** New count after both decay channels, floored at 0 (downward-only). */
-export function decayedCount(count: number, used: number, unrest: number, params: DecayParams): number {
-  const next = count - disuseDecay(count, used, params.disuseRate)
-    - unrestDecay(count, unrest, params.unrestRate, params.unrestThreshold);
-  return Math.max(0, next);
+/**
+ * Whole levels of `type` currently sitting idle: the integer count minus its utilization, floored.
+ * A level counts as idle only when a FULL level's capacity is unused. Housing occupancy can exceed
+ * its own count (over-crowding), which yields a negative gap → never idle.
+ */
+export function idleLevels(count: number, used: number): number {
+  return Math.floor(count - used);
 }
 
 /**
- * Decay one system's whole built base. Returns only the building types whose count
- * actually fell (so writes stay minimal) plus the recomputed popCap. Labour state is
- * computed once and reused across every building (the headcount gate + two skill-ceiling
- * gates); uptake is per produced good (1 when not staffed/produced).
+ * Decay one system's whole built base by whole levels. Labour state is computed once and reused across
+ * every building (the headcount gate + two skill-ceiling gates); uptake is per produced good. Returns
+ * the building types whose count fell and whose idle countdown changed, plus the recomputed popCap.
  */
 export function computeSystemDecay(input: SystemDecayInput, params: DecayParams): SystemDecayResult {
-  const { buildings, population, unrest } = input;
-  // One labourParts pass feeds every building's utilization (the headcount gate, both skill
-  // ceilings, and the academies' own licence-draw ratios) via one shared context.
+  const { buildings, buildingIdleMonths, population, unrest } = input;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
   const ctx: UtilizationContext = { buildings, population, parts, state, outputUptake: input.outputUptake };
 
   const newCounts: Record<string, number> = {};
+  const newIdleMonths: Record<string, number> = {};
+
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
     const used = buildingUsed(type, count, ctx);
-    const next = decayedCount(count, used, unrest, params);
-    if (next < count) newCounts[type] = next;
+    const prevIdle = buildingIdleMonths[type] ?? 0;
+
+    // Hysteresis: the countdown ticks up while ≥1 whole level is idle, and resets the moment it refills.
+    let idle = idleLevels(count, used) >= 1 ? prevIdle + 1 : 0;
+    let removed = 0;
+    if (idle >= params.idleBufferMonths) {
+      removed += 1; // shed the marginal idle level and restart its countdown
+      idle = 0;
+    }
+    if (unrest > params.unrestThreshold) removed += 1; // discrete unrest teardown, even of used capacity
+
+    if (removed > 0) newCounts[type] = Math.max(0, count - removed);
+    if (idle !== prevIdle) newIdleMonths[type] = idle;
   }
 
   // popCap tracks the post-decay housing count (POP_BASELINE_FLOOR stays at 0).
   const decayedBuildings = { ...buildings, ...newCounts };
   const popCap = housingPopCap(decayedBuildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR;
-  return { newCounts, popCap };
+  return { newCounts, newIdleMonths, popCap };
 }
