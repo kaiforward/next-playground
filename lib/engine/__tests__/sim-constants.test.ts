@@ -151,8 +151,8 @@ describe("sim constants: infrastructure decay", () => {
     const base = resolveConstants();
     expect(base.infrastructure).toEqual({ ...INFRASTRUCTURE_DECAY_PARAMS });
 
-    const overridden = resolveConstants({ infrastructure: { disuseRate: 0.5 } });
-    expect(overridden.infrastructure.disuseRate).toBe(0.5);
+    const overridden = resolveConstants({ infrastructure: { idleBufferMonths: 12 } });
+    expect(overridden.infrastructure.idleBufferMonths).toBe(12);
     expect(overridden.infrastructure.unrestThreshold).toBe(INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold);
   });
 });

@@ -143,19 +143,17 @@ describe("generateSubstrate — available-space seeder + yield (P3)", () => {
     }
   });
 
-  it("seeds population = popCap (fully staffs the built industry), continuous (not rounded)", () => {
+  it("seeds population = popCap (fully staffs the built industry)", () => {
     const systems = sampleP3(200);
     for (const s of systems) {
       expect(s.population).toBeGreaterThanOrEqual(0);
-      // Population fills the labour-matched housing capacity — fully staffed at seed,
-      // not re-discounted by `fill` (which would leave every system understaffed).
+      // Population fills the labour-matched housing capacity — fully staffed at seed, not
+      // re-discounted by `fill` (which would leave every system understaffed). Population is set
+      // to popCap exactly (no independent rounding); it stays a Float that grows/declines/migrates
+      // continuously at runtime. Under integer housing levels the seed value is an integer multiple
+      // of POP_CENTRE_DENSITY, but that is the substrate's doing, not a round on population.
       expect(s.population).toBe(s.popCap);
     }
-    // population is a continuous magnitude (no Math.round) — inhabited systems
-    // carry a fractional headcount.
-    expect(
-      systems.some((s) => s.population > 0 && s.population !== Math.round(s.population)),
-    ).toBe(true);
   });
 
   it("seeded build-out respects the surface caps (slots, habitable, general)", () => {

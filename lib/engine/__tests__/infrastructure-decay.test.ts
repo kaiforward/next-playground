@@ -1,223 +1,149 @@
 import { describe, it, expect } from "vitest";
 import {
   housingUsed,
-  productionUsed,
-  disuseDecay,
-  unrestDecay,
-  decayedCount,
+  idleLevels,
   computeSystemDecay,
+  type DecayParams,
 } from "@/lib/engine/infrastructure-decay";
-import {
-  effectiveFulfilment,
-  labourParts,
-  labourStateFromParts,
-  complexUsed,
-  familyThroughput,
-} from "@/lib/engine/industry";
 import {
   HOUSING_TYPE,
   POP_CENTRE_DENSITY,
   BUILDING_TYPES,
   labourTotal,
   VOCATIONAL_SCHOOL_TYPE,
-  RESEARCH_INSTITUTE_TYPE,
-  SKILL1_PER_SCHOOL,
   HEAVY_INDUSTRY_COMPLEX,
-  ANCHOR_RATED_COVERAGE,
-  OUTPUT_PER_UNIT,
-  SPECIALISATION_FAMILIES,
 } from "@/lib/constants/industry";
 
 const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
 
-const NO_DECAY = { disuseRate: 0, unrestRate: 0, unrestThreshold: 0.75 };
+/** Buffered decay: a level must sit idle 3 runs before the marginal level sheds; θ_decay 0.75. */
+const PARAMS: DecayParams = { idleBufferMonths: 3, unrestThreshold: 0.75 };
+/** Never sheds — for asserting "no-op" paths. */
+const NO_DECAY: DecayParams = { idleBufferMonths: 9999, unrestThreshold: 1 };
+
+const noUptake = () => 1;
 
 describe("housingUsed", () => {
-  it("is population / POP_CENTRE_DENSITY (units of housing the current pop fills)", () => {
+  it("is population / POP_CENTRE_DENSITY (housing the current pop fills)", () => {
     expect(housingUsed(200)).toBeCloseTo(200 / POP_CENTRE_DENSITY, 6);
     expect(housingUsed(0)).toBe(0);
-    expect(housingUsed(-50)).toBe(0); // negative population floors at 0
+    expect(housingUsed(-50)).toBe(0);
   });
 });
 
-describe("productionUsed", () => {
-  it("is count × min(labourFulfillment, outputUptake)", () => {
-    expect(productionUsed(10, 0.8, 0.5)).toBeCloseTo(5, 6); // uptake binds
-    expect(productionUsed(10, 0.3, 0.9)).toBeCloseTo(3, 6); // labour binds
+describe("idleLevels", () => {
+  it("is the whole levels of unused capacity (floor of count − used)", () => {
+    expect(idleLevels(5, 3.2)).toBe(1); // 1.8 idle → one whole idle level
+    expect(idleLevels(5, 4.9)).toBe(0); // 0.1 idle → not a whole level
+    expect(idleLevels(5, 5)).toBe(0);
+  });
+
+  it("is negative (never idle) when utilization exceeds count — housing over-crowding", () => {
+    expect(idleLevels(3, 5)).toBe(-2);
   });
 });
 
-describe("disuseDecay", () => {
-  it("rots only the gap above used, scaled by the rate; zero when fully used", () => {
-    expect(disuseDecay(10, 4, 0.1)).toBeCloseTo(0.1 * 6, 6);
-    expect(disuseDecay(4, 10, 0.1)).toBe(0); // used ≥ count → no disuse
-  });
-});
-
-describe("unrestDecay", () => {
-  it("tears down working capacity only above the threshold, scaled by count and excess unrest", () => {
-    expect(unrestDecay(20, 0.9, 0.02, 0.75)).toBeCloseTo(0.02 * 20 * 0.15, 6);
-    expect(unrestDecay(20, 0.5, 0.02, 0.75)).toBe(0); // below threshold → no teardown
-  });
-});
-
-describe("decayedCount", () => {
-  it("subtracts disuse + unrest decay and never goes below 0", () => {
-    const next = decayedCount(10, 4, 0.9, { disuseRate: 0.1, unrestRate: 0.02, unrestThreshold: 0.75 });
-    const expected = 10 - 0.1 * 6 - 0.02 * 10 * 0.15;
-    expect(next).toBeCloseTo(expected, 6);
-    expect(decayedCount(0.001, 0, 1, { disuseRate: 1, unrestRate: 1, unrestThreshold: 0 })).toBe(0);
-  });
-});
-
-describe("computeSystemDecay", () => {
-  it("does not decay a viable system (built = used, calm) and recomputes popCap from housing", () => {
-    // 5 housing → popCap 100 → population 100 exactly fills it (housingUsed = 5).
-    // 2 'ore' extractors fully staffed and selling (uptake 1, labour 1) → used = 2.
-    const input = {
-      buildings: { [HOUSING_TYPE]: 5, ore: 2 },
-      population: 100,
-      unrest: 0,
-      outputUptake: () => 1,
-    };
-    const params = { disuseRate: 0.01, unrestRate: 0.02, unrestThreshold: 0.75 };
-    const result = computeSystemDecay(input, params);
-    expect(result.newCounts).toEqual({}); // nothing decayed
+describe("computeSystemDecay — whole-level buffered contraction", () => {
+  it("does not shed a viable system (built = used, calm) and leaves idle countdowns at 0", () => {
+    const result = computeSystemDecay(
+      {
+        buildings: { [HOUSING_TYPE]: 5, ore: 2 },
+        buildingIdleMonths: {},
+        population: 100, // fills 5 housing exactly; 2 ore fully staffed + selling
+        unrest: 0,
+        outputUptake: noUptake,
+      },
+      PARAMS,
+    );
+    expect(result.newCounts).toEqual({});
+    expect(result.newIdleMonths).toEqual({});
     expect(result.popCap).toBeCloseTo(5 * POP_CENTRE_DENSITY, 6);
   });
 
-  it("disuse-decays idle production toward used and shrinks popCap as excess housing rots", () => {
-    // population = 4 × oreLabour → fulfillment 0.4 (10 ore extractors demand 10×oreLabour).
-    // 10 housing → popCap 200, but population only fills population/DENSITY < 10 → housing rots too.
-    const input = {
-      buildings: { [HOUSING_TYPE]: 10, ore: 10 },
-      population: 4 * ORE_LABOUR, // labourDemand(ore:10) = 10×oreLabour → fulfillment 0.4
-      unrest: 0,
-      outputUptake: () => 1,
-    };
-    const params = { disuseRate: 0.1, unrestRate: 0, unrestThreshold: 0.75 };
-    const result = computeSystemDecay(input, params);
-    expect(result.newCounts[HOUSING_TYPE]).toBeLessThan(10);
-    expect(result.newCounts.ore).toBeLessThan(10);
-    // popCap recomputed from the decayed housing count.
-    expect(result.popCap).toBeCloseTo(result.newCounts[HOUSING_TYPE] * POP_CENTRE_DENSITY, 6);
-  });
-
-  it("unrest-decays even fully-used capacity above the threshold (the snowball)", () => {
-    const input = {
-      buildings: { [HOUSING_TYPE]: 5, ore: 2 },
-      population: 100, // housing fully used, ore fully staffed
-      unrest: 1,
-      outputUptake: () => 1,
-    };
-    const params = { disuseRate: 0, unrestRate: 0.05, unrestThreshold: 0.75 };
-    const result = computeSystemDecay(input, params);
-    // Used = built, so disuse is 0; unrest tears down anyway:
-    // unrestDecay = 0.05 · count · (1 − 0.75) → housing 5−0.0625, ore 2−0.025.
-    expect(result.newCounts[HOUSING_TYPE]).toBeCloseTo(4.9375, 6);
-    expect(result.newCounts.ore).toBeCloseTo(1.975, 6);
-  });
-
-  it("is a no-op (no writes) under zero rates", () => {
+  it("counts an idle building's buffer up without shedding below the threshold", () => {
+    // 3 ore, population 0 → used 0 → all 3 levels idle. Countdown 1 → 2, no removal (buffer 3).
     const result = computeSystemDecay(
-      { buildings: { [HOUSING_TYPE]: 3, ore: 1 }, population: 10, unrest: 1, outputUptake: () => 0 },
+      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 1 }, population: 0, unrest: 0, outputUptake: noUptake },
+      PARAMS,
+    );
+    expect(result.newCounts).toEqual({});
+    expect(result.newIdleMonths.ore).toBe(2);
+  });
+
+  it("sheds exactly one whole level at the buffer and resets the countdown", () => {
+    const result = computeSystemDecay(
+      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 2 }, population: 0, unrest: 0, outputUptake: noUptake },
+      PARAMS,
+    );
+    expect(result.newCounts.ore).toBe(2); // one level torn down; count stays integer
+    expect(Number.isInteger(result.newCounts.ore)).toBe(true);
+    expect(result.newIdleMonths.ore).toBe(0); // countdown reset after shedding
+  });
+
+  it("resets the countdown when a level refills, without shedding (hysteresis)", () => {
+    // Fully staffed + selling now → no idle level, so a mid-countdown building recovers for free.
+    const result = computeSystemDecay(
+      {
+        buildings: { ore: 3 },
+        buildingIdleMonths: { ore: 2 },
+        population: 3 * ORE_LABOUR,
+        unrest: 0,
+        outputUptake: noUptake,
+      },
+      PARAMS,
+    );
+    expect(result.newCounts).toEqual({});
+    expect(result.newIdleMonths.ore).toBe(0);
+  });
+
+  it("tears down a whole level immediately when unrest exceeds the threshold (discrete collapse)", () => {
+    // 2 ore fully staffed + selling (not idle), but unrest 1 > 0.75 → one level torn down anyway.
+    const result = computeSystemDecay(
+      { buildings: { ore: 2 }, buildingIdleMonths: {}, population: 2 * ORE_LABOUR, unrest: 1, outputUptake: noUptake },
+      PARAMS,
+    );
+    expect(result.newCounts.ore).toBe(1);
+    expect(Number.isInteger(result.newCounts.ore)).toBe(true);
+  });
+
+  it("recomputes popCap from the surviving housing when a housing level sheds", () => {
+    const result = computeSystemDecay(
+      { buildings: { [HOUSING_TYPE]: 5 }, buildingIdleMonths: { [HOUSING_TYPE]: 2 }, population: 0, unrest: 0, outputUptake: noUptake },
+      PARAMS,
+    );
+    expect(result.newCounts[HOUSING_TYPE]).toBe(4);
+    expect(result.popCap).toBeCloseTo(4 * POP_CENTRE_DENSITY, 6);
+  });
+
+  it("is a no-op under a never-expiring buffer and sub-threshold unrest", () => {
+    const result = computeSystemDecay(
+      { buildings: { [HOUSING_TYPE]: 3, ore: 1 }, buildingIdleMonths: {}, population: 0, unrest: 0.7, outputUptake: () => 0 },
       NO_DECAY,
     );
     expect(result.newCounts).toEqual({});
+    // Idle countdowns still advance (they just never reach the never-expiring buffer).
+    expect(result.newIdleMonths[HOUSING_TYPE]).toBe(1);
+    expect(result.newIdleMonths.ore).toBe(1);
   });
 });
 
-describe("academy decay", () => {
-  const params = { disuseRate: 0.5, unrestRate: 0, unrestThreshold: 0.5 };
-  it("sheds a vocational school that licenses more than the system demands", () => {
-    // 2 schools license 2×SKILL1_PER_SCHOOL=300; one metals fab demands skill1 7 →
-    // used = 2×(7/300) = 0.046667; disuse 0.5·(2−0.046667) = 0.976667 → next 1.023333.
-    const buildings = { metals: 1, vocational_school: 2, housing: 100 };
-    const res = computeSystemDecay({ buildings, population: 100000, unrest: 0, outputUptake: () => 1 }, params);
-    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE]).toBeCloseTo(1.023333, 5);
-  });
-  it("does not shed a school whose licensing the system fully uses", () => {
-    // skill1 demand ≈ school cap: many fabs vs one school.
-    const fabs = Math.ceil(SKILL1_PER_SCHOOL / 7) + 5; // metals skill1 = 7
-    const buildings: Record<string, number> = { metals: fabs, vocational_school: 1, housing: 100000 };
-    const res = computeSystemDecay({ buildings, population: 100000, unrest: 0, outputUptake: () => 1 }, params);
-    expect(res.newCounts[VOCATIONAL_SCHOOL_TYPE] ?? 1).toBeGreaterThanOrEqual(1 - 1e-9);
-  });
-  it("fully decays an academy orphaned by collapsed industry (no skill demand)", () => {
-    // No tier-2 producers → skill2 demand 0 → used 0 → disuse 0.5·(1−0) = 0.5 → next 0.5.
-    const buildings = { research_institute: 1, housing: 10 };
-    const res = computeSystemDecay({ buildings, population: 100, unrest: 0, outputUptake: () => 1 }, params);
-    expect(res.newCounts[RESEARCH_INSTITUTE_TYPE]).toBeCloseTo(0.5, 6);
-  });
-});
-
-const COMPLEX_PARAMS = { disuseRate: 0.1, unrestRate: 0, unrestThreshold: 0.6 };
-const noUptake = () => 1;
-
-describe("unified decay across every output kind (one system, one pass)", () => {
-  it("decays housing, both academies, a complex, and producers by each type's own used", () => {
-    // A mixed base where every kind is partially utilised, so all decay together.
-    const buildings: Record<string, number> = {
-      ore: 10, // tier-0 producer
-      metals: 4, // tier-1 producer (draws skill-1)
-      [HOUSING_TYPE]: 10,
-      [VOCATIONAL_SCHOOL_TYPE]: 2, // over-licenses → idle → sheds
-      [RESEARCH_INSTITUTE_TYPE]: 1, // no tier-2 demand → sheds fully
-      [HEAVY_INDUSTRY_COMPLEX]: 1,
-    };
-    const population = 131; // labourDemand 262 → labourFulfil 0.5; housingUsed 6.55 < 10
-    const params = { disuseRate: 0.1, unrestRate: 0, unrestThreshold: 0.75 };
-    const { newCounts } = computeSystemDecay(
-      { buildings, population, unrest: 0, outputUptake: () => 1 },
-      params,
+describe("computeSystemDecay — every output kind sheds whole levels uniformly", () => {
+  it("sheds an over-licensed academy level at the buffer (capacity output)", () => {
+    // 2 vocational schools license far more skill-1 than one metals fab demands → ≥1 idle level.
+    const buildings = { metals: 1, [VOCATIONAL_SCHOOL_TYPE]: 2, [HOUSING_TYPE]: 100 };
+    const result = computeSystemDecay(
+      { buildings, buildingIdleMonths: { [VOCATIONAL_SCHOOL_TYPE]: 2 }, population: 100000, unrest: 0, outputUptake: noUptake },
+      PARAMS,
     );
-
-    // Independently recompute each type's "used" the old per-type way, then decayedCount.
-    const parts = labourParts(buildings);
-    const state = labourStateFromParts(parts, population);
-    const heavy = SPECIALISATION_FAMILIES.find((f) => f.complexType === HEAVY_INDUSTRY_COMPLEX)!;
-    const expected: Record<string, number> = {
-      ore: decayedCount(10, productionUsed(10, effectiveFulfilment(state, 0), 1), 0, params),
-      metals: decayedCount(4, productionUsed(4, effectiveFulfilment(state, 1), 1), 0, params),
-      [HOUSING_TYPE]: decayedCount(10, housingUsed(population), 0, params),
-      [VOCATIONAL_SCHOOL_TYPE]: decayedCount(
-        2,
-        2 * Math.min(1, parts.skill1Demand / parts.skill1Cap),
-        0,
-        params,
-      ),
-      [RESEARCH_INSTITUTE_TYPE]: decayedCount(1, 0, 0, params), // skill2 demand 0 → used 0
-      [HEAVY_INDUSTRY_COMPLEX]: decayedCount(
-        1,
-        complexUsed(1, familyThroughput(buildings, heavy), ANCHOR_RATED_COVERAGE),
-        0,
-        params,
-      ),
-    };
-    // A type is written only when it actually fell; otherwise its effective count is unchanged.
-    for (const [type, count] of Object.entries(expected)) {
-      expect(newCounts[type] ?? buildings[type], type).toBeCloseTo(count, 9);
-    }
+    expect(result.newCounts[VOCATIONAL_SCHOOL_TYPE]).toBe(1);
   });
-});
 
-describe("complex decay", () => {
-  it("holds a complex serving a thriving family (used ≈ count)", () => {
-    // metals throughput well above rated coverage → complex fully used → no decay.
-    const metals = (ANCHOR_RATED_COVERAGE * 2) / (OUTPUT_PER_UNIT.metals ?? 1);
-    const buildings = { metals, [HEAVY_INDUSTRY_COMPLEX]: 1 };
-    const { newCounts } = computeSystemDecay(
-      { buildings, population: 1e9, unrest: 0, outputUptake: noUptake },
-      COMPLEX_PARAMS,
+  it("sheds an orphaned specialisation complex at the buffer (modifier output)", () => {
+    // No family factories → the complex buffs nothing → one whole idle level → sheds at the buffer.
+    const result = computeSystemDecay(
+      { buildings: { [HEAVY_INDUSTRY_COMPLEX]: 1 }, buildingIdleMonths: { [HEAVY_INDUSTRY_COMPLEX]: 2 }, population: 1e9, unrest: 0, outputUptake: noUptake },
+      PARAMS,
     );
-    expect(newCounts[HEAVY_INDUSTRY_COMPLEX]).toBeUndefined(); // did not decay
-  });
-  it("rots an orphaned complex (no family factories left) toward 0", () => {
-    const buildings = { [HEAVY_INDUSTRY_COMPLEX]: 1 };
-    const { newCounts } = computeSystemDecay(
-      { buildings, population: 1e9, unrest: 0, outputUptake: noUptake },
-      COMPLEX_PARAMS,
-    );
-    expect(newCounts[HEAVY_INDUSTRY_COMPLEX]).toBeLessThan(1); // decayed (used = 0 → full disuse gap)
+    expect(result.newCounts[HEAVY_INDUSTRY_COMPLEX]).toBe(0);
   });
 });

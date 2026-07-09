@@ -31,6 +31,7 @@ import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
@@ -143,10 +144,14 @@ export function toSimSystems(world: World): SimSystem[] {
   }
 
   const buildingsBySystem = new Map<string, Record<string, number>>();
+  const idleMonthsBySystem = new Map<string, Record<string, number>>();
   for (const b of world.buildings) {
     const rec = buildingsBySystem.get(b.systemId);
     if (rec) rec[b.buildingType] = b.count;
     else buildingsBySystem.set(b.systemId, { [b.buildingType]: b.count });
+    const idle = idleMonthsBySystem.get(b.systemId);
+    if (idle) idle[b.buildingType] = b.idleMonths;
+    else idleMonthsBySystem.set(b.systemId, { [b.buildingType]: b.idleMonths });
   }
 
   return world.systems.map((s) => ({
@@ -166,6 +171,7 @@ export function toSimSystems(world: World): SimSystem[] {
     traits: traitsBySystem.get(s.id) ?? [],
     unrest: s.unrest,
     buildings: buildingsBySystem.get(s.id) ?? {},
+    buildingIdleMonths: idleMonthsBySystem.get(s.id) ?? {},
     yields: resourceVectorFromColumns(
       {
         yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -231,7 +237,9 @@ function flattenBuildings(simSystems: SimSystem[]): WorldBuilding[] {
   const rows: WorldBuilding[] = [];
   for (const s of simSystems) {
     for (const [buildingType, count] of Object.entries(s.buildings)) {
-      if (count > 0) rows.push({ systemId: s.id, buildingType, count });
+      if (count > 0) {
+        rows.push({ systemId: s.id, buildingType, count, idleMonths: s.buildingIdleMonths[buildingType] ?? 0 });
+      }
     }
   }
   return rows;
@@ -498,6 +506,7 @@ export async function runWorldTick(
   let flowEvents = world.flowEvents;
   let relations = world.relations;
   let alliancePacts = world.alliancePacts;
+  let constructionProjects = world.constructionProjects;
   let nextId = world.nextId;
   // Tracks each event's metadata across the events stage (SimEvent has no
   // metadata field — see lib/engine/simulator/types.ts's doc comment).
@@ -733,10 +742,16 @@ export async function runWorldTick(
     };
 
     const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
-    const dbWorld = new MemoryDirectedBuildWorld(rows);
+    const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
     await runDirectedBuildProcessor(dbWorld, { tick }, {
       interval: DIRECTED_BUILD.INTERVAL,
       routeCost,
+      construction: {
+        cap: CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,
+        throughputPerPop: CONSTRUCTION.THROUGHPUT_PER_POP,
+        // Project ids draw from the world's monotonic counter, threaded through this tick.
+        mintId: () => `construction-${nextId++}`,
+      },
       claim: {
         reachProvider, rng,
         params: { maxClaimsPerPulse: EXPANSION.MAX_CLAIMS_PER_PULSE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
@@ -749,6 +764,7 @@ export async function runWorldTick(
     systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
     systems = applyClaims(systems, dbWorld.claims);
     systems = applyDevelopments(systems, dbWorld.developments);
+    constructionProjects = dbWorld.constructionProjects;
     processorsRun.push("directed-build");
   }
 
@@ -811,6 +827,7 @@ export async function runWorldTick(
     meta: { ...world.meta, currentTick: tick },
     systems: mergeSystemsIntoWorld(world.systems, systems),
     buildings: flattenBuildings(systems),
+    constructionProjects,
     markets: mergeMarketsIntoWorld(world.markets, markets),
     events,
     modifiers: rebuildWorldModifiers(events, scaled.definitions),

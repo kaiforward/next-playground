@@ -14,8 +14,10 @@ export interface InfrastructureStateView {
   systemId: string;
   population: number;
   unrest: number;
-  /** buildingType → count. */
+  /** buildingType → whole-integer level count. */
   buildings: Record<string, number>;
+  /** buildingType → sustained-idle countdown (the decay buffer's state). */
+  buildingIdleMonths: Record<string, number>;
 }
 
 /** One building's decayed count (downward-only; floored at 0 by the adapter). */
@@ -25,16 +27,25 @@ export interface BuildingCountUpdate {
   count: number;
 }
 
+/** One building's new sustained-idle countdown. */
+export interface IdleMonthsUpdate {
+  systemId: string;
+  buildingType: string;
+  idleMonths: number;
+}
+
 export interface PopCapUpdate {
   systemId: string;
   popCap: number;
 }
 
 export interface InfrastructureWorld {
-  /** Building roster + population + unrest for the given systems (this tick's shard). */
+  /** Building roster + idle countdowns + population + unrest for the given systems (this tick's shard). */
   getInfrastructureState(systemIds: string[]): Promise<InfrastructureStateView[]>;
   /** Bulk-write decayed building counts. Downward-only: never raises a count. */
   applyBuildingDecays(updates: BuildingCountUpdate[]): Promise<void>;
+  /** Bulk-write updated idle countdowns (the decay buffer's persisted state). */
+  applyIdleMonths(updates: IdleMonthsUpdate[]): Promise<void>;
   /** Bulk-write recomputed popCap for systems whose housing changed. */
   applyPopCapUpdates(updates: PopCapUpdate[]): Promise<void>;
 }

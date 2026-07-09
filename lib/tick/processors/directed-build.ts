@@ -1,7 +1,11 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard } from "@/lib/tick/shard";
-import { planFactionBuilds, type BuildSystemState } from "@/lib/engine/directed-build";
+import { planFactionQueue, type BuildSystemState } from "@/lib/engine/directed-build";
+import { fundQueue } from "@/lib/engine/construction";
+import { workCostPerLevel } from "@/lib/constants/construction";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { WorldConstructionProject } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedBuildWorld,
@@ -26,6 +30,15 @@ export interface DirectedBuildProcessorParams {
   interval: number;
   /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
   routeCost: RouteCost;
+  /** Construction funding: the per-build absorption cap, the pool rate per pop, and a unique-id minter. */
+  construction: {
+    /** Most construction points one build can absorb per pulse (sets the minimum build time). */
+    cap: number;
+    /** Construction points a faction's pool gains per unit population per pulse. */
+    throughputPerPop: number;
+    /** Mints a unique id for each newly-committed project (backed by the world's nextId counter). */
+    mintId: () => string;
+  };
   /** Claim step (control tier). Omitted → no claim phase (the build-only path used by engine/adapter tests). */
   claim?: {
     reachProvider: (factionId: string) => ClaimCandidate[];
@@ -58,11 +71,15 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
 /**
  * Pure processor body. Monthly resolution pulse (mirrors directed-logistics): on the
  * boundary tick (`tick % interval === 0`) every faction is planned at once via
- * `pulseShard`; every other tick is a no-op. The build engine returns production +
- * housing builds; we
- * apply them as building-count increments (continuous Float). The engine bounds each
- * build to the site's remaining capacity, so counts never exceed capacity. Removal
- * stays disuse-decay's job — this only adds.
+ * `pulseShard`; every other tick is a no-op.
+ *
+ * Construction is committed and throughput-paced: each due faction's auto queue policy
+ * (`planFactionQueue`) proposes whole-level projects toward its ceilings (subtracting the
+ * levels already in flight), the faction's per-pulse throughput pool funds the front-first
+ * queue (`fundQueue`) at a per-build absorption cap, and only projects whose work COMPLETES
+ * land — applied as whole-integer building-count increments. The open-project set is
+ * persisted each pulse (funded, plus new commitments, minus what landed). Removal of levels
+ * stays whole-level decay's job — this only adds.
  */
 export async function runDirectedBuildProcessor(
   world: DirectedBuildWorld,
@@ -103,45 +120,75 @@ export async function runDirectedBuildProcessor(
 
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
+  const openProjects = await world.getConstructionProjects(dueKeys);
 
-  // Group rows by faction; plan each faction independently.
+  // Group rows + open projects by faction; plan and fund each faction independently.
   const byFaction = new Map<string | null, SystemBuildRow[]>();
   for (const r of rows) {
     const list = byFaction.get(r.factionId) ?? [];
     list.push(r);
     byFaction.set(r.factionId, list);
   }
+  const openByFaction = new Map<string | null, WorldConstructionProject[]>();
+  for (const p of openProjects) {
+    const list = openByFaction.get(p.factionId) ?? [];
+    list.push(p);
+    openByFaction.set(p.factionId, list);
+  }
 
-  // Current counts per system, to turn engine "add count" into an absolute write.
+  // Current counts per system, to turn a landed whole-level increment into an absolute write.
   const currentBySystem = new Map<string, Record<string, number>>();
   for (const r of rows) currentBySystem.set(r.systemId, r.buildings);
 
-  // Accumulate added units per system → buildingType across the faction's plans.
-  const addedBySystem = new Map<string, Map<string, number>>();
-  for (const group of byFaction.values()) {
-    const plans = planFactionBuilds(group.map(toBuildState), params.routeCost);
-    for (const b of plans) {
-      const byType = addedBySystem.get(b.systemId) ?? new Map<string, number>();
-      byType.set(b.buildingType, (byType.get(b.buildingType) ?? 0) + b.count);
-      addedBySystem.set(b.systemId, byType);
+  const landedBySystem = new Map<string, Map<string, number>>();
+  const nextOpen: WorldConstructionProject[] = [];
+
+  for (const [factionId, group] of byFaction) {
+    // The faction's per-pulse throughput pool: developed systems fund it (controlled/unclaimed
+    // systems are inert with population 0). The pool drains the queue; it never enqueues.
+    let pool = 0;
+    for (const r of group) {
+      if (isEconomicallyActive(r.control)) pool += Math.max(0, r.population) * params.construction.throughputPerPop;
+    }
+
+    const existing = openByFaction.get(factionId) ?? [];
+    // Auto policy proposes new whole-level projects toward the ceilings, aware of what is in flight.
+    const desired = planFactionQueue(group.map(toBuildState), params.routeCost, existing);
+    const newProjects: WorldConstructionProject[] = desired.map((d) => ({
+      id: params.construction.mintId(),
+      factionId: d.factionId,
+      systemId: d.systemId,
+      buildingType: d.buildingType,
+      levels: d.levels,
+      workTotal: d.levels * workCostPerLevel(d.buildingType),
+      workDone: 0,
+    }));
+
+    // Fund front-first: finish started work before new commitments; land completed levels.
+    const { projects: fundedOpen, landed } = fundQueue([...existing, ...newProjects], pool, params.construction.cap);
+    nextOpen.push(...fundedOpen);
+    for (const l of landed) {
+      const byType = landedBySystem.get(l.systemId) ?? new Map<string, number>();
+      byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
+      landedBySystem.set(l.systemId, byType);
     }
   }
-  if (addedBySystem.size === 0) return {};
 
-  // Emit absolute new counts = current + added (continuous Float). The engine already
-  // bounds `added` to each site's remaining capacity, so cur + added never exceeds the
-  // capacity cap. The per-cycle build budget already represents one shard cycle, so no
-  // catch-up scaling is applied (scaling the capacity-bounded output would overshoot it).
+  // Emit absolute new counts = current + landed whole levels (integer).
   const updates: BuildBuildingUpdate[] = [];
-  for (const [systemId, byType] of addedBySystem) {
+  for (const [systemId, byType] of landedBySystem) {
     const current = currentBySystem.get(systemId);
-    for (const [buildingType, added] of byType) {
-      if (!Number.isFinite(added) || added <= 0) continue;
+    for (const [buildingType, levels] of byType) {
+      if (levels <= 0) continue;
       const cur = current?.[buildingType] ?? 0;
-      updates.push({ systemId, buildingType, count: cur + added });
+      updates.push({ systemId, buildingType, count: cur + levels });
     }
   }
   if (updates.length > 0) await world.applyBuildingIncreases(updates);
+
+  // Persist the due factions' open set (funded existing + new commitments, minus what landed) —
+  // always, so a project that just landed is removed from the queue.
+  await world.applyConstructionUpdates(dueKeys, nextOpen);
 
   return {};
 }

@@ -196,6 +196,8 @@ into the whole-level teardown) and gives Capacity/Modifier a first-class, non-ma
 
 ## PR3 — Discrete integer levels + committed construction projects
 
+**Full task detail:** `docs/build-plans/building-construction-pr3-discrete-levels.md`.
+
 **Goal:** Flip `count` to an integer **level count** (world-gen rounds seeds to whole levels); replace
 the fractional-accretion planner with **committed construction projects** funded by a **per-faction
 throughput pool** through a queue with a **per-build absorption cap** (duration emerges as `work ÷

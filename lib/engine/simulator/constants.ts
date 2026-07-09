@@ -68,8 +68,7 @@ export interface SimConstants {
     strike: { threshold: number; floorMultiplier: number };
   };
   infrastructure: {
-    disuseRate: number;
-    unrestRate: number;
+    idleBufferMonths: number;
     unrestThreshold: number;
   };
   migration: {

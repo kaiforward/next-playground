@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick } from "../tick";
+import { runWorldTick, toSimSystems } from "../tick";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import type { WorldShip } from "../types";
@@ -87,6 +87,97 @@ describe("runWorldTick", () => {
     const { world: after, events } = await runWorldTick(world);
     expect(events.currentTick).toBe(after.meta.currentTick);
     expect(events.currentTick).toBe(1);
+  });
+
+  it("keeps every building count a non-negative integer across a long run (the level invariant)", async () => {
+    // The whole point of the discrete-level model: seeds are integer, construction lands whole
+    // levels, decay sheds whole levels — so no count is ever fractional at any tick.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    let world = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
+    for (let i = 0; i < 120; i++) {
+      const result = await runWorldTick(world);
+      world = result.world;
+      for (const bld of world.buildings) {
+        expect(Number.isInteger(bld.count), `tick ${i + 1}: ${bld.systemId}/${bld.buildingType} = ${bld.count}`).toBe(true);
+        expect(bld.count).toBeGreaterThan(0); // flattenBuildings drops count ≤ 0
+        expect(Number.isInteger(bld.idleMonths)).toBe(true);
+      }
+    }
+  });
+
+  it("toSimSystems seeds buildingIdleMonths from WorldBuilding.idleMonths", () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const target = base.buildings[0].systemId;
+    const world = {
+      ...base,
+      buildings: base.buildings.map((b) => (b.systemId === target ? { ...b, idleMonths: 4 } : b)),
+    };
+    const sim = toSimSystems(world).find((s) => s.id === target);
+    expect(sim).toBeDefined();
+    for (const b of world.buildings.filter((b) => b.systemId === target)) {
+      expect(sim?.buildingIdleMonths[b.buildingType]).toBe(4);
+    }
+  });
+
+  it("accumulates construction projects and lands whole integer building levels over many ticks", async () => {
+    // A single-faction developed corridor drives construction: connect two developed homeworlds so
+    // logistics makes them fed-and-calm, then run long enough for committed projects to land.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const world = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
+    const after = await runTicks(world, 120);
+
+    // Construction projects exist (committed, in-flight) and every one is well-formed.
+    expect(after.constructionProjects.length).toBeGreaterThan(0);
+    for (const p of after.constructionProjects) {
+      expect(p.levels).toBeGreaterThanOrEqual(1);
+      expect(Number.isInteger(p.levels)).toBe(true);
+      expect(p.workDone).toBeGreaterThanOrEqual(0);
+      expect(p.workDone).toBeLessThanOrEqual(p.workTotal);
+    }
+    // Project ids are unique (minted from the world's monotonic counter).
+    const ids = after.constructionProjects.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Landed levels are whole integers when they land (the full integer invariant, once decay is
+    // whole-level too, is asserted separately).
+    for (const u of after.constructionProjects) expect(Number.isInteger(u.levels)).toBe(true);
+  });
+
+  it("round-trips building idleMonths across a non-decay tick (the field survives the sim serialize round-trip)", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const world = { ...base, buildings: base.buildings.map((b) => ({ ...b, idleMonths: 7 })) };
+    const seeded = new Set(world.buildings.map((b) => `${b.systemId}|${b.buildingType}`));
+    const { world: after } = await runWorldTick(world);
+    // Infrastructure decay consumes idleMonths, but only on an economy-update tick (it is gated
+    // behind economySignals); this single tick from a fresh world is not one, so every building
+    // that existed at seed round-trips its idleMonths unchanged through the sim. Newly-built rows
+    // are excluded — they start at 0.
+    for (const b of after.buildings) {
+      if (seeded.has(`${b.systemId}|${b.buildingType}`)) {
+        expect(b.idleMonths, `${b.systemId}|${b.buildingType}`).toBe(7);
+      }
+    }
   });
 });
 

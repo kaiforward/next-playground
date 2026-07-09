@@ -3,12 +3,19 @@ import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build"
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
 import type { SystemBuildRow } from "@/lib/tick/world/directed-build-world";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
+import type { WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { ClaimCandidate, DevelopCandidate, ExpansionParams, DevelopParams } from "@/lib/engine/expansion";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const reachable: RouteCost = () => 1;
+
+/** Construction params with a monotonic id minter. Big cap by default → projects land as pool allows. */
+function mkConstruction(cap = 1000, throughputPerPop = 0.05) {
+  let n = 0;
+  return { cap, throughputPerPop, mintId: () => `proj-${n++}` };
+}
 
 // food market with a high demandRate so the band's targetStock is large — stock 1 is a deep deficit.
 function foodMarket(systemId: string, stock: number): MarketRowForLogistics {
@@ -28,7 +35,7 @@ function builderSlots(n: number) {
   return slotCap;
 }
 
-// A: deep structural food deficit, no capacity. B: builder with arable slots + budget, reachable from A.
+// A: deep structural food deficit, no capacity. B: builder with arable slots + population, reachable from A.
 function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[] {
   return [
     {
@@ -50,68 +57,99 @@ function countOf(w: MemoryDirectedBuildWorld, systemId: string, type: string): n
   return u?.count ?? 0;
 }
 
-describe("runDirectedBuildProcessor", () => {
-  it("builds production + housing at a reachable builder on a due tick", async () => {
+describe("runDirectedBuildProcessor — committed construction", () => {
+  it("commits construction projects for the faction on a due tick", async () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0));
-    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
-    expect(countOf(w, "B", "food")).toBeGreaterThan(0);
-    expect(countOf(w, "B", "housing")).toBeGreaterThan(0);
-    // Writes are absolute new counts (current 0 + added), never the deficit system A.
-    expect(w.buildingUpdates.every((u) => u.systemId === "B")).toBe(true);
-  });
-
-  it("builds nothing on an off-boundary tick (monthly pulse)", async () => {
-    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
-    await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
+    // A tiny cap so no project completes this pulse — the queue holds the funded, in-flight work.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.constructionProjects.length).toBeGreaterThan(0);
+    expect(w.constructionProjects.every((p) => p.factionId === "f1")).toBe(true);
+    // The pool funded the front of the queue (workDone advanced) but nothing has landed yet.
+    expect(w.constructionProjects.some((p) => p.workDone > 0)).toBe(true);
     expect(w.buildingUpdates).toHaveLength(0);
   });
 
-  it("develops a hand-seeded world: keeps building toward the unmet deficit across cycles", async () => {
-    // Builder cap (1000 slots) far exceeds one cycle's build budget, so it fills
-    // gradually: cycle 2 must add more on top of cycle 1's count (not cap out in one).
-    // Cycle 1 from a blank builder; feed its output counts back as cycle-2 input so increments persist.
-    const w1 = new MemoryDirectedBuildWorld(scenario(0, 0, 1000));
-    await runDirectedBuildProcessor(w1, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
-    const food1 = countOf(w1, "B", "food");
-    expect(food1).toBeGreaterThan(0);
-
-    const w2 = new MemoryDirectedBuildWorld(scenario(food1, countOf(w1, "B", "housing"), 1000));
-    await runDirectedBuildProcessor(w2, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
-    expect(countOf(w2, "B", "food")).toBeGreaterThan(food1);
+  it("lands whole integer levels once a project's work completes", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    // A generous pool (throughput 1/pop) completes the committed projects this pulse.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1) });
+    const housing = countOf(w, "B", "housing");
+    expect(housing).toBeGreaterThan(0);
+    expect(Number.isInteger(housing)).toBe(true);
+    // Writes are absolute new counts (current 0 + landed), only at the builder B.
+    expect(w.buildingUpdates.every((u) => u.systemId === "B" && Number.isInteger(u.count))).toBe(true);
   });
 
-  it("never builds past capacity (capacity-bounded output)", async () => {
-    // The build budget is per-cycle and the planner already plans one cycle's worth,
-    // so the capacity-bounded output must be written as-is — a builder with a 10-slot
-    // arable cap and ample budget must end at ≤ 10 food, never more, on the pulse boundary.
-    const rows: SystemBuildRow[] = [
-      {
-        systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
-        yields: unitResourceVector(), slotCap: emptyResourceVector(),
-        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
-      },
-      {
-        systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
-        yields: unitResourceVector(), slotCap: builderSlots(10),
-        generalSpace: 0, habitableSpace: 0, markets: [],
-      },
-    ];
-    const w = new MemoryDirectedBuildWorld(rows);
-    await runDirectedBuildProcessor(w, { tick: 0 }, { interval: 24, routeCost: reachable });
-    const food = countOf(w, "B", "food");
-    expect(food).toBeGreaterThan(0);
-    expect(food).toBeLessThanOrEqual(10);
+  it("funds existing open projects front-first, advancing workDone (persists deltas)", async () => {
+    const existing: WorldConstructionProject = {
+      id: "e", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
+    };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    // Front of the queue is the pre-existing project; the per-build cap (4) advances it by exactly 4.
+    const e = w.constructionProjects.find((p) => p.id === "e");
+    expect(e?.workDone).toBe(4);
   });
 
-  it("returns no writes when there are no structural deficits", async () => {
+  it("does not land anything when the pool is below a level's work cost (throughput-paced)", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    // pool = 5000 × 0.0001 = 0.5 construction points — far below any level's work cost; cap is generous.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: { cap: 1000, throughputPerPop: 0.0001, mintId: mkConstruction().mintId },
+    });
+    expect(w.buildingUpdates).toHaveLength(0);          // nothing landed
+    expect(w.constructionProjects.length).toBeGreaterThan(0); // but the work is committed
+  });
+
+  it("commits and funds nothing on an off-boundary tick (monthly pulse)", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
+    expect(w.buildingUpdates).toHaveLength(0);
+    expect(w.constructionProjects).toHaveLength(0);
+  });
+
+  it("commits nothing when there is nothing to build (no deficit, no housing headroom)", async () => {
     const balanced: SystemBuildRow[] = [{
       systemId: "A", factionId: "f1", control: "developed", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
-      markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → balanced; no habitable land → no proactive housing → no writes
+      markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → balanced; no habitable land → no housing
     }];
     const w = new MemoryDirectedBuildWorld(balanced);
-    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
     expect(w.buildingUpdates).toHaveLength(0);
+    expect(w.constructionProjects).toHaveLength(0);
+  });
+
+  it("accumulates a whole level across several pulses (committed and timed, not one-shot)", async () => {
+    // A fed (no unmet goods) and calm developed system with room for a few housing levels. A small
+    // pool + cap fund a slice each pulse, so the level lands only after several pulses of work.
+    const base: SystemBuildRow = {
+      systemId: "B", factionId: "f1", control: "developed", population: 300, unrest: 0,
+      buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+      generalSpace: 10, habitableSpace: 3, markets: [],
+    };
+    let rows: SystemBuildRow[] = [base];
+    let projects: WorldConstructionProject[] = [];
+    const mint = mkConstruction().mintId;
+    let landedAtPulse = -1;
+    for (let pulse = 0; pulse < 10; pulse++) {
+      const w = new MemoryDirectedBuildWorld(rows, projects);
+      await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+        interval: INTERVAL, routeCost: reachable, construction: { cap: 6, throughputPerPop: 0.05, mintId: mint },
+      });
+      rows = rows.map((r) => {
+        const buildings = { ...r.buildings };
+        for (const u of w.buildingUpdates) if (u.systemId === r.systemId) buildings[u.buildingType] = u.count;
+        return { ...r, buildings };
+      });
+      projects = w.constructionProjects;
+      if ((rows[0].buildings.housing ?? 0) > 0 && landedAtPulse < 0) landedAtPulse = pulse;
+    }
+    const housing = rows[0].buildings.housing ?? 0;
+    expect(housing).toBeGreaterThan(0);
+    expect(Number.isInteger(housing)).toBe(true);
+    // It did NOT land on the first pulse — the work cost spanned several pulses (throughput-paced).
+    expect(landedAtPulse).toBeGreaterThan(0);
   });
 });
 
@@ -140,7 +178,7 @@ describe("runDirectedBuildProcessor: claim + develop phase", () => {
         { systemId: "u-rich", minHops: 1, habitableSpace: 200, resourceDiversity: 4, traitQuality: 0 },
       ] : [];
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-      interval: INTERVAL, routeCost: reachable,
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
       claim: { reachProvider, rng: mulberry32(1), params: EXP_PARAMS },
     });
     expect(w.claims).toEqual([{ systemId: "u-rich", factionId: "f1" }]);
@@ -151,7 +189,7 @@ describe("runDirectedBuildProcessor: claim + develop phase", () => {
     const candidateProvider = (f: string): DevelopCandidate[] =>
       f === "f1" ? [{ systemId: "c1", habitableSpace: 100, resourceDiversity: 2, traitQuality: 0, sourceSystemId: "f1-home" }] : [];
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-      interval: INTERVAL, routeCost: reachable,
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
       develop: { candidateProvider, params: DEV_PARAMS },
     });
     expect(w.developments).toEqual([{ systemId: "c1", sourceSystemId: "f1-home", seedPop: 50 }]);
@@ -160,17 +198,17 @@ describe("runDirectedBuildProcessor: claim + develop phase", () => {
   it("claims/develops nothing off the pulse boundary", async () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
-      interval: INTERVAL, routeCost: reachable,
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
       claim: { reachProvider: () => [{ systemId: "u1", minHops: 1, habitableSpace: 100, resourceDiversity: 3, traitQuality: 0 }], rng: mulberry32(1), params: EXP_PARAMS },
     });
     expect(w.claims).toHaveLength(0);
   });
 
-  it("claims/develops nothing when no claim/develop param is supplied (existing build path)", async () => {
+  it("runs the build phase even when no claim/develop param is supplied", async () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0));
-    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable });
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
     expect(w.claims).toHaveLength(0);
     expect(w.developments).toHaveLength(0);
-    expect(countOf(w, "B", "food")).toBeGreaterThan(0); // build phase still runs
+    expect(w.constructionProjects.length).toBeGreaterThan(0); // construction still committed
   });
 });
