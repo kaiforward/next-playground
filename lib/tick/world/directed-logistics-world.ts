@@ -50,6 +50,6 @@ export interface DirectedLogisticsWorld {
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]>;
   /** Bulk absolute stock writes (already clamped). */
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
-  /** Append directed-logistics flow rows (flowType = "logistics"). */
+  /** Append directed-logistics flow rows to the world flow log. */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
 }

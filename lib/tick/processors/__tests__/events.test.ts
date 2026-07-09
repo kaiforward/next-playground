@@ -34,14 +34,18 @@ function makeParams(
   };
 }
 
-function makeSystem(id: string, regionId: string): SimSystem {
+function makeSystem(
+  id: string,
+  regionId: string,
+  control: SimSystem["control"] = "developed",
+): SimSystem {
   return {
     id,
     name: id.toUpperCase(),
     economyType: "extraction",
     regionId,
     factionId: "faction-0",
-    control: "developed",
+    control,
     governmentType: "frontier",
     population: 0,
     popCap: 1000,
@@ -379,6 +383,20 @@ describe("InMemoryEventsWorld.applyShocks", () => {
     const touched = await world.applyShocks([
       shock({ value: Infinity }),
       shock({ goodId: "no_such_good", mode: "absolute", value: 10 }),
+    ]);
+    expect(touched).toBe(0);
+    expect(world.markets[0].stock).toBe(100);
+  });
+
+  it("skips a shock whose target system is not developed (inert market stays frozen)", async () => {
+    // Same 30% supply shock that raises a developed market to 130 above — but on a
+    // controlled (non-developed) system the developed-gate skips it, leaving stock frozen.
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1", "controlled")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    const touched = await world.applyShocks([
+      shock({ parameter: "supply", mode: "percentage", value: 0.3 }),
     ]);
     expect(touched).toBe(0);
     expect(world.markets[0].stock).toBe(100);

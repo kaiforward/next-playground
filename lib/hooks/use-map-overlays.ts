@@ -19,7 +19,6 @@ import {
  */
 export interface MapOverlays {
   events: boolean;
-  tradeFlow: boolean;
   logistics: boolean;
   priceHeatmap: boolean;
 }
@@ -28,7 +27,6 @@ export type MapOverlayKey = keyof MapOverlays;
 
 const DEFAULT_OVERLAYS: MapOverlays = {
   events: true,
-  tradeFlow: false,
   logistics: false,
   priceHeatmap: false,
 };
@@ -40,7 +38,6 @@ function hydrateFromSession(): MapOverlays {
   if (!stored) return DEFAULT_OVERLAYS;
   return {
     events: stored.events ?? DEFAULT_OVERLAYS.events,
-    tradeFlow: stored.tradeFlow ?? DEFAULT_OVERLAYS.tradeFlow,
     logistics: stored.logistics ?? DEFAULT_OVERLAYS.logistics,
     priceHeatmap: stored.priceHeatmap ?? DEFAULT_OVERLAYS.priceHeatmap,
   };
@@ -68,7 +65,6 @@ export function useMapOverlays(): {
     const stored: MapOverlaysState = {
       events: overlays.events,
     };
-    if (overlays.tradeFlow) stored.tradeFlow = true;
     if (overlays.logistics) stored.logistics = true;
     if (overlays.priceHeatmap) stored.priceHeatmap = true;
     setOverlaysInSession(stored);

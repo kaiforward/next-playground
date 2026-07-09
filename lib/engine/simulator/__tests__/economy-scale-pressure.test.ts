@@ -13,11 +13,10 @@ afterEach(() => {
 });
 
 describe("ECONOMY_SCALE simulator pressure", () => {
-  it("scales bot starting credits and the sim flow budget by S", async () => {
+  it("scales bot starting credits by S", async () => {
     const base = await resolveAtScale("1");
     const x10 = await resolveAtScale("10");
 
     expect(x10.bots.startingCredits).toBeCloseTo(base.bots.startingCredits * 10);
-    expect(x10.tradeFlow.flowBudget).toBeCloseTo(base.tradeFlow.flowBudget * 10);
   });
 });

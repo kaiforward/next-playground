@@ -46,7 +46,7 @@ Knobs that a body shouldn't hard-code (RNG source, scaled caps, modifier caps, e
 
 ### Where the shard selection lives
 
-For processors that shard by system (economy) or by edge (trade-flow, migration), the shard selection lives in the **body**. The adapter exposes a stable-ordered id/edge list and a slice reader; the body processes `shardRange(total, ctx.tick, interval)` over it. The adapter only has to know how to fetch by id — it never needs `ctx.tick`.
+For processors that shard by system (economy) or by edge (migration), the shard selection lives in the **body**. The adapter exposes a stable-ordered id/edge list and a slice reader; the body processes `shardRange(total, ctx.tick, interval)` over it. The adapter only has to know how to fetch by id — it never needs `ctx.tick`.
 
 ### World → view joins
 
@@ -64,7 +64,6 @@ For processors that shard by system (economy) or by edge (trade-flow, migration)
 | infrastructure-decay | ✓ | ✓ |
 | population | ✓ | ✓ |
 | migration | ✓ | ✓ |
-| trade-flow | ✓ | ✓ |
 | directed-logistics | ✓ | ✓ |
 | directed-build | ✓ | ✓ |
 | relations | ✓ | ✓ |

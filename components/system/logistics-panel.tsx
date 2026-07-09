@@ -106,12 +106,8 @@ function externalRow(g: LogisticsGoodRow): DivergingBarRow {
       </div>
     ) : undefined,
     segments: [
-      // imports (left): hatch market then solid logistics → solid sits at the divider
-      { value: g.importMarket, side: "left", color: "in", pattern: "hatch" },
       { value: g.importLogistics, side: "left", color: "in", pattern: "solid" },
-      // exports (right): solid logistics then hatch market → solid sits at the divider
       { value: g.exportLogistics, side: "right", color: "out", pattern: "solid" },
-      { value: g.exportMarket, side: "right", color: "out", pattern: "hatch" },
     ],
   };
 }
@@ -142,7 +138,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
   }, [byTier]);
 
   if (data.visibility === "unknown") {
-    return <EmptyState message="Scan this system with a ship in range to survey its logistics." />;
+    return <EmptyState message="This system isn't developed yet — no trade activity to show." />;
   }
   if (data.rows.length === 0) {
     return <EmptyState message="No logistics activity — this system neither produces, consumes, nor trades." />;
@@ -177,7 +173,7 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
           </div>
         </div>
 
-        {/* per-column solid/hatch legend — internal = consumption split, external = flow type */}
+        {/* per-column legend — internal = consumption split (civilian vs manufacturing); external = directed logistics */}
         <div className="mt-2 grid grid-cols-2 gap-4 border-t border-border pt-2 text-[10px] text-text-tertiary">
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
@@ -190,9 +186,6 @@ export function LogisticsPanel({ systemId }: { systemId: string }) {
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
               <LegendSwatch color="out" /> directed logistics
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <LegendSwatch color="out" hatch /> market diffusion
             </span>
           </div>
         </div>

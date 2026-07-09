@@ -10,7 +10,9 @@ let systemId: string;
 
 beforeEach(() => {
   world = generateWorld({ systemCount: 60, seed: 11 });
-  systemId = world.systems[0].id;
+  // getMarket only returns entries for developed systems; homeworlds are the
+  // developed systems in a freshly generated world.
+  systemId = world.factions[0].homeworldId;
   setWorld(world);
 });
 

@@ -53,10 +53,7 @@ export function StarMap({
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
-  const { marketEdges, logisticsEdges } = useTradeFlow(
-    overlays.tradeFlow,
-    overlays.logistics,
-  );
+  const { logisticsEdges } = useTradeFlow(overlays.logistics);
   const stabilityBySystem = useStability(mapMode === "stability");
   const populationBySystem = usePopulation(mapMode === "population");
 
@@ -209,7 +206,6 @@ export function StarMap({
     events,
     visibleSystemIds,
     dynamicSystems,
-    tradeFlowEdges: marketEdges,
     logisticsEdges,
     selectedSystem: view.selectedSystem,
     systemRegionMap,

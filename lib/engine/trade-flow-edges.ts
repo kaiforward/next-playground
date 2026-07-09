@@ -1,28 +1,20 @@
 /**
- * Pure aggregation for the trade-flow MAP OVERLAY. The service in
- * `lib/services/trade-flow.ts` window-sums raw `TradeFlow` rows and feeds them
- * here to produce the two undirected edge sets the Pixi layers render.
+ * Pure aggregation for the directed-logistics MAP OVERLAY. The service in
+ * `lib/services/trade-flow.ts` window-sums raw flow rows and feeds them here to
+ * produce the undirected edge set the Pixi layer renders.
  *
- * Pure: no Prisma, no I/O. Unit-tested against in-memory rows.
+ * Pure: no I/O. Unit-tested against in-memory rows.
  */
 
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
 
-/** One window-summed flow between two systems for one good, tagged by type. */
+/** One window-summed flow between two systems for one good. */
 export interface RawFlowRow {
   fromSystemId: string;
   toSystemId: string;
   goodId: string;
   /** Window-summed magnitude (rows with quantity <= 0 are ignored). */
   quantity: number;
-  /** "market" (diffusion) | "logistics" (directed). */
-  flowType: string;
-}
-
-/** Both overlay edge sets, split by flow type. */
-export interface FlowEdgeSets {
-  marketEdges: TradeFlowEdgeInfo[];
-  logisticsEdges: TradeFlowEdgeInfo[];
 }
 
 interface DirectionalGoodTally {
@@ -33,11 +25,11 @@ interface DirectionalGoodTally {
 }
 
 /**
- * Collapse rows of a SINGLE flow type into undirected edges keyed by the sorted
+ * Collapse window-summed flow rows into undirected edges keyed by the sorted
  * endpoint pair, recovering net direction from the dominant good. Drops edges
  * below `floor` cumulative volume and edges with no visible endpoint.
  */
-function aggregateOneType(
+export function buildFlowEdges(
   rows: ReadonlyArray<RawFlowRow>,
   visibleSet: Set<string>,
   floor: number,
@@ -102,26 +94,4 @@ function aggregateOneType(
     edges.push({ fromSystemId, toSystemId, totalVolume, dominantGoodId, perGood: perGoodObj });
   }
   return edges;
-}
-
-/**
- * Partition window-summed flow rows by type, then collapse each into undirected
- * edges. Market and logistics get independent inference floors.
- */
-export function buildFlowEdges(
-  rows: ReadonlyArray<RawFlowRow>,
-  visibleSet: Set<string>,
-  marketFloor: number,
-  logisticsFloor: number,
-): FlowEdgeSets {
-  const marketRows: RawFlowRow[] = [];
-  const logisticsRows: RawFlowRow[] = [];
-  for (const row of rows) {
-    if (row.flowType === "logistics") logisticsRows.push(row);
-    else marketRows.push(row);
-  }
-  return {
-    marketEdges: aggregateOneType(marketRows, visibleSet, marketFloor),
-    logisticsEdges: aggregateOneType(logisticsRows, visibleSet, logisticsFloor),
-  };
 }

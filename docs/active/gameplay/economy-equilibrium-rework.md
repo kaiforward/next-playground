@@ -76,8 +76,8 @@ small multiple (initial guess **1.2–1.5**, calibrated). The production self-li
 
 - **Effect:** equilibrium stock rests just above the anchor → producer prices rise from the floor toward
   base; excess capacity simply idles.
-- **Exports are preserved** because export drainage holds a producer's stock *low* — while diffusion /
-  logistics keep pulling, stock stays below `operatingCeiling`, the throttle stays high, and the producer
+- **Exports are preserved** because export drainage holds a producer's stock *low* — while directed
+  logistics keeps pulling, stock stays below `operatingCeiling`, the throttle stays high, and the producer
   keeps making goods to export. With `HOLD_COVER = 1.3`, a producer sitting *at* its anchor still runs at
   ~61% capacity (≈1.04× local consumption for a 1.70×-capacity exporter), so it makes a small export
   surplus and holds near the anchor; drained harder, it makes more. It idles only when nobody wants the
@@ -163,7 +163,7 @@ This becomes a **permanent, wired instrument** for this change and every future 
 - **Unrest recalibration (coarse).** Well-supplied systems get calmer; confirm growth/decline still reads
   sanely, no new instability or pinning. **Coarse health bar only** — no precision tuning (perishable
   pre-SP5).
-- **Logistics / diffusion** now have less slop to move and may heal less → more residual deficits (good
+- **Directed logistics** now has less slop to move and may heal less → more residual deficits (good
   for the spread, consistent with negative-space). Verify it doesn't tip viability into decline.
 
 ## Testing & validation

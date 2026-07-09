@@ -5,8 +5,7 @@
 > [infrastructure decay](./economy-infrastructure-decay.md) (the **erosion** half): decay tears unused
 > capacity down, agency builds viable capacity back and moves goods to where they are needed. Sits *on*
 > the substrate-v2 available-space model and the SP3.5 decay loop (both unchanged) and *beside*
-> [trade-flow diffusion](./trade-simulation.md) + migration as additional flows on the shared
-> intra-faction edge topology. Roadmap home:
+> migration on the shared intra-faction [open-edge topology](./trade-simulation.md). Roadmap home:
 > [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13 item 5.
 > North-star constraint: [negative-space-economy.md](../../planned/negative-space-economy.md).
 >
@@ -21,15 +20,15 @@
 
 A seeded galaxy left to SP3.5 decay alone is a **one-way ratchet down**: things rot, nothing recovers.
 Most of the map also can't feed itself locally — a same-faction food surplus often sits a couple of hops
-away, but market diffusion is too distance-attenuated to deliver it. Autonomic-light is the faction
+away, and nothing moves goods between systems on its own. Autonomic-light is the faction
 **deliberately acting on its own territory** to counter both: it **moves its surplus to its deficits**, and
 it **builds viable systems up toward their potential**. Two mechanisms, one slow agency clock, one shared
 "what does this system have vs need" reading.
 
 **Two rules:**
 
-> **Directed logistics:** a faction moves its own surplus to its own deficits, above the diffusion cap,
-> on a slow clock — silently, within a capacity budget set *below* total need.
+> **Directed logistics:** a faction moves its own surplus to its own deficits — the sole goods-mover
+> between systems — on a slow clock, silently, within a capacity budget set *below* total need.
 >
 > **Autonomic build:** a faction builds its systems up toward viable potential — housing leads,
 > population fills it, industry follows the resident workforce.
@@ -46,17 +45,17 @@ Supply makes a system viable; a viable system builds.
 
 ## How it composes with the existing flows
 
-Directed logistics is an **additive** command flow — a different driver from price-gradient diffusion, not
-a re-tuning of it. Market diffusion stays deliberately leaky by design (see the negative-space doc).
+Directed logistics is the **sole goods-mover** between systems — there is no passive price-gradient
+diffusion. It shares the intra-faction edge substrate with population migration (the only other flow):
 
-| Flow | Driver | Funded | Moves against price gradient? | Legibility |
-|---|---|---|---|---|
-| **Market diffusion** (`tradeFlow`) | local price gradient | self (profit) | no | ambient |
-| **Migration** | unrest + headroom | n/a | n/a | ambient |
-| **Directed logistics** (this slice) | faction need / surplus | free (v1) | **yes** | map "Logistics" overlay |
+| Flow | Driver | Funded | Legibility |
+|---|---|---|---|
+| **Migration** | unrest + headroom | n/a | ambient |
+| **Directed logistics** (this slice) | faction need / surplus | free (v1) | map "Logistics" overlay |
 
-The coupling is benign: when logistics dumps food into a deficit system its price drops, which *naturally*
-tapers market diffusion into that same system — no double-supply, they compose. Logistics draws only from
+Both act only on **developed** systems: migration's open edges are gated to developed-both endpoints and
+directed logistics only routes between developed participants, so an unclaimed or controlled system neither
+sends nor receives goods or population (its seeded market is frozen). Logistics draws only from
 market stock **above** a donor's own days-of-supply anchor, so a donor is never pulled below its comfort
 target and locals keep their supply (the v1 form of civilian crowd-out — emergent, target-protected).
 
@@ -209,11 +208,9 @@ Both reuse the existing fixed-interval shard machinery and the shared market-sta
 
 ## Map legibility
 
-Directed hauls surface as a dedicated **"Logistics" map overlay**, independent of the market "Trade Flows"
-overlay: tier-coloured curved arcs that lift off the straight lane network, arrow-headed toward the
-importing system, distinct from market diffusion's straight ambient particle streams. Both overlays share
-the tier-colour legend and differ by shape. The overlay is pure visualisation of the `logistics`
-`TradeFlow` rows — see the [Universe & Map spec](./universe.md) for the rendering detail.
+Directed hauls surface as a dedicated **"Logistics" map overlay**: tier-coloured curved arcs that lift off
+the straight lane network, arrow-headed toward the importing system. The overlay is pure visualisation of
+the `logistics` `TradeFlow` rows — see the [Universe & Map spec](./universe.md) for the rendering detail.
 
 ---
 

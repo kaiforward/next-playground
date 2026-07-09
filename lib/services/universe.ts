@@ -1,6 +1,7 @@
 import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem, marketsBySystem } from "./world-index";
 import { ServiceError } from "./errors";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import type { GovernmentType, RegionInfo, SystemTraitInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
@@ -186,6 +187,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   if (!system) {
     throw new ServiceError("System not found.", 404);
   }
+  if (!isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
 

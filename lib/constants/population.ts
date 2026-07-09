@@ -30,14 +30,14 @@ export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0
 export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineRate: 0.015, overshootDeathRate: 0.05 };
 
 /**
- * Migration over the de-regioned intra-faction topology (same open edges + fixed-interval
- * edge shard as trade-flow). Gateways throttle like goods (high fuelCost → strong
- * distance attenuation); a gateway-preferred-migration term is a deliberate future
+ * Migration over the de-regioned intra-faction topology — the sole consumer of the
+ * open edges + fixed-interval edge shard. Gateways throttle like goods (high fuelCost →
+ * strong distance attenuation); a gateway-preferred-migration term is a deliberate future
  * addition, not SP2. Sim-tuned for stable-but-growing (no ping-pong).
  */
 export const MIGRATION_PARAMS: MigrationFlowParams = {
   weights: { contentment: 1, headroom: 1 },
   maxOutflowFraction: 0.05,
   gradientThreshold: 0.02,
-  distanceDecay: 0.1, // matches TRADE_SIMULATION.DISTANCE_DECAY (shared topology)
+  distanceDecay: 0.1, // per-hop gradient attenuation over the open-edge topology
 };

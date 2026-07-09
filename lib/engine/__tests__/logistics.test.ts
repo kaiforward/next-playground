@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { buildLogisticsRows, type GoodFlowAggregate } from "@/lib/engine/logistics";
-import { aggregateLogisticsFlows, type LogisticsFlowRow } from "@/lib/engine/logistics";
+import {
+  buildLogisticsRows,
+  aggregateLogisticsFlows,
+  type GoodFlowAggregate,
+} from "@/lib/engine/logistics";
+import type { SystemFlowRow } from "@/lib/engine/system-trade-flow";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 
 const agg = (p: Partial<GoodFlowAggregate>): GoodFlowAggregate => ({
-  importMarket: 0, importLogistics: 0, exportMarket: 0, exportLogistics: 0,
+  importLogistics: 0, exportLogistics: 0,
   importPartners: [], exportPartners: [], ...p,
 });
 
@@ -24,8 +28,8 @@ describe("buildLogisticsRows", () => {
 
   it("computes internal/external net and the traded flag", () => {
     const flows = new Map<string, GoodFlowAggregate>([
-      ["water", agg({ exportMarket: 4, exportLogistics: 2 })],
-      ["food", agg({ importMarket: 3, importLogistics: 1 })],
+      ["water", agg({ exportLogistics: 6 })],
+      ["food", agg({ importLogistics: 4 })],
     ]);
     const model = buildLogisticsRows(prodCon, flows);
     const water = model.rows.find((r) => r.goodId === "water")!;
@@ -40,8 +44,8 @@ describe("buildLogisticsRows", () => {
 
   it("normalizes each column to its own max, and counts active/traded goods", () => {
     const flows = new Map<string, GoodFlowAggregate>([
-      ["water", agg({ exportMarket: 4, exportLogistics: 2 })], // export total 6
-      ["food", agg({ importMarket: 3, importLogistics: 1 })], // import total 4
+      ["water", agg({ exportLogistics: 6 })], // export total 6
+      ["food", agg({ importLogistics: 4 })], // import total 4
     ]);
     const model = buildLogisticsRows(prodCon, flows);
     expect(model.internalMax).toBe(10); // water production
@@ -53,7 +57,7 @@ describe("buildLogisticsRows", () => {
   it("includes a trade-only good with no prod/con, and drops fully-inactive goods", () => {
     const prod: SubstrateGoodRate[] = [{ goodId: "ore", production: 0, consumption: 0 }];
     const flows = new Map<string, GoodFlowAggregate>([
-      ["chemicals", agg({ importMarket: 5 })],
+      ["chemicals", agg({ importLogistics: 5 })],
     ]);
     const model = buildLogisticsRows(prod, flows);
     expect(model.rows.map((r) => r.goodId)).toEqual(["chemicals"]); // ore dropped (no activity)
@@ -94,15 +98,14 @@ describe("buildLogisticsRows", () => {
   it("normalises imports/exports (and partners) to a per-cycle rate, leaving prod/con untouched", () => {
     const flows = new Map<string, GoodFlowAggregate>([
       ["water", agg({
-        exportMarket: 40, exportLogistics: 20, // window total 60
+        exportLogistics: 60, // window total
         exportPartners: [{ systemId: "A", systemName: "A", quantity: 60 }],
       })],
     ]);
     const model = buildLogisticsRows(prodCon, flows, 8); // 8 cycles in the window
     const water = model.rows.find((r) => r.goodId === "water")!;
     // imports/exports divided by 8; production/consumption (per-cycle already) unchanged
-    expect(water.exportMarket).toBe(5);
-    expect(water.exportLogistics).toBe(2.5);
+    expect(water.exportLogistics).toBe(7.5);
     expect(water.externalNet).toBe(7.5);
     expect(water.production).toBe(10);
     expect(water.consumption).toBe(2);
@@ -114,17 +117,17 @@ describe("buildLogisticsRows", () => {
 describe("aggregateLogisticsFlows", () => {
   const SYS = "sys1";
   const resolveName = (id: string) => `${id}-name`;
-  const flows: LogisticsFlowRow[] = [
-    { tick: 1, fromSystemId: SYS, toSystemId: "A", goodId: "water", quantity: 4, flowType: "market" },
-    { tick: 2, fromSystemId: SYS, toSystemId: "B", goodId: "water", quantity: 2, flowType: "logistics" },
-    { tick: 3, fromSystemId: "C", toSystemId: SYS, goodId: "food", quantity: 3, flowType: "market" },
-    { tick: 4, fromSystemId: "C", toSystemId: SYS, goodId: "food", quantity: 1, flowType: "logistics" },
+  const flows: SystemFlowRow[] = [
+    { tick: 1, fromSystemId: SYS, toSystemId: "A", goodId: "water", quantity: 4 },
+    { tick: 2, fromSystemId: SYS, toSystemId: "B", goodId: "water", quantity: 2 },
+    { tick: 3, fromSystemId: "C", toSystemId: SYS, goodId: "food", quantity: 3 },
+    { tick: 4, fromSystemId: "C", toSystemId: SYS, goodId: "food", quantity: 1 },
   ];
 
-  it("splits exports/imports by flow type", () => {
+  it("sums per-good imports and exports", () => {
     const out = aggregateLogisticsFlows(flows, SYS, resolveName);
-    expect(out.get("water")).toMatchObject({ exportMarket: 4, exportLogistics: 2, importMarket: 0 });
-    expect(out.get("food")).toMatchObject({ importMarket: 3, importLogistics: 1, exportMarket: 0 });
+    expect(out.get("water")).toMatchObject({ exportLogistics: 6, importLogistics: 0 });
+    expect(out.get("food")).toMatchObject({ importLogistics: 4, exportLogistics: 0 });
   });
 
   it("ranks partners by quantity with resolved names", () => {
@@ -139,12 +142,12 @@ describe("aggregateLogisticsFlows", () => {
   });
 
   it("caps partners at the top 3 by quantity", () => {
-    const many: LogisticsFlowRow[] = [
-      { tick: 1, fromSystemId: SYS, toSystemId: "P1", goodId: "ore", quantity: 1, flowType: "market" },
-      { tick: 1, fromSystemId: SYS, toSystemId: "P2", goodId: "ore", quantity: 5, flowType: "market" },
-      { tick: 1, fromSystemId: SYS, toSystemId: "P3", goodId: "ore", quantity: 3, flowType: "market" },
-      { tick: 1, fromSystemId: SYS, toSystemId: "P4", goodId: "ore", quantity: 4, flowType: "market" },
-      { tick: 1, fromSystemId: SYS, toSystemId: "P5", goodId: "ore", quantity: 2, flowType: "market" },
+    const many: SystemFlowRow[] = [
+      { tick: 1, fromSystemId: SYS, toSystemId: "P1", goodId: "ore", quantity: 1 },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P2", goodId: "ore", quantity: 5 },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P3", goodId: "ore", quantity: 3 },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P4", goodId: "ore", quantity: 4 },
+      { tick: 1, fromSystemId: SYS, toSystemId: "P5", goodId: "ore", quantity: 2 },
     ];
     const out = aggregateLogisticsFlows(many, SYS, resolveName);
     // 5 distinct destinations collapse to the 3 highest-volume partners, qty-desc.
@@ -157,7 +160,7 @@ describe("aggregateLogisticsFlows", () => {
 
   it("ignores non-positive quantities", () => {
     const out = aggregateLogisticsFlows(
-      [{ tick: 1, fromSystemId: SYS, toSystemId: "A", goodId: "ore", quantity: 0, flowType: "market" }],
+      [{ tick: 1, fromSystemId: SYS, toSystemId: "A", goodId: "ore", quantity: 0 }],
       SYS, resolveName,
     );
     expect(out.has("ore")).toBe(false);

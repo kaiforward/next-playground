@@ -1,4 +1,4 @@
-import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
+import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type {
   MigrationDelta, MigrationNodeView, MigrationWorld,
 } from "@/lib/tick/world/migration-world";

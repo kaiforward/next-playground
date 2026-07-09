@@ -8,6 +8,7 @@ import { MarketTable } from "@/components/trade/market-table";
 import { StockChart } from "@/components/trade/stock-chart";
 import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { EmptyState } from "@/components/ui/empty-state";
 
 function MarketContent({ systemId }: { systemId: string }) {
   const router = useRouter();
@@ -38,6 +39,12 @@ function MarketContent({ systemId }: { systemId: string }) {
       })),
     [universe.connections],
   );
+
+  // A non-developed system has no market (getMarket returns no entries); the tab is
+  // hidden for it, but the route is still reachable directly.
+  if (market.length === 0) {
+    return <EmptyState message="This system isn't developed yet — no market here." />;
+  }
 
   return (
     <>
