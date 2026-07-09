@@ -14,6 +14,9 @@ export const DIRECTED_BUILD = {
   MAX_HOPS: 4,
   /** Per-unit route cost = hops × this (proximity weight in placement scoring). */
   HOP_WEIGHT: 1.0,
+  /** Per-unit route cost of a system serving ITSELF — the cheapest positive route, so self-supply
+   *  outranks export in the planner's served ÷ cost scoring. Must be 0 < SELF_COST < HOP_WEIGHT. */
+  SELF_COST: 0.5,
   /** "Fed" gate: grow housing only where supply-dissatisfaction D ≤ this (0…1). */
   D_SETTLE: 0.15,
   /** "Calm" gate: grow housing only where stored unrest ≤ this (0…1). */
