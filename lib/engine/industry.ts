@@ -732,7 +732,6 @@ export function buildIndustryReadout(
     }
     const outputGood = def?.outputGood;
     const tier: GoodTier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
-    const uptake = outputGood !== undefined ? uptakeOf(outputGood) : 1;
     const fulfil = effectiveFulfilment(state, tier);
     const used = buildingUsed(buildingType, count, ctx);
     // output = the real production rate this cycle: buildingProduction × inputGate (uptake is a
@@ -745,6 +744,9 @@ export function buildIndustryReadout(
     }
     let idleReason: IdleReason | undefined;
     if (used < count) {
+      // uptake is only read here to name the binding constraint; derive it lazily so a fully-used
+      // producer skips the lookup buildingUsed already made for `used`.
+      const uptake = outputGood !== undefined ? uptakeOf(outputGood) : 1;
       if (uptake < fulfil) idleReason = "selling";
       else if (fulfil < state.labourFulfil) {
         // A skill ceiling binds. Name the pool that is actually the min the tier draws on;

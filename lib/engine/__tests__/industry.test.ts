@@ -954,6 +954,13 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
     expect(buildingUsed(HEAVY_INDUSTRY_COMPLEX, 0.5, ctx)).toBeCloseTo(expected, 9);
   });
 
+  it("none (unrecognised type, no catalog output) used = count × labourFulfil", () => {
+    // A key absent from BUILDING_TYPES falls through to the `none` fallback (every real catalog
+    // entry has a non-none output), so it is measured by headcount staffing alone.
+    expect(buildingUsed("nonexistent_type", 3, ctx)).toBeCloseTo(3 * state.labourFulfil, 9);
+    expect(computeUtilization("nonexistent_type", 3, ctx)).toBeCloseTo(Math.min(1, state.labourFulfil), 9);
+  });
+
   it("computeUtilization = min(1, buildingUsed/count), and 0 at count 0", () => {
     for (const type of ["ore", "metals", "vocational_school", HEAVY_INDUSTRY_COMPLEX]) {
       const count = buildings[type];
