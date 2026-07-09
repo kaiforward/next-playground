@@ -143,10 +143,14 @@ export function toSimSystems(world: World): SimSystem[] {
   }
 
   const buildingsBySystem = new Map<string, Record<string, number>>();
+  const idleMonthsBySystem = new Map<string, Record<string, number>>();
   for (const b of world.buildings) {
     const rec = buildingsBySystem.get(b.systemId);
     if (rec) rec[b.buildingType] = b.count;
     else buildingsBySystem.set(b.systemId, { [b.buildingType]: b.count });
+    const idle = idleMonthsBySystem.get(b.systemId);
+    if (idle) idle[b.buildingType] = b.idleMonths;
+    else idleMonthsBySystem.set(b.systemId, { [b.buildingType]: b.idleMonths });
   }
 
   return world.systems.map((s) => ({
@@ -166,6 +170,7 @@ export function toSimSystems(world: World): SimSystem[] {
     traits: traitsBySystem.get(s.id) ?? [],
     unrest: s.unrest,
     buildings: buildingsBySystem.get(s.id) ?? {},
+    buildingIdleMonths: idleMonthsBySystem.get(s.id) ?? {},
     yields: resourceVectorFromColumns(
       {
         yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -231,7 +236,9 @@ function flattenBuildings(simSystems: SimSystem[]): WorldBuilding[] {
   const rows: WorldBuilding[] = [];
   for (const s of simSystems) {
     for (const [buildingType, count] of Object.entries(s.buildings)) {
-      if (count > 0) rows.push({ systemId: s.id, buildingType, count, idleMonths: 0 });
+      if (count > 0) {
+        rows.push({ systemId: s.id, buildingType, count, idleMonths: s.buildingIdleMonths[buildingType] ?? 0 });
+      }
     }
   }
   return rows;

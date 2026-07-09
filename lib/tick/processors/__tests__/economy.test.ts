@@ -63,6 +63,7 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
     traits: [],
     unrest,
     buildings: { food: 2 },
+    buildingIdleMonths: {},
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
@@ -84,6 +85,7 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
     traits: [],
     unrest,
     buildings: {},
+    buildingIdleMonths: {},
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
@@ -375,6 +377,7 @@ describe("economy processor: supply-chain input-gating", () => {
         traits: [],
         unrest: 0,
         buildings: { metals: 2, vocational_school: 1 }, // smelter + academy — no ore extractor
+        buildingIdleMonths: {},
         yields: unitResourceVector(),
         slotCap: emptyResourceVector(),
         generalSpace: 0,

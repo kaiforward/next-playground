@@ -12,7 +12,7 @@ function sys(id: string, over: Partial<SimSystem>): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 100, popCap: 200, traits: [],
-    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, yields: unitResourceVector(),
+    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleMonths: {}, yields: unitResourceVector(),
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...over,
   };

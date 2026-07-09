@@ -64,6 +64,7 @@ function makeSimSystem(id: string, factionId: string | null): SimSystem {
     traits: [],
     unrest: 0,
     buildings: {},
+    buildingIdleMonths: {},
     yields: emptyResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 100,

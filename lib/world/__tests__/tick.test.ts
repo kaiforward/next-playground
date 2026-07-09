@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick } from "../tick";
+import { runWorldTick, toSimSystems } from "../tick";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import type { WorldShip } from "../types";
@@ -87,6 +87,35 @@ describe("runWorldTick", () => {
     const { world: after, events } = await runWorldTick(world);
     expect(events.currentTick).toBe(after.meta.currentTick);
     expect(events.currentTick).toBe(1);
+  });
+
+  it("toSimSystems seeds buildingIdleMonths from WorldBuilding.idleMonths", () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const target = base.buildings[0].systemId;
+    const world = {
+      ...base,
+      buildings: base.buildings.map((b) => (b.systemId === target ? { ...b, idleMonths: 4 } : b)),
+    };
+    const sim = toSimSystems(world).find((s) => s.id === target);
+    expect(sim).toBeDefined();
+    for (const b of world.buildings.filter((b) => b.systemId === target)) {
+      expect(sim?.buildingIdleMonths[b.buildingType]).toBe(4);
+    }
+  });
+
+  it("round-trips building idleMonths across a tick (inert plumbing — decay does not yet consume it)", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const world = { ...base, buildings: base.buildings.map((b) => ({ ...b, idleMonths: 7 })) };
+    const seeded = new Set(world.buildings.map((b) => `${b.systemId}|${b.buildingType}`));
+    const { world: after } = await runWorldTick(world);
+    // Every building that existed at seed still carries its idleMonths unchanged (nothing in
+    // Phase A reads or writes it; the value merely survives the sim round-trip). Newly-built rows
+    // are excluded — they start at 0.
+    for (const b of after.buildings) {
+      if (seeded.has(`${b.systemId}|${b.buildingType}`)) {
+        expect(b.idleMonths, `${b.systemId}|${b.buildingType}`).toBe(7);
+      }
+    }
   });
 });
 

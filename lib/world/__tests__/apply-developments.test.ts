@@ -20,6 +20,7 @@ function makeSystem(id: string, population: number): SimSystem {
     traits: [],
     unrest: 0,
     buildings: {},
+    buildingIdleMonths: {},
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 100,
