@@ -687,6 +687,21 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     expect(readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!.output).toBeUndefined();
     expect(readout.buildings.find((b) => b.buildingType === "vocational_school")!.output).toBeUndefined();
   });
+
+  it("reads an over-licensed academy as idle (licence-draw), like a complex not a producer", () => {
+    // 1 metals fab demands skill1 = 7; the school licenses SKILL1_PER_SCHOOL (150) ≫ that, so most of
+    // its licensing sits idle — the readout must match decay (licence-draw), not the old staffing proxy.
+    const buildings = { metals: 1, vocational_school: 1 };
+    const pop = labourDemand(buildings) * 10; // plentiful → fully staffed on headcount
+    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const school = readout.buildings.find((b) => b.buildingType === "vocational_school")!;
+    const s1 = BUILDING_TYPES.metals!.labour!.skill1;
+    // used = 1 × min(1, skill1Demand / skill1Cap): mostly idle, well below the built count of 1.
+    expect(school.used).toBeCloseTo(Math.min(1, s1 / SKILL1_PER_SCHOOL), 6);
+    expect(school.used).toBeLessThan(0.2);
+    // staffedFraction is the utilisation bar (used / count), matching housing/complex — not staffing.
+    expect(school.staffedFraction).toBeCloseTo(school.used, 6);
+  });
 });
 
 describe("computeLabourAllocation", () => {
