@@ -133,7 +133,24 @@ function labourFor(goodId: string): LabourVector {
   return LABOUR_OVERRIDES[goodId] ?? LABOUR_BY_TIER[GOOD_TIER_BY_KEY[goodId] ?? 0];
 }
 
+/** The abstract (un-priced) capacities a building can supply. */
+export type CapacityKind = "pop_cap" | "skill1_licence" | "skill2_licence";
+
+/**
+ * What a building produces — one uniform skeleton, typed output. A `market_good` is priced and sold
+ * (extractors, factories); a `capacity` is an un-priced running balance (housing pop-cap, an academy
+ * skill licence); a `modifier` is a %-buff (a specialisation complex, keyed by its complex-type id);
+ * `none` is employment/holding only. The utilization dispatch (`buildingUsed`) keys off `kind`.
+ */
+export type BuildingOutput =
+  | { kind: "market_good"; goodId: string }
+  | { kind: "capacity"; capacity: CapacityKind }
+  | { kind: "modifier"; family: string }
+  | { kind: "none" };
+
 export interface BuildingTypeDef {
+  /** Typed output — the discriminant every utilization/decay/read path dispatches on. */
+  output: BuildingOutput;
   /** Good this type produces (=== type id in this model). Undefined for housing. */
   outputGood?: string;
   /** Recipe: input good → units per output. Tier-1+ only; inert until input-gating. */
@@ -208,6 +225,7 @@ function buildProductionTypes(): Record<string, BuildingTypeDef> {
     const recipe = GOOD_RECIPES[goodId];
     const resource = GOOD_PRODUCTION[goodId]?.resource;
     out[goodId] = {
+      output: { kind: "market_good", goodId },
       outputGood: goodId,
       ...(recipe ? { inputs: recipe } : {}),
       ...(resource ? { resource } : {}),
@@ -223,6 +241,7 @@ function buildComplexTypes(): Record<string, BuildingTypeDef> {
   const out: Record<string, BuildingTypeDef> = {};
   for (const f of SPECIALISATION_FAMILIES) {
     out[f.complexType] = {
+      output: { kind: "modifier", family: f.complexType },
       spaceCost: ANCHOR_FOOTPRINT,
       labour: { unskilled: ANCHOR_UNSKILLED_LABOUR, skill1: 0, skill2: 0 },
     };
@@ -233,13 +252,19 @@ function buildComplexTypes(): Record<string, BuildingTypeDef> {
 export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
   ...buildProductionTypes(),
   ...buildComplexTypes(),
-  [HOUSING_TYPE]: { spaceCost: DEFAULT_SPACE_COST, popProvided: POP_CENTRE_DENSITY },
+  [HOUSING_TYPE]: {
+    output: { kind: "capacity", capacity: "pop_cap" },
+    spaceCost: DEFAULT_SPACE_COST,
+    popProvided: POP_CENTRE_DENSITY,
+  },
   [VOCATIONAL_SCHOOL_TYPE]: {
+    output: { kind: "capacity", capacity: "skill1_licence" },
     spaceCost: 1.5,
     labour: { unskilled: 15, skill1: 0, skill2: 0 },
     skill1Licensed: SKILL1_PER_SCHOOL,
   },
   [RESEARCH_INSTITUTE_TYPE]: {
+    output: { kind: "capacity", capacity: "skill2_licence" },
     spaceCost: 2.0,
     labour: { unskilled: 20, skill1: 0, skill2: 0 },
     skill2Licensed: SKILL2_PER_INSTITUTE,

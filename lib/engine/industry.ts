@@ -38,6 +38,7 @@ import {
   ANCHOR_RATED_COVERAGE,
   type LabourVector,
   type SpecialisationFamily,
+  type CapacityKind,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -378,6 +379,77 @@ export function complexUsed(count: number, throughput: number, rated: number): n
   return Math.min(count, rated > 0 ? throughput / rated : 0);
 }
 
+/** Housing the current population fills, in building units. May exceed the housing count (overshoot). */
+export function housingUsed(population: number): number {
+  return Math.max(0, population) / POP_CENTRE_DENSITY;
+}
+
+/**
+ * Everything a per-`output.kind` utilization needs, computed once per system by the caller. Both the
+ * decay engine and the industry read service already have every field in hand (a single labourParts
+ * pass + the population + a seller-side uptake signal), so this just names the bundle.
+ */
+export interface UtilizationContext {
+  /** The whole built base — needed for a modifier's family throughput. */
+  buildings: Record<string, number>;
+  population: number;
+  /** Headcount + skill demand/cap totals (one labourParts pass). */
+  parts: LabourParts;
+  /** The three fulfilment ratios. */
+  state: LabourState;
+  /** Seller-side output uptake ∈ [0,1] for a produced good; missing ⇒ 1 (sells freely). */
+  outputUptake: (goodId: string) => number;
+}
+
+/** An abstract-capacity building's licence draw ÷ licence supply, in building units. */
+function capacityUsed(kind: CapacityKind, count: number, ctx: UtilizationContext): number {
+  switch (kind) {
+    case "pop_cap":
+      return housingUsed(ctx.population);
+    case "skill1_licence":
+      return count * (ctx.parts.skill1Cap > 0 ? Math.min(1, ctx.parts.skill1Demand / ctx.parts.skill1Cap) : 0);
+    case "skill2_licence":
+      return count * (ctx.parts.skill2Cap > 0 ? Math.min(1, ctx.parts.skill2Demand / ctx.parts.skill2Cap) : 0);
+  }
+}
+
+/**
+ * Absolute in-use amount for one building, dispatched on its typed output — the single source of the
+ * "used" quantity the decay engine and the industry readout both consume, replacing the per-type
+ * branches each carried:
+ *  - market_good → staffed AND selling: count × min(effectiveFulfilment(tier), uptake).
+ *  - capacity/pop_cap → occupancy: population / POP_CENTRE_DENSITY (may exceed count → overshoot).
+ *  - capacity/skill{1,2}_licence → licence draw: count × min(1, skillDemand / skillCap).
+ *  - modifier → family coverage the built factories draw: complexUsed(count, familyThroughput, rated).
+ *  - none → staffing only (no current type; employment/holding fallback).
+ */
+export function buildingUsed(buildingType: string, count: number, ctx: UtilizationContext): number {
+  const output = BUILDING_TYPES[buildingType]?.output ?? { kind: "none" as const };
+  switch (output.kind) {
+    case "market_good": {
+      const tier = GOOD_TIER_BY_KEY[output.goodId] ?? 0;
+      return count * Math.min(effectiveFulfilment(ctx.state, tier), ctx.outputUptake(output.goodId));
+    }
+    case "capacity":
+      return capacityUsed(output.capacity, count, ctx);
+    case "modifier": {
+      const family = COMPLEX_BY_TYPE[output.family];
+      return family ? complexUsed(count, familyThroughput(ctx.buildings, family), ANCHOR_RATED_COVERAGE) : 0;
+    }
+    case "none":
+      return count * ctx.state.labourFulfil;
+  }
+}
+
+/**
+ * Utilization u ∈ [0,1] = min(1, buildingUsed / count); 0 at non-positive count. The clamped ratio
+ * PR3's whole-level decay reads (an over-occupied housing level reads as fully utilised, not >1).
+ */
+export function computeUtilization(buildingType: string, count: number, ctx: UtilizationContext): number {
+  if (count <= 0) return 0;
+  return Math.min(1, buildingUsed(buildingType, count, ctx) / count);
+}
+
 /**
  * Capacity-driven production rate for one good. Sums every production type
  * whose outputGood matches (1:1 today, many-to-one ready).
@@ -615,23 +687,27 @@ export function buildIndustryReadout(
     skill2: { have: parts.skill2Cap, need: parts.skill2Demand, fulfil: state.skill2Fulfil },
   };
   const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
+  // Seller-side uptake for a produced good ∈ [0,1]; a good with no market band (no row, or a legacy
+  // caller without maxStockOf) sells freely (1). Shared by buildingUsed and the producer idleReason.
+  const uptakeOf = (g: string): number => {
+    if (maxStockOf === undefined) return 1;
+    const maxStock = maxStockOf(g);
+    return maxStock !== undefined ? outputUptake(stockOf(g), minStockOf(g), maxStock) : 1;
+  };
+  const ctx: UtilizationContext = { buildings, population, parts, state, outputUptake: uptakeOf };
 
-  // Per-building "in use" — the decay-relevant quantity (mirrors computeSystemDecay):
-  //  - housing: occupancy = population / POP_CENTRE_DENSITY,
-  //  - producers: count × min(effectiveFulfilment(tier), outputUptake) (staffed AND selling),
-  //    where effectiveFulfilment is the skill-gated ratio for the good's tier — a tier-1/2
-  //    building that is headcount-full but skill-starved (no licensing academy) reads as idle too.
-  // idleReason names the binding constraint so the panel can caption an idle row:
-  // "labour" when headcount itself is short, "skill1"/"skill2" when a skill ceiling
-  // (no vocational school / research institute) drags effectiveFulfilment below the
-  // headcount gate, "selling" when output can't move.
-  // outputUptake needs the maxStock band; without it (legacy callers) output sells
-  // freely (uptake 1) so `used` falls back to the fulfilment-only figure.
+  // Per-building "in use" — the decay-relevant quantity, resolved by the one shared buildingUsed
+  // dispatch (the same values computeSystemDecay sees): housing occupancy, an academy's licence draw,
+  // a complex's family coverage, or a producer's staffed-and-selling capacity. staffedFraction is the
+  // panel's utilisation bar — used/count for the capacity/modifier rows, the pure staffing ratio for
+  // producers (so a fully-staffed-but-not-selling producer still reads 100% staffed). idleReason
+  // captions an idle producer row: "labour" (headcount short), "skill1"/"skill2" (a skill ceiling
+  // drags fulfilment below the headcount gate), or "selling" (output can't move).
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
   for (const [buildingType, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
-      const used = Math.max(0, population) / POP_CENTRE_DENSITY;
+      const used = buildingUsed(HOUSING_TYPE, count, ctx);
       const staffedFraction = count > 0 ? used / count : 0;
       buildingEntries.push({ buildingType, tier: -1, count, used, staffedFraction, idleReason: used < count ? "occupancy" : undefined });
       continue;
@@ -639,25 +715,25 @@ export function buildIndustryReadout(
     if (COMPLEX_BY_TYPE[buildingType]) {
       // A complex produces no good of its own — its "used" is family-utilisation
       // (built factories vs rated coverage), not labour/selling like a producer.
-      const used = complexUsed(count, familyThroughput(buildings, COMPLEX_BY_TYPE[buildingType]), ANCHOR_RATED_COVERAGE);
+      const used = buildingUsed(buildingType, count, ctx);
       const staffedFraction = count > 0 ? used / count : 0;
       buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
       continue;
     }
     const def = BUILDING_TYPES[buildingType];
+    if (def?.output.kind === "capacity") {
+      // Academy (housing handled above) — a capacity building whose utilisation is its licence draw
+      // (skill demand vs the licensed ceiling). Displayed like a complex (staffedFraction = used/count,
+      // no market output), so an over-licensed academy reads as idle exactly as decay measures it.
+      const used = buildingUsed(buildingType, count, ctx);
+      const staffedFraction = count > 0 ? used / count : 0;
+      buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
+      continue;
+    }
     const outputGood = def?.outputGood;
     const tier: GoodTier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
-    // Output uptake needs the market band; a good with no band (no market row, or a
-    // legacy caller without maxStockOf) sells freely (uptake 1) → labour-only `used`.
-    let uptake = 1;
-    if (outputGood !== undefined && maxStockOf !== undefined) {
-      const maxStock = maxStockOf(outputGood);
-      if (maxStock !== undefined) {
-        uptake = outputUptake(stockOf(outputGood), minStockOf(outputGood), maxStock);
-      }
-    }
     const fulfil = effectiveFulfilment(state, tier);
-    const used = count * Math.min(fulfil, uptake);
+    const used = buildingUsed(buildingType, count, ctx);
     // output = the real production rate this cycle: buildingProduction × inputGate (uptake is a
     // selling/decay signal, not a production multiplier — see lib/tick/processors/economy.ts).
     let output: number | undefined;
@@ -668,6 +744,9 @@ export function buildIndustryReadout(
     }
     let idleReason: IdleReason | undefined;
     if (used < count) {
+      // uptake is only read here to name the binding constraint; derive it lazily so a fully-used
+      // producer skips the lookup buildingUsed already made for `used`.
+      const uptake = outputGood !== undefined ? uptakeOf(outputGood) : 1;
       if (uptake < fulfil) idleReason = "selling";
       else if (fulfil < state.labourFulfil) {
         // A skill ceiling binds. Name the pool that is actually the min the tier draws on;
