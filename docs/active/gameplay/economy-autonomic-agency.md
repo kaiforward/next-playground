@@ -147,23 +147,28 @@ growing. Three mechanisms, in causal order:
 1. **Proactive housing.** Where a system is *fed and calm* (`dissatisfaction ≤ D_settle` and
    `unrest ≤ unrest_settle`) and has habitable land not yet built out, build housing **ahead** of
    population, toward the habitable cap — creating the headroom population needs to grow. Housing is paced
-   to keep `popCap` only a small margin (`settleMargin`) ahead of current population, so population (which
-   grows ~3× faster than housing decays) fills it before disuse decay can erode it. A system short on food
+   to keep `popCap` only a small margin (`settleMargin`) ahead of current population, so population fills the
+   new levels before their idle buffer could expire and shed them. A system short on food
    or unsettled does not grow — food supply is therefore the natural ceiling on how full a system becomes,
    with no magic population cap.
 2. **Population growth** fills the new housing — the existing logistic, untouched; `popCap` recomputes live
    from the housing count (SP3.5).
 3. **Labour-gated industry.** Build production only where there is genuine **spare labour**
    (`population − labourDemand`) *and* a reachable structural deficit (a deficit with no reachable surplus)
-   it can serve with available inputs. Each build is capped to what the already-resident population can
-   staff (`spareLabour / labourPerUnit`, fractional), decremented per placement within a cycle. Industry
+   it can serve with available inputs. Each build is capped to whole levels the already-resident population
+   can staff, and a skill-gated good's build is committed **gate-first** — the academies (and any
+   specialisation complex) that license it are queued ahead of the production levels they serve. Industry
    follows the people who already live there; it is never built for population that does not yet exist.
 
-The faction build budget is pooled the same way as logistics (`Σ population × generation rate`) and funds
-**both** housing and industry. No explicit cross-mechanism priority is needed — the gates sequence the work
-on their own: a system with no spare labour spends budget only on housing (and only if fed and calm), and
-industry draws budget only where spare labour already exists. A per-system per-cycle pacing cap keeps one
-system from absorbing a disproportionate share of the pool in a single run.
+Capacity grows only through **committed construction projects**, never instant accretion. The auto queue
+policy proposes whole-level projects toward these ceilings — aware of the levels already in flight, so it
+never double-commits — and a **per-faction throughput pool** (`Σ developed population × throughput rate`)
+funds the front-first queue at a **per-build absorption cap**. A level is *under construction* (contributing
+nothing) until its accumulated work reaches its cost, then it **lands** as a full staffable level; build
+duration is therefore *emergent* (`work ÷ absorbed`, a floor wealth cannot buy past) and a larger pool
+spreads across more parallel fronts rather than finishing any one build faster. The gates sequence the work
+on their own: a system with no spare labour queues only housing (and only if fed and calm), and industry is
+queued only where spare labour already exists.
 
 ---
 
