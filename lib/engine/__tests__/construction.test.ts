@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fundQueue } from "@/lib/engine/construction";
+import { fundQueue, factionThroughputPool } from "@/lib/engine/construction";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -14,6 +14,22 @@ function project(
 ): WorldConstructionProject {
   return { id, factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
 }
+
+describe("factionThroughputPool", () => {
+  it("sums pop × rate over economically-active (developed) systems only", () => {
+    const systems = [
+      { control: "developed" as const, population: 100 },
+      { control: "controlled" as const, population: 50 },   // inert
+      { control: "unclaimed" as const, population: 0 },      // inert
+      { control: "developed" as const, population: 200 },
+    ];
+    expect(factionThroughputPool(systems, 0.05)).toBeCloseTo((100 + 200) * 0.05);
+  });
+
+  it("floors negative population at zero", () => {
+    expect(factionThroughputPool([{ control: "developed" as const, population: -10 }], 0.05)).toBe(0);
+  });
+});
 
 describe("fundQueue", () => {
   it("advances a single build by min(cap, remaining, pool) each pulse — duration emerges as work ÷ cap", () => {
