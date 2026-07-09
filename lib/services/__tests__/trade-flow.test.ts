@@ -22,16 +22,16 @@ beforeEach(() => {
   [system, partnerA, partnerB] = byPop;
 
   // Cross-border flows on the focal system, inside the history window.
-  // WorldFlowEvent.goodId stores the good KEY. Water EXPORTS to partnerA
-  // (market + logistics); food IMPORTS from both partners.
+  // WorldFlowEvent.goodId stores the good KEY. Water EXPORTS to partnerA;
+  // food IMPORTS from both partners.
   world = {
     ...generated,
     meta: { ...generated.meta, currentTick: 10 },
     flowEvents: [
-      { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 4, flowType: "market" },
-      { tick: 10, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 2, flowType: "logistics" },
-      { tick: 9, fromSystemId: partnerB.id, toSystemId: system.id, goodId: "food", quantity: 3, flowType: "market" },
-      { tick: 10, fromSystemId: partnerA.id, toSystemId: system.id, goodId: "food", quantity: 1, flowType: "logistics" },
+      { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 4 },
+      { tick: 10, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 2 },
+      { tick: 9, fromSystemId: partnerB.id, toSystemId: system.id, goodId: "food", quantity: 3 },
+      { tick: 10, fromSystemId: partnerA.id, toSystemId: system.id, goodId: "food", quantity: 1 },
     ],
   };
   setWorld(world);
@@ -42,25 +42,22 @@ afterEach(() => {
 });
 
 describe("getSystemLogistics", () => {
-  it("assembles the logistics readout, split by flow type", () => {
+  it("assembles the logistics readout with per-good imports and exports", () => {
     const data = getSystemLogistics(system.id);
     expect(data.visibility).toBe("visible");
     if (data.visibility !== "visible") throw new Error("expected visible");
 
-    // Exports split by flow type, no inbound flow (window totals 4 + 2, per cycle).
+    // Exports only, no inbound flow (window total 4 + 2, per cycle).
     const water = data.rows.find((r) => r.goodId === "water")!;
-    expect(water.exportMarket).toBeCloseTo(perCycle(4));
-    expect(water.exportLogistics).toBeCloseTo(perCycle(2));
-    expect(water.importMarket).toBe(0);
+    expect(water.exportLogistics).toBeCloseTo(perCycle(6));
     expect(water.importLogistics).toBe(0);
     expect(water.externalNet).toBeCloseTo(perCycle(6));
     expect(water.traded).toBe(true);
 
-    // Imports split by flow type, summed across both source partners (window totals 3 + 1).
+    // Imports summed across both source partners (window total 3 + 1).
     const food = data.rows.find((r) => r.goodId === "food")!;
-    expect(food.importMarket).toBeCloseTo(perCycle(3));
-    expect(food.importLogistics).toBeCloseTo(perCycle(1));
-    expect(food.exportMarket).toBe(0);
+    expect(food.importLogistics).toBeCloseTo(perCycle(4));
+    expect(food.exportLogistics).toBe(0);
     expect(food.externalNet).toBeCloseTo(perCycle(-4));
     expect(food.traded).toBe(true);
 
@@ -102,7 +99,6 @@ describe("getSystemLogistics", () => {
           toSystemId: partnerA.id,
           goodId: "water",
           quantity: 99,
-          flowType: "market",
         },
       ],
     });
@@ -119,7 +115,7 @@ describe("getTradeFlowEdges", () => {
     setWorld({
       ...world,
       flowEvents: [
-        { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 40, flowType: "logistics" },
+        { tick: 9, fromSystemId: system.id, toSystemId: partnerA.id, goodId: "water", quantity: 40 },
       ],
     });
     const edges = getTradeFlowEdges();

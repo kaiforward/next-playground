@@ -647,7 +647,7 @@ export async function runWorldTick(
     };
     // Directed-logistics moves goods only between developed systems.
     const rows = buildLogisticsRows(
-      systems.filter((s) => isEconomicallyActive(s.control)),
+      systems.filter((s) => developedSystemIds.has(s.id)),
       logisticsMarketRows,
     );
     const dlWorld = new MemoryDirectedLogisticsWorld(rows);
@@ -657,11 +657,10 @@ export async function runWorldTick(
     });
     markets = applyStockUpdates(markets, dlWorld.stockUpdates);
     dlStockUpdates = dlWorld.stockUpdates;
-    const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows.map((f) => ({ ...f, flowType: "logistics" }));
+    const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
     flowEvents = [...flowEvents, ...newLogisticsFlows];
-    // Prune the flow-event log to the overlay/logistics retention window. The
-    // deleted trade-flow processor used to be the sole pruner; directed-logistics
-    // is now the only writer, so pruning happens here after the append.
+    // Directed-logistics is the only writer of flowEvents; prune the log to the
+    // overlay/logistics retention window here, after the append.
     const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
     flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
     processorsRun.push("directed-logistics");

@@ -14,7 +14,6 @@ import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/indus
 import {
   aggregateLogisticsFlows,
   buildLogisticsRows,
-  type LogisticsFlowRow,
 } from "@/lib/engine/logistics";
 
 /**
@@ -25,11 +24,11 @@ export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
   const minTick = world.meta.currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
-  // Group by (from, to, good, flowType) summing quantity over the window.
+  // Group by (from, to, good) summing quantity over the window.
   const grouped = new Map<string, RawFlowRow>();
   for (const f of world.flowEvents) {
     if (f.tick <= minTick || f.quantity <= 0) continue;
-    const key = `${f.fromSystemId}|${f.toSystemId}|${f.goodId}|${f.flowType}`;
+    const key = `${f.fromSystemId}|${f.toSystemId}|${f.goodId}`;
     const existing = grouped.get(key);
     if (existing) {
       existing.quantity += f.quantity;
@@ -39,16 +38,14 @@ export function getTradeFlowEdges(): TradeFlowEdges {
         toSystemId: f.toSystemId,
         goodId: f.goodId,
         quantity: f.quantity,
-        flowType: f.flowType,
       });
     }
   }
 
   const allSystemIds = new Set(world.systems.map((s) => s.id));
-  const { logisticsEdges } = buildFlowEdges(
+  const logisticsEdges = buildFlowEdges(
     [...grouped.values()],
     allSystemIds,
-    TRADE_SIMULATION.ROUTE_INFERENCE_FLOOR,
     TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
   );
   return { logisticsEdges };
@@ -92,8 +89,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const nameById = systemNameById();
   const resolveName = (id: string): string => nameById.get(id) ?? "Unknown System";
 
-  const flowRows: LogisticsFlowRow[] = flows;
-  const flowsByGood = aggregateLogisticsFlows(flowRows, systemId, resolveName);
+  const flowsByGood = aggregateLogisticsFlows(flows, systemId, resolveName);
   // Imports/exports are summed over the FLOW_HISTORY_TICKS window; normalise to a
   // per-economy-cycle rate so they share units with the production/consumption rates.
   const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / ECONOMY_UPDATE_INTERVAL;

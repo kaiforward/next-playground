@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { runWorldTick } from "../tick";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
+import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import type { WorldShip } from "../types";
 
 async function runTicks(world: ReturnType<typeof generateWorld>, count: number) {
@@ -179,5 +180,28 @@ describe("runWorldTick — per-stage wiring", () => {
     const after = await runTicks(world, 50);
 
     expect(after.flowEvents.length).toBeGreaterThan(0);
+  });
+
+  it("directed-logistics: prunes flow events older than FLOW_HISTORY_TICKS from the log each tick", async () => {
+    // The tick body prunes flowEvents unconditionally after directed-logistics writes,
+    // keeping only ticks >= currentTick - FLOW_HISTORY_TICKS.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const T = 300;
+    const staleTick = T - TRADE_SIMULATION.FLOW_HISTORY_TICKS - 5; // below the post-tick retention floor
+    const freshTick = T; // within the window
+    const [s0, s1] = base.systems;
+    const world = {
+      ...base,
+      meta: { ...base.meta, currentTick: T },
+      flowEvents: [
+        { tick: staleTick, fromSystemId: s0.id, toSystemId: s1.id, goodId: "water", quantity: 5 },
+        { tick: freshTick, fromSystemId: s0.id, toSystemId: s1.id, goodId: "water", quantity: 5 },
+      ],
+    };
+
+    const { world: after } = await runWorldTick(world);
+
+    expect(after.flowEvents.some((f) => f.tick === staleTick)).toBe(false);
+    expect(after.flowEvents.some((f) => f.tick === freshTick)).toBe(true);
   });
 });

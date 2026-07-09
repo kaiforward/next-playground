@@ -87,9 +87,7 @@ export interface LogisticsGoodRow {
   inputDemand: number;
   /** production − (consumption + inputDemand). */
   internalNet: number;
-  importMarket: number;
   importLogistics: number;
-  exportMarket: number;
   exportLogistics: number;
   /** (exports total) − (imports total), per cycle. */
   externalNet: number;

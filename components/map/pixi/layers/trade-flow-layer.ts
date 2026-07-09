@@ -119,7 +119,7 @@ export class TradeFlowLayer {
 
   /** Per-frame visibility update: frustum culling + layer alpha from LOD. */
   updateVisibility(frustum: Frustum, lod: LODState, layerAlpha = 1) {
-    this.container.alpha = lod.tradeFlowAlpha * layerAlpha;
+    this.container.alpha = lod.logisticsAlpha * layerAlpha;
     if (this.container.alpha === 0) {
       this.container.visible = false;
       return;

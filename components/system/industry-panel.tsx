@@ -590,7 +590,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const { density, setDensity } = useIndustryDensity();
 
   if (data.visibility === "unknown") {
-    return <EmptyState message="Scan this system with a ship in range to survey its industry." />;
+    return <EmptyState message="This system isn't developed yet — no industry to survey." />;
   }
 
   const { space, deposits, labour, labourAllocation, labourFulfillment, buildings, supplyChain, unrest, skillBaskets } = data;
