@@ -1,12 +1,9 @@
 import {
   spotPrice,
-  quoteTrade,
   curveForGood,
   type MarketCurve,
 } from "@/lib/engine/market-pricing";
-import { getSpread } from "@/lib/constants/market-economy";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
-import type { GovernmentDefinition } from "@/lib/constants/government";
 import type { MarketEntry } from "@/lib/types/game";
 
 /** Minimal good shape needed to price a market row. */
@@ -31,38 +28,25 @@ export function curveForGoodRow(
 }
 
 /**
- * Build a display MarketEntry from a market row's stock + good. The single-unit
- * buy/sell prices use the bid-ask spread for the system's government.
- * `stock` is floored so the player never sees fractional goods.
- *
- * `demandRate` is the market row's stored days-of-supply denominator; `anchorMult`
- * its stored anchor-shift multiplier (default 1). The resulting `targetStock` is
- * the per-system reference, exposed on the entry so the client reproduces the
- * exact curve for quote previews.
+ * Build a display MarketEntry from a market row's stock + good. Price is the
+ * derived spot readout; `stock` is floored so the player never sees fractional
+ * goods. `demandRate` is the market row's days-of-supply denominator and
+ * `anchorMult` (default 1) its stored anchor-shift multiplier — together they
+ * centre the pricing curve.
  */
 export function buildMarketEntry(
   goodId: string,
   good: PricedGood,
   stock: number,
   demandRate: number,
-  govDef?: GovernmentDefinition,
   anchorMult: number = 1,
 ): MarketEntry {
   const { curve } = curveForGoodRow(good, demandRate, anchorMult);
-  const spread = getSpread(govDef);
   return {
     goodId,
     goodName: good.name,
     basePrice: good.basePrice,
     currentPrice: spotPrice(curve, stock),
-    buyPrice: quoteTrade(curve, stock, 1, "buy", spread).totalPrice,
-    sellPrice: quoteTrade(curve, stock, 1, "sell", spread).totalPrice,
     stock: Math.floor(stock),
-    // Curve inputs for client-side quote previews (trade form).
-    priceFloor: good.priceFloor,
-    priceCeiling: good.priceCeiling,
-    targetStock: curve.targetStock,
-    spread,
   };
 }
-
