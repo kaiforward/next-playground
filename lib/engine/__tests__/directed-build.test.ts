@@ -4,6 +4,7 @@ import type { WorldConstructionProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, ANCHOR_FOOTPRINT, effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
+import { TARGET_COVER } from "@/lib/constants/market-economy";
 import { labourDemand } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 
@@ -43,51 +44,56 @@ const reachable: RouteCost = () => 1;
 const unreachable: RouteCost = () => null;
 
 describe("findStructuralDeficits", () => {
-  it("flags a deficit as structural when no surplus of that good is reachable", () => {
-    const deficit = buildSys("A", { goodId: "electronics", stock: 1, targetStock: 10, demand: 4 });
+  it("flags a good with production below demand as a structural rate deficit", () => {
+    // demand 4, production 0 → rateDeficit 4. Stock/targetStock are irrelevant to placement now.
+    const deficit = buildSys("A", { goodId: "electronics", stock: 1, targetStock: 10, demand: 4, production: 0 });
     const out = findStructuralDeficits([deficit], reachable);
     expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ systemId: "A", goodId: "electronics", shortfall: 9, demand: 4 });
+    expect(out[0]).toMatchObject({ systemId: "A", goodId: "electronics", rateDeficit: 4, demand: 4 });
   });
 
-  it("excludes a deficit when a reachable surplus of that good exists", () => {
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4 });
-    const surplus = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4 });
-    expect(findStructuralDeficits([deficit, surplus], reachable)).toHaveLength(0);
+  it("flags a rate deficit even when the stock buffer is full (stock decoupled from placement)", () => {
+    // Full stock (>= targetStock) but production 1 < demand 4 → still a structural rate deficit:
+    // the buffer is draining. This is the core B behaviour — TARGET_COVER no longer gates builds.
+    const drainingButStocked = buildSys("A", { goodId: "food", stock: 500, targetStock: 100, demand: 4, production: 1 });
+    const out = findStructuralDeficits([drainingButStocked], reachable);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ goodId: "food", rateDeficit: 3 });
   });
 
-  it("keeps a deficit structural when the only surplus is unreachable", () => {
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4 });
-    const surplus = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4 });
-    expect(findStructuralDeficits([deficit, surplus], unreachable)).toHaveLength(1);
+  it("excludes a deficit when a reachable rate exporter (production > demand) of that good exists", () => {
+    // B produces 30 > its own demand 4 → a sustainable exporter whose surplus flow logistics carries.
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0 });
+    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30 });
+    expect(findStructuralDeficits([deficit, exporter], reachable)).toHaveLength(0);
   });
 
-  it("does not treat a balanced or surplus market as a deficit", () => {
-    const balanced = buildSys("A", { goodId: "ore", stock: 10, targetStock: 10, demand: 4 });
-    expect(findStructuralDeficits([balanced], reachable)).toHaveLength(0);
+  it("does NOT exclude a deficit when the only nearby stock is a draining pile (production < demand)", () => {
+    // B holds 100 stock but produces nothing (production 0 < demand 4) → it is itself draining, not a
+    // sustainable source. A must still build its own capacity; logistics ships B's transient stock meanwhile.
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0 });
+    const drainingPile = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 0 });
+    // Both A and B are rate deficits (neither produces its own demand); neither excludes the other.
+    expect(findStructuralDeficits([deficit, drainingPile], reachable)).toHaveLength(2);
+  });
+
+  it("keeps a deficit structural when the only exporter is unreachable", () => {
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0 });
+    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30 });
+    // Only A is a deficit (B is an exporter); it stays structural because the exporter can't reach it.
+    expect(findStructuralDeficits([deficit, exporter], unreachable)).toHaveLength(1);
   });
 
   it("does not flag a self-supplier (production ≥ demand) as a deficit despite low standing stock", () => {
-    // Low stock but produces at least its own demand → throughput, not need. Mirrors the
-    // logistics matcher's self-supply gate: building more capacity for a good a system already
-    // makes piles stock to the ceiling and decays its own producers.
     const selfSupplier = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 10 });
     expect(findStructuralDeficits([selfSupplier], reachable)).toHaveLength(0);
   });
 
-  it("still flags a net importer (production < demand) with low stock as structural", () => {
+  it("still flags a net importer (production < demand) as structural", () => {
     const importer = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 2 });
-    expect(findStructuralDeficits([importer], reachable)).toHaveLength(1);
-  });
-
-  it("excludes a deficit when a reachable structural producer (below the 1.4× margin) can supply it", () => {
-    // B produces 30 > demand 5 → structural exporter; stock 110 = 1.1× anchor 100, BELOW the 1.4×
-    // margin. Directed logistics can now donate from it, so A's deficit is not structural — the build
-    // planner must read 'surplus' the same way the matcher does, or it builds redundant capacity for
-    // a good logistics already delivers.
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4 });
-    const producer = buildSys("B", { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 30 });
-    expect(findStructuralDeficits([deficit, producer], reachable)).toHaveLength(0);
+    const out = findStructuralDeficits([importer], reachable);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ rateDeficit: 3 });
   });
 });
 
@@ -149,6 +155,25 @@ function countFor(builds: PlannedBuild[], systemId: string, type: string): numbe
 }
 
 describe("planFactionBuilds", () => {
+  it("sizes a tier-0 build to the demand RATE, not the 40-day stock target (over-extraction regression)", () => {
+    // A developed system with an ample arable deposit: demand rate 20/tick, no local production,
+    // ample labour. It reaches itself (self-cost) so it self-supplies. The stock model built
+    // servedOutput/perUnit where servedOutput = targetStock − stock = 40×20 = 800 → ~228 food units
+    // (deposit-capped over-extraction). The rate model builds demand/perUnit ≈ 20/3.5 ≈ 5.
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 100000, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ arable: 1000 }), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 0, targetStock: TARGET_COVER * 20, demand: 20, production: 0 }],
+    };
+    const foodUnits = countFor(planFactionBuilds([sys], rc), "A", "food");
+    // Capacity meets the flow, within one whole level.
+    expect(foodUnits * OUTPUT_PER_UNIT.food).toBeGreaterThanOrEqual(20 - OUTPUT_PER_UNIT.food);
+    expect(foodUnits * OUTPUT_PER_UNIT.food).toBeLessThanOrEqual(20 + OUTPUT_PER_UNIT.food);
+    // Far below the deposit-cap over-extraction the stock target would have driven.
+    expect(foodUnits).toBeLessThan((TARGET_COVER * 20) / OUTPUT_PER_UNIT.food / 4);
+  });
+
   it("builds tier-0 production at a site that can serve a reachable structural deficit", () => {
     // A: structural food deficit (no surplus anywhere). B: has arable slots + population budget, reachable from A.
     const slotCap = emptyResourceVector();
@@ -180,7 +205,8 @@ describe("planFactionBuilds", () => {
     const surplus: BuildSystemState = {
       systemId: "S", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 100, targetStock: 20, demand: 5 }],
+      // Rate exporter: produces 30 > its own demand 5 → a sustainable food source logistics can carry.
+      goods: [{ goodId: "food", stock: 100, targetStock: 20, demand: 5, production: 30 }],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -718,15 +744,17 @@ function tinyHeavyDeficitScenario(): BuildSystemState[] {
 // ANCHOR_MIN_THROUGHPUT (and saturates ANCHOR_RATED_COVERAGE) on its own — i.e. without the
 // cross-family anchor cap, the planner would want to co-build a complex for BOTH families here.
 function crossFamilyDeficitScenario(): BuildSystemState[] {
+  // Each deficit's RATE (demand − production) is sized to clear ANCHOR_MIN_THROUGHPUT on its own, so
+  // both families independently qualify for a complex — proving the cap (not the floor) suppresses the second.
   const deficitMetals: BuildSystemState = {
     systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId: "metals", stock: 1, targetStock: 30, demand: 5 }],
+    goods: [{ goodId: "metals", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0 }],
   };
   const deficitFuel: BuildSystemState = {
     systemId: "C", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId: "fuel", stock: 1, targetStock: 30, demand: 5 }],
+    goods: [{ goodId: "fuel", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0 }],
   };
   const producer: BuildSystemState = {
     systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
@@ -744,11 +772,14 @@ function crossFamilyDeficitScenario(): BuildSystemState[] {
 function anchoredVsGreenfieldScenario(): BuildSystemState[] {
   const capUnits = 20;
   const space = capUnits * effectiveSpaceCost("metals");
-  const shortfall = capUnits * OUTPUT_PER_UNIT.metals * 1.15;
+  // Rate deficit sized between one site's unbuffed capacity output (capUnits × 1.0×) and the anchored
+  // site's buffed output (× 1.4×): both sites are capacity-limited at score time, so C's buffed
+  // per-unit must rank it first (the snowball).
+  const rateDeficit = capUnits * OUTPUT_PER_UNIT.metals * 1.15;
   const deficit: BuildSystemState = {
     systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId: "metals", stock: 0, targetStock: shortfall, demand: 5 }],
+    goods: [{ goodId: "metals", stock: 0, targetStock: 1, demand: rateDeficit, production: 0 }],
   };
   const greenfield: BuildSystemState = {
     systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",

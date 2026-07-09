@@ -10,7 +10,7 @@
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { classifyMarketState, surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
+import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
 import { dissatisfaction } from "@/lib/engine/population";
@@ -154,48 +154,52 @@ export function plannedHousingUnits(sys: BuildSystemState): number {
   return Math.min(wantUnits, headroom);
 }
 
-/** A deficit with no reachable surplus of its good — the build target. */
+/** A rate deficit (production < demand) with no reachable surplus of its good — the build target. */
 export interface StructuralDeficit {
   systemId: string;
   goodId: string;
-  shortfall: number;
+  /** The per-tick flow to close = demand − production (> 0). Placement sizes capacity to this rate. */
+  rateDeficit: number;
   demand: number;
 }
 
 /**
- * Find deficits that logistics cannot serve because no reachable surplus of the
- * good exists. Build classification per (system, good); collect deficits and the
- * surplus-holding systems per good; a deficit is structural when no surplus system
- * of its good can reach it (routeCost(surplus, deficit) non-null). A self-supplier
- * (production ≥ demand) is never a deficit sink — its low standing stock is throughput,
- * not need — so building it more capacity is skipped (mirrors the logistics matcher's
- * self-supply gate; without it the planner over-builds goods a system already makes).
+ * Find rate deficits (production < demand) that logistics cannot serve because no reachable surplus
+ * of the good exists. A good's build target is its RATE deficit (demand − production), not a
+ * days-of-supply stock shortfall: capacity is built to meet the flow (docs/planned/economy-demand-driven-model.md
+ * §2), so a full stock buffer does not cancel a structural shortfall. A self-supplier (production ≥
+ * demand) has no rate deficit and is skipped. The reachable-surplus exclusion is a rate EXPORTER
+ * (production > demand) — a sustainable producer whose surplus flow logistics can carry — not a
+ * transient stock pile: a neighbour merely holding (and draining) stock is no reason to forgo a
+ * system's own capacity, and logistics still ships that stock while the capacity comes up. Building
+ * to serve one's own demand (self = cheapest route) unless a producer already serves it.
  */
 export function findStructuralDeficits(
   systems: BuildSystemState[],
   routeCost: RouteCost,
 ): StructuralDeficit[] {
-  const deficits: Array<{ systemId: string; goodId: string; shortfall: number; demand: number }> = [];
-  const surplusSystemsByGood = new Map<string, string[]>();
+  const deficits: Array<{ systemId: string; goodId: string; rateDeficit: number; demand: number }> = [];
+  const exporterSystemsByGood = new Map<string, string[]>();
 
   for (const s of systems) {
     for (const g of s.goods) {
-      const c = classifyMarketState(g.stock, g.targetStock);
-      if (c.kind === "deficit" && c.shortfall > 0 && (g.production ?? 0) < g.demand) {
-        deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, demand: g.demand });
-      } else if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0) > 0) {
-        const list = surplusSystemsByGood.get(g.goodId) ?? [];
+      const production = g.production ?? 0;
+      const rateDeficit = g.demand - production;
+      if (rateDeficit > 0) {
+        deficits.push({ systemId: s.systemId, goodId: g.goodId, rateDeficit, demand: g.demand });
+      } else if (production > g.demand) {
+        const list = exporterSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
-        surplusSystemsByGood.set(g.goodId, list);
+        exporterSystemsByGood.set(g.goodId, list);
       }
     }
   }
 
   const structural: StructuralDeficit[] = [];
   for (const d of deficits) {
-    const sources = surplusSystemsByGood.get(d.goodId) ?? [];
-    const reachableSurplus = sources.some((su) => routeCost(su, d.systemId) !== null);
-    if (!reachableSurplus) structural.push(d);
+    const exporters = exporterSystemsByGood.get(d.goodId) ?? [];
+    const reachableExporter = exporters.some((su) => routeCost(su, d.systemId) !== null);
+    if (!reachableExporter) structural.push(d);
   }
   return structural;
 }
@@ -425,7 +429,7 @@ export function planFactionBuilds(
   const remainingByGood = new Map<string, Map<string, number>>();
   for (const d of structural) {
     const m = remainingByGood.get(d.goodId) ?? new Map<string, number>();
-    m.set(d.systemId, (m.get(d.systemId) ?? 0) + d.shortfall);
+    m.set(d.systemId, (m.get(d.systemId) ?? 0) + d.rateDeficit);
     remainingByGood.set(d.goodId, m);
   }
 
