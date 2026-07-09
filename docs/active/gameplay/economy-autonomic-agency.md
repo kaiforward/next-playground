@@ -63,10 +63,14 @@ target and locals keep their supply (the v1 form of civilian crowd-out — emerg
 
 ## The shared reading: market state per good
 
-Both halves run off one per-system, per-good classification against the **days-of-supply price anchor**
-(`targetStock = TARGET_COVER × demandRate`, where `demandRate` = civilian consumption + industrial input
-draw — the same number the supply/demand UI shows). One definition, so logistics and build agree on what a
-deficit or surplus *is*:
+Both halves read the same per-system, per-good numbers — stock, `production`, `demand` (civilian
+consumption + industrial input draw), and the **days-of-supply price anchor** (`targetStock = TARGET_COVER
+× demandRate`, the same number the supply/demand UI shows) — but they ask **different questions of them**,
+because they do different jobs. **Logistics moves the running-balance stock**, so it classifies against the
+stock anchor; **build sizes sustainable capacity**, so it reads the per-tick flow (`production` vs
+`demand`). The anchor drives pricing, satisfaction, and logistics; it no longer sizes builds.
+
+**Logistics classification** (stock-based):
 
 - **Deficit** — `stock < targetStock × DEFICIT_FRACTION` (below the anchor, with a dead-band). Severity =
   shortfall × demand.
@@ -80,10 +84,17 @@ deficit or surplus *is*:
   (food, water, biomass).
 - **Balanced** — the dead-band between, and anything with no demand anchor.
 
+**Build classification** (rate-based): a **rate deficit** is `production < demand` (magnitude `demand −
+production`), and a system is a build target for it unless a reachable **rate exporter** (`production >
+demand`) can serve it. Stock level is irrelevant to placement — a full buffer does not cancel a rate
+deficit (the system is draining it), and a transient stock pile at a neighbour does not substitute for a
+sustainable producer.
+
 **Self-supply gate.** A system that produces at least its own demand for a good (`production ≥ demand`) is
-**never** a deficit sink for it — its low standing stock is *throughput*, not need. Importing into it only
-piles stock toward the storage ceiling, where SP3.5 decay reads the producer as not-selling and tears down
-its own extractors. Net-negative producers (make some, need more) are still sinks.
+**never** a deficit sink for it — its low standing stock is *throughput*, not need. For logistics, importing
+into it only piles stock toward the storage ceiling, where SP3.5 decay reads the producer as not-selling and
+tears down its own extractors; for build, it has no rate deficit to close. Net-negative producers (make
+some, need more) are still sinks.
 
 ---
 
@@ -154,21 +165,32 @@ growing. Three mechanisms, in causal order:
 2. **Population growth** fills the new housing — the existing logistic, untouched; `popCap` recomputes live
    from the housing count (SP3.5).
 3. **Labour-gated industry.** Build production only where there is genuine **spare labour**
-   (`population − labourDemand`) *and* a reachable structural deficit (a deficit with no reachable surplus)
-   it can serve with available inputs. Each build is capped to whole levels the already-resident population
-   can staff, and a skill-gated good's build is committed **gate-first** — the academies (and any
-   specialisation complex) that license it are queued ahead of the production levels they serve. Industry
-   follows the people who already live there; it is never built for population that does not yet exist.
+   (`population − labourDemand`) *and* a **structural rate deficit** — a good whose local `production <
+   demand` (the per-tick flow) with no reachable **rate exporter** (a system producing more than it
+   consumes) to serve it, inputs available. Capacity is sized to **close the rate**, not to fill a
+   days-of-supply stock target: the planner builds enough to meet the flow, and extraction grows
+   tier-by-tier as each new factory's input draw appears as the tier below's rate deficit. A full stock
+   buffer does not cancel the shortfall — the buffer is a passive shock-absorber (it emerges from lumpy
+   capacity overshoot), never a build goal; a neighbour merely *holding* stock is not a reason to forgo a
+   system's own capacity, and logistics still ships that stock while the capacity comes up. Each build is
+   capped to whole levels the already-resident population can staff, and a skill-gated good's build is
+   committed **gate-first** — the academies (and any specialisation complex) that license it are queued
+   ahead of the production levels they serve. Industry follows the people who already live there; it is
+   never built for population that does not yet exist.
 
-Capacity grows only through **committed construction projects**, never instant accretion. The auto queue
-policy proposes whole-level projects toward these ceilings — aware of the levels already in flight, so it
-never double-commits — and a **per-faction throughput pool** (`Σ developed population × throughput rate`)
-funds the front-first queue at a **per-build absorption cap**. A level is *under construction* (contributing
-nothing) until its accumulated work reaches its cost, then it **lands** as a full staffable level; build
-duration is therefore *emergent* (`work ÷ absorbed`, a floor wealth cannot buy past) and a larger pool
-spreads across more parallel fronts rather than finishing any one build faster. The gates sequence the work
-on their own: a system with no spare labour queues only housing (and only if fed and calm), and industry is
-queued only where spare labour already exists.
+The planner is a clean **decision → gate → pacing** pipeline. The **decision** ranks rate-deficit
+opportunities (served ÷ route cost); the **gate** sizes each to the whole-level count the site's spare
+labour and general space admit, co-building the academies/complex it needs; and **pacing** is the
+construction throughput pool alone — the planner proposes toward the physical ceilings and holds no
+build budget of its own. Capacity grows only through **committed construction projects**, never instant
+accretion. The auto queue policy proposes whole-level projects toward these ceilings — aware of the levels
+already in flight, so it never double-commits — and a **per-faction throughput pool** (`Σ developed
+population × throughput rate`) funds the front-first queue at a **per-build absorption cap**. A level is
+*under construction* (contributing nothing) until its accumulated work reaches its cost, then it **lands**
+as a full staffable level; build duration is therefore *emergent* (`work ÷ absorbed`, a floor wealth cannot
+buy past) and a larger pool spreads across more parallel fronts rather than finishing any one build faster.
+The gates sequence the work on their own: a system with no spare labour queues only housing (and only if
+fed and calm), and industry is queued only where spare labour already exists.
 
 ---
 
@@ -236,8 +258,9 @@ budget < need leaves a visible residual. Validated in the simulator first, then 
 **In:** the logistics work-budget (per-system generation → faction pool, work = qty × route cost); the
 shared deficit/surplus/self-supply classification; greedy surplus→deficit matching with silent stock moves
 + `logistics` flow rows; proactive housing (fed-and-calm, paced ahead of population, capped at habitable
-land); labour-gated industry builds (fractional spare-labour gate); both builds funded from the pooled
-faction budget with per-system pacing; both processors on the 48-tick agency clock.
+land); rate-deficit-driven, labour-gated industry builds (whole-level spare-labour gate; the planner
+proposes toward the physical ceilings, and the per-faction construction throughput pool alone paces the
+committed queue); both processors on the 48-tick agency clock.
 
 **Deferred (explicitly out):**
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy
@@ -261,7 +284,7 @@ faction budget with per-system pacing; both processors on the 48-tick agency clo
 - Logistics: the budget generation rate; surplus/deficit margins; hop budget / max logistics distance; the
   hop-vs-fuel blend in route cost.
 - Build: `settleMargin` (housing headroom ahead of population); `D_settle` / `unrest_settle` (the
-  fed-and-calm gate); the per-system budget pace; the budget generation rate.
+  fed-and-calm gate); the construction throughput-pool rate and per-build absorption cap (construction pace).
 
 Per the standing approach, calibrate to a **coarse** health bar — precise tuning is perishable and waits
 until SP4 / SP5-full land.
