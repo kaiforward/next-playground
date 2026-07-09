@@ -8,7 +8,7 @@
  * The processor maps DB/sim rows into BuildSystemState and applies the returned PlannedBuild[].
  */
 import type { ResourceVector } from "@/lib/types/game";
-import type { SystemControl } from "@/lib/world/types";
+import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { classifyMarketState, surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -372,11 +372,13 @@ export function planFactionBuilds(
     if (budget <= 0) break;
     const want = plannedHousingUnits(site);
     if (want <= 0) continue;
-    const units = Math.min(want, budget);
-    if (units <= 0) continue;
-    site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + units;
-    builds.push({ systemId: site.systemId, buildingType: HOUSING_TYPE, count: units });
-    budget -= units;
+    // Whole levels only: you commit a whole housing level or none. Floor the paced want to the
+    // levels the budget can start this pulse; a sub-level want waits for the next pulse.
+    const levels = Math.floor(Math.min(want, budget));
+    if (levels < 1) continue;
+    site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + levels;
+    builds.push({ systemId: site.systemId, buildingType: HOUSING_TYPE, count: levels });
+    budget -= levels;
   }
 
   // ── Pass 2: labour-gated industry (industry follows the resident workforce). ──
@@ -476,9 +478,9 @@ export function planFactionBuilds(
     }
     if (servedOutput <= 0) continue;
 
-    // Desired production before factor gates.
-    let wantUnits = Math.min(capUnits, servedOutput / opp.perUnit, budget);
-    if (wantUnits <= 0) continue;
+    // Buffed output per unit against the live working copy (reflects any complex already here) —
+    // used to convert served demand into produced output when decrementing the deficit.
+    const perUnit = (OUTPUT_PER_UNIT[opp.goodId] ?? 0) * familyAnchorBuff(site.buildings, opp.goodId);
 
     // Spare-LABOUR gate: a site may add only the production (+ any co-built academies) its
     // already-resident population can staff. Population is a single undifferentiated pool that
@@ -487,79 +489,58 @@ export function planFactionBuilds(
     // built this cycle adds no labour now — population fills it over later ticks — so industry
     // follows the people who already live there, never population that doesn't yet exist.
     const spareLabour = Math.max(0, site.population - labourDemand(site.buildings));
-
-    // Size production against the academies it needs — a skill-gated good must co-build the
-    // schools/institutes that lift its ceiling, charged to the SAME budget/space/spare-labour
-    // pool as the production itself. Iterate to convergence: each shrink of wantUnits shrinks the
-    // academy lift it requires, which may relax the gate that shrank it.
-    // Buffed output per unit against the live working copy (reflects any complex already here).
-    const perUnit = (OUTPUT_PER_UNIT[opp.goodId] ?? 0) * familyAnchorBuff(site.buildings, opp.goodId);
-
-    let aLift = academyLift(site, opp.goodId, wantUnits);
-    let cLift = complexLift(site, opp.goodId, wantUnits);
     const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
     // Tier-0 extractors sit on dedicated deposit slots, not general space (mirrors generalSpaceUsed).
     const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
     // Full per-unit head count (unskilled + skill1 + skill2) — population staffs the WHOLE labour
-    // draw of a production unit, not just its unskilled slice. Academy terms stay unskilled-only
-    // (schools/institutes draw no skill labour, so their labourTotal equals their unskilled share).
+    // draw of a production unit, not just its unskilled slice.
     const prodLabourPerUnit = labourTotal(BUILDING_TYPES[opp.goodId]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 });
 
-    // Shrink wantUnits until production + academy lift + complex lift fit budget, space, and spare labour.
-    for (let guard = 0; guard < 8 && wantUnits > 0; guard++) {
-      const totalBudget = wantUnits + aLift.units + cLift.units;
-      const totalSpace = wantUnits * prodSpacePerUnit + aLift.space + cLift.space;
-      const totalLabour = wantUnits * prodLabourPerUnit + aLift.unskilled + cLift.unskilled;
-      const overBudget = totalBudget > budget ? budget / totalBudget : 1;
-      const overSpace = totalSpace > remainingGeneral && totalSpace > 0 ? remainingGeneral / totalSpace : 1;
-      const overLabour = totalLabour > spareLabour && totalLabour > 0 ? spareLabour / totalLabour : 1;
-      const shrink = Math.min(overBudget, overSpace, overLabour);
-      if (shrink >= 1) break;
-      wantUnits *= shrink;
-      aLift = academyLift(site, opp.goodId, wantUnits);
-      cLift = complexLift(site, opp.goodId, wantUnits);
+    // Whole-level convergence: floor the desired production to whole levels (you commission whole
+    // levels), then round the academies and complex that GATE it UP — a gate must fully exist to
+    // license/anchor the production it serves (a fractional school licenses nobody). Reduce the
+    // production levels until production + the whole-level gates fit the budget, the general space,
+    // and the spare labour, so a landed level is never unstaffable or over-footprint. Recomputing
+    // the lift per candidate level mirrors the fractional planner's convergence on whole levels.
+    let prodLevels = Math.floor(Math.min(capUnits, servedOutput / opp.perUnit, budget));
+    let schools = 0;
+    let institutes = 0;
+    let complexLevels = 0;
+    let complexType: string | undefined;
+    for (; prodLevels >= 1; prodLevels--) {
+      const a = academyLift(site, opp.goodId, prodLevels);
+      const c = complexLift(site, opp.goodId, prodLevels);
+      schools = a.schools > 0 ? Math.ceil(a.schools) : 0;
+      institutes = a.institutes > 0 ? Math.ceil(a.institutes) : 0;
+      complexType = c.complexType;
+      complexLevels = c.count > 0 ? Math.ceil(c.count) : 0;
+      const unitsTotal = prodLevels + schools + institutes + complexLevels;
+      const spaceTotal =
+        prodLevels * prodSpacePerUnit +
+        schools * effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE) +
+        institutes * effectiveSpaceCost(RESEARCH_INSTITUTE_TYPE) +
+        (complexType ? complexLevels * effectiveSpaceCost(complexType) : 0);
+      const labourNeeded =
+        prodLevels * prodLabourPerUnit +
+        schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
+        institutes * unskilledPerUnit(RESEARCH_INSTITUTE_TYPE) +
+        (complexType ? complexLevels * unskilledPerUnit(complexType) : 0);
+      if (unitsTotal <= budget && spaceTotal <= remainingGeneral && labourNeeded <= spareLabour) break;
     }
-    if (wantUnits <= 0) continue;
-
-    // Defensive final guard: the proportional-shrink loop converges geometrically but is not
-    // guaranteed to land within all three constraints after 8 iterations for pathological inputs
-    // (e.g. a large pre-existing skill deficit comparable to the remaining budget). Recompute the
-    // fit ratios once more; if still short, apply the shrink and recompute the academy lift. If
-    // it STILL violates a constraint, skip the opportunity rather than emit an over-commit.
-    {
-      const totalBudget = wantUnits + aLift.units + cLift.units;
-      const totalSpace = wantUnits * prodSpacePerUnit + aLift.space + cLift.space;
-      const totalLabour = wantUnits * prodLabourPerUnit + aLift.unskilled + cLift.unskilled;
-      const overBudget = totalBudget > budget ? budget / totalBudget : 1;
-      const overSpace = totalSpace > remainingGeneral && totalSpace > 0 ? remainingGeneral / totalSpace : 1;
-      const overLabour = totalLabour > spareLabour && totalLabour > 0 ? spareLabour / totalLabour : 1;
-      const finalShrink = Math.min(overBudget, overSpace, overLabour);
-      if (finalShrink < 1) {
-        wantUnits *= finalShrink;
-        aLift = academyLift(site, opp.goodId, wantUnits);
-        cLift = complexLift(site, opp.goodId, wantUnits);
-        const EPS = 1e-6;
-        const recheckBudget = wantUnits + aLift.units + cLift.units;
-        const recheckSpace = wantUnits * prodSpacePerUnit + aLift.space + cLift.space;
-        const recheckLabour = wantUnits * prodLabourPerUnit + aLift.unskilled + cLift.unskilled;
-        if (recheckBudget > budget + EPS || recheckSpace > remainingGeneral + EPS || recheckLabour > spareLabour + EPS) {
-          continue; // truly pathological — skip rather than emit an over-commit
-        }
-      }
-    }
-    if (wantUnits <= 0) continue;
+    if (prodLevels < 1) continue;
 
     // Apply the complex first (any later opportunity at this site sees the buff it grants), then
-    // academies (raises the ceiling on the working copy), then the production.
-    if (cLift.complexType && cLift.count > 0) {
-      site.buildings[cLift.complexType] = (site.buildings[cLift.complexType] ?? 0) + cLift.count;
-      builds.push({ systemId: site.systemId, buildingType: cLift.complexType, count: cLift.count });
-      budget -= cLift.count;
+    // academies (raise the ceiling on the working copy), then the production — gate before production
+    // in both the working copy and the emitted order, so the funding queue funds the gate first.
+    if (complexType && complexLevels > 0) {
+      site.buildings[complexType] = (site.buildings[complexType] ?? 0) + complexLevels;
+      builds.push({ systemId: site.systemId, buildingType: complexType, count: complexLevels });
+      budget -= complexLevels;
     }
 
     for (const [type, count] of [
-      [VOCATIONAL_SCHOOL_TYPE, aLift.schools] as const,
-      [RESEARCH_INSTITUTE_TYPE, aLift.institutes] as const,
+      [VOCATIONAL_SCHOOL_TYPE, schools] as const,
+      [RESEARCH_INSTITUTE_TYPE, institutes] as const,
     ]) {
       if (count <= 0) continue;
       site.buildings[type] = (site.buildings[type] ?? 0) + count;
@@ -567,12 +548,12 @@ export function planFactionBuilds(
       budget -= count;
     }
 
-    site.buildings[opp.goodId] = (site.buildings[opp.goodId] ?? 0) + wantUnits;
-    builds.push({ systemId: site.systemId, buildingType: opp.goodId, count: wantUnits });
-    budget -= wantUnits;
+    site.buildings[opp.goodId] = (site.buildings[opp.goodId] ?? 0) + prodLevels;
+    builds.push({ systemId: site.systemId, buildingType: opp.goodId, count: prodLevels });
+    budget -= prodLevels;
 
     // Decrement the served structural demand (nearest-first) so later opportunities don't re-target it.
-    let producedOutput = wantUnits * perUnit;
+    let producedOutput = prodLevels * perUnit;
     for (const r of opp.reachable) {
       if (producedOutput <= 0) break;
       const short = deficitMap.get(r.sysId) ?? 0;
@@ -584,4 +565,59 @@ export function planFactionBuilds(
   }
 
   return builds;
+}
+
+/** A whole-level construction order the auto policy wants enqueued (a project before it gets an id). */
+export interface DesiredProject {
+  factionId: string;
+  systemId: string;
+  buildingType: string;
+  /** Whole levels to build (integer ≥ 1). */
+  levels: number;
+}
+
+/**
+ * The auto queue policy: plan the whole-level construction projects a faction should enqueue this
+ * pulse. It runs the same ceiling logic as `planFactionBuilds` (proactive housing → labour-gated
+ * industry, with academy/complex co-builds), but treats each system's **effective current** capacity
+ * as its built levels PLUS the levels already in flight (`openProjects`) — so a level already under
+ * construction counts as committed and is never enqueued twice. The emitted order is gate-first
+ * (complex/academies before the production they license), which the funding queue preserves.
+ *
+ * The throughput pool (not this planner) meters how fast the queue drains; this only decides WHAT to
+ * commit, bounded by the physical ceilings the effective-current capacity encodes.
+ */
+export function planFactionQueue(
+  systems: BuildSystemState[],
+  routeCost: RouteCost,
+  openProjects: WorldConstructionProject[],
+): DesiredProject[] {
+  // In-flight levels per (system, buildingType) — the "already committed" capacity.
+  const queuedBySystem = new Map<string, Record<string, number>>();
+  for (const p of openProjects) {
+    const rec = queuedBySystem.get(p.systemId) ?? {};
+    rec[p.buildingType] = (rec[p.buildingType] ?? 0) + p.levels;
+    queuedBySystem.set(p.systemId, rec);
+  }
+
+  // Effective-current systems: fold in-flight levels onto the built base so every capacity, space,
+  // and labour gate sees the committed state and the planner only proposes what is NOT yet queued.
+  const augmented = systems.map((s) => {
+    const queued = queuedBySystem.get(s.systemId);
+    if (!queued) return s;
+    const buildings = { ...s.buildings };
+    for (const [type, levels] of Object.entries(queued)) buildings[type] = (buildings[type] ?? 0) + levels;
+    return { ...s, buildings };
+  });
+
+  const factionBySystem = new Map(systems.map((s) => [s.systemId, s.factionId]));
+  const projects: DesiredProject[] = [];
+  for (const b of planFactionBuilds(augmented, routeCost)) {
+    const factionId = factionBySystem.get(b.systemId);
+    // Only faction-owned systems can be developed (the build gate), so a build always has a faction;
+    // the guard both narrows the type and skips the impossible independent-system case.
+    if (factionId == null) continue;
+    projects.push({ factionId, systemId: b.systemId, buildingType: b.buildingType, levels: b.count });
+  }
+  return projects;
 }
