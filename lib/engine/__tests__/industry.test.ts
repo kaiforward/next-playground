@@ -30,8 +30,11 @@ import {
   computeSystemLabourSnapshot,
   labourParts,
   labourStateFromParts,
+  buildingUsed,
+  computeUtilization,
+  housingUsed,
 } from "@/lib/engine/industry";
-import type { IndustryHealth, LabourState, GradeStaffing, LabourParts } from "@/lib/engine/industry";
+import type { IndustryHealth, LabourState, GradeStaffing, LabourParts, UtilizationContext } from "@/lib/engine/industry";
 import {
   DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
@@ -868,5 +871,82 @@ describe("buildIndustryReadout — complex row", () => {
     const row = r.buildings.find((b) => b.buildingType === HEAVY_INDUSTRY_COMPLEX)!;
     expect(row.used).toBe(0);            // orphaned → 0, despite population being huge
     expect(row.output).toBeUndefined();  // produces no good
+  });
+});
+
+describe("buildingUsed + computeUtilization (unified per-output-kind utilization)", () => {
+  // One mixed base exercised across every output kind. Each expectation is computed from the SAME
+  // helpers the old per-type branches used, so these are coherence witnesses, not magic numbers.
+  const buildings: Record<string, number> = {
+    ore: 5, // tier-0 extractor (market_good)
+    metals: 3, // tier-1 producer (market_good), heavy-industry family
+    housing: 4, // capacity/pop_cap
+    vocational_school: 1, // capacity/skill1_licence
+    research_institute: 1, // capacity/skill2_licence
+    [HEAVY_INDUSTRY_COMPLEX]: 0.5, // modifier
+  };
+  const population = 100;
+  const parts = labourParts(buildings);
+  const state = labourStateFromParts(parts, population);
+  const uptake: Record<string, number> = { ore: 0.8, metals: 0.6 };
+  const ctx: UtilizationContext = {
+    buildings,
+    population,
+    parts,
+    state,
+    outputUptake: (g) => uptake[g] ?? 1,
+  };
+
+  it("market_good used = count × min(effectiveFulfilment(tier), uptake)", () => {
+    expect(buildingUsed("metals", 3, ctx)).toBeCloseTo(
+      3 * Math.min(effectiveFulfilment(state, 1), 0.6),
+      9,
+    );
+    expect(buildingUsed("ore", 5, ctx)).toBeCloseTo(
+      5 * Math.min(effectiveFulfilment(state, 0), 0.8),
+      9,
+    );
+  });
+
+  it("market_good with no uptake entry sells freely (uptake 1)", () => {
+    expect(buildingUsed("metals", 3, { ...ctx, outputUptake: () => 1 })).toBeCloseTo(
+      3 * effectiveFulfilment(state, 1),
+      9,
+    );
+  });
+
+  it("capacity/pop_cap used = occupancy, and may exceed count (overshoot)", () => {
+    expect(buildingUsed("housing", 4, ctx)).toBeCloseTo(housingUsed(population), 9);
+    expect(housingUsed(population)).toBeGreaterThan(4); // 100/20 = 5 > 4 built
+    expect(computeUtilization("housing", 4, ctx)).toBe(1); // clamped, despite overshoot
+  });
+
+  it("capacity/skill1_licence used = count × min(1, skill1Demand/skill1Cap)", () => {
+    const expected = 1 * (parts.skill1Cap > 0 ? Math.min(1, parts.skill1Demand / parts.skill1Cap) : 0);
+    expect(buildingUsed("vocational_school", 1, ctx)).toBeCloseTo(expected, 9);
+    expect(expected).toBeGreaterThan(0); // metals demands skill-1, school licenses it
+  });
+
+  it("capacity/skill2_licence used = 0 when nothing demands skill-2", () => {
+    expect(parts.skill2Demand).toBe(0); // no tier-2 producer in this base
+    expect(buildingUsed("research_institute", 1, ctx)).toBe(0);
+    expect(computeUtilization("research_institute", 1, ctx)).toBe(0);
+  });
+
+  it("modifier used = complexUsed(count, familyThroughput, ANCHOR_RATED_COVERAGE)", () => {
+    const family = SPECIALISATION_FAMILIES.find((f) => f.complexType === HEAVY_INDUSTRY_COMPLEX)!;
+    const expected = complexUsed(0.5, familyThroughput(buildings, family), ANCHOR_RATED_COVERAGE);
+    expect(buildingUsed(HEAVY_INDUSTRY_COMPLEX, 0.5, ctx)).toBeCloseTo(expected, 9);
+  });
+
+  it("computeUtilization = min(1, buildingUsed/count), and 0 at count 0", () => {
+    for (const type of ["ore", "metals", "vocational_school", HEAVY_INDUSTRY_COMPLEX]) {
+      const count = buildings[type];
+      expect(computeUtilization(type, count, ctx)).toBeCloseTo(
+        Math.min(1, buildingUsed(type, count, ctx) / count),
+        9,
+      );
+    }
+    expect(computeUtilization("metals", 0, ctx)).toBe(0);
   });
 });

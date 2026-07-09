@@ -38,6 +38,7 @@ import {
   ANCHOR_RATED_COVERAGE,
   type LabourVector,
   type SpecialisationFamily,
+  type CapacityKind,
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -376,6 +377,77 @@ export function familyThroughput(buildings: Record<string, number>, family: Spec
 export function complexUsed(count: number, throughput: number, rated: number): number {
   if (count <= 0) return 0;
   return Math.min(count, rated > 0 ? throughput / rated : 0);
+}
+
+/** Housing the current population fills, in building units. May exceed the housing count (overshoot). */
+export function housingUsed(population: number): number {
+  return Math.max(0, population) / POP_CENTRE_DENSITY;
+}
+
+/**
+ * Everything a per-`output.kind` utilization needs, computed once per system by the caller. Both the
+ * decay engine and the industry read service already have every field in hand (a single labourParts
+ * pass + the population + a seller-side uptake signal), so this just names the bundle.
+ */
+export interface UtilizationContext {
+  /** The whole built base — needed for a modifier's family throughput. */
+  buildings: Record<string, number>;
+  population: number;
+  /** Headcount + skill demand/cap totals (one labourParts pass). */
+  parts: LabourParts;
+  /** The three fulfilment ratios. */
+  state: LabourState;
+  /** Seller-side output uptake ∈ [0,1] for a produced good; missing ⇒ 1 (sells freely). */
+  outputUptake: (goodId: string) => number;
+}
+
+/** An abstract-capacity building's licence draw ÷ licence supply, in building units. */
+function capacityUsed(kind: CapacityKind, count: number, ctx: UtilizationContext): number {
+  switch (kind) {
+    case "pop_cap":
+      return housingUsed(ctx.population);
+    case "skill1_licence":
+      return count * (ctx.parts.skill1Cap > 0 ? Math.min(1, ctx.parts.skill1Demand / ctx.parts.skill1Cap) : 0);
+    case "skill2_licence":
+      return count * (ctx.parts.skill2Cap > 0 ? Math.min(1, ctx.parts.skill2Demand / ctx.parts.skill2Cap) : 0);
+  }
+}
+
+/**
+ * Absolute in-use amount for one building, dispatched on its typed output — the single source of the
+ * "used" quantity the decay engine and the industry readout both consume, replacing the per-type
+ * branches each carried:
+ *  - market_good → staffed AND selling: count × min(effectiveFulfilment(tier), uptake).
+ *  - capacity/pop_cap → occupancy: population / POP_CENTRE_DENSITY (may exceed count → overshoot).
+ *  - capacity/skill{1,2}_licence → licence draw: count × min(1, skillDemand / skillCap).
+ *  - modifier → family coverage the built factories draw: complexUsed(count, familyThroughput, rated).
+ *  - none → staffing only (no current type; employment/holding fallback).
+ */
+export function buildingUsed(buildingType: string, count: number, ctx: UtilizationContext): number {
+  const output = BUILDING_TYPES[buildingType]?.output ?? { kind: "none" as const };
+  switch (output.kind) {
+    case "market_good": {
+      const tier = GOOD_TIER_BY_KEY[output.goodId] ?? 0;
+      return count * Math.min(effectiveFulfilment(ctx.state, tier), ctx.outputUptake(output.goodId));
+    }
+    case "capacity":
+      return capacityUsed(output.capacity, count, ctx);
+    case "modifier": {
+      const family = COMPLEX_BY_TYPE[output.family];
+      return family ? complexUsed(count, familyThroughput(ctx.buildings, family), ANCHOR_RATED_COVERAGE) : 0;
+    }
+    case "none":
+      return count * ctx.state.labourFulfil;
+  }
+}
+
+/**
+ * Utilization u ∈ [0,1] = min(1, buildingUsed / count); 0 at non-positive count. The clamped ratio
+ * PR3's whole-level decay reads (an over-occupied housing level reads as fully utilised, not >1).
+ */
+export function computeUtilization(buildingType: string, count: number, ctx: UtilizationContext): number {
+  if (count <= 0) return 0;
+  return Math.min(1, buildingUsed(buildingType, count, ctx) / count);
 }
 
 /**
