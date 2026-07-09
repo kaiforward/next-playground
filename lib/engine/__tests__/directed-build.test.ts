@@ -442,6 +442,23 @@ describe("planFactionBuilds performance", () => {
     expect(builds.length).toBeGreaterThan(0);
     expect(ms).toBeLessThan(2000);
   }, 120_000);
+
+  it("converges the whole-level fit fast when capacity dwarfs the labour ceiling", () => {
+    // A huge deposit + huge rate deficit but labour that admits only a handful of levels: the fit
+    // must land the labour-max whole level, and do so without scanning every candidate level from
+    // the top (binary search, not an O(capUnits) descent). Correctness: built labour ≤ population.
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 40 * oreLabour, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ ore: 100000 }), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 1_000_000, production: 0 }],
+    };
+    const t0 = performance.now();
+    const oreUnits = countFor(planFactionBuilds([sys], rc), "A", "ore");
+    expect(performance.now() - t0).toBeLessThan(50);
+    expect(oreUnits).toBeGreaterThan(0);
+    expect(oreUnits).toBeLessThanOrEqual(40 + 1e-9); // labour ceiling: 40×oreLabour ÷ oreLabour
+  });
 });
 
 describe("supplyDissatisfaction", () => {

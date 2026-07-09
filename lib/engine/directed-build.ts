@@ -507,35 +507,57 @@ export function planFactionBuilds(
     // draw of a production unit, not just its unskilled slice.
     const prodLabourPerUnit = labourTotal(BUILDING_TYPES[opp.goodId]?.labour ?? { unskilled: 0, skill1: 0, skill2: 0 });
 
-    // Whole-level convergence: floor the desired production to whole levels (you commission whole
-    // levels), then round the academies and complex that GATE it UP — a gate must fully exist to
-    // license/anchor the production it serves (a fractional school licenses nobody). Reduce the
-    // production levels until production + the whole-level gates fit the general space and the spare
-    // labour, so a landed level is never unstaffable or over-footprint. Recomputing the lift per
-    // candidate level mirrors the fractional planner's convergence on whole levels.
-    let prodLevels = Math.floor(Math.min(capUnits, servedOutput / opp.perUnit));
-    let schools = 0;
-    let institutes = 0;
-    let complexLevels = 0;
-    let complexType: string | undefined;
-    for (; prodLevels >= 1; prodLevels--) {
-      const a = academyLift(site, opp.goodId, prodLevels);
-      const c = complexLift(site, opp.goodId, prodLevels);
-      schools = a.schools > 0 ? Math.ceil(a.schools) : 0;
-      institutes = a.institutes > 0 ? Math.ceil(a.institutes) : 0;
-      complexType = c.complexType;
-      complexLevels = c.count > 0 ? Math.ceil(c.count) : 0;
+    // Whole-level convergence: the desired production floored to whole levels (you commission whole
+    // levels), then the academies and complex that GATE it rounded UP — a gate must fully exist to
+    // license/anchor the production it serves (a fractional school licenses nobody). The largest
+    // whole-level count whose production + gates fit the general space and spare labour is found by
+    // binary search: the fit is monotone (more levels ⇒ more space + labour + academy/complex), so a
+    // landed level is never unstaffable or over-footprint. Recomputing the lift per candidate level
+    // mirrors the fractional planner's convergence on whole levels.
+    const maxLevels = Math.floor(Math.min(capUnits, servedOutput / opp.perUnit));
+    if (maxLevels < 1) continue;
+
+    const fitFor = (levels: number) => {
+      const a = academyLift(site, opp.goodId, levels);
+      const c = complexLift(site, opp.goodId, levels);
+      const schools = a.schools > 0 ? Math.ceil(a.schools) : 0;
+      const institutes = a.institutes > 0 ? Math.ceil(a.institutes) : 0;
+      const complexType = c.complexType;
+      const complexLevels = c.count > 0 ? Math.ceil(c.count) : 0;
       const spaceTotal =
-        prodLevels * prodSpacePerUnit +
+        levels * prodSpacePerUnit +
         schools * effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE) +
         institutes * effectiveSpaceCost(RESEARCH_INSTITUTE_TYPE) +
         (complexType ? complexLevels * effectiveSpaceCost(complexType) : 0);
       const labourNeeded =
-        prodLevels * prodLabourPerUnit +
+        levels * prodLabourPerUnit +
         schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
         institutes * unskilledPerUnit(RESEARCH_INSTITUTE_TYPE) +
         (complexType ? complexLevels * unskilledPerUnit(complexType) : 0);
-      if (spaceTotal <= remainingGeneral && labourNeeded <= spareLabour) break;
+      const fits = spaceTotal <= remainingGeneral && labourNeeded <= spareLabour;
+      return { fits, schools, institutes, complexType, complexLevels };
+    };
+
+    let lo = 1;
+    let hi = maxLevels;
+    let prodLevels = 0;
+    let schools = 0;
+    let institutes = 0;
+    let complexLevels = 0;
+    let complexType: string | undefined;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const f = fitFor(mid);
+      if (f.fits) {
+        prodLevels = mid;
+        schools = f.schools;
+        institutes = f.institutes;
+        complexType = f.complexType;
+        complexLevels = f.complexLevels;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
     }
     if (prodLevels < 1) continue;
 
