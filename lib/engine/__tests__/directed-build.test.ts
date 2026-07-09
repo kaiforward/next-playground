@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionQueue, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
+import { systemBuildGeneration, findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionQueue, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, ANCHOR_FOOTPRINT, effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
 import { labourDemand } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -865,5 +865,33 @@ describe("planFactionBuilds: develop gate", () => {
     const site = sysWith({ ...buildable, control: "developed", buildings: {} });
     const plans = planFactionBuilds([site], () => 1);
     expect(plans.some((b) => b.buildingType === HOUSING_TYPE)).toBe(true);
+  });
+});
+
+describe("hopRouteCost", () => {
+  it("returns SELF_COST for a system reaching itself, and hop×weight otherwise", () => {
+    const hops = new Map([["A", new Map([["A", 0], ["B", 2]])]]);
+    const rc = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    expect(rc("A", "A")).toBe(DIRECTED_BUILD.SELF_COST);
+    expect(rc("A", "B")).toBe(2 * DIRECTED_BUILD.HOP_WEIGHT);
+  });
+
+  it("returns null beyond MAX_HOPS or when unreachable", () => {
+    const hops = new Map([["A", new Map([["A", 0], ["B", 99]])]]);
+    const rc = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    expect(rc("A", "B")).toBeNull();      // 99 > MAX_HOPS
+    expect(rc("A", "Z")).toBeNull();      // no entry
+    expect(rc("Q", "A")).toBeNull();      // no source row
+  });
+
+  it("makes the planner build a system's OWN local deficit (self-supply)", () => {
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 1000, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+    };
+    const builds = planFactionBuilds([sys], rc);
+    expect(builds.some((b) => b.systemId === "A" && b.buildingType === "food")).toBe(true);
   });
 });

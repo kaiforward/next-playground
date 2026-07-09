@@ -35,6 +35,7 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { hopRouteCost } from "@/lib/engine/directed-build";
 import type { ClaimCandidate, DevelopCandidate } from "@/lib/engine/expansion";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -677,10 +678,7 @@ export async function runWorldTick(
 
   // ── directed-build ──
   {
-    const routeCost: RouteCost = (f, t) => {
-      const h = hops.get(f)?.get(t);
-      return h === undefined || h > DIRECTED_BUILD.MAX_HOPS ? null : h * DIRECTED_BUILD.HOP_WEIGHT;
-    };
+    const routeCost = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
 
     // Ownership lookups reused by both providers.
     const factionBySystem = new Map(systems.map((s) => [s.id, s.factionId]));

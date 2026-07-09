@@ -75,6 +75,26 @@ export function systemBuildGeneration(population: number): number {
 }
 
 /**
+ * Build-side route cost over a bounded-hop distance map. A system reaches ITSELF at `selfCost`
+ * (the cheapest positive route, so the planner's served ÷ cost scoring builds local self-supply
+ * before export); any other system costs `hops × hopWeight`, or is unreachable (`null`) when it has
+ * no entry or lies beyond `maxHops`. An empty `hops` map yields a self-only route (used to seed an
+ * isolated homeworld).
+ */
+export function hopRouteCost(
+  hops: Map<string, Map<string, number>>,
+  maxHops: number,
+  hopWeight: number,
+  selfCost: number,
+): RouteCost {
+  return (from, to) => {
+    if (from === to) return selfCost;
+    const h = hops.get(from)?.get(to);
+    return h === undefined || h > maxHops ? null : h * hopWeight;
+  };
+}
+
+/**
  * Stock-coverage dissatisfaction D in [0,1] for one system — the "fed" half of the
  * settle gate. Reuses the population engine's demand-weighted convex fold, with a
  * stock-based satisfaction proxy (stock ÷ targetStock, clamped): the build planner
