@@ -103,6 +103,34 @@ describe("academies", () => {
   });
 });
 
+describe("typed building output", () => {
+  it("gives every catalog entry a typed output", () => {
+    for (const [type, def] of Object.entries(BUILDING_TYPES)) {
+      expect(def.output, type).toBeDefined();
+    }
+  });
+
+  it("marks production types as market_good outputs matching their good id", () => {
+    for (const goodId of GOOD_NAMES) {
+      expect(BUILDING_TYPES[goodId].output, goodId).toEqual({ kind: "market_good", goodId });
+      // The union stays consistent with the legacy outputGood field it will eventually supplant.
+      expect(BUILDING_TYPES[goodId].outputGood).toBe(goodId);
+    }
+  });
+
+  it("marks housing + academies as capacity outputs of the right kind", () => {
+    expect(BUILDING_TYPES[HOUSING_TYPE].output).toEqual({ kind: "capacity", capacity: "pop_cap" });
+    expect(BUILDING_TYPES[VOCATIONAL_SCHOOL_TYPE].output).toEqual({ kind: "capacity", capacity: "skill1_licence" });
+    expect(BUILDING_TYPES[RESEARCH_INSTITUTE_TYPE].output).toEqual({ kind: "capacity", capacity: "skill2_licence" });
+  });
+
+  it("marks each specialisation complex as a modifier output keyed on its complex type", () => {
+    for (const f of SPECIALISATION_FAMILIES) {
+      expect(BUILDING_TYPES[f.complexType].output).toEqual({ kind: "modifier", family: f.complexType });
+    }
+  });
+});
+
 describe("specialisation families", () => {
   it("partition every tier-1+ good into exactly one family", () => {
     const tier1plus = GOOD_NAMES.filter((g) => (GOOD_TIER_BY_KEY[g] ?? 0) >= 1);

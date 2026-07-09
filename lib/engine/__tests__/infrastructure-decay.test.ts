@@ -8,6 +8,13 @@ import {
   computeSystemDecay,
 } from "@/lib/engine/infrastructure-decay";
 import {
+  effectiveFulfilment,
+  labourParts,
+  labourStateFromParts,
+  complexUsed,
+  familyThroughput,
+} from "@/lib/engine/industry";
+import {
   HOUSING_TYPE,
   POP_CENTRE_DENSITY,
   BUILDING_TYPES,
@@ -18,6 +25,7 @@ import {
   HEAVY_INDUSTRY_COMPLEX,
   ANCHOR_RATED_COVERAGE,
   OUTPUT_PER_UNIT,
+  SPECIALISATION_FAMILIES,
 } from "@/lib/constants/industry";
 
 const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
@@ -145,6 +153,53 @@ describe("academy decay", () => {
 
 const COMPLEX_PARAMS = { disuseRate: 0.1, unrestRate: 0, unrestThreshold: 0.6 };
 const noUptake = () => 1;
+
+describe("unified decay across every output kind (one system, one pass)", () => {
+  it("decays housing, both academies, a complex, and producers by each type's own used", () => {
+    // A mixed base where every kind is partially utilised, so all decay together.
+    const buildings: Record<string, number> = {
+      ore: 10, // tier-0 producer
+      metals: 4, // tier-1 producer (draws skill-1)
+      [HOUSING_TYPE]: 10,
+      [VOCATIONAL_SCHOOL_TYPE]: 2, // over-licenses → idle → sheds
+      [RESEARCH_INSTITUTE_TYPE]: 1, // no tier-2 demand → sheds fully
+      [HEAVY_INDUSTRY_COMPLEX]: 1,
+    };
+    const population = 131; // labourDemand 262 → labourFulfil 0.5; housingUsed 6.55 < 10
+    const params = { disuseRate: 0.1, unrestRate: 0, unrestThreshold: 0.75 };
+    const { newCounts } = computeSystemDecay(
+      { buildings, population, unrest: 0, outputUptake: () => 1 },
+      params,
+    );
+
+    // Independently recompute each type's "used" the old per-type way, then decayedCount.
+    const parts = labourParts(buildings);
+    const state = labourStateFromParts(parts, population);
+    const heavy = SPECIALISATION_FAMILIES.find((f) => f.complexType === HEAVY_INDUSTRY_COMPLEX)!;
+    const expected: Record<string, number> = {
+      ore: decayedCount(10, productionUsed(10, effectiveFulfilment(state, 0), 1), 0, params),
+      metals: decayedCount(4, productionUsed(4, effectiveFulfilment(state, 1), 1), 0, params),
+      [HOUSING_TYPE]: decayedCount(10, housingUsed(population), 0, params),
+      [VOCATIONAL_SCHOOL_TYPE]: decayedCount(
+        2,
+        2 * Math.min(1, parts.skill1Demand / parts.skill1Cap),
+        0,
+        params,
+      ),
+      [RESEARCH_INSTITUTE_TYPE]: decayedCount(1, 0, 0, params), // skill2 demand 0 → used 0
+      [HEAVY_INDUSTRY_COMPLEX]: decayedCount(
+        1,
+        complexUsed(1, familyThroughput(buildings, heavy), ANCHOR_RATED_COVERAGE),
+        0,
+        params,
+      ),
+    };
+    // A type is written only when it actually fell; otherwise its effective count is unchanged.
+    for (const [type, count] of Object.entries(expected)) {
+      expect(newCounts[type] ?? buildings[type], type).toBeCloseTo(count, 9);
+    }
+  });
+});
 
 describe("complex decay", () => {
   it("holds a complex serving a thriving family (used ≈ count)", () => {
