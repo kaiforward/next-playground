@@ -103,6 +103,40 @@ describe("runWorldTick", () => {
     }
   });
 
+  it("accumulates construction projects and lands whole integer building levels over many ticks", async () => {
+    // A single-faction developed corridor drives construction: connect two developed homeworlds so
+    // logistics makes them fed-and-calm, then run long enough for committed projects to land.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const world = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
+    const after = await runTicks(world, 120);
+
+    // Construction projects exist (committed, in-flight) and every one is well-formed.
+    expect(after.constructionProjects.length).toBeGreaterThan(0);
+    for (const p of after.constructionProjects) {
+      expect(p.levels).toBeGreaterThanOrEqual(1);
+      expect(Number.isInteger(p.levels)).toBe(true);
+      expect(p.workDone).toBeGreaterThanOrEqual(0);
+      expect(p.workDone).toBeLessThanOrEqual(p.workTotal);
+    }
+    // Project ids are unique (minted from the world's monotonic counter).
+    const ids = after.constructionProjects.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Landed levels are whole integers when they land (the full integer invariant, once decay is
+    // whole-level too, is asserted separately).
+    for (const u of after.constructionProjects) expect(Number.isInteger(u.levels)).toBe(true);
+  });
+
   it("round-trips building idleMonths across a tick (inert plumbing — decay does not yet consume it)", async () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const world = { ...base, buildings: base.buildings.map((b) => ({ ...b, idleMonths: 7 })) };

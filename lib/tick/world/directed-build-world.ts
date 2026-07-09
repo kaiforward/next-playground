@@ -5,7 +5,7 @@
  * (the build planner needs all of a faction's systems at once), matching logistics.
  */
 import type { ResourceVector } from "@/lib/types/game";
-import type { SystemControl } from "@/lib/world/types";
+import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
@@ -56,8 +56,12 @@ export interface DirectedBuildWorld {
   getFactionShardKeys(): Promise<Array<string | null>>;
   /** All systems (with markets + capacity) belonging to the given faction keys. */
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemBuildRow[]>;
-  /** Bulk absolute building-count writes (production goods + "housing"). */
+  /** Open (in-flight) construction projects owned by the given faction keys. */
+  getConstructionProjects(factionKeys: Array<string | null>): Promise<WorldConstructionProject[]>;
+  /** Bulk absolute building-count writes (landed whole levels: production goods + "housing"). */
   applyBuildingIncreases(updates: BuildBuildingUpdate[]): Promise<void>;
+  /** Replace the given factions' open construction projects with the funded/created set (landed removed). */
+  applyConstructionUpdates(factionKeys: Array<string | null>, projects: WorldConstructionProject[]): Promise<void>;
   /** Ownership writes from the claim step (unclaimed → controlled). */
   applyClaims(claims: SystemClaim[]): Promise<void>;
   /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */
