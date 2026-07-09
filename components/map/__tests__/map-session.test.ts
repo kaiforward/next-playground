@@ -34,12 +34,12 @@ describe("map-session", () => {
   });
 
   describe("parseOverlays (via getMapSessionState)", () => {
-    it("keeps tradeFlow when present", () => {
+    it("keeps logistics when present", () => {
       sessionStorage.setItem(
         "stellarTrader:mapState",
-        JSON.stringify({ overlays: { tradeFlow: true } }),
+        JSON.stringify({ overlays: { logistics: true } }),
       );
-      expect(getMapSessionState()?.overlays?.tradeFlow).toBe(true);
+      expect(getMapSessionState()?.overlays?.logistics).toBe(true);
     });
 
     it("silently drops a legacy politicalTerritory key", () => {
@@ -52,15 +52,15 @@ describe("map-session", () => {
       expect(getMapSessionState()?.overlays).toBeUndefined();
     });
 
-    it("keeps tradeFlow even when a legacy politicalTerritory is also present", () => {
+    it("keeps logistics even when a legacy politicalTerritory is also present", () => {
       sessionStorage.setItem(
         "stellarTrader:mapState",
         JSON.stringify({
-          overlays: { tradeFlow: true, politicalTerritory: true },
+          overlays: { logistics: true, politicalTerritory: true },
         }),
       );
       const overlays = getMapSessionState()?.overlays;
-      expect(overlays?.tradeFlow).toBe(true);
+      expect(overlays?.logistics).toBe(true);
       expect("politicalTerritory" in (overlays ?? {})).toBe(false);
     });
 
@@ -69,11 +69,11 @@ describe("map-session", () => {
       // a dropped key would silently revert to the default on hydrate.
       sessionStorage.setItem(
         "stellarTrader:mapState",
-        JSON.stringify({ overlays: { events: false, tradeFlow: true } }),
+        JSON.stringify({ overlays: { events: false, logistics: true } }),
       );
       const overlays = getMapSessionState()?.overlays;
       expect(overlays?.events).toBe(false);
-      expect(overlays?.tradeFlow).toBe(true);
+      expect(overlays?.logistics).toBe(true);
     });
 
     it("drops a non-boolean events value during parse", () => {
@@ -100,10 +100,10 @@ describe("map-session", () => {
       // Exercises setOverlaysInSession → writeSessionState → getMapSessionState
       // end-to-end (not just a seeded parse): a default-ON overlay turned off
       // must survive the write, or it would silently revert on hydrate.
-      setOverlaysInSession({ events: false, tradeFlow: true });
+      setOverlaysInSession({ events: false, logistics: true });
       const overlays = getMapSessionState()?.overlays;
       expect(overlays?.events).toBe(false);
-      expect(overlays?.tradeFlow).toBe(true);
+      expect(overlays?.logistics).toBe(true);
     });
   });
 
@@ -126,19 +126,19 @@ describe("map-session", () => {
     });
 
     it("preserves overlays when setting mode independently", () => {
-      setOverlaysInSession({ tradeFlow: true });
+      setOverlaysInSession({ logistics: true });
       setModeInSession("regions");
       const state = getMapSessionState();
       expect(state?.mode).toBe("regions");
-      expect(state?.overlays?.tradeFlow).toBe(true);
+      expect(state?.overlays?.logistics).toBe(true);
     });
 
     it("preserves mode when setting overlays independently", () => {
       setModeInSession("political");
-      setOverlaysInSession({ tradeFlow: true });
+      setOverlaysInSession({ logistics: true });
       const state = getMapSessionState();
       expect(state?.mode).toBe("political");
-      expect(state?.overlays?.tradeFlow).toBe(true);
+      expect(state?.overlays?.logistics).toBe(true);
     });
   });
 });

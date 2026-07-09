@@ -63,9 +63,9 @@ describe("computeLOD — unchanged adjacent curves (regression guards)", () => {
     expect(computeLOD(0.6).regionLabelAlpha).toBe(0);
   });
 
-  it("tradeFlowAlpha still fades in across 0.4 → 0.6", () => {
-    expect(computeLOD(0.3).tradeFlowAlpha).toBe(0);
-    expect(computeLOD(0.7).tradeFlowAlpha).toBe(1);
+  it("logisticsAlpha still fades in across 0.4 → 0.6", () => {
+    expect(computeLOD(0.3).logisticsAlpha).toBe(0);
+    expect(computeLOD(0.7).logisticsAlpha).toBe(1);
   });
 });
 

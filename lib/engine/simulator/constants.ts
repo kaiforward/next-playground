@@ -13,7 +13,6 @@ import {
   scaleEventCaps,
 } from "@/lib/constants/events";
 import { SHIP_TYPES } from "@/lib/constants/ships";
-import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { genConfigForSystemCount, DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { type ModifierCaps } from "@/lib/engine/events";
 import { UNREST_PARAMS, STRIKE_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS } from "@/lib/constants/population";
@@ -63,13 +62,6 @@ export interface SimConstants {
     gatewaysPerBorder: number;
     intraRegionExtraEdges: number;
   };
-  tradeFlow: {
-    distanceDecay: number;
-    flowBudget: number;
-    gradientThreshold: number;
-    gradientSensitivity: number;
-    flowHistoryTicks: number;
-  };
   population: {
     unrest: { gain: number; decay: number };
     dynamics: { growthRate: number; declineRate: number; overshootDeathRate: number };
@@ -104,7 +96,6 @@ export type SimConstantOverrides = {
   };
   ships?: Record<string, Partial<SimConstants["ships"][string]>>;
   universe?: Partial<SimConstants["universe"]>;
-  tradeFlow?: Partial<SimConstants["tradeFlow"]>;
   population?: {
     unrest?: Partial<SimConstants["population"]["unrest"]>;
     dynamics?: Partial<SimConstants["population"]["dynamics"]>;
@@ -186,13 +177,6 @@ function buildDefaults(): SimConstants {
       gatewaysPerBorder: DEFAULT_GEN_CONFIG.GATEWAYS_PER_BORDER,
       intraRegionExtraEdges: DEFAULT_GEN_CONFIG.INTRA_REGION_EXTRA_EDGES,
     },
-    tradeFlow: {
-      distanceDecay: TRADE_SIMULATION.DISTANCE_DECAY,
-      flowBudget: TRADE_SIMULATION.FLOW_BUDGET,
-      gradientThreshold: TRADE_SIMULATION.GRADIENT_THRESHOLD,
-      gradientSensitivity: TRADE_SIMULATION.GRADIENT_SENSITIVITY,
-      flowHistoryTicks: TRADE_SIMULATION.FLOW_HISTORY_TICKS,
-    },
     population: {
       unrest: { ...UNREST_PARAMS },
       dynamics: { ...POPULATION_PARAMS },
@@ -229,7 +213,6 @@ export function resolveConstants(overrides?: SimConstantOverrides): SimConstants
     events: mergeEvents(base.events, overrides.events),
     ships: mergeRecord(base.ships, overrides.ships),
     universe: { ...base.universe, ...overrides.universe },
-    tradeFlow: { ...base.tradeFlow, ...overrides.tradeFlow },
     population: {
       unrest: { ...base.population.unrest, ...overrides.population?.unrest },
       dynamics: { ...base.population.dynamics, ...overrides.population?.dynamics },

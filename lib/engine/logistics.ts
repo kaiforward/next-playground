@@ -1,9 +1,9 @@
 /**
  * Pure builders for the per-system Logistics tab. The service in
- * `lib/services/trade-flow.ts` loads raw rows from Prisma and feeds them
+ * `lib/services/trade-flow.ts` window-sums raw flow rows and feeds them
  * through these helpers to produce the panel-facing shape.
  *
- * Pure: no Prisma, no I/O. Safe to unit-test against in-memory data.
+ * Pure: no I/O. Safe to unit-test against in-memory data.
  */
 
 import { GOODS, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -11,11 +11,9 @@ import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import type { SystemFlowRow } from "@/lib/engine/system-trade-flow";
 import type { LogisticsGoodRow, TradeFlowPartner } from "@/lib/types/api";
 
-/** Per-good cross-border flow totals (split by flow type) plus top partners. */
+/** Per-good cross-border import/export totals plus top partners. */
 export interface GoodFlowAggregate {
-  importMarket: number;
   importLogistics: number;
-  exportMarket: number;
   exportLogistics: number;
   importPartners: TradeFlowPartner[];
   exportPartners: TradeFlowPartner[];
@@ -30,7 +28,7 @@ export interface LogisticsRowModel {
 }
 
 const EMPTY_AGG: GoodFlowAggregate = {
-  importMarket: 0, importLogistics: 0, exportMarket: 0, exportLogistics: 0,
+  importLogistics: 0, exportLogistics: 0,
   importPartners: [], exportPartners: [],
 };
 
@@ -74,13 +72,11 @@ export function buildLogisticsRows(
     const a = flowsByGood.get(goodId) ?? EMPTY_AGG;
 
     // Window sums → per-cycle rates (matches production/consumption units).
-    const importMarket = a.importMarket / norm;
     const importLogistics = a.importLogistics / norm;
-    const exportMarket = a.exportMarket / norm;
     const exportLogistics = a.exportLogistics / norm;
 
-    const importTotal = importMarket + importLogistics;
-    const exportTotal = exportMarket + exportLogistics;
+    const importTotal = importLogistics;
+    const exportTotal = exportLogistics;
     const traded = importTotal > 0 || exportTotal > 0;
     const active = production > 0 || totalConsumption > 0;
     if (!active && !traded) continue;
@@ -98,9 +94,7 @@ export function buildLogisticsRows(
       consumption,
       inputDemand,
       internalNet: production - totalConsumption,
-      importMarket,
       importLogistics,
-      exportMarket,
       exportLogistics,
       externalNet: exportTotal - importTotal,
       traded,
@@ -119,28 +113,20 @@ export function buildLogisticsRows(
   return { rows, internalMax, externalMax, activeGoodCount, tradedGoodCount };
 }
 
-/** A flow row carrying its flow type, for the import/export split. */
-export interface LogisticsFlowRow extends SystemFlowRow {
-  flowType: string;
-}
-
 /** Partner systems shown per good in the import/export tooltips. */
 const TOP_PARTNERS = 3;
 
 /**
- * Aggregate one system's flow rows into per-good import/export totals split by
- * flow type ("logistics" = directed, anything else = market diffusion), plus
- * the top contributing partner systems for each direction.
+ * Aggregate one system's directed-logistics flow rows into per-good import/export
+ * totals plus the top contributing partner systems for each direction.
  */
 export function aggregateLogisticsFlows(
-  flows: ReadonlyArray<LogisticsFlowRow>,
+  flows: ReadonlyArray<SystemFlowRow>,
   systemId: string,
   resolveName: (id: string) => string,
 ): Map<string, GoodFlowAggregate> {
   interface Acc {
-    importMarket: number;
     importLogistics: number;
-    exportMarket: number;
     exportLogistics: number;
     importByPartner: Map<string, number>;
     exportByPartner: Map<string, number>;
@@ -152,19 +138,16 @@ export function aggregateLogisticsFlows(
     let acc = byGood.get(f.goodId);
     if (!acc) {
       acc = {
-        importMarket: 0, importLogistics: 0, exportMarket: 0, exportLogistics: 0,
+        importLogistics: 0, exportLogistics: 0,
         importByPartner: new Map(), exportByPartner: new Map(),
       };
       byGood.set(f.goodId, acc);
     }
-    const directed = f.flowType === "logistics";
     if (f.toSystemId === systemId) {
-      if (directed) acc.importLogistics += f.quantity;
-      else acc.importMarket += f.quantity;
+      acc.importLogistics += f.quantity;
       acc.importByPartner.set(f.fromSystemId, (acc.importByPartner.get(f.fromSystemId) ?? 0) + f.quantity);
     } else if (f.fromSystemId === systemId) {
-      if (directed) acc.exportLogistics += f.quantity;
-      else acc.exportMarket += f.quantity;
+      acc.exportLogistics += f.quantity;
       acc.exportByPartner.set(f.toSystemId, (acc.exportByPartner.get(f.toSystemId) ?? 0) + f.quantity);
     }
   }
@@ -178,9 +161,7 @@ export function aggregateLogisticsFlows(
   const out = new Map<string, GoodFlowAggregate>();
   for (const [goodId, acc] of byGood) {
     out.set(goodId, {
-      importMarket: acc.importMarket,
       importLogistics: acc.importLogistics,
-      exportMarket: acc.exportMarket,
       exportLogistics: acc.exportLogistics,
       importPartners: topPartners(acc.importByPartner),
       exportPartners: topPartners(acc.exportByPartner),

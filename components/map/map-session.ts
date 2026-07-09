@@ -6,7 +6,6 @@ const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapOverlaysState {
   events?: boolean;
-  tradeFlow?: boolean;
   logistics?: boolean;
   priceHeatmap?: boolean;
 }
@@ -22,9 +21,6 @@ function parseOverlays(value: unknown): MapOverlaysState | undefined {
   const out: MapOverlaysState = {};
   if ("events" in value && typeof value.events === "boolean") {
     out.events = value.events;
-  }
-  if ("tradeFlow" in value && typeof value.tradeFlow === "boolean") {
-    out.tradeFlow = value.tradeFlow;
   }
   if ("logistics" in value && typeof value.logistics === "boolean") {
     out.logistics = value.logistics;

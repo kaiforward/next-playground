@@ -1,4 +1,4 @@
-import type { EdgeView } from "@/lib/tick/world/trade-flow-world";
+import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type { MigrationFlowParams } from "@/lib/engine/migration";
 
 export interface MigrationNodeView { systemId: string; population: number; popCap: number; unrest: number; }

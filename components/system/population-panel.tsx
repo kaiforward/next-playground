@@ -50,7 +50,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
 
   if (pop.visibility === "unknown") {
     return (
-      <EmptyState message="Scan this system with a ship in range to assess its population." />
+      <EmptyState message="This system isn't developed yet — no established population." />
     );
   }
 

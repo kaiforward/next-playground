@@ -3,6 +3,7 @@
 import { use } from "react";
 import { usePathname } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
+import { useOwnership } from "@/lib/hooks/use-ownership";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,20 @@ function SystemPanelContent({
   children: React.ReactNode;
 }) {
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
+  const ownership = useOwnership();
   const pathname = usePathname();
 
+  // Live developed tier (tick-invalidated). Non-developed systems show only Overview +
+  // Astrography; the four economy tabs (Population/Industry/Logistics/Market) are hidden.
+  // Default to developed while ownership is still loading so we never hide a real system's
+  // tabs on a cold direct-load — the services gate the inert case regardless.
+  const isDeveloped = ownership.get(systemId)?.developed ?? true;
+  const visibleTabs = SYSTEM_TABS.filter(
+    (tab) => isDeveloped || tab.segment === "" || tab.segment === "astrography",
+  );
+
   const basePath = `/system/${systemId}`;
-  const tabs = SYSTEM_TABS.map((tab) => {
+  const tabs = visibleTabs.map((tab) => {
     const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;
     return {
       label: tab.label,

@@ -1,44 +1,16 @@
 /**
- * Trade simulation constants — drive the edge-flow processor.
- *
- * See `docs/design/active/trade-simulation.md`. Values are placeholders pending
- * sim-sweep calibration; tune via the simulator before promoting changes.
+ * Trade flow-event constants — retention window + overlay/route inference floors
+ * for the `world.flowEvents` log written by directed-logistics.
  */
 
-import { scaleValue } from "@/lib/constants/economy-scale";
-
 export const TRADE_SIMULATION = {
-  /**
-   * Distance attenuation coefficient. Per-edge flow is scaled by
-   * 1/(1 + DISTANCE_DECAY · fuelCost), so costlier jumps move less. 0 = no
-   * attenuation. Calibrated to 0.1: the median local hop (fuelCost ~8.6) still
-   * moves ~54% of budget while high-fuel intra-faction gateways (fuelCost up to
-   * ~47) throttle toward ~18%, concentrating price dispersion on long-haul
-   * high-value goods (notably luxuries) without starving distant systems or
-   * pinning stock to a bound.
-   */
-  DISTANCE_DECAY: 0.1,
-  /** Max units of one good moved per edge per processor run. */
-  FLOW_BUDGET: scaleValue(8),
-  /**
-   * Price gradient threshold below which no flow occurs. Expressed as a
-   * fraction of basePrice so all goods use the same trigger.
-   */
-  GRADIENT_THRESHOLD: 0.05,
-  /**
-   * Linear response of flow fraction to gradient. At sensitivity 1.0 a
-   * gradient equal to basePrice (1.0) saturates the budget.
-   */
-  GRADIENT_SENSITIVITY: 1.0,
   /** Window (in ticks) for flow history retention and route inference. */
   FLOW_HISTORY_TICKS: 200,
-  /** Minimum cumulative flow on an edge to count toward route inference. */
-  ROUTE_INFERENCE_FLOOR: 5,
   /**
-   * Minimum cumulative LOGISTICS flow on an edge to render. Lower than the
-   * market `ROUTE_INFERENCE_FLOOR` — directed logistics is sparse (one transfer
-   * per faction-shard sweep) and small in the pre-scale economy, so the market
-   * floor would hide most logistics arcs. Lifts naturally once ECONOMY_SCALE lands.
+   * Minimum cumulative logistics flow on an edge to render on the overlay.
+   * Directed logistics is sparse (one transfer per faction-shard sweep) and
+   * small in the pre-scale economy, so the floor is low. Lifts naturally once
+   * ECONOMY_SCALE lands.
    */
   LOGISTICS_ROUTE_FLOOR: 1,
 } as const;

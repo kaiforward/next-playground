@@ -10,6 +10,7 @@ import type {
 } from "@/lib/tick/world/events-world";
 import { buildModifiersForPhase, type ModifierRow } from "@/lib/engine/events";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import type { EventDefinition, EventTypeId } from "@/lib/constants/events";
 import type {
   SimConnection,
@@ -173,9 +174,16 @@ export class InMemoryEventsWorld implements EventsWorld {
     for (const m of this.markets) {
       marketByKey.set(`${m.systemId}|${m.goodId}`, m);
     }
+    // A shock is a market-economic disruption; it only applies where an economy
+    // runs. Non-developed systems are economically inert (their markets freeze),
+    // so a shock targeting one is skipped — events still spawn galaxy-wide as
+    // ambient flavour, but they can't unfreeze an inert market.
+    const controlBySystem = new Map(this.systems.map((s) => [s.id, s.control]));
 
     const touched = new Set<SimMarketEntry>();
     for (const shock of shocks) {
+      const control = controlBySystem.get(shock.systemId);
+      if (control === undefined || !isEconomicallyActive(control)) continue;
       const market = marketByKey.get(`${shock.systemId}|${shock.goodId}`);
       if (!market) continue;
       if (!isFinite(shock.value)) continue;

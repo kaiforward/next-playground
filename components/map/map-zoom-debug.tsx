@@ -46,7 +46,7 @@ function buildRows(lod: LODState): DebugRow[] {
       value: lod.showRegionLabels ? a2(lod.regionLabelAlpha) : "off",
       active: lod.showRegionLabels && lod.regionLabelAlpha > VISIBLE,
     },
-    { label: "trade flow", value: a2(lod.tradeFlowAlpha), active: lod.tradeFlowAlpha > VISIBLE },
+    { label: "logistics", value: a2(lod.logisticsAlpha), active: lod.logisticsAlpha > VISIBLE },
     { label: "glow", value: lod.showGlow ? "ON" : "off", active: lod.showGlow },
     {
       label: "pill content",

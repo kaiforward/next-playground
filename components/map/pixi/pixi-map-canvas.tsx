@@ -58,7 +58,6 @@ interface PixiRefs {
   politicalTerritoryLayer: PoliticalTerritoryLayer;
   stabilityTerritoryLayer: StabilityTerritoryLayer;
   populationTerritoryLayer: PopulationTerritoryLayer;
-  tradeFlowLayer: TradeFlowLayer;
   logisticsFlowLayer: TradeFlowLayer;
 }
 
@@ -159,12 +158,8 @@ export function PixiMapCanvas({
       const connectionLayer = new ConnectionLayer();
       world.addChild(connectionLayer.container);
 
-      // Trade-flow particles render between connections and territories so
-      // they sit on top of the static graph but below region fills/labels.
-      const tradeFlowLayer = new TradeFlowLayer();
-      world.addChild(tradeFlowLayer.container);
-
-      // Logistics convoys render just above market diffusion, below territories.
+      // Logistics convoys render above the connection graph, below region
+      // fills/labels.
       const logisticsFlowLayer = new TradeFlowLayer(LOGISTICS_FLOW_CONFIG);
       world.addChild(logisticsFlowLayer.container);
 
@@ -252,11 +247,8 @@ export function PixiMapCanvas({
         stabilityTerritoryLayer.updateVisibility(lod);
         populationTerritoryLayer.updateVisibility(lod);
 
-        // Trade-flow overlay: layer alpha multiplies the system fade so the
+        // Logistics overlay: layer alpha multiplies the system fade so the
         // overlay disappears alongside its host systems at universe zoom.
-        tradeFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
-        if (tradeFlowLayer.container.visible) tradeFlowLayer.update(dtMs);
-
         logisticsFlowLayer.updateVisibility(frustum, lod, lod.systemLayerAlpha);
         if (logisticsFlowLayer.container.visible) logisticsFlowLayer.update(dtMs);
 
@@ -271,7 +263,7 @@ export function PixiMapCanvas({
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
         politicalTerritoryLayer, stabilityTerritoryLayer, populationTerritoryLayer,
-        tradeFlowLayer, logisticsFlowLayer,
+        logisticsFlowLayer,
       };
       setPixiReady(true);
     })();
@@ -292,7 +284,6 @@ export function PixiMapCanvas({
           refs.politicalTerritoryLayer.destroy();
           refs.stabilityTerritoryLayer.destroy();
           refs.populationTerritoryLayer.destroy();
-          refs.tradeFlowLayer.destroy();
           refs.logisticsFlowLayer.destroy();
           refs.starfield.destroy();
           refs.pointCloudLayer.destroy();
@@ -363,7 +354,6 @@ export function PixiMapCanvas({
     // System objects and connections driven by mapData (viewport detail)
     p.systemLayer.sync(mapData.systems, selectedSystem?.id ?? null);
     p.connectionLayer.sync(mapData.connections, mapData.systems);
-    p.tradeFlowLayer.sync(mapData.systems, mapData.flowEdges);
     p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges);
   }, [mapData, selectedSystem, pixiReady]);
 

@@ -100,7 +100,9 @@ describe("getSystemCadence — monthly pulse", () => {
 describe("shard-order helpers vs. the tick adapters (drift guard)", () => {
   it("InMemoryEconomyWorld.getSystemIds() matches economyShardOrder for the same systems", async () => {
     const ids = ["zulu", "alpha", "mike", "bravo", "yankee"];
-    const systems = ids.map((id) => makeSimSystem(id, null));
+    // Developed systems (via a faction id) so the economy-participation gate in
+    // getSystemIds is a no-op here — this guards ordering drift, not the gate.
+    const systems = ids.map((id) => makeSimSystem(id, "faction-a"));
     const world = new InMemoryEconomyWorld({ systems, markets: [], modifiers: [] });
 
     const fromAdapter = await world.getSystemIds();

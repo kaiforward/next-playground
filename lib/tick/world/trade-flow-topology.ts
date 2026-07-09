@@ -1,4 +1,15 @@
-import type { EdgeView } from "./trade-flow-world";
+/**
+ * One unique unordered open edge (both endpoints share a faction).
+ *
+ * `buildOpenEdges` dedupes the bidirectional connection rows by ordering the
+ * endpoints (aSystemId < bSystemId) so each pair appears once. `fuelCost` is the
+ * distance source for downstream attenuation.
+ */
+export interface EdgeView {
+  aSystemId: string;
+  bSystemId: string;
+  fuelCost: number;
+}
 
 /**
  * Build the open-edge list from raw system connections and a systemId → factionId

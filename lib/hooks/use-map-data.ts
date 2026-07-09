@@ -52,10 +52,9 @@ export interface MapData {
   systems: SystemNodeData[];
   connections: ConnectionData[];
   /**
-   * Trade-flow edges keyed by canonical edge id `${fromId}|${toId}` (sorted).
-   * Empty when the Trade Flows overlay is off — the Pixi layer renders nothing.
+   * Directed-logistics edges keyed by canonical edge id `${fromId}|${toId}`
+   * (sorted). Empty when the Logistics overlay is off — the Pixi layer renders nothing.
    */
-  flowEdges: Map<string, TradeFlowEdgeInfo>;
   logisticsFlowEdges: Map<string, TradeFlowEdgeInfo>;
   /** Per-system price data for the active heatmap good. Null when overlay is off. */
   priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
@@ -75,7 +74,6 @@ interface UseMapDataOptions {
   events: ActiveEvent[];
   visibleSystemIds: Set<string>;
   dynamicSystems: DynamicTileSystem[];
-  tradeFlowEdges: TradeFlowEdgeInfo[];
   logisticsEdges: TradeFlowEdgeInfo[];
   selectedSystem: StarSystemInfo | null;
   systemRegionMap: Map<string, string>;
@@ -108,7 +106,6 @@ export function useMapData({
   events,
   visibleSystemIds,
   dynamicSystems,
-  tradeFlowEdges,
   logisticsEdges,
   selectedSystem,
   systemRegionMap,
@@ -241,13 +238,11 @@ export function useMapData({
   // `fromSystemId`/`toSystemId` reflect net flow direction (not sort order),
   // so we key by canonical pair `${min}|${max}`. The renderer uses each value's
   // from/to as-is for direction.
-  const flowEdges = useMemo(() => keyByCanonicalPair(tradeFlowEdges), [tradeFlowEdges]);
   const logisticsFlowEdges = useMemo(() => keyByCanonicalPair(logisticsEdges), [logisticsEdges]);
 
   return {
     systems,
     connections,
-    flowEdges,
     logisticsFlowEdges,
     priceHeatmap,
     eventsAtSelected,

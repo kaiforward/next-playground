@@ -1,6 +1,6 @@
 # Economy System
 
-The economy is a **single-stock** market simulation. Each `(station, good)` holds one value — `stock` — from which price, buy/sell rates, and the "how much can I trade" limits are all derived. Producers add stock (self-limiting near the ceiling), consumers drain it (self-limiting near the floor), and the spatial flow of goods between systems (trade-flow + player trades) is what separates cheap producer worlds from expensive consumer worlds. There is no second free-floating `demand` value and no mean-reversion — equilibrium emerges from production/consumption balance plus spatial flow. (Each market does store a static per-system **demand rate**, but it only sets where the pricing curve is centred — it never evolves and never moves stock.)
+The economy is a **single-stock** market simulation. Each `(station, good)` holds one value — `stock` — from which price, buy/sell rates, and the "how much can I trade" limits are all derived. Producers add stock (self-limiting near the ceiling), consumers drain it (self-limiting near the floor), and the spatial flow of goods between systems (directed logistics) is what separates cheap producer worlds from expensive consumer worlds. There is no second free-floating `demand` value and no mean-reversion — equilibrium emerges from production/consumption balance plus that spatial flow. (Each market does store a static per-system **demand rate**, but it only sets where the pricing curve is centred — it never evolves and never moves stock.)
 
 See [Design Rationale](#design-rationale) below for why this replaced the legacy dual supply/demand model and how it kills the instant buy→resell exploit.
 
@@ -131,7 +131,7 @@ The cascade runs **per system, each tick**, with goods processed in **recipe-top
 
 **Drawable-above-floor rule.** "Drawable" stock is `max(0, stock − minStock)` — only stock above the market's own scarcity reserve (`minStock`, the per-market price-floor level; see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) can be drawn down by a recipe. Because the gate is computed against drawable stock and inputs drain in proportion to it, every input stays at or above its reserve *by construction* — no re-clamp is needed, and a consumer can never mine its input below the reserve and pin that input's own price to the ceiling.
 
-Inputs come from *local* stock, which trade flow refills from cheaper neighbours (unchanged). So a refinery world with no Ore deposits still runs its Smelters as long as Ore flows in — and **cutting that lane starts the downstream cascade**, grounded in the existing trade-flow lever. The marquee emergent behaviours — need-cascade, lane-cut cascade, over-industrialise-a-garden-world-and-it-can-no-longer-feed-itself — all fall out of this loop composed with the population/unrest dynamics, with the industrial base **static** (seeded at world-gen; runtime construction is a later agency layer). The cascade engine is pure (`lib/engine/supply-chain.ts`, shared by the live tick and the simulator).
+Inputs come from *local* stock, which directed logistics refills from same-faction surplus systems. So a refinery world with no Ore deposits still runs its Smelters as long as Ore is hauled in — and **cutting that supply starts the downstream cascade**, grounded in the directed-logistics lever. The marquee emergent behaviours — need-cascade, lane-cut cascade, over-industrialise-a-garden-world-and-it-can-no-longer-feed-itself — all fall out of this loop composed with the population/unrest dynamics, with the industrial base **static** (seeded at world-gen; runtime construction is a later agency layer). The cascade engine is pure (`lib/engine/supply-chain.ts`, shared by the live tick and the simulator).
 
 ### Market Seeding
 
@@ -258,7 +258,7 @@ Events can shift a good's **pricing reference** (the anchor) — the stock level
 - `goodId: null` — applies to all goods at the target station; setting a specific `goodId` targets one good only
 - Multiple active shifts on the same good **compound** (multiply together)
 
-**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same shard cadence as `stock`) and writes it to **`WorldMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — market display, cross-system comparison, and trade-flow gradient.
+**Storage and write path**: The economy processor computes the net multiplier from all active `anchor_shift` modifiers on a system's events each tick (same shard cadence as `stock`) and writes it to **`WorldMarket.anchorMult`** (default `1`). Reads are pure: `curveForGood` folds `anchorMult` into the reference (`TARGET_COVER × demandRate × anchorMult`) before evaluating the price curve, so the shift flows automatically through every price read path — market display, cross-system comparison, and directed-logistics supply/demand classification.
 
 **Safety cap**: `anchorMult` is clamped to **[0.1, 4.0]** — a single good can at most become 4× as expensive (or 10× as cheap) via anchor shift.
 
@@ -270,7 +270,7 @@ See [events.md](./events.md) for the full modifier catalog and event definitions
 
 ## How It Composes Each Tick
 
-The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor processes its shard of systems each tick (every system refreshes every `ECONOMY_UPDATE_INTERVAL` ticks), and **event** modifiers plus player trades layer on top in real time. The **trade-flow** processor sweeps its fixed-interval edge shard each tick (region lines ignored, faction borders closed; see [trade-simulation.md](./trade-simulation.md)). Two additional processors — **population** and **migration** — run after economy and complete the consequence loop:
+The per-market steps above sit inside a larger ordering — the logical sequence each market's state moves through every tick. The **economy** processor processes its shard of systems each tick (every system refreshes every `ECONOMY_UPDATE_INTERVAL` ticks) — and only **developed** systems participate; unclaimed and controlled systems are economically inert (seeded markets frozen, population 0). **Event** modifiers layer on top; goods move between systems only via **directed logistics** (see [economy-autonomic-agency.md](./economy-autonomic-agency.md)). Two additional processors — **population** and **migration** — run after economy and complete the consequence loop:
 
 ```
 EVENTS       run first  - stock shocks (one-time jolts) + modifiers
@@ -285,25 +285,23 @@ ECONOMY      run second - per system (markets grouped, recipe-topological
    |                      records per-system satisfaction (delivered/demanded)
    |                      via ctx.results for the population processor
    v
-TRADE FLOW   run third  - goods flow along open intra-faction edges
-   |                      (region lines ignored, borders closed),
-   |                      distance-attenuated, by mid-price gradient;
-   |                      a single stock delta moves cheap -> dear
-   v
-INFRA DECAY  run fourth - shrinks WorldBuilding.count downward toward used
+INFRA DECAY  run third  - shrinks WorldBuilding.count downward toward used
    |                      (disuse where built > used, + unrest teardown above
    |                      theta); recomputes popCap live from surviving housing;
    |                      acts on the economy's just-processed shard
    v
-POPULATION   run fifth  - reads per-system satisfaction from ctx.results;
+POPULATION   run fourth - reads per-system satisfaction from ctx.results;
    |                      integrates unrest (D formula); applies growth/decline
    |                      against the live popCap; housing-overshoot sheds the
    |                      excess as unrest-weighted death; rewrites demandRate
    v
-MIGRATION    run sixth  - relocates population (conserved) along the same
-                          intra-faction open-edge topology + work-budget slice;
+MIGRATION    run fifth  - relocates population (conserved) along the
+                          intra-faction open-edge topology (developed-both edges);
                           population flows down-unrest / up-headroom,
-                          distance-attenuated (gateways throttle both flows)
+                          distance-attenuated (gateways throttle it)
+
+(goods move between systems separately, via directed logistics — see
+ economy-autonomic-agency.md)
 
 PLAYER TRADES  anytime (not tick-locked) - buy lowers stock, sell raises
                it (one stock delta); same per-market effect as a flow
@@ -327,14 +325,14 @@ Viewed another way, the simulation stacks four layers from static to real-time:
 2  Tick evolution (each tick)  input-gated self-limiting production (the
                                supply-chain cascade) + civilian consumption,
                                strike suppression (from unrest), noise,
-                               clamp, edge flow, infrastructure decay
+                               clamp, directed logistics, infrastructure decay
                                (count -> used, live popCap), population
                                growth/decline, migration, demandRate rewrite
 3  Disruptions (events)        shocks + modifiers temporarily change how
                                layer 2 behaves
 ```
 
-Edge-flow mechanics are detailed in [trade-simulation.md](./trade-simulation.md); this is just where it sits in the tick.
+Inter-system goods movement (directed logistics) is detailed in [economy-autonomic-agency.md](./economy-autonomic-agency.md), and the shared open-edge topology in [trade-simulation.md](./trade-simulation.md); this is just where they sit in the tick.
 
 ---
 
@@ -364,4 +362,5 @@ This mirrors how comparable games solve it — slippage / marginal pricing (Moun
 
 ## Related Systems
 
-- **[Trade simulation](./trade-simulation.md)** — edge-flow inter-system trade that provides the spatial restoring force production/consumption alone lack.
+- **[Directed logistics & autonomic agency](./economy-autonomic-agency.md)** — the inter-system goods movement that provides the spatial restoring force production/consumption alone lack.
+- **[Open-edge topology & flow surfaces](./trade-simulation.md)** — the faction-bounded edge substrate shared by directed logistics and migration, plus the flow-event log.

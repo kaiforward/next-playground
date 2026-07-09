@@ -36,8 +36,8 @@ export interface LODState {
   regionLabelAlpha: number;
   /** Whether to show glow effects */
   showGlow: boolean;
-  /** Alpha for trade-flow particles (smooth fade in 0.4 → 0.6). */
-  tradeFlowAlpha: number;
+  /** Alpha for the directed-logistics overlay layer (smooth fade in 0.4 → 0.6). */
+  logisticsAlpha: number;
   /** Whether pill TEXT/ICON content shows (shapes show earlier, with the layer). */
   showPillContent: boolean;
   /** Alpha for pill text/icon content (smooth fade). */
@@ -135,7 +135,7 @@ export function computeLOD(zoom: number): LODState {
     showGlow: zoom > 0.45,
 
     // Trade-flow overlay fades in across the crossfade-to-system band
-    tradeFlowAlpha: smoothStep(0.4, 0.6, zoom),
+    logisticsAlpha: smoothStep(0.4, 0.6, zoom),
 
     // Pill content (text/icon) reveals with system names on the 0.8–0.9 text
     // band — the pill shapes still appear far earlier (with systemLayerAlpha),

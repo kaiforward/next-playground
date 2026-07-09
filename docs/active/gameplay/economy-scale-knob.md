@@ -16,7 +16,7 @@
 
 One global multiplier `ECONOMY_SCALE = S` on the **goods-side magnitudes** of the economy (production
 output, consumption, seeded stock) plus the **absolute terms that silently break if left unscaled** (the
-demand floor, per-unit storage, the two silent-flow budgets, the directed-logistics budget).
+demand floor, per-unit storage, the directed-logistics budget).
 Ratio/dimensionless terms (target-cover, price exponent, band ratios, market-state thresholds, route
 cost) deliberately do **not** scale.
 
@@ -92,7 +92,6 @@ Audited against current code. `file:line` are the definition sites.
 | `PRODUCTION_STORAGE_PER_UNIT` (15) | `lib/constants/industry.ts` | Additive in `maxStock`. |
 | `POP_CENTRE_STORAGE_DEFAULT` (2) | `lib/constants/industry.ts` | Per pop-centre default storage. |
 | `POP_CENTRE_STORAGE` (**every entry**) | `lib/constants/industry.ts` | Absolute per-good overrides, **not** ratios — each entry scales. |
-| `TRADE_SIMULATION.FLOW_BUDGET` (8) | `lib/constants/trade-simulation.ts` | Per-edge market-diffusion unit cap; auto-propagates to the sim's `tradeFlow.flowBudget`. |
 | `DIRECTED_LOGISTICS.GENERATION_PER_POP` (0.5) | `lib/constants/directed-logistics.ts` | Goods-denominated work budget: `affordable = floor(budget / perUnit)`. ×S deficits need ×S budget to heal the same fraction. |
 
 Seeded stock and industrial input-demand scale automatically (derived from the above) — no edit.
@@ -102,7 +101,6 @@ Seeded stock and industrial input-demand scale automatically (derived from the a
 | Symbol | File | Note |
 |---|---|---|
 | `bots.startingCredits` (500) | `lib/engine/simulator/constants.ts` | Scaled `× S` explicitly so bots can buy the ×S economy at invariant prices. |
-| sim `tradeFlow.flowBudget` | `lib/engine/simulator/constants.ts` | References `TRADE_SIMULATION.FLOW_BUDGET` — **auto-scales**, no explicit edit. |
 
 ### Deliberately NOT scaled
 

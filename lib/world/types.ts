@@ -286,8 +286,6 @@ export interface WorldFlowEvent {
   toSystemId: string;
   goodId: string;
   quantity: number;
-  /** "market" (diffusion) or "logistics" (directed). */
-  flowType: "market" | "logistics";
 }
 
 // ── World ───────────────────────────────────────────────────────
@@ -307,7 +305,7 @@ export interface World {
   events: WorldEvent[];
   modifiers: WorldEventModifier[];
   ships: WorldShip[];
-  /** Rolling window of edge-flow events; pruned by the trade-flow processor. */
+  /** Rolling window of directed-logistics flow events; pruned to the retention window by the tick body. */
   flowEvents: WorldFlowEvent[];
   /** Monotonic counter for generating unique ids. */
   nextId: number;

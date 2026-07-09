@@ -4,6 +4,7 @@ import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
   TradeFlowEdges,
   SystemLogisticsData,
@@ -13,22 +14,21 @@ import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/indus
 import {
   aggregateLogisticsFlows,
   buildLogisticsRows,
-  type LogisticsFlowRow,
 } from "@/lib/engine/logistics";
 
 /**
- * Returns the two map-overlay edge sets (market diffusion + directed logistics)
- * aggregated over the last `FLOW_HISTORY_TICKS`.
+ * Returns the directed-logistics map-overlay edge set, aggregated over the last
+ * `FLOW_HISTORY_TICKS`.
  */
 export function getTradeFlowEdges(): TradeFlowEdges {
   const world = getWorld();
   const minTick = world.meta.currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
-  // Group by (from, to, good, flowType) summing quantity over the window.
+  // Group by (from, to, good) summing quantity over the window.
   const grouped = new Map<string, RawFlowRow>();
   for (const f of world.flowEvents) {
     if (f.tick <= minTick || f.quantity <= 0) continue;
-    const key = `${f.fromSystemId}|${f.toSystemId}|${f.goodId}|${f.flowType}`;
+    const key = `${f.fromSystemId}|${f.toSystemId}|${f.goodId}`;
     const existing = grouped.get(key);
     if (existing) {
       existing.quantity += f.quantity;
@@ -38,18 +38,17 @@ export function getTradeFlowEdges(): TradeFlowEdges {
         toSystemId: f.toSystemId,
         goodId: f.goodId,
         quantity: f.quantity,
-        flowType: f.flowType,
       });
     }
   }
 
   const allSystemIds = new Set(world.systems.map((s) => s.id));
-  return buildFlowEdges(
+  const logisticsEdges = buildFlowEdges(
     [...grouped.values()],
     allSystemIds,
-    TRADE_SIMULATION.ROUTE_INFERENCE_FLOOR,
     TRADE_SIMULATION.LOGISTICS_ROUTE_FLOOR,
   );
+  return { logisticsEdges };
 }
 
 /**
@@ -62,7 +61,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const minTick = currentTick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
   const system = world.systems.find((s) => s.id === systemId);
-  if (!system) return { visibility: "unknown" };
+  if (!system || !isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
   const flows = (flowEventsBySystem().get(systemId) ?? []).filter((f) => f.tick > minTick);
 
@@ -90,8 +89,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const nameById = systemNameById();
   const resolveName = (id: string): string => nameById.get(id) ?? "Unknown System";
 
-  const flowRows: LogisticsFlowRow[] = flows;
-  const flowsByGood = aggregateLogisticsFlows(flowRows, systemId, resolveName);
+  const flowsByGood = aggregateLogisticsFlows(flows, systemId, resolveName);
   // Imports/exports are summed over the FLOW_HISTORY_TICKS window; normalise to a
   // per-economy-cycle rate so they share units with the production/consumption rates.
   const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / ECONOMY_UPDATE_INTERVAL;

@@ -161,7 +161,9 @@ export function SystemDetailPanel({
         <div className="px-4 py-3 border-t border-gray-700 space-y-3">
           {/* Tab shortcuts — Overview has its own dedicated button below. */}
           <div className="flex flex-col gap-1">
-            {SYSTEM_TABS.filter((tab) => tab.segment).map((tab) => (
+            {SYSTEM_TABS.filter(
+              (tab) => tab.segment && (system.developed || tab.segment === "astrography"),
+            ).map((tab) => (
               <Button
                 key={tab.segment}
                 href={`/system/${system.id}/${tab.segment}`}

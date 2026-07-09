@@ -150,39 +150,11 @@ export const ANIM = {
   hoverScale:         1.05,
 } as const;
 
-// ── Trade flow overlay ───────────────────────────────────────────
-
-export const TRADE_FLOW = {
-  /** Pixel radius of one particle (world-space — scales with zoom). */
-  particleRadius: 2.8,
-  /** Pixels per second a particle travels along its edge. */
-  particleSpeed: 80,
-  /**
-   * Minimum particles per active edge. Even a low-volume edge gets at least
-   * this many so it reads as "active" rather than "dead."
-   */
-  minParticlesPerEdge: 2,
-  /**
-   * Volume per additional particle above the minimum. Tuned so a busy edge
-   * (totalVolume = ROUTE_INFERENCE_FLOOR × 10) shows ~8 particles.
-   */
-  volumePerExtraParticle: 6,
-  /** Hard cap per edge so a runaway aggregate can't melt the GPU. */
-  maxParticlesPerEdge: 10,
-  /**
-   * Global cap on total active particles across all edges. Frustum culling
-   * keeps draw counts down, but this is the last-line defence at galactic zoom
-   * where many edges enter the viewport at once.
-   */
-  maxTotalParticles: 2000,
-  /** Particle alpha (multiplied with LOD/layer alpha). */
-  particleAlpha: 0.9,
-} as const;
+// ── Flow overlay ─────────────────────────────────────────────────
 
 /**
- * Directed-logistics overlay. Arced, glowing "convoy" particles distinct from
- * market's small ambient dots. Visual values are placeholders — tune in the
- * manual smoke (bow/glow/speed) the way TRADE_FLOW's are.
+ * Directed-logistics overlay. Arced, glowing "convoy" particles. Visual values
+ * are placeholders — tune in the manual smoke (bow/glow/speed).
  */
 export const LOGISTICS_FLOW = {
   /** Perpendicular bow as a fraction of chord length. */
