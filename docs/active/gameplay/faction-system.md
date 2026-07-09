@@ -132,18 +132,16 @@ Two factions can share a government type and still be bitter enemies. A federati
 
 Concrete economic modifiers per government type. These are the live shipped values from `GOVERNMENT_TYPES`.
 
-| Government | Volatility | Eq. Spread | Danger | Consumption boost |
-|---|---|---|---|---|
-| Federation | 0.8× | -10% | 0.00 | medicine |
-| Corporate | 0.9× | -5% | 0.02 | luxuries |
-| Authoritarian | 0.7× | -15% | 0.00 | weapons, fuel |
-| Frontier | 1.5× | +20% | 0.10 | — |
-| Cooperative | 0.7× | -10% | 0.00 | food, medicine |
-| Technocratic | 1.0× | +5% | 0.01 | electronics |
-| Militarist | 1.3× | +10% | 0.05 | weapons, fuel, machinery |
-| Theocratic | 0.8× | -5% | 0.03 | food, medicine, textiles |
-
-> **Planned (tuning pass):** the original design called for per-tier nuance in equilibrium spread — e.g. Technocratic should be wide for tier-2 goods but narrow for tier-0 basics; Theocratic narrow for basics and wide for restricted. Today every government applies a single flat `equilibriumSpreadPct` to all goods. A `goodCategoryModifiers`-style field would be added to `GovernmentDefinition` during that tuning pass to support per-tier spread nuance — it is not currently declared on the interface.
+| Government | Volatility | Danger | Consumption boost |
+|---|---|---|---|
+| Federation | 0.8× | 0.00 | medicine |
+| Corporate | 0.9× | 0.02 | luxuries |
+| Authoritarian | 0.7× | 0.00 | weapons, fuel |
+| Frontier | 1.5× | 0.10 | — |
+| Cooperative | 0.7× | 0.00 | food, medicine |
+| Technocratic | 1.0× | 0.01 | electronics |
+| Militarist | 1.3× | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.8× | 0.03 | food, medicine, textiles |
 
 ---
 

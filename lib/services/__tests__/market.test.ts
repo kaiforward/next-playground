@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
 import { getMarket } from "@/lib/services/market";
 import { ServiceError } from "@/lib/services/errors";
+import { TARGET_COVER } from "@/lib/constants/market-economy";
 import type { World } from "@/lib/world/types";
 
 let world: World;
@@ -47,20 +48,20 @@ describe("getMarket", () => {
   });
 
   it("prices scarcity: lower stock reads more expensive than higher stock", () => {
-    // Pick stocks either side of the curve's own anchor so neither read is
-    // clamped at the price floor/ceiling.
-    const targetStock = getMarket(systemId).entries.find((e) => e.goodId === "food")!.targetStock;
+    // Pick stocks either side of the good's per-system anchor (TARGET_COVER ×
+    // demandRate × anchorMult) so neither read is clamped at floor/ceiling.
+    const market = getWorld().markets.find(
+      (m) => m.systemId === systemId && m.goodId === "food",
+    )!;
+    const anchor = TARGET_COVER * market.demandRate * market.anchorMult;
 
-    setFoodStock(targetStock * 0.5);
+    setFoodStock(anchor * 0.5);
     const scarce = getMarket(systemId).entries.find((e) => e.goodId === "food")!;
 
-    setFoodStock(targetStock * 2);
+    setFoodStock(anchor * 2);
     const abundant = getMarket(systemId).entries.find((e) => e.goodId === "food")!;
 
     expect(scarce.currentPrice).toBeGreaterThan(abundant.currentPrice);
-    // Buy price always sits at or above the mid (the spread); sell at or below.
-    expect(scarce.buyPrice).toBeGreaterThanOrEqual(scarce.currentPrice);
-    expect(scarce.sellPrice).toBeLessThanOrEqual(scarce.currentPrice);
   });
 
   it("throws ServiceError(404) for an unknown system", () => {
