@@ -1,13 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionProposals, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type PlannedBuild, type Proposal } from "@/lib/engine/directed-build";
+import { findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import type { WorldConstructionProject } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, ANCHOR_FOOTPRINT, effectiveSpaceCost, HOUSING_TYPE } from "@/lib/constants/industry";
+import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, ANCHOR_FOOTPRINT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 import { labourDemand } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { ResourceVector } from "@/lib/types/game";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { EXPANSION } from "@/lib/constants/expansion";
 
 /** ore's total per-unit head count (labour.unskilled + skill1 + skill2) — shared across fixtures. */
 const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
@@ -896,7 +899,9 @@ describe("complex co-build", () => {
 
 /** Flatten a proposal list to its ordered building items — the funding-queue expansion. */
 function flatItems(proposals: Proposal[]): Array<{ systemId: string; buildingType: string; levels: number }> {
-  return proposals.flatMap((p) => p.items.map((i) => ({ systemId: p.systemId, buildingType: i.buildingType, levels: i.levels })));
+  return proposals.flatMap((p) =>
+    p.kind === "build" ? p.items.map((i) => ({ systemId: p.systemId, buildingType: i.buildingType, levels: i.levels })) : [],
+  );
 }
 
 describe("planFactionProposals", () => {
@@ -1020,5 +1025,137 @@ describe("hopRouteCost", () => {
     };
     const builds = planFactionBuilds([sys], rc);
     expect(builds.some((b) => b.systemId === "A" && b.buildingType === "food")).toBe(true);
+  });
+});
+
+const COLONY_PARAMS: ColonyEstablishParams = {
+  landPremium: COLONISATION.LAND_PREMIUM,
+  landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
+  landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
+  sigmaFloor: COLONISATION.SIGMA_FLOOR,
+  establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
+  seedPop: EXPANSION.COLONY_SEED_POP,
+  habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+};
+
+/** A developed home system for the σ/missing/deficit aggregates. `housing` sets built pop-cap; `habitable`
+ *  the potential — equal ⇒ σ = 1 (saturated). `goods` seed the faction rate deficits. */
+function homeState(opts: {
+  systemId?: string;
+  housing?: number;
+  habitableSpace?: number;
+  slotCap?: ResourceVector;
+  goods?: BuildGoodState[];
+}): BuildSystemState {
+  return {
+    systemId: opts.systemId ?? "home", factionId: "f1", control: "developed", population: 1000, unrest: 0,
+    buildings: opts.housing ? { [HOUSING_TYPE]: opts.housing } : {},
+    slotCap: opts.slotCap ?? emptyResourceVector(),
+    generalSpace: 0, habitableSpace: opts.habitableSpace ?? 0, goods: opts.goods ?? [],
+  };
+}
+
+/** A controlled colony candidate with a seed source. */
+function candidate(opts: {
+  systemId?: string; habitableSpace?: number; generalSpace?: number; slotCap?: ResourceVector;
+}): ColonyEstablishCandidate {
+  return {
+    systemId: opts.systemId ?? "c1",
+    habitableSpace: opts.habitableSpace ?? 100,
+    generalSpace: opts.generalSpace ?? 0,
+    slotCap: opts.slotCap ?? emptyResourceVector(),
+    sourceSystemId: "home",
+  };
+}
+
+describe("factionGoodDeficits", () => {
+  it("sums each good's positive (demand − production) across developed systems", () => {
+    const developed = [
+      homeState({ systemId: "a", goods: [{ goodId: "food", stock: 0, targetStock: 0, demand: 30, production: 10 }] }),
+      homeState({ systemId: "b", goods: [
+        { goodId: "food", stock: 0, targetStock: 0, demand: 20, production: 5 },
+        { goodId: "ore", stock: 0, targetStock: 0, demand: 5, production: 50 }, // surplus → no deficit
+      ] }),
+    ];
+    const deficits = factionGoodDeficits(developed);
+    const food = deficits.find((d) => d.goodId === "food");
+    expect(food?.rateDeficit).toBeCloseTo((30 - 10) + (20 - 5), 6);
+    expect(deficits.some((d) => d.goodId === "ore")).toBe(false); // ore is a surplus everywhere
+  });
+});
+
+describe("planFactionColonyProposals", () => {
+  it("scores a candidate's land value and rises with faction saturation σ (the crossover driver)", () => {
+    const c = candidate({ habitableSpace: 100, generalSpace: 40 });
+    // Unsaturated home: lots of unbuilt habitable land (σ ≈ 0) → land premium mostly dormant.
+    const loose = planFactionColonyProposals("f1", [homeState({ housing: 1, habitableSpace: 1000 })], [c], [], COLONY_PARAMS);
+    // Saturated home: housing fills all habitable land (σ = 1) → full land premium live.
+    const tight = planFactionColonyProposals("f1", [homeState({ housing: 5, habitableSpace: 5 })], [c], [], COLONY_PARAMS);
+    expect(loose).toHaveLength(1);
+    expect(tight).toHaveLength(1);
+    expect(loose[0].value).toBeGreaterThan(0);                 // σ_floor keeps some land value live
+    expect(tight[0].value).toBeGreaterThan(loose[0].value);    // saturation activates the rest
+  });
+
+  it("credits U (unblocking value) for a keystone deposit even at σ = 0", () => {
+    // Home has no `ore` deposit anywhere (missing) and a structural `metals` deficit (metals needs ore).
+    // A candidate WITH an ore deposit unblocks that deficit up the recipe chain → U > 0 even unsaturated.
+    const oreVec = makeResourceVector({ ore: 5 });
+    const home = homeState({
+      housing: 1, habitableSpace: 1000, // σ ≈ 0 → land term nearly dormant
+      slotCap: emptyResourceVector(),   // zero ore slots → ore is a missing resource
+      goods: [{ goodId: "metals", stock: 0, targetStock: 0, demand: 40, production: 0 }],
+    });
+    const keystone = candidate({ systemId: "ore-world", habitableSpace: 5, slotCap: oreVec });
+    const barren = candidate({ systemId: "rock", habitableSpace: 5, slotCap: emptyResourceVector() });
+    const [k] = planFactionColonyProposals("f1", [home], [keystone], [], COLONY_PARAMS);
+    const [b] = planFactionColonyProposals("f1", [home], [barren], [], COLONY_PARAMS);
+    // Same land (habitable 5); the keystone's ore deposit adds the metals deficit's demand as U.
+    expect(k.value - b.value).toBeGreaterThan(0);
+  });
+
+  it("sizes the seed + bundled housing to the land, and prices establishWork = base + housing work", () => {
+    const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+    // Land-rich: whole-level habitable cap ≫ seedPop → full seed.
+    const [rich] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "big", habitableSpace: 100 })], [], COLONY_PARAMS);
+    expect(rich.seedPop).toBe(EXPANSION.COLONY_SEED_POP);
+    expect(rich.housingLevels).toBe(Math.ceil(EXPANSION.COLONY_SEED_POP / POP_CENTRE_DENSITY));
+    expect(rich.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(rich.seedPop); // viable by construction
+    expect(rich.work).toBeCloseTo(COLONISATION.COLONY_ESTABLISH_WORK + rich.housingLevels * workCostPerLevel(HOUSING_TYPE), 6);
+    expect(rich.work).toBeGreaterThan(COLONISATION.COLONY_ESTABLISH_WORK); // housing is paid for, not free
+
+    // Land-poor: two whole housing levels of habitable land → seed capped below COLONY_SEED_POP.
+    const housingCost = effectiveSpaceCost(HOUSING_TYPE);
+    const poorHabitable = 2 * housingCost; // exactly 2 whole levels
+    const [poor] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "small", habitableSpace: poorHabitable })], [], COLONY_PARAMS);
+    expect(poor.seedPop).toBe(Math.min(EXPANSION.COLONY_SEED_POP, 2 * POP_CENTRE_DENSITY));
+    expect(poor.seedPop).toBeLessThan(EXPANSION.COLONY_SEED_POP);
+    expect(poor.housingLevels).toBeLessThanOrEqual(2);
+    expect(poor.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(poor.seedPop);
+  });
+
+  it("skips a candidate below the habitable floor and one with no whole housing level", () => {
+    const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+    const belowFloor = candidate({ systemId: "dead", habitableSpace: 0 });
+    expect(planFactionColonyProposals("f1", developed, [belowFloor], [], COLONY_PARAMS)).toHaveLength(0);
+  });
+
+  it("does not re-propose a colony already in flight for that system", () => {
+    const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+    const c = candidate({ systemId: "c1", habitableSpace: 100 });
+    const open: WorldColonyEstablishProject[] = [
+      { kind: "colony_establish", id: "e", factionId: "f1", systemId: "c1", sourceSystemId: "home", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 20 },
+    ];
+    expect(planFactionColonyProposals("f1", developed, [c], [], COLONY_PARAMS)).toHaveLength(1);
+    expect(planFactionColonyProposals("f1", developed, [c], open, COLONY_PARAMS)).toHaveLength(0);
+  });
+
+  it("carries kind, faction, system, and the fixed seed source through to the proposal", () => {
+    const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+    const [p] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "c1" })], [], COLONY_PARAMS);
+    expect(p.kind).toBe("colony_establish");
+    expect(p.factionId).toBe("f1");
+    expect(p.systemId).toBe("c1");
+    expect(p.sourceSystemId).toBe("home");
   });
 });

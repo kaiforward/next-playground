@@ -158,6 +158,7 @@ export async function runDirectedBuildProcessor(
     // complex → academies → production order). fundQueue never sees the ROI — the ordering is done.
     const newProjects: WorldConstructionProject[] = [];
     for (const p of ordered) {
+      if (p.kind !== "build") continue; // colony-establish expansion wired in Task 4
       for (const item of p.items) {
         newProjects.push({
           kind: "build",

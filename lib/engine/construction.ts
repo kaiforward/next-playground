@@ -102,7 +102,8 @@ function isHousing(p: Proposal): boolean {
  * Pure: sorts a copy, never mutates the input.
  */
 export function orderProposals(proposals: Proposal[]): Proposal[] {
-  const tiebreak = (p: Proposal): string => `${p.systemId}|${p.items[0]?.buildingType ?? ""}`;
+  const tiebreak = (p: Proposal): string =>
+    p.kind === "build" ? `${p.systemId}|${p.items[0]?.buildingType ?? ""}` : `${p.systemId}|colony`;
   return [...proposals].sort((a, b) => {
     const ah = isHousing(a);
     const bh = isHousing(b);

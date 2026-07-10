@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { fundQueue, factionThroughputPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
-import type { Proposal } from "@/lib/engine/directed-build";
+import type { Proposal, ColonyProposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -154,7 +154,7 @@ describe("orderProposals", () => {
       { buildingType: "electronics", levels: 1 },
     ], 12, 45);
     const other = proposal("s2", [{ buildingType: "food", levels: 1 }], 8, 12);
-    const flat = orderProposals([other, gated]).flatMap((p) => p.items.map((i) => i.buildingType));
+    const flat = orderProposals([other, gated]).flatMap((p) => (p.kind === "build" ? p.items.map((i) => i.buildingType) : []));
     expect(flat.indexOf("vocational_school")).toBeLessThan(flat.indexOf("electronics"));
   });
 
@@ -176,6 +176,36 @@ describe("orderProposals", () => {
     const snapshot = input.map((p) => p.systemId);
     orderProposals(input);
     expect(input.map((p) => p.systemId)).toEqual(snapshot);
+  });
+});
+
+/** Build a colony-establish proposal with explicit value/work. */
+function colony(systemId: string, value: number, work: number): ColonyProposal {
+  return { kind: "colony_establish", factionId: "f1", systemId, sourceSystemId: "home", seedPop: 50, housingLevels: 3, value, work };
+}
+
+describe("orderProposals — colony interleaving", () => {
+  it("interleaves a colony among build bundles by descending ROI", () => {
+    const hi = proposal("s1", [{ buildingType: "food", levels: 1 }], 40, 20);   // ROI 2.0
+    const col = colony("c1", 30, 20);                                            // ROI 1.5
+    const lo = proposal("s2", [{ buildingType: "ore", levels: 1 }], 10, 20);     // ROI 0.5
+    expect(orderProposals([lo, col, hi]).map((p) => p.systemId)).toEqual(["s1", "c1", "s2"]);
+  });
+
+  it("keeps housing ahead of a higher-ROI colony (proactive substrate still leads)", () => {
+    const housing = proposal("s1", [{ buildingType: "housing", levels: 1 }], 0, 8, "housing");
+    const col = colony("c1", 1000, 4); // enormous ROI, still funded after housing
+    const ordered = orderProposals([col, housing]);
+    expect(ordered[0]).toBe(housing);
+    expect(ordered[1]).toBe(col);
+  });
+
+  it("is deterministic with a colony present (union-safe tiebreak, no items on a colony)", () => {
+    const a = colony("c-a", 20, 20); // ROI 1.0
+    const b = proposal("s-b", [{ buildingType: "ore", levels: 1 }], 20, 20); // ROI 1.0 (tie)
+    const order1 = orderProposals([a, b]).map((p) => p.systemId);
+    const order2 = orderProposals([b, a]).map((p) => p.systemId);
+    expect(order1).toEqual(order2);
   });
 });
 

@@ -8,7 +8,7 @@
  * The processor maps DB/sim rows into BuildSystemState and applies the returned PlannedBuild[].
  */
 import type { ResourceVector } from "@/lib/types/game";
-import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
+import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -22,6 +22,10 @@ import {
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { workCostPerLevel } from "@/lib/constants/construction";
+import {
+  colonyValue, factionMissingResources, factionSaturation, unblockedDemandByResource,
+  type FactionSystemState, type GoodDeficit, type ColonyValueParams,
+} from "@/lib/engine/colonisation-value";
 import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
   familyAnchorBuff, familyThroughput,
@@ -382,8 +386,8 @@ export interface BuildProposal {
   work: number;
 }
 
-/** The proposal union the decision layer emits. PR3 widens it to `BuildProposal | ColonyProposal`. */
-export type Proposal = BuildProposal;
+/** The proposal union the decision layer emits — build bundles and colony-establishments, ranked on one pool. */
+export type Proposal = BuildProposal | ColonyProposal;
 
 /** A bundle before its faction is attached (the planner works per system; faction is a later join). */
 interface PlannedBundle {
@@ -688,7 +692,7 @@ export function planFactionProposals(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   openProjects: WorldConstructionProject[],
-): Proposal[] {
+): BuildProposal[] {
   // In-flight levels per (system, buildingType) — the "already committed" capacity. Only build
   // projects contribute building levels here; a colony-establish carries no in-flight levels at a
   // developed system (its own in-flight dedup is handled by planFactionColonyProposals).
@@ -711,13 +715,131 @@ export function planFactionProposals(
   });
 
   const factionBySystem = new Map(systems.map((s) => [s.systemId, s.factionId]));
-  const proposals: Proposal[] = [];
+  const proposals: BuildProposal[] = [];
   for (const b of planFactionBundles(augmented, routeCost)) {
     const factionId = factionBySystem.get(b.systemId);
     // Only faction-owned systems can be developed (the build gate), so a bundle always has a faction;
     // the guard both narrows the type and skips the impossible independent-system case.
     if (factionId == null) continue;
     proposals.push({ kind: "build", factionId, systemId: b.systemId, role: b.role, items: b.items, value: b.value, work: b.work });
+  }
+  return proposals;
+}
+
+// ── Colony-establish proposals (the second consumer of the decision → gate → pace pipeline) ──────────
+
+/** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */
+export interface ColonyEstablishCandidate {
+  systemId: string;
+  habitableSpace: number;
+  generalSpace: number;
+  slotCap: ResourceVector;
+  /** Nearest developed same-faction system — the conserved seed source (non-null; the provider drops sourceless). */
+  sourceSystemId: string;
+}
+
+/** Tunable colony inputs: the valuation coefficients plus the establish cost, seed base, and habitable floor. */
+export interface ColonyEstablishParams extends ColonyValueParams {
+  /** Base settle work before the bundled seed-housing's build cost (COLONISATION.COLONY_ESTABLISH_WORK). */
+  establishWork: number;
+  /** Starter colony population, land-capped at proposal (EXPANSION.COLONY_SEED_POP). */
+  seedPop: number;
+  /** Minimum habitable space to consider a controlled system a colony candidate (EXPANSION.DEVELOP_HABITABLE_FLOOR). */
+  habitableFloor: number;
+}
+
+/**
+ * A colony-establish proposal — a single-item member of the `Proposal` union carrying its `colonyValue`
+ * (the ROI numerator, on the build-comparable demand-rate axis) and `establishWork` (the denominator). It
+ * interleaves with build bundles by ROI in `orderProposals`; the processor expands a funded one into a
+ * `colony_establish` project. `seedPop`/`housingLevels` are fixed here (sized to the candidate's land).
+ */
+export interface ColonyProposal {
+  kind: "colony_establish";
+  factionId: string;
+  /** The controlled system being settled. */
+  systemId: string;
+  /** Nearest developed same-faction system the seed transfers from (fixed at proposal). */
+  sourceSystemId: string;
+  /** Land-sized seed: min(COLONY_SEED_POP, whole-level habitable cap). */
+  seedPop: number;
+  /** Housing bundled with the establishment (houses the seed pop; ≤ whole-level habitable capacity). */
+  housingLevels: number;
+  /** colonyValue(c) — the ROI numerator. */
+  value: number;
+  /** COLONY_ESTABLISH_WORK + housingLevels × housing level-work — the ROI denominator. */
+  work: number;
+}
+
+/**
+ * Faction-level rate deficit per good = Σ over developed systems of max(0, demand − production). The
+ * `U` (unblocking-value) input to colony scoring: a missing deposit's worth is mostly the DOWNSTREAM
+ * demand it gates, so we hand the raw per-good deficits to `unblockedDemandByResource` to attribute
+ * fractionally across the missing resources in each good's recipe closure. A self-supplied good (no
+ * deficit) contributes nothing.
+ */
+export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[] {
+  const byGood = new Map<string, number>();
+  for (const s of developed) {
+    for (const g of s.goods) {
+      const deficit = g.demand - (g.production ?? 0);
+      if (deficit > 0) byGood.set(g.goodId, (byGood.get(g.goodId) ?? 0) + deficit);
+    }
+  }
+  return [...byGood].map(([goodId, rateDeficit]) => ({ goodId, rateDeficit }));
+}
+
+/**
+ * Emit a colony-establish proposal for each controlled candidate above the ROI floor, scored on the same
+ * demand-rate axis as a build (docs/planned/economy-colonisation-cost.md §3). Faction-level aggregates
+ * (territory saturation σ, and the unmet demand each missing resource unblocks) are computed once from the
+ * faction's DEVELOPED systems; each candidate is then valued with `colonyValue` and sized to its land —
+ * seed capped to the whole-level habitable capacity and housing sized to house it, so the landed colony has
+ * `popCap ≥ seedPop` (viable by construction). There is NO per-pulse cap: every eligible candidate is
+ * proposed; the pool decides which advance (a proposal persists as an in-flight project only once funded —
+ * enforced by the processor's persist-if-funded). A candidate already being established (open project) or
+ * below the habitable floor / lacking a whole housing level is skipped. The `Map`/`Set` aggregates are
+ * transient — nothing here reaches `World` state.
+ */
+export function planFactionColonyProposals(
+  factionId: string,
+  developed: BuildSystemState[],
+  candidates: ColonyEstablishCandidate[],
+  openColonyProjects: WorldColonyEstablishProject[],
+  params: ColonyEstablishParams,
+): ColonyProposal[] {
+  if (candidates.length === 0) return [];
+
+  const factionSystems: FactionSystemState[] = developed.map((s) => ({
+    buildings: s.buildings, habitableSpace: s.habitableSpace, slotCap: s.slotCap,
+  }));
+  const missing = factionMissingResources(factionSystems);
+  const sigma = factionSaturation(factionSystems);
+  const unblocked = unblockedDemandByResource(factionGoodDeficits(developed), missing);
+
+  const inFlight = new Set(openColonyProjects.map((p) => p.systemId));
+  const housingCost = effectiveSpaceCost(HOUSING_TYPE);
+
+  const proposals: ColonyProposal[] = [];
+  for (const c of candidates) {
+    if (inFlight.has(c.systemId)) continue;                 // already being established
+    if (c.habitableSpace < params.habitableFloor) continue; // DEVELOP_HABITABLE_FLOOR gate stands
+
+    // Land-sized seed + bundled housing, on WHOLE housing levels so popCap ≥ seedPop exactly (no rounding
+    // gap): seed capped to the whole-level habitable capacity; housing sized to house it, land-bounded.
+    const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, c.habitableSpace) / housingCost) : 0;
+    const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
+    const seedPop = Math.min(params.seedPop, habitableCap);
+    const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
+    if (housingLevels < 1 || seedPop <= 0) continue;        // no whole housing level → not viable, skip
+
+    const value = colonyValue(c, unblocked, sigma, params);
+    const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
+
+    proposals.push({
+      kind: "colony_establish", factionId, systemId: c.systemId,
+      sourceSystemId: c.sourceSystemId, seedPop, housingLevels, value, work,
+    });
   }
   return proposals;
 }
