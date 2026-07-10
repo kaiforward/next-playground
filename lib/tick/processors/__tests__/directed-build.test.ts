@@ -153,6 +153,37 @@ describe("runDirectedBuildProcessor — committed construction", () => {
   });
 });
 
+describe("runDirectedBuildProcessor — value-order funding", () => {
+  // The queue is [in-flight, ...new proposals in funding order]; with a tiny cap nothing lands, so
+  // w.constructionProjects preserves that order and we can assert priority by index.
+  function idx(w: MemoryDirectedBuildWorld, systemId: string, type: string): number {
+    return w.constructionProjects.findIndex((p) => p.systemId === systemId && p.buildingType === type);
+  }
+
+  it("funds housing ahead of industry at the same builder (proactive substrate leads)", async () => {
+    // scenario(0,0): A has a deep food deficit, B is a developed builder with habitable land →
+    // B gets both a housing proposal and a food industry proposal. Housing must sort first.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const housingIdx = idx(w, "B", "housing");
+    const foodIdx = idx(w, "B", "food");
+    expect(housingIdx).toBeGreaterThanOrEqual(0);
+    expect(foodIdx).toBeGreaterThanOrEqual(0);
+    expect(housingIdx).toBeLessThan(foodIdx);
+  });
+
+  it("keeps in-flight projects ahead of newly proposed work", async () => {
+    const existing: WorldConstructionProject = {
+      id: "e", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
+    };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    // The pre-existing project is at the front of the queue → it absorbs the (single-cap) pool first.
+    expect(w.constructionProjects[0]?.id).toBe("e");
+    expect(w.constructionProjects[0]?.workDone).toBe(4);
+  });
+});
+
 const EXP_PARAMS: ExpansionParams = {
   maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
 };
