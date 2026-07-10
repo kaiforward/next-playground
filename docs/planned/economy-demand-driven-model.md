@@ -190,19 +190,30 @@ None of these are built here; each names the seam that lets it plug in without r
 
 ## Decomposition (this design → build plans)
 
-Four sub-projects, each its own implementation plan when we reach it:
+Sub-projects, each its own implementation plan when we reach it:
 
 - **A — Strip the trader apparatus.** Delete spread/slippage/`quoteTrade`/`tradeAvgMidPrice`/buy-sell
-  columns; collapse price display to the derived spot signal. Small, already blessed, low-risk.
+  columns; collapse price display to the derived spot signal. Small, already blessed, low-risk. **Shipped.**
 - **B — Rate-based placement (the core fix).** Planner sizes to the demand-rate deficit; demand modelled
   as an extensible sum; `TARGET_COVER` decoupled from builds (kept for price/satisfaction/logistics).
   Fixes seed over-extraction and makes the demand-pull work. **This is the minimal path to a working base.**
+  **Shipped** (incl. the whole-level `ceil` sizing fix — a rate deficit below one building's output still
+  commits one level, else nothing builds).
 - **C — Planner decision/gate/pacing seam.** Refactor `planFactionBuilds` into clean decision / gate /
   pace units (seam-aware, not player-wired). Best done *with* B since B rewrites the sizing logic anyway.
-- **D — Homeworld prefab.** Isolated start-viability win; independent, can land any time.
+  **Partially shipped** with B (removed the double-meter, extracted the throughput pool, binary-searched the
+  gate); the full decision/gate proposer split lands with the colonisation phase, which needs it.
+- **Colonisation cost & viability** — expansion becomes **pool-funded + timed** (not free/instant), colonies
+  land **viable by construction** (seed pop + bundled housing), and expand-vs-build arbitrates by ROI on the
+  shared pool. Cuts the C4 decision/gate proposer seam and the value-order (need-order) funding swap for real.
+  Design: `economy-colonisation-cost.md`. **Runs before D** — a colony run through the old free-develop still
+  floods, so the prefab must start from the corrected mechanic.
+- **D — Homeworld prefab.** Isolated start-viability win; independent, runs after colonisation cost so prefab
+  starts are colonised/built by the corrected mechanic.
 
-**Minimal working base = B (+ D for a viable start).** A is a clean-up that can lead or follow; C is the
-architecture pass that rides with B. Order likely: **A → B+C → D**, re-measuring economy health after B.
+**Minimal working base = B (+ D for a viable start).** A is a clean-up that led. C is the architecture pass
+that rides with B and completes in the colonisation phase. Order: **A → B+C → colonisation cost → D**,
+re-measuring economy health after each.
 
 **Relationship to the paused PR3 branch (`feat/building-pr3-discrete-levels`):** Task 1 (self-serving
 route cost, commit `3a41412`) is correct and survives — it is the reachable-opportunity machinery §1/trade
