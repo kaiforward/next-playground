@@ -22,6 +22,7 @@ import {
   buildExperimentResult,
 } from "../lib/engine/simulator/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/engine/simulator/population-analysis";
+import { summarizeColonisation } from "../lib/engine/simulator/build-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { toSimSystems } from "../lib/world/tick";
@@ -208,6 +209,38 @@ function formatTable(results: SimResults): string {
       ["Collapsed systems (≈0)", String(infra.collapsedCount)],
     ];
     for (const [l, v] of iRows) lines.push([pad(l, iWidths[0]), rpad(v, iWidths[1])].join(" | "));
+  }
+
+  // Colonisation / build-loop health — does a colonised system actually get built out?
+  {
+    const homeworldIds = new Set(finalWorld.factions.map((f) => f.homeworldId));
+    const col = summarizeColonisation(finalSimSystems, homeworldIds, finalWorld.constructionProjects);
+    lines.push("");
+    lines.push("Colonisation & Build Loop (end of simulation):");
+    const cWidths = [30, 12, 12];
+    lines.push([pad("Metric", cWidths[0]), rpad("Homeworld", cWidths[1]), rpad("Colony", cWidths[2])].join(" | "));
+    lines.push(cWidths.map((w) => "-".repeat(w)).join("-+-"));
+    const cRows: [string, number, number][] = [
+      ["Developed systems", col.homeworld.count, col.colony.count],
+      ["  with tier-0 extraction", col.homeworld.withTier0, col.colony.withTier0],
+      ["  with tier-1+ industry", col.homeworld.withTier1Plus, col.colony.withTier1Plus],
+      ["  with housing", col.homeworld.withHousing, col.colony.withHousing],
+      ["  populated, NO industry", col.homeworld.populatedButNoIndustry, col.colony.populatedButNoIndustry],
+      ["  popCap-starved (pop, cap≈0)", col.homeworld.popCapStarved, col.colony.popCapStarved],
+      ["  deposits idle (no tier-0)", col.homeworld.depositsIdle, col.colony.depositsIdle],
+    ];
+    for (const [label, hw, cl] of cRows) {
+      lines.push([pad(label, cWidths[0]), rpad(String(hw), cWidths[1]), rpad(String(cl), cWidths[2])].join(" | "));
+    }
+    lines.push(
+      `Construction queue: homeworld ${col.queue.homeworldProjects} projects (${col.queue.homeworldLevels} lvls), ` +
+        `colony ${col.queue.colonyProjects} projects (${col.queue.colonyLevels} lvls, ` +
+        `mean progress ${(col.queue.colonyMeanProgress * 100).toFixed(0)}%)`,
+    );
+    const kinds = Object.entries(col.queue.colonyByKind);
+    if (kinds.length > 0) {
+      lines.push(`  colony projects by kind: ${kinds.map(([k, n]) => `${k}=${n}`).join(", ")}`);
+    }
   }
 
   // Event impact (top 20 only — full list in JSON output)
