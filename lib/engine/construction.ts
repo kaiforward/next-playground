@@ -7,6 +7,7 @@
  * the physical ceilings) lives in `lib/engine/directed-build.ts`.
  */
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
+import type { Proposal } from "@/lib/engine/directed-build";
 import { isEconomicallyActive } from "@/lib/engine/control";
 
 /**
@@ -79,4 +80,39 @@ export function fundQueue(
   }
 
   return { projects: open, landed };
+}
+
+/** ROI of a proposal on the shared construction pool: served value ÷ whole-bundle work (0 if no work). */
+export function proposalRoi(p: Proposal): number {
+  return p.work > 0 ? p.value / p.work : 0;
+}
+
+/** Housing leads population — the proactive substrate funds ahead of ROI-ranked opportunities. */
+function isHousing(p: Proposal): boolean {
+  return p.kind === "build" && p.role === "housing";
+}
+
+/**
+ * Order this pulse's new proposals into funding priority (front = funded first) — the reorder of
+ * `fundQueue`'s input the value-order model prescribes (docs/planned/economy-colonisation-cost.md §4):
+ *   1. housing — the proactive population substrate leads (no served-demand ROI of its own);
+ *   2. everything else by descending ROI (value ÷ whole-bundle work).
+ * Ties break by systemId then first-item type, a total order independent of input order (determinism).
+ * A proposal is atomic — its gate-first `items` are never split, so a bundled academy stays ahead of
+ * the production it gates. The caller expands each proposal into its item rows and prepends the
+ * in-flight projects (already-committed work finishes first); `fundQueue` then drains front-first.
+ * Pure: sorts a copy, never mutates the input.
+ */
+export function orderProposals(proposals: Proposal[]): Proposal[] {
+  const tiebreak = (p: Proposal): string => `${p.systemId}|${p.items[0]?.buildingType ?? ""}`;
+  return [...proposals].sort((a, b) => {
+    const ah = isHousing(a);
+    const bh = isHousing(b);
+    if (ah !== bh) return ah ? -1 : 1; // housing first
+    if (!ah) {
+      const dRoi = proposalRoi(b) - proposalRoi(a); // then descending ROI
+      if (Math.abs(dRoi) > 1e-12) return dRoi;
+    }
+    return tiebreak(a).localeCompare(tiebreak(b)); // deterministic within a tier / ROI tie
+  });
 }
