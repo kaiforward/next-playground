@@ -396,6 +396,22 @@ describe("planFactionBuilds — proactive housing", () => {
     expect(housing).toBeLessThanOrEqual(5); // habitableSpace 5 ÷ spaceCost 1
   });
 
+  it("commits the full settle-margin-paced housing want, unthrottled by any per-pop budget", () => {
+    // The housing pass commits floor(plannedHousingUnits) — the settle-margin-paced want — bounded
+    // only by the habitable cap, never by a per-pop budget (that throttle was removed). Headroom is
+    // ample here, so the pacing target (pop × (1 + SETTLE_MARGIN) ÷ popProvided) is the binding term
+    // and the commit equals that floored want. A reintroduced pop×0.05-style budget (80 at pop 1600)
+    // would cap the commit below the paced want — this pins that it does not.
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 1600, unrest: 0, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 100000, habitableSpace: 100000,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    };
+    const pacedWant = Math.floor(plannedHousingUnits(sys));
+    expect(pacedWant).toBeGreaterThan(1); // a genuine multi-level commit, not a trivial one
+    expect(countFor(planFactionBuilds([sys], () => 1), "A", "housing")).toBe(pacedWant);
+  });
+
   it("does not co-build housing on the industry path (housing comes only from the housing pass)", () => {
     // Builder has NO habitable land: the housing pass cannot fire, so any housing here
     // would be the deleted co-build. Expect production, zero housing.
