@@ -158,4 +158,23 @@ describe("colonyValue", () => {
     expect(tall).toBeCloseTo(0, 5);
     expect(rush).toBeCloseTo(40, 5);
   });
+
+  it("sums only supplied resources into U, weights all three L terms, and clamps σ", () => {
+    // Candidate supplies ore but NOT gas, so only ore's unblocked demand reaches U.
+    const c = candidate({
+      habitableSpace: 10,
+      generalSpace: 20,
+      slotCap: { ...emptyResourceVector(), ore: 2 },
+    });
+    const unblocked = new Map<ResourceType, number>([
+      ["ore", 8], // supplied → counts
+      ["gas", 100], // NOT supplied → excluded by the slotCap[r] > 0 filter
+    ]);
+    // U = 8 (ore only; gas is filtered out despite its large demand)
+    // L = landPremium·10 + landGeneralWeight·20 + landDepositWeight·depositRichness(2)
+    //   = 0.4·10 + 0.1·20 + 0.15·2 = 4 + 2 + 0.3 = 6.3
+    // σ = clamp(1.5) = 1 → landGate = 0.25 + 0.75·1 = 1
+    // value = 8 + 6.3·1 = 14.3
+    expect(colonyValue(c, unblocked, 1.5, PARAMS)).toBeCloseTo(14.3, 5);
+  });
 });

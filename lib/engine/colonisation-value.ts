@@ -87,7 +87,7 @@ export function factionSaturation(developed: FactionSystemState[]): number {
       potential += (Math.max(0, s.habitableSpace) / housingCost) * POP_CENTRE_DENSITY;
     }
   }
-  if (potential <= 0) return 1;
+  if (!Number.isFinite(potential) || potential <= 0) return 1;
   return clamp(built / potential, 0, 1);
 }
 
@@ -110,7 +110,7 @@ export function unblockedDemandByResource(
 ): Map<ResourceType, number> {
   const out = new Map<ResourceType, number>();
   for (const d of deficits) {
-    if (d.rateDeficit <= 0) continue;
+    if (!Number.isFinite(d.rateDeficit) || d.rateDeficit <= 0) continue;
     const gating = (RESOURCE_CLOSURE[d.goodId] ?? []).filter((r) => missing.has(r));
     if (gating.length === 0) continue;
     const share = d.rateDeficit / gating.length;
