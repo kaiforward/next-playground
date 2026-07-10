@@ -21,6 +21,7 @@ import {
   FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
+import { workCostPerLevel } from "@/lib/constants/construction";
 import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
   familyAnchorBuff, familyThroughput,
@@ -352,23 +353,63 @@ function complexLift(
   };
 }
 
+/** One whole-level order within a proposal bundle: `levels` of `buildingType`. */
+export interface ProposalItem {
+  buildingType: string;
+  levels: number;
+}
+
 /**
- * Greedy demand-pulled build planner for ONE faction's systems. Proposes builds toward the physical
- * ceilings only — capacity (deposit slots / general space), spare labour, and whole-level validity;
- * the construction throughput pool (in the processor, via fundQueue) is the sole speed meter, so the
- * planner never throttles by a population budget of its own. For each structural-gap good, score
- * candidate sites by the reachable structural demand they can serve (capacity-bounded, nearest-first),
- * then commit the highest-scoring opportunities.
- *
- * Each (site, good) opportunity's route-cost-sorted reachable deficits are static, so they are computed
- * ONCE and committed in a single descending-score pass — never re-scanning every site×good per build.
- * A faction owning hundreds of systems would otherwise cost O(builds × sites × deficits) and take tens
- * of seconds at 10k.
+ * A funding proposal — the unit that carries an ROI (docs/planned/economy-colonisation-cost.md §4).
+ * A BuildProposal BUNDLES a production level-set with the academies/complex that GATE it, in `items`
+ * held gate-first (complex → schools → institutes → production); a housing proposal is a single
+ * housing item. ROI = `value` (served demand-rate the production covers) ÷ `work` (the WHOLE bundle's
+ * level work), so an enabler — an academy/complex with no served demand of its own — raises the
+ * denominator without touching the numerator: the bundle funds gate-first at the production's ROI and
+ * the school never ranks below the factory it staffs. (PR3 adds a single-item ColonyProposal.)
  */
-export function planFactionBuilds(
+export interface BuildProposal {
+  kind: "build";
+  factionId: string;
+  systemId: string;
+  /** Housing leads population (proactive substrate, no served-demand ROI); industry ranks by ROI. */
+  role: "housing" | "industry";
+  /** Whole-level orders in gate-first funding order. */
+  items: ProposalItem[];
+  /** Served demand-rate this bundle's production covers — the ROI numerator (0 for housing). */
+  value: number;
+  /** Σ over items of `levels × workCostPerLevel` — the ROI denominator. */
+  work: number;
+}
+
+/** The proposal union the decision layer emits. PR3 widens it to `BuildProposal | ColonyProposal`. */
+export type Proposal = BuildProposal;
+
+/** A bundle before its faction is attached (the planner works per system; faction is a later join). */
+interface PlannedBundle {
+  systemId: string;
+  role: "housing" | "industry";
+  items: ProposalItem[];
+  value: number;
+  work: number;
+}
+
+/**
+ * Greedy demand-pulled build planner for ONE faction's systems, emitting funding BUNDLES. Same
+ * decision logic as before — proposes builds toward the physical ceilings only (capacity, spare
+ * labour, whole-level validity); the construction pool is the sole speed meter — but each committed
+ * build now leaves as a `PlannedBundle` carrying its served demand (`value`) and total level work
+ * (`work`) so the funding stage can rank bundles by ROI. A housing build is a one-item bundle; an
+ * industry opportunity is a bundle of [complex?, schools?, institutes?, production], gate-first.
+ *
+ * Each (site, good) opportunity's route-cost-sorted reachable deficits are static, so they are
+ * computed ONCE and committed in a single descending-score pass — never re-scanning every site×good
+ * per build.
+ */
+function planFactionBundles(
   systems: BuildSystemState[],
   routeCost: RouteCost,
-): PlannedBuild[] {
+): PlannedBundle[] {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
   // systems are skipped here, gating both the housing and industry passes in one place.
@@ -379,7 +420,7 @@ export function planFactionBuilds(
     working.set(s.systemId, { ...s, buildings: { ...s.buildings } });
   }
 
-  const builds: PlannedBuild[] = [];
+  const bundles: PlannedBundle[] = [];
 
   // ── Pass 1: proactive housing (housing leads population). ──
   // Build housing toward the habitable cap wherever a system is fed and calm, paced a
@@ -392,12 +433,18 @@ export function planFactionBuilds(
     const levels = Math.floor(want);
     if (levels < 1) continue;
     site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + levels;
-    builds.push({ systemId: site.systemId, buildingType: HOUSING_TYPE, count: levels });
+    bundles.push({
+      systemId: site.systemId,
+      role: "housing",
+      items: [{ buildingType: HOUSING_TYPE, levels }],
+      value: 0, // proactive substrate — no served-demand ROI; the funding stage leads housing anyway
+      work: levels * workCostPerLevel(HOUSING_TYPE),
+    });
   }
 
   // ── Pass 2: labour-gated industry (industry follows the resident workforce). ──
   const structural = findStructuralDeficits(systems, routeCost);
-  if (structural.length === 0) return builds;
+  if (structural.length === 0) return bundles;
 
   // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
   // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
@@ -567,10 +614,13 @@ export function planFactionBuilds(
 
     // Apply the complex first (any later opportunity at this site sees the buff it grants), then
     // academies (raise the ceiling on the working copy), then the production — gate before production
-    // in both the working copy and the emitted order, so the funding queue funds the gate first.
+    // in both the working copy and the bundle's item order, so the funding queue funds the gate first.
+    const items: ProposalItem[] = [];
+    let work = 0;
     if (complexType && complexLevels > 0) {
       site.buildings[complexType] = (site.buildings[complexType] ?? 0) + complexLevels;
-      builds.push({ systemId: site.systemId, buildingType: complexType, count: complexLevels });
+      items.push({ buildingType: complexType, levels: complexLevels });
+      work += complexLevels * workCostPerLevel(complexType);
     }
 
     for (const [type, count] of [
@@ -579,14 +629,18 @@ export function planFactionBuilds(
     ]) {
       if (count <= 0) continue;
       site.buildings[type] = (site.buildings[type] ?? 0) + count;
-      builds.push({ systemId: site.systemId, buildingType: type, count });
+      items.push({ buildingType: type, levels: count });
+      work += count * workCostPerLevel(type);
     }
 
     site.buildings[opp.goodId] = (site.buildings[opp.goodId] ?? 0) + prodLevels;
-    builds.push({ systemId: site.systemId, buildingType: opp.goodId, count: prodLevels });
+    items.push({ buildingType: opp.goodId, levels: prodLevels });
+    work += prodLevels * workCostPerLevel(opp.goodId);
 
-    // Decrement the served structural demand (nearest-first) so later opportunities don't re-target it.
+    // Decrement the served structural demand (nearest-first) so later opportunities don't re-target
+    // it, and accumulate what this bundle actually serves — its ROI numerator (`value`).
     let producedOutput = prodLevels * perUnit;
+    let value = 0;
     for (const r of opp.reachable) {
       if (producedOutput <= 0) break;
       const short = deficitMap.get(r.sysId) ?? 0;
@@ -594,37 +648,47 @@ export function planFactionBuilds(
       const take = Math.min(producedOutput, short);
       deficitMap.set(r.sysId, short - take);
       producedOutput -= take;
+      value += take;
     }
+
+    bundles.push({ systemId: site.systemId, role: "industry", items, value, work });
   }
 
-  return builds;
-}
-
-/** A whole-level construction order the auto policy wants enqueued (a project before it gets an id). */
-export interface DesiredProject {
-  factionId: string;
-  systemId: string;
-  buildingType: string;
-  /** Whole levels to build (integer ≥ 1). */
-  levels: number;
+  return bundles;
 }
 
 /**
- * The auto queue policy: plan the whole-level construction projects a faction should enqueue this
- * pulse. It runs the same ceiling logic as `planFactionBuilds` (proactive housing → labour-gated
- * industry, with academy/complex co-builds), but treats each system's **effective current** capacity
- * as its built levels PLUS the levels already in flight (`openProjects`) — so a level already under
- * construction counts as committed and is never enqueued twice. The emitted order is gate-first
- * (complex/academies before the production they license), which the funding queue preserves.
+ * Flat build view of the planner — the same decisions `planFactionBundles` makes, ungrouped, in
+ * emission order (housing pass, then industry opportunities by descending score). Kept as the stable
+ * unit-test surface for the planner's *what-gets-built* logic, independent of funding order.
+ */
+export function planFactionBuilds(
+  systems: BuildSystemState[],
+  routeCost: RouteCost,
+): PlannedBuild[] {
+  return planFactionBundles(systems, routeCost).flatMap((b) =>
+    b.items.map((i) => ({ systemId: b.systemId, buildingType: i.buildingType, count: i.levels })),
+  );
+}
+
+/**
+ * The auto queue policy: emit the whole-level PROPOSALS a faction should fund this pulse. It runs the
+ * same ceiling logic as `planFactionBuilds` (proactive housing → labour-gated industry, with
+ * academy/complex co-builds), but treats each system's **effective current** capacity as its built
+ * levels PLUS the levels already in flight (`openProjects`) — so a level already under construction
+ * counts as committed and is never proposed twice. Each returned `BuildProposal` bundles its
+ * gate-first items with the served demand (`value`) and total work the funding stage ranks by; the
+ * order here is the planner's natural one (housing, then industry by score) — the funding stage
+ * (`orderProposals`) does the ROI re-ordering.
  *
  * The throughput pool (not this planner) meters how fast the queue drains; this only decides WHAT to
  * commit, bounded by the physical ceilings the effective-current capacity encodes.
  */
-export function planFactionQueue(
+export function planFactionProposals(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   openProjects: WorldConstructionProject[],
-): DesiredProject[] {
+): Proposal[] {
   // In-flight levels per (system, buildingType) — the "already committed" capacity.
   const queuedBySystem = new Map<string, Record<string, number>>();
   for (const p of openProjects) {
@@ -644,13 +708,13 @@ export function planFactionQueue(
   });
 
   const factionBySystem = new Map(systems.map((s) => [s.systemId, s.factionId]));
-  const projects: DesiredProject[] = [];
-  for (const b of planFactionBuilds(augmented, routeCost)) {
+  const proposals: Proposal[] = [];
+  for (const b of planFactionBundles(augmented, routeCost)) {
     const factionId = factionBySystem.get(b.systemId);
-    // Only faction-owned systems can be developed (the build gate), so a build always has a faction;
+    // Only faction-owned systems can be developed (the build gate), so a bundle always has a faction;
     // the guard both narrows the type and skips the impossible independent-system case.
     if (factionId == null) continue;
-    projects.push({ factionId, systemId: b.systemId, buildingType: b.buildingType, levels: b.count });
+    proposals.push({ kind: "build", factionId, systemId: b.systemId, role: b.role, items: b.items, value: b.value, work: b.work });
   }
-  return projects;
+  return proposals;
 }
