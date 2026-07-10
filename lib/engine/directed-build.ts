@@ -689,9 +689,12 @@ export function planFactionProposals(
   routeCost: RouteCost,
   openProjects: WorldConstructionProject[],
 ): Proposal[] {
-  // In-flight levels per (system, buildingType) — the "already committed" capacity.
+  // In-flight levels per (system, buildingType) — the "already committed" capacity. Only build
+  // projects contribute building levels here; a colony-establish carries no in-flight levels at a
+  // developed system (its own in-flight dedup is handled by planFactionColonyProposals).
   const queuedBySystem = new Map<string, Record<string, number>>();
   for (const p of openProjects) {
+    if (p.kind !== "build") continue;
     const rec = queuedBySystem.get(p.systemId) ?? {};
     rec[p.buildingType] = (rec[p.buildingType] ?? 0) + p.levels;
     queuedBySystem.set(p.systemId, rec);

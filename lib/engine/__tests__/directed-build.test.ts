@@ -963,7 +963,7 @@ describe("planFactionProposals", () => {
     });
     // Ten housing levels already under construction cover the whole pace-ahead target → no new housing.
     const open: WorldConstructionProject[] = [
-      { id: "h", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
+      { kind: "build", id: "h", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
     ];
     expect(planFactionProposals([site], () => 1, []).some((p) => p.role === "housing")).toBe(true);
     expect(planFactionProposals([site], () => 1, open).some((p) => p.role === "housing")).toBe(false);

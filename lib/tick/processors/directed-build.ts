@@ -160,6 +160,7 @@ export async function runDirectedBuildProcessor(
     for (const p of ordered) {
       for (const item of p.items) {
         newProjects.push({
+          kind: "build",
           id: params.construction.mintId(),
           factionId: p.factionId,
           systemId: p.systemId,
@@ -175,6 +176,7 @@ export async function runDirectedBuildProcessor(
     const { projects: fundedOpen, landed } = fundQueue([...existing, ...newProjects], pool, params.construction.cap);
     nextOpen.push(...fundedOpen);
     for (const l of landed) {
+      if (l.kind !== "build") continue; // colony-establish landings handled in Task 4
       const byType = landedBySystem.get(l.systemId) ?? new Map<string, number>();
       byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
       landedBySystem.set(l.systemId, byType);

@@ -13,7 +13,7 @@ function project(
   workDone = 0,
   workTotal = levels * workCostPerLevel(buildingType),
 ): WorldConstructionProject {
-  return { id, factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
+  return { kind: "build", id, factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
 }
 
 describe("factionThroughputPool", () => {
@@ -62,7 +62,8 @@ describe("fundQueue", () => {
     // One pulse from completion: remaining work = 5 ≤ cap → lands this pulse.
     const r = fundQueue([project("p", HOUSING_TYPE, 3, 25, 30)], cap, cap);
     expect(r.projects).toHaveLength(0);
-    expect(r.landed).toEqual([{ systemId: "s1", buildingType: HOUSING_TYPE, levels: 3 }]);
+    expect(r.landed).toHaveLength(1);
+    expect(r.landed[0].id).toBe("p");
   });
 
   it("spreads the pool across parallel fronts ≈ pool ÷ cap (front-first)", () => {
@@ -83,7 +84,8 @@ describe("fundQueue", () => {
       12,
       cap,
     );
-    expect(r.landed).toEqual([{ systemId: "s1", buildingType: HOUSING_TYPE, levels: 1 }]);
+    expect(r.landed).toHaveLength(1);
+    expect(r.landed[0].id).toBe("p1");
     expect(r.projects).toHaveLength(1);
     expect(r.projects[0].id).toBe("p2");
     expect(r.projects[0].workDone).toBe(9);

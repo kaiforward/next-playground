@@ -28,18 +28,16 @@ export function factionThroughputPool(
   return pool;
 }
 
-/** One completed project's whole-level payload — applied as an integer count increment. */
-export interface LandedLevel {
-  systemId: string;
-  buildingType: string;
-  levels: number;
-}
-
 export interface FundQueueResult {
   /** Still-open projects with advanced workDone (landed projects removed). Same order as the input. */
   projects: WorldConstructionProject[];
-  /** Projects that completed this pulse, in the order they landed. */
-  landed: LandedLevel[];
+  /**
+   * Projects that COMPLETED this pulse (workDone reached workTotal), in the order they landed — full
+   * discriminated rows, so the caller applies each by its `kind` (a build increments counts; a
+   * colony-establish develops + seeds + houses). fundQueue stays decision-free: it moves rows between
+   * open and landed by work alone, never interpreting the kind.
+   */
+  landed: WorldConstructionProject[];
 }
 
 /**
@@ -64,7 +62,7 @@ export function fundQueue(
   const safeCap = Number.isFinite(cap) ? Math.max(0, cap) : 0;
   let poolLeft = Number.isFinite(pool) ? Math.max(0, pool) : 0;
   const open: WorldConstructionProject[] = [];
-  const landed: LandedLevel[] = [];
+  const landed: WorldConstructionProject[] = [];
 
   for (const p of projects) {
     const remaining = Math.max(0, p.workTotal - p.workDone);
@@ -73,7 +71,7 @@ export function fundQueue(
     const workDone = p.workDone + absorbed;
 
     if (workDone >= p.workTotal) {
-      landed.push({ systemId: p.systemId, buildingType: p.buildingType, levels: p.levels });
+      landed.push({ ...p, workDone });
     } else {
       open.push({ ...p, workDone });
     }

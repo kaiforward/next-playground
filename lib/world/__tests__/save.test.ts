@@ -57,12 +57,12 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 4 (construction projects + idleMonths)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(4);
+  it("is at save format version 5 (discriminated construction projects)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(5);
   });
 
-  it("rejects a prior-version (v3) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 3, world });
+  it("rejects a prior-version (v4) save — saves break on the shape bump", () => {
+    const json = JSON.stringify({ formatVersion: 4, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
@@ -72,6 +72,7 @@ describe("serializeWorld / deserializeWorld", () => {
       ...world,
       constructionProjects: [
         {
+          kind: "build",
           id: "proj-1",
           factionId: world.factions[0].id,
           systemId: world.systems[0].id,

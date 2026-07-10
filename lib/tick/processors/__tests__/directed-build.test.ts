@@ -82,7 +82,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
 
   it("funds existing open projects front-first, advancing workDone (persists deltas)", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
+      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
@@ -157,7 +157,7 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
   // The queue is [in-flight, ...new proposals in funding order]; with a tiny cap nothing lands, so
   // w.constructionProjects preserves that order and we can assert priority by index.
   function idx(w: MemoryDirectedBuildWorld, systemId: string, type: string): number {
-    return w.constructionProjects.findIndex((p) => p.systemId === systemId && p.buildingType === type);
+    return w.constructionProjects.findIndex((p) => p.kind === "build" && p.systemId === systemId && p.buildingType === type);
   }
 
   it("funds housing ahead of industry at the same builder (proactive substrate leads)", async () => {
@@ -174,7 +174,7 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
 
   it("keeps in-flight projects ahead of newly proposed work", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
+      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
