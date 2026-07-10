@@ -182,6 +182,51 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
     expect(w.constructionProjects[0]?.id).toBe("e");
     expect(w.constructionProjects[0]?.workDone).toBe(4);
   });
+
+  it("funds competing industry by descending bundle-ROI through the full pipeline (beats the systemId tiebreak)", async () => {
+    // Two isolated builder→deficit pairs, each builder reaching exactly one deficit. Builder "B2" serves
+    // a huge food deficit (capacity-bound → ROI at the per-unit ceiling); builder "B1" serves a trickle
+    // (one overshoot level → far lower ROI). The systemId tiebreak alone would fund "B1" first (lexically
+    // before "B2"), so asserting B2's food is minted AHEAD of B1's proves descending-ROI ordering — not
+    // the tiebreak — survives the full processor path (planFactionProposals → orderProposals → gate-first
+    // expand → fundQueue). The single-industry shipped tests can't exercise this cross-bundle ordering.
+    const rows: SystemBuildRow[] = [
+      {
+        systemId: "A1", factionId: "f1", control: "unclaimed", population: 10, unrest: 0, buildings: {},
+        yields: unitResourceVector(), slotCap: emptyResourceVector(),
+        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A1", 1)],
+      },
+      {
+        systemId: "A2", factionId: "f1", control: "unclaimed", population: 100000, unrest: 0, buildings: {},
+        yields: unitResourceVector(), slotCap: emptyResourceVector(),
+        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A2", 1)],
+      },
+      {
+        systemId: "B1", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
+        yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
+      },
+      {
+        systemId: "B2", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
+        yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
+      },
+    ];
+    // B1 reaches only the shallow A1; B2 only the deep A2 (cross pairs unreachable) — so each food bundle
+    // carries a cleanly different ROI instead of both builders chasing the deeper deficit.
+    const isolatedRoute: RouteCost = (from, to) => {
+      if (from === to) return 0;
+      const pair = [from, to].sort().join("|");
+      if (pair === "A1|B1" || pair === "A2|B2") return 1;
+      return null;
+    };
+    // Tiny cap so nothing lands — constructionProjects preserves the funded queue order.
+    const w = new MemoryDirectedBuildWorld(rows);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: isolatedRoute, construction: mkConstruction(4) });
+    const deepIdx = idx(w, "B2", "food");    // capacity-bound, high ROI
+    const shallowIdx = idx(w, "B1", "food"); // one overshoot level, low ROI
+    expect(deepIdx).toBeGreaterThanOrEqual(0);
+    expect(shallowIdx).toBeGreaterThanOrEqual(0);
+    expect(deepIdx).toBeLessThan(shallowIdx); // ROI-desc overrides the "B1" < "B2" tiebreak
+  });
 });
 
 const EXP_PARAMS: ExpansionParams = {
