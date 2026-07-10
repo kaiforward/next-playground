@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionQueue, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type PlannedBuild } from "@/lib/engine/directed-build";
+import { findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionProposals, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type PlannedBuild, type Proposal } from "@/lib/engine/directed-build";
+import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
@@ -893,46 +894,88 @@ describe("complex co-build", () => {
   });
 });
 
-describe("planFactionQueue", () => {
-  it("emits whole-level projects toward the ceilings (housing at a fed-and-calm developed system)", () => {
+/** Flatten a proposal list to its ordered building items — the funding-queue expansion. */
+function flatItems(proposals: Proposal[]): Array<{ systemId: string; buildingType: string; levels: number }> {
+  return proposals.flatMap((p) => p.items.map((i) => ({ systemId: p.systemId, buildingType: i.buildingType, levels: i.levels })));
+}
+
+describe("planFactionProposals", () => {
+  it("emits a housing proposal (role 'housing', value 0, work = levels × housing cost) at a fed-and-calm developed system", () => {
     const site = sysWith({
       control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
     });
-    const projects = planFactionQueue([site], () => 1, []);
-    expect(projects.some((p) => p.buildingType === HOUSING_TYPE)).toBe(true);
-    for (const p of projects) {
-      expect(Number.isInteger(p.levels), `${p.buildingType} levels`).toBe(true);
-      expect(p.levels).toBeGreaterThanOrEqual(1);
-      expect(p.factionId).toBe("f1");
-    }
+    const proposals = planFactionProposals([site], () => 1, []);
+    const housing = proposals.find((p) => p.role === "housing");
+    expect(housing).toBeDefined();
+    expect(housing!.kind).toBe("build");
+    expect(housing!.factionId).toBe("f1");
+    expect(housing!.value).toBe(0);                              // housing has no served-demand ROI
+    expect(housing!.items).toHaveLength(1);
+    const lvls = housing!.items[0].levels;
+    expect(housing!.items[0].buildingType).toBe(HOUSING_TYPE);
+    expect(Number.isInteger(lvls)).toBe(true);
+    expect(lvls).toBeGreaterThanOrEqual(1);
+    expect(housing!.work).toBeCloseTo(lvls * workCostPerLevel(HOUSING_TYPE), 6);
   });
 
-  it("does not re-enqueue a level already in flight (subtracts open projects)", () => {
+  it("emits an industry proposal with value>0 (served demand) and work = Σ item level-work", () => {
+    // A: structural food deficit; B: builder with arable slots + population, reachable from A.
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [], // no habitable land → isolate industry
+    };
+    const proposals = planFactionProposals([deficit, builder], () => 1, []);
+    const food = proposals.find((p) => p.role === "industry" && p.items.some((i) => i.buildingType === "food"));
+    expect(food).toBeDefined();
+    expect(food!.value).toBeGreaterThan(0);                     // it serves real demand
+    expect(food!.value).toBeLessThanOrEqual(5 + 1e-9);          // never more than the deficit it serves
+    const expectedWork = food!.items.reduce((s, i) => s + i.levels * workCostPerLevel(i.buildingType), 0);
+    expect(food!.work).toBeCloseTo(expectedWork, 6);
+  });
+
+  it("bundles a co-built academy INTO the production's proposal, gate-first (not as a separate proposal)", () => {
+    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, []);
+    const bundle = proposals.find((p) => p.items.some((i) => i.buildingType === "electronics"));
+    expect(bundle).toBeDefined();
+    const types = bundle!.items.map((i) => i.buildingType);
+    expect(types).toContain(VOCATIONAL_SCHOOL_TYPE);
+    expect(types).toContain(RESEARCH_INSTITUTE_TYPE);
+    // Gate-first WITHIN the bundle: the academies precede the electronics they license.
+    expect(types.indexOf(VOCATIONAL_SCHOOL_TYPE)).toBeLessThan(types.indexOf("electronics"));
+    expect(types.indexOf(RESEARCH_INSTITUTE_TYPE)).toBeLessThan(types.indexOf("electronics"));
+    // The academy is NOT a standalone proposal — it lives in the production's bundle (this is what
+    // lets it inherit the production's ROI instead of sorting last at value ≈ 0).
+    expect(proposals.some((p) => p.items.length === 1 && p.items[0].buildingType === VOCATIONAL_SCHOOL_TYPE)).toBe(false);
+  });
+
+  it("does not re-propose a level already in flight (subtracts open projects)", () => {
     const site = sysWith({
       control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
     });
-    // Ten housing levels already under construction cover the whole pace-ahead target (popCap 200 ≫
-    // 100 × 1.25) — so no further housing should be enqueued while they build.
+    // Ten housing levels already under construction cover the whole pace-ahead target → no new housing.
     const open: WorldConstructionProject[] = [
       { id: "h", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
     ];
-    expect(planFactionQueue([site], () => 1, []).some((p) => p.buildingType === HOUSING_TYPE)).toBe(true);
-    expect(planFactionQueue([site], () => 1, open).some((p) => p.buildingType === HOUSING_TYPE)).toBe(false);
+    expect(planFactionProposals([site], () => 1, []).some((p) => p.role === "housing")).toBe(true);
+    expect(planFactionProposals([site], () => 1, open).some((p) => p.role === "housing")).toBe(false);
   });
 
-  it("orders a co-built academy before the production level it gates", () => {
-    const projects = planFactionQueue(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, []);
-    const prodIdx = projects.findIndex((p) => p.buildingType === "electronics");
-    const schoolIdx = projects.findIndex((p) => p.buildingType === VOCATIONAL_SCHOOL_TYPE);
-    const instituteIdx = projects.findIndex((p) => p.buildingType === RESEARCH_INSTITUTE_TYPE);
-    expect(prodIdx).toBeGreaterThanOrEqual(0);
+  it("flattening a proposal keeps its academy before the production it gates", () => {
+    const flat = flatItems(planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, []));
+    const schoolIdx = flat.findIndex((i) => i.buildingType === VOCATIONAL_SCHOOL_TYPE);
+    const prodIdx = flat.findIndex((i) => i.buildingType === "electronics");
     expect(schoolIdx).toBeGreaterThanOrEqual(0);
-    expect(instituteIdx).toBeGreaterThanOrEqual(0);
-    // The academies that license electronics are funded before the electronics levels themselves.
+    expect(prodIdx).toBeGreaterThanOrEqual(0);
     expect(schoolIdx).toBeLessThan(prodIdx);
-    expect(instituteIdx).toBeLessThan(prodIdx);
   });
 });
 
