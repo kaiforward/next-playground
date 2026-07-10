@@ -106,6 +106,19 @@ describe("unblockedDemandByResource", () => {
     );
     expect(m.size).toBe(0);
   });
+
+  it("accumulates across two different goods gated by the same missing resource", () => {
+    // Only `ore` is missing. metals → {ore} (full 10). components → {minerals, ore} but only ore
+    // is missing → full 10. Both attribute to ore and must SUM, not overwrite → 20.
+    const m = unblockedDemandByResource(
+      [
+        { goodId: "metals", rateDeficit: 10 },
+        { goodId: "components", rateDeficit: 10 },
+      ],
+      new Set<ResourceType>(["ore"]),
+    );
+    expect(m.get("ore")).toBeCloseTo(20, 5);
+  });
 });
 
 const PARAMS: ColonyValueParams = {
