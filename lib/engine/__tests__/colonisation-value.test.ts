@@ -3,10 +3,12 @@ import {
   RESOURCE_CLOSURE,
   factionMissingResources,
   factionSaturation,
+  unblockedDemandByResource,
   type FactionSystemState,
 } from "@/lib/engine/colonisation-value";
 import { emptyResourceVector } from "@/lib/engine/resources";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
+import type { ResourceType } from "@/lib/types/game";
 
 describe("RESOURCE_CLOSURE", () => {
   it("maps a tier-0 good to its own resource", () => {
@@ -65,5 +67,40 @@ describe("factionSaturation", () => {
 
   it("treats zero habitable potential as fully saturated", () => {
     expect(factionSaturation([sys({ habitableSpace: 0 })])).toBe(1);
+  });
+});
+
+describe("unblockedDemandByResource", () => {
+  it("attributes a blocked good's deficit to its single missing gating resource", () => {
+    // metals needs ore; ore missing → ore gets the full deficit
+    const m = unblockedDemandByResource(
+      [{ goodId: "metals", rateDeficit: 10 }],
+      new Set<ResourceType>(["ore"]),
+    );
+    expect(m.get("ore")).toBeCloseTo(10, 5);
+  });
+
+  it("splits a deficit equally across two missing gating resources", () => {
+    // alloys → {ore, minerals}; both missing → 5 each
+    const m = unblockedDemandByResource(
+      [{ goodId: "alloys", rateDeficit: 10 }],
+      new Set<ResourceType>(["ore", "minerals"]),
+    );
+    expect(m.get("ore")).toBeCloseTo(5, 5);
+    expect(m.get("minerals")).toBeCloseTo(5, 5);
+  });
+
+  it("ignores a good whose gating resources the faction already has", () => {
+    // metals needs ore; nothing missing → no attribution
+    const m = unblockedDemandByResource([{ goodId: "metals", rateDeficit: 10 }], new Set());
+    expect(m.size).toBe(0);
+  });
+
+  it("ignores non-positive deficits", () => {
+    const m = unblockedDemandByResource(
+      [{ goodId: "metals", rateDeficit: 0 }],
+      new Set<ResourceType>(["ore"]),
+    );
+    expect(m.size).toBe(0);
   });
 });

@@ -90,3 +90,31 @@ export function factionSaturation(developed: FactionSystemState[]): number {
   if (potential <= 0) return 1;
   return clamp(built / potential, 0, 1);
 }
+
+/** One good the faction under-produces (demand > production) — a structural rate deficit. */
+export interface GoodDeficit {
+  goodId: string;
+  rateDeficit: number;
+}
+
+/**
+ * Unmet demand attributable to each missing resource, split fractionally: a good's rate deficit is
+ * divided equally across the missing resources that gate it (the ones in its recipe closure the
+ * faction lacks). A good with no gating missing resource contributes nothing; a good gated by two
+ * missing resources gives half its deficit to each — so a colony supplying both scores the whole,
+ * one supplying either scores half, with no double-count.
+ */
+export function unblockedDemandByResource(
+  deficits: GoodDeficit[],
+  missing: ReadonlySet<ResourceType>,
+): Map<ResourceType, number> {
+  const out = new Map<ResourceType, number>();
+  for (const d of deficits) {
+    if (d.rateDeficit <= 0) continue;
+    const gating = (RESOURCE_CLOSURE[d.goodId] ?? []).filter((r) => missing.has(r));
+    if (gating.length === 0) continue;
+    const share = d.rateDeficit / gating.length;
+    for (const r of gating) out.set(r, (out.get(r) ?? 0) + share);
+  }
+  return out;
+}
