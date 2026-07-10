@@ -514,7 +514,11 @@ export function planFactionBuilds(
     // binary search: the fit is monotone (more levels ⇒ more space + labour + academy/complex), so a
     // landed level is never unstaffable or over-footprint. Recomputing the lift per candidate level
     // mirrors the fractional planner's convergence on whole levels.
-    const maxLevels = Math.floor(Math.min(capUnits, servedOutput / opp.perUnit));
+    // Round the served RATE deficit UP to whole levels: capacity is lumpy, so meeting a flow smaller
+    // than one level's output still commits one level (the design's accepted overshoot — the excess
+    // fills the passive buffer). Flooring here would build NOTHING whenever a system's per-tick demand
+    // is below a single building's output, stranding every small consumer. Still capped by physical capacity.
+    const maxLevels = Math.min(Math.floor(capUnits), Math.ceil(servedOutput / opp.perUnit));
     if (maxLevels < 1) continue;
 
     const fitFor = (levels: number) => {

@@ -163,6 +163,21 @@ describe("planFactionBuilds", () => {
     expect(foodUnits).toBeLessThan((TARGET_COVER * 20) / OUTPUT_PER_UNIT.food / 4);
   });
 
+  it("builds one whole level for a rate deficit smaller than a single building's output (lumpy overshoot, not zero)", () => {
+    // The real-galaxy failure: almost every system needs LESS than one building's output per tick.
+    // Flooring rate ÷ output rounds to 0 → the system builds NOTHING and stays starved forever
+    // (the bug that left every colony and homeworld with no industry). Capacity is lumpy: a positive
+    // rate deficit must commit at least one whole level (the design's accepted overshoot).
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const smallDemand = OUTPUT_PER_UNIT.food * 0.5; // half of one extractor's output — floors to 0
+    const sys: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 100, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 0, targetStock: 1, demand: smallDemand, production: 0 }],
+    };
+    expect(countFor(planFactionBuilds([sys], rc), "A", "food")).toBe(1);
+  });
+
   it("proposes capacity up to the physical ceilings in one pass (no population-budget throttle)", () => {
     // A lone developed builder with a huge local rate deficit, ample deposits, and ample labour.
     // The only bounds are deposits and labour — the planner holds no per-pass build budget. Build
