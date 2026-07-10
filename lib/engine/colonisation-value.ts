@@ -14,10 +14,18 @@
  *   weights. Forward-looking; independent of any current deficit.
  * - σ — faction territory saturation in [0,1]: built housing pop-cap ÷ habitable-potential pop-cap.
  */
-import type { ResourceType } from "@/lib/types/game";
+import type { ResourceType, ResourceVector } from "@/lib/types/game";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { GOOD_NAMES } from "@/lib/constants/goods";
-import { BUILDING_TYPES } from "@/lib/constants/industry";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
+import { housingPopCap } from "@/lib/engine/industry";
+import {
+  BUILDING_TYPES,
+  HOUSING_TYPE,
+  POP_CENTRE_DENSITY,
+  effectiveSpaceCost,
+} from "@/lib/constants/industry";
+import { clamp } from "@/lib/utils/math";
 
 /**
  * good id → the tier-0 deposit resources it transitively needs. A tier-0 good's closure is its own
@@ -44,3 +52,41 @@ export const RESOURCE_CLOSURE: Readonly<Record<string, readonly ResourceType[]>>
   for (const good of GOOD_NAMES) result[good] = [...resolve(good)];
   return result;
 })();
+
+/** A developed system's state needed for the faction-level aggregates (σ, missing resources). */
+export interface FactionSystemState {
+  buildings: Record<string, number>;
+  habitableSpace: number;
+  slotCap: ResourceVector;
+}
+
+/**
+ * Resources the faction has NO deposit slots for across its developed systems — the binary
+ * "can't make it at all" set. A colony supplying one of these unblocks the goods that need it.
+ */
+export function factionMissingResources(developed: FactionSystemState[]): Set<ResourceType> {
+  const missing = new Set<ResourceType>(RESOURCE_TYPES);
+  for (const s of developed) {
+    for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) missing.delete(r);
+  }
+  return missing;
+}
+
+/**
+ * Faction territory saturation σ ∈ [0,1]: built housing pop-cap ÷ habitable-potential pop-cap
+ * across developed systems. Low when there is lots of unbuilt habitable land; 1 when built out.
+ * Zero potential (no habitable land) reads as fully saturated (1) — there is no room to fill.
+ */
+export function factionSaturation(developed: FactionSystemState[]): number {
+  const housingCost = effectiveSpaceCost(HOUSING_TYPE);
+  let built = 0;
+  let potential = 0;
+  for (const s of developed) {
+    built += housingPopCap(s.buildings);
+    if (housingCost > 0) {
+      potential += (Math.max(0, s.habitableSpace) / housingCost) * POP_CENTRE_DENSITY;
+    }
+  }
+  if (potential <= 0) return 1;
+  return clamp(built / potential, 0, 1);
+}
