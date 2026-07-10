@@ -6,7 +6,11 @@ import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
-import type { ClaimCandidate, DevelopCandidate, ExpansionParams, DevelopParams } from "@/lib/engine/expansion";
+import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
+import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { EXPANSION } from "@/lib/constants/expansion";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const reachable: RouteCost = () => 1;
@@ -232,9 +236,30 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
 const EXP_PARAMS: ExpansionParams = {
   maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
 };
-const DEV_PARAMS: DevelopParams = {
-  maxDevelopsPerPulse: 1, habitableFloor: 1, seedPop: 50, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
+const COLONY_PARAMS: ColonyEstablishParams = {
+  landPremium: COLONISATION.LAND_PREMIUM,
+  landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
+  landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
+  sigmaFloor: COLONISATION.SIGMA_FLOOR,
+  establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
+  seedPop: EXPANSION.COLONY_SEED_POP,
+  habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
 };
+
+/** A developed home with housing filling all its habitable land (σ = 1) and no build deficits — so the
+ *  pool funds only colonies. Population sets the throughput pool. */
+function saturatedHome(population: number): SystemBuildRow {
+  return {
+    systemId: "home", factionId: "f1", control: "developed", population, unrest: 0,
+    buildings: { [HOUSING_TYPE]: 5 },
+    yields: unitResourceVector(), slotCap: emptyResourceVector(),
+    generalSpace: 5, habitableSpace: 5, markets: [], // habitable fully housed (5 levels) → σ = 1, no housing headroom
+  };
+}
+
+function colonyCand(systemId: string, habitableSpace = 100): ColonyEstablishCandidate {
+  return { systemId, habitableSpace, generalSpace: 50, slotCap: emptyResourceVector(), sourceSystemId: "home" };
+}
 
 // One developed owned system so the faction is in the shard, with no build needs.
 function ownedOnly(factionId: string): SystemBuildRow {
@@ -245,7 +270,7 @@ function ownedOnly(factionId: string): SystemBuildRow {
   };
 }
 
-describe("runDirectedBuildProcessor: claim + develop phase", () => {
+describe("runDirectedBuildProcessor: claim phase", () => {
   it("claims the best in-reach candidate on a due tick", async () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     const reachProvider = (f: string): ClaimCandidate[] =>
@@ -260,18 +285,7 @@ describe("runDirectedBuildProcessor: claim + develop phase", () => {
     expect(w.claims).toEqual([{ systemId: "u-rich", factionId: "f1" }]);
   });
 
-  it("develops the best controlled candidate on a due tick", async () => {
-    const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
-    const candidateProvider = (f: string): DevelopCandidate[] =>
-      f === "f1" ? [{ systemId: "c1", habitableSpace: 100, resourceDiversity: 2, traitQuality: 0, sourceSystemId: "f1-home" }] : [];
-    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
-      develop: { candidateProvider, params: DEV_PARAMS },
-    });
-    expect(w.developments).toEqual([{ systemId: "c1", sourceSystemId: "f1-home", seedPop: 50 }]);
-  });
-
-  it("claims/develops nothing off the pulse boundary", async () => {
+  it("claims nothing off the pulse boundary", async () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
@@ -286,5 +300,65 @@ describe("runDirectedBuildProcessor: claim + develop phase", () => {
     expect(w.claims).toHaveLength(0);
     expect(w.developments).toHaveLength(0);
     expect(w.constructionProjects.length).toBeGreaterThan(0); // construction still committed
+  });
+});
+
+describe("runDirectedBuildProcessor: colony-establish phase", () => {
+  it("does NOT develop on the pulse it is proposed — the colony-establish accrues work over pulses", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    // A tiny cap so the establish project cannot complete this pulse.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+    });
+    expect(w.developments).toHaveLength(0); // not flipped this pulse
+    const colony = w.constructionProjects.find((p) => p.kind === "colony_establish");
+    expect(colony).toBeDefined();
+    expect(colony!.systemId).toBe("c1");
+    // establishWork exceeds the base by the bundled seed-housing's build cost (housing is paid for).
+    expect(colony!.workTotal).toBeGreaterThan(COLONISATION.COLONY_ESTABLISH_WORK);
+  });
+
+  it("develops the colony once the establish project completes (seed + bundled housing landing)", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    // A generous pool + cap completes the establish this pulse.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+    });
+    expect(w.developments).toHaveLength(1);
+    const dev = w.developments[0];
+    expect(dev.systemId).toBe("c1");
+    expect(dev.sourceSystemId).toBe("home");
+    expect(dev.seedPop).toBe(EXPANSION.COLONY_SEED_POP);
+    // Viable by construction: bundled housing houses the whole seed.
+    expect(dev.housingLevels).toBe(Math.ceil(dev.seedPop / POP_CENTRE_DENSITY));
+    expect(dev.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(dev.seedPop);
+    // The completed establish project is removed from the open queue.
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
+  });
+
+  it("bounds the open queue: with many candidates and a small pool, only funded colonies persist", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(80)]); // pool = 80 × 0.05 = 4 → one cap-worth
+    const candidates = ["c1", "c2", "c3", "c4", "c5"].map((id) => colonyCand(id));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? candidates : []), params: COLONY_PARAMS },
+    });
+    const openColonies = w.constructionProjects.filter((p) => p.kind === "colony_establish");
+    // Front-first funding gives one colony a cap's worth; the other four get zero and are dropped.
+    expect(openColonies.length).toBeLessThan(candidates.length);
+    expect(openColonies.length).toBeGreaterThanOrEqual(1);
+    for (const p of openColonies) expect(p.workDone).toBeGreaterThan(0);
+  });
+
+  it("develops nothing off the pulse boundary", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
+      develop: { candidateProvider: () => [colonyCand("c1")], params: COLONY_PARAMS },
+    });
+    expect(w.developments).toHaveLength(0);
+    expect(w.constructionProjects).toHaveLength(0);
   });
 });

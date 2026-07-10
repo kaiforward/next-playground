@@ -6,8 +6,10 @@
  * growth, not tuned — later phases move the calibration target). Scores are ABSOLUTE (not
  * pool-normalized) so two factions' proposals for the same system compare directly in resolution.
  *
- * Claims/developments are free this phase (not throughput-funded — that is PR3's construction pool);
- * gradualness comes from the small per-pulse caps + the reach radius + the score/habitable floors.
+ * Claims are cheap and near-instant this phase (bounded by MAX_CLAIMS_PER_PULSE + the reach radius +
+ * the score floor). Developing a controlled system is NO longer instant or capped here — it is a
+ * pool-funded, timed colony-establish project (docs/planned/economy-colonisation-cost.md); COLONY_SEED_POP
+ * and DEVELOP_HABITABLE_FLOOR feed that project's sizing/eligibility, the construction pool paces it.
  */
 export const EXPANSION = {
   /** Unclaimed systems within this many jumps of a faction's territory (any owned tier) are claim
@@ -15,8 +17,6 @@ export const EXPANSION = {
   REACH_JUMPS: 3,
   /** Systems a faction claims per monthly pulse — small, so the map fills gradually. */
   MAX_CLAIMS_PER_PULSE: 1,
-  /** Controlled systems a faction develops per monthly pulse — small, so development trails claiming. */
-  MAX_DEVELOPS_PER_PULSE: 1,
   /** Minimum claim score; below it a candidate isn't worth claiming. Permissive — excludes only
    * zero-substrate systems. */
   SCORE_FLOOR: 0.001,
