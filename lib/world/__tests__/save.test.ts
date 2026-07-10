@@ -89,4 +89,27 @@ describe("serializeWorld / deserializeWorld", () => {
     if (!result.ok) return;
     expect(result.world).toStrictEqual(withConstruction);
   });
+
+  it("round-trips a colony-establish project unchanged (serializable, no lost fields)", () => {
+    const withColony: World = {
+      ...world,
+      constructionProjects: [
+        {
+          kind: "colony_establish",
+          id: "establish-1",
+          factionId: world.factions[0].id,
+          systemId: world.systems[1].id,
+          sourceSystemId: world.systems[0].id,
+          seedPop: 50,
+          housingLevels: 3,
+          workTotal: 84,
+          workDone: 40,
+        },
+      ],
+    };
+    const result = deserializeWorld(serializeWorld(withColony));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world).toStrictEqual(withColony);
+  });
 });
