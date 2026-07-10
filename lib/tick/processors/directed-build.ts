@@ -1,7 +1,7 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard } from "@/lib/tick/shard";
-import { planFactionQueue, type BuildSystemState } from "@/lib/engine/directed-build";
-import { fundQueue, factionThroughputPool } from "@/lib/engine/construction";
+import { planFactionProposals, type BuildSystemState } from "@/lib/engine/directed-build";
+import { fundQueue, factionThroughputPool, orderProposals } from "@/lib/engine/construction";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -73,12 +73,13 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
  * `pulseShard`; every other tick is a no-op.
  *
  * Construction is committed and throughput-paced: each due faction's auto queue policy
- * (`planFactionQueue`) proposes whole-level projects toward its ceilings (subtracting the
- * levels already in flight), the faction's per-pulse throughput pool funds the front-first
- * queue (`fundQueue`) at a per-build absorption cap, and only projects whose work COMPLETES
- * land — applied as whole-integer building-count increments. The open-project set is
- * persisted each pulse (funded, plus new commitments, minus what landed). Removal of levels
- * stays whole-level decay's job — this only adds.
+ * (`planFactionProposals`) proposes whole-level bundles toward its ceilings (subtracting the
+ * levels already in flight); `orderProposals` ranks them by value (housing leads, then descending
+ * bundle-ROI) and each is expanded gate-first into project rows; the faction's per-pulse throughput
+ * pool funds the front-first queue (`fundQueue`, in-flight first) at a per-build absorption cap, and
+ * only projects whose work COMPLETES land — applied as whole-integer building-count increments. The
+ * open-project set is persisted each pulse (funded, plus new commitments, minus what landed). Removal
+ * of levels stays whole-level decay's job — this only adds.
  */
 export async function runDirectedBuildProcessor(
   world: DirectedBuildWorld,
@@ -148,19 +149,29 @@ export async function runDirectedBuildProcessor(
     const pool = factionThroughputPool(group, params.construction.throughputPerPop);
 
     const existing = openByFaction.get(factionId) ?? [];
-    // Auto policy proposes new whole-level projects toward the ceilings, aware of what is in flight.
-    const desired = planFactionQueue(group.map(toBuildState), params.routeCost, existing);
-    const newProjects: WorldConstructionProject[] = desired.map((d) => ({
-      id: params.construction.mintId(),
-      factionId: d.factionId,
-      systemId: d.systemId,
-      buildingType: d.buildingType,
-      levels: d.levels,
-      workTotal: d.levels * workCostPerLevel(d.buildingType),
-      workDone: 0,
-    }));
+    // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
+    // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
+    const proposals = planFactionProposals(group.map(toBuildState), params.routeCost, existing);
+    const ordered = orderProposals(proposals);
 
-    // Fund front-first: finish started work before new commitments; land completed levels.
+    // Expand each proposal gate-first into its whole-level project rows (its `items` are already in
+    // complex → academies → production order). fundQueue never sees the ROI — the ordering is done.
+    const newProjects: WorldConstructionProject[] = [];
+    for (const p of ordered) {
+      for (const item of p.items) {
+        newProjects.push({
+          id: params.construction.mintId(),
+          factionId: p.factionId,
+          systemId: p.systemId,
+          buildingType: item.buildingType,
+          levels: item.levels,
+          workTotal: item.levels * workCostPerLevel(item.buildingType),
+          workDone: 0,
+        });
+      }
+    }
+
+    // Fund front-first: in-flight work finishes before new commitments; land completed levels.
     const { projects: fundedOpen, landed } = fundQueue([...existing, ...newProjects], pool, params.construction.cap);
     nextOpen.push(...fundedOpen);
     for (const l of landed) {

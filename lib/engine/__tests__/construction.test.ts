@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { fundQueue, factionThroughputPool } from "@/lib/engine/construction";
+import { fundQueue, factionThroughputPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
+import type { Proposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -102,6 +103,77 @@ describe("fundQueue", () => {
     const r2 = fundQueue([project("q", HOUSING_TYPE, 1, 0, 1e9)], 1000, 1000);
     expect(Number.isFinite(r2.projects[0].workDone)).toBe(true);
     expect(r2.projects[0].workDone).toBeLessThanOrEqual(r2.projects[0].workTotal);
+  });
+});
+
+/** Build a proposal with explicit value/work; `role` defaults to industry. */
+function proposal(
+  systemId: string,
+  items: Array<{ buildingType: string; levels: number }>,
+  value: number,
+  work: number,
+  role: "housing" | "industry" = "industry",
+): Proposal {
+  return { kind: "build", factionId: "f1", systemId, role, items, value, work };
+}
+
+describe("proposalRoi", () => {
+  it("is value ÷ whole-bundle work", () => {
+    expect(proposalRoi(proposal("s", [{ buildingType: "food", levels: 1 }], 20, 8))).toBeCloseTo(2.5, 6);
+  });
+
+  it("is 0 for zero-work or housing (value 0) proposals", () => {
+    expect(proposalRoi(proposal("s", [{ buildingType: "food", levels: 1 }], 20, 0))).toBe(0);
+    expect(proposalRoi(proposal("s", [{ buildingType: "housing", levels: 1 }], 0, 8, "housing"))).toBe(0);
+  });
+});
+
+describe("orderProposals", () => {
+  it("funds housing ahead of all industry (the proactive substrate leads regardless of ROI)", () => {
+    const housing = proposal("s1", [{ buildingType: "housing", levels: 1 }], 0, 8, "housing");
+    const richIndustry = proposal("s2", [{ buildingType: "food", levels: 1 }], 100, 4); // ROI 25 ≫ anything
+    const ordered = orderProposals([richIndustry, housing]);
+    expect(ordered[0]).toBe(housing);
+    expect(ordered[1]).toBe(richIndustry);
+  });
+
+  it("orders industry by descending ROI (value ÷ work)", () => {
+    const lo = proposal("s1", [{ buildingType: "food", levels: 1 }], 10, 20);   // ROI 0.5
+    const hi = proposal("s2", [{ buildingType: "ore", levels: 1 }], 30, 20);    // ROI 1.5
+    const mid = proposal("s3", [{ buildingType: "gas", levels: 1 }], 20, 20);   // ROI 1.0
+    expect(orderProposals([lo, hi, mid]).map((p) => p.systemId)).toEqual(["s2", "s3", "s1"]);
+  });
+
+  it("keeps a bundled academy ahead of its production after ordering (gate-first preserved)", () => {
+    // A high-work, low-value-looking bundle whose FIRST item is the academy: ordering must not split
+    // it — the academy rides the production's bundle ROI and stays in front of the production.
+    const gated = proposal("s1", [
+      { buildingType: "vocational_school", levels: 1 },
+      { buildingType: "electronics", levels: 1 },
+    ], 12, 45);
+    const other = proposal("s2", [{ buildingType: "food", levels: 1 }], 8, 12);
+    const flat = orderProposals([other, gated]).flatMap((p) => p.items.map((i) => i.buildingType));
+    expect(flat.indexOf("vocational_school")).toBeLessThan(flat.indexOf("electronics"));
+  });
+
+  it("is deterministic under input reordering (stable total order via the systemId tiebreak)", () => {
+    const a = proposal("s-a", [{ buildingType: "food", levels: 1 }], 20, 20); // ROI 1.0
+    const b = proposal("s-b", [{ buildingType: "ore", levels: 1 }], 20, 20);  // ROI 1.0 (tie)
+    const c = proposal("s-c", [{ buildingType: "gas", levels: 1 }], 40, 20);  // ROI 2.0
+    const order1 = orderProposals([a, b, c]).map((p) => p.systemId);
+    const order2 = orderProposals([c, b, a]).map((p) => p.systemId);
+    expect(order1).toEqual(order2);
+    expect(order1[0]).toBe("s-c"); // highest ROI first; a/b tie broken by systemId
+  });
+
+  it("does not mutate its input array", () => {
+    const input = [
+      proposal("s1", [{ buildingType: "food", levels: 1 }], 10, 20),
+      proposal("s2", [{ buildingType: "ore", levels: 1 }], 30, 20),
+    ];
+    const snapshot = input.map((p) => p.systemId);
+    orderProposals(input);
+    expect(input.map((p) => p.systemId)).toEqual(snapshot);
   });
 });
 
