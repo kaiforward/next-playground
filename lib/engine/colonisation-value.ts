@@ -118,3 +118,52 @@ export function unblockedDemandByResource(
   }
   return out;
 }
+
+/** A colony candidate's substrate — the physical inputs to its valuation. */
+export interface ColonyCandidate {
+  habitableSpace: number;
+  generalSpace: number;
+  slotCap: ResourceVector;
+}
+
+/** Tunable colony-valuation coefficients (global defaults now; per-doctrine later). */
+export interface ColonyValueParams {
+  landPremium: number;
+  landGeneralWeight: number;
+  landDepositWeight: number;
+  sigmaFloor: number;
+}
+
+/** Σ of a candidate's deposit slots across all resources — its "deposit richness". */
+function depositRichness(slotCap: ResourceVector): number {
+  let total = 0;
+  for (const r of RESOURCE_TYPES) total += Math.max(0, slotCap[r]);
+  return total;
+}
+
+/**
+ * Colony value on the build-comparable demand-rate axis: U(c) + L(c)·(σ_floor + (1−σ_floor)·σ).
+ * `unblockedByResource` and `saturation` are the faction-level aggregates (computed once per pulse
+ * by the caller); `candidate` is the controlled system being scored. `U` is coefficient-free (it is
+ * already unmet demand); `L` carries the land coefficients; `σ` gates how much of `L` is live.
+ */
+export function colonyValue(
+  candidate: ColonyCandidate,
+  unblockedByResource: ReadonlyMap<ResourceType, number>,
+  saturation: number,
+  params: ColonyValueParams,
+): number {
+  // U: unmet demand of every missing resource this candidate supplies (has any deposit slot for).
+  let u = 0;
+  for (const r of RESOURCE_TYPES) {
+    if (candidate.slotCap[r] > 0) u += unblockedByResource.get(r) ?? 0;
+  }
+  // L: land option value — habitable space plus small general-space and deposit-richness weights.
+  const l =
+    params.landPremium * Math.max(0, candidate.habitableSpace) +
+    params.landGeneralWeight * Math.max(0, candidate.generalSpace) +
+    params.landDepositWeight * depositRichness(candidate.slotCap);
+  const sigma = clamp(saturation, 0, 1);
+  const landGate = params.sigmaFloor + (1 - params.sigmaFloor) * sigma;
+  return u + l * landGate;
+}
