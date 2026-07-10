@@ -110,9 +110,9 @@ describe("runDirectedBuildProcessor — committed construction", () => {
 
   it("commits nothing when there is nothing to build (no deficit, no housing headroom)", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", control: "developed", population: 100, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", control: "developed", population: 0, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
-      markets: [{ ...foodMarket("A", 1), demandRate: 0 }], // demandRate 0 → balanced; no habitable land → no housing
+      markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
     }];
     const w = new MemoryDirectedBuildWorld(balanced);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
