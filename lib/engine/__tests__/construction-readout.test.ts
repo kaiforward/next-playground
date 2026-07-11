@@ -6,6 +6,8 @@ import {
   type ConstructionSystemInfo,
 } from "@/lib/engine/construction-readout";
 import type { WorldConstructionProject } from "@/lib/world/types";
+import { RESEARCH_INSTITUTE_TYPE, COMPLEX_BY_TYPE, HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
+import { GOODS } from "@/lib/constants/goods";
 
 function build(id: string, workTotal: number, workDone: number): WorldBuildProject {
   return { kind: "build", id, factionId: "f1", systemId: "s1", buildingType: "housing", levels: 1, workTotal, workDone };
@@ -57,11 +59,29 @@ describe("nextPulseGains", () => {
 });
 
 describe("buildingLabel / describeBuildProject", () => {
-  it("labels the non-good building types and falls back to the good name", () => {
+  it("labels the three named building types", () => {
     expect(buildingLabel("housing")).toBe("Housing");
     expect(buildingLabel("vocational_school")).toBe("Vocational School");
+    expect(buildingLabel(RESEARCH_INSTITUTE_TYPE)).toBe("Research Institute");
     expect(describeBuildProject("housing")).toContain("population capacity");
     expect(describeBuildProject("vocational_school")).toContain("technician");
+    expect(describeBuildProject(RESEARCH_INSTITUTE_TYPE)).toContain("engineer");
+  });
+
+  it("labels a specialisation complex from its family", () => {
+    const label = COMPLEX_BY_TYPE[HEAVY_INDUSTRY_COMPLEX].label;
+    expect(buildingLabel(HEAVY_INDUSTRY_COMPLEX)).toBe(label);
+    expect(describeBuildProject(HEAVY_INDUSTRY_COMPLEX)).toBe(`specialisation · anchors ${label} yield`);
+  });
+
+  it("falls back to the good name for a plain good type", () => {
+    expect(buildingLabel("ore")).toBe(GOODS.ore.name);
+    expect(describeBuildProject("ore")).toBe(`industry · produces ${GOODS.ore.name}`);
+  });
+
+  it("falls back to the raw type id when it is neither academy, complex, nor good", () => {
+    expect(buildingLabel("mystery_structure")).toBe("mystery_structure");
+    expect(describeBuildProject("mystery_structure")).toBe("industry · produces mystery_structure");
   });
 });
 

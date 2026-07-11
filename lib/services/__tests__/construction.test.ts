@@ -43,8 +43,15 @@ describe("getFactionConstruction", () => {
     expect(data.expansion[0].kind).toBe("colony_establish");
     expect(data.buildOut[0].buildingLabel).toBe("Housing");
   });
-  it("throws ServiceError(404) for an unknown faction", () => {
+  it("throws ServiceError(404) naming the id for an unknown faction", () => {
     expect(() => getFactionConstruction("nope")).toThrow(ServiceError);
+    try {
+      getFactionConstruction("nope");
+    } catch (err) {
+      if (!(err instanceof ServiceError)) throw err;
+      expect(err.status).toBe(404);
+      expect(err.message).toContain("nope");
+    }
   });
 });
 
@@ -67,7 +74,19 @@ describe("getSystemConstruction", () => {
     setWorld(world);
     expect(getSystemConstruction(dev.id)).toEqual({ visibility: "hidden" });
   });
-  it("throws ServiceError(404) for an unknown system", () => {
+  it("hides on an unclaimed system with no faction", () => {
+    const unclaimed = world.systems.find((s) => s.factionId === null);
+    if (!unclaimed) throw new Error("fixture: expected an unclaimed system in the generated world");
+    expect(getSystemConstruction(unclaimed.id)).toEqual({ visibility: "hidden" });
+  });
+  it("throws ServiceError(404) naming the id for an unknown system", () => {
     expect(() => getSystemConstruction("nope")).toThrow(ServiceError);
+    try {
+      getSystemConstruction("nope");
+    } catch (err) {
+      if (!(err instanceof ServiceError)) throw err;
+      expect(err.status).toBe(404);
+      expect(err.message).toContain("nope");
+    }
   });
 });
