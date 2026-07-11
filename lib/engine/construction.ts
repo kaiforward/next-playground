@@ -127,3 +127,31 @@ export function orderProposals(proposals: Proposal[]): Proposal[] {
     return tiebreak(a).localeCompare(tiebreak(b)); // deterministic within a tier / ROI tie
   });
 }
+
+/**
+ * Forward-simulate `fundQueue` at a CONSTANT pool + cap to find the pulse each project lands on.
+ * Returns an array aligned to `projects` by index: the 1-based pulse count until that project
+ * completes, or `null` when it never will at this rate ("stalled" — a zero/invalid pool, or the
+ * guard cap hit). Coarse by design: the real pool grows with population and is shared across the
+ * queue, so this is an estimate at the current rate, not a countdown. The progress bar
+ * (`workDone/workTotal`) is exact; only the ETA is approximate.
+ */
+export function forecastEtaPulses(
+  projects: WorldConstructionProject[],
+  pool: number,
+  cap: number,
+  maxPulses = 999,
+): (number | null)[] {
+  // A zero/invalid pool funds nothing — everything is stalled (also avoids a maxPulses spin).
+  if (!Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0) {
+    return projects.map(() => null);
+  }
+  const landedAt = new Map<string, number>();
+  let queue = projects.map((p) => ({ ...p }));
+  for (let pulse = 1; pulse <= maxPulses && queue.length > 0; pulse++) {
+    const { projects: open, landed } = fundQueue(queue, pool, cap);
+    for (const l of landed) landedAt.set(l.id, pulse);
+    queue = open;
+  }
+  return projects.map((p) => landedAt.get(p.id) ?? null);
+}
