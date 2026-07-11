@@ -1134,10 +1134,20 @@ describe("planFactionColonyProposals", () => {
     expect(poor.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(poor.seedPop);
   });
 
-  it("skips a candidate below the habitable floor and one with no whole housing level", () => {
+  it("skips a candidate below the habitable floor", () => {
     const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
     const belowFloor = candidate({ systemId: "dead", habitableSpace: 0 });
     expect(planFactionColonyProposals("f1", developed, [belowFloor], [], COLONY_PARAMS)).toHaveLength(0);
+  });
+
+  it("skips a candidate that clears the floor but lacks one whole housing level of land", () => {
+    const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+    // Above the habitable floor (lowered here) yet under one housing level of land → maxHousingLevels 0,
+    // so seedPop caps to 0 and the second gate drops it — no zero-housing colony is ever proposed.
+    const sliver = candidate({ systemId: "sliver", habitableSpace: effectiveSpaceCost(HOUSING_TYPE) * 0.5 });
+    expect(
+      planFactionColonyProposals("f1", developed, [sliver], [], { ...COLONY_PARAMS, habitableFloor: 0 }),
+    ).toHaveLength(0);
   });
 
   it("does not re-propose a colony already in flight for that system", () => {

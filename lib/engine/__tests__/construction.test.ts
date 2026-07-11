@@ -63,7 +63,8 @@ describe("fundQueue", () => {
     const r = fundQueue([project("p", HOUSING_TYPE, 3, 25, 30)], cap, cap);
     expect(r.projects).toHaveLength(0);
     expect(r.landed).toHaveLength(1);
-    expect(r.landed[0].id).toBe("p");
+    // The full discriminated row (kind/buildingType/levels) survives onto the landed set, not a narrowed payload.
+    expect(r.landed[0]).toEqual({ ...project("p", HOUSING_TYPE, 3, 25, 30), workDone: 30 });
   });
 
   it("spreads the pool across parallel fronts ≈ pool ÷ cap (front-first)", () => {
@@ -85,7 +86,7 @@ describe("fundQueue", () => {
       cap,
     );
     expect(r.landed).toHaveLength(1);
-    expect(r.landed[0].id).toBe("p1");
+    expect(r.landed[0]).toEqual({ ...project("p1", HOUSING_TYPE, 1, 27, 30), workDone: 30 });
     expect(r.projects).toHaveLength(1);
     expect(r.projects[0].id).toBe("p2");
     expect(r.projects[0].workDone).toBe(9);

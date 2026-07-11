@@ -102,8 +102,20 @@ function isHousing(p: Proposal): boolean {
  * Pure: sorts a copy, never mutates the input.
  */
 export function orderProposals(proposals: Proposal[]): Proposal[] {
-  const tiebreak = (p: Proposal): string =>
-    p.kind === "build" ? `${p.systemId}|${p.items[0]?.buildingType ?? ""}` : `${p.systemId}|colony`;
+  // Exhaustive on `kind` so a future proposal kind can't silently fall into the colony branch and
+  // collide tiebreak strings — a new union member fails to compile here until it is given its own label.
+  const tiebreak = (p: Proposal): string => {
+    switch (p.kind) {
+      case "build":
+        return `${p.systemId}|${p.items[0]?.buildingType ?? ""}`;
+      case "colony_establish":
+        return `${p.systemId}|colony`;
+      default: {
+        const _exhaustive: never = p;
+        return _exhaustive;
+      }
+    }
+  };
   return [...proposals].sort((a, b) => {
     const ah = isHousing(a);
     const bh = isHousing(b);
