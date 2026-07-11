@@ -245,7 +245,6 @@ export type SystemConstructionData =
 /** Faction roll-up card state — pool header + the two locked groups. */
 export interface FactionConstructionData {
   factionId: string;
-  factionName: string;
   pool: number;
   expandCount: number;
   buildCount: number;
