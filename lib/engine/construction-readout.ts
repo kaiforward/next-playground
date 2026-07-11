@@ -108,6 +108,8 @@ export function nextPulseGains(
   cap: number,
 ): number[] {
   const { projects: open, landed } = fundQueue(projects, pool, cap);
+  // Keyed by project id — unique per queue (minted from the world's nextId counter), so each project
+  // reads back its own post-step workDone; a duplicate id would cross-wire two projects' gains.
   const doneById = new Map<string, number>();
   for (const p of open) doneById.set(p.id, p.workDone);
   for (const p of landed) doneById.set(p.id, p.workDone);

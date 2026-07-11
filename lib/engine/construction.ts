@@ -146,6 +146,8 @@ export function forecastEtaPulses(
   if (!Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0) {
     return projects.map(() => null);
   }
+  // Keyed by project id — unique per queue (minted from the world's nextId counter), so each
+  // project's landing pulse is recorded once; a duplicate id would overwrite an earlier landing.
   const landedAt = new Map<string, number>();
   let queue = projects.map((p) => ({ ...p }));
   for (let pulse = 1; pulse <= maxPulses && queue.length > 0; pulse++) {

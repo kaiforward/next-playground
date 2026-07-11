@@ -16,7 +16,7 @@ import type { SystemConstructionData, FactionConstructionData } from "@/lib/type
 function readoutForFaction(factionId: string): FactionConstructionReadout {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
-  if (!faction) throw new ServiceError("Faction not found.", 404);
+  if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, 404);
 
   const systems: ConstructionSystemInfo[] = world.systems
     .filter((s) => s.factionId === factionId)
@@ -43,7 +43,7 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
 export function getSystemConstruction(systemId: string): SystemConstructionData {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
-  if (!system) throw new ServiceError("System not found.", 404);
+  if (!system) throw new ServiceError(`System ${systemId} not found.`, 404);
   // Unclaimed/independent systems have no faction pool → nothing to show.
   if (!system.factionId) return { visibility: "hidden" };
 
