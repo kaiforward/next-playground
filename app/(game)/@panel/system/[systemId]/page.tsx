@@ -15,6 +15,7 @@ import { StatList, StatRow } from "@/components/ui/stat-row";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SystemConstructionSection } from "@/components/construction/system-construction-section";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { getPriceTrendPct } from "@/lib/utils/market";
@@ -272,6 +273,9 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Construction — in-flight builds / a forming colony (hidden when nothing is under way on a developed world) */}
+      <SystemConstructionSection systemId={systemId} />
 
       {/* Market row — snapshot + pie chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

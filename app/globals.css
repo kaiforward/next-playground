@@ -35,6 +35,7 @@
   --color-text-secondary: #8b949e;
   --color-text-tertiary: #7d868e;
   --color-text-accent: #e0845f; /* copper, lightened for 4.5:1 contrast on dark surfaces */
+  --color-text-accent-hover: #eea886; /* brighter copper for the hover lift on accent links */
 
   /* Borders */
   --color-border: rgba(139, 148, 158, 0.15);

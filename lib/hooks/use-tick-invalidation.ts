@@ -28,6 +28,9 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.systemPopulationAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemIndustryAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemLogisticsAll });
+        // Construction advances every funded pulse (same monthly economy tick) — refresh both surfaces.
+        queryClient.invalidateQueries({ queryKey: queryKeys.systemConstructionAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.factionConstructionAll });
       }),
       // Event notifications → refresh events cache and dynamic data (event state changed)
       subscribeToEvent("eventNotifications", () => {

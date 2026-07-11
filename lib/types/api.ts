@@ -229,6 +229,32 @@ export type SystemIndustryData =
   | { visibility: "unknown" };
 export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 
+// ── Construction (build-queue / colony-visibility) ────────────────────────────
+import type {
+  ConstructionProjectRow, ConstructionProjectColonyRow, ConstructionProjectBuildRow,
+} from "@/lib/engine/construction-readout";
+
+/** Per-system Construction section state. `hidden` renders nothing (developed with nothing building);
+ *  `empty` is the controlled-not-yet-colonised state; `visible` carries the rows for this system.
+ *  `empty`/`visible` carry `factionId` so the section can link to the faction roll-up. */
+export type SystemConstructionData =
+  | { visibility: "hidden" }
+  | { visibility: "empty"; control: "controlled"; factionId: string }
+  | { visibility: "visible"; factionId: string; projects: ConstructionProjectRow[] };
+
+/** Faction roll-up card state — pool header + the two locked groups. */
+export interface FactionConstructionData {
+  factionId: string;
+  pool: number;
+  expandCount: number;
+  buildCount: number;
+  expansion: ConstructionProjectColonyRow[];
+  buildOut: ConstructionProjectBuildRow[];
+}
+
+export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
+export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
+
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
 export type GoodsResponse = ApiResponse<{ goods: GoodInfo[] }>;
