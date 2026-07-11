@@ -12,6 +12,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { StatList, StatRow } from "@/components/ui/stat-row";
 import { EventIcon } from "@/components/events/event-icon";
 import { FactionCard } from "@/components/factions/faction-card";
+import { FactionConstructionCard } from "@/components/construction/faction-construction-card";
 import { FactionStatusBadge } from "@/components/factions/faction-status-badge";
 import { RelationTierBadge } from "@/components/factions/relation-tier-badge";
 import { useFaction } from "@/lib/hooks/use-faction";
@@ -25,6 +26,8 @@ function FactionDetailContent({ factionId }: { factionId: string }) {
   return (
     <DetailPanel title={faction.name} size="xl" backPath="/factions">
       <FactionCard faction={faction} size="md" className="mb-6" />
+
+      <FactionConstructionCard factionId={faction.id} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <Card variant="bordered" padding="md">
