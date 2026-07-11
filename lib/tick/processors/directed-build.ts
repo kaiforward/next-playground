@@ -1,10 +1,11 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard } from "@/lib/tick/shard";
-import { planFactionProposals, type BuildSystemState } from "@/lib/engine/directed-build";
+import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { fundQueue, factionThroughputPool, orderProposals } from "@/lib/engine/construction";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
-import type { WorldConstructionProject } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedBuildWorld,
@@ -16,12 +17,9 @@ import type {
 import {
   proposeFactionClaims,
   resolveClaims,
-  planFactionDevelopments,
   type ClaimCandidate,
   type ClaimProposal,
-  type DevelopCandidate,
   type ExpansionParams,
-  type DevelopParams,
 } from "@/lib/engine/expansion";
 import type { RNG } from "@/lib/engine/universe-gen";
 
@@ -44,10 +42,11 @@ export interface DirectedBuildProcessorParams {
     rng: RNG;
     params: ExpansionParams;
   };
-  /** Develop step (developed tier + colony seed). Omitted → no develop phase. */
+  /** Colony-establish step. Omitted → no colonisation (build-only path used by engine/adapter tests). */
   develop?: {
-    candidateProvider: (factionId: string) => DevelopCandidate[];
-    params: DevelopParams;
+    /** Controlled colony candidates per faction (substrate + seed source), from the tick body's hop data. */
+    candidateProvider: (factionId: string) => ColonyEstablishCandidate[];
+    params: ColonyEstablishParams;
   };
 }
 
@@ -80,6 +79,13 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
  * only projects whose work COMPLETES land — applied as whole-integer building-count increments. The
  * open-project set is persisted each pulse (funded, plus new commitments, minus what landed). Removal
  * of levels stays whole-level decay's job — this only adds.
+ *
+ * Colonisation is the second consumer of the same decision → gate → pace pipeline: each faction's
+ * controlled candidates are scored (`planFactionColonyProposals`, via colonyValue), interleaved with build
+ * bundles by ROI (`orderProposals`), and expanded into colony-establish projects. There is no instant
+ * develop flip — a `colony_establish` accrues work over pulses like any build and, on COMPLETION, develops
+ * its target (seed transfer + bundled housing via `applyDevelopments`). Only funded colony proposals
+ * persist as in-flight projects, so the open queue is bounded without a per-pulse develop cap.
  */
 export async function runDirectedBuildProcessor(
   world: DirectedBuildWorld,
@@ -106,18 +112,6 @@ export async function runDirectedBuildProcessor(
     if (resolved.length > 0) await world.applyClaims(resolved);
   }
 
-  // ── Develop phase (developed tier): each due faction develops its best controlled system(s) —
-  // intra-faction, so no cross-faction resolution. The colony seed is conserved (transferred from the
-  // source in tick.ts). Systems developed this pulse become build-eligible next pulse. ──
-  if (params.develop) {
-    const developments: SystemDevelopment[] = [];
-    for (const key of dueKeys) {
-      if (key === null) continue;
-      developments.push(...planFactionDevelopments(params.develop.candidateProvider(key), params.develop.params));
-    }
-    if (developments.length > 0) await world.applyDevelopments(developments);
-  }
-
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
   const openProjects = await world.getConstructionProjects(dueKeys);
@@ -141,6 +135,7 @@ export async function runDirectedBuildProcessor(
   for (const r of rows) currentBySystem.set(r.systemId, r.buildings);
 
   const landedBySystem = new Map<string, Map<string, number>>();
+  const developments: SystemDevelopment[] = [];
   const nextOpen: WorldConstructionProject[] = [];
 
   for (const [factionId, group] of byFaction) {
@@ -151,21 +146,52 @@ export async function runDirectedBuildProcessor(
     const existing = openByFaction.get(factionId) ?? [];
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
-    const proposals = planFactionProposals(group.map(toBuildState), params.routeCost, existing);
-    const ordered = orderProposals(proposals);
+    const buildStates = group.map(toBuildState);
+    const buildProposals = planFactionProposals(buildStates, params.routeCost, existing);
 
-    // Expand each proposal gate-first into its whole-level project rows (its `items` are already in
-    // complex → academies → production order). fundQueue never sees the ROI — the ordering is done.
+    // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
+    // colonise (a null-faction group is independents — never); the develop param is omitted in build-only tests.
+    let colonyProposals: ColonyProposal[] = [];
+    if (params.develop && factionId !== null) {
+      const developedStates = buildStates.filter((s) => isEconomicallyActive(s.control));
+      const openColonies = existing.filter(
+        (p): p is WorldColonyEstablishProject => p.kind === "colony_establish",
+      );
+      colonyProposals = planFactionColonyProposals(
+        factionId, developedStates, params.develop.candidateProvider(factionId), openColonies, params.develop.params,
+      );
+    }
+
+    const ordered = orderProposals([...buildProposals, ...colonyProposals]);
+
+    // Expand each proposal into whole-level project rows: a build bundle's `items` are already gate-first
+    // (complex → academies → production); a colony is a single colony-establish project whose workTotal is
+    // its establishWork. fundQueue never sees the ROI — the ordering is done.
     const newProjects: WorldConstructionProject[] = [];
     for (const p of ordered) {
-      for (const item of p.items) {
+      if (p.kind === "build") {
+        for (const item of p.items) {
+          newProjects.push({
+            kind: "build",
+            id: params.construction.mintId(),
+            factionId: p.factionId,
+            systemId: p.systemId,
+            buildingType: item.buildingType,
+            levels: item.levels,
+            workTotal: item.levels * workCostPerLevel(item.buildingType),
+            workDone: 0,
+          });
+        }
+      } else {
         newProjects.push({
+          kind: "colony_establish",
           id: params.construction.mintId(),
           factionId: p.factionId,
           systemId: p.systemId,
-          buildingType: item.buildingType,
-          levels: item.levels,
-          workTotal: item.levels * workCostPerLevel(item.buildingType),
+          sourceSystemId: p.sourceSystemId,
+          seedPop: p.seedPop,
+          housingLevels: p.housingLevels,
+          workTotal: p.work,
           workDone: 0,
         });
       }
@@ -173,13 +199,30 @@ export async function runDirectedBuildProcessor(
 
     // Fund front-first: in-flight work finishes before new commitments; land completed levels.
     const { projects: fundedOpen, landed } = fundQueue([...existing, ...newProjects], pool, params.construction.cap);
-    nextOpen.push(...fundedOpen);
+    for (const p of fundedOpen) {
+      // Persist-if-funded for colonies: a colony-establish that got NO work this pulse is dropped and
+      // re-scored next pulse, so the open queue never balloons with unfunded colonies (pool-pacing alone
+      // bounds expansion — there is no per-pulse develop cap). In-flight colonies always have workDone > 0,
+      // so they persist. Builds persist regardless (their in-flight subtraction already bounds them).
+      if (p.kind === "colony_establish" && p.workDone <= 0) continue;
+      nextOpen.push(p);
+    }
     for (const l of landed) {
-      const byType = landedBySystem.get(l.systemId) ?? new Map<string, number>();
-      byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
-      landedBySystem.set(l.systemId, byType);
+      if (l.kind === "build") {
+        const byType = landedBySystem.get(l.systemId) ?? new Map<string, number>();
+        byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
+        landedBySystem.set(l.systemId, byType);
+      } else {
+        // A completed colony-establish → develop the system: seed transfer + bundled housing (applied in tick.ts).
+        developments.push({
+          systemId: l.systemId, sourceSystemId: l.sourceSystemId, seedPop: l.seedPop, housingLevels: l.housingLevels,
+        });
+      }
     }
   }
+
+  // Apply completed colony establishments (develop + conserved seed + bundled housing).
+  if (developments.length > 0) await world.applyDevelopments(developments);
 
   // Emit absolute new counts = current + landed whole levels (integer).
   const updates: BuildBuildingUpdate[] = [];

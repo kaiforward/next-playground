@@ -45,7 +45,7 @@ function project(
   systemId: string, buildingType: string,
   { levels = 1, workTotal = 100, workDone = 0 }: { levels?: number; workTotal?: number; workDone?: number } = {},
 ): WorldConstructionProject {
-  return { id: `${systemId}:${buildingType}`, factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
+  return { kind: "build", id: `${systemId}:${buildingType}`, factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
 }
 
 describe("summarizeColonisation — per-class build-out", () => {
@@ -174,5 +174,21 @@ describe("summarizeColonisation — construction queue split", () => {
     expect(summary.queue.colonyProjects).toBe(0);
     expect(summary.queue.colonyMeanProgress).toBe(0);
     expect(summary.queue.colonyByKind).toEqual({});
+  });
+
+  it("excludes colony-establish projects from the queue split (reported in PR4, no NaN)", () => {
+    const colony: WorldConstructionProject = {
+      kind: "colony_establish", id: "c1:establish", factionId: "f1", systemId: "c1",
+      sourceSystemId: "hw", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 40,
+    };
+    const summary = summarizeColonisation([], new Set(["hw"]), [
+      project("hw", "ore", { levels: 4, workTotal: 100, workDone: 50 }),
+      colony,
+    ]);
+    // Only the build project is counted; the colony-establish is skipped (no undefined buildingType/levels).
+    expect(summary.queue.homeworldProjects).toBe(1);
+    expect(summary.queue.colonyProjects).toBe(0);
+    expect(summary.queue.colonyLevels).toBe(0);
+    expect(Number.isNaN(summary.queue.colonyMeanProgress)).toBe(false);
   });
 });

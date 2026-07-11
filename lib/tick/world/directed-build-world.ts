@@ -43,12 +43,14 @@ export interface SystemClaim {
   factionId: string;
 }
 
-/** One development: a controlled system flips to developed and receives a conserved colony seed. */
+/** One development: a controlled system flips to developed and receives a conserved colony seed + bundled housing. */
 export interface SystemDevelopment {
   systemId: string;
   /** Developed same-faction system the seed population is transferred from. */
   sourceSystemId: string;
   seedPop: number;
+  /** Housing levels placed on the colony with the establishment (viable by construction). */
+  housingLevels: number;
 }
 
 export interface DirectedBuildWorld {
