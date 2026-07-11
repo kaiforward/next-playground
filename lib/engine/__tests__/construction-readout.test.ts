@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { forecastEtaPulses } from "@/lib/engine/construction";
 import type { WorldBuildProject } from "@/lib/world/types";
 import {
-  computeFactionConstruction, buildingLabel, describeBuildProject,
+  computeFactionConstruction, buildingLabel, describeBuildProject, nextPulseGains,
   type ConstructionSystemInfo,
 } from "@/lib/engine/construction-readout";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -31,6 +31,28 @@ describe("forecastEtaPulses", () => {
   it("returns null past the guard cap without spinning", () => {
     // Huge work, tiny pool that still funds → guard trims it to stalled at maxPulses.
     expect(forecastEtaPulses([build("a", 100000, 0)], 1, 4, 5)).toEqual([null]);
+  });
+});
+
+describe("nextPulseGains", () => {
+  it("funds front-first: the head project takes the whole pool, the tail waits", () => {
+    expect(nextPulseGains([build("a", 8, 0), build("b", 8, 0)], 4, 4)).toEqual([4, 0]);
+  });
+
+  it("spreads leftover pool across parallel fronts", () => {
+    expect(nextPulseGains([build("a", 8, 0), build("b", 8, 0)], 8, 4)).toEqual([4, 4]);
+  });
+
+  it("is pool-limited: front gets its full cap, tail gets only what's left", () => {
+    expect(nextPulseGains([build("a", 8, 0), build("b", 8, 0)], 6, 4)).toEqual([4, 2]);
+  });
+
+  it("caps a near-complete project at its remaining work, not the full cap", () => {
+    expect(nextPulseGains([build("a", 20, 18)], 4, 4)).toEqual([2]);
+  });
+
+  it("returns 0 for every project when the pool is zero", () => {
+    expect(nextPulseGains([build("a", 8, 0)], 0, 4)).toEqual([0]);
   });
 });
 
@@ -66,5 +88,53 @@ describe("computeFactionConstruction", () => {
     expect(r.buildOut[0].buildingLabel).toBe("Housing");
     expect(r.buildOut[0].progress).toBeCloseTo(0.8, 6);
     expect(r.buildOut[0].etaPulses === null || typeof r.buildOut[0].etaPulses === "number").toBe(true);
+  });
+
+  it("attaches nextPulseGain: a funded front row gets its cap, a starved back row gets 0", () => {
+    // Single developed system sized so pool === cap: only the front build can be funded this pulse.
+    const oneSystem: ConstructionSystemInfo[] = [
+      { id: "dev1", name: "Vela Prime", control: "developed", population: 80 },
+    ];
+    const twoBuilds: WorldConstructionProject[] = [
+      { kind: "build", id: "front", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "back", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+    ];
+    const r = computeFactionConstruction(twoBuilds, oneSystem, 0.05, 4);
+    expect(r.pool).toBeCloseTo(4, 6);
+    const front = r.all.find((p) => p.id === "front");
+    const back = r.all.find((p) => p.id === "back");
+    if (!front || !back) throw new Error("fixture: expected both rows");
+    expect(front.nextPulseGain).toBe(4); // its full cap
+    expect(back.nextPulseGain).toBe(0); // pool exhausted by the front — waiting
+  });
+
+  it("orders buildOut soonest-ETA-first, independent of input order", () => {
+    // Ample pool (> cap × count) funds both projects in parallel each pulse, so ETA is purely
+    // remaining-work ÷ cap — "slow" (16 work) lands later than "fast" (8 work) regardless of which
+    // comes first in the input queue.
+    const oneSystem: ConstructionSystemInfo[] = [
+      { id: "s1", name: "Only System", control: "developed", population: 400 },
+    ];
+    const slowThenFast: WorldConstructionProject[] = [build("slow", 16, 0), build("fast", 8, 0)];
+    const r = computeFactionConstruction(slowThenFast, oneSystem, 0.05, 4);
+    expect(r.pool).toBeCloseTo(20, 6);
+    expect(r.buildOut.map((p) => p.id)).toEqual(["fast", "slow"]);
+  });
+
+  it("falls back to systemName when ETAs tie (an all-stalled, pool-zero faction)", () => {
+    const twoNamedSystems: ConstructionSystemInfo[] = [
+      { id: "sysZ", name: "Zeta System", control: "developed", population: 10 },
+      { id: "sysA", name: "Alpha System", control: "developed", population: 10 },
+    ];
+    // Same-kind projects on differently-named systems, inserted in reverse-alphabetical order.
+    const zetaThenAlpha: WorldConstructionProject[] = [
+      { kind: "build", id: "pZ", factionId: "f1", systemId: "sysZ", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "pA", factionId: "f1", systemId: "sysA", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+    ];
+    // throughputPerPop 0 zeroes the pool regardless of population — every project stalls (etaPulses null).
+    const r = computeFactionConstruction(zetaThenAlpha, twoNamedSystems, 0, 4);
+    expect(r.pool).toBe(0);
+    expect(r.buildOut.every((p) => p.etaPulses === null)).toBe(true);
+    expect(r.buildOut.map((p) => p.systemName)).toEqual(["Alpha System", "Zeta System"]);
   });
 });

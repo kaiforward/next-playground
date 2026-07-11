@@ -5,7 +5,7 @@
  * grouped) and the per-system section (filtered to one system via `all`).
  */
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
-import { factionThroughputPool, forecastEtaPulses } from "@/lib/engine/construction";
+import { factionThroughputPool, forecastEtaPulses, fundQueue } from "@/lib/engine/construction";
 import { GOODS } from "@/lib/constants/goods";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_BY_TYPE,
@@ -29,6 +29,9 @@ interface ConstructionRowBase {
   workTotal: number;
   /** Coarse ≈pulses to completion at the current rate; null = stalled. */
   etaPulses: number | null;
+  /** Construction points this project will absorb on the next funded pulse (0 = starved/"waiting"). Exact for the
+   *  immediate next pulse (fundQueue is deterministic); reused for the projected-fill segment + per-row rate. */
+  nextPulseGain: number;
 }
 
 export interface ConstructionProjectBuildRow extends ConstructionRowBase {
@@ -94,6 +97,24 @@ function byEta(a: ConstructionRowBase, b: ConstructionRowBase): number {
 }
 
 /**
+ * Per-project construction points absorbed on the NEXT funded pulse, index-aligned to `projects` — one
+ * `fundQueue` step at the current pool + cap. A front project gets its full cap; a project the pool can't reach
+ * this pulse gets 0 ("waiting"); a near-complete project gets just its remaining work. The exact same first step
+ * the ETA forecast runs, surfaced for display.
+ */
+export function nextPulseGains(
+  projects: WorldConstructionProject[],
+  pool: number,
+  cap: number,
+): number[] {
+  const { projects: open, landed } = fundQueue(projects, pool, cap);
+  const doneById = new Map<string, number>();
+  for (const p of open) doneById.set(p.id, p.workDone);
+  for (const p of landed) doneById.set(p.id, p.workDone);
+  return projects.map((p) => Math.max(0, (doneById.get(p.id) ?? p.workDone) - p.workDone));
+}
+
+/**
  * Build the faction readout: pool from the developed systems, ETA forecast over the queue as stored
  * (in-flight first — the order the tick funds it), then rows split into Expansion (colonies) and
  * Build-out (builds), each sorted soonest-first. `projects` must be one faction's open projects.
@@ -107,6 +128,7 @@ export function computeFactionConstruction(
   const nameById = new Map(systems.map((s) => [s.id, s.name]));
   const pool = factionThroughputPool(systems, throughputPerPop);
   const etas = forecastEtaPulses(projects, pool, cap);
+  const gains = nextPulseGains(projects, pool, cap);
 
   const all: ConstructionProjectRow[] = [];
   const expansion: ConstructionProjectColonyRow[] = [];
@@ -121,6 +143,7 @@ export function computeFactionConstruction(
       workDone: p.workDone,
       workTotal: p.workTotal,
       etaPulses: etas[i],
+      nextPulseGain: gains[i],
     };
     if (p.kind === "colony_establish") {
       const row: ConstructionProjectColonyRow = {
