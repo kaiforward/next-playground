@@ -6,7 +6,11 @@ import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
-import type { ClaimCandidate, DevelopCandidate, ExpansionParams, DevelopParams } from "@/lib/engine/expansion";
+import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
+import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { EXPANSION } from "@/lib/constants/expansion";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const reachable: RouteCost = () => 1;
@@ -82,7 +86,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
 
   it("funds existing open projects front-first, advancing workDone (persists deltas)", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
+      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
@@ -157,7 +161,7 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
   // The queue is [in-flight, ...new proposals in funding order]; with a tiny cap nothing lands, so
   // w.constructionProjects preserves that order and we can assert priority by index.
   function idx(w: MemoryDirectedBuildWorld, systemId: string, type: string): number {
-    return w.constructionProjects.findIndex((p) => p.systemId === systemId && p.buildingType === type);
+    return w.constructionProjects.findIndex((p) => p.kind === "build" && p.systemId === systemId && p.buildingType === type);
   }
 
   it("funds housing ahead of industry at the same builder (proactive substrate leads)", async () => {
@@ -174,7 +178,7 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
 
   it("keeps in-flight projects ahead of newly proposed work", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
+      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
@@ -232,9 +236,30 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
 const EXP_PARAMS: ExpansionParams = {
   maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
 };
-const DEV_PARAMS: DevelopParams = {
-  maxDevelopsPerPulse: 1, habitableFloor: 1, seedPop: 50, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
+const COLONY_PARAMS: ColonyEstablishParams = {
+  landPremium: COLONISATION.LAND_PREMIUM,
+  landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
+  landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
+  sigmaFloor: COLONISATION.SIGMA_FLOOR,
+  establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
+  seedPop: EXPANSION.COLONY_SEED_POP,
+  habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
 };
+
+/** A developed home with housing filling all its habitable land (σ = 1) and no build deficits — so the
+ *  pool funds only colonies. Population sets the throughput pool. */
+function saturatedHome(population: number): SystemBuildRow {
+  return {
+    systemId: "home", factionId: "f1", control: "developed", population, unrest: 0,
+    buildings: { [HOUSING_TYPE]: 5 },
+    yields: unitResourceVector(), slotCap: emptyResourceVector(),
+    generalSpace: 5, habitableSpace: 5, markets: [], // habitable fully housed (5 levels) → σ = 1, no housing headroom
+  };
+}
+
+function colonyCand(systemId: string, habitableSpace = 100): ColonyEstablishCandidate {
+  return { systemId, habitableSpace, generalSpace: 50, slotCap: emptyResourceVector(), sourceSystemId: "home" };
+}
 
 // One developed owned system so the faction is in the shard, with no build needs.
 function ownedOnly(factionId: string): SystemBuildRow {
@@ -245,7 +270,7 @@ function ownedOnly(factionId: string): SystemBuildRow {
   };
 }
 
-describe("runDirectedBuildProcessor: claim + develop phase", () => {
+describe("runDirectedBuildProcessor: claim phase", () => {
   it("claims the best in-reach candidate on a due tick", async () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     const reachProvider = (f: string): ClaimCandidate[] =>
@@ -260,18 +285,7 @@ describe("runDirectedBuildProcessor: claim + develop phase", () => {
     expect(w.claims).toEqual([{ systemId: "u-rich", factionId: "f1" }]);
   });
 
-  it("develops the best controlled candidate on a due tick", async () => {
-    const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
-    const candidateProvider = (f: string): DevelopCandidate[] =>
-      f === "f1" ? [{ systemId: "c1", habitableSpace: 100, resourceDiversity: 2, traitQuality: 0, sourceSystemId: "f1-home" }] : [];
-    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
-      develop: { candidateProvider, params: DEV_PARAMS },
-    });
-    expect(w.developments).toEqual([{ systemId: "c1", sourceSystemId: "f1-home", seedPop: 50 }]);
-  });
-
-  it("claims/develops nothing off the pulse boundary", async () => {
+  it("claims nothing off the pulse boundary", async () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
@@ -286,5 +300,117 @@ describe("runDirectedBuildProcessor: claim + develop phase", () => {
     expect(w.claims).toHaveLength(0);
     expect(w.developments).toHaveLength(0);
     expect(w.constructionProjects.length).toBeGreaterThan(0); // construction still committed
+  });
+});
+
+describe("runDirectedBuildProcessor: colony-establish phase", () => {
+  it("does NOT develop on the pulse it is proposed — the colony-establish accrues work over pulses", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    // A tiny cap so the establish project cannot complete this pulse.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+    });
+    expect(w.developments).toHaveLength(0); // not flipped this pulse
+    const colony = w.constructionProjects.find((p) => p.kind === "colony_establish");
+    expect(colony).toBeDefined();
+    expect(colony!.systemId).toBe("c1");
+    // establishWork exceeds the base by the bundled seed-housing's build cost (housing is paid for).
+    expect(colony!.workTotal).toBeGreaterThan(COLONISATION.COLONY_ESTABLISH_WORK);
+  });
+
+  it("develops the colony once the establish project completes (seed + bundled housing landing)", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    // A generous pool + cap completes the establish this pulse.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+    });
+    expect(w.developments).toHaveLength(1);
+    const dev = w.developments[0];
+    expect(dev.systemId).toBe("c1");
+    expect(dev.sourceSystemId).toBe("home");
+    expect(dev.seedPop).toBe(EXPANSION.COLONY_SEED_POP);
+    // Viable by construction: bundled housing houses the whole seed.
+    expect(dev.housingLevels).toBe(Math.ceil(dev.seedPop / POP_CENTRE_DENSITY));
+    expect(dev.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(dev.seedPop);
+    // The completed establish project is removed from the open queue.
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
+  });
+
+  it("bounds the open queue: with many candidates and a small pool, only funded colonies persist", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(80)]); // pool = 80 × 0.05 = 4 → one cap-worth
+    const candidates = ["c1", "c2", "c3", "c4", "c5"].map((id) => colonyCand(id));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? candidates : []), params: COLONY_PARAMS },
+    });
+    const openColonies = w.constructionProjects.filter((p) => p.kind === "colony_establish");
+    // Front-first funding gives one colony a cap's worth; the other four get zero and are dropped.
+    expect(openColonies.length).toBeLessThan(candidates.length);
+    expect(openColonies.length).toBeGreaterThanOrEqual(1);
+    for (const p of openColonies) expect(p.workDone).toBeGreaterThan(0);
+  });
+
+  it("develops nothing off the pulse boundary", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
+      develop: { candidateProvider: () => [colonyCand("c1")], params: COLONY_PARAMS },
+    });
+    expect(w.developments).toHaveLength(0);
+    expect(w.constructionProjects).toHaveLength(0);
+  });
+});
+
+/** A developed home saturated on housing (σ = 1, no housing headroom) but carrying a deep food deficit
+ *  with spare labour + food slots — so it emits a food industry build proposal that competes with a
+ *  colony in the same pool. Population sets labour; the pool is kept scarce via mkConstruction's rate. */
+function homeWithFoodDeficit(population = 1000): SystemBuildRow {
+  return {
+    systemId: "home", factionId: "f1", control: "developed", population, unrest: 0,
+    buildings: { [HOUSING_TYPE]: 5 },
+    yields: unitResourceVector(), slotCap: builderSlots(20),
+    generalSpace: 5, habitableSpace: 5, markets: [foodMarket("home", 1)], // habitable fully housed → σ = 1
+  };
+}
+
+function colonyOf(systemId: string, habitableSpace: number, generalSpace = 0): ColonyEstablishCandidate {
+  return { systemId, habitableSpace, generalSpace, slotCap: emptyResourceVector(), sourceSystemId: "home" };
+}
+
+describe("runDirectedBuildProcessor: build-vs-colony ROI arbitration (one shared pool)", () => {
+  it("funds a high-ROI local build ahead of a low-value colony (colony deferred)", async () => {
+    const w = new MemoryDirectedBuildWorld([homeWithFoodDeficit(1000)]);
+    // pool = 1000 × 0.004 = 4 → one cap-worth; only the front of the ROI-ordered queue funds this pulse.
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(6, 0.004),
+      // A barren colony (habitable 2, no deposits) scores colonyValue ≈ ROI 0.08 vs the food build's ≈ 0.25,
+      // so the build out-ROIs it and takes the shared pool front-first.
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyOf("c1", 2)] : []), params: COLONY_PARAMS },
+    });
+    // The local build wins the pool; the colony got no work and is dropped (persist-if-funded).
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
+    // Proof the pool went to the build: it either landed (building update) or is in-flight with workDone > 0.
+    const buildActivity =
+      w.buildingUpdates.length > 0 || w.constructionProjects.some((p) => p.kind === "build" && p.workDone > 0);
+    expect(buildActivity).toBe(true);
+  });
+
+  it("funds a high-value colony ahead of a low-ROI local build (build starved)", async () => {
+    const w = new MemoryDirectedBuildWorld([homeWithFoodDeficit(1000)]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(6, 0.004),
+      // Same home/deficit; only the colony's land changes — enormous habitable → colonyValue ROI ≫ the
+      // build's 0.25, so the colony dominates the shared pool front-first.
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyOf("c1", 1_000_000)] : []), params: COLONY_PARAMS },
+    });
+    const fundedColony = w.constructionProjects.find((p) => p.kind === "colony_establish");
+    expect(fundedColony).toBeDefined();
+    expect(fundedColony!.workDone).toBeGreaterThan(0);
+    // The food build was proposed but starved of the pool this pulse (builds persist at workDone 0).
+    const build = w.constructionProjects.find((p) => p.kind === "build");
+    expect(build).toBeDefined();
+    expect(build!.workDone).toBe(0);
   });
 });

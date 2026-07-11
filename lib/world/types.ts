@@ -141,24 +141,52 @@ export interface WorldBuilding {
   idleMonths: number;
 }
 
-/**
- * One committed construction project: a queued order to build `levels` whole levels of `buildingType`
- * at `systemId`, funded by `factionId`'s per-pulse throughput pool. Contributes zero capacity until
- * `workDone` reaches `workTotal`, then lands all `levels` at once. Duration is emergent (work ÷ funded
- * points), never a stored timer.
- */
-export interface WorldConstructionProject {
+/** Fields every committed construction project shares — funded by `factionId`'s per-pulse pool. */
+interface WorldConstructionProjectBase {
   id: string;
   factionId: string;
   systemId: string;
-  buildingType: string;
-  /** Whole levels this project lands on completion (integer ≥ 1). */
-  levels: number;
-  /** Total construction work to complete = levels × per-level work cost. */
+  /** Total construction work to complete. */
   workTotal: number;
   /** Construction points accumulated so far, in [0, workTotal]. */
   workDone: number;
 }
+
+/**
+ * A queued order to build `levels` whole levels of `buildingType` at `systemId`. Contributes zero
+ * capacity until `workDone` reaches `workTotal`, then lands all `levels` at once. Duration is emergent
+ * (work ÷ funded points), never a stored timer.
+ */
+export interface WorldBuildProject extends WorldConstructionProjectBase {
+  kind: "build";
+  buildingType: string;
+  /** Whole levels this project lands on completion (integer ≥ 1). */
+  levels: number;
+}
+
+/**
+ * A queued order to establish a colony at controlled `systemId` (docs/planned/economy-colonisation-cost.md
+ * §1-2). On completion the system flips `developed`, receives the conserved `seedPop` transferred from
+ * `sourceSystemId` (capped at apply time by the source's population), and lands `housingLevels` of housing
+ * bundled with it — so `popCap ≥ seedPop` on arrival (viable by construction). `seedPop`/`housingLevels`
+ * are fixed at proposal time (sized to the colony's habitable land) and never recomputed.
+ */
+export interface WorldColonyEstablishProject extends WorldConstructionProjectBase {
+  kind: "colony_establish";
+  /** Nearest developed same-faction system the seed population transfers from (fixed for the project's life). */
+  sourceSystemId: string;
+  /** Conserved starter population, sized at proposal to the whole-level habitable cap. */
+  seedPop: number;
+  /** Housing levels placed with the colony (houses the seed pop; land-bounded). */
+  housingLevels: number;
+}
+
+/**
+ * One committed construction project. A discriminated union: ordinary `build` levels, or a
+ * `colony_establish` that lands a viable colony. Both are funded from the same per-faction throughput
+ * pool by the same `fundQueue`, so build-vs-colonise arbitrates on one budget.
+ */
+export type WorldConstructionProject = WorldBuildProject | WorldColonyEstablishProject;
 
 export interface WorldTrait {
   systemId: string;

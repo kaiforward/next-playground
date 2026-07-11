@@ -29,9 +29,18 @@ describe("runWorldTick: expansion (claim + develop)", () => {
       }
       if (s.factionId === null) expect(s.control).toBe("unclaimed");
     }
-    // At least one system developed past the homeworlds (colony bootstrap ran).
-    const developedNonHome = world.systems.filter((s) => s.control === "developed" && !homeworldIds.has(s.id));
-    expect(developedNonHome.length).toBeGreaterThan(0);
+    // Developing is now a pool-funded, timed colony-establish project (not an instant flip), and it is
+    // saturation-gated (home-first while there is cheap building). So within a few months we assert
+    // colonisation is PACED — controlled borders accumulate — rather than a completed developed colony
+    // (end-to-end completion + viability is covered by the processor + applyDevelopments unit tests, and
+    // long-run pacing by `npm run simulate`).
+    const controlledNonHome = world.systems.filter((s) => s.control === "controlled" && !homeworldIds.has(s.id));
+    expect(controlledNonHome.length).toBeGreaterThan(0);
+    // No colony-establish project ever carries NaN/Infinity work into World state.
+    for (const p of world.constructionProjects) {
+      expect(Number.isFinite(p.workTotal)).toBe(true);
+      expect(Number.isFinite(p.workDone)).toBe(true);
+    }
   });
 
   it("is deterministic — same seed produces the same ownership after several pulses", async () => {

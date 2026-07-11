@@ -35,8 +35,11 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
-import { hopRouteCost } from "@/lib/engine/directed-build";
-import type { ClaimCandidate, DevelopCandidate } from "@/lib/engine/expansion";
+import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
+import type { ClaimCandidate } from "@/lib/engine/expansion";
+import { housingPopCap } from "@/lib/engine/industry";
+import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { COLONISATION } from "@/lib/constants/colonisation";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
@@ -394,17 +397,23 @@ function applyClaims(systems: SimSystem[], claims: SystemClaim[]): SimSystem[] {
   });
 }
 
-/** Apply developments: the target flips to `developed`; the colony seed is transferred (conserved,
- * capped by what the source can spare) from its source system. The `: SimSystem` annotation narrows
- * the `"developed"` literal. `available` tracks each source's remaining spendable population across
- * the loop so two developments sharing a source draw from the same (shrinking) balance rather than
- * both reading the original snapshot — otherwise a shared source would have its seed double-counted
- * and mint population that was never conserved. */
+/**
+ * Apply completed colony establishments: the target flips `developed`, receives the conserved seed
+ * population (capped by what its stored source can spare), and lands its bundled housing so `popCap ≥
+ * seedPop` on arrival (viable by construction — docs/planned/economy-colonisation-cost.md §2). The `:
+ * SimSystem` annotation narrows the `"developed"` literal. `available` tracks each source's remaining
+ * spendable population across the loop so two establishments sharing a source draw from the same
+ * (shrinking) balance rather than both reading the original snapshot — otherwise a shared source would
+ * mint population that was never conserved. popCap is raised to the placed housing's capacity (never
+ * lowered) — the same figure infrastructure-decay recomputes next tick, set here so the colony is viable
+ * the instant it exists.
+ */
 export function applyDevelopments(systems: SimSystem[], developments: SystemDevelopment[]): SimSystem[] {
   if (developments.length === 0) return systems;
   const bySystem = new Map(systems.map((s) => [s.id, s]));
   const popDelta = new Map<string, number>();
   const developed = new Set<string>();
+  const housingBySystem = new Map<string, number>();
   const available = new Map<string, number>();
   for (const d of developments) {
     const source = bySystem.get(d.sourceSystemId);
@@ -416,15 +425,21 @@ export function applyDevelopments(systems: SimSystem[], developments: SystemDeve
     popDelta.set(d.sourceSystemId, (popDelta.get(d.sourceSystemId) ?? 0) - moved);
     popDelta.set(d.systemId, (popDelta.get(d.systemId) ?? 0) + moved);
     developed.add(d.systemId);
+    housingBySystem.set(d.systemId, (housingBySystem.get(d.systemId) ?? 0) + d.housingLevels);
   }
   return systems.map((s): SimSystem => {
     const delta = popDelta.get(s.id) ?? 0;
     const nowDeveloped = developed.has(s.id);
     if (delta === 0 && !nowDeveloped) return s;
+    const buildings = nowDeveloped
+      ? { ...s.buildings, [HOUSING_TYPE]: (s.buildings[HOUSING_TYPE] ?? 0) + (housingBySystem.get(s.id) ?? 0) }
+      : s.buildings;
     return {
       ...s,
       population: Math.max(0, s.population + delta),
       control: nowDeveloped ? "developed" : s.control,
+      buildings,
+      popCap: nowDeveloped ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap,
     };
   });
 }
@@ -713,10 +728,11 @@ export async function runWorldTick(
       return candidates;
     };
 
-    // Develop-candidate provider: a faction's CONTROLLED systems, each tagged with the nearest
-    // developed same-faction system as the conserved colony-seed source (null if none reachable).
-    const developProvider = (factionId: string): DevelopCandidate[] => {
-      const candidates: DevelopCandidate[] = [];
+    // Colony-candidate provider: a faction's CONTROLLED systems that have a reachable developed
+    // same-faction seed source, tagged with their substrate + that source. The colony planner scores
+    // them via colonyValue and funds establish projects from the shared pool.
+    const developProvider = (factionId: string): ColonyEstablishCandidate[] => {
+      const candidates: ColonyEstablishCandidate[] = [];
       for (const s of systems) {
         if (s.factionId !== factionId || s.control !== "controlled") continue;
         const neighbours = hops.get(s.id);
@@ -730,9 +746,12 @@ export async function runWorldTick(
             if (h < bestHop) { bestHop = h; sourceSystemId = destId; }
           }
         }
+        if (sourceSystemId === null) continue; // no developed seed source reachable → cannot establish
         candidates.push({
-          systemId: s.id, habitableSpace: s.habitableSpace,
-          resourceDiversity: countResourceDiversity(s), traitQuality: sumTraitQuality(s),
+          systemId: s.id,
+          habitableSpace: s.habitableSpace,
+          generalSpace: s.generalSpace,
+          slotCap: s.slotCap,
           sourceSystemId,
         });
       }
@@ -756,7 +775,15 @@ export async function runWorldTick(
       },
       develop: {
         candidateProvider: developProvider,
-        params: { maxDevelopsPerPulse: EXPANSION.MAX_DEVELOPS_PER_PULSE, habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR, seedPop: EXPANSION.COLONY_SEED_POP, weights: EXPANSION.SCORE_WEIGHTS },
+        params: {
+          landPremium: COLONISATION.LAND_PREMIUM,
+          landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
+          landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
+          sigmaFloor: COLONISATION.SIGMA_FLOOR,
+          establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
+          seedPop: EXPANSION.COLONY_SEED_POP,
+          habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+        },
       },
     });
     systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);

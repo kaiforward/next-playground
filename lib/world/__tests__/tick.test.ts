@@ -151,8 +151,10 @@ describe("runWorldTick", () => {
     // Construction projects exist (committed, in-flight) and every one is well-formed.
     expect(after.constructionProjects.length).toBeGreaterThan(0);
     for (const p of after.constructionProjects) {
-      expect(p.levels).toBeGreaterThanOrEqual(1);
-      expect(Number.isInteger(p.levels)).toBe(true);
+      if (p.kind === "build") {
+        expect(p.levels).toBeGreaterThanOrEqual(1);
+        expect(Number.isInteger(p.levels)).toBe(true);
+      }
       expect(p.workDone).toBeGreaterThanOrEqual(0);
       expect(p.workDone).toBeLessThanOrEqual(p.workTotal);
     }
@@ -161,7 +163,7 @@ describe("runWorldTick", () => {
     expect(new Set(ids).size).toBe(ids.length);
     // Landed levels are whole integers when they land (the full integer invariant, once decay is
     // whole-level too, is asserted separately).
-    for (const u of after.constructionProjects) expect(Number.isInteger(u.levels)).toBe(true);
+    for (const u of after.constructionProjects) if (u.kind === "build") expect(Number.isInteger(u.levels)).toBe(true);
   });
 
   it("round-trips building idleMonths across a non-decay tick (the field survives the sim serialize round-trip)", async () => {

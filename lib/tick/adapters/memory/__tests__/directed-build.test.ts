@@ -35,7 +35,7 @@ describe("MemoryDirectedBuildWorld: claim + develop capture", () => {
   it("captures applied claims and developments for write-back", async () => {
     const world = new MemoryDirectedBuildWorld([]);
     const claims: SystemClaim[] = [{ systemId: "s1", factionId: "f1" }];
-    const devs: SystemDevelopment[] = [{ systemId: "s2", sourceSystemId: "home", seedPop: 50 }];
+    const devs: SystemDevelopment[] = [{ systemId: "s2", sourceSystemId: "home", seedPop: 50, housingLevels: 3 }];
     await world.applyClaims(claims);
     await world.applyDevelopments(devs);
     expect(world.claims).toEqual(claims);
