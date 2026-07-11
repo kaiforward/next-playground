@@ -13,16 +13,29 @@ import { formatEta } from "@/lib/utils/construction-format";
  */
 export function ConstructionRow({ row, showSystem }: { row: ConstructionProjectRow; showSystem: boolean }) {
   const stalled = row.etaPulses === null;
-  const suffix = showSystem ? ` — ${row.systemName}` : "";
-  const title =
-    row.kind === "colony_establish"
-      ? `Establish Colony${suffix}`
-      : `${row.buildingLabel} ×${row.levels}${suffix}`;
+  const baseTitle =
+    row.kind === "colony_establish" ? "Establish Colony" : `${row.buildingLabel} ×${row.levels}`;
+  const titleText = showSystem ? `${baseTitle} — ${row.systemName}` : baseTitle; // plain, for aria
+  const rate = Math.round(row.nextPulseGain * 10) / 10; // 1-dp; avoids "+0/pulse" noise
+  const rateText = rate > 0 ? `+${rate}/pulse` : "waiting";
 
   return (
     <div className="border-b border-border/40 py-2 last:border-b-0">
       <div className="flex items-baseline gap-2">
-        <span className="font-display text-sm text-text-primary">{title}</span>
+        <span className="font-display text-sm text-text-primary">
+          {baseTitle}
+          {showSystem && (
+            <>
+              {" — "}
+              <Link
+                href={`/system/${row.systemId}`}
+                className="text-text-accent hover:text-text-accent-hover transition-colors"
+              >
+                {row.systemName}
+              </Link>
+            </>
+          )}
+        </span>
         <span
           className={`ml-auto font-mono text-[11px] ${stalled ? "text-status-amber-light" : "text-text-secondary"}`}
         >
@@ -55,12 +68,13 @@ export function ConstructionRow({ row, showSystem }: { row: ConstructionProjectR
       )}
 
       <ProgressBar
-        label=""
+        label={rateText}
         value={row.workDone}
         max={row.workTotal}
         valueText={`${Math.round(row.progress * 100)}%`}
+        projected={row.nextPulseGain}
         color={stalled ? "amber" : "copper"}
-        ariaLabel={`${title}: ${Math.round(row.progress * 100)}% complete`}
+        ariaLabel={`${titleText}: ${Math.round(row.progress * 100)}% complete, ${rateText}`}
       />
     </div>
   );
