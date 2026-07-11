@@ -58,7 +58,7 @@ export function ConstructionRow({ row, showSystem }: { row: ConstructionProjectR
         label=""
         value={row.workDone}
         max={row.workTotal}
-        formatValue={formatMagnitude}
+        valueText={`${Math.round(row.progress * 100)}%`}
         color={stalled ? "amber" : "copper"}
         ariaLabel={`${title}: ${Math.round(row.progress * 100)}% complete`}
       />
