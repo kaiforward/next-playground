@@ -3,6 +3,7 @@ import type {
   MigrationDelta, MigrationNodeView, MigrationWorld,
 } from "@/lib/tick/world/migration-world";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
+import { labourDemand } from "@/lib/engine/industry";
 import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
 
 /**
@@ -35,7 +36,7 @@ export class InMemoryMigrationWorld implements MigrationWorld {
     const out: MigrationNodeView[] = [];
     for (const s of this.systems) {
       if (!ids.has(s.id)) continue;
-      out.push({ systemId: s.id, population: s.population, popCap: s.popCap, unrest: s.unrest });
+      out.push({ systemId: s.id, population: s.population, popCap: s.popCap, unrest: s.unrest, labourDemand: labourDemand(s.buildings) });
     }
     return Promise.resolve(out);
   }
