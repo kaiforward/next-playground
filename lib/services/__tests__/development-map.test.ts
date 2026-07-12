@@ -3,7 +3,6 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
 import { getDevelopmentBySystem } from "@/lib/services/development-map";
 import { systemDevelopment } from "@/lib/engine/development";
-import { makeResourceVector } from "@/lib/engine/resources";
 import type { World } from "@/lib/world/types";
 
 let world: World;
@@ -32,11 +31,6 @@ describe("getDevelopmentBySystem", () => {
     const expected = systemDevelopment({
       buildings,
       population: s.population,
-      slotCap: makeResourceVector({
-        gas: s.slotGas, minerals: s.slotMinerals, ore: s.slotOre, biomass: s.slotBiomass,
-        arable: s.slotArable, water: s.slotWater, radioactive: s.slotRadioactive,
-      }),
-      generalSpace: s.generalSpace,
       habitableSpace: s.habitableSpace,
     });
     const entry = getDevelopmentBySystem().find((e) => e.systemId === homeworldId)!;

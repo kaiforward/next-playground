@@ -1,105 +1,77 @@
 import { describe, it, expect } from "vitest";
 import { systemDevelopment, type DevelopmentInput } from "@/lib/engine/development";
-import { emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
 
 /**
  * Fixture: a system's development inputs. Defaults are a barren, empty frontier
- * (no pop, no buildings, no land) so each test opts into only the fields it
- * exercises.
+ * (no pop, no buildings, no habitable land) so each test opts into only the
+ * fields it exercises.
  */
 function devInput(partial: Partial<DevelopmentInput>): DevelopmentInput {
-  return {
-    buildings: {},
-    population: 0,
-    slotCap: emptyResourceVector(),
-    generalSpace: 0,
-    habitableSpace: 0,
-    ...partial,
-  };
+  return { buildings: {}, population: 0, habitableSpace: 0, ...partial };
 }
 
 describe("systemDevelopment", () => {
-  it("reads 0 for an empty frontier with unbuilt potential", () => {
-    // Lots of land/slots but nothing built and no people → nothing is developed.
-    const sys = devInput({
-      habitableSpace: 10,
-      generalSpace: 20,
-      slotCap: makeResourceVector({ ore: 10 }),
-    });
-    expect(systemDevelopment(sys)).toBe(0);
+  it("reads 0 for an empty frontier (nothing built, no people)", () => {
+    expect(systemDevelopment(devInput({ habitableSpace: 10 }))).toBe(0);
   });
 
-  it("reads 0 for a system with no physical potential at all", () => {
-    // No habitable land, no general space, no slots → no potential; guard against NaN (0/0).
-    expect(systemDevelopment(devInput({ population: 100 }))).toBe(0);
+  it("reads a small full colony far BELOW a large system with more absolute industry", () => {
+    // The regression that motivated the absolute model: development is a magnitude, not a fill
+    // fraction. A 1-housing/1-extractor colony that is 'full' for its size must still read low
+    // because it has almost nothing in absolute terms; a system with 20× the industry reads high.
+    const small = devInput({ buildings: { housing: 1, ore: 1 }, population: 20, habitableSpace: 5 });
+    const large = devInput({ buildings: { ore: 20 }, population: 240, habitableSpace: 100 });
+    const dSmall = systemDevelopment(small);
+    const dLarge = systemDevelopment(large);
+    expect(dSmall).toBeLessThan(dLarge);
+    // Calibration-coupled bounds (POP_REF/INDUSTRY_REF): the tiny colony reads clearly
+    // undeveloped, the large system clearly developed.
+    expect(dSmall).toBeLessThan(0.25);
+    expect(dLarge).toBeGreaterThan(0.6);
   });
 
-  it("blends population-fill and industry-fill against fixed geographic potential", () => {
-    // habitablePotentialPop = (10 / 1) × 20 = 200; pop 100 → popFill 0.5.
-    // ore: 4 built extractors staffed by pop 100 (demand 40, labourFulfil 1) → used 4.
-    // industryPotential = slots(10×1) + generalSpace(20) = 30 → industryFill 4/30.
-    // development = 0.5·0.5 + 0.5·(4/30).
-    const sys = devInput({
-      habitableSpace: 10,
-      generalSpace: 20,
-      slotCap: makeResourceVector({ ore: 10 }),
-      population: 100,
-      buildings: { ore: 4 },
-    });
-    expect(systemDevelopment(sys)).toBeCloseTo(0.5 * 0.5 + 0.5 * (4 / 30), 5);
-  });
-
-  it("rises with population (more people, more settled and more staffed)", () => {
-    const base = {
-      habitableSpace: 10,
-      generalSpace: 20,
-      slotCap: makeResourceVector({ ore: 10 }),
-      buildings: { ore: 4 },
-    };
-    const sparse = systemDevelopment(devInput({ ...base, population: 20 }));
-    const dense = systemDevelopment(devInput({ ...base, population: 100 }));
+  it("rises with population (absolute — more people, more developed)", () => {
+    const base = { buildings: {}, habitableSpace: 20 };
+    const sparse = systemDevelopment(devInput({ ...base, population: 50 }));
+    const dense = systemDevelopment(devInput({ ...base, population: 400 }));
     expect(dense).toBeGreaterThan(sparse);
   });
 
-  it("counts industry by what is STAFFED, not what is built (idle capacity reads low)", () => {
-    // Barren (no habitable land) so the pop term drops out and industry carries the whole
-    // reading — isolating the used-vs-built question. Both systems have 4 built ore extractors
-    // over 10 slots; the only difference is whether the population can staff them.
-    // demand = 4 × 10 = 40.
-    const built = {
-      slotCap: makeResourceVector({ ore: 10 }),
-      buildings: { ore: 4 },
-    };
-    // pop 100 → labourFulfil 1 → used 4 → industryFill 4/10 = 0.4.
-    const staffed = systemDevelopment(devInput({ ...built, population: 100 }));
-    // pop 20 → labourFulfil 0.5 → used 2 → industryFill 2/10 = 0.2.
-    const idle = systemDevelopment(devInput({ ...built, population: 20 }));
-    expect(staffed).toBeCloseTo(0.4, 5);
-    expect(idle).toBeCloseTo(0.2, 5);
+  it("rises with staffed industry (absolute — more built-and-worked industry, more developed)", () => {
+    const base = { population: 500, habitableSpace: 100 }; // ample labour to staff either build
+    const light = systemDevelopment(devInput({ ...base, buildings: { ore: 2 } }));
+    const heavy = systemDevelopment(devInput({ ...base, buildings: { ore: 8 } }));
+    expect(heavy).toBeGreaterThan(light);
+  });
+
+  it("counts industry by what is STAFFED, not what is built (barren isolates it)", () => {
+    // Barren (no habitable land) drops the pop term, so development is industry alone — isolating
+    // the used-vs-built question. Same 10 built ore extractors; only staffing differs.
+    // labourDemand = 10 × 10 = 100.
+    const built = { buildings: { ore: 10 }, habitableSpace: 0 };
+    const staffed = systemDevelopment(devInput({ ...built, population: 100 })); // staffing 1 → used 10
+    const idle = systemDevelopment(devInput({ ...built, population: 30 })); //    staffing 0.3 → used 3
+    expect(staffed).toBeGreaterThan(idle);
   });
 
   it("does not inflate when housing is built ahead of population (housing-immune)", () => {
-    const base = {
-      habitableSpace: 10,
-      generalSpace: 20,
-      slotCap: makeResourceVector({ ore: 10 }),
-      population: 50,
-    };
+    const base = { population: 50, habitableSpace: 20 };
     const withoutHousing = systemDevelopment(devInput({ ...base, buildings: {} }));
-    // 5 empty housing levels (popCap 100) but population still 50.
     const withHousing = systemDevelopment(devInput({ ...base, buildings: { housing: 5 } }));
     expect(withHousing).toBe(withoutHousing);
   });
 
-  it("stays within [0,1] even when over-built and over-populated", () => {
-    const sys = devInput({
-      habitableSpace: 10, // potential pop 200
-      generalSpace: 20,
-      slotCap: makeResourceVector({ ore: 10 }),
-      population: 5000, // far past the ceiling → popFill clamps to 1
-      buildings: { ore: 40 }, // far past the 10 slots → industryFill clamps to 1
-    });
-    const dev = systemDevelopment(sys);
+  it("reads a barren system on its industry alone (no habitable land)", () => {
+    // No habitable land → the pop term is dropped; a built-and-staffed extraction colony still
+    // reads developed via industry, and an empty barren system reads 0.
+    const worked = systemDevelopment(devInput({ buildings: { ore: 6 }, population: 100, habitableSpace: 0 }));
+    const empty = systemDevelopment(devInput({ buildings: {}, population: 100, habitableSpace: 0 }));
+    expect(worked).toBeGreaterThan(empty);
+    expect(empty).toBe(0);
+  });
+
+  it("stays within [0,1] even when massively over-populated and over-built", () => {
+    const dev = systemDevelopment(devInput({ buildings: { ore: 500 }, population: 100_000, habitableSpace: 500 }));
     expect(dev).toBeGreaterThanOrEqual(0);
     expect(dev).toBeLessThanOrEqual(1);
   });
