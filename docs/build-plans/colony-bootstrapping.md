@@ -42,38 +42,40 @@ mode as the visual sanity-check on the new stat.
 
 ### 1. Per-system development stat (new primitive)
 
-- New pure function `systemDevelopment(system): number` → `0..1` (0 = raw frontier, 1 = maxed-out). Home in
-  `lib/engine/` (a small new `development.ts`, or alongside `colonisation-value.ts`).
-- **Formula (decided): a weighted blend of population-fill and industry-fill, each measured against the
-  system's own physical potential.** Housing is deliberately **excluded** from both terms, so a colony with
-  housing built ahead of its population still reads *undeveloped* (defuses the housing-built-ahead trap —
-  popCap 320 / pop 53 reads low, not high).
+- New pure function `systemDevelopment(system): number` → `0..1` (0 = raw frontier, ~1 = maxed-out). Home in
+  `lib/engine/development.ts`.
+- **Formula (built): an ABSOLUTE magnitude — how much a system has actually built and worked —
+  soft-saturated against a FIXED reference, NOT a fill fraction of the system's own potential.** This follows
+  how EU4 / EU5 (Project Caesar) / Victoria 3 all quantify development: magnitude and fill are *separate*
+  signals, and development is always the absolute one; a self-normalised fill makes a tiny "full" colony read
+  as developed (the naïve bug this replaced). Housing is excluded from both terms, so shells built ahead of
+  population never inflate the reading.
 
   ```
-  popFill      = clamp(population / habitablePotentialPop, 0, 1)   // habitablePotentialPop = (habitableSpace / spaceCostOfHousing) × POP_CENTRE_DENSITY  (geography-fixed ceiling)
-  industryFill = clamp(builtIndustry / industryPotential, 0, 1)    // built productive/extraction levels vs the space/slots they could fill
-  development  = w_pop · popFill  +  w_ind · industryFill          // w_pop + w_ind = 1; default 0.5 / 0.5, per-doctrine, tuned in PR4
+  popTerm     = 1 − exp(−population / POP_REF)                     // absolute resident pop, soft-saturated
+  indTerm     = 1 − exp(−staffedIndustry / INDUSTRY_REF)          // absolute STAFFED industry (used, not built), soft-saturated
+  development = w_pop · popTerm  +  w_ind · indTerm                // w_pop + w_ind = 1; default 0.5/0.5, PR4-tuned
   ```
+
+  where `staffedIndustry = (extractorLevels·footprint + non-housing general-space used) × labourFulfil`.
 
 - **Design intents baked in:**
-  - *Honest read (industry counts).* Development reflects productive build-out, not just headcount — matching
-    EU5/Victoria, where development is infrastructure + population.
-  - *"High pop, low development ⇒ industry needed."* A populous world with little industry reads ≈ `w_pop`
-    (the industry half is visibly missing), turning the map into an action signal: hot population + cool
-    development = build industry here.
-  - *Hard to attain (even capitals sit low).* Both terms are built-vs-*generous physical potential*, so full
-    development is rare and aspirational, not a value mature systems trivially hit — a deliberate calibration
-    stance (EU5/Victoria feel), refined in PR4.
-  - *Housing-immune.* `popFill` uses actual `population`, not built housing, so shells built ahead of pop do
-    not inflate the reading.
-- **Barren-world edge case:** when `habitablePotentialPop ≤ 0` (little/no habitable land), drop the pop term
-  and let `industryFill` carry the whole reading (renormalise to the industry weight) — a barren extraction
-  colony's development *is* its extraction build-out.
-- **Finalise at build (wiring, not decisions):** the exact `industryPotential` expression against the
-  substrate-v2 available-space model (`availableSpace` / `generalSpace` + `effectiveSpaceCost`, deposit slots
-  for extraction); and the weights `w_pop` / `w_ind` in `lib/constants/` (per-doctrine-ready, §4 rubric; default
-  50/50, calibration knobs).
-- The map mode (§4 below) is the validation surface — this is why it's in PR1.
+  - *Absolute, not relative.* A small colony has little in absolute terms → reads low → prioritised; a large
+    capital reads high regardless of its own headroom. Soft-saturation is most sensitive at the low end (so it
+    discriminates among colonies) and compresses the top (capitals sit high, not trivially at 1).
+  - *Used, not built.* Industry is discounted by headcount staffing (`labourFulfil`), so idle-because-
+    understaffed capacity is not development — an over-built colony reads low until pop staffs it.
+  - *Housing-immune.* `popTerm` uses actual `population`, not built housing; housing is netted out of industry.
+- **Barren-world edge case:** when there is no habitable land (`habitableSpace ≤ 0`, no population possible),
+  drop the pop term and let `indTerm` carry the whole reading — a barren extraction colony's development *is*
+  its extraction.
+- **Reference constants** (`lib/constants/development.ts`, PR4-tunable): `POP_REF` / `INDUSTRY_REF` are the
+  "fully developed system" magnitudes (grounded in observed sim p90s: homeworld pop ≈ 240 / industry ≈ 22),
+  plus the `w_pop` / `w_ind` weights (per-doctrine-ready, §4 rubric; default 50/50). Potential
+  (slotCap / generalSpace) is deliberately *not* an input — reserved for a future saturation / growth-headroom
+  signal, per the EU5 split of "how developed" (absolute) from "how crowded" (fill).
+- The map mode (§4 below) is the validation surface — this is why it's in PR1. It reads systemDevelopment as
+  an ABSOLUTE 0..1 value (no relative-to-visible-max normalisation).
 - **Distinct from `SystemControl`.** `developed` is a one-way ownership gate; `systemDevelopment` is the
   continuous magnitude the redesign needs (§7.7b).
 
