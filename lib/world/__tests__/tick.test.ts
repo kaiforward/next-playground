@@ -254,9 +254,11 @@ describe("runWorldTick — per-stage wiring", () => {
   });
 
   it("directed-logistics: produces flow events once developed territory is connected", async () => {
-    // A homeworld-only galaxy has no same-faction adjacencies, so no cross-system flows arise
-    // until a faction connects developed territory. Put two developed homeworlds in one faction
-    // and link them directly, so their differing production drives directed-logistics.
+    // A homeworld-only galaxy has no same-faction adjacencies, so no cross-system flows arise until a
+    // faction connects developed territory with a production gradient. Put two developed homeworlds in
+    // one faction, link them, and force an explicit water gradient — strip B's water production so it
+    // structurally imports, and give A a large water buffer so it structurally donates. (The flow math
+    // itself is covered by the directed-logistics processor tests; this asserts the tick wires it.)
     const base = generateWorld({ systemCount: 100, seed: 42 });
     const a = base.factions[0].homeworldId;
     const b = base.factions[1].homeworldId;
@@ -264,6 +266,15 @@ describe("runWorldTick — per-stage wiring", () => {
     const world = {
       ...base,
       systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      // B loses its water extractors AND starts empty of water → a persistent water deficit (it can't
+      // self-refill, so it stays below its days-of-supply anchor and must import).
+      buildings: base.buildings.filter((bl) => !(bl.systemId === b && bl.buildingType === "water")),
+      // A holds a large water reserve → a surplus donor above its anchor.
+      markets: base.markets.map((m) => {
+        if (m.systemId === a && m.goodId === "water") return { ...m, stock: 1_000_000 };
+        if (m.systemId === b && m.goodId === "water") return { ...m, stock: 0 };
+        return m;
+      }),
       connections: [
         ...base.connections,
         { fromId: a, toId: b, fuelCost: 1 },
