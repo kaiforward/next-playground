@@ -239,20 +239,30 @@ Migration is job-aware at both endpoints: colonies fill to their open jobs at th
 stay home by default, and jobless pop drifts toward openings — all reading the one threaded `labourDemand`.
 Unit + sim green; `tsc` clean; `npx next build --webpack` clean.
 
-## PR3 — Colony seeding, pricing & budget fairness
+## PR3 — Colony bootstrapping: seeding, pricing, budget fairness, build gate & the pop pump
 
-**Goal / outcomes:** outcomes 2 & 3 — colonies stop being founded off a drained homeworld, and a founded
-colony can actually *fund its first builds*. Three engine changes, all reading primitives PR1/PR2 already
-shipped (`systemDevelopment`, `labourDemand`, job-aware migration): make the seed **tiny** (so founding is
-cheap and the job-aware loop grows it), **price the pop it does spend** (so founding prefers a job-short
-source over a busy one), and give young colonies a **guaranteed pool slice** (so their first extractor beats
-the homeworld's fifth factory for construction points). **Player-directed founding (§3.5) is deferred** — see
-the note at the end; the pool floor built here is its substrate.
+**Goal / outcomes:** outcomes 2 & 3 — colonies stop being founded off a drained homeworld, fund their first
+builds, and actually *grow* rather than freezing at the seed. What shipped are **five** engine changes, all
+reading primitives PR1/PR2 already shipped (`systemDevelopment`, `labourDemand`, job-aware migration):
 
-The bootstrapping loop this closes: a **tiny cheap seed** lands with one bundled housing level → its 1–2 pops
-staff a first tier-0 basic (PR1's speculative floor proposes it; the **pool floor** funds it) → those jobs
-lift `labourDemand` → PR2's absorptive throttle now lets migration flow in → more pop staffs more industry.
-Each PR3 piece removes one thing that currently breaks that loop before it can turn over.
+1. **Tiny seed (§1)** — `COLONY_SEED_POP` stays **2**; the seed is a spark, not a transfer. It *works* (vs
+   deadlocking) only because of the build gate + pop pump below — validated in the sim.
+2. **Seed-pop opportunity-cost pricing (§2)** — founding prefers a job-short source over a busy one.
+3. **Development-scaled pool fairness floor (§3)** — a young colony's first build beats the homeworld's fifth
+   factory for construction points.
+4. **Decay-consistent build gate / "one unit ahead" (§4)** — a 2-pop colony may build its first extractor even
+   though it can't fully staff it, because decay only sheds a *whole* idle unit. Creates the jobs that let
+   migration flow. **This was the load-bearing unlock** — without it the tiny seed can never create a job.
+5. **Employed-migration leak / pop pump (§5)** — a small always-on fraction of a *saturated* core's staffed
+   workers leaks toward job-rich colonies, so colonisation proceeds after home worlds fill up.
+
+**Player-directed founding (§3.5) is deferred** — the pool floor is its substrate (see the note near the end).
+
+The bootstrapping loop this closes (each piece removes one break): a **tiny cheap seed** lands → the **build
+gate** lets its 2 pops stand up a first extractor (PR1's speculative floor proposes it, the **pool floor**
+funds it) → those jobs lift `labourDemand` → PR2's absorptive throttle opens *and* the **pop pump** supplies
+the pop → the colony grows and ratchets up more industry. The diagnostic story behind why all five are needed
+— and what we deliberately left for PR4 — is in **"Findings & deferred"** below.
 
 ### 1. Seed model C — a tiny seed the job-aware loop grows (§7.1)
 
@@ -330,6 +340,39 @@ legitimate high-value homeworld builds and wastes budget — §7.9).
   floor into it needs dev-refs in the read service and belongs in the end-of-stream "pool-floor readouts" UI
   pass (§5), not here.
 
+### 4. Decay-consistent build gate — "one production-unit ahead of staffing"
+
+The original planner gate refused to build any level it couldn't **fully** staff (`labourNeeded ≤ spareLabour`).
+That is *stricter than decay requires*: infrastructure decay only sheds a level when a **whole** unit is idle
+(`idleLevels = floor(count − used) ≥ 1`, `infrastructure-decay.ts`), so a single partially-staffed unit is
+safe. A 2-pop colony therefore *could* run a 20 %-staffed 10-labour extractor with no decay — the planner just
+wouldn't build it, and the colony deadlocked (no pop to staff → no build → no jobs → no migration inflow).
+
+- In `planFactionBundles`'s per-opportunity fit, replace the spare-labour test with a **total-demand** gate:
+  `labourDemand(site.buildings) + labourNeeded < site.population + prodLabourPerUnit`. Strict `<` keeps the lead
+  unit only *fractionally* idle (< 1 whole unit ⇒ decay-safe) and refuses to build on a pop-0 world; gating
+  total demand (not `max(0)`-floored spare) bounds the lead across opportunities so it can't stack into
+  multi-unit — decaying — under-staffing. For round-number spare (exact multiples of a unit's labour) this
+  reproduces the old result; the one-unit lead only appears for the fractional-pop case colonies live in.
+- Effect: the tiny seed can stand up its first extractor, whose jobs then open the absorptive cap and pull
+  migration. **This is the load-bearing unlock** — the other four pieces are inert without it.
+
+### 5. Employed-migration leak — the pop pump (relaxes the PR2 source cap)
+
+PR2 let *only spare (idle) labour* migrate (`employedGradientThreshold` unreachable). But home worlds saturate
+to ~0 spare early (the build planner employs their pop), so migration to colonies stalls the moment colonies
+have jobs to receive it. Add a small **always-on leak** of *staffed* workers toward strongly-attractive
+destinations:
+
+- `MigrationFlowParams` gains `employedLeakFraction`; `MIGRATION_PARAMS.employedLeakFraction = 0.02`
+  (coarse). In `migrationFlow`, below `employedGradientThreshold` the employed pool is drawable at
+  `employedLeakFraction × employed` (instead of 0); above the threshold the whole pool still unlocks (the
+  future player speed-dial).
+- Effect: a saturated core still feeds job-rich colonies a steady 2 % trickle → colonies grow past the seed.
+  This is what turns the *tiny seed* into a working "seed + migration grows it" model (§7.1's intent). Existing
+  PR2 source-cap tests set `employedLeakFraction: 0` to preserve their spare-only intent; a new test covers the
+  leak.
+
 ### Deferred — player-directed founding (§3.5 / §7.8)
 
 Founding a colony by hand needs a **player seat**, which is not built (the viewpoint is the whole galaxy;
@@ -350,22 +393,62 @@ toggle) once the seat exists. Nothing here forecloses it.
   exactly; unspent reserve funds the general queue (no waste); a project's total absorption this pulse never
   exceeds `cap` across both passes; `floorShare` weans to 0 at `dev = FLOOR_DEV_KNEE`.
 - **Unit (`expansion.test.ts`):** `COLONY_SEED_POP` is small — a guard against it silently regrowing.
-- **Sim (real tick, via `summarizeColonisation`):** `colony.populatedButNoIndustry` drops and
-  `colony.withTier0` / `withTier1Plus` rise (colonies build — outcome 1/2); `queue.colonyMeanProgress` rises
-  (the floor actually funds them — outcome 3); `homeworld.totalPopulation` is not over-drained and faction
-  **total** population grows rather than being shuffled into idle colonies (seed model C + pricing — outcome
-  2); `detectPingPong` does not worsen.
+- **Unit (`directed-build.test.ts`):** a 2-pop developed system builds exactly **one** first extractor (one
+  unit ahead of full staffing); the strict `<` refuses a second level and refuses to build on a pop-0 world.
+- **Unit (`migration.test.ts`):** with `employedLeakFraction > 0` a fully-staffed source (spare 0) sends a
+  small fraction of its staffed workers to an attractive destination; with `0` it sends nobody.
+- **Sim (real tick):** colony population **grows past the seed** (probe: mean 2 → ~7 over ~500 ticks, all
+  colonies building), `colony.withTier0` rises, `colony.populatedButNoIndustry` drops, and the source is not
+  over-drained (home worlds lose *less* pop than with a fat seed); `detectPingPong` does not worsen.
+
+### Findings & deferred to PR4
+
+This PR's real output was **diagnosis**. What we confirmed, and what we deliberately left for PR4:
+
+- **The tiny seed alone deadlocks** — 2 pop can't staff a 10-labour extractor, and PR2's job-gated migration
+  can't rescue a colony with no jobs. The fix needed the build gate (§4) *and* the pop pump (§5) together; with
+  both, the tiny seed works. Kept the tiny seed (it drains the source less than a fat one).
+- **The −6/−7 % galaxy pop decline is homeworld-driven, not colony-driven** — home worlds accumulate unrest
+  (~0.09 → ~0.26) from a chronic higher-tier goods deficit; colonies are unhappy too but far too small to move
+  the total. **So the galaxy-total-pop metric is a bad yardstick for colony work — PR4 must judge colonies on
+  colony-specific metrics** (`summarizeColonisation`, colony pop trajectory), not the total.
+- **World-gen seeds NO tier-1 industry anywhere (a bug, not calibration).** `industry-seed.ts` places tier-1
+  factories at fractional counts (~0.1–0.9 levels) — the staffing-consistency step scales all industry down to
+  fit a deliberately-under-seeded housing budget, and step 3c's `Math.floor` then rounds every tier-1 to **0**
+  (extractors survive as larger counts). Consequences: (a) the galaxy starts extraction-only → the higher-tier
+  deficit that drives the decline; (b) housing is sized for the *pre-floor* labour (incl. the deleted tier-1),
+  so `popCap ≫ post-floor labourDemand` → the large **early homeworld unemployment** (≈2200 spare at t≈100)
+  that the build planner then slowly re-employs. **Fix direction:** reserve labour/space for whole-level
+  manufacturing (e.g. seed the dominant tier-1 family as ≥1 whole level) *before* extractors consume the
+  budget, rather than placing extractors-first and flooring the remainder. **A distinct world-gen fix — do it
+  first in PR4 so the decline reading is un-confounded.**
+- **Colony growth is slow** (mean ~7 of ~130 cap over 500 ticks). Acceptable as "slow colonisation" for now;
+  the speed is a value-tuning question (seed / `employedLeakFraction` / build-gate lead / growth rate).
+- **Development-scaled unrest sensitivity** (frontier tolerates scarcity, hubs don't) — a coherent idea raised
+  for the decline, but the decline concentrates on high-development home worlds, so the seeding/supply lever is
+  the bigger one. Consider in PR4; S3 already does the "young systems demand less" half.
 
 ### Done when
 
 The four success criteria all trend correctly in the sim (coarse health bar), unit + sim green, `tsc` clean,
-`npx next build --webpack` clean. Calibrating the new coefficients (`COLONY_SEED_POP`,
-`SEED_POP_COST_WEIGHT`, `POOL_FLOOR_BASE`, `FLOOR_DEV_KNEE`) to hit all four *simultaneously* is PR4 — PR3
-lands the mechanisms at coarse first-cut values.
+`npx next build --webpack` clean. **Shipped at coarse first-cut values; final coefficient tuning is PR4.**
 
-## PR4 — Calibration *(outline — detail JIT)*
+## PR4 — Calibration + seeding fix *(outline — detail JIT)*
 
-- Tune coefficients (development blend, speculative floor size, seed-pop weight, pool-floor generosity,
-  migration weights + throttle) against the sim to hit all four success criteria simultaneously. Add a sim
-  metric when a symptom hides in aggregate (e.g. local-vs-import share, colony pop stability/variance). Coarse
-  health bar per the calibration convention — precision tuning is perishable and deferred.
+Sequenced deliberately so the sim readings aren't confounded (see PR3 "Findings"):
+
+1. **Fix the tier-1 seeding bug FIRST** (`industry-seed.ts`) — reserve labour/space for whole-level
+   manufacturing before extractors consume the budget, so the galaxy seeds with a manufacturing base instead of
+   extraction-only. This removes the chronic higher-tier deficit *and* the early homeworld unemployment, so the
+   pop-decline signal becomes an honest calibration target rather than a bug artifact. Re-measure the decline
+   after this lands.
+2. **Judge colonies on colony-specific metrics** — extend `summarizeColonisation` / the probe (colony pop
+   trajectory + variance, colony industry breadth, local-vs-import share), NOT the galaxy pop total.
+3. **Tune the coarse coefficients** together: `COLONY_SEED_POP`, `SEED_POP_COST_WEIGHT`, `POOL_FLOOR_BASE`,
+   `FLOOR_DEV_KNEE`, `employedLeakFraction`, the build-gate lead, `DIRECTED_BUILD.SPECULATIVE_FLOOR`, migration
+   weights, and the growth/decline rates — to hit all four success criteria simultaneously (colonies form,
+   build sensibly, fund steadily, grow at a reasonable pace without over-draining the core).
+4. **Consider a development-scaled unrest sensitivity** (frontier tolerates scarcity, hubs don't) if the
+   decline persists after (1) — but the seeding fix is expected to be the bigger lever.
+
+Coarse health bar per the calibration convention — precision tuning is perishable and deferred.

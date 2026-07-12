@@ -1106,6 +1106,21 @@ describe("planFactionBuilds: develop gate", () => {
     const plans = planFactionBuilds([site], () => 1, DEV_REFS);
     expect(plans.some((b) => b.buildingType === HOUSING_TYPE)).toBe(true);
   });
+
+  it("builds a first extractor ONE unit ahead of full staffing (the colony-bootstrap unlock)", () => {
+    // pop 2 cannot FULLY staff a 10-labour food extractor, but decay only sheds a WHOLE idle unit, so
+    // the planner may still commit the first level — creating the jobs that then pull migration. Without
+    // this a tiny colony deadlocks (no pop to staff → no build → no jobs → no inflow).
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const site: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 2, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+    };
+    const builds = planFactionBuilds([site], rc, DEV_REFS);
+    const food = builds.find((b) => b.systemId === "A" && b.buildingType === "food");
+    expect(food?.count).toBe(1); // exactly one level ahead — level 2 would exceed pop + one unit
+  });
 });
 
 describe("hopRouteCost", () => {

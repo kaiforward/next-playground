@@ -7,7 +7,7 @@ import { migrationAttractiveness, migrationFlow } from "../migration";
 // constraint (the cap behaviour is covered explicitly in its own blocks).
 const OFF = 100; // employedGradientThreshold above any achievable |gradient| ⇒ staffed migration off
 const W = { contentment: 1, headroom: 1, jobs: 0 };
-const FLOW = { weights: W, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF };
+const FLOW = { weights: W, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 };
 
 describe("migrationAttractiveness", () => {
   it("rises with contentment (low unrest) and with headroom", () => {
@@ -64,7 +64,7 @@ describe("migrationAttractiveness — jobs term", () => {
 });
 
 describe("migrationFlow — drains a calm overshot source", () => {
-  const PARAMS = { weights: { contentment: 1, headroom: 1, jobs: 0 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF };
+  const PARAMS = { weights: { contentment: 1, headroom: 1, jobs: 0 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 };
   it("pushes population out of an overshot, CALM source to a roomy calm neighbour", () => {
     // Both unrest 0. Source is overshot (1500/1000), dest is roomy (100/1000) with open jobs.
     const source = { unrest: 0, population: 1500, popCap: 1000, labourDemand: 0 };
@@ -109,7 +109,7 @@ describe("migrationFlow", () => {
 });
 
 describe("migrationFlow — destination absorptive throttle", () => {
-  const JFLOW = { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF };
+  const JFLOW = { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 };
   it("caps a flood at the destination's open jobs (labourDemand − pop)", () => {
     const source = { unrest: 0.9, population: 5000, popCap: 5000, labourDemand: 0 };    // spare 5000
     const dest = { unrest: 0, population: 100, popCap: 10000, labourDemand: 200 };      // open jobs 100
@@ -126,14 +126,22 @@ describe("migrationFlow — destination absorptive throttle", () => {
 
 describe("migrationFlow — source two-tier draw", () => {
   const W3 = { contentment: 1, headroom: 1, jobs: 1 };
-  const base = { weights: W3, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1 };
+  const base = { weights: W3, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedLeakFraction: 0 };
   // Attractive destination with ample open jobs & housing, so the source-side caps are what's tested.
   const dest = { unrest: 0, population: 100, popCap: 10000, labourDemand: 5000 };
 
-  it("default (unreachable) threshold: a fully-staffed source sends nobody", () => {
+  it("no leak + unreachable threshold: a fully-staffed source sends nobody", () => {
     const source = { unrest: 0.9, population: 1000, popCap: 1000, labourDemand: 1000 }; // spare 0
     const { quantity } = migrationFlow(source, dest, 10, { ...base, employedGradientThreshold: OFF });
     expect(quantity).toBe(0);
+  });
+  it("employed leak: a fully-staffed source sends a small fraction of its staffed workers", () => {
+    // The pop pump — a saturated core (spare 0) still feeds a strongly-attractive colony a trickle.
+    const source = { unrest: 0.9, population: 1000, popCap: 1000, labourDemand: 1000 }; // spare 0, fully staffed
+    const { fromIsA, quantity } = migrationFlow(source, dest, 10, { ...base, employedGradientThreshold: OFF, employedLeakFraction: 0.02 });
+    expect(fromIsA).toBe(true);
+    expect(quantity).toBeGreaterThan(0);              // leak flows despite zero spare labour
+    expect(quantity).toBeLessThanOrEqual(0.02 * 1000); // bounded by the leaked fraction of the staffed pool
   });
   it("default threshold: a source with idle labour sends up to its spare", () => {
     const source = { unrest: 0.9, population: 1000, popCap: 1000, labourDemand: 600 };  // spare 400

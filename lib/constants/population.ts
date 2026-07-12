@@ -42,8 +42,10 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
   maxOutflowFraction: 0.05,
   gradientThreshold: 0.02,
   distanceDecay: 0.1, // per-hop gradient attenuation over the open-edge topology
-  // Above any achievable |gradient| (with these weights the appeal gap tops out ~5), so
-  // staffed workers stay home and only spare labour migrates. The future player speed-dial
-  // lowers this per chosen system, at a cost, to coax staffed workers toward a new frontier.
+  // Above any achievable |gradient| (with these weights the appeal gap tops out ~5), so the full
+  // staffed pool stays home; the future player speed-dial lowers this per chosen system, at a cost.
   employedGradientThreshold: 100,
+  // Small always-on leak of staffed workers toward strongly-attractive colonies — the pop pump that
+  // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Coarse; PR4-calibrated.
+  employedLeakFraction: 0.02,
 };

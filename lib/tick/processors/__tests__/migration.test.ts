@@ -9,7 +9,7 @@ import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources"
 const OFF = 100; // employedGradientThreshold above any achievable |gradient| ⇒ staffed migration off
 const PARAMS = {
   interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
-  flow: { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF },
+  flow: { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 },
 };
 
 // Migration is now a monthly pulse: all edges process on ticks where tick % interval === 0.

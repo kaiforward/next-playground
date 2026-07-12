@@ -614,13 +614,14 @@ function planFactionBundles(
     // used to convert served demand into produced output when decrementing the deficit.
     const perUnit = (OUTPUT_PER_UNIT[opp.goodId] ?? 0) * familyAnchorBuff(site.buildings, opp.goodId);
 
-    // Spare-LABOUR gate: a site may add only the production (+ any co-built academies) its
-    // already-resident population can staff. Population is a single undifferentiated pool that
-    // staffs ALL labour (unskilled + skill1 + skill2 heads) — skill1/skill2 are academy-licensed
-    // CEILINGS on how much of that pool may work skilled roles, not separate head pools. Housing
-    // built this cycle adds no labour now — population fills it over later ticks — so industry
-    // follows the people who already live there, never population that doesn't yet exist.
-    const spareLabour = Math.max(0, site.population - labourDemand(site.buildings));
+    // Labour gate: a site may build up to ONE production-unit AHEAD of what its resident population
+    // fully staffs. Population is a single undifferentiated pool staffing ALL labour (unskilled +
+    // skill1 + skill2 heads); skill1/skill2 are academy-licensed ceilings on that pool, not separate
+    // head pools. The one-unit lead is decay-safe — infrastructure decay only sheds a level when a
+    // WHOLE unit is idle (floor(count − used) ≥ 1, see infrastructure-decay.ts) — and it is what lets a
+    // small colony stand up its FIRST extractor (whose jobs then pull migration) instead of deadlocking
+    // on a full-staffing gate. Housing built this cycle adds no labour now — industry follows the
+    // people already resident, never population that doesn't yet exist.
     const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
     // Tier-0 extractors sit on dedicated deposit slots, not general space (mirrors generalSpaceUsed).
     const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
@@ -659,7 +660,13 @@ function planFactionBundles(
         schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
         institutes * unskilledPerUnit(RESEARCH_INSTITUTE_TYPE) +
         (complexType ? complexLevels * unskilledPerUnit(complexType) : 0);
-      const fits = spaceTotal <= remainingGeneral && labourNeeded <= spareLabour;
+      // Total labour demand after this build stays STRICTLY within one production-unit of the
+      // population, so the lead unit is only ever fractionally idle (< 1 whole unit ⇒ decay-safe; the
+      // strict `<` excludes the exact-boundary case that would leave a whole unit idle, and refuses to
+      // build at all on a pop-0 world). Gating TOTAL demand — not a max(0)-floored spare — bounds the
+      // lead across opportunities so it can't stack into multi-unit under-staffing.
+      const fits = spaceTotal <= remainingGeneral &&
+        labourDemand(site.buildings) + labourNeeded < site.population + prodLabourPerUnit;
       return { fits, schools, institutes, complexType, complexLevels };
     };
 
