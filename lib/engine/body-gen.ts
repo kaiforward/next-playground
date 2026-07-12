@@ -16,6 +16,7 @@ import type { GeneratedTrait } from "./trait-gen";
 import type { RNG } from "./universe-gen";
 import { weightedPick, randInt } from "./universe-gen";
 import { allocateIndustry } from "@/lib/engine/industry-seed";
+import { depositGradeVector } from "@/lib/engine/deposit-grade";
 import { partitionBody, rollQualityBand } from "./substrate-space";
 
 export interface GeneratedBody {
@@ -191,6 +192,8 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     generalSpace,
     habitableSpace,
     slotCap,
-    yieldMult: allocation.yieldMult,
+    // Deposit grade is a pure property of the ground — the fully-worked mean quality of the field —
+    // independent of how much industry the seed placed, so it stays stable as the system develops.
+    yieldMult: depositGradeVector(bodies),
   };
 }
