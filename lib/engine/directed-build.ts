@@ -9,7 +9,8 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
-import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
+import { systemDevelopment } from "@/lib/engine/development";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
@@ -287,6 +288,25 @@ export function buildableOutput(sys: BuildSystemState, goodId: string): number {
 }
 
 /**
+ * The additional local production an undeveloped system should stand up as a self-supply FLOOR of a
+ * basic it has a deposit for, beyond what reactive builds already add (§3.2 / §7.7). The floor is
+ * `(1 − systemDevelopment) × SPECULATIVE_FLOOR × localDemand` — strongest on a raw colony, fading to
+ * nothing as it matures — netted against the good's current local production and the
+ * `structuralResidual` (the flow-aware uncovered demand already queued for local build). Zero for a
+ * non-basic, a good with no local deposit or demand, a matured system, or when reactive builds already
+ * reach the floor. Bounded ≤ local demand, so it is a floor, never export.
+ */
+export function speculativeFloorExtra(site: BuildSystemState, goodId: string, structuralResidual: number): number {
+  if (!SPECULATIVE_BASICS.includes(goodId)) return 0;
+  if (buildableUnits(site, goodId) < 1) return 0; // no local deposit slots to build into
+  const market = site.goods.find((g) => g.goodId === goodId);
+  if (!market || market.demand <= 0) return 0;
+  const floorFraction = (1 - systemDevelopment(site)) * DIRECTED_BUILD.SPECULATIVE_FLOOR;
+  if (floorFraction <= 0) return 0;
+  return Math.max(0, floorFraction * market.demand - (market.production ?? 0) - structuralResidual);
+}
+
+/**
  * A tier-1+ site is build-eligible this cycle only when every recipe input is either produced
  * locally or held as a surplus at a system REACHABLE FROM THE SITE. The factory's inputs arrive
  * via logistics, which is route-cost bounded, so a surplus that merely exists somewhere in the
@@ -475,7 +495,32 @@ function planFactionBundles(
 
   // ── Pass 2: labour-gated industry (industry follows the resident workforce). ──
   const structural = findStructuralDeficits(systems, routeCost);
-  if (structural.length === 0) return bundles;
+
+  // Remaining structural shortfall per (good → systemId → shortfall).
+  const remainingByGood = new Map<string, Map<string, number>>();
+  for (const d of structural) {
+    const m = remainingByGood.get(d.goodId) ?? new Map<string, number>();
+    m.set(d.systemId, (m.get(d.systemId) ?? 0) + d.rateDeficit);
+    remainingByGood.set(d.goodId, m);
+  }
+
+  // Speculative local-basics floor (§3.2): an undeveloped system stands up a bounded floor of its own
+  // tier-0 extraction of un-repurposable basics it imports, scaled by (1 − development). Added onto the
+  // remaining shortfall so the same opportunity machinery builds and ROI-ranks it (self-supply wins on
+  // route cost); nets against the flow-aware residual so it only tops up what reactive builds miss. This
+  // runs even with no structural deficit — the import-everything case is exactly what it exists to fix.
+  for (const site of working.values()) {
+    for (const goodId of SPECULATIVE_BASICS) {
+      const residual = remainingByGood.get(goodId)?.get(site.systemId) ?? 0;
+      const extra = speculativeFloorExtra(site, goodId, residual);
+      if (extra <= 0) continue;
+      const m = remainingByGood.get(goodId) ?? new Map<string, number>();
+      m.set(site.systemId, (m.get(site.systemId) ?? 0) + extra);
+      remainingByGood.set(goodId, m);
+    }
+  }
+
+  if (remainingByGood.size === 0) return bundles;
 
   // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
   // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
@@ -489,14 +534,6 @@ function planFactionBundles(
         surplusSystemsByGood.set(g.goodId, list);
       }
     }
-  }
-
-  // Remaining structural shortfall per (good → systemId → shortfall).
-  const remainingByGood = new Map<string, Map<string, number>>();
-  for (const d of structural) {
-    const m = remainingByGood.get(d.goodId) ?? new Map<string, number>();
-    m.set(d.systemId, (m.get(d.systemId) ?? 0) + d.rateDeficit);
-    remainingByGood.set(d.goodId, m);
   }
 
   // Precompute every candidate (site, good) opportunity once — the reachable deficit

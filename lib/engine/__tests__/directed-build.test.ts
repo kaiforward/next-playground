@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { findStructuralDeficits, buildableUnits, buildableOutput, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { findStructuralDeficits, buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { systemDevelopment } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -118,6 +119,75 @@ describe("findStructuralDeficits — flow-aware coverage netting (§3.1)", () =>
     const out = findStructuralDeficits([a, c, exporter], reachable);
     expect(out).toHaveLength(2);
     for (const d of out) expect(d.rateDeficit).toBeCloseTo(7, 5);
+  });
+});
+
+describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2)", () => {
+  // A developed colony with a food deposit and food demand, nothing built yet (low development).
+  function foodColony(partial: Partial<BuildSystemState>): BuildSystemState {
+    return sysWith({
+      control: "developed",
+      slotCap: makeResourceVector({ arable: 5 }),
+      generalSpace: 20,
+      habitableSpace: 50, // habitable-potential pop 1000 → low popFill
+      goods: [{ goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 }],
+      ...partial,
+    });
+  }
+
+  it("wants a local floor of (1 − development) × SPECULATIVE_FLOOR × demand when imports cover it", () => {
+    const site = foodColony({ population: 100 });
+    const expected = (1 - systemDevelopment(site)) * DIRECTED_BUILD.SPECULATIVE_FLOOR * 10;
+    expect(expected).toBeGreaterThan(0);
+    expect(speculativeFloorExtra(site, "food", 0)).toBeCloseTo(expected, 5);
+  });
+
+  it("scales down as the system develops", () => {
+    const young = foodColony({ population: 100, buildings: {} });
+    // More people (fills housing) + built-and-staffed non-food industry ⇒ higher development.
+    const mature = foodColony({
+      population: 1000,
+      slotCap: makeResourceVector({ arable: 5, ore: 5 }),
+      buildings: { ore: 4 },
+    });
+    expect(systemDevelopment(mature)).toBeGreaterThan(systemDevelopment(young));
+    expect(speculativeFloorExtra(mature, "food", 0)).toBeLessThan(speculativeFloorExtra(young, "food", 0));
+  });
+
+  it("is zero for a basic the system has no local deposit for", () => {
+    const noDeposit = foodColony({ population: 100, slotCap: emptyResourceVector() });
+    expect(speculativeFloorExtra(noDeposit, "food", 0)).toBe(0);
+  });
+
+  it("is zero for a non-basic good (specialisation survives)", () => {
+    const site = foodColony({
+      population: 100,
+      slotCap: makeResourceVector({ ore: 5 }),
+      goods: [{ goodId: "metals", stock: 1, targetStock: 10, demand: 10, production: 0 }],
+    });
+    expect(speculativeFloorExtra(site, "metals", 0)).toBe(0);
+  });
+
+  it("is zero when reactive builds already reach the floor", () => {
+    const site = foodColony({ population: 100 });
+    // A structural residual larger than the floor already commits enough local food.
+    expect(speculativeFloorExtra(site, "food", 10)).toBe(0);
+  });
+
+  it("builds a local food floor at an undeveloped colony even when a reachable exporter covers demand", () => {
+    const colony = sysWith({
+      systemId: "A", control: "developed", population: 100,
+      slotCap: makeResourceVector({ arable: 5 }), generalSpace: 50, habitableSpace: 50,
+      buildings: {}, goods: [{ goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 }],
+    });
+    const exporter = sysWith({
+      systemId: "B", control: "developed", population: 100,
+      slotCap: emptyResourceVector(), buildings: { food: 10 },
+      goods: [{ goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30 }],
+    });
+    // Flow-aware cancellation covers A's deficit (B's spare 26 ≥ 10), yet the nudge still stands up local food.
+    const builds = planFactionBuilds([colony, exporter], reachable);
+    expect(countFor(builds, "A", "food")).toBeGreaterThanOrEqual(1);
   });
 });
 
