@@ -1121,6 +1121,21 @@ describe("planFactionBuilds: develop gate", () => {
     const food = builds.find((b) => b.systemId === "A" && b.buildingType === "food");
     expect(food?.count).toBe(1); // exactly one level ahead — level 2 would exceed pop + one unit
   });
+
+  it("refuses to build the first extractor on a pop-0 world (the strict `<` boundary)", () => {
+    // The one-unit lead is a STRICT bound: total demand must stay < pop + one unit. On a pop-0 world
+    // that is `0 + 10 < 0 + 10` → false, so nothing is built — a whole idle unit is never committed
+    // (it would decay). This pins the strict `<`: with a non-strict `<=` the gate would pass (10 <= 10)
+    // and the planner would stand up industry on an unpopulated world. Same fixture as above, pop 0.
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const site: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 0, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+    };
+    const builds = planFactionBuilds([site], rc, DEV_REFS);
+    expect(builds.find((b) => b.systemId === "A" && b.buildingType === "food")).toBeUndefined();
+  });
 });
 
 describe("hopRouteCost", () => {
