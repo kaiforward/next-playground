@@ -90,6 +90,37 @@ describe("findStructuralDeficits", () => {
   });
 });
 
+describe("findStructuralDeficits — flow-aware coverage netting (§3.1)", () => {
+  it("leaves a residual structural deficit when a reachable exporter only partly covers demand", () => {
+    // A needs 10/tick, produces none. B exports a spare rate of only 3 (prod 7 − demand 4).
+    // coveredFraction = min(1, 3/10) = 0.3 → residual = 10 × 0.7 = 7 is still structural (build locally).
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
+    const partialExporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 7 });
+    const out = findStructuralDeficits([deficit, partialExporter], reachable);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ systemId: "A", goodId: "food" });
+    expect(out[0].rateDeficit).toBeCloseTo(7, 5);
+  });
+
+  it("cancels the deficit entirely when the exporter's spare rate fully covers it", () => {
+    // B's spare rate 16 (prod 20 − demand 4) ≥ A's 10 deficit → coveredFraction 1 → no residual.
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
+    const ampleExporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 20 });
+    expect(findStructuralDeficits([deficit, ampleExporter], reachable)).toHaveLength(0);
+  });
+
+  it("nets one exporter's spare across competing consumers (no double-coverage)", () => {
+    // Two colonies each need 10; one exporter has spare rate 6. The 6 is shared across the 20 of total
+    // reachable demand — coveredFraction = 6/20 = 0.3 — so each keeps a 7 residual (not each fully covered).
+    const a = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
+    const c = buildSys("C", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
+    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 10 });
+    const out = findStructuralDeficits([a, c, exporter], reachable);
+    expect(out).toHaveLength(2);
+    for (const d of out) expect(d.rateDeficit).toBeCloseTo(7, 5);
+  });
+});
+
 // A tier-0 good (food → arable) with deposit slots; sys has space but partial build.
 function tier0Sys(builtFood: number, foodSlots: number): BuildSystemState {
   const slotCap = emptyResourceVector();

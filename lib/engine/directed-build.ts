@@ -164,42 +164,69 @@ export interface StructuralDeficit {
 }
 
 /**
- * Find rate deficits (production < demand) that logistics cannot serve because no reachable surplus
- * of the good exists. A good's build target is its RATE deficit (demand − production), not a
- * days-of-supply stock shortfall: capacity is built to meet the flow (docs/planned/economy-demand-driven-model.md
- * §2), so a full stock buffer does not cancel a structural shortfall. A self-supplier (production ≥
- * demand) has no rate deficit and is skipped. The reachable-surplus exclusion is a rate EXPORTER
- * (production > demand) — a sustainable producer whose surplus flow logistics can carry — not a
- * transient stock pile: a neighbour merely holding (and draining) stock is no reason to forgo a
- * system's own capacity, and logistics still ships that stock while the capacity comes up. Building
- * to serve one's own demand (self = cheapest route) unless a producer already serves it.
+ * Find the rate deficits (production < demand) reachable supply cannot cover, netting the coverage
+ * FLOW rather than testing mere existence (docs/planned/economy-colony-bootstrapping.md §3.1). A
+ * good's build target is its RATE deficit (demand − production), not a days-of-supply stock shortfall:
+ * capacity is built to meet the flow (docs/planned/economy-demand-driven-model.md §2), so a full
+ * stock buffer does not cancel a structural shortfall. A self-supplier (production ≥ demand) has no
+ * rate deficit and is skipped.
+ *
+ * Cancellation is flow-aware. An exporter's spare is its sustainable export RATE `production − demand`
+ * (not a stock pile — a neighbour merely holding and draining stock has non-positive spare, so it never
+ * cancels a deficit; logistics still ships that transient stock while local capacity comes up). Per
+ * good, the reachable exporters' total spare is netted across all reachable deficits at once —
+ * `coveredFraction = min(1, Σ spare / Σ reachable-deficit)` (first cut per §7.6) — so one exporter's
+ * spare cannot fully cover two competing colonies. Each reachable deficit's residual
+ * `rateDeficit × (1 − coveredFraction)` stays structural → buildable locally; a deficit with no
+ * reachable exporter stays fully structural. Building serves one's own demand (self = cheapest route)
+ * for whatever reachable supply cannot actually deliver.
+ *
+ * O(goods · systems) for the spare/deficit sums plus the same per-deficit reachability scan the
+ * existence test already did — cheap enough for the per-pulse planner.
  */
 export function findStructuralDeficits(
   systems: BuildSystemState[],
   routeCost: RouteCost,
 ): StructuralDeficit[] {
   const deficits: Array<{ systemId: string; goodId: string; rateDeficit: number; demand: number }> = [];
-  const exporterSystemsByGood = new Map<string, string[]>();
+  // Reachable rate exporters per good, each carrying its spare export rate (production − demand > 0).
+  const exportersByGood = new Map<string, Array<{ systemId: string; spare: number }>>();
+  const spareByGood = new Map<string, number>();
 
   for (const s of systems) {
     for (const g of s.goods) {
-      const production = g.production ?? 0;
-      const rateDeficit = g.demand - production;
-      if (rateDeficit > 0) {
-        deficits.push({ systemId: s.systemId, goodId: g.goodId, rateDeficit, demand: g.demand });
-      } else if (production > g.demand) {
-        const list = exporterSystemsByGood.get(g.goodId) ?? [];
-        list.push(s.systemId);
-        exporterSystemsByGood.set(g.goodId, list);
+      const spare = (g.production ?? 0) - g.demand;
+      if (spare < 0) {
+        deficits.push({ systemId: s.systemId, goodId: g.goodId, rateDeficit: -spare, demand: g.demand });
+      } else if (spare > 0) {
+        const list = exportersByGood.get(g.goodId) ?? [];
+        list.push({ systemId: s.systemId, spare });
+        exportersByGood.set(g.goodId, list);
+        spareByGood.set(g.goodId, (spareByGood.get(g.goodId) ?? 0) + spare);
       }
     }
   }
 
+  // First pass: mark which deficits have any reachable exporter, and sum the reachable demand per good
+  // — the denominator the shared spare is netted across.
+  const reachableDeficitByGood = new Map<string, number>();
+  const flagged = deficits.map((d) => {
+    const reachable = (exportersByGood.get(d.goodId) ?? []).some((e) => routeCost(e.systemId, d.systemId) !== null);
+    if (reachable) reachableDeficitByGood.set(d.goodId, (reachableDeficitByGood.get(d.goodId) ?? 0) + d.rateDeficit);
+    return { d, reachable };
+  });
+
+  // Second pass: an unreachable deficit is fully structural; a reachable one keeps its uncovered residual.
   const structural: StructuralDeficit[] = [];
-  for (const d of deficits) {
-    const exporters = exporterSystemsByGood.get(d.goodId) ?? [];
-    const reachableExporter = exporters.some((su) => routeCost(su, d.systemId) !== null);
-    if (!reachableExporter) structural.push(d);
+  for (const { d, reachable } of flagged) {
+    if (!reachable) {
+      structural.push(d);
+      continue;
+    }
+    const reachableDeficit = reachableDeficitByGood.get(d.goodId) ?? 0;
+    const coveredFraction = reachableDeficit > 0 ? Math.min(1, (spareByGood.get(d.goodId) ?? 0) / reachableDeficit) : 0;
+    const residual = d.rateDeficit * (1 - coveredFraction);
+    if (residual > 0) structural.push({ systemId: d.systemId, goodId: d.goodId, rateDeficit: residual, demand: d.demand });
   }
   return structural;
 }
