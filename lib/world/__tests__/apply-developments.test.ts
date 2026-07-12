@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { applyDevelopments } from "@/lib/world/tick";
+import { applyDevelopments, applyBuildingIncreases } from "@/lib/world/tick";
 import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import type { SimSystem } from "@/lib/engine/simulator/types";
-import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
+import type { SystemDevelopment, BuildBuildingUpdate } from "@/lib/tick/world/directed-build-world";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { housingPopCap } from "@/lib/engine/industry";
 
@@ -119,5 +119,45 @@ describe("applyDevelopments", () => {
     expect(c.popCap).toBeGreaterThanOrEqual(c.population); // no popCap≈0 stranded state
     expect(src.population).toBe(475);                       // conserved: 500 − 25
     for (const s of after) expect(Number.isFinite(s.popCap)).toBe(true);
+  });
+});
+
+describe("applyBuildingIncreases — popCap tracks built housing", () => {
+  function developedColony(id: string, housingLevels: number, population: number): SimSystem {
+    const s = makeSystem(id, population);
+    s.control = "developed";
+    s.buildings = { [HOUSING_TYPE]: housingLevels };
+    s.popCap = housingPopCap(s.buildings);
+    return s;
+  }
+
+  it("raises popCap when construction completes a housing level", () => {
+    // The regression this guards: applyBuildingIncreases updated the housing COUNT but left popCap
+    // stale, so a colony could build housing yet never grow into it (popCap welded to its seed).
+    const colony = developedColony("colony", 1, 20); // popCap 20
+    const updates: BuildBuildingUpdate[] = [{ systemId: "colony", buildingType: HOUSING_TYPE, count: 3 }];
+    const after = applyBuildingIncreases([colony], updates);
+    const c = after.find((s) => s.id === "colony")!;
+    expect(c.buildings[HOUSING_TYPE]).toBe(3);
+    expect(c.popCap).toBe(housingPopCap({ [HOUSING_TYPE]: 3 })); // 3 × POP_CENTRE_DENSITY, not the stale 20
+  });
+
+  it("leaves popCap untouched for a non-housing build", () => {
+    const colony = developedColony("colony", 5, 50); // popCap 100
+    const before = colony.popCap;
+    const updates: BuildBuildingUpdate[] = [{ systemId: "colony", buildingType: "metals", count: 4 }];
+    const after = applyBuildingIncreases([colony], updates);
+    const c = after.find((s) => s.id === "colony")!;
+    expect(c.buildings["metals"]).toBe(4);
+    expect(c.popCap).toBe(before); // extraction doesn't house anyone
+  });
+
+  it("never lowers popCap (decay owns downward moves)", () => {
+    const colony = developedColony("colony", 2, 30);
+    colony.popCap = 100; // seeded higher than current housing implies
+    const updates: BuildBuildingUpdate[] = [{ systemId: "colony", buildingType: HOUSING_TYPE, count: 2 }];
+    const after = applyBuildingIncreases([colony], updates);
+    const c = after.find((s) => s.id === "colony")!;
+    expect(c.popCap).toBe(100); // max(100, housingPopCap(2)=40)
   });
 });

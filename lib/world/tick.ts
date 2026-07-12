@@ -354,7 +354,7 @@ function patchMarketRowStocks(
   return patched;
 }
 
-function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpdate[]): SimSystem[] {
+export function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpdate[]): SimSystem[] {
   if (updates.length === 0) return systems;
   const bySystem = new Map<string, Map<string, number>>();
   for (const u of updates) {
@@ -367,7 +367,12 @@ function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpda
     if (!byType) return s;
     const buildings = { ...s.buildings };
     for (const [type, count] of byType) buildings[type] = count;
-    return { ...s, buildings };
+    // Completed housing must raise the population cap — popCap tracks built housing (mirrors the
+    // develop-transition seed at applyDevelopments). Without this, a colony can build housing but
+    // never grow into it: popCap welds to its seed level and pop caps there forever. Only recompute
+    // when housing actually changed; other builds don't affect popCap. Never lowers it (decay owns that).
+    const popCap = byType.has(HOUSING_TYPE) ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap;
+    return { ...s, buildings, popCap };
   });
 }
 

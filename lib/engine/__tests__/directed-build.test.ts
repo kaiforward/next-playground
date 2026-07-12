@@ -662,13 +662,34 @@ describe("habitableHousingHeadroom", () => {
 });
 
 describe("plannedHousingUnits", () => {
-  it("paces housing a settle-margin ahead of population", () => {
-    // pop 100, no housing, ample habitable → target popCap = 100 × 1.25 = 125 → 6.25 housing.
+  it("paces housing a settle-margin ahead of population (rounded up to whole levels)", () => {
+    // pop 100, no housing, ample habitable → target popCap = 100 × 1.25 = 125 → 6.25 → ceil 7 levels.
     const units = plannedHousingUnits(sysWith({
       population: 100, buildings: {}, generalSpace: 100, habitableSpace: 100,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
     }));
-    expect(units).toBeCloseTo(125 / 20 - 0); // 6.25
+    expect(units).toBe(Math.ceil(125 / 20)); // 7
+  });
+
+  it("ratchets a small seed colony up by a whole level once occupancy passes the margin", () => {
+    // The colony-bootstrap case: pop 20 filling a 1-level seed (popCap 20). Target popCap = 25 > 20, so a
+    // fraction of a level is wanted — the OLD floor() returned 0 and welded popCap at the seed forever.
+    // It must now round UP to one whole level so popCap can ratchet above the seed.
+    const units = plannedHousingUnits(sysWith({
+      population: 20, buildings: { housing: 1 }, generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }));
+    expect(units).toBe(1);
+  });
+
+  it("builds nothing while population is still below the current cap by more than the margin", () => {
+    // pop 2 in a 5-level colony (popCap 100): target = 2.5 ≪ 100, so there is ample housing headroom
+    // and no premature build.
+    const units = plannedHousingUnits(sysWith({
+      population: 2, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }));
+    expect(units).toBe(0);
   });
 
   it("returns 0 when the system is not fed and calm", () => {
