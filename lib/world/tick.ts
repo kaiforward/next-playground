@@ -25,7 +25,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
-import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS } from "@/lib/constants/population";
+import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -643,6 +643,7 @@ export async function runWorldTick(
     await runMigrationProcessor(migWorld, newTickCtx(), {
       interval: ECONOMY_UPDATE_INTERVAL,
       flow: MIGRATION_PARAMS,
+      delivery: COLONY_DELIVERY_PARAMS,
     });
     systems = migWorld.systems;
     processorsRun.push("migration");
@@ -791,6 +792,8 @@ export async function runWorldTick(
           seedPop: EXPANSION.COLONY_SEED_POP,
           habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
           popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
+          minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
+          employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
         },
       },
     });

@@ -833,6 +833,10 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   habitableFloor: number;
   /** Weight on the seed-pop opportunity cost netted off colony value (COLONISATION.SEED_POP_COST_WEIGHT). */
   popCostWeight: number;
+  /** Settler supply (drawable pop/pulse) a faction must have per hungry colony to open another — the anti-sprawl gate (COLONISATION.MIN_SETTLER_SUPPLY). */
+  minSettlerSupply: number;
+  /** Fraction of a source's staffed workers drawable as settlers (mirrors MIGRATION_PARAMS.employedLeakFraction). */
+  employedLeakFraction: number;
 }
 
 /**
@@ -950,5 +954,24 @@ export function planFactionColonyProposals(
       sourceSystemId: c.sourceSystemId, seedPop, housingLevels, value, work,
     });
   }
-  return proposals;
+
+  // Settler-supply founding gate: a faction only opens new colonies while it can still deliver its
+  // minimum settler supply to each colony it is ALREADY trying to fill (+ each new one). Releasable
+  // settler flow this pulse = idle spare labour + the always-on employed leak, summed over developed
+  // systems; "hungry" absorbers are developed systems still below their housing cap. Founding is
+  // capped to `floor(releasable / minSettlerSupply) − hungry` best-valued candidates, so a faction
+  // fills what it has before it sprawls into colonies it can never populate. `minSettlerSupply ≤ 0`
+  // disables the gate.
+  if (params.minSettlerSupply <= 0 || proposals.length === 0) return proposals;
+  let releasable = 0;
+  let hungry = 0;
+  for (const s of developed) {
+    const ld = labourDemand(s.buildings);
+    const staffed = Math.min(Math.max(0, s.population), Math.max(0, ld));
+    releasable += Math.max(0, s.population - ld) + params.employedLeakFraction * staffed;
+    if (s.population < housingPopCap(s.buildings)) hungry++;
+  }
+  const budget = Math.max(0, Math.floor(releasable / params.minSettlerSupply) - hungry);
+  if (budget >= proposals.length) return proposals;
+  return [...proposals].sort((a, b) => b.value - a.value).slice(0, budget);
 }

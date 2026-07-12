@@ -1,5 +1,6 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { migrationFlow, type MigrationNode } from "@/lib/engine/migration";
+import { allocateColonists } from "@/lib/engine/colonist-delivery";
 import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type {
@@ -29,6 +30,14 @@ export async function runMigrationProcessor(
   const slice: EdgeView[] = edges.slice(start, end);
   if (slice.length === 0) return {};
   const catchUp = catchUpFactor(params.interval);
+
+  // Colonist delivery (targeted, equalising) — runs on the same monthly pulse as the edge sweep, BEFORE
+  // diffusion, so diffusion balances the post-delivery state and colony delivery is the primary flow.
+  // Faction pools of drawable spare are water-filled to raise the emptiest colonies (reaches the frontier
+  // that gradient diffusion never could). Applied first so getNodesForSystems below reads the updated pop.
+  const developed = await world.getDevelopedSystems();
+  const deliveryDeltas = allocateColonists(developed, params.delivery);
+  if (deliveryDeltas.length > 0) await world.applyMigrationDeltas(deliveryDeltas);
 
   const systemIds = new Set<string>();
   for (const e of slice) { systemIds.add(e.aSystemId); systemIds.add(e.bSystemId); }
