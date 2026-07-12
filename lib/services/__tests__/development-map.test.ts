@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
-import { getDevelopmentBySystem } from "@/lib/services/development-map";
+import { getDevelopmentBySystem, developmentRefsForWorld } from "@/lib/services/development-map";
 import { systemDevelopment } from "@/lib/engine/development";
 import type { World } from "@/lib/world/types";
 
@@ -28,11 +28,14 @@ describe("getDevelopmentBySystem", () => {
     const s = w.systems.find((x) => x.id === homeworldId)!;
     const buildings: Record<string, number> = {};
     for (const b of w.buildings) if (b.systemId === homeworldId) buildings[b.buildingType] = b.count;
-    const expected = systemDevelopment({
-      buildings,
-      population: s.population,
-      habitableSpace: s.habitableSpace,
-    });
+    const expected = systemDevelopment(
+      {
+        buildings,
+        population: s.population,
+        habitableSpace: s.habitableSpace,
+      },
+      developmentRefsForWorld(w.systems),
+    );
     const entry = getDevelopmentBySystem().find((e) => e.systemId === homeworldId)!;
     expect(entry.development).toBeCloseTo(expected, 10);
     expect(expected).toBeGreaterThan(0); // a seeded homeworld has built out some development

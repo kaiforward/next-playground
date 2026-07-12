@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { findStructuralDeficits, buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
-import { systemDevelopment } from "@/lib/engine/development";
+import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -15,6 +15,13 @@ import { EXPANSION } from "@/lib/constants/expansion";
 
 /** ore's total per-unit head count (labour.unskilled + skill1 + skill2) — shared across fixtures. */
 const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
+
+/**
+ * A fixed universe-wide development reference for the planner's unit tests. `systemDevelopment` (which
+ * the speculative nudge scales by) reads this instead of deriving it per-galaxy, so these logic tests
+ * stay deterministic; the universe-wide derivation itself is covered in development.test.ts.
+ */
+const DEV_REFS: DevelopmentRefs = { popRef: 150, industryRef: 12 };
 
 function sysWith(partial: Partial<BuildSystemState>): BuildSystemState {
   return {
@@ -129,7 +136,7 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
       control: "developed",
       slotCap: makeResourceVector({ arable: 5 }),
       generalSpace: 20,
-      habitableSpace: 50, // habitable-potential pop 1000 → low popFill
+      habitableSpace: 50, // small habitable land → low development against the universe reference
       goods: [{ goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 }],
       ...partial,
     });
@@ -137,9 +144,9 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
 
   it("wants a local floor of (1 − development) × SPECULATIVE_FLOOR × demand when imports cover it", () => {
     const site = foodColony({ population: 100 });
-    const expected = (1 - systemDevelopment(site)) * DIRECTED_BUILD.SPECULATIVE_FLOOR * 10;
+    const expected = (1 - systemDevelopment(site, DEV_REFS)) * DIRECTED_BUILD.SPECULATIVE_FLOOR * 10;
     expect(expected).toBeGreaterThan(0);
-    expect(speculativeFloorExtra(site, "food", 0)).toBeCloseTo(expected, 5);
+    expect(speculativeFloorExtra(site, "food", 0, DEV_REFS)).toBeCloseTo(expected, 5);
   });
 
   it("scales down as the system develops", () => {
@@ -150,13 +157,13 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
       slotCap: makeResourceVector({ arable: 5, ore: 5 }),
       buildings: { ore: 4 },
     });
-    expect(systemDevelopment(mature)).toBeGreaterThan(systemDevelopment(young));
-    expect(speculativeFloorExtra(mature, "food", 0)).toBeLessThan(speculativeFloorExtra(young, "food", 0));
+    expect(systemDevelopment(mature, DEV_REFS)).toBeGreaterThan(systemDevelopment(young, DEV_REFS));
+    expect(speculativeFloorExtra(mature, "food", 0, DEV_REFS)).toBeLessThan(speculativeFloorExtra(young, "food", 0, DEV_REFS));
   });
 
   it("is zero for a basic the system has no local deposit for", () => {
     const noDeposit = foodColony({ population: 100, slotCap: emptyResourceVector() });
-    expect(speculativeFloorExtra(noDeposit, "food", 0)).toBe(0);
+    expect(speculativeFloorExtra(noDeposit, "food", 0, DEV_REFS)).toBe(0);
   });
 
   it("is zero for a non-basic good (specialisation survives)", () => {
@@ -165,13 +172,13 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
       slotCap: makeResourceVector({ ore: 5 }),
       goods: [{ goodId: "metals", stock: 1, targetStock: 10, demand: 10, production: 0 }],
     });
-    expect(speculativeFloorExtra(site, "metals", 0)).toBe(0);
+    expect(speculativeFloorExtra(site, "metals", 0, DEV_REFS)).toBe(0);
   });
 
   it("is zero when reactive builds already reach the floor", () => {
     const site = foodColony({ population: 100 });
     // A structural residual larger than the floor already commits enough local food.
-    expect(speculativeFloorExtra(site, "food", 10)).toBe(0);
+    expect(speculativeFloorExtra(site, "food", 10, DEV_REFS)).toBe(0);
   });
 
   it("builds a local food floor at an undeveloped colony even when a reachable exporter covers demand", () => {
@@ -186,7 +193,7 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
       goods: [{ goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30 }],
     });
     // Flow-aware cancellation covers A's deficit (B's spare 26 ≥ 10), yet the nudge still stands up local food.
-    const builds = planFactionBuilds([colony, exporter], reachable);
+    const builds = planFactionBuilds([colony, exporter], reachable, DEV_REFS);
     expect(countFor(builds, "A", "food")).toBeGreaterThanOrEqual(1);
   });
 });
@@ -260,7 +267,7 @@ describe("planFactionBuilds", () => {
       buildings: {}, slotCap: makeResourceVector({ arable: 1000 }), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 0, targetStock: TARGET_COVER * 20, demand: 20, production: 0 }],
     };
-    const foodUnits = countFor(planFactionBuilds([sys], rc), "A", "food");
+    const foodUnits = countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "food");
     // Capacity meets the flow, within one whole level.
     expect(foodUnits * OUTPUT_PER_UNIT.food).toBeGreaterThanOrEqual(20 - OUTPUT_PER_UNIT.food);
     expect(foodUnits * OUTPUT_PER_UNIT.food).toBeLessThanOrEqual(20 + OUTPUT_PER_UNIT.food);
@@ -280,7 +287,7 @@ describe("planFactionBuilds", () => {
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 0, targetStock: 1, demand: smallDemand, production: 0 }],
     };
-    expect(countFor(planFactionBuilds([sys], rc), "A", "food")).toBe(1);
+    expect(countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "food")).toBe(1);
   });
 
   it("proposes capacity up to the physical ceilings in one pass (no population-budget throttle)", () => {
@@ -294,7 +301,7 @@ describe("planFactionBuilds", () => {
       buildings: {}, slotCap: makeResourceVector({ ore: 1000 }), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 100000, production: 0 }],
     };
-    const oreUnits = countFor(planFactionBuilds([sys], rc), "A", "ore");
+    const oreUnits = countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "ore");
     expect(oreUnits).toBeGreaterThan(5);                          // a pop×0.05 budget would have capped this at 5
     expect(oreUnits).toBeLessThanOrEqual(100 / oreLabour + 1e-9); // labour ceiling: pop ÷ per-unit labour
   });
@@ -313,7 +320,7 @@ describe("planFactionBuilds", () => {
       slotCap, generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
     };
-    const builds = planFactionBuilds([deficit, builder], () => 1);
+    const builds = planFactionBuilds([deficit, builder], () => 1, DEV_REFS);
     expect(countFor(builds, "B", "food")).toBeGreaterThan(0);
     // Proactive housing accompanies the build (B is fed and calm with habitable land).
     expect(countFor(builds, "B", "housing")).toBeGreaterThan(0);
@@ -337,7 +344,7 @@ describe("planFactionBuilds", () => {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50, goods: [],
     };
-    const builds = planFactionBuilds([deficit, surplus, builder], () => 1);
+    const builds = planFactionBuilds([deficit, surplus, builder], () => 1, DEV_REFS);
     expect(countFor(builds, "B", "food")).toBe(0);
   });
 
@@ -352,13 +359,13 @@ describe("planFactionBuilds", () => {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50, goods: [],
     };
-    expect(countFor(planFactionBuilds([deficit, builderNoInput], () => 1), "B", "metals")).toBe(0);
+    expect(countFor(planFactionBuilds([deficit, builderNoInput], () => 1, DEV_REFS), "B", "metals")).toBe(0);
 
     // Same, but B locally produces ore → the metals factory becomes eligible.
     const builderWithInput: BuildSystemState = {
       ...builderNoInput, buildings: { ore: 5 },
     };
-    expect(countFor(planFactionBuilds([deficit, builderWithInput], () => 1), "B", "metals")).toBeGreaterThan(0);
+    expect(countFor(planFactionBuilds([deficit, builderWithInput], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
   });
 
   it("builds proactive housing (no production) at a fed system with no structural deficits", () => {
@@ -367,7 +374,7 @@ describe("planFactionBuilds", () => {
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
     };
-    const builds = planFactionBuilds([fed], () => 1);
+    const builds = planFactionBuilds([fed], () => 1, DEV_REFS);
     expect(countFor(builds, "A", "housing")).toBeGreaterThan(0);
     expect(builds.every((b) => b.buildingType === "housing")).toBe(true);
   });
@@ -402,7 +409,7 @@ describe("planFactionBuilds", () => {
       goods: [],
     };
 
-    const builds = planFactionBuilds([deficitFood, deficitWater, builder], () => 1);
+    const builds = planFactionBuilds([deficitFood, deficitWater, builder], () => 1, DEV_REFS);
 
     // Both goods must be built at C, requiring at least two greedy iterations.
     expect(countFor(builds, "C", "food")).toBeGreaterThan(0);
@@ -443,12 +450,12 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
     const { deficit, builder, oreSurplus } = scenario();
     // B can reach the deficit A (so it could serve it), but the ore source S is unreachable from B.
     const routeCost: RouteCost = (from, to) => (from === "S" || to === "S" ? null : 1);
-    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], routeCost), "B", "metals")).toBe(0);
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], routeCost, DEV_REFS), "B", "metals")).toBe(0);
   });
 
   it("builds a tier-1+ factory when its input surplus is reachable from the site (not just locally produced)", () => {
     const { deficit, builder, oreSurplus } = scenario();
-    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1), "B", "metals")).toBeGreaterThan(0);
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
   });
 
   it("greenlights the factory when the only input source is a structural producer below the 1.4× margin", () => {
@@ -458,7 +465,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
     // production-throttled exporter can in fact supply (the regression this branch guards against).
     const { deficit, builder, oreSurplus } = scenario();
     oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 30 }];
-    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1), "B", "metals")).toBeGreaterThan(0);
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
   });
 
   it("does not greenlight the factory when the in-band input holder is a non-producer (no phantom source)", () => {
@@ -467,7 +474,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
     // factory is built — mirroring the matcher's re-export guard at the build-planner gate.
     const { deficit, builder, oreSurplus } = scenario();
     oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 0 }];
-    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1), "B", "metals")).toBe(0);
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBe(0);
   });
 });
 
@@ -478,7 +485,7 @@ describe("planFactionBuilds — proactive housing", () => {
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100 }],
     };
-    expect(countFor(planFactionBuilds([starved], () => 1), "A", "housing")).toBe(0);
+    expect(countFor(planFactionBuilds([starved], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
 
   it("does not build housing at an unsettled (high-unrest) system", () => {
@@ -487,7 +494,7 @@ describe("planFactionBuilds — proactive housing", () => {
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
     };
-    expect(countFor(planFactionBuilds([unsettled], () => 1), "A", "housing")).toBe(0);
+    expect(countFor(planFactionBuilds([unsettled], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
 
   it("never builds housing past the habitable cap", () => {
@@ -496,7 +503,7 @@ describe("planFactionBuilds — proactive housing", () => {
       slotCap: emptyResourceVector(), generalSpace: 1000, habitableSpace: 5,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
     };
-    const housing = countFor(planFactionBuilds([sys], () => 1), "A", "housing");
+    const housing = countFor(planFactionBuilds([sys], () => 1, DEV_REFS), "A", "housing");
     expect(housing).toBeGreaterThan(0);
     expect(housing).toBeLessThanOrEqual(5); // habitableSpace 5 ÷ spaceCost 1
   });
@@ -514,7 +521,7 @@ describe("planFactionBuilds — proactive housing", () => {
     };
     const pacedWant = Math.floor(plannedHousingUnits(sys));
     expect(pacedWant).toBeGreaterThan(1); // a genuine multi-level commit, not a trivial one
-    expect(countFor(planFactionBuilds([sys], () => 1), "A", "housing")).toBe(pacedWant);
+    expect(countFor(planFactionBuilds([sys], () => 1, DEV_REFS), "A", "housing")).toBe(pacedWant);
   });
 
   it("does not co-build housing on the industry path (housing comes only from the housing pass)", () => {
@@ -532,7 +539,7 @@ describe("planFactionBuilds — proactive housing", () => {
       slotCap, generalSpace: 50, habitableSpace: 0,
       goods: [],
     };
-    const builds = planFactionBuilds([deficit, builder], () => 1);
+    const builds = planFactionBuilds([deficit, builder], () => 1, DEV_REFS);
     expect(countFor(builds, "B", "food")).toBeGreaterThan(0);
     expect(countFor(builds, "B", "housing")).toBe(0);
   });
@@ -573,7 +580,7 @@ describe("planFactionBuilds performance", () => {
   it("plans a 500-system faction well within the tick budget", () => {
     const systems = makeLargeFaction(500);
     const t0 = performance.now();
-    const builds = planFactionBuilds(systems, () => 1);
+    const builds = planFactionBuilds(systems, () => 1, DEV_REFS);
     const ms = performance.now() - t0;
     // It must actually do the work (not early-exit), and do it fast.
     expect(builds.length).toBeGreaterThan(0);
@@ -591,7 +598,7 @@ describe("planFactionBuilds performance", () => {
       goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 1_000_000, production: 0 }],
     };
     const t0 = performance.now();
-    const oreUnits = countFor(planFactionBuilds([sys], rc), "A", "ore");
+    const oreUnits = countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "ore");
     expect(performance.now() - t0).toBeLessThan(50);
     expect(oreUnits).toBeGreaterThan(0);
     expect(oreUnits).toBeLessThanOrEqual(40 + 1e-9); // labour ceiling: 40×oreLabour ÷ oreLabour
@@ -710,13 +717,13 @@ describe("planFactionBuilds — spare-labour gate", () => {
 
   it("builds no industry when the builder has no spare labour", () => {
     // pop fully absorbed by 4 ore extractors (4 × oreLabour) → spareLabour 0.
-    const builds = planFactionBuilds(deficitAndBuilder(4 * oreLabour, { ore: 4 }), () => 1);
+    const builds = planFactionBuilds(deficitAndBuilder(4 * oreLabour, { ore: 4 }), () => 1, DEV_REFS);
     expect(countFor(builds, "B", "ore")).toBe(0);
   });
 
   it("caps industry at the spare labour the resident population supports", () => {
     // pop = 2× the 4 extractors' labour demand → spareLabour == demand → ≤ demand/oreLabour = 4 new units.
-    const builds = planFactionBuilds(deficitAndBuilder(8 * oreLabour, { ore: 4 }), () => 1);
+    const builds = planFactionBuilds(deficitAndBuilder(8 * oreLabour, { ore: 4 }), () => 1, DEV_REFS);
     const built = countFor(builds, "B", "ore");
     expect(built).toBeGreaterThan(0);
     expect(built).toBeLessThanOrEqual(4 + 1e-9);
@@ -735,7 +742,7 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
       slotCap, generalSpace: 9, habitableSpace: 5,
       goods: [{ goodId: "ore", stock: 50, targetStock: 50, demand: 20 }],
     };
-    expect(planFactionBuilds([atPotential], () => 1)).toHaveLength(0);
+    expect(planFactionBuilds([atPotential], () => 1, DEV_REFS)).toHaveLength(0);
   });
 
   it("does not work deposit slots on a barren, low-habitable world", () => {
@@ -753,7 +760,7 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50 }],
     };
-    expect(countFor(planFactionBuilds([barren, deficit], () => 1), "B", "ore")).toBe(0);
+    expect(countFor(planFactionBuilds([barren, deficit], () => 1, DEV_REFS), "B", "ore")).toBe(0);
   });
 });
 
@@ -832,7 +839,7 @@ describe("academy co-build", () => {
     // reachable electronics deficit. Planner must emit vocational_school + research_institute
     // builds (electronics draws both skill1 and skill2) alongside the electronics build.
     const systems = makeElectronicsDeficitWithCapableSite();
-    const builds = planFactionBuilds(systems, selfAndNeighbourRoute);
+    const builds = planFactionBuilds(systems, selfAndNeighbourRoute, DEV_REFS);
     const byType = new Map<string, number>();
     for (const b of builds) byType.set(b.buildingType, (byType.get(b.buildingType) ?? 0) + b.count);
     expect(byType.get("electronics") ?? 0).toBeGreaterThan(0);
@@ -848,7 +855,7 @@ describe("academy co-build", () => {
 
   it("does not build academies when the deficit good is tier-0 (no skill draw)", () => {
     const systems = makeOreDeficitWithCapableSite();
-    const builds = planFactionBuilds(systems, selfAndNeighbourRoute);
+    const builds = planFactionBuilds(systems, selfAndNeighbourRoute, DEV_REFS);
     expect(countFor(builds, "B", "ore")).toBeGreaterThan(0); // the build actually happens
     expect(builds.some((b) => b.buildingType === VOCATIONAL_SCHOOL_TYPE)).toBe(false);
     expect(builds.some((b) => b.buildingType === RESEARCH_INSTITUTE_TYPE)).toBe(false);
@@ -856,7 +863,7 @@ describe("academy co-build", () => {
 
   it("builds no academy when the existing skill ceiling already covers the build", () => {
     const systems = makeTier1DeficitWithSchoolsAlready(); // skill1Cap already ≥ post-build skill1Demand
-    const builds = planFactionBuilds(systems, selfAndNeighbourRoute);
+    const builds = planFactionBuilds(systems, selfAndNeighbourRoute, DEV_REFS);
     expect(countFor(builds, "B", "metals")).toBeGreaterThan(0); // the build actually happens
     expect(builds.some((b) => b.buildingType === VOCATIONAL_SCHOOL_TYPE)).toBe(false);
 
@@ -956,7 +963,7 @@ function anchoredVsGreenfieldScenario(): BuildSystemState[] {
 
 describe("complex co-build", () => {
   it("routes family production to the site already carrying the complex (the snowball)", () => {
-    const builds = planFactionBuilds(anchoredVsGreenfieldScenario(), reachable);
+    const builds = planFactionBuilds(anchoredVsGreenfieldScenario(), reachable, DEV_REFS);
     const atAnchored = countFor(builds, "C", "metals");
     const atGreenfield = countFor(builds, "B", "metals");
     expect(atAnchored).toBeGreaterThan(0);
@@ -964,7 +971,7 @@ describe("complex co-build", () => {
   });
 
   it("co-builds a family complex at a site serving a large family deficit", () => {
-    const builds = planFactionBuilds(heavyDeficitScenario(), reachable);
+    const builds = planFactionBuilds(heavyDeficitScenario(), reachable, DEV_REFS);
     const complex = builds.find((b) => COMPLEX_TYPES.includes(b.buildingType));
     expect(complex?.buildingType).toBe(HEAVY_INDUSTRY_COMPLEX);
     // never more than the cap
@@ -973,14 +980,14 @@ describe("complex co-build", () => {
   });
 
   it("does not co-build a complex for a tiny family deficit (below the throughput floor)", () => {
-    const builds = planFactionBuilds(tinyHeavyDeficitScenario(), reachable);
+    const builds = planFactionBuilds(tinyHeavyDeficitScenario(), reachable, DEV_REFS);
     expect(builds.some((b) => COMPLEX_TYPES.includes(b.buildingType))).toBe(false);
     // The floor (not a lack of production) is what suppressed the complex — metals still builds.
     expect(builds.some((b) => b.buildingType === "metals" && b.count > 0)).toBe(true);
   });
 
   it("caps the complex across families — a second family's opportunity at the same site gets zero lift", () => {
-    const builds = planFactionBuilds(crossFamilyDeficitScenario(), reachable);
+    const builds = planFactionBuilds(crossFamilyDeficitScenario(), reachable, DEV_REFS);
 
     // Both goods independently clear the throughput floor — proving the CAP, not the floor, is
     // what suppresses the second complex.
@@ -1011,7 +1018,7 @@ describe("planFactionProposals", () => {
       control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
     });
-    const proposals = planFactionProposals([site], () => 1, []);
+    const proposals = planFactionProposals([site], () => 1, [], DEV_REFS);
     const housing = proposals.find((p) => p.role === "housing");
     expect(housing).toBeDefined();
     expect(housing!.kind).toBe("build");
@@ -1038,7 +1045,7 @@ describe("planFactionProposals", () => {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 0, goods: [], // no habitable land → isolate industry
     };
-    const proposals = planFactionProposals([deficit, builder], () => 1, []);
+    const proposals = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS);
     const food = proposals.find((p) => p.role === "industry" && p.items.some((i) => i.buildingType === "food"));
     expect(food).toBeDefined();
     expect(food!.value).toBeGreaterThan(0);                     // it serves real demand
@@ -1048,7 +1055,7 @@ describe("planFactionProposals", () => {
   });
 
   it("bundles a co-built academy INTO the production's proposal, gate-first (not as a separate proposal)", () => {
-    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, []);
+    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS);
     const bundle = proposals.find((p) => p.items.some((i) => i.buildingType === "electronics"));
     expect(bundle).toBeDefined();
     const types = bundle!.items.map((i) => i.buildingType);
@@ -1071,12 +1078,12 @@ describe("planFactionProposals", () => {
     const open: WorldConstructionProject[] = [
       { kind: "build", id: "h", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
     ];
-    expect(planFactionProposals([site], () => 1, []).some((p) => p.role === "housing")).toBe(true);
-    expect(planFactionProposals([site], () => 1, open).some((p) => p.role === "housing")).toBe(false);
+    expect(planFactionProposals([site], () => 1, [], DEV_REFS).some((p) => p.role === "housing")).toBe(true);
+    expect(planFactionProposals([site], () => 1, open, DEV_REFS).some((p) => p.role === "housing")).toBe(false);
   });
 
   it("flattening a proposal keeps its academy before the production it gates", () => {
-    const flat = flatItems(planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, []));
+    const flat = flatItems(planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS));
     const schoolIdx = flat.findIndex((i) => i.buildingType === VOCATIONAL_SCHOOL_TYPE);
     const prodIdx = flat.findIndex((i) => i.buildingType === "electronics");
     expect(schoolIdx).toBeGreaterThanOrEqual(0);
@@ -1091,12 +1098,12 @@ describe("planFactionBuilds: develop gate", () => {
   it("builds nothing at a fed-and-calm system that is controlled but not developed", () => {
     const site = sysWith({ ...buildable, control: "controlled", buildings: {} });
     expect(fedAndCalm(site)).toBe(true); // sanity: absent the gate it WOULD build housing
-    expect(planFactionBuilds([site], () => 1)).toEqual([]);
+    expect(planFactionBuilds([site], () => 1, DEV_REFS)).toEqual([]);
   });
 
   it("builds housing at the same system once it is developed", () => {
     const site = sysWith({ ...buildable, control: "developed", buildings: {} });
-    const plans = planFactionBuilds([site], () => 1);
+    const plans = planFactionBuilds([site], () => 1, DEV_REFS);
     expect(plans.some((b) => b.buildingType === HOUSING_TYPE)).toBe(true);
   });
 });
@@ -1124,7 +1131,7 @@ describe("hopRouteCost", () => {
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
       goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
     };
-    const builds = planFactionBuilds([sys], rc);
+    const builds = planFactionBuilds([sys], rc, DEV_REFS);
     expect(builds.some((b) => b.systemId === "A" && b.buildingType === "food")).toBe(true);
   });
 });

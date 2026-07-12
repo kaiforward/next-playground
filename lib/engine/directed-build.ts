@@ -10,7 +10,7 @@
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
 import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
-import { systemDevelopment } from "@/lib/engine/development";
+import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
@@ -296,12 +296,17 @@ export function buildableOutput(sys: BuildSystemState, goodId: string): number {
  * non-basic, a good with no local deposit or demand, a matured system, or when reactive builds already
  * reach the floor. Bounded ≤ local demand, so it is a floor, never export.
  */
-export function speculativeFloorExtra(site: BuildSystemState, goodId: string, structuralResidual: number): number {
+export function speculativeFloorExtra(
+  site: BuildSystemState,
+  goodId: string,
+  structuralResidual: number,
+  refs: DevelopmentRefs,
+): number {
   if (!SPECULATIVE_BASICS.includes(goodId)) return 0;
   if (buildableUnits(site, goodId) < 1) return 0; // no local deposit slots to build into
   const market = site.goods.find((g) => g.goodId === goodId);
   if (!market || market.demand <= 0) return 0;
-  const floorFraction = (1 - systemDevelopment(site)) * DIRECTED_BUILD.SPECULATIVE_FLOOR;
+  const floorFraction = (1 - systemDevelopment(site, refs)) * DIRECTED_BUILD.SPECULATIVE_FLOOR;
   if (floorFraction <= 0) return 0;
   return Math.max(0, floorFraction * market.demand - (market.production ?? 0) - structuralResidual);
 }
@@ -460,6 +465,7 @@ interface PlannedBundle {
 function planFactionBundles(
   systems: BuildSystemState[],
   routeCost: RouteCost,
+  refs: DevelopmentRefs,
 ): PlannedBundle[] {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
@@ -512,7 +518,7 @@ function planFactionBundles(
   for (const site of working.values()) {
     for (const goodId of SPECULATIVE_BASICS) {
       const residual = remainingByGood.get(goodId)?.get(site.systemId) ?? 0;
-      const extra = speculativeFloorExtra(site, goodId, residual);
+      const extra = speculativeFloorExtra(site, goodId, residual, refs);
       if (extra <= 0) continue;
       const m = remainingByGood.get(goodId) ?? new Map<string, number>();
       m.set(site.systemId, (m.get(site.systemId) ?? 0) + extra);
@@ -733,8 +739,9 @@ function planFactionBundles(
 export function planFactionBuilds(
   systems: BuildSystemState[],
   routeCost: RouteCost,
+  refs: DevelopmentRefs,
 ): PlannedBuild[] {
-  return planFactionBundles(systems, routeCost).flatMap((b) =>
+  return planFactionBundles(systems, routeCost, refs).flatMap((b) =>
     b.items.map((i) => ({ systemId: b.systemId, buildingType: i.buildingType, count: i.levels })),
   );
 }
@@ -756,6 +763,7 @@ export function planFactionProposals(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   openProjects: WorldConstructionProject[],
+  refs: DevelopmentRefs,
 ): BuildProposal[] {
   // In-flight levels per (system, buildingType) — the "already committed" capacity. Only build
   // projects contribute building levels here; a colony-establish carries no in-flight levels at a
@@ -780,7 +788,7 @@ export function planFactionProposals(
 
   const factionBySystem = new Map(systems.map((s) => [s.systemId, s.factionId]));
   const proposals: BuildProposal[] = [];
-  for (const b of planFactionBundles(augmented, routeCost)) {
+  for (const b of planFactionBundles(augmented, routeCost, refs)) {
     const factionId = factionBySystem.get(b.systemId);
     // Only faction-owned systems can be developed (the build gate), so a bundle always has a faction;
     // the guard both narrows the type and skips the impossible independent-system case.

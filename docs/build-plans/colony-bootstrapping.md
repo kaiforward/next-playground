@@ -42,38 +42,45 @@ mode as the visual sanity-check on the new stat.
 
 ### 1. Per-system development stat (new primitive)
 
-- New pure function `systemDevelopment(system): number` → `0..1` (0 = raw frontier, ~1 = maxed-out). Home in
-  `lib/engine/development.ts`.
+- New pure function `systemDevelopment(input, refs): number` → `0..1` (0 = raw frontier, ~1 = a system that has
+  realised the galaxy's biggest natural potential — and then some). Home in `lib/engine/development.ts`.
 - **Formula (built): an ABSOLUTE magnitude — how much a system has actually built and worked —
-  soft-saturated against a FIXED reference, NOT a fill fraction of the system's own potential.** This follows
-  how EU4 / EU5 (Project Caesar) / Victoria 3 all quantify development: magnitude and fill are *separate*
-  signals, and development is always the absolute one; a self-normalised fill makes a tiny "full" colony read
-  as developed (the naïve bug this replaced). Housing is excluded from both terms, so shells built ahead of
-  population never inflate the reading.
+  soft-saturated against the UNIVERSE-WIDE reference (the galaxy's biggest natural potential), NOT a fill
+  fraction of the system's own potential.** This follows how EU4 / EU5 (Project Caesar) / Victoria 3 all
+  quantify development: magnitude and fill are *separate* signals, and development is always the absolute one;
+  a self-normalised fill makes a tiny "full" colony read as developed (the naïve bug this replaced). Housing is
+  excluded from both terms, so shells built ahead of population never inflate the reading.
 
   ```
-  popTerm     = 1 − exp(−population / POP_REF)                     // absolute resident pop, soft-saturated
-  indTerm     = 1 − exp(−staffedIndustry / INDUSTRY_REF)          // absolute STAFFED industry (used, not built), soft-saturated
+  popTerm     = 1 − exp(−population / popRef)                      // resident pop vs galaxy's biggest habitable land
+  indTerm     = 1 − exp(−staffedIndustry / industryRef)           // STAFFED industry vs galaxy's biggest footprint
   development = w_pop · popTerm  +  w_ind · indTerm                // w_pop + w_ind = 1; default 0.5/0.5, PR4-tuned
   ```
 
-  where `staffedIndustry = (extractorLevels·footprint + non-housing general-space used) × labourFulfil`.
+  where `staffedIndustry = (extractorLevels·footprint + non-housing general-space used) × labourFulfil`, and the
+  `refs` are the universe-wide maxima from `developmentRefs(systems)` (see below).
 
 - **Design intents baked in:**
-  - *Absolute, not relative.* A small colony has little in absolute terms → reads low → prioritised; a large
-    capital reads high regardless of its own headroom. Soft-saturation is most sensitive at the low end (so it
-    discriminates among colonies) and compresses the top (capitals sit high, not trivially at 1).
+  - *Absolute against the galaxy's ceiling, not the system's own.* A system that is "full" for its OWN size
+    still has almost nothing measured against the biggest world, so most systems read near the bottom of the
+    board even at max housing — realising your own potential is not high development, only realising the
+    universe's max potential is. Intentional: the top is reserved for systems that later exceed natural
+    potential (robots + special housing), and that is meant to take a long time.
+  - *Soft-saturation, so the top is an unreachable ideal.* Even the biggest natural system, fully built to its
+    own potential, sits at the soft-saturation knee (~0.63 per term), never at 1; the curve is most sensitive
+    at the low end (so it discriminates among colonies) and compresses the top.
   - *Used, not built.* Industry is discounted by headcount staffing (`labourFulfil`), so idle-because-
     understaffed capacity is not development — an over-built colony reads low until pop staffs it.
   - *Housing-immune.* `popTerm` uses actual `population`, not built housing; housing is netted out of industry.
 - **Barren-world edge case:** when there is no habitable land (`habitableSpace ≤ 0`, no population possible),
   drop the pop term and let `indTerm` carry the whole reading — a barren extraction colony's development *is*
   its extraction.
-- **Reference constants** (`lib/constants/development.ts`, PR4-tunable): `POP_REF` / `INDUSTRY_REF` are the
-  "fully developed system" magnitudes (grounded in observed sim p90s: homeworld pop ≈ 240 / industry ≈ 22),
-  plus the `w_pop` / `w_ind` weights (per-doctrine-ready, §4 rubric; default 50/50). Potential
-  (slotCap / generalSpace) is deliberately *not* an input — reserved for a future saturation / growth-headroom
-  signal, per the EU5 split of "how developed" (absolute) from "how crowded" (fill).
+- **The universe reference** (`developmentRefs(systems)` in `lib/engine/development.ts`): `popRef` = the max
+  `habitablePotentialPop` (habitable land packed with housing) across the galaxy; `industryRef` = the max
+  `industryPotential` (every deposit slot worked + all general space as factory) across the galaxy. Derived
+  from static substrate, so it is a per-world constant — recomputed cheaply per map read and per build pulse,
+  and threaded in identically to both consumers so a system reads one development everywhere. `lib/constants/
+  development.ts` keeps only the `w_pop` / `w_ind` weights (per-doctrine-ready, §4 rubric; default 50/50).
 - The map mode (§4 below) is the validation surface — this is why it's in PR1. It reads systemDevelopment as
   an ABSOLUTE 0..1 value (no relative-to-visible-max normalisation).
 - **Distinct from `SystemControl`.** `developed` is a one-way ownership gate; `systemDevelopment` is the
