@@ -12,12 +12,13 @@ import {
   generateConnections,
   generateUniverse,
   selectStartingSystem,
-  applyEmergentStartingCondition,
+  stampHomeworldPrefabs,
   type GenParams,
   type GeneratedRegion,
   type GeneratedSystem,
 } from "../universe-gen";
 import type { GeneratedFaction } from "../faction-gen";
+import { HOME_SYSTEM_PREFAB } from "@/lib/engine/homeworld-prefab";
 import { emptyResourceVector } from "@/lib/engine/resources";
 import {
   genConfigForSystemCount,
@@ -304,11 +305,10 @@ describe("generateSystems", () => {
     for (const sys of systems) {
       econCounts.set(sys.economyType, (econCounts.get(sys.economyType) ?? 0) + 1);
     }
-    // The four substrate-driven base types are always present; the population-gated
-    // 'industrial'/'tech' types are sparse-to-absent until P4 calibration lifts the
-    // population magnitude (full-fold population currently peaks ~1065, below the
-    // ECON_POP_HIGH=1000 / 0.6 gate for most systems). Assert the reliable floor.
-    for (const econ of ["agricultural", "extraction", "refinery", "core"]) {
+    // generateSystems produces BARE substrate (population 0), so the economy label here is purely
+    // deposit-driven — the three resource-based types always appear. The population-gated types
+    // (core / industrial / tech) come only from the stamped faction capitals (generateUniverse).
+    for (const econ of ["agricultural", "extraction", "refinery"]) {
       expect(econCounts.get(econ) ?? 0, econ).toBeGreaterThan(0);
     }
     for (const [, count] of econCounts) {
@@ -458,23 +458,26 @@ describe("generateConnections", () => {
   });
 });
 
-// ── Emergent starting condition ─────────────────────────────────
+// ── Emergent starting condition (home-system prefab) ────────────
 
-describe("applyEmergentStartingCondition", () => {
-  it("leaves the homeworld's buildings and population unchanged, zeroes every other system", () => {
+describe("stampHomeworldPrefabs", () => {
+  it("stamps the identical home-system prefab onto a garden body for each homeworld, leaves the rest bare", () => {
     const systems = [
-      mkSys({ index: 0, population: 50, buildings: { shipyard: 2, farm: 1 } }),
-      mkSys({ index: 1, population: 30, buildings: { mine: 3 } }),
+      mkSys({ index: 0, population: 0, buildings: {} }),
+      mkSys({ index: 1, population: 0, buildings: {} }),
     ];
-    const homeworldSnapshot = {
-      population: systems[0].population,
-      buildings: { ...systems[0].buildings },
-    };
+    const homeworldBodiesBefore = systems[0].bodies.length;
 
-    applyEmergentStartingCondition(systems, new Set([0]));
+    stampHomeworldPrefabs(systems, new Set([0]));
 
-    expect(systems[0].population).toBe(homeworldSnapshot.population);
-    expect(systems[0].buildings).toEqual(homeworldSnapshot.buildings);
+    // Homeworld: stamped with the prefab, on a prepended guaranteed garden body.
+    expect(systems[0].buildings).toEqual(HOME_SYSTEM_PREFAB.buildings);
+    expect(systems[0].population).toBe(HOME_SYSTEM_PREFAB.population);
+    expect(systems[0].popCap).toBe(HOME_SYSTEM_PREFAB.population); // housing sized so popCap == residents
+    expect(systems[0].bodies.length).toBe(homeworldBodiesBefore + 1);
+    expect(systems[0].bodies[0].bodyType).toBe("garden_world");
+    expect(systems[0].habitableSpace).toBeGreaterThan(0);
+    // Non-homeworld: an empty deposit field.
     expect(systems[1].population).toBe(0);
     expect(systems[1].buildings).toEqual({});
   });

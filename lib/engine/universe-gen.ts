@@ -5,8 +5,12 @@
 
 import type { EconomyType, ResourceVector, SunClass } from "@/lib/types/game";
 import type { GeneratedTrait } from "./trait-gen";
-import { generateSubstrate, type GeneratedBody } from "./body-gen";
+import { generateSubstrate, substrateAggregates, type GeneratedBody } from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
+import { depositGradeVector } from "./deposit-grade";
+import { HOME_SYSTEM_PREFAB, homeworldGardenBody } from "./homeworld-prefab";
+import { housingPopCap } from "./industry";
+import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import {
   generateFactions,
   assignHomeworldOwnership,
@@ -649,21 +653,36 @@ export function generateConnections(
 // ── Emergent starting condition ─────────────────────────────────
 
 /**
- * Apply the emergent starting condition to the freshly-scattered systems: each faction
- * homeworld keeps its seeded substrate industry unchanged (its `control` flag already
- * carries "developed", so directed build can grow it without a stamped building), and
- * every other system's population and buildings are zeroed. The physical substrate
- * (space, slots, yields, danger, traits) is left intact — expansion grows into it.
- * Mutates `systems` in place.
+ * Apply the emergent starting condition to the freshly-scattered (bare) systems: each faction homeworld
+ * is stamped with the identical, self-sufficient home-system prefab on a guaranteed garden body sized to
+ * fit it; every other system stays an empty deposit field that expansion colonises into. The garden body
+ * is prepended to the homeworld's procedural bodies (kept as scenery), and the space/slot/yield
+ * aggregates + economy label are recomputed to match. Mutates `systems` in place.
  */
-export function applyEmergentStartingCondition(
+export function stampHomeworldPrefabs(
   systems: GeneratedSystem[],
   homeworldIndices: Set<number>,
 ): void {
   for (const s of systems) {
-    if (homeworldIndices.has(s.index)) continue; // homeworld keeps its seeded substrate industry
-    s.population = 0;
-    s.buildings = {};
+    if (!homeworldIndices.has(s.index)) {
+      s.population = 0; // already bare from generateSubstrate — belt-and-braces
+      s.buildings = {};
+      s.popCap = 0;
+      continue;
+    }
+    const bodies = [homeworldGardenBody(), ...s.bodies];
+    const agg = substrateAggregates(bodies);
+    s.bodies = bodies;
+    s.slotCap = agg.slotCap;
+    s.generalSpace = agg.generalSpace;
+    s.habitableSpace = agg.habitableSpace;
+    s.availableSpace = agg.availableSpace;
+    s.yieldMult = depositGradeVector(bodies);
+    s.bodyDanger = bodies.reduce((sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline, 0);
+    s.buildings = { ...HOME_SYSTEM_PREFAB.buildings };
+    s.population = HOME_SYSTEM_PREFAB.population;
+    s.popCap = housingPopCap(s.buildings);
+    s.economyType = deriveEconomyTypeLabel(s.slotCap, s.yieldMult, s.population);
   }
 }
 
@@ -733,7 +752,7 @@ export function generateUniverse(
   });
 
   const homeworldIndices = new Set(factions.map((f) => f.homeworldSystemIndex));
-  applyEmergentStartingCondition(systems, homeworldIndices);
+  stampHomeworldPrefabs(systems, homeworldIndices);
 
   const systemFactionAssignments = assignHomeworldOwnership(systems.length, factions);
 

@@ -8,12 +8,6 @@ export const SUBSTRATE_GEN = {
   /** Body size multiplier band, uniform. */
   SIZE_MIN: 0.5,
   SIZE_MAX: 1.5,
-  /** Seed-fill curve: fill = BASE + SLOPE·popNorm + (rng−0.5)·JITTER, clamped [MIN, MAX]. */
-  POP_FILL_BASE: 0.1,
-  POP_FILL_SLOPE: 0.6,
-  POP_FILL_JITTER: 0.2,
-  POP_FILL_MIN: 0.05,
-  POP_FILL_MAX: 0.9,
   /** Narrative feature count per system, uniform inclusive. */
   FEATURE_COUNT: { min: 0, max: 2 },
   /** Economy-type classifier thresholds (see lib/engine/economy-type.ts). */
@@ -34,16 +28,6 @@ export const SUBSTRATE_GEN = {
   VOLATILITY_SPIKE: 6,
   /** Population baseline floor per body. */
   POP_BASELINE_FLOOR: 0,
-  /** Reference habitable space treated as "fully developable" for the seed-fill curve. P4-tuned; not load-bearing for invariants. */
-  HABITABLE_REF: 250,
-  /**
-   * Fraction of a system's habitable space seeded as housing. Below 1 leaves habitable
-   * headroom so the autonomic build (housing → population → industry) has room to climb
-   * toward potential — i.e. the galaxy seeds as a developing one, not at capacity.
-   * Industry follows automatically: the staffing-self-consistency pass scales seeded
-   * industry down to staff the reduced population. Tunable (0.25 / 0.5 / 0.75).
-   */
-  SEED_HOUSING_FRACTION: 0.5,
 } as const;
 
 export interface QualityBand {

@@ -821,11 +821,10 @@ export function facilityStorageForGood(buildings: Record<string, number>, goodId
 }
 
 // ── Substrate display summaries (system-panel view helpers) ──────────────────
-// The space partition the seeder built against (industry-seed.ts): tier-0
-// extractors sit on dedicated deposit slots; tier-1+ factories and population
-// centres share fungible general space; pop-centres are additionally bounded by
-// the habitable subset. These pure helpers turn the denormalised substrate
-// columns + built base into the shapes the system panels render.
+// The space partition industry is built against: tier-0 extractors sit on dedicated deposit slots;
+// tier-1+ factories and population centres share fungible general space; pop-centres are additionally
+// bounded by the habitable subset. These pure helpers turn the denormalised substrate columns + built
+// base into the shapes the system panels render.
 
 /**
  * Tier-0 extractor count per resource from the built base — the worked deposit

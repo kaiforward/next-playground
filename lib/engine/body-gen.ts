@@ -15,7 +15,6 @@ import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import type { GeneratedTrait } from "./trait-gen";
 import type { RNG } from "./universe-gen";
 import { weightedPick, randInt } from "./universe-gen";
-import { allocateIndustry } from "@/lib/engine/industry-seed";
 import { depositGradeVector } from "@/lib/engine/deposit-grade";
 import { partitionBody, rollQualityBand } from "./substrate-space";
 
@@ -53,10 +52,6 @@ export interface GeneratedSubstrate {
   slotCap: ResourceVector;
   /** Effective per-resource yield multiplier — mean quality of the filled deposit slots (1.0 where none filled). */
   yieldMult: ResourceVector;
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
 }
 
 /** Weighted sun-class roll. Returns the typed `SunClass` id directly (no cast). */
@@ -142,58 +137,40 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     0,
   );
 
-  // ── Per-system available-space aggregates ──
-  const availableSpace = SUBSTRATE_GEN.SPACE_PER_SIZE * bodies.reduce((s, b) => s + b.size, 0);
-  const generalSpace = bodies.reduce((s, b) => s + b.generalSpace, 0);
-  const habitableSpace = bodies.reduce((s, b) => s + b.habitableSpace, 0);
-  const slotCap = sumResourceVectors(bodies.map((b) => b.slots));
-
-  // ── Development fill — driven by habitable land (full-fold retires bodyBaselinePopCap) ──
-  const popNorm = clamp(habitableSpace / SUBSTRATE_GEN.HABITABLE_REF, 0, 1);
-  const rawFill = clamp(
-    SUBSTRATE_GEN.POP_FILL_BASE
-      + SUBSTRATE_GEN.POP_FILL_SLOPE * popNorm
-      + (rng() - 0.5) * SUBSTRATE_GEN.POP_FILL_JITTER,
-    SUBSTRATE_GEN.POP_FILL_MIN,
-    SUBSTRATE_GEN.POP_FILL_MAX,
-  );
-  // No habitable land → no workforce to staff or house. The system stays an
-  // undeveloped deposit field: substrate (slots/quality) is generated but NOTHING
-  // is built and nobody lives there. Factions develop it later (SP5) by paying for
-  // orbital/artificial habitation alongside the extractors. (rawFill still consumes
-  // its rng draw so other systems' streams don't shift.)
-  const fill = habitableSpace > 0 ? rawFill : 0;
-
-  const allocation = allocateIndustry(
-    { bodies, slotCap, generalSpace, habitableSpace, fill },
-    rng,
-  );
-  const popCap = allocation.popCap;
-  // Seed population fully staffs the built industry. `popCap` is already the
-  // fill-scaled, labour-matched housing capacity — allocateIndustry scales the
-  // industry by `fill` and sizes housing to staff exactly that — so population
-  // fills it rather than re-applying `fill` a second time (which would seed a
-  // system at ~fill of the labour its own industry needs, leaving it perpetually
-  // understaffed). A continuous magnitude (like building counts) — a tiny outpost
-  // is pop 0.3, not a false 0; only a truly uninhabitable system (popCap 0) is empty.
-  const population = popCap;
-
+  const { availableSpace, generalSpace, habitableSpace, slotCap } = substrateAggregates(bodies);
   const features = rollFeatures(rng);
 
+  // Bare substrate: no seeded industry or population. Faction capitals are stamped with the home-system
+  // prefab (see world-gen); every other system starts as an empty deposit field and is colonised into.
+  // Deposit grade (yieldMult) is a pure property of the ground — the fully-worked mean quality of the
+  // field, independent of how a system is later developed.
   return {
     sunClass,
     bodies,
-    popCap,
-    population,
+    popCap: 0,
+    population: 0,
     bodyDanger,
     features,
-    buildings: allocation.buildings,
+    buildings: {},
     availableSpace,
     generalSpace,
     habitableSpace,
     slotCap,
-    // Deposit grade is a pure property of the ground — the fully-worked mean quality of the field —
-    // independent of how much industry the seed placed, so it stays stable as the system develops.
     yieldMult: depositGradeVector(bodies),
+  };
+}
+
+/** Per-system available-space aggregates from a body list: SPACE_PER_SIZE × Σ size, Σ general / habitable space, Σ deposit slots. */
+export function substrateAggregates(bodies: GeneratedBody[]): {
+  availableSpace: number;
+  generalSpace: number;
+  habitableSpace: number;
+  slotCap: ResourceVector;
+} {
+  return {
+    availableSpace: SUBSTRATE_GEN.SPACE_PER_SIZE * bodies.reduce((s, b) => s + b.size, 0),
+    generalSpace: bodies.reduce((s, b) => s + b.generalSpace, 0),
+    habitableSpace: bodies.reduce((s, b) => s + b.habitableSpace, 0),
+    slotCap: sumResourceVectors(bodies.map((b) => b.slots)),
   };
 }
