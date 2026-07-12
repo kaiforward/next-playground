@@ -40,7 +40,9 @@ export async function runMigrationProcessor(
   const liveNode = (id: string): MigrationNode | null => {
     const n = nodeById.get(id);
     if (!n) return null;
-    return { unrest: n.unrest, population: n.population + (popDelta.get(id) ?? 0), popCap: n.popCap };
+    // labourDemand is building-derived (static within a pulse); population keeps its live
+    // intra-tick delta so open jobs shrink correctly as pop arrives across several edges.
+    return { unrest: n.unrest, population: n.population + (popDelta.get(id) ?? 0), popCap: n.popCap, labourDemand: n.labourDemand };
   };
 
   for (const edge of slice) {
