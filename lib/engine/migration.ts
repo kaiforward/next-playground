@@ -57,13 +57,20 @@ export interface MigrationFlowParams {
   /** Distance attenuation: factor = 1/(1 + distanceDecay·fuelCost). */
   distanceDecay: number;
   /**
-   * Appeal-gap bar above which a source releases its *staffed* workers, not just its
-   * spare labour. The default sits above any achievable |gradient| (so staffed workers
-   * stay home and only idle labour is drawable — the hard source cap). The future
-   * player "speed-dial" lowers this per chosen system, at a cost, to coax staffed
-   * workers toward a force-grown frontier.
+   * Appeal-gap bar above which a source releases *all* its staffed workers (not just the small
+   * always-on leak below). The default sits above any achievable |gradient|, so above the leak
+   * staffed migration is off by default; the future player "speed-dial" lowers this per chosen
+   * system, at a cost, to fully coax staffed workers toward a force-grown frontier.
    */
   employedGradientThreshold: number;
+  /**
+   * Fraction of a source's STAFFED workers that stays drawable even below `employedGradientThreshold`
+   * — a small always-on leak so a saturated core (spare labour ≈ 0) still feeds a strongly-attractive
+   * (job-rich) colony a steady trickle. This is the mechanism that makes colonisation work once the
+   * home worlds fill up: without it, migration to colonies stalls the moment the source has no idle
+   * labour. Small by design (the core keeps almost all its workers). PR4-calibrated.
+   */
+  employedLeakFraction: number;
 }
 
 /**
@@ -92,11 +99,13 @@ export function migrationFlow(
   // Usually tighter than housing headroom; a fully-staffed destination absorbs nobody.
   const absorptiveCapacity = Math.max(0, dest.labourDemand - dest.population);
 
-  // Source two-tier draw: idle labour is always drawable; staffed workers only leave once
-  // the appeal gap clears employedGradientThreshold (default unreachable ⇒ staffed stay home).
+  // Source draw: idle labour is always fully drawable; a small always-on fraction of STAFFED workers
+  // (employedLeakFraction) also leaks toward a strongly-attractive destination, so a saturated core
+  // still feeds job-rich colonies; above employedGradientThreshold the whole staffed pool unlocks.
   const sourceSpare = Math.max(0, source.population - source.labourDemand);
   const employed = Math.min(Math.max(0, source.population), Math.max(0, source.labourDemand));
-  const employedEligible = Math.abs(gradient) > params.employedGradientThreshold ? employed : 0;
+  const employedEligible =
+    Math.abs(gradient) > params.employedGradientThreshold ? employed : params.employedLeakFraction * employed;
   const sourceDrawable = sourceSpare + employedEligible;
 
   const quantity = Math.max(0, Math.min(outflow, sourceDrawable, source.population, destHeadroom, absorptiveCapacity));

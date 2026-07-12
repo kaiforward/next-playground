@@ -25,7 +25,9 @@ export const EXPANSION = {
   SCORE_WEIGHTS: { habitable: 1.0, diversity: 3.0, trait: 2.0, proximity: 0.5 },
   /** A controlled system is only worth developing if it can host housing — skip dead rocks. */
   DEVELOP_HABITABLE_FLOOR: 1,
-  /** Starter population a new colony receives, transferred (conserved) from the nearest developed
-   * same-faction system so logistic growth can begin from a non-zero base. */
-  COLONY_SEED_POP: 50,
+  /** Bootstrap-spark population a new colony receives, transferred (conserved) from the nearest
+   * developed same-faction system. Deliberately tiny (seed model C): a big seed drains the source
+   * and dumps pops on a jobless world faster than jobs form — instead the spark staffs a first
+   * local basic, whose jobs then pull job-aware migration in to grow the colony at its own pace. */
+  COLONY_SEED_POP: 2,
 } as const;

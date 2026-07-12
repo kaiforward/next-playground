@@ -614,13 +614,14 @@ function planFactionBundles(
     // used to convert served demand into produced output when decrementing the deficit.
     const perUnit = (OUTPUT_PER_UNIT[opp.goodId] ?? 0) * familyAnchorBuff(site.buildings, opp.goodId);
 
-    // Spare-LABOUR gate: a site may add only the production (+ any co-built academies) its
-    // already-resident population can staff. Population is a single undifferentiated pool that
-    // staffs ALL labour (unskilled + skill1 + skill2 heads) — skill1/skill2 are academy-licensed
-    // CEILINGS on how much of that pool may work skilled roles, not separate head pools. Housing
-    // built this cycle adds no labour now — population fills it over later ticks — so industry
-    // follows the people who already live there, never population that doesn't yet exist.
-    const spareLabour = Math.max(0, site.population - labourDemand(site.buildings));
+    // Labour gate: a site may build up to ONE production-unit AHEAD of what its resident population
+    // fully staffs. Population is a single undifferentiated pool staffing ALL labour (unskilled +
+    // skill1 + skill2 heads); skill1/skill2 are academy-licensed ceilings on that pool, not separate
+    // head pools. The one-unit lead is decay-safe — infrastructure decay only sheds a level when a
+    // WHOLE unit is idle (floor(count − used) ≥ 1, see infrastructure-decay.ts) — and it is what lets a
+    // small colony stand up its FIRST extractor (whose jobs then pull migration) instead of deadlocking
+    // on a full-staffing gate. Housing built this cycle adds no labour now — industry follows the
+    // people already resident, never population that doesn't yet exist.
     const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
     // Tier-0 extractors sit on dedicated deposit slots, not general space (mirrors generalSpaceUsed).
     const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
@@ -659,7 +660,13 @@ function planFactionBundles(
         schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
         institutes * unskilledPerUnit(RESEARCH_INSTITUTE_TYPE) +
         (complexType ? complexLevels * unskilledPerUnit(complexType) : 0);
-      const fits = spaceTotal <= remainingGeneral && labourNeeded <= spareLabour;
+      // Total labour demand after this build stays STRICTLY within one production-unit of the
+      // population, so the lead unit is only ever fractionally idle (< 1 whole unit ⇒ decay-safe; the
+      // strict `<` excludes the exact-boundary case that would leave a whole unit idle, and refuses to
+      // build at all on a pop-0 world). Gating TOTAL demand — not a max(0)-floored spare — bounds the
+      // lead across opportunities so it can't stack into multi-unit under-staffing.
+      const fits = spaceTotal <= remainingGeneral &&
+        labourDemand(site.buildings) + labourNeeded < site.population + prodLabourPerUnit;
       return { fits, schools, institutes, complexType, complexLevels };
     };
 
@@ -818,6 +825,8 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   seedPop: number;
   /** Minimum habitable space to consider a controlled system a colony candidate (EXPANSION.DEVELOP_HABITABLE_FLOOR). */
   habitableFloor: number;
+  /** Weight on the seed-pop opportunity cost netted off colony value (COLONISATION.SEED_POP_COST_WEIGHT). */
+  popCostWeight: number;
 }
 
 /**
@@ -889,6 +898,9 @@ export function planFactionColonyProposals(
   const sigma = factionSaturation(factionSystems);
   const unblocked = unblockedDemandByResource(factionGoodDeficits(developed), missing);
 
+  // Seed sources are developed systems — look them up to price the seed's forgone output (below).
+  const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
+
   const inFlight = new Set(openColonyProjects.map((p) => p.systemId));
   const housingCost = effectiveSpaceCost(HOUSING_TYPE);
 
@@ -905,7 +917,26 @@ export function planFactionColonyProposals(
     const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
     if (housingLevels < 1 || seedPop <= 0) continue;        // no whole housing level → not viable, skip
 
-    const value = colonyValue(c, unblocked, sigma, params);
+    // Seed-population opportunity cost (§7.3): charge the source's forgone output for the part of the
+    // seed that must come from STAFFED workers — idle labour is ≈ free, so founding prefers a job-short
+    // source and a healthy core stops bleeding pop. Netted onto the benefit side, keeping `work` a pure
+    // construction-points denominator (no invented exchange rate; the cost is in the same output units
+    // as `value`). `outputPerWorker` is the source's real output density, so poaching from a dense
+    // homeworld costs more than from a sparse frontier — "forgone output, not a flat number".
+    const source = bySystemId.get(c.sourceSystemId);
+    let popCost = 0;
+    if (source) {
+      const sourceSpare = Math.max(0, source.population - labourDemand(source.buildings));
+      const employedSeed = Math.max(0, seedPop - sourceSpare);
+      if (employedSeed > 0) {
+        const staffed = Math.max(1, Math.min(Math.max(0, source.population), labourDemand(source.buildings)));
+        let output = 0;
+        for (const g of source.goods) output += Math.max(0, g.production ?? 0);
+        popCost = params.popCostWeight * employedSeed * (output / staffed);
+      }
+    }
+    const value = colonyValue(c, unblocked, sigma, params) - popCost;
+    if (value <= 0) continue; // net-negative — the labour it would drain outweighs the colony's worth
     const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
 
     proposals.push({

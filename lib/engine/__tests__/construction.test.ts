@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fundQueue, factionThroughputPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
+import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionThroughputPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
 import type { Proposal, ColonyProposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
@@ -106,6 +106,70 @@ describe("fundQueue", () => {
     const r2 = fundQueue([project("q", HOUSING_TYPE, 1, 0, 1e9)], 1000, 1000);
     expect(Number.isFinite(r2.projects[0].workDone)).toBe(true);
     expect(r2.projects[0].workDone).toBeLessThanOrEqual(r2.projects[0].workTotal);
+  });
+});
+
+/** Build an open project at an explicit system (the floor gates on which system a build targets). */
+function projectAt(
+  id: string,
+  systemId: string,
+  buildingType: string,
+  levels: number,
+  workDone: number,
+  workTotal: number,
+): WorldConstructionProject {
+  return { kind: "build", id, factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
+}
+
+describe("developmentFloorShare", () => {
+  it("is the full base at zero development and weans linearly to zero at the knee", () => {
+    expect(developmentFloorShare(0, 12, 0.5)).toBeCloseTo(12, 6); // raw colony → full floor
+    expect(developmentFloorShare(0.25, 12, 0.5)).toBeCloseTo(6, 6); // halfway to the knee
+    expect(developmentFloorShare(0.5, 12, 0.5)).toBeCloseTo(0, 6); // at the knee → nothing reserved
+    expect(developmentFloorShare(0.9, 12, 0.5)).toBe(0); // past the knee stays zero (no negative floor)
+  });
+
+  it("reserves nothing for a non-positive knee", () => {
+    expect(developmentFloorShare(0, 12, 0)).toBe(0);
+  });
+});
+
+describe("fundQueueWithFloor", () => {
+  it("reproduces fundQueue exactly when reserved is 0", () => {
+    const cap = 10;
+    const projects = [projectAt("a", "s", "food", 1, 0, 1000), projectAt("b", "s", "food", 1, 0, 1000)];
+    expect(fundQueueWithFloor(projects, 15, cap, 0, () => true)).toEqual(fundQueue(projects, 15, cap));
+  });
+
+  it("guarantees an eligible colony build its reserved slice ahead of a higher-priority homeworld build", () => {
+    const cap = 10;
+    // Front-first, the homeworld build (first in the queue) would take the whole cap-sized pool and the
+    // colony would get 0. A reserve of 4 for the colony flips that: it funds first from the reserve, the
+    // homeworld drains the remainder.
+    const home = projectAt("h", "home", "food", 1, 0, 1000);
+    const col = projectAt("c", "colony", "food", 1, 0, 1000);
+    const r = fundQueueWithFloor([home, col], 10, cap, 4, (p) => p.systemId === "colony");
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(4); // its reserved slice (would be 0 unreserved)
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(6); // homeworld drains the rest
+  });
+
+  it("returns unspent reserve to the general pool rather than wasting it", () => {
+    const cap = 10;
+    // Reserve (100) far exceeds what the one eligible build can absorb this pulse (cap = 10); the surplus
+    // must fund the non-eligible homeworld build, not vanish.
+    const col = projectAt("c", "colony", "food", 1, 0, 1000);
+    const home = projectAt("h", "home", "food", 1, 0, 1000);
+    const r = fundQueueWithFloor([col, home], 30, cap, 100, (p) => p.systemId === "colony");
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(10); // capped despite the huge reserve
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(10); // freed reserve funded the homeworld
+  });
+
+  it("never lets a project absorb more than cap across the reserve + general passes", () => {
+    const cap = 10;
+    // Eligible build funded to the cap by the reserve; a huge general pool must not top it up past cap.
+    const col = projectAt("c", "colony", "food", 1, 0, 1000);
+    const r = fundQueueWithFloor([col], 100, cap, 10, () => true);
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(cap);
   });
 });
 

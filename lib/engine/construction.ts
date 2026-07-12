@@ -9,6 +9,7 @@
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { Proposal } from "@/lib/engine/directed-build";
 import { isEconomicallyActive } from "@/lib/engine/control";
+import { clamp } from "@/lib/utils/math";
 
 /**
  * A faction's per-pulse construction throughput pool: Σ over its economically-active (developed)
@@ -77,6 +78,74 @@ export function fundQueue(
     }
   }
 
+  return { projects: open, landed };
+}
+
+/**
+ * A young colony's guaranteed construction-point floor, self-weaning with development: the full `base`
+ * at development 0, fading linearly to 0 once development reaches `knee`. Development is the galaxy-wide
+ * magnitude (`systemDevelopment`), so the most-developed systems (homeworlds) reserve nothing and a
+ * brand-new colony reserves the most — no colony flag needed. Zero for a non-positive knee.
+ */
+export function developmentFloorShare(development: number, base: number, knee: number): number {
+  if (knee <= 0) return 0;
+  return Math.max(0, base) * clamp(1 - Math.max(0, development) / knee, 0, 1);
+}
+
+/**
+ * Fund a front-first queue with a reserved development-scaled floor for eligible (young-colony) builds,
+ * so a colony's valid-but-low-ROI first build isn't monopolised out of the pool by the homeworld's
+ * larger builds (docs/planned/economy-colony-bootstrapping.md §3.4 / §7.9). Returns the same shape as
+ * `fundQueue`; `reserved = 0` reproduces `fundQueue` exactly.
+ *
+ * Two passes over the one ROI-ordered queue:
+ *  - Pass A funds only the floor-eligible builds, front-first, from `reserved` (the minimum slice).
+ *  - Pass B funds the WHOLE queue in ROI order from the general pool — `pool` minus what the reserve
+ *    actually spent, so unspent reserve flows back here (no wasted budget) — with each build capped at
+ *    `cap` minus its pass-A absorption, so total absorption this pulse never exceeds the per-build cap
+ *    (the build-time floor is preserved across both passes).
+ * A reserve is a *minimum* slice, never a max-spend cap: an eligible build can still win more from the
+ * general pool on ROI, and the homeworld's builds drain whatever the reserve leaves.
+ */
+export function fundQueueWithFloor(
+  ordered: WorldConstructionProject[],
+  pool: number,
+  cap: number,
+  reserved: number,
+  isFloorEligible: (p: WorldConstructionProject) => boolean,
+): FundQueueResult {
+  const safeCap = Number.isFinite(cap) ? Math.max(0, cap) : 0;
+  const safePool = Number.isFinite(pool) ? Math.max(0, pool) : 0;
+  const cappedReserve = clamp(Number.isFinite(reserved) ? reserved : 0, 0, safePool);
+
+  // Pass A: eligible builds absorb the reserved slice, front-first.
+  const absorbed = new Map<string, number>();
+  let reserveLeft = cappedReserve;
+  for (const p of ordered) {
+    if (reserveLeft <= 0) break;
+    if (!isFloorEligible(p)) continue;
+    const remaining = Math.max(0, p.workTotal - p.workDone);
+    const take = Math.min(safeCap, remaining, reserveLeft);
+    if (take > 0) {
+      absorbed.set(p.id, take);
+      reserveLeft -= take;
+    }
+  }
+
+  // Pass B: the whole queue drains the general pool (unspent reserve folded back in), each build capped
+  // at its remaining per-pulse absorption.
+  let generalLeft = safePool - (cappedReserve - reserveLeft);
+  const open: WorldConstructionProject[] = [];
+  const landed: WorldConstructionProject[] = [];
+  for (const p of ordered) {
+    const already = absorbed.get(p.id) ?? 0;
+    const remaining = Math.max(0, p.workTotal - p.workDone - already);
+    const take = Math.min(Math.max(0, safeCap - already), remaining, generalLeft);
+    generalLeft -= take;
+    const workDone = p.workDone + already + take;
+    if (workDone >= p.workTotal) landed.push({ ...p, workDone });
+    else open.push({ ...p, workDone });
+  }
   return { projects: open, landed };
 }
 
