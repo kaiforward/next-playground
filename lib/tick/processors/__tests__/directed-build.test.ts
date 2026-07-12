@@ -10,15 +10,21 @@ import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
 import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
+import { CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const reachable: RouteCost = () => 1;
 
 /** Construction params with a monotonic id minter. Big cap by default → projects land as pool allows. */
-function mkConstruction(cap = 1000, throughputPerPop = 0.05) {
+function mkConstruction(
+  cap = 1000,
+  throughputPerPop = 0.05,
+  floorBase: number = CONSTRUCTION.POOL_FLOOR_BASE,
+  floorKnee: number = CONSTRUCTION.FLOOR_DEV_KNEE,
+) {
   let n = 0;
-  return { cap, throughputPerPop, mintId: () => `proj-${n++}` };
+  return { cap, throughputPerPop, floorBase, floorKnee, mintId: () => `proj-${n++}` };
 }
 
 // food market with a high demandRate so the band's targetStock is large — stock 1 is a deep deficit.
@@ -99,7 +105,8 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0));
     // pool = 5000 × 0.0001 = 0.5 construction points — far below any level's work cost; cap is generous.
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-      interval: INTERVAL, routeCost: reachable, construction: { cap: 1000, throughputPerPop: 0.0001, mintId: mkConstruction().mintId },
+      interval: INTERVAL, routeCost: reachable,
+      construction: { cap: 1000, throughputPerPop: 0.0001, floorBase: CONSTRUCTION.POOL_FLOOR_BASE, floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE, mintId: mkConstruction().mintId },
     });
     expect(w.buildingUpdates).toHaveLength(0);          // nothing landed
     expect(w.constructionProjects.length).toBeGreaterThan(0); // but the work is committed
@@ -139,7 +146,8 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     for (let pulse = 0; pulse < 10; pulse++) {
       const w = new MemoryDirectedBuildWorld(rows, projects);
       await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-        interval: INTERVAL, routeCost: reachable, construction: { cap: 6, throughputPerPop: 0.05, mintId: mint },
+        interval: INTERVAL, routeCost: reachable,
+        construction: { cap: 6, throughputPerPop: 0.05, floorBase: CONSTRUCTION.POOL_FLOOR_BASE, floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE, mintId: mint },
       });
       rows = rows.map((r) => {
         const buildings = { ...r.buildings };
@@ -413,5 +421,43 @@ describe("runDirectedBuildProcessor: build-vs-colony ROI arbitration (one shared
     const build = w.constructionProjects.find((p) => p.kind === "build");
     expect(build).toBeDefined();
     expect(build!.workDone).toBe(0);
+  });
+});
+
+describe("runDirectedBuildProcessor — pool fairness floor", () => {
+  // A fully-housed, no-industry homeworld reads development 0.316 (> FLOOR_DEV_KNEE ⇒ weaned off the
+  // floor); a tiny colony reads ≈ 0 (⇒ reserves the full floor). Both hold one in-flight build, the
+  // homeworld's at the front, so a small pool funds only it front-first. The floor guarantees the young
+  // colony its slice — the floorBase-on-vs-off differential proves the wiring (the fund/curve primitives
+  // are unit-tested in construction.test.ts). No markets + full housing ⇒ the planner proposes nothing
+  // new, so funding is purely the two in-flight builds.
+  const floorScenario = (): SystemBuildRow[] => [
+    {
+      systemId: "H", factionId: "f1", control: "developed", population: 400, unrest: 0,
+      buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+      generalSpace: 0, habitableSpace: 20, markets: [],
+    },
+    {
+      systemId: "C", factionId: "f1", control: "developed", population: 2, unrest: 0,
+      buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+      generalSpace: 0, habitableSpace: 20, markets: [],
+    },
+  ];
+  const inflight = (): WorldConstructionProject[] => [
+    { id: "pH", kind: "build", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+    { id: "pC", kind: "build", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+  ];
+  const colonyWorkDone = async (floorBase: number): Promise<number> => {
+    const w = new MemoryDirectedBuildWorld(floorScenario(), inflight());
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(1000, 0.05, floorBase, CONSTRUCTION.FLOOR_DEV_KNEE),
+    });
+    return w.constructionProjects.find((p) => p.id === "pC")?.workDone ?? 0;
+  };
+
+  it("funds a young colony's build that front-first funding would otherwise starve", async () => {
+    expect(await colonyWorkDone(0)).toBe(0); // no floor: the homeworld's front build takes the whole pool
+    expect(await colonyWorkDone(CONSTRUCTION.POOL_FLOOR_BASE)).toBeGreaterThan(0); // the floor reserves its slice
   });
 });
