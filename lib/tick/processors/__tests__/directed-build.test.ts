@@ -244,6 +244,7 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
   seedPop: EXPANSION.COLONY_SEED_POP,
   habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+  popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
 };
 
 /** A developed home with housing filling all its habitable land (σ = 1) and no build deficits — so the

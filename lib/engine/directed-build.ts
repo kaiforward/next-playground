@@ -818,6 +818,8 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   seedPop: number;
   /** Minimum habitable space to consider a controlled system a colony candidate (EXPANSION.DEVELOP_HABITABLE_FLOOR). */
   habitableFloor: number;
+  /** Weight on the seed-pop opportunity cost netted off colony value (COLONISATION.SEED_POP_COST_WEIGHT). */
+  popCostWeight: number;
 }
 
 /**
@@ -889,6 +891,9 @@ export function planFactionColonyProposals(
   const sigma = factionSaturation(factionSystems);
   const unblocked = unblockedDemandByResource(factionGoodDeficits(developed), missing);
 
+  // Seed sources are developed systems — look them up to price the seed's forgone output (below).
+  const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
+
   const inFlight = new Set(openColonyProjects.map((p) => p.systemId));
   const housingCost = effectiveSpaceCost(HOUSING_TYPE);
 
@@ -905,7 +910,26 @@ export function planFactionColonyProposals(
     const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
     if (housingLevels < 1 || seedPop <= 0) continue;        // no whole housing level → not viable, skip
 
-    const value = colonyValue(c, unblocked, sigma, params);
+    // Seed-population opportunity cost (§7.3): charge the source's forgone output for the part of the
+    // seed that must come from STAFFED workers — idle labour is ≈ free, so founding prefers a job-short
+    // source and a healthy core stops bleeding pop. Netted onto the benefit side, keeping `work` a pure
+    // construction-points denominator (no invented exchange rate; the cost is in the same output units
+    // as `value`). `outputPerWorker` is the source's real output density, so poaching from a dense
+    // homeworld costs more than from a sparse frontier — "forgone output, not a flat number".
+    const source = bySystemId.get(c.sourceSystemId);
+    let popCost = 0;
+    if (source) {
+      const sourceSpare = Math.max(0, source.population - labourDemand(source.buildings));
+      const employedSeed = Math.max(0, seedPop - sourceSpare);
+      if (employedSeed > 0) {
+        const staffed = Math.max(1, Math.min(Math.max(0, source.population), labourDemand(source.buildings)));
+        let output = 0;
+        for (const g of source.goods) output += Math.max(0, g.production ?? 0);
+        popCost = params.popCostWeight * employedSeed * (output / staffed);
+      }
+    }
+    const value = colonyValue(c, unblocked, sigma, params) - popCost;
+    if (value <= 0) continue; // net-negative — the labour it would drain outweighs the colony's worth
     const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
 
     proposals.push({

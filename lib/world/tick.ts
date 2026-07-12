@@ -783,6 +783,7 @@ export async function runWorldTick(
           establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
           seedPop: EXPANSION.COLONY_SEED_POP,
           habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+          popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
         },
       },
     });
