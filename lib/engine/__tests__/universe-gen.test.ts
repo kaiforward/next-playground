@@ -477,6 +477,9 @@ describe("stampHomeworldPrefabs", () => {
     expect(systems[0].bodies.length).toBe(homeworldBodiesBefore + 1);
     expect(systems[0].bodies[0].bodyType).toBe("garden_world");
     expect(systems[0].habitableSpace).toBeGreaterThan(0);
+    // Recomputed label: the stamped capital's population clears the developed gate, so it lands on one of
+    // the population-gated developed types (never a bare deposit-driven one).
+    expect(["core", "industrial", "tech"]).toContain(systems[0].economyType);
     // Non-homeworld: an empty deposit field.
     expect(systems[1].population).toBe(0);
     expect(systems[1].buildings).toEqual({});

@@ -132,12 +132,8 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     bodies.push(rollBody(rng, rollArchetype(rng, sun)));
   }
 
-  const bodyDanger = bodies.reduce(
-    (sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline,
-    0,
-  );
-
-  const { availableSpace, generalSpace, habitableSpace, slotCap } = substrateAggregates(bodies);
+  const { availableSpace, generalSpace, habitableSpace, slotCap, yieldMult, bodyDanger } =
+    substrateAggregates(bodies);
   const features = rollFeatures(rng);
 
   // Bare substrate: no seeded industry or population. Faction capitals are stamped with the home-system
@@ -156,21 +152,30 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     generalSpace,
     habitableSpace,
     slotCap,
-    yieldMult: depositGradeVector(bodies),
+    yieldMult,
   };
 }
 
-/** Per-system available-space aggregates from a body list: SPACE_PER_SIZE × Σ size, Σ general / habitable space, Σ deposit slots. */
+/**
+ * All per-system aggregates derived purely from a body list — the single source both bare-substrate
+ * generation and the homeworld-prefab stamp use, so a homeworld's aggregates can never drift from a
+ * regular system's: SPACE_PER_SIZE × Σ size, Σ general / habitable space, Σ deposit slots, the deposit
+ * grade (`depositGradeVector`), and the summed body danger baseline.
+ */
 export function substrateAggregates(bodies: GeneratedBody[]): {
   availableSpace: number;
   generalSpace: number;
   habitableSpace: number;
   slotCap: ResourceVector;
+  yieldMult: ResourceVector;
+  bodyDanger: number;
 } {
   return {
     availableSpace: SUBSTRATE_GEN.SPACE_PER_SIZE * bodies.reduce((s, b) => s + b.size, 0),
     generalSpace: bodies.reduce((s, b) => s + b.generalSpace, 0),
     habitableSpace: bodies.reduce((s, b) => s + b.habitableSpace, 0),
     slotCap: sumResourceVectors(bodies.map((b) => b.slots)),
+    yieldMult: depositGradeVector(bodies),
+    bodyDanger: bodies.reduce((sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline, 0),
   };
 }

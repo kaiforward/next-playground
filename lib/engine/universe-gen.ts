@@ -7,10 +7,8 @@ import type { EconomyType, ResourceVector, SunClass } from "@/lib/types/game";
 import type { GeneratedTrait } from "./trait-gen";
 import { generateSubstrate, substrateAggregates, type GeneratedBody } from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
-import { depositGradeVector } from "./deposit-grade";
 import { HOME_SYSTEM_PREFAB, homeworldGardenBody } from "./homeworld-prefab";
 import { housingPopCap } from "./industry";
-import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import {
   generateFactions,
   assignHomeworldOwnership,
@@ -677,8 +675,8 @@ export function stampHomeworldPrefabs(
     s.generalSpace = agg.generalSpace;
     s.habitableSpace = agg.habitableSpace;
     s.availableSpace = agg.availableSpace;
-    s.yieldMult = depositGradeVector(bodies);
-    s.bodyDanger = bodies.reduce((sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline, 0);
+    s.yieldMult = agg.yieldMult;
+    s.bodyDanger = agg.bodyDanger;
     s.buildings = { ...HOME_SYSTEM_PREFAB.buildings };
     s.population = HOME_SYSTEM_PREFAB.population;
     s.popCap = housingPopCap(s.buildings);
