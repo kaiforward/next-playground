@@ -1232,12 +1232,16 @@ describe("planFactionColonyProposals", () => {
     expect(rich.work).toBeCloseTo(COLONISATION.COLONY_ESTABLISH_WORK + rich.housingLevels * workCostPerLevel(HOUSING_TYPE), 6);
     expect(rich.work).toBeGreaterThan(COLONISATION.COLONY_ESTABLISH_WORK); // housing is paid for, not free
 
-    // Land-poor: two whole housing levels of habitable land → seed capped below COLONY_SEED_POP.
+    // Land-poor: two whole housing levels of habitable land cap the seed below what was asked for.
+    // The shipped seed (model C) is smaller than one housing level's capacity, so it can never be
+    // land-capped in practice; drive this sub-case with an explicit oversized seed so the whole-level
+    // capping logic stays covered independent of the calibrated constant.
+    const bigSeed = { ...COLONY_PARAMS, seedPop: 50 };
     const housingCost = effectiveSpaceCost(HOUSING_TYPE);
-    const poorHabitable = 2 * housingCost; // exactly 2 whole levels
-    const [poor] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "small", habitableSpace: poorHabitable })], [], COLONY_PARAMS);
-    expect(poor.seedPop).toBe(Math.min(EXPANSION.COLONY_SEED_POP, 2 * POP_CENTRE_DENSITY));
-    expect(poor.seedPop).toBeLessThan(EXPANSION.COLONY_SEED_POP);
+    const poorHabitable = 2 * housingCost; // exactly 2 whole levels → habitable cap 2 × POP_CENTRE_DENSITY
+    const [poor] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "small", habitableSpace: poorHabitable })], [], bigSeed);
+    expect(poor.seedPop).toBe(Math.min(bigSeed.seedPop, 2 * POP_CENTRE_DENSITY));
+    expect(poor.seedPop).toBeLessThan(bigSeed.seedPop);
     expect(poor.housingLevels).toBeLessThanOrEqual(2);
     expect(poor.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(poor.seedPop);
   });

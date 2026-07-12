@@ -239,20 +239,129 @@ Migration is job-aware at both endpoints: colonies fill to their open jobs at th
 stay home by default, and jobless pop drifts toward openings — all reading the one threaded `labourDemand`.
 Unit + sim green; `tsc` clean; `npx next build --webpack` clean.
 
-## PR3 — Colony seeding, pricing & budget fairness *(outline — detail JIT; may split 3a/3b)*
+## PR3 — Colony seeding, pricing & budget fairness
 
-- **Seeding (3a):** small deliberate seed (≈1–2 pops) drawn from the source's **unemployed** first; seed
-  model C (tiny seed + job-aware migration grows it). Adjust `COLONY_SEED_POP` + `applyDevelopments` seed
-  sizing (`lib/world/tick.ts`).
-- **Pricing (3a):** seed-pop opportunity cost = the source's forgone output, netted into colony value on the
-  **benefit** side (§7.3), in `colonisation-value.ts` / `directed-build.ts`.
-- **Budget fairness (3b):** **development-scaled pool floor** (§3.4 / §7.9) in `construction.ts` `fundQueue`
-  — a guaranteed minimum slice for colonies-with-proposals, biggest for the youngest, self-weaning as they
-  develop. **Player-directed founding** (§3.5, EU5-style): player picks in the shared queue fund ahead of the
-  marginal AI pick; automation is a toggle.
-- Tests: seed sized to source unemployed; seed-pop cost shifts colony-vs-build ordering under a scarce pool;
-  the floor guarantees a colony ≥ its development-scaled minimum; a player pick funds ahead of the marginal AI
-  pick. Outcomes 2 & 3.
+**Goal / outcomes:** outcomes 2 & 3 — colonies stop being founded off a drained homeworld, and a founded
+colony can actually *fund its first builds*. Three engine changes, all reading primitives PR1/PR2 already
+shipped (`systemDevelopment`, `labourDemand`, job-aware migration): make the seed **tiny** (so founding is
+cheap and the job-aware loop grows it), **price the pop it does spend** (so founding prefers a job-short
+source over a busy one), and give young colonies a **guaranteed pool slice** (so their first extractor beats
+the homeworld's fifth factory for construction points). **Player-directed founding (§3.5) is deferred** — see
+the note at the end; the pool floor built here is its substrate.
+
+The bootstrapping loop this closes: a **tiny cheap seed** lands with one bundled housing level → its 1–2 pops
+staff a first tier-0 basic (PR1's speculative floor proposes it; the **pool floor** funds it) → those jobs
+lift `labourDemand` → PR2's absorptive throttle now lets migration flow in → more pop staffs more industry.
+Each PR3 piece removes one thing that currently breaks that loop before it can turn over.
+
+### 1. Seed model C — a tiny seed the job-aware loop grows (§7.1)
+
+- `EXPANSION.COLONY_SEED_POP`: **50 → 2**. The seed is now a bootstrap spark, not a population transfer; PR2's
+  job-aware migration is what grows the colony once its first jobs appear. A big seed was the deadlock's other
+  half — it dumped pops on a jobless world faster than jobs could form, and drained the source.
+- **No mechanical change to `applyDevelopments` (`tick.ts`) or the sizing in `planFactionColonyProposals`.**
+  Both already conserve-move `min(seedPop, source-available)` and size bundled housing to
+  `ceil(seedPop / POP_CENTRE_DENSITY)` whole levels (so `popCap ≥ seedPop` on arrival). At `seedPop = 2` that
+  is one housing level — the rest of the colony's housing comes from the proactive housing pass once it is
+  fed-and-calm, exactly as the model intends (housing leads).
+- **"Drawn from the source's unemployed first" is realised by the pricing (§2 below), not a hard cap** — a
+  source with spare labour costs ~nothing to seed from, so the AI naturally pulls the tiny seed from
+  job-short sources. A mechanical "only draw idle pop" cap on a 2-pop seed would be noise; the pricing carries
+  the intent.
+
+### 2. Seed-population opportunity-cost pricing (§3.3 / §7.2 / §7.3)
+
+Net the seed's **forgone source output** into the colony's value on the **benefit** side (§7.3) — keeping
+`work` a pure construction-points denominator, no invented exchange rate. In `planFactionColonyProposals`
+(`directed-build.ts`), the source system is already in the `developed: BuildSystemState[]` input (the develop
+provider only offers a candidate whose `sourceSystemId` is a developed same-faction system), so **no new
+plumbing in `tick.ts`** — look it up by `sourceSystemId`:
+
+```
+sourceSpare     = max(0, sourcePop − labourDemand(source.buildings))     // idle workers ≈ free to move
+employedSeed    = max(0, seedPop − sourceSpare)                          // the part that must poach staffed workers
+sourceStaffed   = max(1, min(sourcePop, labourDemand(source.buildings))) // avoid /0
+outputPerWorker = Σ max(0, source.good.production) / sourceStaffed       // source output density (goods/tick)
+popCost         = params.popCostWeight · employedSeed · outputPerWorker
+value           = colonyValue(candidate, unblocked, σ, params) − popCost
+```
+
+- A colony whose `value ≤ 0` after the cost is **not proposed** (net-negative — its worth doesn't clear the
+  labour it would drain). Otherwise it competes on `value / establishWork` as today.
+- **The bias falls out:** a job-short source (`sourceSpare ≥ 2`) → `employedSeed = 0` → `popCost = 0` → full
+  colony value; a fully-staffed productive source → `employedSeed > 0` and a high `outputPerWorker` →
+  `popCost` bites → the AI stops draining a busy core. This is "the source's forgone output, **not** a flat
+  number" (§7.2) — `outputPerWorker` is the source's real output density, so poaching from a dense homeworld
+  costs more than from a sparse frontier.
+- New tunable `COLONISATION.SEED_POP_COST_WEIGHT` (default 1.0) → `ColonyEstablishParams.popCostWeight`. It
+  bridges the pop cost into the value scalar and is the per-doctrine dial (§4 rubric); PR4 calibrates it
+  against `LAND_PREMIUM`/`σ`. `production` is `?? 0` (engine-test fixtures may omit it; the live/sim path
+  always supplies it via `toGoodMarketStates`).
+
+### 3. Development-scaled pool fairness floor (§3.4 / §7.9)
+
+The pool drains strictly front-first by ROI, so a homeworld's larger builds monopolise it and a young
+colony's valid-but-low-ROI first extractor never funds. Reserve a **development-scaled minimum slice** for
+young colonies' build proposals — biggest for the youngest, self-weaning to nothing as they mature — then the
+homeworld drains the remainder by value as today. A *minimum*, **not** a max-spend cap (a cap throttles
+legitimate high-value homeworld builds and wastes budget — §7.9).
+
+- **New pure `fundQueueWithFloor(ordered, pool, cap, reserved, isFloorEligible)` in `construction.ts`**
+  (leaves `fundQueue` untouched for `forecastEtaPulses`), returning the same `{ projects, landed }`. Two
+  passes over the one ordered queue:
+  - **Pass A** funds only the floor-eligible projects, front-first, from `reserved` (tracking each project's
+    absorbed-this-pulse).
+  - **Pass B** funds the *whole* queue in ROI order from `pool − (reserved actually spent in A)`, each project
+    capped at `cap − absorbedInA` — so the per-pulse absorption cap (the build-time floor) is preserved across
+    both passes, and **unspent reserve flows back to the general pool** (no wasted budget). `reserved = 0`
+    makes it byte-identical to `fundQueue`.
+- **In the processor (`runDirectedBuildProcessor`)**, per developed system compute
+  `dev = systemDevelopment(state, refs)` (refs already fetched for the speculative nudge) and
+  `floorShare(dev) = POOL_FLOOR_BASE · max(0, 1 − dev / FLOOR_DEV_KNEE)` — a smooth self-weaning curve, zero
+  once a system's development clears the knee (so **homeworlds, the most-developed systems, reserve nothing**
+  — no colony flag needed, development does the discriminating). `reserved = Σ floorShare` over developed
+  systems; `isFloorEligible(p) = p.kind === "build" && floorShareBySystem.get(p.systemId) > 0`. Swap the
+  single `fundQueue(...)` call for `fundQueueWithFloor(...)`.
+- New tunables `CONSTRUCTION.POOL_FLOOR_BASE` (max reserved points per young colony) and
+  `CONSTRUCTION.FLOOR_DEV_KNEE` (development at which the floor fully weans off), PR4-calibrated.
+- **Known readout approximation (deferred, not a PR3 bug):** `forecastEtaPulses` (the faction-construction
+  ETA) still forward-sims plain `fundQueue`, so a colony row's `≈N pulses` won't reflect the floor's
+  reallocation. The ETA is already documented as a coarse estimate (the bar/percent stay exact); threading the
+  floor into it needs dev-refs in the read service and belongs in the end-of-stream "pool-floor readouts" UI
+  pass (§5), not here.
+
+### Deferred — player-directed founding (§3.5 / §7.8)
+
+Founding a colony by hand needs a **player seat**, which is not built (the viewpoint is the whole galaxy;
+picking a faction is planned). So this ships documented-but-deferred, exactly as PR2 deferred the migration
+"speed-dial": the **development-scaled pool floor above is its mechanism** — §3.5 defines a player pin as "a
+fairness floor the player sets by hand", so player-founding becomes a purely additive later piece (a
+per-system floor override the player sets to `∞`-equivalent + a queue-injection surface + the automation
+toggle) once the seat exists. Nothing here forecloses it.
+
+### Tests
+
+- **Unit (`colonisation-value.test.ts` / `directed-build.test.ts`):** seed-pop cost is 0 when the source has
+  spare labour ≥ the seed, and positive when the source is fully staffed; a fully-staffed dense source's
+  colony ranks below an equal candidate seeded from a job-short source; a colony whose value goes ≤ 0 after
+  the cost is not proposed; a candidate with no spare-labour deficit at either end is unchanged.
+- **Unit (`construction.test.ts`):** `fundQueueWithFloor` gives an eligible young-colony build ≥ its reserved
+  share even when a higher-ROI homeworld build sits ahead of it; `reserved = 0` reproduces `fundQueue`
+  exactly; unspent reserve funds the general queue (no waste); a project's total absorption this pulse never
+  exceeds `cap` across both passes; `floorShare` weans to 0 at `dev = FLOOR_DEV_KNEE`.
+- **Unit (`expansion.test.ts`):** `COLONY_SEED_POP` is small — a guard against it silently regrowing.
+- **Sim (real tick, via `summarizeColonisation`):** `colony.populatedButNoIndustry` drops and
+  `colony.withTier0` / `withTier1Plus` rise (colonies build — outcome 1/2); `queue.colonyMeanProgress` rises
+  (the floor actually funds them — outcome 3); `homeworld.totalPopulation` is not over-drained and faction
+  **total** population grows rather than being shuffled into idle colonies (seed model C + pricing — outcome
+  2); `detectPingPong` does not worsen.
+
+### Done when
+
+The four success criteria all trend correctly in the sim (coarse health bar), unit + sim green, `tsc` clean,
+`npx next build --webpack` clean. Calibrating the new coefficients (`COLONY_SEED_POP`,
+`SEED_POP_COST_WEIGHT`, `POOL_FLOOR_BASE`, `FLOOR_DEV_KNEE`) to hit all four *simultaneously* is PR4 — PR3
+lands the mechanisms at coarse first-cut values.
 
 ## PR4 — Calibration *(outline — detail JIT)*
 

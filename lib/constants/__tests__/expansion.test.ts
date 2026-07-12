@@ -23,4 +23,11 @@ describe("EXPANSION constants", () => {
     expect(EXPANSION.DEVELOP_HABITABLE_FLOOR).toBeGreaterThan(0);
     expect(EXPANSION.COLONY_SEED_POP).toBeGreaterThan(0);
   });
+
+  it("keeps the colony seed a tiny bootstrap spark, not a population transfer (seed model C)", () => {
+    // A big seed drains the source and dumps pops on a jobless world faster than jobs form; seed
+    // model C moves a tiny spark and lets job-aware migration grow the colony. Guard against the
+    // seed silently regrowing back toward a transfer size.
+    expect(EXPANSION.COLONY_SEED_POP).toBeLessThanOrEqual(5);
+  });
 });
