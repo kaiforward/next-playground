@@ -19,7 +19,7 @@ to hit all four at once. Coarse health bar only until PR4 — no premature preci
 
 The **roadmap and sequencing are fixed here now; code-level detail is written just-in-time** — each PR's
 detailed section is filled in immediately before we build it, so it reflects what actually shipped before it
-(later PRs depend on the exact shapes earlier ones land). **PR1 is detailed now; PR2–PR4 are outlined.**
+(later PRs depend on the exact shapes earlier ones land). **PR1 and PR2 are detailed now; PR3–PR4 are outlined.**
 
 Work lands on the shared feature branch `feat/economy-rework-base`; each PR is a phase branch squash/ff-merged
 in (per the workflow conventions).
@@ -128,19 +128,116 @@ Colonies build a sensible first-industry floor in the sim; the dev map mode is v
 
 ---
 
-## PR2 — Job-aware population *(outline — detail JIT)*
+## PR2 — Job-aware population
 
-- **Surface a real job-openings signal** per system (labour demand vs employed pop). Today
-  `computeLabourAllocation` (`industry.ts`) is display-only; promote the openings/shortage number into a value
-  migration and population dynamics can read.
-- **Jobs into `migrationAttractiveness`** (§7.5) so a jobless colony isn't a magnet; **target-side throttle**
-  (§7.4) so flow is capped by the target's absorptive capacity, not just source size + absolute headroom;
-  **jobless colonists drift out** toward openings.
-- Files: `lib/engine/migration.ts` (attractiveness + throttle), `lib/constants/population.ts` (weights),
-  `lib/engine/industry.ts` (expose openings), `lib/tick/processors/migration.ts`.
-- Tests: a big source no longer floods a small attractive colony; a jobless colony scores lower than a jobbed
-  one; unemployed pop migrates toward openings. Sim: no roller-coaster (colony pop doesn't overshoot then
-  collapse). Outcome 2.
+**Goal / outcomes:** outcome 2 (colonies don't build things that fail because pops migrate away; sim shows no
+roller-coaster). Couple migration to jobs at **both endpoints** so (a) a colony with open jobs attracts pop,
+(b) it fills at *its own* pace not the source's, and (c) *staffed* homeworld workers are not poached to seed a
+merely-more-attractive colony. This is the prerequisite for PR3's seed-pop pricing: jobs must drive migration
+before the seed can be priced against the source's forgone output.
+
+Everything reads **one new threaded signal** — `labourDemand` (Σ heads the built base wants) — already
+computed by `labourDemand(buildings)` in `lib/engine/industry.ts` (housing demands none). No change to
+`industry.ts`; the gap (`demand − population`) is computed live in the pure migration engine, so it tracks the
+intra-pulse population delta rather than a stale precomputed "openings".
+
+### 1. Thread `labourDemand` to the migration engine (adapter derives, engine stays pure)
+
+- `MigrationNode` (`lib/engine/migration.ts`) and `MigrationNodeView` (`lib/tick/world/migration-world.ts`)
+  each gain **`labourDemand: number`**.
+- `InMemoryMigrationWorld.getNodesForSystems` (`lib/tick/adapters/memory/migration.ts`) computes it via
+  `labourDemand(s.buildings)` (import from `@/lib/engine/industry`). The adapter already holds full
+  `SimSystem`s, so this is a one-line derive per node.
+- The processor's `liveNode` (`lib/tick/processors/migration.ts`) passes `labourDemand` through **unchanged**
+  (building-derived, static within a pulse) while `population` keeps its live intra-tick delta — so as pop
+  arrives across several edges in one pulse, the remaining open jobs shrink correctly.
+
+### 2. Jobs term in `migrationAttractiveness` (§7.5)
+
+- `AttractivenessWeights` gains **`jobs: number`**.
+- Formula (added to the existing contentment + headroom sum):
+  ```
+  jobGap   = node.labourDemand − node.population
+  jobsTerm = (node.labourDemand > 0 || node.population > 0) ? jobGap / max(node.labourDemand, node.population) : 0
+  attractiveness = w.contentment·(1 − unrest) + w.headroom·headroom + w.jobs·jobsTerm
+  ```
+- Bounded in [−1, 1] by construction (|numerator| ≤ denominator) — no magic constant. Open jobs → positive
+  (pull); fully staffed → ~0; unemployment → negative (push).
+- **"Jobless colonists drift out" is emergent, not a new rule:** a jobless colony (pop > demand) scores below
+  its jobbed neighbours, so the existing conserved gradient flow carries the surplus toward openings. No
+  change to the population growth/decline formula (out of scope for this PR; §7.5 is explicit there is no new
+  "starve" rule).
+
+### 3. Destination absorptive throttle (§7.4)
+
+- In `migrationFlow`, after `dest` is resolved from the gradient direction, cap inflow at the destination's
+  **open jobs** (live pop):
+  ```
+  absorptiveCapacity = max(0, dest.labourDemand − dest.population)
+  ```
+- Fold into the `quantity = min(...)`. `destHeadroom = max(0, dest.popCap − dest.population)` stays as the
+  **housing hard cap** (overshoot bound); `absorptiveCapacity` is the usually-tighter **jobs cap**, so a
+  colony fills to its openings at its own pace — this is the load-bearing fix for the overshoot→wither→leave
+  roller-coaster. A fully-staffed colony (no openings) receives nobody.
+
+### 4. Source two-tier draw — spare labour by default, staffed gated by a threshold (§7.4)
+
+- `MigrationFlowParams` gains **`employedGradientThreshold: number`**.
+- In `migrationFlow` (source = the less-attractive endpoint):
+  ```
+  sourceSpare      = max(0, source.population − source.labourDemand)          // idle workers — always drawable
+  employed         = min(max(0, source.population), max(0, source.labourDemand))
+  employedEligible = |gradient| > params.employedGradientThreshold ? employed : 0
+  sourceDrawable   = sourceSpare + employedEligible
+  quantity = max(0, min(outflow, sourceDrawable, source.population, destHeadroom, absorptiveCapacity))
+  ```
+  (`sourceDrawable ≤ source.population` always, so the existing `source.population` term is now a redundant
+  safety belt — keep it.)
+- **Three nested tiers**, monotonic in the appeal gap: `< gradientThreshold` → nobody moves (unchanged);
+  `< employedGradientThreshold` → **only spare labour** moves; `≥ employedGradientThreshold` → spare +
+  staffed move.
+- **Default `employedGradientThreshold` is effectively unreachable** (above the max achievable appeal gap —
+  with weights all 1 the gap tops out ~5), so out of the box `employedEligible = 0` and only spare labour is
+  drawable ⇒ the hard source cap: staffed workers stay home. Represent "off" cleanly (a documented very-high
+  constant); do **not** use `Infinity` — it is a code param, not world state, but keep the no-`Infinity`
+  discipline and a finite sentinel reads more honestly.
+- **Deferred (documented, not built): the player speed-dial.** Lowering `employedGradientThreshold` for chosen
+  systems (a paid decision / currency cost) is the future player action that coaxes staffed workers toward a
+  force-grown frontier (design doc §7.4 / #10). The *mechanism* ships here inert; the player-facing knob is a
+  purely additive later change (a per-system threshold override + the decision surface + the cost). Because it
+  ships tested (below), that later work is config + plumbing, not new flow logic.
+
+### 5. Constants (`lib/constants/population.ts`)
+
+- `MIGRATION_PARAMS.weights` gains **`jobs: 1`** (provisional; PR4 rebalances the contentment/headroom/jobs
+  mix — `headroom` deliberately stays 1 here so PR2 is a pure addition, not a recalibration).
+- `MIGRATION_PARAMS` gains **`employedGradientThreshold`** set to the unreachable default (staffed-migration
+  off), with a comment naming it as the bar the future player knob lowers.
+
+### Tests
+
+- **Unit (`lib/engine/__tests__/migration.test.ts`):**
+  - *Jobs term:* a jobbed node (`demand > pop`) scores above an equal jobless node (`demand = 0`); the term
+    flips sign at `pop = demand`; `demand = pop = 0` yields 0 (no NaN).
+  - *Destination throttle:* a big source flooding a small colony is capped at the colony's open jobs; a
+    fully-staffed colony (no openings) receives nobody even when otherwise attractive.
+  - *Source spare cap (default threshold):* a fully-staffed source (`sourceSpare = 0`) sends nobody even to a
+    very attractive destination; a source with idle labour sends up to its spare.
+  - *Source coax tier (low threshold — proves the future knob):* with a low `employedGradientThreshold`, a
+    fully-staffed source **does** release staffed workers when `|gradient|` clears the bar, and **does not**
+    below it. (Guards against the coax mechanism being untested dead code.)
+  - *Update existing tests* to include `labourDemand` on each `MigrationNode`, choosing values that preserve
+    each test's intent (the overshoot-source test gets ample spare labour; the headroom-cap test's destination
+    gets ample open jobs so the absorptive cap isn't the binding constraint).
+- **Sim (real tick, via the runner):** `detectPingPong` (`population-analysis.ts`) does not worsen and colony
+  pop doesn't overshoot-then-collapse; `emptiedCount` / `growthPct` stay sane (coarse health bar). Spot-check
+  that homeworlds aren't drained of *staffed* workers (source cap working). Outcome 2.
+
+### Done when
+
+Migration is job-aware at both endpoints: colonies fill to their open jobs at their own pace, staffed workers
+stay home by default, and jobless pop drifts toward openings — all reading the one threaded `labourDemand`.
+Unit + sim green; `tsc` clean; `npx next build --webpack` clean.
 
 ## PR3 — Colony seeding, pricing & budget fairness *(outline — detail JIT; may split 3a/3b)*
 

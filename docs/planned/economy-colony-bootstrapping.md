@@ -202,22 +202,45 @@ technical anchor for implementation.
    construction facilities + staff + money), not an abstract token — its own future piece, and it sharpens
    #9.
 
-4. **How fast do people move — and can the player force a big move?** → **Decided:** default speed = the
-   existing migration rate (`migrationFlow`); a player "speed dial" pulls harder and costs money / an
-   abstract currency later. Still a rate-limited flow, never an instant jump.
+4. **How fast do people move — and can the player force a big move?** → **Decided:** migration is a
+   rate-limited flow gated by the **job gap at both endpoints** — the destination pulls only toward its open
+   jobs, the source releases only its spare (idle) labour. Never an instant jump.
    - **Target-side throttle (required fix).** Today the per-pulse flow scales with the *source's* population
      and is clipped only by the destination's *absolute* headroom (`min(outflow, source.pop, destHeadroom)`),
      so a large homeworld **floods a tiny colony** — at current params (`maxOutflowFraction 0.05`,
      contentment+headroom weights 1) a ~300-pop homeworld pushes ~12 pops/pulse into a 1–2 pop seed. Fix:
-     throttle the flow by the **target's absorptive capacity** — the jobs/space it can actually use now — so
-     a small colony fills at *its* pace, not the source's. Composes with the jobs pull (#5) and the small
-     deliberate seed (#1) to give a smooth ramp instead of a roller-coaster.
+     cap inflow at the destination's **absorptive capacity = its open jobs** (`max(0, labourDemand −
+     population)`, live pop). Housing headroom stays the hard overshoot bound; open jobs is the
+     usually-tighter cap, so a small colony fills at *its own* pace (jobs), not the source's size.
+   - **Source-side spare-labour cap (required fix).** Symmetrically, the source releases only its **idle
+     labour** (`sourceSpare = max(0, population − labourDemand)`) by default — migration never poaches a
+     *staffed* worker off a homeworld to seed a colony that is merely more attractive overall. This is the
+     load-bearing "job shortage is the push signal" rule (§3.3): a job-short source feeds colonies readily, a
+     fully-employed one resists, and colonies grow from surplus labour + organic growth rather than by
+     bleeding the core. (Signed jobs attractiveness alone does *not* achieve this — a young job-rich colony
+     out-attracts a nearly-staffed homeworld, so the direction still points *off* the core; the source cap is
+     what actually protects staffed workers.)
+   - **The player "speed-dial" = lowering the staffed-migration bar.** Staffed workers become drawable only
+     when the appeal gap clears a **very high `employedGradientThreshold`** — unreachable by default, so out
+     of the box only spare labour moves (the cap above). The planned player action (a paid decision /
+     currency cost, per #10) **lowers that threshold** for chosen systems, coaxing staffed workers to
+     relocate toward a force-grown frontier and accepting the core-output hit — Victoria 3's "mass migration"
+     burst. The two-tier draw ships as the mechanism now (present but inert); the player-facing knob is the
+     purely additive later piece. The bar's meaning is intuitive: *how much better must a destination be
+     before someone quits a job to move there.*
 
 5. **What makes people want to move to (and stay in) a colony?** → **Decided:** add **jobs** as an
    attractiveness pull (`migrationAttractiveness` has none today — which is why empty colonies wrongly look
    attractive), with room for more pulls later. Jobless colonists **drift back out** toward jobs rather than
    getting a new "starve and die" rule. This single edit is load-bearing — it fixes the bad "empty colony is
    attractive" incentive, delivers the job-shortage push, and paces arrivals to the build, all at once.
+   - **Formula:** a signed jobs term `jobsTerm = (labourDemand − population) / max(labourDemand, population)`
+     (0 when both are 0), added to contentment + headroom. Open jobs → positive (pull); fully staffed → ~0;
+     unemployment → negative (push). Bounded in [−1, 1] by construction — no magic constant. The "drift back
+     out" is then **emergent**, not a new rule: a jobless colony scores below its jobbed neighbours, so the
+     existing conserved gradient flow carries the surplus toward openings. `headroom` keeps weight 1 for now
+     (the jobs term already reverses the empty-colony / homeworld-poach incentive); rebalancing the
+     contentment/headroom/jobs weights is a later calibration step, not part of this edit.
 
 ### Making colonies build their own industry
 
