@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   emptyResourceVector, makeResourceVector,
-  sumResourceVectors, resourceVectorFromColumns, prepareResourceBars,
+  sumResourceVector, sumResourceVectors, resourceVectorFromColumns, prepareResourceBars,
   slotColumns, qualColumns, yieldColumns, unitResourceVector,
 } from "../resources";
 import type { ResourceType } from "@/lib/types/game";
@@ -64,6 +64,25 @@ describe("sumResourceVectors", () => {
   it("returns an all-zero vector for an empty list", () => {
     const sum = sumResourceVectors([]);
     expect(sum).toEqual(makeResourceVector({}));
+  });
+});
+
+describe("sumResourceVector", () => {
+  it("sums the components of a single vector", () => {
+    expect(sumResourceVector(makeResourceVector({ gas: 1, ore: 2, water: 5 }))).toBe(8);
+  });
+
+  it("is zero for an empty vector", () => {
+    expect(sumResourceVector(emptyResourceVector())).toBe(0);
+  });
+
+  it("counts every one of the seven resource types (no slot dropped)", () => {
+    // Each type must contribute — a dropped type here would silently skew the universe-wide industryRef
+    // that getDevelopmentRefs derives from this sum.
+    const v = makeResourceVector({
+      gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1,
+    });
+    expect(sumResourceVector(v)).toBe(7);
   });
 });
 

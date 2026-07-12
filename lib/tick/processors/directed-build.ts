@@ -115,6 +115,9 @@ export async function runDirectedBuildProcessor(
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
   const openProjects = await world.getConstructionProjects(dueKeys);
+  // Universe-wide development reference (galaxy's biggest natural potential) — the same value the
+  // dev-map reads, so the speculative nudge scores each system's development consistently.
+  const developmentRefs = await world.getDevelopmentRefs();
 
   // Group rows + open projects by faction; plan and fund each faction independently.
   const byFaction = new Map<string | null, SystemBuildRow[]>();
@@ -147,7 +150,7 @@ export async function runDirectedBuildProcessor(
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
     const buildStates = group.map(toBuildState);
-    const buildProposals = planFactionProposals(buildStates, params.routeCost, existing);
+    const buildProposals = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
 
     // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
     // colonise (a null-faction group is independents — never); the develop param is omitted in build-only tests.

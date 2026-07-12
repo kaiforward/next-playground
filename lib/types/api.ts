@@ -14,6 +14,7 @@ import type {
   BodyArchetypeId,
   StabilityEntry,
   PopulationEntry,
+  DevelopmentEntry,
   OwnershipEntry,
   ResourceVector,
 } from "./game";
@@ -56,6 +57,7 @@ export interface TradeFlowEdges {
 export type TradeFlowResponse = ApiResponse<TradeFlowEdges>;
 export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
 export type PopulationResponse = ApiResponse<{ systems: PopulationEntry[] }>;
+export type DevelopmentResponse = ApiResponse<{ systems: DevelopmentEntry[] }>;
 export type OwnershipResponse = ApiResponse<{ systems: OwnershipEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {

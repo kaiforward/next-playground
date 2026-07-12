@@ -18,6 +18,8 @@ export const queryKeys = {
   stability: ["stability"] as const,
   // All-systems population (tick-scoped — map choropleth)
   populationMap: ["populationMap"] as const,
+  // All-systems development 0..1 (tick-scoped — map choropleth)
+  developmentMap: ["developmentMap"] as const,
   // All-systems ownership (faction + developed tier — tick-scoped; political territory + markers)
   ownership: ["ownership"] as const,
   // Trade flow overlay (tick-scoped, gated by overlay toggle)

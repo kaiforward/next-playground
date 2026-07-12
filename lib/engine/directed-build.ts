@@ -9,7 +9,8 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
-import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
+import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
@@ -164,42 +165,69 @@ export interface StructuralDeficit {
 }
 
 /**
- * Find rate deficits (production < demand) that logistics cannot serve because no reachable surplus
- * of the good exists. A good's build target is its RATE deficit (demand − production), not a
- * days-of-supply stock shortfall: capacity is built to meet the flow (docs/planned/economy-demand-driven-model.md
- * §2), so a full stock buffer does not cancel a structural shortfall. A self-supplier (production ≥
- * demand) has no rate deficit and is skipped. The reachable-surplus exclusion is a rate EXPORTER
- * (production > demand) — a sustainable producer whose surplus flow logistics can carry — not a
- * transient stock pile: a neighbour merely holding (and draining) stock is no reason to forgo a
- * system's own capacity, and logistics still ships that stock while the capacity comes up. Building
- * to serve one's own demand (self = cheapest route) unless a producer already serves it.
+ * Find the rate deficits (production < demand) reachable supply cannot cover, netting the coverage
+ * FLOW rather than testing mere existence (docs/planned/economy-colony-bootstrapping.md §3.1). A
+ * good's build target is its RATE deficit (demand − production), not a days-of-supply stock shortfall:
+ * capacity is built to meet the flow (docs/planned/economy-demand-driven-model.md §2), so a full
+ * stock buffer does not cancel a structural shortfall. A self-supplier (production ≥ demand) has no
+ * rate deficit and is skipped.
+ *
+ * Cancellation is flow-aware. An exporter's spare is its sustainable export RATE `production − demand`
+ * (not a stock pile — a neighbour merely holding and draining stock has non-positive spare, so it never
+ * cancels a deficit; logistics still ships that transient stock while local capacity comes up). Per
+ * good, the reachable exporters' total spare is netted across all reachable deficits at once —
+ * `coveredFraction = min(1, Σ spare / Σ reachable-deficit)` (first cut per §7.6) — so one exporter's
+ * spare cannot fully cover two competing colonies. Each reachable deficit's residual
+ * `rateDeficit × (1 − coveredFraction)` stays structural → buildable locally; a deficit with no
+ * reachable exporter stays fully structural. Building serves one's own demand (self = cheapest route)
+ * for whatever reachable supply cannot actually deliver.
+ *
+ * O(goods · systems) for the spare/deficit sums plus the same per-deficit reachability scan the
+ * existence test already did — cheap enough for the per-pulse planner.
  */
 export function findStructuralDeficits(
   systems: BuildSystemState[],
   routeCost: RouteCost,
 ): StructuralDeficit[] {
   const deficits: Array<{ systemId: string; goodId: string; rateDeficit: number; demand: number }> = [];
-  const exporterSystemsByGood = new Map<string, string[]>();
+  // Reachable rate exporters per good, each carrying its spare export rate (production − demand > 0).
+  const exportersByGood = new Map<string, Array<{ systemId: string; spare: number }>>();
+  const spareByGood = new Map<string, number>();
 
   for (const s of systems) {
     for (const g of s.goods) {
-      const production = g.production ?? 0;
-      const rateDeficit = g.demand - production;
-      if (rateDeficit > 0) {
-        deficits.push({ systemId: s.systemId, goodId: g.goodId, rateDeficit, demand: g.demand });
-      } else if (production > g.demand) {
-        const list = exporterSystemsByGood.get(g.goodId) ?? [];
-        list.push(s.systemId);
-        exporterSystemsByGood.set(g.goodId, list);
+      const spare = (g.production ?? 0) - g.demand;
+      if (spare < 0) {
+        deficits.push({ systemId: s.systemId, goodId: g.goodId, rateDeficit: -spare, demand: g.demand });
+      } else if (spare > 0) {
+        const list = exportersByGood.get(g.goodId) ?? [];
+        list.push({ systemId: s.systemId, spare });
+        exportersByGood.set(g.goodId, list);
+        spareByGood.set(g.goodId, (spareByGood.get(g.goodId) ?? 0) + spare);
       }
     }
   }
 
+  // First pass: mark which deficits have any reachable exporter, and sum the reachable demand per good
+  // — the denominator the shared spare is netted across.
+  const reachableDeficitByGood = new Map<string, number>();
+  const flagged = deficits.map((d) => {
+    const reachable = (exportersByGood.get(d.goodId) ?? []).some((e) => routeCost(e.systemId, d.systemId) !== null);
+    if (reachable) reachableDeficitByGood.set(d.goodId, (reachableDeficitByGood.get(d.goodId) ?? 0) + d.rateDeficit);
+    return { d, reachable };
+  });
+
+  // Second pass: an unreachable deficit is fully structural; a reachable one keeps its uncovered residual.
   const structural: StructuralDeficit[] = [];
-  for (const d of deficits) {
-    const exporters = exporterSystemsByGood.get(d.goodId) ?? [];
-    const reachableExporter = exporters.some((su) => routeCost(su, d.systemId) !== null);
-    if (!reachableExporter) structural.push(d);
+  for (const { d, reachable } of flagged) {
+    if (!reachable) {
+      structural.push(d);
+      continue;
+    }
+    const reachableDeficit = reachableDeficitByGood.get(d.goodId) ?? 0;
+    const coveredFraction = reachableDeficit > 0 ? Math.min(1, (spareByGood.get(d.goodId) ?? 0) / reachableDeficit) : 0;
+    const residual = d.rateDeficit * (1 - coveredFraction);
+    if (residual > 0) structural.push({ systemId: d.systemId, goodId: d.goodId, rateDeficit: residual, demand: d.demand });
   }
   return structural;
 }
@@ -257,6 +285,30 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
 /** Additional output of `goodId` a system can host = buildable units × per-unit output. */
 export function buildableOutput(sys: BuildSystemState, goodId: string): number {
   return buildableUnits(sys, goodId) * (OUTPUT_PER_UNIT[goodId] ?? 0);
+}
+
+/**
+ * The additional local production an undeveloped system should stand up as a self-supply FLOOR of a
+ * basic it has a deposit for, beyond what reactive builds already add (§3.2 / §7.7). The floor is
+ * `(1 − systemDevelopment) × SPECULATIVE_FLOOR × localDemand` — strongest on a raw colony, fading to
+ * nothing as it matures — netted against the good's current local production and the
+ * `structuralResidual` (the flow-aware uncovered demand already queued for local build). Zero for a
+ * non-basic, a good with no local deposit or demand, a matured system, or when reactive builds already
+ * reach the floor. Bounded ≤ local demand, so it is a floor, never export.
+ */
+export function speculativeFloorExtra(
+  site: BuildSystemState,
+  goodId: string,
+  structuralResidual: number,
+  refs: DevelopmentRefs,
+): number {
+  if (!SPECULATIVE_BASICS.includes(goodId)) return 0;
+  if (buildableUnits(site, goodId) < 1) return 0; // no local deposit slots to build into
+  const market = site.goods.find((g) => g.goodId === goodId);
+  if (!market || market.demand <= 0) return 0;
+  const floorFraction = (1 - systemDevelopment(site, refs)) * DIRECTED_BUILD.SPECULATIVE_FLOOR;
+  if (floorFraction <= 0) return 0;
+  return Math.max(0, floorFraction * market.demand - (market.production ?? 0) - structuralResidual);
 }
 
 /**
@@ -413,6 +465,7 @@ interface PlannedBundle {
 function planFactionBundles(
   systems: BuildSystemState[],
   routeCost: RouteCost,
+  refs: DevelopmentRefs,
 ): PlannedBundle[] {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
@@ -448,7 +501,32 @@ function planFactionBundles(
 
   // ── Pass 2: labour-gated industry (industry follows the resident workforce). ──
   const structural = findStructuralDeficits(systems, routeCost);
-  if (structural.length === 0) return bundles;
+
+  // Remaining structural shortfall per (good → systemId → shortfall).
+  const remainingByGood = new Map<string, Map<string, number>>();
+  for (const d of structural) {
+    const m = remainingByGood.get(d.goodId) ?? new Map<string, number>();
+    m.set(d.systemId, (m.get(d.systemId) ?? 0) + d.rateDeficit);
+    remainingByGood.set(d.goodId, m);
+  }
+
+  // Speculative local-basics floor (§3.2): an undeveloped system stands up a bounded floor of its own
+  // tier-0 extraction of un-repurposable basics it imports, scaled by (1 − development). Added onto the
+  // remaining shortfall so the same opportunity machinery builds and ROI-ranks it (self-supply wins on
+  // route cost); nets against the flow-aware residual so it only tops up what reactive builds miss. This
+  // runs even with no structural deficit — the import-everything case is exactly what it exists to fix.
+  for (const site of working.values()) {
+    for (const goodId of SPECULATIVE_BASICS) {
+      const residual = remainingByGood.get(goodId)?.get(site.systemId) ?? 0;
+      const extra = speculativeFloorExtra(site, goodId, residual, refs);
+      if (extra <= 0) continue;
+      const m = remainingByGood.get(goodId) ?? new Map<string, number>();
+      m.set(site.systemId, (m.get(site.systemId) ?? 0) + extra);
+      remainingByGood.set(goodId, m);
+    }
+  }
+
+  if (remainingByGood.size === 0) return bundles;
 
   // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
   // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
@@ -462,14 +540,6 @@ function planFactionBundles(
         surplusSystemsByGood.set(g.goodId, list);
       }
     }
-  }
-
-  // Remaining structural shortfall per (good → systemId → shortfall).
-  const remainingByGood = new Map<string, Map<string, number>>();
-  for (const d of structural) {
-    const m = remainingByGood.get(d.goodId) ?? new Map<string, number>();
-    m.set(d.systemId, (m.get(d.systemId) ?? 0) + d.rateDeficit);
-    remainingByGood.set(d.goodId, m);
   }
 
   // Precompute every candidate (site, good) opportunity once — the reachable deficit
@@ -669,8 +739,9 @@ function planFactionBundles(
 export function planFactionBuilds(
   systems: BuildSystemState[],
   routeCost: RouteCost,
+  refs: DevelopmentRefs,
 ): PlannedBuild[] {
-  return planFactionBundles(systems, routeCost).flatMap((b) =>
+  return planFactionBundles(systems, routeCost, refs).flatMap((b) =>
     b.items.map((i) => ({ systemId: b.systemId, buildingType: i.buildingType, count: i.levels })),
   );
 }
@@ -692,6 +763,7 @@ export function planFactionProposals(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   openProjects: WorldConstructionProject[],
+  refs: DevelopmentRefs,
 ): BuildProposal[] {
   // In-flight levels per (system, buildingType) — the "already committed" capacity. Only build
   // projects contribute building levels here; a colony-establish carries no in-flight levels at a
@@ -716,7 +788,7 @@ export function planFactionProposals(
 
   const factionBySystem = new Map(systems.map((s) => [s.systemId, s.factionId]));
   const proposals: BuildProposal[] = [];
-  for (const b of planFactionBundles(augmented, routeCost)) {
+  for (const b of planFactionBundles(augmented, routeCost, refs)) {
     const factionId = factionBySystem.get(b.systemId);
     // Only faction-owned systems can be developed (the build gate), so a bundle always has a faction;
     // the guard both narrows the type and skips the impossible independent-system case.
