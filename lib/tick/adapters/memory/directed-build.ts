@@ -6,6 +6,8 @@ import type {
   SystemDevelopment,
 } from "@/lib/tick/world/directed-build-world";
 import type { WorldConstructionProject } from "@/lib/world/types";
+import { developmentRefs, type DevelopmentRefs } from "@/lib/engine/development";
+import { sumResourceVector } from "@/lib/engine/resources";
 
 /** In-memory DirectedBuildWorld for unit tests + the simulator. Captures writes for assertions + write-back. */
 export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
@@ -34,6 +36,17 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   async getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemBuildRow[]> {
     const set = new Set(factionKeys);
     return this.systems.filter((s) => set.has(s.factionId));
+  }
+
+  async getDevelopmentRefs(): Promise<DevelopmentRefs> {
+    // Universe-wide over the full system set (all factions + independents), not a per-faction shard.
+    return developmentRefs(
+      this.systems.map((s) => ({
+        habitableSpace: s.habitableSpace,
+        generalSpace: s.generalSpace,
+        depositSlots: sumResourceVector(s.slotCap),
+      })),
+    );
   }
 
   async getConstructionProjects(factionKeys: Array<string | null>): Promise<WorldConstructionProject[]> {

@@ -19,6 +19,13 @@ export function unitResourceVector(): ResourceVector {
   return { gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1 };
 }
 
+/** Total magnitude across all resource types (Σ of the seven components). */
+export function sumResourceVector(v: ResourceVector): number {
+  let total = 0;
+  for (const type of RESOURCE_TYPES) total += v[type];
+  return total;
+}
+
 /** Build a full vector from a partial, filling unspecified types with zero. */
 export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVector {
   const v = emptyResourceVector();

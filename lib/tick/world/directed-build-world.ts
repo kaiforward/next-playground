@@ -7,6 +7,7 @@
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
+import type { DevelopmentRefs } from "@/lib/engine/development";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
 export interface SystemBuildRow {
@@ -58,6 +59,8 @@ export interface DirectedBuildWorld {
   getFactionShardKeys(): Promise<Array<string | null>>;
   /** All systems (with markets + capacity) belonging to the given faction keys. */
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemBuildRow[]>;
+  /** Universe-wide development reference (galaxy's biggest natural potential) over ALL systems, not just a shard. */
+  getDevelopmentRefs(): Promise<DevelopmentRefs>;
   /** Open (in-flight) construction projects owned by the given faction keys. */
   getConstructionProjects(factionKeys: Array<string | null>): Promise<WorldConstructionProject[]>;
   /** Bulk absolute building-count writes (landed whole levels: production goods + "housing"). */

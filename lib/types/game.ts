@@ -255,6 +255,13 @@ export interface PopulationEntry {
   population: number;
 }
 
+/** Per-system development reading (0..1) for the development choropleth overlay. Tick-scoped: development
+ *  changes as systems grow, so it rides a tick-invalidated path (not the static atlas). */
+export interface DevelopmentEntry {
+  systemId: string;
+  development: number;
+}
+
 /** Per-system ownership reading for the political territory + system markers. Tick-scoped: ownership
  *  changes on the monthly claim/develop pulse, so this rides a tick-invalidated path (not the static atlas). */
 export interface OwnershipEntry {
