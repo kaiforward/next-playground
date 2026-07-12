@@ -13,32 +13,32 @@ describe("deriveEconomyTypeLabel", () => {
   });
 
   it("classifies an arable/biomass-dominant low-pop system as agricultural", () => {
-    expect(deriveEconomyTypeLabel(makeResourceVector({ arable: 8, biomass: 4, ore: 1 }), UNIT, 100))
+    expect(deriveEconomyTypeLabel(makeResourceVector({ arable: 8, biomass: 4, ore: 1 }), UNIT, 1000))
       .toBe("agricultural");
   });
 
   it("classifies an ore/mineral-dominant low-pop system as extraction", () => {
-    expect(deriveEconomyTypeLabel(makeResourceVector({ ore: 6, minerals: 6, water: 1 }), UNIT, 100))
+    expect(deriveEconomyTypeLabel(makeResourceVector({ ore: 6, minerals: 6, water: 1 }), UNIT, 1000))
       .toBe("extraction");
   });
 
   it("classifies a mid-pop mixed system as refinery", () => {
-    expect(deriveEconomyTypeLabel(makeResourceVector({ water: 4, ore: 2, biomass: 1, gas: 1 }), UNIT, 400))
+    expect(deriveEconomyTypeLabel(makeResourceVector({ water: 4, ore: 2, biomass: 1, gas: 1 }), UNIT, 4000))
       .toBe("refinery");
   });
 
   it("classifies a populous balanced/food system as core", () => {
-    expect(deriveEconomyTypeLabel(makeResourceVector({ arable: 4, biomass: 3, water: 4, ore: 2 }), UNIT, 1500))
+    expect(deriveEconomyTypeLabel(makeResourceVector({ arable: 4, biomass: 3, water: 4, ore: 2 }), UNIT, 15000))
       .toBe("core");
   });
 
   it("classifies a populous raw-heavy system as industrial", () => {
-    expect(deriveEconomyTypeLabel(makeResourceVector({ ore: 6, minerals: 5, gas: 3 }), UNIT, 1500))
+    expect(deriveEconomyTypeLabel(makeResourceVector({ ore: 6, minerals: 5, gas: 3 }), UNIT, 15000))
       .toBe("industrial");
   });
 
   it("classifies a populous low-resource system as tech", () => {
-    expect(deriveEconomyTypeLabel(makeResourceVector({ water: 5, biomass: 1 }), UNIT, 1500))
+    expect(deriveEconomyTypeLabel(makeResourceVector({ water: 5, biomass: 1 }), UNIT, 15000))
       .toBe("tech");
   });
 
