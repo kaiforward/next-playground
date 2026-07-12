@@ -7,7 +7,7 @@ import {
   type DevelopmentInput,
   type DevelopmentRefs,
 } from "@/lib/engine/development";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost } from "@/lib/constants/industry";
+import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 
 /**
@@ -134,6 +134,28 @@ describe("systemDevelopment", () => {
     expect(heavy).toBeGreaterThan(light);
   });
 
+  it("counts non-extractor general-space buildings (the factory term), staffed not just built", () => {
+    // Extractors sit on deposit slots; factories, academies and complexes sit on general space and feed
+    // development through the `factory` = generalSpaceUsed − housingSpace term. A vocational school is
+    // such a general-space building (no deposit `resource`), so it exercises that term with no extractor
+    // present. Barren land isolates industry as the whole reading.
+    const barren = { habitableSpace: 0 };
+    const empty = systemDevelopment(devInput({ ...barren, population: 1000, buildings: {} }), REFS);
+    const built = systemDevelopment(
+      devInput({ ...barren, population: 1000, buildings: { [VOCATIONAL_SCHOOL_TYPE]: 6 } }),
+      REFS,
+    );
+    expect(empty).toBe(0);
+    expect(built).toBeGreaterThan(0);
+
+    // ...and it counts what is STAFFED: the same buildings understaffed read lower.
+    const idle = systemDevelopment(
+      devInput({ ...barren, population: 5, buildings: { [VOCATIONAL_SCHOOL_TYPE]: 6 } }),
+      REFS,
+    );
+    expect(built).toBeGreaterThan(idle);
+  });
+
   it("counts industry by what is STAFFED, not what is built (barren isolates it)", () => {
     // Barren (no habitable land) drops the pop term, so development is industry alone — isolating
     // the used-vs-built question. Same 10 built ore extractors; only staffing differs.
@@ -167,5 +189,18 @@ describe("systemDevelopment", () => {
     );
     expect(dev).toBeGreaterThanOrEqual(0);
     expect(dev).toBeLessThanOrEqual(1);
+  });
+
+  it("reads 0 against a degenerate zero reference (empty universe), never NaN/Infinity", () => {
+    // developmentRefs([]) yields { popRef: 0, industryRef: 0 }; softSaturate's `ref <= 0` guard must
+    // floor both terms to 0 rather than divide by zero, keeping the reading finite — the codebase bars
+    // NaN/Infinity from reaching derived/world state.
+    const zeroRefs: DevelopmentRefs = { popRef: 0, industryRef: 0 };
+    const dev = systemDevelopment(
+      devInput({ buildings: { ore: 10, [HOUSING_TYPE]: 5 }, population: 200, habitableSpace: 100 }),
+      zeroRefs,
+    );
+    expect(dev).toBe(0);
+    expect(Number.isFinite(dev)).toBe(true);
   });
 });

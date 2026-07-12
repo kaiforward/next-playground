@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
-import { getDevelopmentBySystem, developmentRefsForWorld } from "@/lib/services/development-map";
-import { systemDevelopment } from "@/lib/engine/development";
+import { getDevelopmentBySystem } from "@/lib/services/development-map";
+import { systemDevelopment, developmentRefs } from "@/lib/engine/development";
 import type { World } from "@/lib/world/types";
 
 let world: World;
@@ -24,17 +24,30 @@ describe("getDevelopmentBySystem", () => {
 
   it("wires each system's world substrate into systemDevelopment (homeworld reads developed)", () => {
     const w = getWorld();
-    const homeworldId = w.factions[0]!.homeworldId;
+    const faction = w.factions[0];
+    if (!faction) throw new Error("expected a seeded faction");
+    const homeworldId = faction.homeworldId;
     const s = w.systems.find((x) => x.id === homeworldId)!;
     const buildings: Record<string, number> = {};
     for (const b of w.buildings) if (b.systemId === homeworldId) buildings[b.buildingType] = b.count;
+    // Derive the universe-wide refs independently here (summing the seven slot columns directly) rather
+    // than routing through the service's developmentRefsForWorld — so a dropped slot column in the
+    // service would diverge from this expectation instead of cancelling out on both sides.
+    const refs = developmentRefs(
+      w.systems.map((x) => ({
+        habitableSpace: x.habitableSpace,
+        generalSpace: x.generalSpace,
+        depositSlots:
+          x.slotGas + x.slotMinerals + x.slotOre + x.slotBiomass + x.slotArable + x.slotWater + x.slotRadioactive,
+      })),
+    );
     const expected = systemDevelopment(
       {
         buildings,
         population: s.population,
         habitableSpace: s.habitableSpace,
       },
-      developmentRefsForWorld(w.systems),
+      refs,
     );
     const entry = getDevelopmentBySystem().find((e) => e.systemId === homeworldId)!;
     expect(entry.development).toBeCloseTo(expected, 10);
