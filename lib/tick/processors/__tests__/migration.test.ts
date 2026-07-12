@@ -6,19 +6,24 @@ import type { TickContext } from "@/lib/tick/types";
 import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
+const OFF = 100; // employedGradientThreshold above any achievable |gradient| ⇒ staffed migration off
 const PARAMS = {
   interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
-  flow: { weights: { contentment: 1, headroom: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1 },
+  flow: { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF },
 };
 
 // Migration is now a monthly pulse: all edges process on ticks where tick % interval === 0.
 const EDGE_TICK = 0;
 
-function sys(id: string, factionId: string | null, population: number, popCap: number, unrest: number): SimSystem {
+// A tier-0 production building demands 10 heads/unit (labourTotal), so `{ food: 100 }` opens
+// 1000 jobs — enough headroom for the destination to absorb the migrants each case moves.
+const JOBS = { food: 100 };
+
+function sys(id: string, factionId: string | null, population: number, popCap: number, unrest: number, buildings: Record<string, number> = {}): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId,
     control: factionId ? "developed" : "unclaimed", governmentType: "federation",
-    population, popCap, unrest, traits: [], buildings: {}, buildingIdleMonths: {},
+    population, popCap, unrest, traits: [], buildings, buildingIdleMonths: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
@@ -27,7 +32,7 @@ const ctx = (tick: number): TickContext => ({ tick, results: new Map() });
 
 describe("migration processor", () => {
   it("relocates population from a tense full system to a calm roomy neighbour, conserved", async () => {
-    const systems = [sys("a", "f1", 1000, 1000, 0.9), sys("b", "f1", 100, 1000, 0)];
+    const systems = [sys("a", "f1", 1000, 1000, 0.9), sys("b", "f1", 100, 1000, 0, JOBS)];
     const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
     const before = world.systems.reduce((s, x) => s + x.population, 0);
     await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS);
@@ -43,7 +48,7 @@ describe("migration processor", () => {
   });
   it("drains a CALM overshot system (population > popCap, unrest 0) to a roomy neighbour, conserved", async () => {
     // Overshoot with zero unrest: the death sink would do nothing here; migration must.
-    const systems = [sys("a", "f1", 1500, 1000, 0), sys("b", "f1", 100, 1000, 0)];
+    const systems = [sys("a", "f1", 1500, 1000, 0), sys("b", "f1", 100, 1000, 0, JOBS)];
     const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
     const before = world.systems.reduce((s, x) => s + x.population, 0);
     await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS);
@@ -57,7 +62,7 @@ describe("migration processor", () => {
     // is a boundary for any interval, so the whole edge set resolves in both runs.
     const mk = () =>
       new InMemoryMigrationWorld(
-        { systems: [sys("a", "f1", 1000, 1000, 0.9), sys("b", "f1", 100, 1000, 0)] },
+        { systems: [sys("a", "f1", 1000, 1000, 0.9), sys("b", "f1", 100, 1000, 0, JOBS)] },
         [conn("a", "b")],
       );
     const w1 = mk();

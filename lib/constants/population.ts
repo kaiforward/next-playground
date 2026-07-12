@@ -36,8 +36,14 @@ export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineR
  * addition, not SP2. Sim-tuned for stable-but-growing (no ping-pong).
  */
 export const MIGRATION_PARAMS: MigrationFlowParams = {
-  weights: { contentment: 1, headroom: 1 },
+  // jobs weight makes open jobs pull and unemployment push; headroom stays 1 so this is a
+  // pure addition, not a recalibration (the contentment/headroom/jobs mix is a PR4 rebalance).
+  weights: { contentment: 1, headroom: 1, jobs: 1 },
   maxOutflowFraction: 0.05,
   gradientThreshold: 0.02,
   distanceDecay: 0.1, // per-hop gradient attenuation over the open-edge topology
+  // Above any achievable |gradient| (with these weights the appeal gap tops out ~5), so
+  // staffed workers stay home and only spare labour migrates. The future player speed-dial
+  // lowers this per chosen system, at a cost, to coax staffed workers toward a new frontier.
+  employedGradientThreshold: 100,
 };
