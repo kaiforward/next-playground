@@ -25,4 +25,11 @@ export const COLONISATION = {
    * "expansionist vs not" dial (doctrine feeds it later).
    */
   SIGMA_FLOOR: 0.25,
+  /**
+   * Weight on the seed-population opportunity cost netted off a colony's value (§7.3). The cost is the
+   * source's forgone output for the part of the seed that must come from staffed (not idle) workers,
+   * so founding naturally prefers a job-short source; this dial bridges that lost-production figure into
+   * the value scalar. Coarse first-cut (per-doctrine later); PR4 calibrates it against LAND_PREMIUM/σ.
+   */
+  SEED_POP_COST_WEIGHT: 1.0,
 } as const;

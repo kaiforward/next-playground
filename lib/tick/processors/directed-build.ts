@@ -1,7 +1,8 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
-import { fundQueue, factionThroughputPool, orderProposals } from "@/lib/engine/construction";
+import { fundQueueWithFloor, developmentFloorShare, factionThroughputPool, orderProposals } from "@/lib/engine/construction";
+import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -33,6 +34,10 @@ export interface DirectedBuildProcessorParams {
     cap: number;
     /** Construction points a faction's pool gains per unit population per pulse. */
     throughputPerPop: number;
+    /** Max pool-floor points reserved per young colony at development 0 (§7.9). 0 disables the floor. */
+    floorBase: number;
+    /** Development at which a colony weans fully off the pool floor. */
+    floorKnee: number;
     /** Mints a unique id for each newly-committed project (backed by the world's nextId counter). */
     mintId: () => string;
   };
@@ -165,6 +170,21 @@ export async function runDirectedBuildProcessor(
       );
     }
 
+    // Development-scaled pool floor (§7.9): reserve a self-weaning minimum slice for each young developed
+    // colony, so its valid-but-low-ROI first build isn't monopolised out of the front-first pool by the
+    // homeworld's larger builds. Development does the discriminating — the most-developed systems reserve
+    // nothing — so no colony flag is needed. Only developed systems host builds and reserve a floor.
+    const floorBySystem = new Map<string, number>();
+    for (const s of buildStates) {
+      if (!isEconomicallyActive(s.control)) continue;
+      const share = developmentFloorShare(
+        systemDevelopment(s, developmentRefs), params.construction.floorBase, params.construction.floorKnee,
+      );
+      if (share > 0) floorBySystem.set(s.systemId, share);
+    }
+    let reserved = 0;
+    for (const v of floorBySystem.values()) reserved += v;
+
     const ordered = orderProposals([...buildProposals, ...colonyProposals]);
 
     // Expand each proposal into whole-level project rows: a build bundle's `items` are already gate-first
@@ -200,8 +220,12 @@ export async function runDirectedBuildProcessor(
       }
     }
 
-    // Fund front-first: in-flight work finishes before new commitments; land completed levels.
-    const { projects: fundedOpen, landed } = fundQueue([...existing, ...newProjects], pool, params.construction.cap);
+    // Fund front-first (in-flight work finishes before new commitments), with the development-scaled
+    // colony floor reserved ahead of the ROI order; land completed levels.
+    const { projects: fundedOpen, landed } = fundQueueWithFloor(
+      [...existing, ...newProjects], pool, params.construction.cap, reserved,
+      (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
+    );
     for (const p of fundedOpen) {
       // Persist-if-funded for colonies: a colony-establish that got NO work this pulse is dropped and
       // re-scored next pulse, so the open queue never balloons with unfunded colonies (pool-pacing alone

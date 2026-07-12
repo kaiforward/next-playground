@@ -22,6 +22,16 @@ export const CONSTRUCTION = {
   PER_BUILD_ABSORPTION_CAP: 4,
   /** Fallback per-level work cost for a building type with no explicit override (tier-derived below). */
   DEFAULT_WORK_PER_LEVEL: 20,
+  /**
+   * Pool fairness floor (docs/planned/economy-colony-bootstrapping.md §3.4 / §7.9). The front-first pool
+   * otherwise lets a homeworld's larger builds monopolise it, so a young colony's valid first build never
+   * funds. Reserve a guaranteed minimum slice per young colony, self-weaning with development:
+   * POOL_FLOOR_BASE construction points at development 0, fading to nothing at FLOOR_DEV_KNEE. A minimum,
+   * never a max-spend cap — the homeworld still drains the remainder by value. Coarse first-cut; PR4 tunes.
+   */
+  POOL_FLOOR_BASE: 4,
+  /** Development at which a colony has weaned fully off the pool floor (self-weaning training wheels). */
+  FLOOR_DEV_KNEE: 0.3,
 } as const;
 
 /** Explicit per-level work costs for the non-production building types (housing, academies, complexes). */

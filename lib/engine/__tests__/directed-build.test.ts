@@ -1106,6 +1106,36 @@ describe("planFactionBuilds: develop gate", () => {
     const plans = planFactionBuilds([site], () => 1, DEV_REFS);
     expect(plans.some((b) => b.buildingType === HOUSING_TYPE)).toBe(true);
   });
+
+  it("builds a first extractor ONE unit ahead of full staffing (the colony-bootstrap unlock)", () => {
+    // pop 2 cannot FULLY staff a 10-labour food extractor, but decay only sheds a WHOLE idle unit, so
+    // the planner may still commit the first level — creating the jobs that then pull migration. Without
+    // this a tiny colony deadlocks (no pop to staff → no build → no jobs → no inflow).
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const site: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 2, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+    };
+    const builds = planFactionBuilds([site], rc, DEV_REFS);
+    const food = builds.find((b) => b.systemId === "A" && b.buildingType === "food");
+    expect(food?.count).toBe(1); // exactly one level ahead — level 2 would exceed pop + one unit
+  });
+
+  it("refuses to build the first extractor on a pop-0 world (the strict `<` boundary)", () => {
+    // The one-unit lead is a STRICT bound: total demand must stay < pop + one unit. On a pop-0 world
+    // that is `0 + 10 < 0 + 10` → false, so nothing is built — a whole idle unit is never committed
+    // (it would decay). This pins the strict `<`: with a non-strict `<=` the gate would pass (10 <= 10)
+    // and the planner would stand up industry on an unpopulated world. Same fixture as above, pop 0.
+    const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    const site: BuildSystemState = {
+      systemId: "A", factionId: "F", control: "developed", population: 0, unrest: 0,
+      buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+    };
+    const builds = planFactionBuilds([site], rc, DEV_REFS);
+    expect(builds.find((b) => b.systemId === "A" && b.buildingType === "food")).toBeUndefined();
+  });
 });
 
 describe("hopRouteCost", () => {
@@ -1144,6 +1174,7 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
   seedPop: EXPANSION.COLONY_SEED_POP,
   habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+  popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
 };
 
 /** A developed home system for the σ/missing/deficit aggregates. `housing` sets built pop-cap; `habitable`
@@ -1232,12 +1263,16 @@ describe("planFactionColonyProposals", () => {
     expect(rich.work).toBeCloseTo(COLONISATION.COLONY_ESTABLISH_WORK + rich.housingLevels * workCostPerLevel(HOUSING_TYPE), 6);
     expect(rich.work).toBeGreaterThan(COLONISATION.COLONY_ESTABLISH_WORK); // housing is paid for, not free
 
-    // Land-poor: two whole housing levels of habitable land → seed capped below COLONY_SEED_POP.
+    // Land-poor: two whole housing levels of habitable land cap the seed below what was asked for.
+    // The shipped seed (model C) is smaller than one housing level's capacity, so it can never be
+    // land-capped in practice; drive this sub-case with an explicit oversized seed so the whole-level
+    // capping logic stays covered independent of the calibrated constant.
+    const bigSeed = { ...COLONY_PARAMS, seedPop: 50 };
     const housingCost = effectiveSpaceCost(HOUSING_TYPE);
-    const poorHabitable = 2 * housingCost; // exactly 2 whole levels
-    const [poor] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "small", habitableSpace: poorHabitable })], [], COLONY_PARAMS);
-    expect(poor.seedPop).toBe(Math.min(EXPANSION.COLONY_SEED_POP, 2 * POP_CENTRE_DENSITY));
-    expect(poor.seedPop).toBeLessThan(EXPANSION.COLONY_SEED_POP);
+    const poorHabitable = 2 * housingCost; // exactly 2 whole levels → habitable cap 2 × POP_CENTRE_DENSITY
+    const [poor] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "small", habitableSpace: poorHabitable })], [], bigSeed);
+    expect(poor.seedPop).toBe(Math.min(bigSeed.seedPop, 2 * POP_CENTRE_DENSITY));
+    expect(poor.seedPop).toBeLessThan(bigSeed.seedPop);
     expect(poor.housingLevels).toBeLessThanOrEqual(2);
     expect(poor.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(poor.seedPop);
   });
@@ -1275,5 +1310,56 @@ describe("planFactionColonyProposals", () => {
     expect(p.factionId).toBe("f1");
     expect(p.systemId).toBe("c1");
     expect(p.sourceSystemId).toBe("home");
+  });
+});
+
+describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
+  // A source whose entire workforce runs `oreLevels` extractors (spare labour = 0), producing
+  // `output` ore/tick — so seeding off it must poach STAFFED workers, incurring the forgone-output cost.
+  function staffedSource(systemId: string, oreLevels: number, output: number): BuildSystemState {
+    return {
+      systemId, factionId: "f1", control: "developed",
+      population: oreLevels * oreLabour, unrest: 0,
+      buildings: { ore: oreLevels },
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 0, targetStock: 0, demand: 0, production: output }],
+    };
+  }
+
+  it("charges no seed-pop cost when the source has spare (idle) labour ≥ the seed", () => {
+    // homeState: population 1000, only housing → labourDemand 0 → 1000 idle ≫ the tiny seed. With no
+    // employed seed to charge, the pop-cost weight is inert: the priced value equals the un-priced one.
+    const developed = [homeState({ systemId: "home", housing: 1, habitableSpace: 1000 })];
+    const c = candidate({ habitableSpace: 100 });
+    const [priced] = planFactionColonyProposals("f1", developed, [c], [], COLONY_PARAMS);
+    const [free] = planFactionColonyProposals("f1", developed, [c], [], { ...COLONY_PARAMS, popCostWeight: 0 });
+    expect(priced.value).toBeCloseTo(free.value, 6);
+    expect(priced.value).toBeGreaterThan(0);
+  });
+
+  it("ranks a colony seeded from a fully-staffed source below an identical one from a job-short source", () => {
+    // Identical land at both candidates and one shared developed set ⇒ same σ and U; the ONLY
+    // difference is the source's forgone output. A gentle weight keeps the busy colony positive so the
+    // test isolates the DIRECTION of the bias, not a magnitude.
+    const idle = homeState({ systemId: "idle", housing: 1, habitableSpace: 1000 }); // spare labour
+    const busy = staffedSource("busy", 10, 200);                                     // fully staffed
+    const developed = [idle, busy];
+    const fromIdle: ColonyEstablishCandidate = { ...candidate({ systemId: "c-idle", habitableSpace: 100 }), sourceSystemId: "idle" };
+    const fromBusy: ColonyEstablishCandidate = { ...candidate({ systemId: "c-busy", habitableSpace: 100 }), sourceSystemId: "busy" };
+    const gentle = { ...COLONY_PARAMS, popCostWeight: 0.01 };
+    const proposals = planFactionColonyProposals("f1", developed, [fromIdle, fromBusy], [], gentle);
+    const pIdle = proposals.find((p) => p.systemId === "c-idle")!;
+    const pBusy = proposals.find((p) => p.systemId === "c-busy")!;
+    expect(pBusy.value).toBeGreaterThan(0);            // still worth founding, just dearer
+    expect(pIdle.value).toBeGreaterThan(pBusy.value);  // the busy core's forgone output is charged
+  });
+
+  it("does not propose a colony whose value goes non-positive after the seed-pop cost", () => {
+    // Low-value candidate (one housing level of land) seeded off a fully-staffed, very-high-output
+    // source: the forgone-output cost swamps its worth, so the AI declines to drain the core for it.
+    const busy = staffedSource("busy", 10, 100000);
+    const housingCost = effectiveSpaceCost(HOUSING_TYPE);
+    const tiny: ColonyEstablishCandidate = { ...candidate({ systemId: "c-tiny", habitableSpace: housingCost }), sourceSystemId: "busy" };
+    expect(planFactionColonyProposals("f1", [busy], [tiny], [], COLONY_PARAMS)).toHaveLength(0);
   });
 });
