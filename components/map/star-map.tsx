@@ -21,6 +21,7 @@ import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { useStability } from "@/lib/hooks/use-stability";
 import { usePopulation } from "@/lib/hooks/use-population";
+import { useDevelopment } from "@/lib/hooks/use-development";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 import { useGoods } from "@/lib/hooks/use-goods";
@@ -56,6 +57,7 @@ export function StarMap({
   const { logisticsEdges } = useTradeFlow(overlays.logistics);
   const stabilityBySystem = useStability(mapMode === "stability");
   const populationBySystem = usePopulation(mapMode === "population");
+  const developmentBySystem = useDevelopment(mapMode === "development");
 
   // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
   // the player can currently sense. Topology (political/regions) stays public;
@@ -77,6 +79,16 @@ export function StarMap({
     }
     return gated;
   }, [populationBySystem, visibleSystemIds]);
+
+  // Development is dynamic story state too — same fog gate. Its ramp is absolute,
+  // so no visible-max normalisation, just the fog restriction.
+  const visibleDevelopment = useMemo(() => {
+    const gated = new Map<string, number>();
+    for (const [systemId, development] of developmentBySystem) {
+      if (visibleSystemIds.has(systemId)) gated.set(systemId, development);
+    }
+    return gated;
+  }, [developmentBySystem, visibleSystemIds]);
 
   // ── Price overlay control state (good picker + comparison panel) ──
   const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
@@ -274,6 +286,7 @@ export function StarMap({
         showEvents={overlays.events}
         stabilityBySystem={visibleStability}
         populationBySystem={visiblePopulation}
+        developmentBySystem={visibleDevelopment}
       />
 
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}

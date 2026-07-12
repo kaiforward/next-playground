@@ -6,6 +6,7 @@ import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
 import { STABILITY_RAMP_STOPS } from "@/lib/utils/stability";
 import { POPULATION_RAMP_CSS } from "@/lib/utils/population";
+import { DEVELOPMENT_RAMP_CSS } from "@/lib/utils/development";
 import { RadioGroup } from "@/components/form/radio-group";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import {
@@ -19,6 +20,7 @@ const MODE_LABELS: Record<MapMode, string> = {
   regions: "Regions",
   stability: "Stability",
   population: "Population",
+  development: "Development",
   none: "None",
 };
 
@@ -55,6 +57,8 @@ const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({
       <StabilityRampLegend />
     ) : m === "population" ? (
       <PopulationRampLegend />
+    ) : m === "development" ? (
+      <DevelopmentRampLegend />
     ) : undefined,
 }));
 
@@ -217,6 +221,30 @@ function PopulationRampLegend() {
       </div>
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
         Relative to the most populous system you can currently see.
+      </p>
+    </div>
+  );
+}
+
+const DEVELOPMENT_RAMP = DEVELOPMENT_RAMP_CSS.join(", ");
+
+function DevelopmentRampLegend() {
+  return (
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Development
+      </h5>
+      <div
+        className="h-2 w-full"
+        style={{ background: `linear-gradient(to right, ${DEVELOPMENT_RAMP})` }}
+        aria-hidden
+      />
+      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>Frontier</span>
+        <span>Built-out</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+        Population + industry built against each system&rsquo;s own potential. Absolute 0–100%.
       </p>
     </div>
   );
