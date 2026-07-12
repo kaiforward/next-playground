@@ -244,7 +244,7 @@ function DevelopmentRampLegend() {
         <span>Built-out</span>
       </div>
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
-        Population + industry built against each system&rsquo;s own potential. Absolute 0–100%.
+        Population + industry a system has built and worked, measured against the galaxy&rsquo;s biggest. Absolute 0–100%.
       </p>
     </div>
   );
