@@ -59,6 +59,15 @@ export function DetailPanel({ title, subtitle, headerAction, size, backPath = "/
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  // Move focus into the panel on open and restore it to the previously-focused element on close, so
+  // the modal (role="dialog" aria-modal) is keyboard-reachable and never strands focus behind it.
+  useEffect(() => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.focus();
+    return () => previouslyFocused?.focus();
+  }, []);
+
   const close = useCallback(() => {
     router.push(backPath);
   }, [router, backPath]);
@@ -88,6 +97,7 @@ export function DetailPanel({ title, subtitle, headerAction, size, backPath = "/
       {/* Panel */}
       <div
         ref={panelRef}
+        tabIndex={-1}
         className={styles.content()}
         style={{
           opacity: mounted ? 1 : 0,

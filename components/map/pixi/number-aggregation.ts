@@ -54,7 +54,15 @@ export function buildAggregationGroups(
     cx: mem.reduce((a, s) => a + s.x, 0) / mem.length,
     cy: mem.reduce((a, s) => a + s.y, 0) / mem.length,
     memberIds: mem.map((s) => s.id),
-    value: aggregateValue(mem.map((s) => values.get(s.id) ?? 0), mode),
+    // Aggregate only over members that HAVE a value — an absent system (e.g. undeveloped, so no
+    // stability) must not count as a 0 that drags an average down; it's simply not part of the total.
+    value: aggregateValue(
+      mem.flatMap((s) => {
+        const v = values.get(s.id);
+        return v === undefined ? [] : [v];
+      }),
+      mode,
+    ),
   });
 
   return {
@@ -69,8 +77,9 @@ export interface TierThresholds {
   regionToSystem: number; // camera zoom at/above which per-system numbers show
 }
 
-// Placeholders — camera zoom runs 0..CAMERA.maxZoom (2.5). Re-tune on the real map (see prototype defaults).
-export const DEFAULT_TIER_THRESHOLDS: TierThresholds = { factionToRegion: 0.5, regionToSystem: 1.1 };
+// Camera zoom runs 0..CAMERA.maxZoom (2.5). Tuned on the real map: faction totals give way to
+// per-region totals at 0.285, and to per-system numbers at 0.385.
+export const DEFAULT_TIER_THRESHOLDS: TierThresholds = { factionToRegion: 0.285, regionToSystem: 0.385 };
 
 export function pickTier(zoom: number, t: TierThresholds): Tier {
   if (zoom >= t.regionToSystem) return "system";

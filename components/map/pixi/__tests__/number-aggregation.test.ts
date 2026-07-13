@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildAggregationGroups, pickTier, DEFAULT_TIER_THRESHOLDS,
+  aggregateValue, buildAggregationGroups, pickTier, DEFAULT_TIER_THRESHOLDS,
 } from "@/components/map/pixi/number-aggregation";
 import type { AtlasSystem } from "@/lib/types/game";
 
@@ -43,6 +43,26 @@ describe("buildAggregationGroups", () => {
     const f1r1 = g.factionRegion.find((x) => x.key === "f1|r1")!;
     expect(f1r1.cx).toBe(5); // (0 + 10) / 2
     expect(f1r1.cy).toBe(0);
+  });
+
+  it("averages only over members that have a value (an absent member is skipped, not counted as 0)", () => {
+    const pair = [sys("a", 0, 0, "f1", "r1"), sys("b", 10, 0, "f1", "r1")];
+    const present = new Map([["a", 0.8]]); // b is undeveloped → absent from the value map
+    const g = buildAggregationGroups(pair, present, "stability");
+    const f1 = g.faction.find((x) => x.key === "f1")!;
+    expect(f1.value).toBe(0.8); // avg of {0.8}, NOT (0.8 + 0) / 2 = 0.4
+  });
+});
+
+describe("aggregateValue", () => {
+  it("sums for population, averages for the score modes", () => {
+    expect(aggregateValue([4, 6, 10], "population")).toBe(20);
+    expect(aggregateValue([4, 6, 10], "development")).toBe(20 / 3);
+    expect(aggregateValue([0.2, 0.8], "stability")).toBe(0.5);
+  });
+  it("returns 0 for an empty group (no divide-by-zero)", () => {
+    expect(aggregateValue([], "population")).toBe(0);
+    expect(aggregateValue([], "development")).toBe(0);
   });
 });
 

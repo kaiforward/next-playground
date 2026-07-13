@@ -4,9 +4,7 @@ import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-color
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
-import { STABILITY_RAMP_STOPS } from "@/lib/utils/stability";
-import { POPULATION_RAMP_CSS } from "@/lib/utils/population";
-import { DEVELOPMENT_RAMP_CSS } from "@/lib/utils/development";
+import { rampCssStops, ABSENT_CSS, type ValueMode } from "@/components/map/pixi/value-ramp";
 import { RadioGroup } from "@/components/form/radio-group";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import {
@@ -175,13 +173,14 @@ function PriceRampLegend() {
   );
 }
 
-const STABILITY_RAMP = [
-  STABILITY_RAMP_STOPS.Stable,
-  STABILITY_RAMP_STOPS.Calm,
-  STABILITY_RAMP_STOPS.Tense,
-  STABILITY_RAMP_STOPS.Unrest,
-  STABILITY_RAMP_STOPS.Strike,
-].join(", ");
+/**
+ * Legend gradient = black (absent / value 0) then the mode's present-value ramp.
+ * Rendered from the SAME `value-ramp` stops the Pixi cells are filled from, so
+ * the legend swatch can never drift from the map (one source of truth).
+ */
+function rampGradient(mode: ValueMode): string {
+  return `linear-gradient(to right, ${[ABSENT_CSS, ...rampCssStops(mode)].join(", ")})`;
+}
 
 function StabilityRampLegend() {
   return (
@@ -191,18 +190,19 @@ function StabilityRampLegend() {
       </h5>
       <div
         className="h-2 w-full"
-        style={{ background: `linear-gradient(to right, ${STABILITY_RAMP})` }}
+        style={{ background: rampGradient("stability") }}
         aria-hidden
       />
       <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>Unstable</span>
         <span>Stable</span>
-        <span>Strike</span>
       </div>
+      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+        Higher = calmer. Black = out of sensor range.
+      </p>
     </div>
   );
 }
-
-const POPULATION_RAMP = POPULATION_RAMP_CSS.join(", ");
 
 function PopulationRampLegend() {
   return (
@@ -212,7 +212,7 @@ function PopulationRampLegend() {
       </h5>
       <div
         className="h-2 w-full"
-        style={{ background: `linear-gradient(to right, ${POPULATION_RAMP})` }}
+        style={{ background: rampGradient("population") }}
         aria-hidden
       />
       <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
@@ -220,13 +220,11 @@ function PopulationRampLegend() {
         <span>Highest</span>
       </div>
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
-        Relative to the most populous system you can currently see.
+        Relative to the most populous system you can currently see. Black = none.
       </p>
     </div>
   );
 }
-
-const DEVELOPMENT_RAMP = DEVELOPMENT_RAMP_CSS.join(", ");
 
 function DevelopmentRampLegend() {
   return (
@@ -236,7 +234,7 @@ function DevelopmentRampLegend() {
       </h5>
       <div
         className="h-2 w-full"
-        style={{ background: `linear-gradient(to right, ${DEVELOPMENT_RAMP})` }}
+        style={{ background: rampGradient("development") }}
         aria-hidden
       />
       <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
@@ -244,7 +242,7 @@ function DevelopmentRampLegend() {
         <span>Built-out</span>
       </div>
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
-        Population + industry a system has built and worked, measured against the galaxy&rsquo;s biggest. Absolute 0–100%.
+        Population + industry a system has built and worked, measured against the galaxy&rsquo;s biggest. Black = none.
       </p>
     </div>
   );

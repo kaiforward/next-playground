@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { AtlasData, UniverseData, StarSystemInfo, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
@@ -25,6 +25,19 @@ import { buildSystemRegionMap } from "@/lib/utils/region";
 import { useGoods } from "@/lib/hooks/use-goods";
 import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+
+/** Default zoom the camera settles at when focusing/centring on a location. */
+const FOCUS_ZOOM = 1.2;
+
+type CenterTarget = { x: number; y: number; zoom: number };
+
+/** Parse a `?focus=<x>,<y>[,<zoom>]` param into a camera target, or null if absent/malformed. */
+function parseFocusParam(raw: string | null): CenterTarget | null {
+  if (!raw) return null;
+  const [x, y, z] = raw.split(",", 3).map(Number);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y, zoom: Number.isFinite(z) && z > 0 ? z : FOCUS_ZOOM };
+}
 
 interface StarMapProps {
   atlas: AtlasData;
@@ -58,15 +71,20 @@ export function StarMap({
   const developmentBySystem = useDevelopment(mapMode === "development");
 
   // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
-  // the player can currently sense. Topology (political/regions) stays public;
-  // this gate is what the stability choropleth and other dynamic modes share.
+  // the player can currently sense. We store STABILITY (1 − unrest), not raw unrest,
+  // so the fill AND its number both read "higher = more stable" (bright/high number =
+  // calm). Gated on the live `developed` flag too: an undeveloped system has no
+  // population, so its unrest is a hollow 0 that would invert to "fully stable" (bright
+  // cyan) — instead it must read as absent (black), like population/development.
   const visibleStability = useMemo(() => {
     const gated = new Map<string, number>();
     for (const [systemId, unrest] of stabilityBySystem) {
-      if (visibleSystemIds.has(systemId)) gated.set(systemId, unrest);
+      if (visibleSystemIds.has(systemId) && ownership.get(systemId)?.developed) {
+        gated.set(systemId, 1 - unrest);
+      }
     }
     return gated;
-  }, [stabilityBySystem, visibleSystemIds]);
+  }, [stabilityBySystem, visibleSystemIds, ownership]);
 
   // Population is also dynamic story state — same fog gate as stability. The
   // relative ramp then normalises against the max of this visible set.
@@ -203,6 +221,7 @@ export function StarMap({
   // ── Selection = the open /system/[id] panel route (single source of truth) ──
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const selectedSystemId = useMemo(() => {
     const match = /^\/system\/([^/]+)/.exec(pathname);
     return match ? decodeURIComponent(match[1]) : null;
@@ -241,27 +260,49 @@ export function StarMap({
     router.push("/");
   }, [router]);
 
-  // ── Initial camera + reveal ────────────────────────────────────
-  // Center once on the system the map opened on (a /system/[id] deep-link or the
-  // legacy ?systemId= param). Clicks never recenter — they only open the side
-  // panel — so this is computed on mount only.
-  type CenterTarget = { x: number; y: number; zoom: number };
-  const [centerTarget] = useState<CenterTarget | undefined>(() => {
-    const id = selectedSystemId ?? initialSelectedSystemId ?? null;
-    if (!id) return undefined;
-    const system = universe.systems.find((s) => s.id === id);
-    return system ? { x: system.x, y: system.y, zoom: 1.2 } : undefined;
-  });
+  // ── Camera focus target (generic: centre the map on any location) ──────
+  // Anything can "locate on the map" by linking to the query:
+  //   ?focus=<x>,<y>[,<zoom>]  — centre on raw world coordinates (a system, a fleet, an event,
+  //                              a battle — the caller supplies coords; the map is entity-agnostic)
+  //   ?systemId=<id>           — convenience: resolve a system to its coordinates
+  // This is independent of selection (the open /system/[id] panel): a focus link never opens the
+  // panel, and a click (which routes to /system/[id], touching neither param) never recentres.
+  const resolveSystemTarget = useCallback(
+    (id: string | null | undefined): CenterTarget | null => {
+      const system = id ? universe.systems.find((s) => s.id === id) : undefined;
+      return system ? { x: system.x, y: system.y, zoom: FOCUS_ZOOM } : null;
+    },
+    [universe.systems],
+  );
+
+  // Initial centre — computed once from ?focus, then ?systemId, then the pathname system (a
+  // /system/[id] deep-link).
+  const [centerTarget, setCenterTarget] = useState<CenterTarget | undefined>(
+    () =>
+      parseFocusParam(searchParams.get("focus")) ??
+      resolveSystemTarget(
+        searchParams.get("systemId") ?? initialSelectedSystemId ?? selectedSystemId,
+      ) ??
+      undefined,
+  );
+
+  // Hide the map until the first centre settles so a deep-link/focus doesn't flash the fitView.
   const [mapReady, setMapReadyState] = useState(() => centerTarget === undefined);
 
-  // Migrate a legacy ?systemId= deep-link to the /system/[id] route so the panel
-  // opens and the cell highlights. Mount-only.
-  useEffect(() => {
-    if (initialSelectedSystemId && !selectedSystemId) {
-      router.replace(`/system/${initialSelectedSystemId}`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Post-mount "locate on the map": recentre when the ?focus / ?systemId query changes (a "Show on
+  // Map" jump or any future locate action). Adjusted during render — the React idiom for resetting
+  // state on an input change — and keyed on the query string, so a per-tick atlas refresh (which
+  // churns universe.systems) never recentres, and a click (which changes only the pathname, not
+  // these params) never recentres. Leaving centerTarget untouched keeps its reference stable, so
+  // the canvas's centre effect no-ops on ticks.
+  const focusKey = `${searchParams.get("focus") ?? ""}|${initialSelectedSystemId ?? ""}`;
+  const [appliedFocusKey, setAppliedFocusKey] = useState(focusKey);
+  if (focusKey !== appliedFocusKey) {
+    setAppliedFocusKey(focusKey);
+    const target =
+      parseFocusParam(searchParams.get("focus")) ?? resolveSystemTarget(initialSelectedSystemId);
+    if (target) setCenterTarget(target);
+  }
 
   const handleReady = useCallback(() => {
     setMapReadyState(true);

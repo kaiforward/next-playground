@@ -44,7 +44,7 @@ export interface PixiMapCanvasProps {
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
   /** Ambient display of the event pill (still reveals on hover/select). */
   showEvents: boolean;
-  /** Per-system unrest (0…1) for the stability choropleth, or empty when mode is off. */
+  /** Per-system stability (0…1, = 1 − unrest) for the stability choropleth, or empty when mode is off. */
   stabilityBySystem?: Map<string, number>;
   /** Per-system population for the population choropleth, or empty when mode is off. */
   populationBySystem?: Map<string, number>;
@@ -117,6 +117,7 @@ export function PixiMapCanvas({
     let interactionCleanup: (() => void) | undefined;
     let onStageHover: ((e: FederatedPointerEvent) => void) | undefined;
     let clearHover: (() => void) | undefined;
+    let hoverScreen: { x: number; y: number } | null = null; // last pointer pos, resolved once per frame
     let prevZoom = 0; // Track zoom delta to detect active zooming
     const onResize = (width: number, height: number) => {
       camera.setScreenSize(width, height);
@@ -207,15 +208,18 @@ export function PixiMapCanvas({
         }),
       });
 
-      // Hover: outline the cell under the cursor (every mode, every zoom).
+      // Hover: outline the cell under the cursor (every mode, every zoom). pointermove fires far
+      // more often than we render, so just record the position here and resolve it to a cell once
+      // per frame in the ticker.
       onStageHover = (e: FederatedPointerEvent) => {
-        const cells = pixiRef.current?.cells;
-        if (!cells) return;
-        const w = camera.screenToWorld(e.global.x, e.global.y);
-        cellHighlightLayer.setHovered(cells.findSystemAt(w.x, w.y));
+        hoverScreen = { x: e.global.x, y: e.global.y };
       };
       app.stage.on("pointermove", onStageHover);
-      clearHover = () => cellHighlightLayer.setHovered(null);
+      clearHover = () => {
+        hoverScreen = null;
+        cellHighlightLayer.setHovered(null);
+        pixi.stage.cursor = "default";
+      };
       canvas.addEventListener("pointerleave", clearHover);
 
       // Keep camera screen size in sync with Pixi's own resize
@@ -271,6 +275,19 @@ export function PixiMapCanvas({
         politicalTerritoryLayer.updateVisibility(lod);
         valueChoroplethLayer.updateVisibility(lod);
         if (valueChoroplethLayer.container.visible) valueChoroplethLayer.updateNumbers(camera.zoom, frustum);
+
+        // Resolve the hovered cell at most once per frame (pointermove fires far more often than we
+        // render); also drives the clickable-cell cursor over empty cell space, not just the star.
+        if (hoverScreen) {
+          const cells = pixiRef.current?.cells;
+          if (cells) {
+            const wh = camera.screenToWorld(hoverScreen.x, hoverScreen.y);
+            const hoveredId = cells.findSystemAt(wh.x, wh.y);
+            cellHighlightLayer.setHovered(hoveredId);
+            pixi.stage.cursor = hoveredId ? "pointer" : "default";
+          }
+          hoverScreen = null;
+        }
         cellHighlightLayer.updateZoom(camera.zoom);
 
         // Logistics overlay: layer alpha multiplies the system fade so the

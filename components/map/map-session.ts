@@ -11,7 +11,6 @@ export interface MapOverlaysState {
 }
 
 export interface MapSessionState {
-  selectedSystemId?: string;
   mode?: MapMode;
   overlays?: MapOverlaysState;
 }
@@ -45,11 +44,6 @@ export function getMapSessionState(): MapSessionState | null {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
     return {
-      selectedSystemId:
-        "selectedSystemId" in parsed &&
-        typeof parsed.selectedSystemId === "string"
-          ? parsed.selectedSystemId
-          : undefined,
       mode: "mode" in parsed ? parseMode(parsed.mode) : undefined,
       overlays:
         "overlays" in parsed ? parseOverlays(parsed.overlays) : undefined,
@@ -63,7 +57,6 @@ function writeSessionState(state: MapSessionState): void {
   try {
     // Empty state — clear the key entirely instead of storing "{}".
     if (
-      state.selectedSystemId === undefined &&
       state.mode === undefined &&
       (!state.overlays || Object.keys(state.overlays).length === 0)
     ) {
@@ -77,18 +70,7 @@ function writeSessionState(state: MapSessionState): void {
 }
 
 /**
- * Persist (or clear) the selected system without disturbing other fields.
- */
-export function setSelectedSystemInSession(systemId: string | null): void {
-  const current = getMapSessionState() ?? {};
-  writeSessionState({
-    ...current,
-    selectedSystemId: systemId ?? undefined,
-  });
-}
-
-/**
- * Persist the overlay-toggle state without disturbing the selected system or mode.
+ * Persist the overlay-toggle state without disturbing the mode.
  */
 export function setOverlaysInSession(overlays: MapOverlaysState): void {
   const current = getMapSessionState() ?? {};
@@ -96,7 +78,7 @@ export function setOverlaysInSession(overlays: MapOverlaysState): void {
 }
 
 /**
- * Persist the single-select map mode without disturbing the selected system or overlays.
+ * Persist the single-select map mode without disturbing the overlays.
  */
 export function setModeInSession(mode: MapMode): void {
   const current = getMapSessionState() ?? {};

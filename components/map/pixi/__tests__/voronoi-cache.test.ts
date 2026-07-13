@@ -23,4 +23,12 @@ describe("buildSystemCells", () => {
     expect(cells.findSystemAt(-10, 500)).toBeNull();
     expect(cells.findSystemAt(500, MAP + 10)).toBeNull();
   });
+  it("findSystemAt resolves points on the inclusive extent edge (0 / mapSize)", () => {
+    expect(cells.findSystemAt(0, 0)).not.toBeNull();
+    expect(cells.findSystemAt(MAP, MAP)).not.toBeNull();
+  });
+  it("centroidBySystemId records each system's own position", () => {
+    expect(cells.centroidBySystemId.get("a")).toEqual({ x: 250, y: 250 });
+    expect(cells.centroidBySystemId.get("d")).toEqual({ x: 750, y: 750 });
+  });
 });

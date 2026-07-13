@@ -20,13 +20,19 @@ export function buildSystemCells(systems: AtlasSystem[], mapSize: number): Syste
   const cellsBySystemId = computeTerritoryPolygons(systems.length, voronoi, (i) => systems[i].id);
   const centroidBySystemId = new Map(systems.map((s) => [s.id, { x: s.x, y: s.y }]));
 
+  // Seed the next hill-climb from the last cell found — during continuous hover the cursor moves
+  // a little between calls, so `find` is O(1) amortised instead of re-walking from scratch.
+  let lastFound = 0;
+
   return {
     cellsBySystemId,
     centroidBySystemId,
     findSystemAt(x, y) {
       if (x < 0 || y < 0 || x > mapSize || y > mapSize) return null;
-      const i = delaunay.find(x, y);
-      return i >= 0 && i < systems.length ? systems[i].id : null;
+      const i = delaunay.find(x, y, lastFound);
+      if (i < 0 || i >= systems.length) return null;
+      lastFound = i;
+      return systems[i].id;
     },
   };
 }
