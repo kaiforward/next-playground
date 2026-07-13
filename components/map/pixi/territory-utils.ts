@@ -11,14 +11,17 @@ export type MultiPolygon = Polygon[];
  * space. We round those off by clipping each to a disc around its own site,
  * radius = `DISC_RADIUS_FACTOR` × the universe's median nearest-neighbour
  * spacing (so it auto-scales with universe size). Interior cells are bounded by
- * their neighbours and never touch the box, so they're left untouched — there's
- * no risk of gaps between adjacent territories. Both values are smoke-tunable.
+ * their neighbours and never touch the box, so they're left untouched.
+ *
+ * The radius is kept near ~1× spacing so a hull cell caps to roughly interior-cell
+ * size instead of ballooning out toward the box. It is the primary smoke knob:
+ * lower → tighter edge cells, but too low starts clipping a hull cell's genuine
+ * shared boundary with an interior neighbour (whose vertex can sit past 1× spacing
+ * on a sliver-shaped cell), opening a gap — so it trades edge tightness against
+ * that floor.
  */
-const DISC_RADIUS_FACTOR = 2.5;
-const DISC_SEGMENTS = 20;
-
-/** Tolerance for treating a cell vertex as lying on the Voronoi bounding box. */
-const BOX_EPSILON = 1e-6;
+const DISC_RADIUS_FACTOR = 1.25;
+const DISC_SEGMENTS = 24;
 
 let precisionSet = false;
 
@@ -86,13 +89,7 @@ export function computeTerritoryPolygons(
   const points = delaunay.points;
   const clipRadius = medianNearestNeighbor(delaunay) * DISC_RADIUS_FACTOR;
   const clipEnabled = Number.isFinite(clipRadius) && clipRadius > 0;
-
-  // A cell got box-clipped iff one of its vertices sits on the bounding box.
-  const onBox = (x: number, y: number): boolean =>
-    Math.abs(x - voronoi.xmin) < BOX_EPSILON ||
-    Math.abs(x - voronoi.xmax) < BOX_EPSILON ||
-    Math.abs(y - voronoi.ymin) < BOX_EPSILON ||
-    Math.abs(y - voronoi.ymax) < BOX_EPSILON;
+  const clipRadiusSq = clipRadius * clipRadius;
 
   // Collect (possibly disc-clipped) polygons per group
   const groups = new Map<string, Polygon[]>();
@@ -107,10 +104,17 @@ export function computeTerritoryPolygons(
     const ring = voronoiCellToRing(cell);
     if (ring.length < 4) continue; // need at least a triangle (3 + closing point)
 
-    const polygons: MultiPolygon =
-      clipEnabled && ring.some(([x, y]) => onBox(x, y))
-        ? clipPolygonToDisc(ring, points[2 * i], points[2 * i + 1], clipRadius, DISC_SEGMENTS)
-        : [[ring]];
+    // Clip any cell that stretches past the radius — a box-clipped hull cell, OR a cell that balloons
+    // toward an internal sparse region / the galaxy's irregular boundary (both missed by the old
+    // box-vertex-only test). A small interior cell (every vertex within the radius) is left untouched,
+    // so no gaps open between neighbours.
+    const sx = points[2 * i];
+    const sy = points[2 * i + 1];
+    const needsClip =
+      clipEnabled && ring.some(([x, y]) => (x - sx) ** 2 + (y - sy) ** 2 > clipRadiusSq);
+    const polygons: MultiPolygon = needsClip
+      ? clipPolygonToDisc(ring, sx, sy, clipRadius, DISC_SEGMENTS)
+      : [[ring]];
 
     let collected = groups.get(key);
     if (!collected) {
