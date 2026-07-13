@@ -32,3 +32,21 @@ describe("buildSystemCells", () => {
     expect(cells.centroidBySystemId.get("d")).toEqual({ x: 750, y: 750 });
   });
 });
+
+describe("buildSystemCells — trimmed edge regions are not clickable", () => {
+  const MAP = 1000;
+  // Three systems clustered near the top-left; the rest of the 1000×1000 box is empty space the
+  // Voronoi would assign to a nearest site but the disc-clip visually trims away.
+  const systems = [sys("a", 100, 100), sys("b", 160, 100), sys("c", 130, 150)];
+  const cells = buildSystemCells(systems, MAP);
+
+  it("returns the system for a click within its (clipped) cell", () => {
+    expect(cells.findSystemAt(105, 105)).toBe("a");
+    expect(cells.findSystemAt(158, 102)).toBe("b");
+  });
+  it("returns null for a click in a trimmed-away region (inside the extent, far from every site)", () => {
+    // Inside the map box but far beyond the disc-clip radius of the clustered sites — visually empty,
+    // so it must read as an empty click even though delaunay.find still names a nearest site.
+    expect(cells.findSystemAt(700, 700)).toBeNull();
+  });
+});

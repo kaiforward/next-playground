@@ -87,7 +87,7 @@ export function computeTerritoryPolygons(
 
   const { delaunay } = voronoi;
   const points = delaunay.points;
-  const clipRadius = medianNearestNeighbor(delaunay) * DISC_RADIUS_FACTOR;
+  const clipRadius = clipRadiusForDelaunay(delaunay);
   const clipEnabled = Number.isFinite(clipRadius) && clipRadius > 0;
   const clipRadiusSq = clipRadius * clipRadius;
 
@@ -174,6 +174,18 @@ function medianNearestNeighbor(delaunay: Delaunay<Float64Array>): number {
   if (distances.length === 0) return 0;
   distances.sort((a, b) => a - b);
   return distances[Math.floor(distances.length / 2)];
+}
+
+/**
+ * The disc-clip radius applied to over-large Voronoi cells for this triangulation
+ * (`DISC_RADIUS_FACTOR × median nearest-neighbour spacing`). A cell is visually
+ * contained within a disc of this radius around its site. Exported so the shared
+ * cell cache hit-tests against the SAME radius the cells are trimmed to — otherwise
+ * a click in a trimmed-away (visually empty) region still resolves to the nearest
+ * site. Returns 0 when there is no spacing to measure (clipping is then disabled).
+ */
+export function clipRadiusForDelaunay(delaunay: Delaunay<Float64Array>): number {
+  return medianNearestNeighbor(delaunay) * DISC_RADIUS_FACTOR;
 }
 
 /**
