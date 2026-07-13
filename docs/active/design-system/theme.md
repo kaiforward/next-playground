@@ -57,7 +57,7 @@ Shared palette for Badge, ProgressBar, Button, InlineAlert, and Tabs. Defined as
 - **InlineAlert**: `bg-status-{color}/10 border-status-{color}/20 text-status-{color}-light`
 - **Tabs** (pill active): `bg-status-{color}/20 text-status-{color}-light`
 
-**Not on status palette:** EconomyBadge and TraitList use specialized color patterns (darker shades, `-900/80` backgrounds) that don't map to status semantics. Those stay on Tailwind defaults.
+**Not on status palette:** EconomyBadge uses specialized color patterns (darker shades, `-900/80` backgrounds) that don't map to status semantics. It stays on Tailwind defaults.
 
 ### Borders
 
