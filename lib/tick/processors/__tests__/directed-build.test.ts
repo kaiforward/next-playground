@@ -253,6 +253,8 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   seedPop: EXPANSION.COLONY_SEED_POP,
   habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
   popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
+  minSettlerSupply: 0, // gate disabled — these cases exercise proposal/funding wiring, not founding pace
+  employedLeakFraction: 0,
 };
 
 /** A developed home with housing filling all its habitable land (σ = 1) and no build deficits — so the

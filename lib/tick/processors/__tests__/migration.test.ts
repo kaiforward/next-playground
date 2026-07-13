@@ -7,9 +7,13 @@ import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 const OFF = 100; // employedGradientThreshold above any achievable |gradient| ⇒ staffed migration off
+// Colonist delivery disabled (sourceOutflowCap 0) so these cases isolate edge diffusion; delivery has its
+// own engine tests and a dedicated processor case below.
+const NO_DELIVERY = { sourceOutflowCap: 0, minSourcePopulation: 1e9 };
 const PARAMS = {
   interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
   flow: { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 },
+  delivery: NO_DELIVERY,
 };
 
 // Migration is now a monthly pulse: all edges process on ticks where tick % interval === 0.
@@ -85,5 +89,34 @@ describe("migration processor", () => {
     const before = world.systems.find((s) => s.id === "a")!.population;
     await runMigrationProcessor(world, ctx(1), { ...PARAMS, interval: REFERENCE_INTERVAL }); // tick 1 %24 ≠ 0
     expect(world.systems.find((s) => s.id === "a")!.population).toBe(before);
+  });
+
+  it("delivers colonists from a developed source to an empty colony (water-filled), conserved", async () => {
+    // Diffusion disabled (maxOutflowFraction 0) so this isolates the colonist-delivery pass: the core's
+    // idle spare is water-filled into the empty colony, even though diffusion alone would move nothing.
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const before = world.systems.reduce((s, x) => s + x.population, 0);
+    const params = {
+      ...PARAMS,
+      flow: { ...PARAMS.flow, maxOutflowFraction: 0 },
+      delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 },
+    };
+    await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(world.systems.find((s) => s.id === "core")!.population).toBeLessThan(1000);   // donated spare
+    expect(world.systems.find((s) => s.id === "colony")!.population).toBeGreaterThan(10); // received settlers
+    expect(world.systems.reduce((s, x) => s + x.population, 0)).toBeCloseTo(before, 5);   // conserved
+  });
+
+  it("skips colonist delivery on an off-boundary tick (delivery is monthly-gated)", async () => {
+    // Same source + empty colony and the real delivery params that DO move people on a pulse boundary (the
+    // case above), but run on an off-boundary tick: the monthly-pulse gate must skip the whole processor,
+    // so delivery moves nobody. Guards the delivery pass from drifting above the pulse guard (a 24× rate).
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = { ...PARAMS, delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 } };
+    await runMigrationProcessor(world, ctx(1), params); // tick 1 % 24 ≠ 0 → off-boundary, whole pulse skipped
+    expect(world.systems.find((s) => s.id === "core")!.population).toBe(1000);
+    expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10);
   });
 });

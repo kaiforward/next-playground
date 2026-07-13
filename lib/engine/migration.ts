@@ -17,6 +17,9 @@ export interface MigrationNode {
   labourDemand: number;
 }
 
+/** Signed population change for one system (Σ over a run = 0 — conserved). */
+export interface MigrationDelta { systemId: string; delta: number; }
+
 export interface AttractivenessWeights {
   /** Weight on contentment (1 − unrest) — "how happy is the destination". */
   contentment: number;
@@ -42,9 +45,17 @@ export function migrationAttractiveness(node: MigrationNode, weights: Attractive
   const contentment = 1 - clamp(node.unrest, 0, 1);
   const headroom = node.popCap > 0 ? clamp((node.popCap - node.population) / node.popCap, -1, 1) : 0;
   // Jobs gradient in [-1, 1] by construction (|numerator| ≤ denominator): open jobs pull
-  // (positive), full staffing is neutral (0), unemployment pushes (negative). Both zero → 0.
+  // (positive), full staffing is neutral (0), over-staffing pushes (negative).
   const jobScale = Math.max(node.labourDemand, node.population);
-  const jobs = jobScale > 0 ? (node.labourDemand - node.population) / jobScale : 0;
+  const rawJobs = jobScale > 0 ? (node.labourDemand - node.population) / jobScale : 0;
+  // The unemployment PUSH (negative jobs) only bites once housing is full: an under-occupied colony
+  // rides its headroom and ignores its lack of jobs — people settle available land ahead of industry
+  // (frontier settlement), and their consumption then pulls the industry that staffs them. A full,
+  // job-short system still sheds its surplus. Open-jobs PULL is unconditional. Without this asymmetry a
+  // fresh jobless colony scores −1 on jobs, cancelling its headroom, and never draws the settlers it
+  // needs to bootstrap — colonies never populate.
+  const fullness = node.popCap > 0 ? clamp(node.population / node.popCap, 0, 1) : 1;
+  const jobs = rawJobs < 0 ? rawJobs * fullness : rawJobs;
   return weights.contentment * contentment + weights.headroom * headroom + weights.jobs * jobs;
 }
 
@@ -75,11 +86,17 @@ export interface MigrationFlowParams {
 
 /**
  * Population moved across one edge this run (≥ 0), from the less-attractive
- * endpoint toward the more-attractive one. Conserved; distance-attenuated; and
- * capped at both endpoints by jobs — the destination's open jobs (absorptive
- * throttle) and the source's drawable labour (spare always, staffed only above
- * employedGradientThreshold) — as well as by housing headroom and the source
- * outflow fraction. The caller resolves from/to from `fromIsA` and applies ±quantity.
+ * endpoint toward the more-attractive one. Conserved; distance-attenuated; capped by
+ * housing headroom at the destination, the source's drawable labour (spare always,
+ * staffed only above employedGradientThreshold), and the source outflow fraction. The
+ * caller resolves from/to from `fromIsA` and applies ±quantity.
+ *
+ * Jobs shape WHERE people go (the fullness-gated jobs term in migrationAttractiveness — open jobs pull,
+ * a FULL job-short system pushes) but do NOT hard-cap how many a destination absorbs: population
+ * settles into housing headroom ahead of jobs, and its consumption pulls the industry that then staffs
+ * it (housing/pop leads, industry follows demand). A hard open-jobs absorptive cap here instead froze
+ * colony bootstrap — a fresh colony's jobs are tiny, so pop could never exceed them to create the demand
+ * that grows industry; the attractiveness term now handles "don't overfill a jobless FULL colony" softly.
  */
 export function migrationFlow(
   a: MigrationNode, b: MigrationNode, fuelCost: number, params: MigrationFlowParams,
@@ -95,10 +112,6 @@ export function migrationFlow(
   const outflow = source.population * params.maxOutflowFraction * Math.abs(gradient) * distanceFactor;
   const destHeadroom = Math.max(0, dest.popCap - dest.population);
 
-  // Destination absorptive throttle: a colony fills to its own open jobs at its own pace.
-  // Usually tighter than housing headroom; a fully-staffed destination absorbs nobody.
-  const absorptiveCapacity = Math.max(0, dest.labourDemand - dest.population);
-
   // Source draw: idle labour is always fully drawable; a small always-on fraction of STAFFED workers
   // (employedLeakFraction) also leaks toward a strongly-attractive destination, so a saturated core
   // still feeds job-rich colonies; above employedGradientThreshold the whole staffed pool unlocks.
@@ -108,6 +121,6 @@ export function migrationFlow(
     Math.abs(gradient) > params.employedGradientThreshold ? employed : params.employedLeakFraction * employed;
   const sourceDrawable = sourceSpare + employedEligible;
 
-  const quantity = Math.max(0, Math.min(outflow, sourceDrawable, source.population, destHeadroom, absorptiveCapacity));
+  const quantity = Math.max(0, Math.min(outflow, sourceDrawable, source.population, destHeadroom));
   return { fromIsA, quantity };
 }
