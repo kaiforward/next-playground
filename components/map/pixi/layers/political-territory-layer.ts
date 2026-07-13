@@ -17,9 +17,11 @@ const FACTION_NAME_STYLE = new TextStyle({
 /** Factions with fewer systems than this don't get a name label. */
 const LABEL_MIN_TERRITORY = 6;
 
-/** Polygon fill / stroke alpha for political mode (stronger than the Regions layer's neutral border). */
+/** Polygon fill / stroke alpha for political mode (stronger than the Regions layer's neutral border).
+ *  fillAlpha is well above the old 0.18 so faction colours read close to their true hue rather than a
+ *  washed-out tint — calibration knob, tuned in visual smoke. */
 const POLITICAL = {
-  fillAlpha: 0.18,
+  fillAlpha: 0.4,
   strokeAlpha: 0.55,
   strokeWidth: TERRITORY.strokeWidth,
 } as const;
