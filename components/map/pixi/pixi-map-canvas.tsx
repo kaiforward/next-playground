@@ -178,17 +178,17 @@ export function PixiMapCanvas({
       const politicalTerritoryLayer = new PoliticalTerritoryLayer();
       world.addChild(politicalTerritoryLayer.container);
 
-      // Stability choropleth — a 4th mode in the territory band. Voronoi geometry
+      // Stability choropleth — another territory mode. Voronoi geometry
       // mirrors the other territory layers; fills are redrawn from live unrest values.
       const stabilityTerritoryLayer = new StabilityTerritoryLayer();
       world.addChild(stabilityTerritoryLayer.container);
 
-      // Population choropleth — a 5th mode in the territory band. Same Voronoi
+      // Population choropleth — another territory mode. Same Voronoi
       // geometry; fills are a relative red→green ramp over live population.
       const populationTerritoryLayer = new PopulationTerritoryLayer();
       world.addChild(populationTerritoryLayer.container);
 
-      // Development choropleth — a 6th mode in the territory band. Same Voronoi
+      // Development choropleth — another territory mode. Same Voronoi
       // geometry; fills are an absolute cool→warm ramp over 0..1 development.
       const developmentTerritoryLayer = new DevelopmentTerritoryLayer();
       world.addChild(developmentTerritoryLayer.container);
