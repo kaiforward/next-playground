@@ -1,16 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { AtlasData, UniverseData, StarSystemInfo, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
-import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
-import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useMapMode } from "@/lib/hooks/use-map-mode";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
@@ -27,6 +25,19 @@ import { buildSystemRegionMap } from "@/lib/utils/region";
 import { useGoods } from "@/lib/hooks/use-goods";
 import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+
+/** Default zoom the camera settles at when focusing/centring on a location. */
+const FOCUS_ZOOM = 1.2;
+
+type CenterTarget = { x: number; y: number; zoom: number };
+
+/** Parse a `?focus=<x>,<y>[,<zoom>]` param into a camera target, or null if absent/malformed. */
+function parseFocusParam(raw: string | null): CenterTarget | null {
+  if (!raw) return null;
+  const [x, y, z] = raw.split(",", 3).map(Number);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y, zoom: Number.isFinite(z) && z > 0 ? z : FOCUS_ZOOM };
+}
 
 interface StarMapProps {
   atlas: AtlasData;
@@ -60,15 +71,20 @@ export function StarMap({
   const developmentBySystem = useDevelopment(mapMode === "development");
 
   // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
-  // the player can currently sense. Topology (political/regions) stays public;
-  // this gate is what the stability choropleth and other dynamic modes share.
+  // the player can currently sense. We store STABILITY (1 − unrest), not raw unrest,
+  // so the fill AND its number both read "higher = more stable" (bright/high number =
+  // calm). Gated on the live `developed` flag too: an undeveloped system has no
+  // population, so its unrest is a hollow 0 that would invert to "fully stable" (bright
+  // cyan) — instead it must read as absent (black), like population/development.
   const visibleStability = useMemo(() => {
     const gated = new Map<string, number>();
     for (const [systemId, unrest] of stabilityBySystem) {
-      if (visibleSystemIds.has(systemId)) gated.set(systemId, unrest);
+      if (visibleSystemIds.has(systemId) && ownership.get(systemId)?.developed) {
+        gated.set(systemId, 1 - unrest);
+      }
     }
     return gated;
-  }, [stabilityBySystem, visibleSystemIds]);
+  }, [stabilityBySystem, visibleSystemIds, ownership]);
 
   // Population is also dynamic story state — same fog gate as stability. The
   // relative ramp then normalises against the max of this visible set.
@@ -202,15 +218,21 @@ export function StarMap({
     [universe.systems],
   );
 
-  // ── View state (selection, session persistence) ────────────────
-  const view = useMapViewState({
-    universe,
-    initialSelectedSystemId,
-  });
-
-  // Hide tier-1 quick-preview when a tier-2 panel route is active
+  // ── Selection = the open /system/[id] panel route (single source of truth) ──
+  const router = useRouter();
   const pathname = usePathname();
-  const isPanelOpen = pathname !== "/";
+  const searchParams = useSearchParams();
+  const selectedSystemId = useMemo(() => {
+    const match = /^\/system\/([^/]+)/.exec(pathname);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, [pathname]);
+  const selectedSystem = useMemo(
+    () =>
+      selectedSystemId
+        ? universe.systems.find((s) => s.id === selectedSystemId) ?? null
+        : null,
+    [selectedSystemId, universe.systems],
+  );
 
   // ── Derived map data ────────────────────────────────────────────
   const mapData = useMapData({
@@ -219,64 +241,80 @@ export function StarMap({
     visibleSystemIds,
     dynamicSystems,
     logisticsEdges,
-    selectedSystem: view.selectedSystem,
+    selectedSystem,
     systemRegionMap,
     regionMap,
     priceHeatmap: heatmapData,
     priceMode,
   });
 
-  // ── Destructure stable references for callback deps ──────────
-  const {
-    selectedSystem, selectSystem,
-    closeSystem, setMapReady,
-  } = view;
-
-  // ── Click handlers ────────────────────────────────────────────
-  const onSystemClick = useCallback(
-    (system: { id: string }) => {
-      const fullSystem = universe.systems.find((s) => s.id === system.id);
-      // Guard: viewport detail hasn't loaded yet — name is empty placeholder
-      if (!fullSystem || fullSystem.name === "") return;
-      selectSystem(fullSystem);
+  // ── Click handlers — navigate by id; the panel loads its own detail ──
+  const onSelectSystem = useCallback(
+    (systemId: string) => {
+      router.push(`/system/${systemId}`);
     },
-    [universe.systems, selectSystem],
+    [router],
   );
 
   const onEmptyClick = useCallback(() => {
-    closeSystem();
-  }, [closeSystem]);
+    router.push("/");
+  }, [router]);
 
-  // ── Center target (reactive — responds to systemId URL changes) ──
-  type CenterTarget = { x: number; y: number; zoom: number };
-  const [centerTarget, setCenterTarget] = useState<CenterTarget | undefined>(() => {
-    if (!view.initialSelectedSystem) return undefined;
-    return { x: view.initialSelectedSystem.x, y: view.initialSelectedSystem.y, zoom: 1.2 };
-  });
-  const prevSystemIdRef = useRef(initialSelectedSystemId);
+  // ── Camera focus target (generic: centre the map on any location) ──────
+  // Anything can "locate on the map" by linking to the query:
+  //   ?focus=<x>,<y>[,<zoom>]  — centre on raw world coordinates (a system, a fleet, an event,
+  //                              a battle — the caller supplies coords; the map is entity-agnostic)
+  //   ?systemId=<id>           — convenience: resolve a system to its coordinates
+  // This is independent of selection (the open /system/[id] panel): a focus link never opens the
+  // panel, and a click (which routes to /system/[id], touching neither param) never recentres.
+  const resolveSystemTarget = useCallback(
+    (id: string | null | undefined): CenterTarget | null => {
+      const system = id ? universe.systems.find((s) => s.id === id) : undefined;
+      return system ? { x: system.x, y: system.y, zoom: FOCUS_ZOOM } : null;
+    },
+    [universe.systems],
+  );
 
-  useEffect(() => {
-    if (initialSelectedSystemId === prevSystemIdRef.current) return;
-    prevSystemIdRef.current = initialSelectedSystemId;
-    if (!initialSelectedSystemId) return;
-    const system = universe.systems.find((s) => s.id === initialSelectedSystemId);
-    if (system) {
-      selectSystem(system);
-      setCenterTarget({ x: system.x, y: system.y, zoom: 1.2 });
-    }
-  }, [initialSelectedSystemId, universe.systems, selectSystem]);
+  // Initial centre — computed once from ?focus, then ?systemId, then the pathname system (a
+  // /system/[id] deep-link).
+  const [centerTarget, setCenterTarget] = useState<CenterTarget | undefined>(
+    () =>
+      parseFocusParam(searchParams.get("focus")) ??
+      resolveSystemTarget(
+        searchParams.get("systemId") ?? initialSelectedSystemId ?? selectedSystemId,
+      ) ??
+      undefined,
+  );
+
+  // Hide the map until the first centre settles so a deep-link/focus doesn't flash the fitView.
+  const [mapReady, setMapReadyState] = useState(() => centerTarget === undefined);
+
+  // Post-mount "locate on the map": recentre when the ?focus / ?systemId query changes (a "Show on
+  // Map" jump or any future locate action). Adjusted during render — the React idiom for resetting
+  // state on an input change — and keyed on the query string, so a per-tick atlas refresh (which
+  // churns universe.systems) never recentres, and a click (which changes only the pathname, not
+  // these params) never recentres. Leaving centerTarget untouched keeps its reference stable, so
+  // the canvas's centre effect no-ops on ticks.
+  const focusKey = `${searchParams.get("focus") ?? ""}|${initialSelectedSystemId ?? ""}`;
+  const [appliedFocusKey, setAppliedFocusKey] = useState(focusKey);
+  if (focusKey !== appliedFocusKey) {
+    setAppliedFocusKey(focusKey);
+    const target =
+      parseFocusParam(searchParams.get("focus")) ?? resolveSystemTarget(initialSelectedSystemId);
+    if (target) setCenterTarget(target);
+  }
 
   const handleReady = useCallback(() => {
-    setMapReady();
-  }, [setMapReady]);
+    setMapReadyState(true);
+  }, []);
 
   return (
-    <div className={`relative h-full w-full ${view.mapReady ? "opacity-100" : "opacity-0"}`}>
+    <div className={`relative h-full w-full ${mapReady ? "opacity-100" : "opacity-0"}`}>
       <PixiMapCanvas
         atlasData={liveAtlas}
         mapData={mapData}
         selectedSystem={selectedSystem}
-        onSystemClick={onSystemClick}
+        onSelectSystem={onSelectSystem}
         onEmptyClick={onEmptyClick}
         centerTarget={centerTarget}
         onReady={handleReady}
@@ -313,34 +351,17 @@ export function StarMap({
         setPriceMode={setPriceMode}
       />
 
-      {/* Detail panel overlay (hidden when a panel route is open) */}
-      {!isPanelOpen && (
-        <SystemDetailPanel
-          system={selectedSystem}
-          regionName={mapData.selectedRegionName}
-          factionName={mapData.selectedFactionName}
-          gatewayTargetRegions={mapData.selectedGatewayTargets}
-          activeEvents={mapData.eventsAtSelected}
-          visibility={mapData.selectedVisibility}
-          onClose={closeSystem}
-        />
-      )}
-
       {/* Cross-system price comparison panel (Price overlay) */}
-      {comparisonOpen && priceGoodId && view.selectedSystem && (
+      {comparisonOpen && priceGoodId && selectedSystem && (
         <MarketComparisonPanel
           goodId={priceGoodId}
           goodName={goods.find((g) => g.id === priceGoodId)?.name ?? priceGoodId}
-          fromSystemId={view.selectedSystem.id}
-          fromSystemName={view.selectedSystem.name}
+          fromSystemId={selectedSystem.id}
+          fromSystemName={selectedSystem.name}
           systems={systemsForComparison}
           connections={allConnections}
           onSelectSystem={(sysId) => {
-            const sys = universe.systems.find((s) => s.id === sysId);
-            if (sys) {
-              view.selectSystem(sys);
-              setCenterTarget({ x: sys.x, y: sys.y, zoom: 1.2 });
-            }
+            router.push(`/system/${sysId}`);
             setComparisonOpen(false);
           }}
           onClose={() => setComparisonOpen(false)}

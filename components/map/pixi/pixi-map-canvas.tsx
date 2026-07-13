@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Application, Container } from "pixi.js";
+import type { FederatedPointerEvent } from "pixi.js";
 import { Camera } from "./camera";
 import { Frustum } from "./frustum";
 import { computeLOD } from "./lod";
@@ -11,22 +12,25 @@ import { SystemLayer } from "./layers/system-layer";
 import { ConnectionLayer } from "./layers/connection-layer";
 import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
-import { StabilityTerritoryLayer } from "./layers/stability-territory-layer";
-import { PopulationTerritoryLayer } from "./layers/population-territory-layer";
-import { DevelopmentTerritoryLayer } from "./layers/development-territory-layer";
+import { ValueChoroplethLayer } from "./layers/value-choropleth-layer";
+import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
+import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { ViewportBounds } from "@/lib/types/game";
-import type { MapMode } from "@/lib/types/map";
+import { isValueMapMode, type MapMode } from "@/lib/types/map";
+
+/** Shared empty map for value-choropleth modes with no data yet (avoids a fresh Map per render). */
+const EMPTY = new Map<string, number>();
 
 export interface PixiMapCanvasProps {
   atlasData: AtlasData;
   mapData: MapData;
   selectedSystem: StarSystemInfo | null;
-  onSystemClick: (system: StarSystemInfo) => void;
+  onSelectSystem: (systemId: string) => void;
   onEmptyClick: () => void;
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
@@ -40,7 +44,7 @@ export interface PixiMapCanvasProps {
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
   /** Ambient display of the event pill (still reveals on hover/select). */
   showEvents: boolean;
-  /** Per-system unrest (0…1) for the stability choropleth, or empty when mode is off. */
+  /** Per-system stability (0…1, = 1 − unrest) for the stability choropleth, or empty when mode is off. */
   stabilityBySystem?: Map<string, number>;
   /** Per-system population for the population choropleth, or empty when mode is off. */
   populationBySystem?: Map<string, number>;
@@ -60,17 +64,18 @@ interface PixiRefs {
   connectionLayer: ConnectionLayer;
   territoryLayer: TerritoryLayer;
   politicalTerritoryLayer: PoliticalTerritoryLayer;
-  stabilityTerritoryLayer: StabilityTerritoryLayer;
-  populationTerritoryLayer: PopulationTerritoryLayer;
-  developmentTerritoryLayer: DevelopmentTerritoryLayer;
+  valueChoroplethLayer: ValueChoroplethLayer;
+  cellHighlightLayer: CellHighlightLayer;
   logisticsFlowLayer: TradeFlowLayer;
+  /** Shared Voronoi cells (built once per atlas sync) — also consumed by cell click + hover hit-testing. */
+  cells: SystemCells | null;
 }
 
 export function PixiMapCanvas({
   atlasData,
   mapData,
   selectedSystem,
-  onSystemClick,
+  onSelectSystem,
   onEmptyClick,
   centerTarget,
   onReady,
@@ -87,18 +92,14 @@ export function PixiMapCanvas({
   const readyFired = useRef(false);
 
   // Store callbacks in refs so Pixi event handlers always see latest
-  const callbacksRef = useRef({ onSystemClick, onEmptyClick });
-  callbacksRef.current = { onSystemClick, onEmptyClick };
+  const callbacksRef = useRef({ onSelectSystem, onEmptyClick });
+  callbacksRef.current = { onSelectSystem, onEmptyClick };
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
 
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
-
-  // Store latest data in ref for interaction handlers
-  const mapDataRef = useRef(mapData);
-  mapDataRef.current = mapData;
 
   // Signal to trigger data sync after Pixi is ready
   const [pixiReady, setPixiReady] = useState(false);
@@ -114,6 +115,9 @@ export function PixiMapCanvas({
     const frustum = new Frustum();
     let destroyed = false;
     let interactionCleanup: (() => void) | undefined;
+    let onStageHover: ((e: FederatedPointerEvent) => void) | undefined;
+    let clearHover: (() => void) | undefined;
+    let hoverScreen: { x: number; y: number } | null = null; // last pointer pos, resolved once per frame
     let prevZoom = 0; // Track zoom delta to detect active zooming
     const onResize = (width: number, height: number) => {
       camera.setScreenSize(width, height);
@@ -178,20 +182,17 @@ export function PixiMapCanvas({
       const politicalTerritoryLayer = new PoliticalTerritoryLayer();
       world.addChild(politicalTerritoryLayer.container);
 
-      // Stability choropleth — another territory mode. Voronoi geometry
-      // mirrors the other territory layers; fills are redrawn from live unrest values.
-      const stabilityTerritoryLayer = new StabilityTerritoryLayer();
-      world.addChild(stabilityTerritoryLayer.container);
+      // Value choropleth — one shared-geometry layer for the three value
+      // modes (stability/population/development). Fills + aggregated numbers
+      // are redrawn from live values via setValues(); geometry is built once
+      // in the territory-sync effect from the same Voronoi cells as the
+      // other territory layers.
+      const valueChoroplethLayer = new ValueChoroplethLayer();
+      world.addChild(valueChoroplethLayer.container);
 
-      // Population choropleth — another territory mode. Same Voronoi
-      // geometry; fills are a relative red→green ramp over live population.
-      const populationTerritoryLayer = new PopulationTerritoryLayer();
-      world.addChild(populationTerritoryLayer.container);
-
-      // Development choropleth — another territory mode. Same Voronoi
-      // geometry; fills are an absolute cool→warm ramp over 0..1 development.
-      const developmentTerritoryLayer = new DevelopmentTerritoryLayer();
-      world.addChild(developmentTerritoryLayer.container);
+      // Hovered/selected cell outline — above the fills, below the star markers.
+      const cellHighlightLayer = new CellHighlightLayer();
+      world.addChild(cellHighlightLayer.container);
 
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
@@ -201,8 +202,25 @@ export function PixiMapCanvas({
         app,
         systemLayer,
         getCallbacks: () => callbacksRef.current,
-        getMapData: () => mapDataRef.current,
+        getCellContext: () => ({
+          cells: pixiRef.current?.cells ?? null,
+          toWorld: (screenX, screenY) => camera.screenToWorld(screenX, screenY),
+        }),
       });
+
+      // Hover: outline the cell under the cursor (every mode, every zoom). pointermove fires far
+      // more often than we render, so just record the position here and resolve it to a cell once
+      // per frame in the ticker.
+      onStageHover = (e: FederatedPointerEvent) => {
+        hoverScreen = { x: e.global.x, y: e.global.y };
+      };
+      app.stage.on("pointermove", onStageHover);
+      clearHover = () => {
+        hoverScreen = null;
+        cellHighlightLayer.setHovered(null);
+        pixi.stage.cursor = "default";
+      };
+      canvas.addEventListener("pointerleave", clearHover);
 
       // Keep camera screen size in sync with Pixi's own resize
       app.renderer.on("resize", onResize);
@@ -255,9 +273,22 @@ export function PixiMapCanvas({
 
         territoryLayer.updateVisibility(lod);
         politicalTerritoryLayer.updateVisibility(lod);
-        stabilityTerritoryLayer.updateVisibility(lod);
-        populationTerritoryLayer.updateVisibility(lod);
-        developmentTerritoryLayer.updateVisibility(lod);
+        valueChoroplethLayer.updateVisibility(lod);
+        if (valueChoroplethLayer.container.visible) valueChoroplethLayer.updateNumbers(camera.zoom, frustum);
+
+        // Resolve the hovered cell at most once per frame (pointermove fires far more often than we
+        // render); also drives the clickable-cell cursor over empty cell space, not just the star.
+        if (hoverScreen) {
+          const cells = pixiRef.current?.cells;
+          if (cells) {
+            const wh = camera.screenToWorld(hoverScreen.x, hoverScreen.y);
+            const hoveredId = cells.findSystemAt(wh.x, wh.y);
+            cellHighlightLayer.setHovered(hoveredId);
+            pixi.stage.cursor = hoveredId ? "pointer" : "default";
+          }
+          hoverScreen = null;
+        }
+        cellHighlightLayer.updateZoom(camera.zoom);
 
         // Logistics overlay: layer alpha multiplies the system fade so the
         // overlay disappears alongside its host systems at universe zoom.
@@ -274,8 +305,8 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        politicalTerritoryLayer, stabilityTerritoryLayer, populationTerritoryLayer,
-        developmentTerritoryLayer, logisticsFlowLayer,
+        politicalTerritoryLayer, valueChoroplethLayer, cellHighlightLayer, logisticsFlowLayer,
+        cells: null,
       };
       setPixiReady(true);
     })();
@@ -283,6 +314,8 @@ export function PixiMapCanvas({
     return () => {
       destroyed = true;
       interactionCleanup?.();
+      if (app && onStageHover) app.stage.off("pointermove", onStageHover);
+      if (canvas && clearHover) canvas.removeEventListener("pointerleave", clearHover);
       if (app) {
         app.renderer.off("resize", onResize);
         if (canvas) camera.detach(canvas);
@@ -294,9 +327,8 @@ export function PixiMapCanvas({
           refs.connectionLayer.destroy();
           refs.territoryLayer.destroy();
           refs.politicalTerritoryLayer.destroy();
-          refs.stabilityTerritoryLayer.destroy();
-          refs.populationTerritoryLayer.destroy();
-          refs.developmentTerritoryLayer.destroy();
+          refs.valueChoroplethLayer.destroy();
+          refs.cellHighlightLayer.destroy();
           refs.logisticsFlowLayer.destroy();
           refs.starfield.destroy();
           refs.pointCloudLayer.destroy();
@@ -327,9 +359,13 @@ export function PixiMapCanvas({
     const mapSize = atlasData.meta.mapSize;
     p.territoryLayer.sync(atlasData.systems, regionInfos, mapSize);
     p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions, mapSize);
-    p.stabilityTerritoryLayer.sync(atlasData.systems, mapSize);
-    p.populationTerritoryLayer.sync(atlasData.systems, mapSize);
-    p.developmentTerritoryLayer.sync(atlasData.systems, mapSize);
+
+    // Shared Voronoi cells for the value choropleth — stashed on the ref so
+    // value-mode click hit-testing can reuse the same geometry.
+    const cells = buildSystemCells(atlasData.systems, mapSize);
+    p.cells = cells;
+    p.valueChoroplethLayer.sync(cells, atlasData.systems);
+    p.cellHighlightLayer.setCells(cells);
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
@@ -343,31 +379,32 @@ export function PixiMapCanvas({
     if (!p || !pixiReady) return;
     p.territoryLayer.container.visible = mapMode === "regions";
     p.politicalTerritoryLayer.setActive(mapMode === "political");
-    p.stabilityTerritoryLayer.container.visible = mapMode === "stability";
-    p.populationTerritoryLayer.container.visible = mapMode === "population";
-    p.developmentTerritoryLayer.container.visible = mapMode === "development";
+    p.valueChoroplethLayer.setActive(isValueMapMode(mapMode));
   }, [mapMode, pixiReady]);
 
-  // ── Stability choropleth fills (lightweight redraw on data change) ──
+  // ── Highlight the selected cell (the open /system/[id] panel) ──
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
-    p.stabilityTerritoryLayer.setStability(stabilityBySystem ?? new Map());
-  }, [stabilityBySystem, pixiReady]);
+    p.cellHighlightLayer.setSelected(selectedSystem?.id ?? null);
+  }, [selectedSystem, pixiReady]);
 
-  // ── Population choropleth fills (lightweight redraw on data change) ──
+  // ── Value choropleth fills (lightweight redraw on data change) ──────
+  // One setter for all three value modes — the layer's ramp + aggregation
+  // tiers are keyed off the `ValueMode` passed alongside the value map.
+  // Phase 1: reference == value map (dev uses current-development max as its
+  // v1 reference; potential lands in Phase 2).
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
-    p.populationTerritoryLayer.setPopulation(populationBySystem ?? new Map());
-  }, [populationBySystem, pixiReady]);
-
-  // ── Development choropleth fills (lightweight redraw on data change) ──
-  useEffect(() => {
-    const p = pixiRef.current;
-    if (!p || !pixiReady) return;
-    p.developmentTerritoryLayer.setDevelopment(developmentBySystem ?? new Map());
-  }, [developmentBySystem, pixiReady]);
+    if (mapMode === "population") {
+      p.valueChoroplethLayer.setValues(populationBySystem ?? EMPTY, populationBySystem ?? EMPTY, "population");
+    } else if (mapMode === "stability") {
+      p.valueChoroplethLayer.setValues(stabilityBySystem ?? EMPTY, stabilityBySystem ?? EMPTY, "stability");
+    } else if (mapMode === "development") {
+      p.valueChoroplethLayer.setValues(developmentBySystem ?? EMPTY, developmentBySystem ?? EMPTY, "development");
+    }
+  }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, pixiReady]);
 
   // ── Sync map data → system objects + connections ──────────────────
   useEffect(() => {

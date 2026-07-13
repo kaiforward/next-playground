@@ -19,12 +19,7 @@ export function stabilityLabel(unrest: number): StabilityLabel {
   return "Strike";
 }
 
-/** CSS hex colour for an unrest value (badge accent + legend). */
+/** CSS hex colour for an unrest value (badge accent). */
 export function stabilityRampColor(unrest: number): string {
   return STABILITY_RAMP_STOPS[stabilityLabel(unrest)];
-}
-
-/** Numeric colour for Pixi tinting (choropleth fill). */
-export function stabilityRampColorPixi(unrest: number): number {
-  return parseInt(stabilityRampColor(unrest).slice(1), 16);
 }

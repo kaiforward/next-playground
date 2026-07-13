@@ -29,6 +29,9 @@ export interface LODState {
   territoryAlpha: number;
   /** Alpha for the Political (faction) territory layer. */
   politicalTerritoryAlpha: number;
+  /** Alpha for the value choropleth (population/stability/development). Dims far less than the
+   *  region/political frames up close — value modes are for READING, so they stay legible. */
+  valueChoroplethAlpha: number;
   /** Alpha for region name labels */
   regionLabelAlpha: number;
   /** Whether to show glow effects */
@@ -73,8 +76,11 @@ export interface FadeConfig {
 const LAYER_FADE = {
   /** Faction tint: full strength when zoomed out, half strength up close. */
   politicalTerritory: { start: 0.3, end: 0.7, min: 0.5 },
-  /** Shared choropleth alpha (regions/stability/population/development): same shape as political for visual parity. */
+  /** Regions territory alpha: same shape as political for visual parity. */
   regionsTerritory: { start: 0.3, end: 0.7, min: 0.5 },
+  /** Value choropleth (population/stability/development): stays near-full up close so the fills +
+   *  numbers read clearly — value modes are for reading, not ambient spatial framing. */
+  valueChoropleth: { start: 0.3, end: 0.7, min: 0.85 },
   /** Region name labels: fade out before deep zoom — text clutters systems. */
   regionLabels: { start: 0.3, end: 0.5, min: 0 },
 } as const satisfies Record<string, FadeConfig>;
@@ -120,6 +126,7 @@ export function computeLOD(zoom: number): LODState {
     showTerritories: true,
     territoryAlpha: computeFade(zoom, LAYER_FADE.regionsTerritory),
     politicalTerritoryAlpha: computeFade(zoom, LAYER_FADE.politicalTerritory),
+    valueChoroplethAlpha: computeFade(zoom, LAYER_FADE.valueChoropleth),
 
     // Region labels fade out by deep zoom — text clutters individual systems.
     showRegionLabels: zoom < 0.5,

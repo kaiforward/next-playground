@@ -42,6 +42,11 @@ Design docs (under `docs/`):
 - `docs/build-plans/` — Transient, code-heavy build plans for in-flight features. **Delete each once its feature ships** — the functional spec moves to `docs/active/` and the code is the source of truth. Functional roadmaps that merely order unbuilt features go in `docs/planned/`, not here.
 - `docs/BACKLOG.md` — Actionable work items (delete when shipped)
 
+Doc conventions:
+- **No `docs/archive/`** — superseded design docs are deleted (git is the history). The tree is only active (current rules) / planned (unbuilt) / build-plans (transient).
+- **Active docs describe current reality in present tense** — no change-history/timeline ("removed in Phase 2"), no ephemeral phase nicknames or numbers; a deferred feature is stated as present-fact + a minimal planned-doc pointer.
+- **Specs lead with a concise human-readable headline** of the key mechanics + interactions; math/specifics go in later detail sections.
+
 ## Design Principles
 
 These apply to every layer — components, hooks, services, engine, processors, constants.
@@ -67,6 +72,9 @@ These apply to every layer — components, hooks, services, engine, processors, 
 - **Avoid the postfix `!` non-null assertion** — strip `null | undefined` with a real check, not `foo!`. Exception: `find(...)!` in tests is an accepted project idiom.
 - Client data fetching uses TanStack Query hooks (`lib/hooks/`) with `useSuspenseQuery`. Pages/components wrap data-fetching sections in `QueryBoundary` instead of inline loading/error checks. Query keys are centralized in `lib/query/keys.ts`. Ship arrival invalidation is centralized in `useTickInvalidation` — pages do not subscribe to arrivals individually.
 - Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput`/`SelectInput` from `components/form/`, never raw `<input>` or `<select>`.
+- **Comments describe the code, not the plan** — code comments never reference the plan/phase/PR/migration that produced them.
+- **Separate static metadata from per-tick dynamic data** — different read paths/endpoints, cached by change cadence (static = `staleTime: Infinity`; dynamic = tick-invalidated).
+- **Keep gameplay and performance concerns separate** — never let a performance mechanism (e.g. sharding) silently become a gameplay rule; topology vs sharding are distinct.
 
 ## Gotchas / Known Pitfalls
 
@@ -134,10 +142,38 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 ## Git Workflow
 
 - Feature branch per feature (`feat/feature-name`), PR to main when complete.
-- Use worktrees for larger pieces of work, merging into a shared feature branch.
 - Commit after each meaningful unit of work (new model, API route, component).
-- **Break large features into 2-4 phase PRs** — each PR small enough to hold full convention context. Review against the quality checklist after each phase, not just at the end. A 12-phase plan should ship as 3-4 PRs, not one monolithic branch.
-- **Merge shared→main as squash or fast-forward, never a regular merge commit** — squash when phase-commit subjects carry build-noise (`PR3`/`Phase B`/etc.), else fast-forward to keep clean atomic per-feature history.
+- **Break large features into 2-4 phase PRs** — each PR small enough to hold full convention context. Review against the quality checklist after each phase, not just at the end. A 12-phase plan should ship as 3-4 PRs, not one monolithic branch. (A markdown-only/tooling change is a single PR — the phase-PR rule is for code features.)
+- **Multi-PR features use a shared feature branch:** branch off main, phase PRs merge into the shared branch, one final PR shared→main. Shared branches keep a clean atomic per-feature history — phase branches squash in; no merge/bugfix/impl-detail commits on shared.
+- **Merge shared→main (or phase→shared) as squash or fast-forward, never a regular merge commit** — squash when phase-commit subjects carry build-noise (`PR3`/`Phase B`/etc.), else fast-forward to keep clean atomic per-feature history.
+- **Worktrees are for parallel workstreams, not sequential PRs** — use them for concurrent independent sessions or to keep main's checkout untouched (dev server, editor); for sequential PR-by-PR work on one feature use a shared branch. Always `git worktree remove` after — never leave stale worktrees.
+- **Do the doc lifecycle on the feature branch BEFORE the squash-merge** (promote spec → `docs/active/`, update the umbrella + `docs/SPEC.md`, delete the build plan) — post-merge docs force a pointless docs-only PR.
+
+### Review process
+- Review with `/uber-review`. Local reviews diff against the shared feature branch (not main) when one exists; PR reviews are fine as-is.
+- **PR-mode `/uber-review`: check out the PR head first**, else agents review stale base-branch code.
+- **Scale the review to substantive surface, not file count.** Deletion-heavy PRs: strip pure-deletion files from the reviewed diff (`--diff-filter=d`; pass the deleted-file list as context — the big token lever), bump `--chunk-size`, prune `--only` reviewers whose domain was deleted.
+- **Fix cheap + self-contained + already-touching Minor findings in-task** — don't reflexively defer them; deferred ones get an explicit owned cleanup pass, not a weak final-review sink.
+- **When the user runs the manual/visual smoke themselves, wait for their go-ahead** before launching the whole-branch review.
+- **Never merge over red CI.** If a failure is an unrelated flake (e.g. heavy sim tests timing out under parallel load), confirm it passes in isolation and fix the flake to green — don't merge past it.
+
+## Working Practices
+
+**Verifying changes (dev has no live universe)**
+- Verify generation/economy CHANGES by intrinsic coherence, not bit-identical parity vs old output — seeded RNG shifts by design when the draws change.
+- Prove a gameplay mechanic works via the simulator (the real tick) measuring the actual OUTCOME — not isolated engine fixtures (which pass while the galaxy is 100% broken). Add a sim metric when a symptom hides in aggregate health.
+- Until all mechanisms ship, calibrate the economy to a COARSE health bar only (no NaN/runaway/pinning; greedy≫random; dispersion; liquidity) — defer precision tuning (it's perishable) and loosen magnitude-pinning tests to ranges.
+
+**Before building a mechanic**
+- Map its runtime interactions with ALL shipped mechanics (decay, staffing, pop viability) first — a plan that ignores staffing builds unstaffable capacity that decay then eats.
+- Verify a foundation exposes the discrete primitives the upper layers need before building on it; interaction specs are not integration proof.
+
+**UI / dataviz**
+- UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype the user approves BEFORE implementation — never an agent invoking frontend-design blind.
+- A shared/segmented bar is for two consumers of ONE datapoint, never N differently-scaled series (those get separate bars; per-grade detail → tooltip mini-bars).
+
+**Scripts**
+- `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test); one-off diagnostics live in scratch and are never committed.
 
 ## Shell Commands
 
