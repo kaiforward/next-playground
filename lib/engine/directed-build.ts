@@ -139,20 +139,26 @@ export function habitableHousingHeadroom(sys: BuildSystemState): number {
  * SETTLE_MARGIN ahead of population, never past the habitable headroom. Returns 0
  * when the site is not fed-and-calm or already at its habitable cap. Housing leads —
  * it creates the popCap headroom the (untouched) population logistic then fills.
+ *
+ * Whole housing levels are lumpy (one level houses POP_CENTRE_DENSITY), so once occupancy has caught
+ * the settle margin (targetPopCap > currentPopCap) the want is rounded UP to at least one whole level.
+ * Without that round-up popCap could never ratchet above a small seed: a 1-level colony's margin-ahead
+ * want is a fraction of a level, floored to nothing, so it would need population to exceed its own cap
+ * (impossible — migration/growth both asymptote to popCap) before earning a 2nd level. Bounded by the
+ * physical habitable headroom.
  */
 export function plannedHousingUnits(sys: BuildSystemState): number {
   if (!fedAndCalm(sys)) return 0;
   const headroom = habitableHousingHeadroom(sys);
-  if (headroom <= 0) return 0;
+  if (headroom < 1) return 0; // no room for even one whole level
   const popProvided = BUILDING_TYPES[HOUSING_TYPE]?.popProvided ?? POP_CENTRE_DENSITY;
   if (popProvided <= 0) return 0;
-  const housing = sys.buildings[HOUSING_TYPE] ?? 0;
   const currentPopCap = housingPopCap(sys.buildings);
-  const habitableCapPop = (housing + headroom) * popProvided;
   const pop = Math.max(0, sys.population);
-  const targetPopCap = Math.min(habitableCapPop, pop * (1 + DIRECTED_BUILD.SETTLE_MARGIN));
-  const wantUnits = Math.max(0, (targetPopCap - currentPopCap) / popProvided);
-  return Math.min(wantUnits, headroom);
+  const targetPopCap = pop * (1 + DIRECTED_BUILD.SETTLE_MARGIN);
+  if (targetPopCap <= currentPopCap) return 0; // still housing headroom above the settle margin
+  const wantUnits = (targetPopCap - currentPopCap) / popProvided;
+  return Math.min(Math.floor(headroom), Math.max(1, Math.ceil(wantUnits)));
 }
 
 /** A rate deficit (production < demand) with no reachable surplus of its good — the build target. */
@@ -827,6 +833,10 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   habitableFloor: number;
   /** Weight on the seed-pop opportunity cost netted off colony value (COLONISATION.SEED_POP_COST_WEIGHT). */
   popCostWeight: number;
+  /** Settler supply (drawable pop/pulse) a faction must have per hungry colony to open another — the anti-sprawl gate (COLONISATION.MIN_SETTLER_SUPPLY). */
+  minSettlerSupply: number;
+  /** Fraction of a source's staffed workers drawable as settlers (mirrors MIGRATION_PARAMS.employedLeakFraction). */
+  employedLeakFraction: number;
 }
 
 /**
@@ -944,5 +954,24 @@ export function planFactionColonyProposals(
       sourceSystemId: c.sourceSystemId, seedPop, housingLevels, value, work,
     });
   }
-  return proposals;
+
+  // Settler-supply founding gate: a faction only opens new colonies while it can still deliver its
+  // minimum settler supply to each colony it is ALREADY trying to fill (+ each new one). Releasable
+  // settler flow this pulse = idle spare labour + the always-on employed leak, summed over developed
+  // systems; "hungry" absorbers are developed systems still below their housing cap. Founding is
+  // capped to `floor(releasable / minSettlerSupply) − hungry` best-valued candidates, so a faction
+  // fills what it has before it sprawls into colonies it can never populate. `minSettlerSupply ≤ 0`
+  // disables the gate.
+  if (params.minSettlerSupply <= 0 || proposals.length === 0) return proposals;
+  let releasable = 0;
+  let hungry = 0;
+  for (const s of developed) {
+    const ld = labourDemand(s.buildings);
+    const staffed = Math.min(Math.max(0, s.population), Math.max(0, ld));
+    releasable += Math.max(0, s.population - ld) + params.employedLeakFraction * staffed;
+    if (s.population < housingPopCap(s.buildings)) hungry++;
+  }
+  const budget = Math.max(0, Math.floor(releasable / params.minSettlerSupply) - hungry);
+  if (budget >= proposals.length) return proposals;
+  return [...proposals].sort((a, b) => b.value - a.value).slice(0, budget);
 }

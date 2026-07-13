@@ -32,4 +32,12 @@ export const COLONISATION = {
    * the value scalar. Coarse first-cut (per-doctrine later); PR4 calibrates it against LAND_PREMIUM/σ.
    */
   SEED_POP_COST_WEIGHT: 1.0,
+  /**
+   * Anti-sprawl founding gate: the drawable settler supply (idle spare labour + the employed leak,
+   * summed over a faction's developed systems) required PER hungry colony before the faction may open
+   * another. `budget = floor(releasable / MIN_SETTLER_SUPPLY) − hungryColonies` bounds new establishes
+   * per pulse, so a faction fills the colonies it has before founding more it can't populate. Coarse
+   * first-cut — tuned against the simulator (colonies should populate broadly without dying empty).
+   */
+  MIN_SETTLER_SUPPLY: 5,
 } as const;

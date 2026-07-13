@@ -12,6 +12,10 @@
  *   --help           Show this help message
  */
 
+// Load `.env` FIRST — before any import that reads process.env at module load (economy-scale.ts resolves
+// ECONOMY_SCALE on import). The Next.js dev server auto-loads .env; this makes the headless harness match
+// the live game's scale instead of silently diverging. (The code default is 100; this honours an override.)
+import "dotenv/config";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";

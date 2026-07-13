@@ -662,13 +662,34 @@ describe("habitableHousingHeadroom", () => {
 });
 
 describe("plannedHousingUnits", () => {
-  it("paces housing a settle-margin ahead of population", () => {
-    // pop 100, no housing, ample habitable → target popCap = 100 × 1.25 = 125 → 6.25 housing.
+  it("paces housing a settle-margin ahead of population (rounded up to whole levels)", () => {
+    // pop 100, no housing, ample habitable → target popCap = 100 × 1.25 = 125 → 6.25 → ceil 7 levels.
     const units = plannedHousingUnits(sysWith({
       population: 100, buildings: {}, generalSpace: 100, habitableSpace: 100,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
     }));
-    expect(units).toBeCloseTo(125 / 20 - 0); // 6.25
+    expect(units).toBe(Math.ceil(125 / 20)); // 7
+  });
+
+  it("ratchets a small seed colony up by a whole level once occupancy passes the margin", () => {
+    // The colony-bootstrap case: pop 20 filling a 1-level seed (popCap 20). Target popCap = 25 > 20, so a
+    // fraction of a level is wanted — the OLD floor() returned 0 and welded popCap at the seed forever.
+    // It must now round UP to one whole level so popCap can ratchet above the seed.
+    const units = plannedHousingUnits(sysWith({
+      population: 20, buildings: { housing: 1 }, generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }));
+    expect(units).toBe(1);
+  });
+
+  it("builds nothing while population is still below the current cap by more than the margin", () => {
+    // pop 2 in a 5-level colony (popCap 100): target = 2.5 ≪ 100, so there is ample housing headroom
+    // and no premature build.
+    const units = plannedHousingUnits(sysWith({
+      population: 2, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100,
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+    }));
+    expect(units).toBe(0);
   });
 
   it("returns 0 when the system is not fed and calm", () => {
@@ -1175,6 +1196,8 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   seedPop: EXPANSION.COLONY_SEED_POP,
   habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
   popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
+  minSettlerSupply: 0, // gate disabled by default — the valuation cases below isolate scoring, not founding pace
+  employedLeakFraction: 0,
 };
 
 /** A developed home system for the σ/missing/deficit aggregates. `housing` sets built pop-cap; `habitable`
@@ -1361,5 +1384,42 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
     const housingCost = effectiveSpaceCost(HOUSING_TYPE);
     const tiny: ColonyEstablishCandidate = { ...candidate({ systemId: "c-tiny", habitableSpace: housingCost }), sourceSystemId: "busy" };
     expect(planFactionColonyProposals("f1", [busy], [tiny], [], COLONY_PARAMS)).toHaveLength(0);
+  });
+
+  // ── Settler-supply founding gate (anti-sprawl) ──
+  // A full core (pop == popCap ⇒ not hungry) with 100 idle spare pops and no industry (labourDemand 0).
+  const supplyCore: BuildSystemState = {
+    systemId: "core", factionId: "f1", control: "developed", population: 100, unrest: 0,
+    buildings: { [HOUSING_TYPE]: 100 / POP_CENTRE_DENSITY }, slotCap: emptyResourceVector(),
+    generalSpace: 0, habitableSpace: 0, goods: [],
+  };
+
+  it("caps new colony foundings to the settler-supply budget, keeping the best-valued", () => {
+    // releasable = 100 spare; minSettlerSupply 20 ⇒ affordable floor(100/20) = 5; no hungry colonies ⇒
+    // budget 5. Candidates differ in habitable land (⇒ distinct colony value, since value ∝ habitableSpace),
+    // so this also pins the descending value-sort: the gate must keep the 5 LARGEST (c5–c9), not just any
+    // 5 — with identical candidates a reversed comparator would pass the count assertion alone.
+    const candidates = Array.from({ length: 10 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: (i + 1) * 100 }));
+    const gated = { ...COLONY_PARAMS, minSettlerSupply: 20, employedLeakFraction: 0 };
+    const proposals = planFactionColonyProposals("f1", [supplyCore], candidates, [], gated);
+    expect(proposals).toHaveLength(5);
+    expect(new Set(proposals.map((p) => p.systemId))).toEqual(new Set(["c5", "c6", "c7", "c8", "c9"]));
+  });
+
+  it("stops founding once hungry colonies already consume the settler supply", () => {
+    // Five hungry colonies (developed, pop 2 below their popCap 20) already soak the budget:
+    // releasable 100 + 5×2 = 110 ⇒ affordable 5, minus 5 hungry ⇒ budget 0, so nothing new is founded.
+    const hungry: BuildSystemState[] = Array.from({ length: 5 }, (_, i) => ({
+      systemId: `h${i}`, factionId: "f1", control: "developed", population: 2, unrest: 0,
+      buildings: { [HOUSING_TYPE]: 1 }, slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 100, goods: [],
+    }));
+    const gated = { ...COLONY_PARAMS, minSettlerSupply: 20, employedLeakFraction: 0 };
+    const proposals = planFactionColonyProposals("f1", [supplyCore, ...hungry], [candidate({ habitableSpace: 100 })], [], gated);
+    expect(proposals).toHaveLength(0);
+  });
+
+  it("does not gate when minSettlerSupply is 0 (disabled)", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: 100 }));
+    expect(planFactionColonyProposals("f1", [supplyCore], candidates, [], COLONY_PARAMS)).toHaveLength(8);
   });
 });

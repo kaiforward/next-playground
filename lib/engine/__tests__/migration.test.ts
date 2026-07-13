@@ -63,6 +63,25 @@ describe("migrationAttractiveness — jobs term", () => {
   });
 });
 
+describe("migrationAttractiveness — unemployment push is gated on housing fullness (greedy frontier)", () => {
+  const JW = { contentment: 0, headroom: 0, jobs: 1 }; // isolate the jobs term
+
+  it("an under-occupied jobless colony is barely penalised, a full one sheds its surplus", () => {
+    // Identical jobless state (labourDemand 0), different occupancy: the push scales with fullness, so
+    // the empty frontier colony rides its headroom instead of being repelled by its lack of jobs.
+    const empty = migrationAttractiveness({ unrest: 0, population: 20, popCap: 1000, labourDemand: 0 }, JW);
+    const full = migrationAttractiveness({ unrest: 0, population: 1000, popCap: 1000, labourDemand: 0 }, JW);
+    expect(empty).toBeGreaterThan(full);
+    expect(empty).toBeCloseTo(-0.02, 2); // −1 push scaled by occupancy 0.02 ⇒ ≈ 0
+    expect(full).toBeCloseTo(-1, 6);      // occupancy 1 ⇒ full push
+  });
+
+  it("open-jobs pull is unconditional — a roomy job-rich colony still pulls", () => {
+    const emptyJobbed = migrationAttractiveness({ unrest: 0, population: 20, popCap: 1000, labourDemand: 500 }, JW);
+    expect(emptyJobbed).toBeGreaterThan(0);
+  });
+});
+
 describe("migrationFlow — drains a calm overshot source", () => {
   const PARAMS = { weights: { contentment: 1, headroom: 1, jobs: 0 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 };
   it("pushes population out of an overshot, CALM source to a roomy calm neighbour", () => {
@@ -108,18 +127,23 @@ describe("migrationFlow", () => {
   });
 });
 
-describe("migrationFlow — destination absorptive throttle", () => {
+describe("migrationFlow — destination fills housing headroom, not just open jobs", () => {
   const JFLOW = { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 };
-  it("caps a flood at the destination's open jobs (labourDemand − pop)", () => {
-    const source = { unrest: 0.9, population: 5000, popCap: 5000, labourDemand: 0 };    // spare 5000
-    const dest = { unrest: 0, population: 100, popCap: 10000, labourDemand: 200 };      // open jobs 100
+  it("a roomy, job-poor colony absorbs settlers well past its open jobs (housing headroom binds)", () => {
+    // The old absorptive cap pinned this at the dest's 200 open jobs; a colony with vast housing
+    // headroom now greedily draws settlers AHEAD of jobs — they settle, and their demand pulls the
+    // industry that staffs them (housing/pop leads, industry follows). This is the colony-bootstrap fix.
+    const source = { unrest: 0.9, population: 5000, popCap: 5000, labourDemand: 0 };   // repulsive, spare 5000
+    const dest = { unrest: 0, population: 100, popCap: 10000, labourDemand: 200 };     // 200 open jobs, 9900 housing headroom
     const { fromIsA, quantity } = migrationFlow(source, dest, 10, JFLOW);
     expect(fromIsA).toBe(true);
-    expect(quantity).toBeCloseTo(100, 6); // absorptive cap binds
+    expect(quantity).toBeGreaterThan(dest.labourDemand); // fills past open jobs — the greed the old cap forbade
   });
-  it("a fully-staffed destination (no open jobs) receives nobody", () => {
+  it("a full destination (no housing headroom) still receives nobody", () => {
+    // Housing headroom remains the hard bound: a system at its popCap absorbs no one however hard the
+    // source pushes (the attractiveness jobs-push handles the softer 'don't overfill a jobless colony').
     const source = { unrest: 0.9, population: 5000, popCap: 5000, labourDemand: 0 };
-    const dest = { unrest: 0, population: 500, popCap: 10000, labourDemand: 500 };      // open jobs 0
+    const dest = { unrest: 0, population: 10000, popCap: 10000, labourDemand: 5000 };  // at cap ⇒ headroom 0
     expect(migrationFlow(source, dest, 10, JFLOW).quantity).toBe(0);
   });
 });

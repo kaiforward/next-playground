@@ -25,7 +25,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
-import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS } from "@/lib/constants/population";
+import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -354,7 +354,7 @@ function patchMarketRowStocks(
   return patched;
 }
 
-function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpdate[]): SimSystem[] {
+export function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpdate[]): SimSystem[] {
   if (updates.length === 0) return systems;
   const bySystem = new Map<string, Map<string, number>>();
   for (const u of updates) {
@@ -367,7 +367,12 @@ function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpda
     if (!byType) return s;
     const buildings = { ...s.buildings };
     for (const [type, count] of byType) buildings[type] = count;
-    return { ...s, buildings };
+    // Completed housing must raise the population cap — popCap tracks built housing (mirrors the
+    // develop-transition seed at applyDevelopments). Without this, a colony can build housing but
+    // never grow into it: popCap welds to its seed level and pop caps there forever. Only recompute
+    // when housing actually changed; other builds don't affect popCap. Never lowers it (decay owns that).
+    const popCap = byType.has(HOUSING_TYPE) ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap;
+    return { ...s, buildings, popCap };
   });
 }
 
@@ -638,6 +643,7 @@ export async function runWorldTick(
     await runMigrationProcessor(migWorld, newTickCtx(), {
       interval: ECONOMY_UPDATE_INTERVAL,
       flow: MIGRATION_PARAMS,
+      delivery: COLONY_DELIVERY_PARAMS,
     });
     systems = migWorld.systems;
     processorsRun.push("migration");
@@ -786,6 +792,8 @@ export async function runWorldTick(
           seedPop: EXPANSION.COLONY_SEED_POP,
           habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
           popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
+          minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
+          employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
         },
       },
     });

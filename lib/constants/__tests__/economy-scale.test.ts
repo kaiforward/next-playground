@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   toEconomyScale,
   ECONOMY_SCALE,
@@ -23,8 +23,8 @@ describe("toEconomyScale", () => {
   });
 });
 
-describe("scale helpers at default scale (S = 1)", () => {
-  it("defaults ECONOMY_SCALE to 1 when the env var is unset", () => {
+describe("scale helpers at the test-pinned scale (S = 1)", () => {
+  it("resolves ECONOMY_SCALE to 1 under the test env (vitest pins ECONOMY_SCALE=1)", () => {
     expect(ECONOMY_SCALE).toBe(1);
   });
 
@@ -35,5 +35,23 @@ describe("scale helpers at default scale (S = 1)", () => {
 
   it("scaleRecord maps every value and preserves keys at S = 1", () => {
     expect(scaleRecord({ a: 2, b: 3 })).toEqual({ a: 2, b: 3 });
+  });
+});
+
+describe("ECONOMY_SCALE code default", () => {
+  it("resolves to 100 when no env override is set (the game's scale)", async () => {
+    // The vitest config pins ECONOMY_SCALE=1 for the suite, so the statically-imported value above is 1.
+    // Unset the env var and re-import to prove the CODE default is 100 (the scale the game runs at). This
+    // guards the sim/game scale-parity fix: a regression back to a default of 1 would otherwise pass
+    // unnoticed behind the test-env pin.
+    vi.resetModules();
+    vi.stubEnv("ECONOMY_SCALE", undefined);
+    try {
+      const mod = await import("@/lib/constants/economy-scale");
+      expect(mod.ECONOMY_SCALE).toBe(100);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });

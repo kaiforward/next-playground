@@ -1,5 +1,6 @@
 import type { UnrestParams, StrikeParams, PopulationParams } from "@/lib/engine/population";
 import type { MigrationFlowParams } from "@/lib/engine/migration";
+import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 
 /**
  * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard
@@ -39,7 +40,10 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
   // jobs weight makes open jobs pull and unemployment push; headroom stays 1 so this is a
   // pure addition, not a recalibration (the contentment/headroom/jobs mix is a PR4 rebalance).
   weights: { contentment: 1, headroom: 1, jobs: 1 },
-  maxOutflowFraction: 0.05,
+  // Local balancing only — colony population is supplied by the targeted colonist-delivery pass, not by
+  // diffusion. Kept BELOW the natural growth rate (0.015) so edge diffusion can't drain a system faster
+  // than it regrows; a stronger rate bled the cores dry feeding the nearest colonies.
+  maxOutflowFraction: 0.01,
   gradientThreshold: 0.02,
   distanceDecay: 0.1, // per-hop gradient attenuation over the open-edge topology
   // Above any achievable |gradient| (with these weights the appeal gap tops out ~5), so the full
@@ -48,4 +52,20 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
   // Small always-on leak of staffed workers toward strongly-attractive colonies — the pop pump that
   // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Coarse; PR4-calibrated.
   employedLeakFraction: 0.02,
+};
+
+/**
+ * Targeted colonist delivery — the primary colony population supply (diffusion above is only local
+ * balancing). Each pulse every developed system contributes a capped slice of its drawable spare to a
+ * faction pool that is water-filled across the faction's developed systems, raising the emptiest
+ * colonies first. `sourceOutflowCap` sits well above the diffusion rate (colony delivery IS the flow),
+ * `minSourcePopulation` keeps freshly-seeded stubs from being drained as donors. Coarse first cut —
+ * tuned against the simulator toward an even spread (colony mean within ~50% of max).
+ */
+export const COLONY_DELIVERY_PARAMS: ColonistDeliveryParams = {
+  // Well above the diffusion rate — colony delivery is the primary flow. A source donates only its idle
+  // spare (pop above jobs), so it keeps its workers and cores stabilise at their own size while shedding
+  // surplus to the frontier; growth re-donates, keeping reinforcement sustained.
+  sourceOutflowCap: 0.05,
+  minSourcePopulation: 50,
 };
