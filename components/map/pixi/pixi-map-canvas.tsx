@@ -48,8 +48,10 @@ export interface PixiMapCanvasProps {
   stabilityBySystem?: Map<string, number>;
   /** Per-system population for the population choropleth, or empty when mode is off. */
   populationBySystem?: Map<string, number>;
-  /** Per-system development (0..1) for the development choropleth, or empty when mode is off. */
+  /** Per-system development (raw tier-weighted development points) for the development choropleth, or empty when mode is off. */
   developmentBySystem?: Map<string, number>;
+  /** The focused faction (from the /factions/[id] route), or null. Value modes re-normalise pop/development to it and de-emphasise the rest; stability dims but does not rescale. */
+  selectedFactionId?: string | null;
 }
 
 /** Holds all mutable Pixi references. Created once during mount. */
@@ -86,6 +88,7 @@ export function PixiMapCanvas({
   stabilityBySystem,
   populationBySystem,
   developmentBySystem,
+  selectedFactionId = null,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pixiRef = useRef<PixiRefs | null>(null);
@@ -392,8 +395,8 @@ export function PixiMapCanvas({
   // ── Value choropleth fills (lightweight redraw on data change) ──────
   // One setter for all three value modes — the layer's ramp + aggregation
   // tiers are keyed off the `ValueMode` passed alongside the value map.
-  // Phase 1: reference == value map (dev uses current-development max as its
-  // v1 reference; potential lands in Phase 2).
+  // Reference == value map for every mode: population and development both
+  // colour by value ÷ scope-max (no "vs potential" or "vs own ceiling" reference).
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
@@ -405,6 +408,14 @@ export function PixiMapCanvas({
       p.valueChoroplethLayer.setValues(developmentBySystem ?? EMPTY, developmentBySystem ?? EMPTY, "development");
     }
   }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, pixiReady]);
+
+  // ── Value-mode faction focus (scope) — driven by the /factions/[id] route ──
+  // Separate from the per-tick value effect: scope changes only on mode/faction change, not every tick.
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.valueChoroplethLayer.setScope(isValueMapMode(mapMode) ? (selectedFactionId ?? null) : null);
+  }, [mapMode, selectedFactionId, pixiReady]);
 
   // ── Sync map data → system objects + connections ──────────────────
   useEffect(() => {
