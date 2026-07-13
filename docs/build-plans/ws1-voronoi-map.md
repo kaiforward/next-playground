@@ -93,14 +93,18 @@ These were felt and approved by the user in the interactive prototype. Implement
   the stability badge — keep those; only the layer files are deleted.)
 
 **Modified (Phase 2):**
-- `lib/types/game.ts` — `DevelopmentEntry` gains `potential: number`.
-- `lib/services/development-map.ts` — emit per-system `potential`.
-- `lib/hooks/use-development.ts` — expose a `potentialBySystem` map alongside development.
-- `components/map/star-map.tsx` — pass selected faction id (scope) + dev potential map to the canvas.
+- `lib/engine/development-points.ts` (new) — raw tier-weighted development-points score (pop + skilled uplift + tier-weighted staffed industry).
+- `lib/services/development-map.ts` — return the raw points score (drop the potential soft-saturation from the map read).
+- `components/map/pixi/number-format.ts` — development number = rounded points (absolute), not `× 100`.
 - `components/map/pixi/value-ramp.ts` — add `deEmphasize(color, treatment)`.
-- `components/map/pixi/layers/value-choropleth-layer.ts` — `setScope`, faction-union outline, de-emphasis.
-- `components/map/pixi/layers/political-territory-layer.ts` — expose faction-union polygons + centroids for reuse.
-- `components/map/pixi/interactions.ts` — political-zoomed-out faction hit-test → `onFactionClick`.
+- `components/map/pixi/layers/value-choropleth-layer.ts` — scope re-normalisation (pop/dev only) + "Both" de-emphasis + faction-union outline.
+- `components/map/pixi/layers/political-territory-layer.ts` — expose faction unions + colours (`getFactionUnions`/`getFactionColors`) for reuse.
+- `components/map/star-map.tsx` — derive `selectedFactionId` from the pathname; `onSelectFaction` → `/factions/[id]`.
+- `components/map/pixi/pixi-map-canvas.tsx` — thread `selectedFactionId` → `setScope`; hand unions to the value layer; faction context + `onSelectFaction`.
+- `components/map/pixi/interactions.ts` — zoomed-out faction hit-test → `onSelectFaction`.
+
+**New file (Phase 2):**
+- `components/map/pixi/faction-hit-test.ts` — pure point-in-polygon over a faction-union map (+ test).
 
 **Modified (Phase 3):**
 - `lib/types/game.ts` — `AtlasSystem` + `StarSystemInfo` gain `sunClass: SunClass`.
@@ -865,192 +869,178 @@ git commit -m "refactor(map): remove the three duplicate choropleth layers, fold
 
 ---
 
-# Phase 2 — Faction-scoped gradients + political/value coexistence (PR: `feat/ws1-faction-scope`)
+# Phase 2 — Faction-scoped value gradients + political/value coexistence (PR: `feat/ws1-faction-scope`)
 
-Branch off `feat/economy-rework-base` after Phase 1 merges. Adds relative re-normalisation on selection,
-"Both" de-emphasis, the dev-potential reference, the faction-union outline, and political-zoomed-out faction
-selection.
+Branch off `feat/economy-rework-base` after Phase 1 merges. Adds: development measured against each
+system's **own** ceiling; **zoom-gated faction focus** (re-normalise population/development to a selected
+faction, dim the rest) driven by the pathname; the faction-union outline over value fills; and zoomed-out
+**faction selection** shared by political + value modes.
 
-### Task 2.1: Emit per-system development potential
+## Design decisions locked with the user
 
-**Files:**
-- Modify: `lib/types/game.ts` (`DevelopmentEntry`)
-- Modify: `lib/services/development-map.ts` (`getDevelopmentBySystem`)
-- Test: `lib/services/__tests__/development-map.test.ts` (create if absent; else extend)
+These supersede the original prototype's "select any system → scope to its faction" and the earlier
+"emit a separate dev-potential reference" plan. Implement to these:
 
-**Interfaces:**
-- Produces: `interface DevelopmentEntry { systemId: string; development: number; potential: number }`;
-  `getDevelopmentBySystem()` now sets `potential` per system.
+1. **Development = raw tier-weighted "development points", coloured relative to the scope max — exactly
+   like population.** Drop the potential reference entirely (it was the source of the confusion). The map
+   value becomes each system's built-and-staffed magnitude as a raw points total; the ramp normalises it
+   against the scope max (whole map, or the focused faction), matching EU5's "brightest = the map's
+   most-developed location" ([wiki](https://eu5.paradoxwikis.com/Map_modes)). **Not** per-system
+   self-reference. Population and development are fully symmetric (both raw-value ÷ scope-max); development
+   only differs in *what the value counts*. See Task 2.1 for the points formula.
+2. **Colour is relative to scope; numbers stay absolute.** `valueRampColorPixi(value, referenceMax, mode)`
+   already decouples them: the fill = `value / referenceMax`, the label = the raw aggregated value.
+   Selecting a faction re-tints but **never** changes a number.
+3. **Zoom-gated faction focus (population + development only).**
+   - **Zoomed in** (system tier): pop/development colour relative to the **whole map**; clicking a system
+     opens `/system/[id]` but does **not** rescale the map. Stable during close work.
+   - **Zoomed out** (faction tier): clicking a faction routes to `/factions/[id]` — opening the faction
+     panel **and** re-normalising pop/development to that faction (its worlds span the full ramp), with the
+     other factions de-emphasised. Empty-click (`/`) → back to whole-map.
+   - **Stability never rescales** — its 1−unrest scale is absolute — but its non-focused factions still
+     de-emphasise for visual consistency.
+4. **Scope = the pathname.** No new focus state: the value layer reads the focused faction from
+   `/factions/[id]` (Phase 1 made the pathname the single source of truth for selection). The zoom-gate
+   falls out for free — you can only *reach* `/factions/[id]` via the zoomed-out faction-click.
+5. **De-emphasis = "Both"** (desaturate + darken) — the prototype-locked default; "Hide" stays a future
+   toggle.
 
-- [ ] **Step 1: Write the failing test**
-
-```ts
-// lib/services/__tests__/development-map.test.ts
-import { describe, it, expect } from "vitest";
-import { getDevelopmentBySystem } from "@/lib/services/development-map";
-// (Use the project's world-fixture helper if one exists; otherwise build a minimal world with 2 systems
-//  of clearly different habitableSpace/generalSpace/slot totals and assert potential tracks the substrate.)
-
-describe("getDevelopmentBySystem", () => {
-  it("emits a per-system potential derived from habitable + industry substrate", () => {
-    const entries = getDevelopmentBySystem();
-    expect(entries.length).toBeGreaterThan(0);
-    for (const e of entries) {
-      expect(e).toHaveProperty("potential");
-      expect(e.potential).toBeGreaterThanOrEqual(0);
-      expect(Number.isFinite(e.potential)).toBe(true);
-    }
-    // the system with the largest substrate has the largest potential
-    const max = entries.reduce((a, b) => (b.potential > a.potential ? b : a));
-    expect(max.potential).toBeGreaterThan(0);
-  });
-});
-```
-
-- [ ] **Step 2: Run to verify it fails.** Run: `npx vitest run lib/services/__tests__/development-map.test.ts`
-  Expected: FAIL (`potential` undefined).
-- [ ] **Step 3: Implement.** In `lib/types/game.ts`, add `potential: number` to `DevelopmentEntry` (line ~202).
-  In `lib/services/development-map.ts` (`getDevelopmentBySystem`, ~31–46), compute per system, reusing the pure
-  engine functions already imported for `developmentRefsForWorld`:
-
-```ts
-import { habitablePotentialPop, industryPotential } from "@/lib/engine/development";
-// inside the per-system map:
-const depositSlots = s.slotGas + s.slotMinerals + s.slotOre + s.slotBiomass + s.slotArable + s.slotWater + s.slotRadioactive;
-const potential = habitablePotentialPop(s.habitableSpace) + industryPotential(depositSlots, s.generalSpace);
-return { systemId: s.id, development, potential };
-```
-
-  (Verify the exact `slot*` field names against `lib/world/types.ts:83-89`.)
-- [ ] **Step 4: Run to verify it passes.** Run: `npx vitest run lib/services/__tests__/development-map.test.ts` —
-  Expected: PASS.
-- [ ] **Step 5: Commit**
-
-```bash
-git add lib/types/game.ts lib/services/development-map.ts lib/services/__tests__/development-map.test.ts
-git commit -m "feat(map): emit per-system development potential as the dev-mode ramp reference (WS1)"
-```
-
-### Task 2.2: Expose the potential map from `useDevelopment`
+### Task 2.1: Development as raw tier-weighted "development points"
 
 **Files:**
-- Modify: `lib/hooks/use-development.ts`
+- Create: `lib/engine/development-points.ts` (pure) + `lib/engine/__tests__/development-points.test.ts`
+- Modify: `lib/services/development-map.ts` (`getDevelopmentBySystem` → use the new points score)
+- Modify: `components/map/pixi/number-format.ts` (dev number = rounded points, not `× 100`)
+- Update: `lib/services/__tests__/development-map.test.ts` if it asserts `development ∈ [0,1]`.
 
-- [ ] **Step 1:** Change the hook to fold both maps and return a discriminated object rather than a bare `Map`:
-  `return { developmentBySystem, potentialBySystem }` (both `Map<string, number>`). Update the two call sites
-  (`components/map/star-map.tsx:60/85-91` and anywhere else `git grep -n "useDevelopment("` reports).
-- [ ] **Step 2:** In `star-map.tsx`, apply the same fog-of-war filter to `potentialBySystem` as to the value maps
-  (lines ~85–91) and pass it to the canvas as `developmentReferenceBySystem`.
-- [ ] **Step 3: Build.** Run: `npx tsc --noEmit && npx next build --webpack` — Expected: passes.
-- [ ] **Step 4: Commit**
+The current `systemDevelopment` (potential-referenced soft-saturation) is the **build planner's** measure
+(ROI vs potential) — leave it and its callers (`directed-build`, `construction`) untouched. Add a
+**separate, map-only** raw score the choropleth colours relative to the scope max (like population).
 
-```bash
-git add lib/hooks/use-development.ts components/map/star-map.tsx
-git commit -m "feat(map): surface development potential to the map as the dev ramp reference (WS1)"
-```
+**`developmentPoints(input): number`** = population term + industry term, summed raw (no soft-saturation,
+no reference — the ramp does the scope-max normalisation). All magnitudes live in a first-draft
+`DEVELOPMENT_POINTS` constant and are **calibration knobs**; only the relative *shape* (advanced/skilled >
+raw/basic of the same size) is asserted.
 
-### Task 2.3: Faction scope re-normalisation + "Both" de-emphasis
+- **Population term** — people, skilled people more: `population / POP_CENTRE_DENSITY` (level-equivalent
+  units) plus a skilled uplift `(filledSkill1 × W1 + filledSkill2 × W2) / POP_CENTRE_DENSITY`
+  (`W1 ≈ 1.5`, `W2 ≈ 3`), where filled skilled jobs ≈ each grade of `labourDemand(buildings)` ×
+  `labourFulfillment(population, labourDemand(buildings))`. No separate academy line — skilled jobs only
+  exist where academies license them, so "higher-tier pop" rides along without a double-count.
+- **Industry term** — built-and-**staffed**, more per tier (× staffing so idle shells score ~0): per
+  staffed production level, tier-0 = 1, tier-1 = 2, tier-2 = 4 pts (via `GOOD_TIER_BY_KEY[goodId]`); each
+  specialisation complex = 20 pts (industrial pinnacle, cap 1/system). Housing and academies score nothing
+  directly (housing → population term; academies → the skilled jobs they unlock).
+
+- [ ] **Step 1: Failing test** (property, not magnitude): a system with tier-2 factories + a complex +
+  skilled staff scores **higher** than a same-population system of only tier-0 extractors; fully-idle
+  (unstaffed) industry adds ~0; a barren system (no habitable land) still scores from industry alone;
+  result is finite and ≥ 0.
+- [ ] **Step 2: Run → fails** (`development-points` unresolved).
+  Run: `npx vitest run lib/engine/__tests__/development-points.test.ts`.
+- [ ] **Step 3: Implement** `developmentPoints` + the `DEVELOPMENT_POINTS` knobs; wire
+  `getDevelopmentBySystem` to return it as `development` (drop the `developmentRefsForWorld` soft-saturation
+  from the map read); make `number-format.ts` show development as rounded points (absolute), not `× 100`.
+  Update the service/hook doc comments ("vs the galaxy's biggest potential" → "raw tier-weighted points,
+  coloured relative to the scope max").
+- [ ] **Step 4: Run → passes** (`npx vitest run lib/engine/__tests__/development-points.test.ts lib/services/__tests__/development-map.test.ts`).
+- [ ] **Step 5: Commit.** `feat(map): development as raw tier-weighted points, coloured relative to scope max (WS1)`.
+
+### Task 2.2: `deEmphasize` + faction scope in the value layer
 
 **Files:**
 - Modify: `components/map/pixi/value-ramp.ts` (add `deEmphasize`)
 - Test: `components/map/pixi/__tests__/value-ramp.test.ts` (extend)
-- Modify: `components/map/pixi/layers/value-choropleth-layer.ts` (`drawFills` honours scope + de-emphasis)
-- Modify: `components/map/pixi/pixi-map-canvas.tsx` (pass selected faction id + dev reference)
-- Modify: `components/map/star-map.tsx` (thread `selectedSystem?.factionId`)
+- Modify: `components/map/pixi/layers/value-choropleth-layer.ts`
 
-- [ ] **Step 1: Failing test for `deEmphasize`.**
+- [ ] **Step 1: Failing test** for `deEmphasize(color, "both")` — greys + darkens, never returns
+  `ABSENT_COLOR`, summed channels lower than the input.
+- [ ] **Step 2: Implement `deEmphasize`** in `value-ramp.ts` (`type DeEmphasis = "both" | "dim" | "desat"`;
+  mix toward luminance grey, then darken — "both" is the default treatment). "hide" is not built (future
+  toggle).
+- [ ] **Step 3: Make the layer scope-aware.** `setScope(factionId)` already exists — give it teeth:
+  - Build `factionBySystemId: Map<string, string | null>` in `sync` (from `this.systems`).
+  - Add `RESCALES_TO_SCOPE: Record<ValueMode, boolean> = { population: true, development: true, stability: false }`.
+    `recomputeReferenceMax` scopes to the faction's members only when
+    `scopeFaction != null && RESCALES_TO_SCOPE[mode]`; otherwise it uses all systems (stability stays
+    global; nothing focused stays global).
+  - In `drawFills`, when `scopeFaction != null` and a cell's faction ≠ scope, wrap the colour in
+    `deEmphasize(color, "both")` — **after** the absent/zero→black check, which always wins. Applies in
+    every mode (pop/dev/stability) so focus dims the rest uniformly.
+- [ ] **Step 4: Verify.** `npx vitest run components/map/pixi/__tests__/value-ramp.test.ts && npx tsc --noEmit`.
+- [ ] **Step 5: Commit.** `feat(map): faction-scoped re-normalisation + 'Both' de-emphasis in the value layer (WS1)`.
 
-```ts
-// append to value-ramp.test.ts
-import { deEmphasize } from "@/components/map/pixi/value-ramp";
-it("deEmphasize 'both' greys and darkens a colour but never returns pure black", () => {
-  const top = rampTopPixi("population");
-  const out = deEmphasize(top, "both");
-  expect(out).not.toBe(top);
-  expect(out).not.toBe(ABSENT_COLOR);
-  // darker than the original (lower summed channels)
-  const sum = (c: number) => (c >> 16) + ((c >> 8) & 255) + (c & 255);
-  expect(sum(out)).toBeLessThan(sum(top));
-});
-```
-
-- [ ] **Step 2: Implement `deEmphasize`** in `value-ramp.ts` (mirrors the prototype's "Both": mix toward
-  luminance grey, then darken ×0.42):
-
-```ts
-export type DeEmphasis = "both" | "dim" | "desat"; // "hide" handled by the layer (→ background), future toggle
-export function deEmphasize(color: number, treatment: DeEmphasis): number {
-  const r = color >> 16, g = (color >> 8) & 255, b = color & 255;
-  const L = r * 0.3 + g * 0.59 + b * 0.11;
-  if (treatment === "desat") return (Math.round(r * 0.2 + L * 0.8) << 16) | (Math.round(g * 0.2 + L * 0.8) << 8) | Math.round(b * 0.2 + L * 0.8);
-  if (treatment === "dim") return (Math.round(r * 0.26) << 16) | (Math.round(g * 0.26) << 8) | Math.round(b * 0.26);
-  const mix = (c: number) => Math.round((c * 0.12 + L * 0.88) * 0.42);
-  return (mix(r) << 16) | (mix(g) << 8) | mix(b);
-}
-```
-
-- [ ] **Step 3: Layer honours scope.** In `value-choropleth-layer.ts` `drawFills`, when `scopeFaction != null` and
-  the cell's system is out of scope, run the ramp against the **global** max then `deEmphasize(color, "both")`;
-  in-scope cells use the scoped `referenceMax` (already computed by `recomputeReferenceMax` over `scopeMembers`).
-  A `value ≤ 0` cell stays black regardless of scope (absence is absence — apply the zero check first).
-  Requires the layer to know each system's `factionId`: build a `Map<id, factionId>` in `sync`.
-- [ ] **Step 4: Thread the scope.** Add `setScope` calls from the canvas when `selectedSystem` changes: in a value
-  mode, `valueChoroplethLayer.setScope(selectedSystem?.factionId ?? null)`. For development mode, pass
-  `developmentReferenceBySystem` as the `reference` arg to `setValues` (instead of the value map).
-- [ ] **Step 5: Build + smoke.** Run: `npx vitest run components/map/pixi/__tests__/value-ramp.test.ts && npx next build --webpack`.
-  Smoke: click a system in a value mode → the gradient re-normalises to its faction (that faction's worlds now
-  span the full ramp), other factions grey-and-dim; click empty → back to global. Against the prototype's
-  "Both" treatment.
-- [ ] **Step 6: Commit**
-
-```bash
-git add components/map/pixi/value-ramp.ts components/map/pixi/__tests__/value-ramp.test.ts components/map/pixi/layers/value-choropleth-layer.ts components/map/pixi/pixi-map-canvas.tsx components/map/star-map.tsx
-git commit -m "feat(map): faction-scoped relative gradients with 'Both' de-emphasis (WS1)"
-```
-
-### Task 2.4: Faction-union outline over per-cell fills (political + value coexistence)
+### Task 2.3: Thread the focused faction from the pathname
 
 **Files:**
-- Modify: `components/map/pixi/layers/political-territory-layer.ts` (expose `getFactionUnions(): Map<string, MultiPolygon>`)
-- Modify: `components/map/pixi/layers/value-choropleth-layer.ts` (draw faction-union outlines)
+- Modify: `components/map/star-map.tsx`
+- Modify: `components/map/pixi/pixi-map-canvas.tsx`
 
-- [ ] **Step 1:** In `political-territory-layer.ts`, expose the already-computed union polygons (`cachedTerritories`,
-  keyed by factionId) via a getter. In `value-choropleth-layer.ts`, add an optional bolder faction outline drawn
-  over the per-cell fills (stroke only, faction colour or copper), so value modes still show political borders.
-  Reuse the union polygons — do not recompute a triangulation.
-- [ ] **Step 2: Build + smoke.** In a value mode, faction borders read as a bolder outline over the per-cell
-  gradient. Run: `npx next build --webpack`.
-- [ ] **Step 3: Commit**
+- [ ] **Step 1.** In `star-map.tsx`, derive `selectedFactionId` from the pathname
+  (`/^\/factions\/([^/]+)/` — mirror the existing `selectedSystemId` regex) and pass it to the canvas as a
+  prop.
+- [ ] **Step 2.** In `pixi-map-canvas.tsx`, in the value-mode data effect, call
+  `valueChoroplethLayer.setScope(isValueMapMode(mapMode) ? (selectedFactionId ?? null) : null)`; re-run when
+  `selectedFactionId` or `mapMode` changes.
+- [ ] **Step 3: Verify.** `npx tsc --noEmit && npx next build --webpack`.
+- [ ] **Step 4: Commit.** `feat(map): drive value-mode faction focus from the /factions/[id] route (WS1)`.
 
-```bash
-git add components/map/pixi/layers/political-territory-layer.ts components/map/pixi/layers/value-choropleth-layer.ts
-git commit -m "feat(map): faction-union outline over per-cell value fills (WS1)"
-```
+(Reaching `/factions/[id]` is wired in Task 2.5; until then this is inert — that's expected.)
 
-### Task 2.5: Political-mode zoomed-out faction selection
+### Task 2.4: Faction-union outline over the per-cell value fills
 
 **Files:**
-- Modify: `components/map/pixi/interactions.ts` (faction hit-test when political + zoomed out)
-- Modify: `components/map/pixi/pixi-map-canvas.tsx` + `components/map/star-map.tsx` (`onFactionClick`)
+- Modify: `components/map/pixi/layers/political-territory-layer.ts` (expose the unions)
+- Modify: `components/map/pixi/layers/value-choropleth-layer.ts` (draw the outline)
+- Modify: `components/map/pixi/pixi-map-canvas.tsx` (hand the unions to the value layer)
 
-- [ ] **Step 1: Verify the faction-view target first.** `git grep -n "faction" app/(game) lib/query/keys.ts` to
-  confirm how a faction screen/panel is opened today (route or panel). The `onFactionClick` handler navigates
-  there. If no faction screen exists yet, scope this step to selecting the faction and opening whatever faction
-  detail surface exists; note the gap in the PR description.
-- [ ] **Step 2:** Add `onFactionClick: (factionId: string) => void` to `InteractionCallbacks`. In `onStageClick`,
-  when `mapMode === "political"` and `camera.zoom < FACTION_SELECT_ZOOM` (a threshold aligned with the political
-  layer's union LOD), point-in-polygon test the click against `getFactionUnions()` and call `onFactionClick`.
-  Otherwise fall through to per-cell system selection (Task 1.6) or `onEmptyClick`.
-- [ ] **Step 3: Build + smoke.** Political mode, zoomed out → clicking a faction shape opens the faction view;
-  zoomed in → clicking selects the individual system (per-cell). Run: `npx next build --webpack`.
-- [ ] **Step 4: Commit**
+- [ ] **Step 1.** In `political-territory-layer.ts`, add `getFactionUnions(): Map<string, MultiPolygon> | null`
+  (return `cachedTerritories`, already computed + keyed by factionId) and
+  `getFactionColors(): Map<string, number> | null` (return `cachedColors`). Type via the exported
+  `MultiPolygon` from `territory-utils` (the field is already that shape).
+- [ ] **Step 2.** In the value layer add `setFactionOutlines(unions, colors)` that stores them and draws a
+  **stroke-only** outline over the fills (faction colour, a bolder alpha/width than the per-cell stroke) so
+  political borders read while a value mode is active. Exterior rings only; reuse the union polygons — no new
+  triangulation. Redraw it as part of / after `drawFills`.
+- [ ] **Step 3.** In the canvas territory-sync effect (where `politicalTerritoryLayer.sync(...)` runs), after
+  the sync call
+  `valueChoroplethLayer.setFactionOutlines(politicalTerritoryLayer.getFactionUnions(), politicalTerritoryLayer.getFactionColors())`.
+- [ ] **Step 4: Verify.** `npx next build --webpack` + smoke: a value mode shows a bolder faction border over
+  the gradient.
+- [ ] **Step 5: Commit.** `feat(map): faction-union outline over per-cell value fills (WS1)`.
 
-```bash
-git add components/map/pixi/interactions.ts components/map/pixi/pixi-map-canvas.tsx components/map/star-map.tsx
-git commit -m "feat(map): political-mode zoomed-out faction selection (WS1)"
-```
+### Task 2.5: Zoomed-out faction selection (shared: political + value)
 
-- [ ] **Step 5: Open the Phase 2 PR** into `feat/economy-rework-base`.
+**Files:**
+- Create: `components/map/pixi/faction-hit-test.ts` (pure point-in-polygon over a union map)
+- Test: `components/map/pixi/__tests__/faction-hit-test.test.ts`
+- Modify: `components/map/pixi/interactions.ts`
+- Modify: `components/map/pixi/pixi-map-canvas.tsx`, `components/map/star-map.tsx`
+
+- [ ] **Step 1 (pure + TDD):** `faction-hit-test.ts` →
+  `findFactionAt(unions: Map<string, MultiPolygon>, x: number, y: number): string | null` using ray-casting
+  point-in-polygon. A point is inside a faction when it lies in a polygon's **exterior ring and not in any of
+  that polygon's holes**; unions don't overlap, so the first hit wins. Test: two square unions + inside /
+  outside / in-the-gap / in-a-hole points.
+- [ ] **Step 2: Extend interactions.** Add `onSelectFaction: (factionId: string) => void` to the callbacks
+  and a faction context `{ getFactionUnions: () => Map<string, MultiPolygon> | null; factionSelectActive: () => boolean }`.
+  In `onStageClick`, **before** the per-cell system test: if `factionSelectActive()` and
+  `findFactionAt(unions, w.x, w.y)` hits, call `onSelectFaction` and return; otherwise fall through to the
+  existing per-cell `onSelectSystem` → `onEmptyClick`. Runs in **every** mode — political opens the panel; a
+  value mode also focuses (via the pathname → Task 2.3).
+- [ ] **Step 3.** Add a `FACTION_SELECT_ZOOM` constant (in `theme.ts`) aligned with the faction number tier /
+  political union LOD — the zoom at/below which faction numbers + unions dominate
+  (`DEFAULT_TIER_THRESHOLDS.factionToRegion` is the reference point; a calibration knob). `factionSelectActive()`
+  = `camera.zoom < FACTION_SELECT_ZOOM`. Wire `onSelectFaction` through the canvas → `star-map.tsx`
+  `router.push(\`/factions/${factionId}\`)`.
+- [ ] **Step 4: Verify.** `npx vitest run components/map/pixi/__tests__/faction-hit-test.test.ts && npx next build --webpack`
+  + smoke: zoomed out → clicking a faction opens its panel; in a value mode pop/development also re-normalise
+  to it and the others dim; stability dims-but-does-not-rescale; zoomed in → clicking selects the individual
+  system (no rescale); empty-click clears back to whole-map.
+- [ ] **Step 5: Commit.** `feat(map): zoomed-out faction selection (political + value focus) (WS1)`.
+
+- [ ] **Step 6: Open the Phase 2 PR** into `feat/economy-rework-base`.
+
 
 ---
 
@@ -1185,10 +1175,10 @@ git commit -m "fix(map): refresh system pill icons on data change (WS1)"
 - **Per-cell score-0→black relative fills** → Tasks 1.1, 1.4, 1.5 (+ black-reserved-for-zero contract).
 - **system → faction-within-region → faction numbers** (pop sum, dev/stab avg) → Tasks 1.2, 1.4, 1.5.
 - **Per-cell hit-testing / selection** → Tasks 1.3, 1.6.
-- **Faction-scoped relative gradients + de-emphasis ("Both")** → Tasks 2.1–2.3.
-- **Mode-appropriate reference (dev = potential)** → Tasks 2.1, 2.2, 2.3.
+- **Faction-scoped re-normalisation (pop/dev) + de-emphasis ("Both"), zoom-gated** → Tasks 2.2, 2.3, 2.5.
+- **Development as raw tier-weighted points, coloured relative to scope max (EU5 model)** → Task 2.1.
 - **Political + value coexistence (faction-union outline)** → Task 2.4.
-- **Political zoomed-out faction selection** → Task 2.5.
+- **Zoomed-out faction selection (political + value focus)** → Task 2.5.
 - **Star-type dot (sunClass plumbing + Pixi dot)** → Tasks 3.1, 3.2.
 - **`[Sys 4]` hover + hit-zone** → Task 3.3. **`[Map 5]` icons refresh** → Task 3.4.
 - **Three-layers → one-layer consolidation** → Tasks 1.4, 1.5, 1.7.
