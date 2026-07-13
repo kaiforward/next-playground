@@ -117,20 +117,6 @@ export function randInt(rng: RNG, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
-export function weightedPick(
-  rng: RNG,
-  weights: Record<string, number>,
-): string {
-  const entries = Object.entries(weights);
-  const total = entries.reduce((sum, [, w]) => sum + w, 0);
-  let roll = rng() * total;
-  for (const [key, weight] of entries) {
-    roll -= weight;
-    if (roll <= 0) return key;
-  }
-  return entries[entries.length - 1][0];
-}
-
 // ── Union-Find (for Kruskal's MST) ─────────────────────────────
 
 export class UnionFind {

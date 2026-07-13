@@ -3,7 +3,6 @@ import {
   mulberry32,
   distance,
   randInt,
-  weightedPick,
   UnionFind,
   bridsonSample,
   assignRegions,
@@ -122,20 +121,6 @@ describe("randInt", () => {
       expect(v).toBeLessThanOrEqual(10);
       expect(Number.isInteger(v)).toBe(true);
     }
-  });
-});
-
-describe("weightedPick", () => {
-  it("respects weight distribution", () => {
-    const rng = mulberry32(42);
-    const weights: Record<string, number> = { a: 90, b: 10 };
-    const counts: Record<string, number> = { a: 0, b: 0 };
-    for (let i = 0; i < 1000; i++) {
-      counts[weightedPick(rng, weights)]++;
-    }
-    // With 90/10 weights over 1000 trials, "a" should dominate
-    expect(counts.a).toBeGreaterThan(700);
-    expect(counts.b).toBeGreaterThan(0);
   });
 });
 
