@@ -15,58 +15,6 @@ export type EconomyType =
   | "tech"
   | "core";
 
-// ── System trait types ────────────────────────────────────────────
-
-// The narrative feature traits a system can have. A system's physical makeup
-// lives elsewhere: world/body type as bodies (BodyArchetypeId), and per-body
-// deposit slots + quality bands drive the available-space substrate.
-export type TraitId =
-  // Planetary (2)
-  | "tidally_locked_world"
-  | "geothermal_vents"
-  // Orbital (4)
-  | "binary_star"
-  | "lagrange_stations"
-  | "captured_rogue_body"
-  | "deep_space_beacon"
-  // Resource (2)
-  | "crystalline_formations"
-  | "exotic_matter_traces"
-  // Phenomena & Anomalies (13)
-  | "nebula_proximity"
-  | "solar_flare_activity"
-  | "gravitational_anomaly"
-  | "dark_nebula"
-  | "precursor_ruins"
-  | "subspace_rift"
-  | "pulsar_proximity"
-  | "ion_storm_corridor"
-  | "bioluminescent_ecosystem"
-  | "signal_anomaly"
-  | "xenobiology_preserve"
-  | "ancient_minefield"
-  | "pirate_stronghold"
-  // Infrastructure & Legacy (10)
-  | "ancient_trade_route"
-  | "generation_ship_wreckage"
-  | "orbital_ring_remnant"
-  | "seed_vault"
-  | "colonial_capital"
-  | "free_port_declaration"
-  | "shipbreaking_yards"
-  | "derelict_fleet"
-  | "abandoned_station"
-  | "smuggler_haven";
-
-export type TraitCategory =
-  | "planetary"
-  | "orbital"
-  | "resource"
-  | "phenomena"
-  | "legacy";
-
-export type QualityTier = 1 | 2 | 3;
-
 // ── Physical substrate ────────────────────────────────────────────
 
 /** The seven locked tier-0 resource types a body's resource base spans. */
@@ -170,11 +118,6 @@ export interface GameWorldState {
   achievedTps: number;
 }
 
-export interface SystemTraitInfo {
-  traitId: TraitId;
-  quality: QualityTier;
-}
-
 export interface StarSystemInfo {
   id: string;
   name: string;
@@ -190,7 +133,6 @@ export interface StarSystemInfo {
    *  systems have a substrate economy-type label but no open build-gate. Loaded
    *  by the atlas/map path; absent on lighter paths that don't query control. */
   developed?: boolean;
-  traits?: SystemTraitInfo[];
 }
 
 /** Lightweight faction shape returned alongside universe data for client lookup. */

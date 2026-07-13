@@ -23,7 +23,6 @@ function fakeWorld(): World {
     bodies: [],
     buildings: [],
     constructionProjects: [],
-    traits: [],
     connections: [],
     markets: [],
     factions: [],

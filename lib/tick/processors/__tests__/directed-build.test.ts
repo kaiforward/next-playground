@@ -242,7 +242,7 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
 });
 
 const EXP_PARAMS: ExpansionParams = {
-  maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: { habitable: 1, diversity: 3, trait: 2, proximity: 0.5 },
+  maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: { habitable: 1, diversity: 3, proximity: 0.5 },
 };
 const COLONY_PARAMS: ColonyEstablishParams = {
   landPremium: COLONISATION.LAND_PREMIUM,
@@ -286,8 +286,8 @@ describe("runDirectedBuildProcessor: claim phase", () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     const reachProvider = (f: string): ClaimCandidate[] =>
       f === "f1" ? [
-        { systemId: "u-poor", minHops: 1, habitableSpace: 5, resourceDiversity: 0, traitQuality: 0 },
-        { systemId: "u-rich", minHops: 1, habitableSpace: 200, resourceDiversity: 4, traitQuality: 0 },
+        { systemId: "u-poor", minHops: 1, habitableSpace: 5, resourceDiversity: 0 },
+        { systemId: "u-rich", minHops: 1, habitableSpace: 200, resourceDiversity: 4 },
       ] : [];
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
@@ -300,7 +300,7 @@ describe("runDirectedBuildProcessor: claim phase", () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
-      claim: { reachProvider: () => [{ systemId: "u1", minHops: 1, habitableSpace: 100, resourceDiversity: 3, traitQuality: 0 }], rng: mulberry32(1), params: EXP_PARAMS },
+      claim: { reachProvider: () => [{ systemId: "u1", minHops: 1, habitableSpace: 100, resourceDiversity: 3 }], rng: mulberry32(1), params: EXP_PARAMS },
     });
     expect(w.claims).toHaveLength(0);
   });

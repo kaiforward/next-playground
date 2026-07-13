@@ -115,27 +115,12 @@ describe("buildMarketTickEntry", () => {
       baseProductionRate: 10,
       baseConsumptionRate: undefined,
       govConsumptionBoost: 0,
-      traits: [],
     });
     expect(e.productionRate).toBeCloseTo(10, 5);
     expect(e.stock).toBe(100);
     expect(e.minStock).toBe(5);
     expect(e.targetStock).toBe(100);
     expect(e.maxStock).toBe(200);
-  });
-
-  it("ignores traits when computing production — they no longer grant a bonus", () => {
-    const e = buildMarketTickEntry({
-      goodId: "food",
-      stock: 100,
-      ...BASE_BAND,
-      volatility: 1,
-      baseProductionRate: 10,
-      baseConsumptionRate: undefined,
-      govConsumptionBoost: 0,
-      traits: [{ traitId: "precursor_ruins", quality: 3 }],
-    });
-    expect(e.productionRate).toBeCloseTo(10, 5);
   });
 
   it("folds the government consumption boost into a consumed good's rate", () => {
@@ -147,7 +132,6 @@ describe("buildMarketTickEntry", () => {
       baseProductionRate: undefined,
       baseConsumptionRate: 10,
       govConsumptionBoost: 5,
-      traits: [],
     });
     expect(e.consumptionRate).toBeCloseTo(10 + 5, 5); // base + boost
   });
@@ -161,7 +145,6 @@ describe("buildMarketTickEntry", () => {
       baseProductionRate: undefined,
       baseConsumptionRate: undefined,
       govConsumptionBoost: 5,
-      traits: [],
     });
     expect(e.consumptionRate).toBeUndefined(); // no base rate ⇒ boost cannot create consumption
   });
@@ -175,7 +158,6 @@ describe("buildMarketTickEntry", () => {
       baseProductionRate: undefined,
       baseConsumptionRate: undefined,
       govConsumptionBoost: 0,
-      traits: [],
     });
     expect(e.consumptionRate).toBeUndefined();
   });

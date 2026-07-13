@@ -129,23 +129,14 @@ export function toSimConnections(world: World): SimConnection[] {
 }
 
 /**
- * Join a system's owning faction's governmentType, its traits, and its
- * building roster (all separate flat World arrays) onto one SimSystem row per
- * system — mirroring how `lib/tick/adapters/prisma/economy.ts` joins the same
- * data from relational tables.
+ * Join a system's owning faction's governmentType and its building roster
+ * (separate flat World arrays) onto one SimSystem row per system — the
+ * shape the in-memory tick adapters (`lib/tick/adapters/memory/*`) expect.
  */
 export function toSimSystems(world: World): SimSystem[] {
   const governmentByFaction = new Map<string, GovernmentType>(
     world.factions.map((f) => [f.id, f.governmentType]),
   );
-
-  const traitsBySystem = new Map<string, { traitId: string; quality: number }[]>();
-  for (const t of world.traits) {
-    const list = traitsBySystem.get(t.systemId);
-    const entry = { traitId: t.traitId, quality: t.quality };
-    if (list) list.push(entry);
-    else traitsBySystem.set(t.systemId, [entry]);
-  }
 
   const buildingsBySystem = new Map<string, Record<string, number>>();
   const idleMonthsBySystem = new Map<string, Record<string, number>>();
@@ -172,7 +163,6 @@ export function toSimSystems(world: World): SimSystem[] {
       : "frontier",
     population: s.population,
     popCap: s.popCap,
-    traits: traitsBySystem.get(s.id) ?? [],
     unrest: s.unrest,
     buildings: buildingsBySystem.get(s.id) ?? {},
     buildingIdleMonths: idleMonthsBySystem.get(s.id) ?? {},
@@ -381,12 +371,6 @@ function countResourceDiversity(s: SimSystem): number {
   let n = 0;
   for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) n++;
   return n;
-}
-/** Σ of the system's trait qualities — a claim/develop score input. */
-function sumTraitQuality(s: SimSystem): number {
-  let q = 0;
-  for (const t of s.traits) q += t.quality;
-  return q;
 }
 
 /** Apply resolved claims: the target becomes `controlled` and owned by the winning faction. The
@@ -728,7 +712,6 @@ export async function runWorldTick(
           systemId: candidateId, minHops,
           habitableSpace: cand.habitableSpace,
           resourceDiversity: countResourceDiversity(cand),
-          traitQuality: sumTraitQuality(cand),
         });
       }
       return candidates;

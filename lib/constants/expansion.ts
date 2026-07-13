@@ -22,7 +22,7 @@ export const EXPANSION = {
   SCORE_FLOOR: 0.001,
   /** Weights over the (absolute) substrate terms and the proximity discount. `proximity` feeds
    * 1 / (1 + proximity × minHops), so nearer candidates outscore equal-substrate distant ones. */
-  SCORE_WEIGHTS: { habitable: 1.0, diversity: 3.0, trait: 2.0, proximity: 0.5 },
+  SCORE_WEIGHTS: { habitable: 1.0, diversity: 3.0, proximity: 0.5 },
   /** A controlled system is only worth developing if it can host housing — skip dead rocks. */
   DEVELOP_HABITABLE_FLOOR: 1,
   /** Bootstrap-spark population a new colony receives, transferred (conserved) from the nearest

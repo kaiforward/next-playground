@@ -36,8 +36,8 @@ function SystemDangerBadgeInner({
 
 /**
  * System danger readout for the overview panel. `baseDanger` is the
- * substrate-independent part (government baseline + feature-trait danger).
- * Body danger is fetched in its own boundary so it never blocks the overview —
+ * substrate-independent part (government baseline). Body danger is fetched
+ * in its own boundary so it never blocks the overview —
  * until the substrate loads (or for unsurveyed systems, or on fetch error) the
  * base danger shows. Event-modifier danger is intentionally excluded: this is a
  * static preview, not the live arrival-pipeline value.

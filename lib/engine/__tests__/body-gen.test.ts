@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { mulberry32 } from "../universe-gen";
 import { generateSubstrate } from "../body-gen";
 import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 import { RESOURCE_TYPES, sumResourceVectors } from "../resources";
 import { housingPopCap } from "@/lib/engine/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -64,16 +63,6 @@ describe("generateSubstrate", () => {
     for (const s of undeveloped) {
       expect(s.population).toBe(0);
       expect(Object.values(s.buildings).some((count) => count > 0)).toBe(false);
-    }
-  });
-
-  it("rolls 0–2 features, all narrative survivors, no duplicates", () => {
-    for (const s of sample(200)) {
-      expect(s.features.length).toBeGreaterThanOrEqual(0);
-      expect(s.features.length).toBeLessThanOrEqual(2);
-      const ids = s.features.map((f) => f.traitId);
-      expect(new Set(ids).size).toBe(ids.length);
-      for (const f of s.features) expect(ALL_TRAIT_IDS).toContain(f.traitId);
     }
   });
 

@@ -9,7 +9,6 @@
  * See `docs/design/active/processor-architecture.md` for the broader pattern.
  */
 
-import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
 import type { GovernmentType } from "@/lib/types/game";
 import type { EconomySimParams } from "@/lib/engine/tick";
@@ -40,8 +39,6 @@ export interface MarketView {
   demandRate: number;
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;
-  /** System traits (already validated). */
-  traits: GeneratedTrait[];
 }
 
 /** Result of one market simulation step — written back via applyMarketUpdates. */
@@ -56,7 +53,7 @@ export interface EconomyWorld {
   /** All system ids, stable-sorted by id — the shard schedule's item list. */
   getSystemIds(): Promise<string[]>;
 
-  /** Markets for the given systems (this tick's shard), with system + trait info inlined. */
+  /** Markets for the given systems (this tick's shard), with system info inlined. */
   getMarketsForSystems(systemIds: string[]): Promise<MarketView[]>;
 
   /**

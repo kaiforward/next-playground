@@ -19,7 +19,6 @@ function makeSystem(id: string, population: number): SimSystem {
     governmentType: "federation",
     population,
     popCap: 1000,
-    traits: [],
     unrest: 0,
     buildings: {},
     buildingIdleMonths: {},

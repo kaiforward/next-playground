@@ -5,11 +5,11 @@ import type { GeneratedSystem } from "../universe-gen";
 import type { EconomyType } from "@/lib/types/game";
 
 // Minimal GeneratedSystem for placement tests — only the fields placeHomeworlds reads
-// (index, x, y, habitableSpace, bodyDanger, traits, slotCap) matter; the rest are inert defaults.
+// (index, x, y, habitableSpace, bodyDanger, slotCap) matter; the rest are inert defaults.
 function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
   return {
     name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
-    bodies: [], popCap: 0, population: 0, bodyDanger: 0, traits: [], buildings: {},
+    bodies: [], popCap: 0, population: 0, bodyDanger: 0, buildings: {},
     availableSpace: 0, generalSpace: 0, habitableSpace: 0,
     slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",

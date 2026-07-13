@@ -62,24 +62,6 @@ describe("getUniverse", () => {
     });
   });
 
-  it("attaches traits to the right system only", () => {
-    expect(world.traits.length).toBeGreaterThan(0);
-    const trait = world.traits[0];
-    const universe = getUniverse();
-
-    const owner = universe.systems.find((s) => s.id === trait.systemId)!;
-    const expectedForOwner = world.traits
-      .filter((t) => t.systemId === trait.systemId)
-      .map((t) => ({ traitId: t.traitId, quality: t.quality }));
-    expect(owner.traits).toEqual(expectedForOwner);
-
-    // A system that doesn't carry this trait row shouldn't have it leak in.
-    const other = universe.systems.find(
-      (s) => s.id !== trait.systemId && !world.traits.some((t) => t.systemId === s.id && t.traitId === trait.traitId),
-    )!;
-    expect(other.traits).not.toContainEqual({ traitId: trait.traitId, quality: trait.quality });
-  });
-
   it("derives connection ids as `${fromId}:${toId}`", () => {
     const universe = getUniverse();
     expect(universe.connections.length).toBeGreaterThan(0);
@@ -135,19 +117,21 @@ describe("getUniverse", () => {
 });
 
 describe("getSystemDetail", () => {
-  it("returns trait facts, visibility, and station", () => {
-    expect(world.traits.length).toBeGreaterThan(0);
-    const trait = world.traits[0];
-    const data = getSystemDetail(trait.systemId);
+  it("returns system facts, visibility, and station", () => {
+    const system = world.systems[0];
+    const data = getSystemDetail(system.id);
 
     expect(data.visibility).toBe("visible");
     if (data.visibility !== "visible") throw new Error("expected visible");
     expect(data.station).toBeNull();
-
-    // Display data (name/category/description) is enriched client-side from
-    // the TRAITS catalog — the API carries only the facts.
-    const resolved = data.traits?.find((t) => t.traitId === trait.traitId);
-    expect(resolved).toEqual({ traitId: trait.traitId, quality: trait.quality });
+    expect(data).toMatchObject({
+      id: system.id,
+      name: system.name,
+      economyType: system.economyType,
+      regionId: system.regionId,
+      factionId: system.factionId,
+      isGateway: system.isGateway,
+    });
   });
 
   it("throws ServiceError(404) for an unknown system", () => {

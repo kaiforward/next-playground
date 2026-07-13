@@ -32,8 +32,9 @@ export interface PixiMapCanvasProps {
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
   /**
-   * Which territory tint to paint. `political` shows faction colours,
-   * `regions` shows economy colours, `none` hides both layers.
+   * Which territory layer to paint. `political` shows faction colours,
+   * `regions` shows neutral region border outlines, `none` hides all
+   * territory layers.
    */
   mapMode?: MapMode;
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
@@ -171,23 +172,23 @@ export function PixiMapCanvas({
       const territoryLayer = new TerritoryLayer();
       world.addChild(territoryLayer.container);
 
-      // Political layer sits above the economy territory layer. Both layers
+      // Political layer sits above the regions territory layer. Both layers
       // receive sync data; only one is visible at a time (controlled via the
       // `mapMode` prop / setActive()).
       const politicalTerritoryLayer = new PoliticalTerritoryLayer();
       world.addChild(politicalTerritoryLayer.container);
 
-      // Stability choropleth — a 4th mode in the territory band. Voronoi geometry
+      // Stability choropleth — another territory mode. Voronoi geometry
       // mirrors the other territory layers; fills are redrawn from live unrest values.
       const stabilityTerritoryLayer = new StabilityTerritoryLayer();
       world.addChild(stabilityTerritoryLayer.container);
 
-      // Population choropleth — a 5th mode in the territory band. Same Voronoi
+      // Population choropleth — another territory mode. Same Voronoi
       // geometry; fills are a relative red→green ramp over live population.
       const populationTerritoryLayer = new PopulationTerritoryLayer();
       world.addChild(populationTerritoryLayer.container);
 
-      // Development choropleth — a 6th mode in the territory band. Same Voronoi
+      // Development choropleth — another territory mode. Same Voronoi
       // geometry; fills are an absolute cool→warm ramp over 0..1 development.
       const developmentTerritoryLayer = new DevelopmentTerritoryLayer();
       world.addChild(developmentTerritoryLayer.container);
@@ -332,11 +333,11 @@ export function PixiMapCanvas({
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
-  // Six modes: "political" shows the faction layer, "regions" shows the economy
-  // layer, "stability" shows the unrest choropleth, "population" shows the
-  // population choropleth, "development" shows the development choropleth, "none"
-  // hides all. Per-frame LOD logic still runs on the hidden layers (cheap) so
-  // swapping is instant.
+  // Six modes: "political" shows the faction layer, "regions" shows the neutral
+  // region border layer, "stability" shows the unrest choropleth, "population"
+  // shows the population choropleth, "development" shows the development
+  // choropleth, "none" hides all. Per-frame LOD logic still runs on the hidden
+  // layers (cheap) so swapping is instant.
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;

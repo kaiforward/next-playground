@@ -18,7 +18,6 @@ import type {
   WorldSystem,
   WorldBody,
   WorldBuilding,
-  WorldTrait,
   WorldConnection,
   WorldMarket,
   WorldFaction,
@@ -171,15 +170,6 @@ export function generateWorld(options: GenerateWorldOptions): World {
       })),
   );
 
-  // ── Feature traits ──
-  const traits: WorldTrait[] = universe.systems.flatMap((s, i) =>
-    s.traits.map((t) => ({
-      systemId: systemIds[i],
-      traitId: t.traitId,
-      quality: t.quality,
-    })),
-  );
-
   // ── Connections (already bidirectional from the generator) ──
   const connections: WorldConnection[] = universe.connections.map((c) => ({
     fromId: systemIds[c.fromSystemIndex],
@@ -234,7 +224,6 @@ export function generateWorld(options: GenerateWorldOptions): World {
     bodies,
     buildings,
     constructionProjects: [],
-    traits,
     connections,
     markets,
     factions,

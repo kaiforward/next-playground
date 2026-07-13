@@ -128,6 +128,6 @@ export const HOMEWORLD_PLACEMENT = {
   RELAX_RATE: 0.85,
   /** Relaxation steps before falling back to pure quality order (spacing ignored). */
   MAX_RELAX_STEPS: 12,
-  /** Seed-bias weights over the four normalized substrate terms. */
-  SCORE_WEIGHTS: { habitable: 1.0, diversity: 0.8, trait: 0.5, danger: 0.7 },
+  /** Seed-bias weights over the three normalized substrate terms. */
+  SCORE_WEIGHTS: { habitable: 1.0, diversity: 0.8, danger: 0.7 },
 } as const;

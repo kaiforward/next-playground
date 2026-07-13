@@ -11,9 +11,7 @@ import type {
   GovernmentType,
   Doctrine,
   FactionStatus,
-  QualityTier,
   ShipStatus,
-  TraitId,
   SunClass,
   BodyArchetypeId,
 } from "./game";
@@ -38,26 +36,6 @@ const DOCTRINES: ReadonlySet<string> = new Set<Doctrine>([
 
 const FACTION_STATUSES: ReadonlySet<string> = new Set<FactionStatus>([
   "dominant", "major", "regional", "minor",
-]);
-
-const QUALITY_TIERS: ReadonlySet<number> = new Set<QualityTier>([1, 2, 3]);
-
-const TRAIT_IDS: ReadonlySet<string> = new Set<TraitId>([
-  // Planetary
-  "tidally_locked_world", "geothermal_vents",
-  // Orbital
-  "binary_star", "lagrange_stations", "captured_rogue_body", "deep_space_beacon",
-  // Resource
-  "crystalline_formations", "exotic_matter_traces",
-  // Phenomena & Anomalies
-  "nebula_proximity", "solar_flare_activity", "gravitational_anomaly",
-  "dark_nebula", "precursor_ruins", "subspace_rift", "pulsar_proximity",
-  "ion_storm_corridor", "bioluminescent_ecosystem", "signal_anomaly",
-  "xenobiology_preserve", "ancient_minefield", "pirate_stronghold",
-  // Infrastructure & Legacy
-  "ancient_trade_route", "generation_ship_wreckage", "orbital_ring_remnant",
-  "seed_vault", "colonial_capital", "free_port_declaration",
-  "shipbreaking_yards", "derelict_fleet", "abandoned_station", "smuggler_haven",
 ]);
 
 const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([
@@ -118,20 +96,6 @@ export function toFactionStatus(value: string): FactionStatus {
     throw new Error(`Invalid faction status: "${value}"`);
   }
   return value as FactionStatus;
-}
-
-export function toQualityTier(value: number): QualityTier {
-  if (!QUALITY_TIERS.has(value)) {
-    throw new Error(`Invalid quality tier: ${value}`);
-  }
-  return value as QualityTier;
-}
-
-export function toTraitId(value: string): TraitId {
-  if (!TRAIT_IDS.has(value)) {
-    throw new Error(`Invalid trait id: "${value}"`);
-  }
-  return value as TraitId;
 }
 
 export function toShipStatus(value: string): ShipStatus {
@@ -207,8 +171,6 @@ export const ALL_DOCTRINES: readonly Doctrine[] = [
 export const ALL_FACTION_STATUSES: readonly FactionStatus[] = [
   "dominant", "major", "regional", "minor",
 ];
-
-export const ALL_QUALITY_TIERS: readonly QualityTier[] = [1, 2, 3];
 
 // ── Faction status derivation (hysteresis) ───────────────────────
 

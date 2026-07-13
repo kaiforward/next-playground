@@ -1,9 +1,9 @@
 # UI Overhaul — Map Legibility & System-Detail Redesign
 
-> **Status:** Planned (roadmap). Captures the full set of UI issues raised for the map and system-detail
-> surfaces, grouped into sequenced workstreams. Each workstream gets its own `docs/build-plans/` entry when
-> it starts. The cleanup pass (WS3) is first and has a build plan; the rest are specced here at intent level
-> and designed in detail when picked up.
+> **Status:** Planned (roadmap) for WS1/WS2/WS4/WS5. WS3 (cleanup pass) has shipped. Captures the full set of
+> UI issues raised for the map and system-detail surfaces, grouped into sequenced workstreams. Each
+> remaining workstream gets its own `docs/build-plans/` entry when it starts; until then it's specced here at
+> intent level and designed in detail when picked up.
 
 ## Headline
 
@@ -32,8 +32,8 @@ pass, but it is engine work, not UI.
 - **`economyType` field must stay** — event spawning filters on it (`lib/engine/events.ts` +
   `lib/constants/events.ts`). Only `ECONOMY_COLORS` and its render consumers + the economy badge are removable.
 - **`regionId` must stay** — region-targeted event modifiers, relations, and dominant-faction/economy
-  derivations depend on it. Only the map colour tint (the "Regions" mode, which recolours territories by
-  dominant economy) is removable.
+  derivations depend on it. The "Regions" map mode stays too — only its dominant-economy fill is removable;
+  the territory layer can render transparent fills with neutral-slate borders instead.
 - **System traits are NOT cosmetic** — trait quality is weighted into homeworld placement (`faction-gen`,
   0.5) and runtime claim/expansion scoring (`expansion`, 2.0). Removing traits requires dropping those two
   score terms too; same-seed worlds will then generate and expand differently (acceptable in dev). The
@@ -43,20 +43,21 @@ pass, but it is engine work, not UI.
 
 ## Workstreams (in build order)
 
-### WS3 · Cleanup — strip deprecated concepts _(first; build plan exists)_
+### WS3 · Cleanup — strip deprecated concepts _(SHIPPED)_
 
-Pure structural removals; no calibration. Detail in `docs/build-plans/ui-cleanup-pass.md`.
+Pure structural removals; no calibration.
 
-- **`[Sys 6]` Strip system traits entirely.** Delete the types, catalog, generation, storage, dead
-  economy-tick plumbing, and UI; drop the trait term from homeworld placement and claim/expansion scoring
-  (fall back to habitable space, resource diversity, danger, proximity); retire `system-traits.md`. Danger
-  badge kept on **body danger** only. Same-seed worlds shift — verified sane via the simulator.
-- **`[Map 9]` Remove economic-type markers/colours.** Delete `ECONOMY_COLORS` + consumers (zoom point-cloud
-  tint, system-glyph core fill + `ECON` label, `economy-badge`). Keep the `economyType` field. Glyph falls
-  back to price-based / neutral colour until WS1 recolours by star type.
-- **`[Map 9]` Remove region colours → drop the "Regions" map mode.** It only tints territories by dominant
-  economy, so it dies with the economy palette. Keep `regionId`.
-- **`[Sys 7]` Remove connection count** from the system overview (belongs in astrography if anywhere).
+- **`[Sys 6]` System traits are removed entirely.** The types, catalog, generation, storage, economy-tick
+  plumbing, and UI are gone; homeworld placement and claim/expansion scoring fall back to habitable space,
+  resource diversity, danger, and proximity (no trait term). Danger badge reflects **body danger** only.
+- **`[Map 9]` Economic-type markers/colours are removed.** `ECONOMY_COLORS` and its consumers (zoom
+  point-cloud tint, system-glyph core fill, the `ECON` label, `economy-badge`) are gone; every system glyph
+  renders a single neutral slate colour (`NEUTRAL_GLYPH`). The `economyType` field stays (event targeting
+  still reads it) — only its visuals are gone.
+- **`[Map 9]` The "Regions" map mode is kept, recoloured.** It no longer tints territories by dominant
+  economy: the territory layer renders transparent fills with neutral-slate borders. `regionId` stays
+  (region-targeted event modifiers, relations, and derivations still read it).
+- **`[Sys 7]` Connection count is removed** from the system overview.
 
 ### WS1 · Map rendering & selection overhaul — the "EU5 spine" _(foundational)_
 
@@ -111,8 +112,8 @@ The Voronoi-centric rewrite the rest of the map leans on.
 - Traits: **strip entirely** (incl. the two scoring terms), not UI-hide. Re-thought as a concept later.
 - Danger badge: **kept on body danger** after traits go (substrate property, not trait).
 - `economyType` / `regionId` fields: **kept** (sim-load-bearing); only their visuals removed.
-- System-glyph colour after economy removal: **neutral/price interim**, proper star-type colour in WS1 — no
-  throwaway palette.
+- System-glyph colour after economy removal: **single neutral slate (`NEUTRAL_GLYPH`) interim**, proper
+  star-type colour in WS1 — no throwaway palette.
 - Stale industry labels `[Sys 2]`: **moved to WS4** (same surface, needs live calibration).
 
 ## Open questions (resolve when the owning workstream starts)
@@ -124,6 +125,6 @@ The Voronoi-centric rewrite the rest of the map leans on.
 
 ## Sequence
 
-WS3 (cleanup) → WS1 (map spine) → WS2 (map modes) → WS4 (system detail). WS5 (gameplay) is independent and
+WS3 (cleanup, shipped) → WS1 (map spine) → WS2 (map modes) → WS4 (system detail). WS5 (gameplay) is independent and
 can slot in any time. Map-heavy workstreams (WS1, WS2, WS4 layout) get a browser-viewable HTML prototype
 approved before implementation.

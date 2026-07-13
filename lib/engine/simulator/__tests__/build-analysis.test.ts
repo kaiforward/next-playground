@@ -32,7 +32,7 @@ function devSys(
     governmentType: "frontier",
     population: opts.population ?? 0,
     popCap: opts.popCap ?? 1000,
-    traits: [], unrest: 0,
+    unrest: 0,
     buildings: opts.buildings ?? {},
     buildingIdleMonths: {},
     yields: unitResourceVector(),
