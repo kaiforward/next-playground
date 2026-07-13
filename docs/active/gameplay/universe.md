@@ -26,7 +26,23 @@ Regions are purely geographic now — they group systems for naming, orientation
 
 ### Economy Type
 
-Every system is built from a **physical substrate** — a sun and its bodies (planets, asteroid belts, gas giants), each holding a resource vector. Economy type is derived **bottom-up** from the system's aggregate body resources and population, never assigned directly. The substrate model and derivation rules live in [the available-space model](./economy-substrate-v2-available-space.md).
+Every system is built from a **physical substrate** — one sun and 1–N bodies (planets, asteroid belts, gas giants), each with a resource vector. Economy type is derived **bottom-up** from a system's aggregate body resources and population, never assigned directly.
+
+**Sun class** gates which body archetypes a system can roll and how many bodies it has (`SUN_CLASSES` in `lib/constants/bodies.ts`):
+
+| Sun class | Character | Favours |
+|---|---|---|
+| Yellow (Sol-like) | Temperate, most permissive | Habitable subtypes, balanced mixes |
+| Blue–white (hot) | High-energy inner system | Volcanic, barren rock, asteroid belts |
+| Orange dwarf (cool) | Dim, long-lived | Ocean/ice worlds, gas, marginal habitables |
+| Red dwarf (cold) | Faint frontier | Frozen worlds, gas giants, belts; sparse population |
+
+`deriveEconomyTypeLabel` (`lib/engine/economy-type.ts`) reads each resource's effective deposit potential (slot capacity × yield quality, summed across the system's bodies) plus population, and maps a system to one of six types:
+
+- **High-population systems** (population above a high threshold) read as developed: raw-dominant deposits → `industrial`; neither food- nor raw-dominant → `tech`; otherwise → `core`.
+- **Sparse/mid-population systems** follow their dominant deposit: food-dominant (arable + biomass share) → `agricultural`; raw-dominant (ore + minerals + gas + radioactive share) → `extraction`; otherwise (a mixed raw base) → `refinery`.
+
+Because raw building blocks are needed in huge volume and most bodies carry *some* extractable deposit, the galaxy reads **extraction-dominant by design** — the intended barren-but-alive shape (see [the available-space model](./economy-substrate-v2-available-space.md) for how deposit slots and habitability produce it), not a generation flaw. The label itself is **display-only**: nothing in the economy tick reads economy type — production derives from `WorldBuilding` counts and per-resource yield (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`.
 
 ### Systems
 
