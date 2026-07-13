@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Application, Container } from "pixi.js";
+import type { FederatedPointerEvent } from "pixi.js";
 import { Camera } from "./camera";
 import { Frustum } from "./frustum";
 import { computeLOD } from "./lod";
@@ -12,6 +13,7 @@ import { ConnectionLayer } from "./layers/connection-layer";
 import { TerritoryLayer } from "./layers/territory-layer";
 import { PoliticalTerritoryLayer } from "./layers/political-territory-layer";
 import { ValueChoroplethLayer } from "./layers/value-choropleth-layer";
+import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
 import { BG_COLOR } from "./theme";
@@ -63,8 +65,9 @@ interface PixiRefs {
   territoryLayer: TerritoryLayer;
   politicalTerritoryLayer: PoliticalTerritoryLayer;
   valueChoroplethLayer: ValueChoroplethLayer;
+  cellHighlightLayer: CellHighlightLayer;
   logisticsFlowLayer: TradeFlowLayer;
-  /** Shared Voronoi cells (built once per atlas sync) — also consumed by value-mode click hit-testing. */
+  /** Shared Voronoi cells (built once per atlas sync) — also consumed by cell click + hover hit-testing. */
   cells: SystemCells | null;
 }
 
@@ -112,6 +115,8 @@ export function PixiMapCanvas({
     const frustum = new Frustum();
     let destroyed = false;
     let interactionCleanup: (() => void) | undefined;
+    let onStageHover: ((e: FederatedPointerEvent) => void) | undefined;
+    let clearHover: (() => void) | undefined;
     let prevZoom = 0; // Track zoom delta to detect active zooming
     const onResize = (width: number, height: number) => {
       camera.setScreenSize(width, height);
@@ -184,6 +189,10 @@ export function PixiMapCanvas({
       const valueChoroplethLayer = new ValueChoroplethLayer();
       world.addChild(valueChoroplethLayer.container);
 
+      // Hovered/selected cell outline — above the fills, below the star markers.
+      const cellHighlightLayer = new CellHighlightLayer();
+      world.addChild(cellHighlightLayer.container);
+
       const systemLayer = new SystemLayer();
       world.addChild(systemLayer.container);
 
@@ -197,6 +206,17 @@ export function PixiMapCanvas({
           toWorld: (screenX, screenY) => camera.screenToWorld(screenX, screenY),
         }),
       });
+
+      // Hover: outline the cell under the cursor (every mode, every zoom).
+      onStageHover = (e: FederatedPointerEvent) => {
+        const cells = pixiRef.current?.cells;
+        if (!cells) return;
+        const w = camera.screenToWorld(e.global.x, e.global.y);
+        cellHighlightLayer.setHovered(cells.findSystemAt(w.x, w.y));
+      };
+      app.stage.on("pointermove", onStageHover);
+      clearHover = () => cellHighlightLayer.setHovered(null);
+      canvas.addEventListener("pointerleave", clearHover);
 
       // Keep camera screen size in sync with Pixi's own resize
       app.renderer.on("resize", onResize);
@@ -251,6 +271,7 @@ export function PixiMapCanvas({
         politicalTerritoryLayer.updateVisibility(lod);
         valueChoroplethLayer.updateVisibility(lod);
         if (valueChoroplethLayer.container.visible) valueChoroplethLayer.updateNumbers(camera.zoom, frustum);
+        cellHighlightLayer.updateZoom(camera.zoom);
 
         // Logistics overlay: layer alpha multiplies the system fade so the
         // overlay disappears alongside its host systems at universe zoom.
@@ -267,7 +288,7 @@ export function PixiMapCanvas({
       pixiRef.current = {
         app, camera, frustum, world, starfield,
         pointCloudLayer, systemLayer, connectionLayer, territoryLayer,
-        politicalTerritoryLayer, valueChoroplethLayer, logisticsFlowLayer,
+        politicalTerritoryLayer, valueChoroplethLayer, cellHighlightLayer, logisticsFlowLayer,
         cells: null,
       };
       setPixiReady(true);
@@ -276,6 +297,8 @@ export function PixiMapCanvas({
     return () => {
       destroyed = true;
       interactionCleanup?.();
+      if (app && onStageHover) app.stage.off("pointermove", onStageHover);
+      if (canvas && clearHover) canvas.removeEventListener("pointerleave", clearHover);
       if (app) {
         app.renderer.off("resize", onResize);
         if (canvas) camera.detach(canvas);
@@ -288,6 +311,7 @@ export function PixiMapCanvas({
           refs.territoryLayer.destroy();
           refs.politicalTerritoryLayer.destroy();
           refs.valueChoroplethLayer.destroy();
+          refs.cellHighlightLayer.destroy();
           refs.logisticsFlowLayer.destroy();
           refs.starfield.destroy();
           refs.pointCloudLayer.destroy();
@@ -324,6 +348,7 @@ export function PixiMapCanvas({
     const cells = buildSystemCells(atlasData.systems, mapSize);
     p.cells = cells;
     p.valueChoroplethLayer.sync(cells, atlasData.systems);
+    p.cellHighlightLayer.setCells(cells);
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
@@ -339,6 +364,13 @@ export function PixiMapCanvas({
     p.politicalTerritoryLayer.setActive(mapMode === "political");
     p.valueChoroplethLayer.setActive(isValueMapMode(mapMode));
   }, [mapMode, pixiReady]);
+
+  // ── Highlight the selected cell (the open /system/[id] panel) ──
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.cellHighlightLayer.setSelected(selectedSystem?.id ?? null);
+  }, [selectedSystem, pixiReady]);
 
   // ── Value choropleth fills (lightweight redraw on data change) ──────
   // One setter for all three value modes — the layer's ramp + aggregation
