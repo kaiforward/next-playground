@@ -2,6 +2,8 @@ import type { EconomyType } from "@/lib/types/game";
 import type { SystemEventInfo } from "@/lib/hooks/use-map-data";
 
 // ── Economy colors (WebGL hex) ───────────────────────────────────
+// Still backs the Regions (economy) territory layer — glyphs no longer read
+// this; see NEUTRAL_GLYPH below.
 
 export const ECONOMY_COLORS: Record<EconomyType, { core: number; glow: number }> = {
   agricultural: { core: 0x86efac, glow: 0x22c55e },  // green-300 / green-500
@@ -11,6 +13,9 @@ export const ECONOMY_COLORS: Record<EconomyType, { core: number; glow: number }>
   tech:         { core: 0x93c5fd, glow: 0x3b82f6 },  // blue-300 / blue-500
   core:         { core: 0xd8b4fe, glow: 0xa855f7 },  // purple-300 / purple-500
 };
+
+// Interim single glyph colour — WS1 (map overhaul) recolours the glyph by star type.
+export const NEUTRAL_GLYPH = { core: 0xcbd5e1, glow: 0x64748b } as const; // slate-300 / slate-500
 
 // ── Territory (universe view) ────────────────────────────────────
 
@@ -73,7 +78,6 @@ export const SIZES = {
   systemGlowRadius:   40,
   systemHitRadius:    20,
   systemLabelSize:    14,
-  systemEconLabelSize: 11,
   regionWidth:       180,
   regionHeight:      100,
   regionCornerRadius: 12,
@@ -122,12 +126,13 @@ export const PILL_ANCHOR = {
   yBottom: PILL_CORNER_XY + PILL.height / 2,      // bottom pills (anchor centre)
 } as const;
 
-// ── System label backing (name + economy type) ──────────────────
-// The labels sit below the glyph and can fall behind the nav ring / halo, so
-// each gets a semi-transparent black backing for legibility. They're pushed
-// far enough down to clear the bottom corner-pills: the event pill (and the
-// mirror space a bottom-left pill would use) reaches `yBottom + height/2` below
-// centre, so the name's top starts a few px past that.
+// ── System label backing (name) ──────────────────────────────────
+// The name label sits below the glyph and can fall behind the nav ring /
+// halo, so it gets a semi-transparent black backing for legibility. It's
+// pushed far enough down to clear the bottom corner-pills: the event pill
+// (and the mirror space a bottom-left pill would use) reaches
+// `yBottom + height/2` below centre, so the name's top starts a few px past
+// that.
 const BOTTOM_PILL_REACH = PILL_ANCHOR.yBottom + PILL.height / 2; // ≈ 34
 export const LABEL = {
   bgFill:   0x000000,
@@ -136,7 +141,6 @@ export const LABEL = {
   bgPadY:   1.5,
   bgCorner: 3,
   offsetY:  BOTTOM_PILL_REACH + 4, // ≈ 38 — name top clears the bottom pills
-  lineGap:  4,                     // gap between the name and economy backings
 } as const;
 
 // ── Animation ────────────────────────────────────────────────────

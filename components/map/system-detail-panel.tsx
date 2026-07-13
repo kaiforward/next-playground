@@ -3,7 +3,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { EconomyBadge } from "@/components/ui/economy-badge";
 import type { StarSystemInfo, ActiveEvent, SystemVisibility } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -68,9 +67,8 @@ export function SystemDetailPanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Status row: economy + gateway */}
+        {/* Status row: gateway */}
         <div className="flex flex-wrap items-center gap-2">
-          <EconomyBadge economyType={system.economyType} />
           {system.isGateway && <Badge color="amber">Gateway</Badge>}
         </div>
 

@@ -19,15 +19,12 @@ export interface LODState {
 
   showSystemDots: boolean;
   showSystemNames: boolean;
-  showEconomyLabels: boolean;
   showTerritories: boolean;
   showRegionLabels: boolean;
   /** Scale factor for system dots at low zoom */
   systemDotScale: number;
   /** Alpha for system name labels (smooth fade) */
   systemNameAlpha: number;
-  /** Alpha for economy labels */
-  detailAlpha: number;
   /** Alpha for the Regions (economy) territory layer. */
   territoryAlpha: number;
   /** Alpha for the Political (faction) territory layer. */
@@ -113,10 +110,6 @@ export function computeLOD(zoom: number): LODState {
     // and just add clutter — keep the mid-zoom view to glyphs + pill shapes.
     showSystemNames: zoom > 0.8,
     systemNameAlpha: smoothStep(0.8, 0.9, zoom),
-
-    // Economy labels ride the same 0.8–0.9 text band as the name.
-    showEconomyLabels: zoom > 0.8,
-    detailAlpha: smoothStep(0.8, 0.9, zoom),
 
     // Territories never cull — they're the spatial frame for both modes.
     // Each layer reads its own alpha so political and regions can diverge.

@@ -7,7 +7,6 @@ import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
-import { EconomyBadge } from "@/components/ui/economy-badge";
 import { ThemedPieChart } from "@/components/ui/themed-pie-chart";
 import { Badge } from "@/components/ui/badge";
 import { StatList, StatRow } from "@/components/ui/stat-row";
@@ -106,7 +105,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   // Economy info — net production per good from the system's industrial base.
   // Production (built base) and consumption (population) partition the goods into
   // net exporters (Produces) and net importers (Consumes).
-  const economyType = systemInfo?.economyType ?? "extraction";
   const { producedGoods, consumedGoods } = useMemo(() => {
     if (industry.visibility !== "visible") {
       return { producedGoods: [], consumedGoods: [] };
@@ -195,9 +193,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 ) : (
                   <span className="text-sm text-text-tertiary">—</span>
                 )}
-              </StatRow>
-              <StatRow label="Economy">
-                <EconomyBadge economyType={economyType} />
               </StatRow>
               <StatRow label="Government">
                 <span className="text-sm text-white capitalize">{govDef.name}</span>

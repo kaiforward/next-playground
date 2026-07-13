@@ -34,11 +34,6 @@ function buildRows(lod: LODState): DebugRow[] {
       value: lod.showSystemNames ? a2(lod.systemNameAlpha) : "off",
       active: lod.showSystemNames && lod.systemNameAlpha > VISIBLE,
     },
-    {
-      label: "econ labels",
-      value: lod.showEconomyLabels ? a2(lod.detailAlpha) : "off",
-      active: lod.showEconomyLabels && lod.detailAlpha > VISIBLE,
-    },
     { label: "territory (regions)", value: a2(lod.territoryAlpha), active: lod.territoryAlpha > VISIBLE },
     { label: "territory (political)", value: a2(lod.politicalTerritoryAlpha), active: lod.politicalTerritoryAlpha > VISIBLE },
     {
