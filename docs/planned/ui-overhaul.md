@@ -61,6 +61,9 @@ Pure structural removals; no calibration.
 
 ### WS1 · Map rendering & selection overhaul — the "EU5 spine" _(foundational)_
 
+> **Detailed design:** [ui-ws1-voronoi-map.md](./ui-ws1-voronoi-map.md) — interaction model, rendering
+> architecture, and open questions. The items below are the intent-level summary.
+
 The Voronoi-centric rewrite the rest of the map leans on.
 
 - **`[Map 1]` Numbers inside Voronoi cells** for value modes (stability / population / development); hide the
