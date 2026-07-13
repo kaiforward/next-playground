@@ -10,7 +10,7 @@ import type { PopulationEntry } from "@/lib/types/game";
  * All-systems population, keyed by systemId. Tick-scoped (no viewport dep),
  * mirrors `useStability`. Gated by `active` so the map only pays the request
  * when the population mode is selected. The colour ramp is normalised per
- * render against the visible max (see PopulationTerritoryLayer), so this hook
+ * render against the visible max (see ValueChoroplethLayer), so this hook
  * just carries the raw counts.
  */
 export function usePopulation(active: boolean = true): Map<string, number> {
