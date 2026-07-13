@@ -267,6 +267,15 @@ export function StarMap({
     router.push("/");
   }, [router]);
 
+  // Zoomed-out click on a faction's territory — opens the faction panel, which re-normalises the
+  // value scope to it (see selectedFactionId above / ValueChoroplethLayer.setScope).
+  const onSelectFaction = useCallback(
+    (factionId: string) => {
+      router.push(`/factions/${factionId}`);
+    },
+    [router],
+  );
+
   // ── Camera focus target (generic: centre the map on any location) ──────
   // Anything can "locate on the map" by linking to the query:
   //   ?focus=<x>,<y>[,<zoom>]  — centre on raw world coordinates (a system, a fleet, an event,
@@ -323,6 +332,7 @@ export function StarMap({
         selectedSystem={selectedSystem}
         onSelectSystem={onSelectSystem}
         onEmptyClick={onEmptyClick}
+        onSelectFaction={onSelectFaction}
         centerTarget={centerTarget}
         onReady={handleReady}
         regionInfos={regionInfos}

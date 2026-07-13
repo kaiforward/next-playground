@@ -16,7 +16,7 @@ import { ValueChoroplethLayer } from "./layers/value-choropleth-layer";
 import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
-import { BG_COLOR } from "./theme";
+import { BG_COLOR, FACTION_SELECT_ZOOM } from "./theme";
 import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
@@ -32,6 +32,8 @@ export interface PixiMapCanvasProps {
   selectedSystem: StarSystemInfo | null;
   onSelectSystem: (systemId: string) => void;
   onEmptyClick: () => void;
+  /** Zoomed-out click on a faction's territory (see `theme.ts` `FACTION_SELECT_ZOOM`) — every mode. */
+  onSelectFaction: (factionId: string) => void;
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
@@ -79,6 +81,7 @@ export function PixiMapCanvas({
   selectedSystem,
   onSelectSystem,
   onEmptyClick,
+  onSelectFaction,
   centerTarget,
   onReady,
   regionInfos,
@@ -95,8 +98,8 @@ export function PixiMapCanvas({
   const readyFired = useRef(false);
 
   // Store callbacks in refs so Pixi event handlers always see latest
-  const callbacksRef = useRef({ onSelectSystem, onEmptyClick });
-  callbacksRef.current = { onSelectSystem, onEmptyClick };
+  const callbacksRef = useRef({ onSelectSystem, onEmptyClick, onSelectFaction });
+  callbacksRef.current = { onSelectSystem, onEmptyClick, onSelectFaction };
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
@@ -208,6 +211,10 @@ export function PixiMapCanvas({
         getCellContext: () => ({
           cells: pixiRef.current?.cells ?? null,
           toWorld: (screenX, screenY) => camera.screenToWorld(screenX, screenY),
+        }),
+        getFactionContext: () => ({
+          unions: politicalTerritoryLayer.getFactionUnions(),
+          selectActive: camera.zoom < FACTION_SELECT_ZOOM,
         }),
       });
 
