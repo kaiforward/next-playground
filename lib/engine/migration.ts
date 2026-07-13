@@ -17,6 +17,9 @@ export interface MigrationNode {
   labourDemand: number;
 }
 
+/** Signed population change for one system (Σ over a run = 0 — conserved). */
+export interface MigrationDelta { systemId: string; delta: number; }
+
 export interface AttractivenessWeights {
   /** Weight on contentment (1 − unrest) — "how happy is the destination". */
   contentment: number;

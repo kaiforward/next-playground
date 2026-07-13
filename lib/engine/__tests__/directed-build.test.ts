@@ -1394,12 +1394,16 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
     generalSpace: 0, habitableSpace: 0, goods: [],
   };
 
-  it("caps new colony foundings to the faction's settler-supply budget", () => {
+  it("caps new colony foundings to the settler-supply budget, keeping the best-valued", () => {
     // releasable = 100 spare; minSettlerSupply 20 ⇒ affordable floor(100/20) = 5; no hungry colonies ⇒
-    // only the 5 best-valued of 10 identical candidates are proposed.
-    const candidates = Array.from({ length: 10 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: 100 }));
+    // budget 5. Candidates differ in habitable land (⇒ distinct colony value, since value ∝ habitableSpace),
+    // so this also pins the descending value-sort: the gate must keep the 5 LARGEST (c5–c9), not just any
+    // 5 — with identical candidates a reversed comparator would pass the count assertion alone.
+    const candidates = Array.from({ length: 10 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: (i + 1) * 100 }));
     const gated = { ...COLONY_PARAMS, minSettlerSupply: 20, employedLeakFraction: 0 };
-    expect(planFactionColonyProposals("f1", [supplyCore], candidates, [], gated)).toHaveLength(5);
+    const proposals = planFactionColonyProposals("f1", [supplyCore], candidates, [], gated);
+    expect(proposals).toHaveLength(5);
+    expect(new Set(proposals.map((p) => p.systemId))).toEqual(new Set(["c5", "c6", "c7", "c8", "c9"]));
   });
 
   it("stops founding once hungry colonies already consume the settler supply", () => {

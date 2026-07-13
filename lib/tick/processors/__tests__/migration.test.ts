@@ -107,4 +107,16 @@ describe("migration processor", () => {
     expect(world.systems.find((s) => s.id === "colony")!.population).toBeGreaterThan(10); // received settlers
     expect(world.systems.reduce((s, x) => s + x.population, 0)).toBeCloseTo(before, 5);   // conserved
   });
+
+  it("skips colonist delivery on an off-boundary tick (delivery is monthly-gated)", async () => {
+    // Same source + empty colony and the real delivery params that DO move people on a pulse boundary (the
+    // case above), but run on an off-boundary tick: the monthly-pulse gate must skip the whole processor,
+    // so delivery moves nobody. Guards the delivery pass from drifting above the pulse guard (a 24× rate).
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = { ...PARAMS, delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 } };
+    await runMigrationProcessor(world, ctx(1), params); // tick 1 % 24 ≠ 0 → off-boundary, whole pulse skipped
+    expect(world.systems.find((s) => s.id === "core")!.population).toBe(1000);
+    expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10);
+  });
 });

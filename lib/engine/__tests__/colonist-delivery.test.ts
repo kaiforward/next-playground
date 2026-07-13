@@ -40,8 +40,9 @@ describe("allocateColonists", () => {
     // so it keeps its 700 workers.
     const params: ColonistDeliveryParams = { sourceOutflowCap: 1, minSourcePopulation: 100 };
     const deltas = allocateColonists([sys("core", "f1", 1000, 1000, 700), sys("c", "f1", 10, 10000)], params);
-    expect(net(deltas, "core")).toBeGreaterThanOrEqual(-300 - 1e-6); // kept its 700 workers
-    expect(net(deltas, "core")).toBeLessThan(0); // but did shed the idle spare
+    // Sheds exactly its 300 idle spare and no more — keeps all 700 workers. The exact value pins the
+    // "gives that and no more" floor; a mere `< 0` bound would pass an under-donation regression too.
+    expect(net(deltas, "core")).toBeCloseTo(-300, 6);
   });
 
   it("a fully-staffed source contributes ~nothing (keeps its workers)", () => {

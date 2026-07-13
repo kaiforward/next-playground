@@ -16,7 +16,7 @@
  * routing layer — which system feeds which — layers on later without changing the allocation shape, and
  * the per-pulse {from, to} pairing it needs is the same data a migration-flow overlay would render.
  */
-import type { MigrationDelta } from "@/lib/tick/world/migration-world";
+import type { MigrationDelta } from "@/lib/engine/migration";
 
 /** One developed system's inputs to the allocation. */
 export interface ColonistSystem {
@@ -105,7 +105,12 @@ export function allocateColonists(
   const byFaction = new Map<string, ColonistSystem[]>();
   for (const s of systems) {
     if (s.factionId === null) continue;
-    (byFaction.get(s.factionId) ?? byFaction.set(s.factionId, []).get(s.factionId)!).push(s);
+    let group = byFaction.get(s.factionId);
+    if (!group) {
+      group = [];
+      byFaction.set(s.factionId, group);
+    }
+    group.push(s);
   }
 
   const deltaBySystem = new Map<string, number>();
