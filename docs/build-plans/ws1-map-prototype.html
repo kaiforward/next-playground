@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WS1 Voronoi Map — Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0e1117; --surface:#161b22; --surface-2:#1c2129; --surface-3:#242a33;
+    --fg:#c9d1d9; --t2:#8b949e; --t3:#7d868e;
+    --copper:#e0845f; --copper-2:#d06a42; --copper-dim:#a04428; --amber:#d4a04a;
+    --border:rgba(139,148,158,.16); --border-strong:rgba(139,148,158,.32);
+    --mono:"Geist Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+    --disp:"Chakra Petch",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+    font-family:var(--disp);overflow:hidden;-webkit-font-smoothing:antialiased}
+  #stage{position:fixed;inset:0}
+  canvas{display:block;position:absolute;inset:0;cursor:crosshair}
+
+  /* ── Top strip ─────────────────────────────────────────── */
+  #topbar{position:absolute;top:0;left:0;right:0;height:52px;z-index:20;
+    display:flex;align-items:center;gap:20px;padding:0 18px;
+    background:linear-gradient(180deg,rgba(14,17,23,.94),rgba(14,17,23,.62) 70%,transparent);
+    pointer-events:none}
+  #topbar > *{pointer-events:auto}
+  .brand{display:flex;flex-direction:column;line-height:1.05;user-select:none}
+  .brand .eyebrow{font-size:9.5px;letter-spacing:.28em;color:var(--copper);font-weight:700}
+  .brand .title{font-size:13px;letter-spacing:.06em;color:var(--fg);font-weight:600}
+  .brand .title b{color:var(--t2);font-weight:500}
+
+  .modes{display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);
+    padding:3px}
+  .mode{font-family:var(--disp);font-weight:600;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--t2);background:transparent;border:0;
+    padding:7px 14px 5px;cursor:pointer;position:relative;transition:color .15s}
+  .mode:hover{color:var(--fg)}
+  .mode[aria-pressed="true"]{color:var(--bg);background:var(--copper-2)}
+  .mode[aria-pressed="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-4px;
+    height:2px;background:var(--copper)}
+  .spacer{flex:1}
+  .hint{font-family:var(--mono);font-size:10.5px;color:var(--t3);letter-spacing:.02em;
+    text-align:right;line-height:1.5;user-select:none}
+  .hint b{color:var(--t2);font-weight:500}
+
+  /* ── Left console ──────────────────────────────────────── */
+  #panel{position:absolute;top:66px;left:14px;width:268px;z-index:15;
+    background:var(--surface);border:1px solid var(--border);
+    border-left:3px solid var(--copper-2);
+    box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .p-sec{padding:12px 14px;border-top:1px solid var(--border)}
+  .p-sec:first-child{border-top:0}
+  .p-lbl{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--t3);
+    font-weight:700;margin-bottom:8px}
+  .scope-name{font-family:var(--disp);font-weight:700;font-size:16px;letter-spacing:.02em}
+  .scope-sub{font-family:var(--mono);font-size:11px;color:var(--t2);margin-top:2px}
+  .scope-name.global{color:var(--amber)}
+
+  .ramp{margin-top:10px}
+  .ramp-bar{height:12px;border:1px solid var(--border-strong);
+    background:linear-gradient(90deg,#08090c 0 10%,var(--_floor,#4e545e) 10%,var(--_top,#fcd34d) 100%)}
+  .ramp-scale{display:flex;justify-content:space-between;font-family:var(--mono);
+    font-size:10px;color:var(--t3);margin-top:4px}
+  .ramp-scale b{color:var(--t2);font-weight:500}
+  .ramp-note{font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:6px;
+    line-height:1.5;letter-spacing:.01em}
+  .ramp-note i{color:#0e1117;background:#c9d1d9;font-style:normal;padding:0 3px;
+    margin-right:1px}
+  .ramp-note .blk{color:#c9d1d9;background:#08090c;border:1px solid var(--border-strong)}
+
+  .sel-empty{font-family:var(--mono);font-size:11.5px;color:var(--t3);line-height:1.5}
+  .sel-name{font-family:var(--disp);font-weight:700;font-size:15px;display:flex;
+    align-items:center;gap:8px}
+  .sel-dot{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}
+  .sel-meta{font-family:var(--mono);font-size:10.5px;color:var(--t2);margin-top:3px}
+  dl.stats{display:grid;grid-template-columns:1fr auto;gap:5px 10px;margin:10px 0 0;
+    font-family:var(--mono)}
+  dl.stats dt{font-size:11px;color:var(--t3)}
+  dl.stats dd{margin:0;font-size:12px;color:var(--fg);text-align:right;font-weight:500}
+  dl.stats dd .u{color:var(--t3);font-size:10px}
+  .clearbtn{margin-top:10px;width:100%;font-family:var(--disp);font-weight:600;
+    font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t2);
+    background:var(--surface-2);border:1px solid var(--border);padding:7px;cursor:pointer}
+  .clearbtn:hover{color:var(--fg);border-color:var(--border-strong);background:var(--surface-3)}
+  .clearbtn:disabled{opacity:.4;cursor:default}
+
+  /* ── Tier ladder HUD (signature) ───────────────────────── */
+  #hud{position:absolute;left:14px;bottom:14px;z-index:15;
+    background:rgba(22,27,34,.86);border:1px solid var(--border);
+    backdrop-filter:blur(3px);padding:10px 12px 11px}
+  .hud-top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+    margin-bottom:9px}
+  .hud-lbl{font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--t3);
+    font-weight:700}
+  .hud-zoom{font-family:var(--mono);font-size:11px;color:var(--amber);font-weight:500}
+  .ladder{display:flex;align-items:stretch;gap:0}
+  .rung{position:relative;padding:6px 13px 5px;border:1px solid var(--border);
+    border-right:0;background:var(--surface);min-width:64px;text-align:center;
+    transition:background .25s,color .25s,box-shadow .25s}
+  .rung:last-child{border-right:1px solid var(--border)}
+  .rung .r-t{font-family:var(--disp);font-weight:700;font-size:11px;letter-spacing:.04em;
+    color:var(--t2);transition:color .25s}
+  .rung .r-s{font-family:var(--mono);font-size:8.5px;color:var(--t3);letter-spacing:.03em;
+    margin-top:1px}
+  .rung.on{background:var(--copper-2);border-color:var(--copper);z-index:1;
+    box-shadow:0 0 16px rgba(224,132,95,.35)}
+  .rung.on .r-t{color:#0e1117}
+  .rung.on .r-s{color:rgba(14,17,23,.7)}
+  @keyframes pulse{0%{box-shadow:0 0 0 rgba(224,132,95,.6)}
+    100%{box-shadow:0 0 22px rgba(224,132,95,.35)}}
+  .rung.pulse{animation:pulse .45s ease-out}
+
+  /* ── Tuning drawer ─────────────────────────────────────── */
+  #tuner{position:absolute;right:14px;bottom:14px;z-index:15;width:236px;
+    background:var(--surface);border:1px solid var(--border)}
+  .tuner-head{display:flex;align-items:center;justify-content:space-between;
+    padding:9px 12px;cursor:pointer;user-select:none}
+  .tuner-head span{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--t2);font-weight:700}
+  .tuner-head .chev{color:var(--t3);font-family:var(--mono);font-size:12px;transition:transform .2s}
+  #tuner.collapsed .tuner-body{display:none}
+  #tuner.collapsed .chev{transform:rotate(180deg)}
+  .tuner-body{padding:2px 12px 12px;border-top:1px solid var(--border)}
+  .field{margin-top:11px}
+  .field label{display:flex;justify-content:space-between;font-family:var(--mono);
+    font-size:10px;color:var(--t2);margin-bottom:5px}
+  .field label b{color:var(--copper);font-weight:500}
+  input[type=range]{width:100%;height:3px;-webkit-appearance:none;appearance:none;
+    background:var(--surface-3);outline:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;
+    background:var(--copper);border:0;cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;background:var(--copper);
+    border:0;cursor:pointer;border-radius:0}
+  .seg{display:flex;gap:2px;margin-top:5px;background:var(--surface-2);padding:2px}
+  .seg button{flex:1;font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;
+    color:var(--t2);background:transparent;border:0;padding:5px 2px;cursor:pointer;
+    text-transform:uppercase}
+  .seg button[aria-pressed="true"]{background:var(--copper-2);color:var(--bg)}
+
+  /* ── Tooltip ───────────────────────────────────────────── */
+  #tip{position:absolute;z-index:30;pointer-events:none;display:none;
+    background:rgba(14,17,23,.95);border:1px solid var(--border-strong);
+    border-left:2px solid var(--copper);padding:6px 9px;font-family:var(--mono);
+    font-size:10.5px;line-height:1.45;color:var(--fg);white-space:nowrap;
+    box-shadow:0 6px 20px rgba(0,0,0,.55)}
+  #tip .tn{font-family:var(--disp);font-weight:700;font-size:11.5px}
+  #tip .tf{color:var(--t2)}
+  #tip .tv{color:var(--amber)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="map"></canvas>
+
+  <div id="topbar">
+    <div class="brand">
+      <div class="eyebrow">STELLAR TRADER</div>
+      <div class="title">WS1 &nbsp;<b>Voronoi Map — interaction prototype</b></div>
+    </div>
+    <div class="modes" id="modes">
+      <button class="mode" data-mode="political">Political</button>
+      <button class="mode" data-mode="population" aria-pressed="true">Population</button>
+      <button class="mode" data-mode="development">Development</button>
+      <button class="mode" data-mode="stability">Stability</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="hint">
+      <b>click</b> cell → select + scope to faction &nbsp;·&nbsp; <b>empty / Esc</b> → clear<br/>
+      <b>scroll</b> zoom &nbsp;·&nbsp; <b>drag</b> pan &nbsp;·&nbsp; <b>R</b> reset view
+    </div>
+  </div>
+
+  <div id="panel">
+    <div class="p-sec">
+      <div class="p-lbl">Gradient scope</div>
+      <div class="scope-name global" id="scopeName">Galaxy — global</div>
+      <div class="scope-sub" id="scopeSub">ramp spans all visible systems</div>
+      <div class="ramp" id="ramp">
+        <div class="ramp-bar" id="rampBar"></div>
+        <div class="ramp-scale"><span>low</span><b id="rampTop">—</b></div>
+        <div class="ramp-note"><i class="blk">&nbsp;&nbsp;</i> black = uncolonised / no value<br/>grey → colour = low → high (present)</div>
+      </div>
+    </div>
+    <div class="p-sec">
+      <div class="p-lbl">Selected system</div>
+      <div id="selBody"><div class="sel-empty">No system selected.<br/>Click a cell to inspect it and scope the gradient to its faction.</div></div>
+      <button class="clearbtn" id="clearBtn" disabled>Clear selection</button>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div class="hud-top">
+      <div class="hud-lbl">Number aggregation</div>
+      <div class="hud-zoom" id="hudZoom">1.0×</div>
+    </div>
+    <div class="ladder" id="ladder">
+      <div class="rung" data-tier="faction"><div class="r-t">FACTION</div><div class="r-s">whole empire</div></div>
+      <div class="rung" data-tier="region"><div class="r-t">FACTION·REGION</div><div class="r-s">per-region chunk</div></div>
+      <div class="rung" data-tier="system"><div class="r-t">SYSTEM</div><div class="r-s">per cell</div></div>
+    </div>
+  </div>
+
+  <div id="tuner">
+    <div class="tuner-head" id="tunerHead"><span>⚙ Tuning — open questions</span><span class="chev">▾</span></div>
+    <div class="tuner-body">
+      <div class="field">
+        <label>Tier swap · region → system <b id="v_m1">1.90×</b></label>
+        <input type="range" id="m1" min="1.3" max="4" step="0.05" value="1.9" />
+      </div>
+      <div class="field">
+        <label>Tier swap · faction → region <b id="v_m0">0.95×</b></label>
+        <input type="range" id="m0" min="0.7" max="2" step="0.05" value="0.95" />
+      </div>
+      <div class="field">
+        <label>System label min size <b id="v_px">26px</b></label>
+        <input type="range" id="px" min="10" max="60" step="1" value="26" />
+      </div>
+      <div class="field">
+        <label>Out-of-scope de-emphasis</label>
+        <div class="seg" id="deemp">
+          <button data-d="dim">Dim</button>
+          <button data-d="desat">Desat</button>
+          <button data-d="both" aria-pressed="true">Both</button>
+          <button data-d="hide">Hide</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tip"></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   WS1 Voronoi map — interaction prototype.
+   Not production code — a feel/approve harness for the EU5-style map:
+   per-cell relative gradient (score-0→black), faction-scoped on click,
+   and system → faction-in-region → faction number aggregation on zoom.
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ── Deterministic RNG so the galaxy is stable across reloads ──────────
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rng=mulberry32(0x51E11A2);
+const rand=(lo,hi)=>lo+(hi-lo)*rng();
+const gauss=(m,s)=>{let u=0,v=0;while(!u)u=rng();while(!v)v=rng();
+  return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+
+// ── World buffer (nearest-site is computed at this resolution) ────────
+const MAP_W=1000, MAP_H=648;
+
+const REGION_NAMES=["Ashfall Reach","Cinder Verge","Halcyon Drift","Perdition Belt","Vela Expanse","Orrery Deep"];
+const FACTIONS=[
+  {id:"f0",name:"Meridian Compact",color:[74,122,176]},
+  {id:"f1",name:"Ferrous League",  color:[192,80,77]},
+  {id:"f2",name:"Concord of Vael",  color:[106,154,91]},
+  {id:"f3",name:"Kestrel Dominion", color:[176,138,62]},
+  {id:"f4",name:"The Sable Chorus", color:[138,106,160]},
+];
+const SUN=[ // weighted star classes → SUN_CLASS_COLORS
+  {c:"red_dwarf",   col:[248,113,113], w:.40},
+  {c:"orange_dwarf",col:[251,146,60],  w:.30},
+  {c:"yellow",      col:[250,204,21],  w:.20},
+  {c:"blue_white",  col:[147,197,253], w:.10},
+];
+function pickSun(){let r=rng(),a=0;for(const s of SUN){a+=s.w;if(r<=a)return s}return SUN[0]}
+
+// ── Generate regions ─────────────────────────────────────────────────
+const regions=[];
+{const MX=140,MY=120;let tries=0;
+ while(regions.length<REGION_NAMES.length && tries++<4000){
+   const p={x:rand(MX,MAP_W-MX),y:rand(MY,MAP_H-MY)};
+   if(regions.every(r=>Math.hypot(r.x-p.x,r.y-p.y)>198)){
+     regions.push({id:regions.length,name:REGION_NAMES[regions.length],x:p.x,y:p.y});}
+ }}
+
+// ── Generate faction seed points (empires cut across regions) ─────────
+const facSeeds=[];
+{const MX=115,MY=105;let tries=0;
+ while(facSeeds.length<FACTIONS.length && tries++<4000){
+   const p={x:rand(MX,MAP_W-MX),y:rand(MY,MAP_H-MY)};
+   if(facSeeds.every(s=>Math.hypot(s.x-p.x,s.y-p.y)>188)) facSeeds.push(p);
+ }}
+
+// ── Generate systems (blobbed per region, min-spaced) ─────────────────
+const NAMES_A=["Kael","Tyr","Vex","Ori","Nyx","Dra","Sol","Mir","Cor","Zeph","Lun","Hax","Pyr","Rho","Ash","Vor","Cal","Ien","Sab","Ur","Fen","Gal","Hel","Ith","Jor","Kry","Lys","Mos","Nar","Oph"];
+const NAMES_B=["Prime","Minor","Gate","Reach","Verge","IX","VII","III","Station","Hold","Rift","Cross","Anchor","Spire","Watch","Deep","Forge","Vault","Span","Marches"];
+const systems=[];
+for(const reg of regions){
+  const count=7+Math.floor(rng()*7);
+  let placed=0,tries=0;
+  while(placed<count && tries++<count*8){
+    const x=Math.round(reg.x+gauss(0,96)), y=Math.round(reg.y+gauss(0,88));
+    if(x<50||x>MAP_W-50||y<48||y>MAP_H-48) continue;
+    if(systems.some(s=>Math.hypot(s.x-x,s.y-y)<46)) continue;
+    const capital=rng()<0.12, big=!capital&&rng()<0.28;
+    const dev=Math.min(1,capital?rand(.6,.92):big?rand(.4,.78):rand(.12,.62));
+    const pot=Math.min(1,dev+rand(.08,.4));
+    const sun=pickSun();
+    systems.push({
+      id:systems.length,
+      name:NAMES_A[systems.length%NAMES_A.length]+" "+NAMES_B[(systems.length*7)%NAMES_B.length],
+      x,y,regionId:reg.id,factionId:null,
+      pop: Math.round(capital? rand(28e6,118e6): big? rand(7e6,24e6): rand(1.4e5,4.2e6)),
+      dev, pot, stab: Math.min(1,rand(.32,.95)-(dev<.3?.12:0)),
+      sunClass:sun.c, sunCol:sun.col,
+    });
+    placed++;
+  }
+}
+// assign faction by nearest seed
+for(const s of systems){
+  let best=0,bd=1e18;
+  facSeeds.forEach((seed,i)=>{const d=Math.hypot(seed.x-s.x,seed.y-s.y);if(d<bd){bd=d;best=i}});
+  s.factionId=FACTIONS[best].id;
+}
+// ── Unclaimed frontier systems: stars exist, but value 0 → render black ──
+{let placed=0,tries=0;
+ while(placed<11 && tries++<800){
+   const x=Math.round(rand(60,MAP_W-60)), y=Math.round(rand(56,MAP_H-56));
+   if(systems.some(s=>Math.hypot(s.x-x,s.y-y)<48)) continue;
+   let rr=0,rd=1e18; regions.forEach(rg=>{const d=Math.hypot(rg.x-x,rg.y-y);if(d<rd){rd=d;rr=rg.id}});
+   const sun=pickSun();
+   systems.push({id:systems.length,name:"HX-"+(410+placed),x,y,regionId:rr,
+     factionId:null,uncol:true,pop:0,dev:0,pot:0,stab:0,sunClass:sun.c,sunCol:sun.col});
+   placed++;
+ }}
+const nSites=systems.length;
+const facById=Object.fromEntries(FACTIONS.map(f=>[f.id,f]));
+const regById=Object.fromEntries(regions.map(r=>[r.id,r]));
+
+// ── Precompute owner buffer + centroids + boundary types (ONCE) ───────
+const owner=new Int32Array(MAP_W*MAP_H);
+{const ax=new Float64Array(nSites),ay=new Float64Array(nSites),ac=new Int32Array(nSites);
+ for(let y=0;y<MAP_H;y++){for(let x=0;x<MAP_W;x++){
+   let best=0,bd=1e18;
+   for(let i=0;i<nSites;i++){const dx=systems[i].x-x,dy=systems[i].y-y,d=dx*dx+dy*dy;
+     if(d<bd){bd=d;best=i}}
+   const idx=y*MAP_W+x; owner[idx]=best; ax[best]+=x; ay[best]+=y; ac[best]++;
+ }}
+ for(let i=0;i<nSites;i++){systems[i].ccx=ax[i]/ac[i];systems[i].ccy=ay[i]/ac[i];systems[i].area=ac[i];}
+}
+// boundary: 1 = cell edge, 2 = faction edge
+const bt=new Uint8Array(MAP_W*MAP_H);
+{for(let y=0;y<MAP_H;y++){for(let x=0;x<MAP_W;x++){
+   const idx=y*MAP_W+x,o=owner[idx],fo=systems[o].factionId;let t=0;
+   const nb=[[1,0],[-1,0],[0,1],[0,-1]];
+   for(const[dx,dy]of nb){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=MAP_W||ny>=MAP_H)continue;
+     const no=owner[ny*MAP_W+nx];if(no!==o){t=(systems[no].factionId!==fo)?2:Math.max(t,1);}}
+   bt[idx]=t;
+ }}}
+
+// ── Groups: faction-in-region and whole-faction ───────────────────────
+function centroidOf(mem){let x=0,y=0;for(const s of mem){x+=s.ccx;y+=s.ccy}return{x:x/mem.length,y:y/mem.length}}
+const facRegionGroups=[], factionGroups=[];
+{const fr=new Map(), fa=new Map();
+ for(const s of systems){
+   if(s.factionId==null) continue;                 // unclaimed systems form no group
+   const k=s.factionId+"|"+s.regionId; (fr.get(k)||fr.set(k,[]).get(k)).push(s);
+   (fa.get(s.factionId)||fa.set(s.factionId,[]).get(s.factionId)).push(s);
+ }
+ for(const[k,mem]of fr){const[fid,rid]=k.split("|");const c=centroidOf(mem);
+   facRegionGroups.push({factionId:fid,regionId:+rid,mem,cx:c.x,cy:c.y});}
+ for(const[fid,mem]of fa){const c=centroidOf(mem);
+   factionGroups.push({factionId:fid,mem,cx:c.x,cy:c.y});}
+}
+
+// ── Global maxima (for global scope + de-emphasis reference) ──────────
+const GMAX={
+  population:Math.max(...systems.map(s=>s.pop)),
+  development:Math.max(...systems.map(s=>s.pot)),
+  stability:Math.max(...systems.map(s=>s.stab)),
+};
+
+// ── Value / ramp helpers ──────────────────────────────────────────────
+const val=(s,m)=> m==="population"?s.pop : m==="development"?s.dev : s.stab;
+const rampMax=(mem,m)=> m==="population"?Math.max(...mem.map(s=>s.pop))
+                      : m==="development"?Math.max(...mem.map(s=>s.pot))
+                      : Math.max(...mem.map(s=>s.stab));
+// Floor is a neutral grey (NOT black) — black is reserved for exactly-0 (see siteColors).
+// A present-but-low value reads grey; only absence reads black, so the two never blur.
+const RAMPS={
+  population:[[0,[78,84,94]],[.5,[168,120,52]],[1,[252,211,77]]],
+  development:[[0,[80,84,92]],[.5,[158,74,44]],[1,[224,132,95]]],
+  stability:[[0,[76,86,96]],[.5,[26,120,140]],[1,[103,232,249]]],
+};
+function ramp(stops,t){t=Math.max(0,Math.min(1,t));
+  for(let i=1;i<stops.length;i++){if(t<=stops[i][0]){
+    const[a,ca]=stops[i-1],[b,cb]=stops[i];const f=(t-a)/(b-a||1);
+    return[ca[0]+(cb[0]-ca[0])*f,ca[1]+(cb[1]-ca[1])*f,ca[2]+(cb[2]-ca[2])*f];}}
+  return stops[stops.length-1][1];}
+function topColor(m){const s=RAMPS[m];return`rgb(${s[s.length-1][1].map(Math.round).join(",")})`}
+function floorColor(m){const c=RAMPS[m][0][1];return`rgb(${c.map(Math.round).join(",")})`}
+
+// ── Number formatting ─────────────────────────────────────────────────
+function fmtPop(n){if(n>=1e6)return(n/1e6).toFixed(n<1e7?1:0)+"M";
+  if(n>=1e3)return(n/1e3).toFixed(0)+"K";return""+Math.round(n)}
+function fmtVal(v,m,agg){ // agg: 'sum' | 'avg' member array handled by caller
+  return v;}
+
+// ── State ─────────────────────────────────────────────────────────────
+let mode="population";
+let selectedId=null;               // selected system id
+let scopeFaction=null;             // faction id the ramp is scoped to (value modes)
+let deemp="both";
+let tierM1=1.9, tierM0=0.95, sysPx=26;
+let hoverId=null;
+let fillsDirty=true;
+let currentTier="system";
+
+// ── Canvas setup ──────────────────────────────────────────────────────
+const cv=document.getElementById("map"), ctx=cv.getContext("2d");
+const fills=document.createElement("canvas"); fills.width=MAP_W; fills.height=MAP_H;
+const fctx=fills.getContext("2d");
+const fimg=fctx.createImageData(MAP_W,MAP_H);
+let dpr=1, viewW=0, viewH=0, fitZoom=1, zoom=1, panX=0, panY=0;
+
+function resize(){
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  viewW=window.innerWidth; viewH=window.innerHeight;
+  cv.width=viewW*dpr; cv.height=viewH*dpr;
+  cv.style.width=viewW+"px"; cv.style.height=viewH+"px";
+  fitZoom=Math.min((viewW-40)/MAP_W,(viewH-120)/MAP_H);
+}
+function resetView(){
+  zoom=fitZoom*1.0;
+  panX=(viewW-MAP_W*zoom)/2;
+  panY=(viewH-MAP_H*zoom)/2 + 12;
+}
+
+// ── Fill buffer (recolour only on mode/scope/de-emphasis change) ──────
+function siteColors(){
+  const col=new Float64Array(nSites*3);
+  const scoped= mode!=="political" && scopeFaction!=null;
+  const scopeMem = scoped ? systems.filter(s=>s.factionId===scopeFaction) : systems;
+  const rmax = mode==="political"?1:Math.max(1e-9,rampMax(scopeMem,mode));
+  const gmax = Math.max(1e-9,GMAX[mode]);
+  const stops = RAMPS[mode];
+  for(let i=0;i<nSites;i++){
+    const s=systems[i]; let r,g,b;
+    if(mode==="political"){
+      const f=facById[s.factionId];
+      if(!f){r=32;g=37;b=46;}                                     // unclaimed → neutral slate
+      else{const fc=f.color; r=fc[0]*.62+5.32; g=fc[1]*.62+6.46; b=fc[2]*.62+8.74;}
+    } else {
+      const v=val(s,mode);
+      if(v<=1e-9){r=8;g=9;b=12;}                                  // exactly 0 → black (no value / uncolonised)
+      else{
+        const inScope = !scoped || s.factionId===scopeFaction;
+        if(inScope){[r,g,b]=ramp(stops,v/rmax);}                  // grey floor → colour ceiling
+        else{
+          let[cr,cg,cb]=ramp(stops,v/gmax);
+          if(deemp==="hide"){r=16;g=19;b=25;}                     // → background
+          else{
+            const L=cr*.3+cg*.59+cb*.11;
+            if(deemp==="desat"){r=cr*.2+L*.8;g=cg*.2+L*.8;b=cb*.2+L*.8;}          // grey, keep brightness
+            else if(deemp==="both"){r=(cr*.12+L*.88)*.42;g=(cg*.12+L*.88)*.42;b=(cb*.12+L*.88)*.42;} // grey + dark
+            else{r=cr*.26;g=cg*.26;b=cb*.26;}                     // dim: keep hue, darken
+          }
+        }
+      }
+    }
+    col[i*3]=r; col[i*3+1]=g; col[i*3+2]=b;
+  }
+  return col;
+}
+function rebuildFills(){
+  const col=siteColors(); const d=fimg.data;
+  const cop=[208,106,66], copHot=[240,172,138];
+  for(let p=0,px=0;p<owner.length;p++,px+=4){
+    const o=owner[p]; let r=col[o*3],g=col[o*3+1],b=col[o*3+2];
+    const e=bt[p];
+    if(e===1){r*=.68;g*=.68;b*=.68;}
+    else if(e===2){
+      const hot = scopeFaction!=null && systems[o].factionId===scopeFaction;
+      const c=hot?copHot:cop; const a=hot?.72:.42;
+      r=r*(1-a)+c[0]*a; g=g*(1-a)+c[1]*a; b=b*(1-a)+c[2]*a;
+    }
+    d[px]=r; d[px+1]=g; d[px+2]=b; d[px+3]=255;
+  }
+  fctx.putImageData(fimg,0,0);
+  fillsDirty=false;
+}
+
+// ── Tier decision from zoom ───────────────────────────────────────────
+function tierForZoom(){
+  const z=zoom/fitZoom;
+  if(z>=tierM1) return "system";
+  if(z>=tierM0) return "region";
+  return "faction";
+}
+
+// ── Label collision placement ─────────────────────────────────────────
+function overlaps(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function placeLabels(cands){ // cands sorted by priority; each {sx,sy,text,sub,prio,force}
+  ctx.font="600 12px "+MONO; const placed=[],out=[];
+  // reserve forced (selected) first
+  for(const grp of [cands.filter(c=>c.force),cands.filter(c=>!c.force)]){
+    for(const c of grp){
+      const w=ctx.measureText(c.text).width+12, h=c.sub?26:16;
+      const r={x:c.sx-w/2,y:c.sy-h/2,w,h};
+      if(c.force||!placed.some(p=>overlaps(p,r))){placed.push(r);out.push(c);}
+    }
+  }
+  return out;
+}
+const MONO='"Geist Mono",ui-monospace,monospace';
+
+// ── Aggregate a group's number for the current mode ───────────────────
+function groupNumber(mem){
+  if(mode==="population"||mode==="political"){
+    return fmtPop(mem.reduce((a,s)=>a+s.pop,0));
+  }
+  const avg=mem.reduce((a,s)=>a+val(s,mode),0)/mem.length;
+  return Math.round(avg*100)+"";
+}
+function systemNumber(s){
+  if(mode==="population"||mode==="political")return fmtPop(s.pop);
+  return Math.round(val(s,mode)*100)+"";
+}
+
+// ── World → screen ────────────────────────────────────────────────────
+const sx=wx=>wx*zoom+panX, sy=wy=>wy*zoom+panY;
+
+// ── Render ────────────────────────────────────────────────────────────
+function render(){
+  if(fillsDirty) rebuildFills();
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,viewW,viewH);
+  ctx.fillStyle="#0b0e13"; ctx.fillRect(0,0,viewW,viewH);
+
+  // choropleth (smoothed upscale of the nearest-site buffer)
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+  ctx.setTransform(zoom*dpr,0,0,zoom*dpr,panX*dpr,panY*dpr);
+  ctx.drawImage(fills,0,0);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const valueMode = mode!=="political";
+  const tier=tierForZoom();
+
+  // ── star-type dots ──
+  for(const s of systems){
+    const px=sx(s.ccx),py=sy(s.ccy);
+    if(px<-20||py<-20||px>viewW+20||py>viewH+20)continue;
+    const c=s.sunCol; const sel=s.id===selectedId, hov=s.id===hoverId;
+    const subdued = valueMode; // in value modes the cell carries meaning; dot recedes
+    const rad = sel?4.6: subdued?2.4:3.3;
+    ctx.beginPath(); ctx.arc(px,py,rad,0,7);
+    ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${subdued&&!sel?0.55:0.95})`; ctx.fill();
+    if(sel){ctx.beginPath();ctx.arc(px,py,8,0,7);
+      ctx.strokeStyle="#e0845f";ctx.lineWidth=1.8;ctx.stroke();}
+    else if(hov){ctx.beginPath();ctx.arc(px,py,7,0,7);
+      ctx.strokeStyle="rgba(201,209,217,.8)";ctx.lineWidth=1.3;ctx.stroke();}
+  }
+
+  // ── numbers by tier ──
+  let cands=[];
+  const inView=(x,y)=>x>-40&&y>-30&&x<viewW+40&&y<viewH+30;
+  if(tier==="system"){
+    const minArea=sysPx*sysPx; // on-screen px² needed
+    for(const s of systems){
+      if(s.uncol)continue;                          // empty cells carry no number
+      const scr=s.area*zoom*zoom; if(scr<minArea)continue;
+      const px=sx(s.ccx),py=sy(s.ccy); if(!inView(px,py))continue;
+      cands.push({sx:px,sy:py,text:systemNumber(s),prio:s.pop,
+        force:s.id===selectedId, kind:"sys", s});
+    }
+    cands.sort((a,b)=>b.prio-a.prio);
+  } else if(tier==="region"){
+    for(const g of facRegionGroups){
+      const px=sx(g.cx),py=sy(g.cy); if(!inView(px,py))continue;
+      const pop=g.mem.reduce((a,s)=>a+s.pop,0);
+      cands.push({sx:px,sy:py,text:groupNumber(g.mem),
+        sub:facById[g.factionId].name+" · "+regById[g.regionId].name,
+        prio:pop, kind:"grp", g});
+    }
+    cands.sort((a,b)=>b.prio-a.prio);
+  } else {
+    for(const g of factionGroups){
+      const px=sx(g.cx),py=sy(g.cy); if(!inView(px,py))continue;
+      const pop=g.mem.reduce((a,s)=>a+s.pop,0);
+      cands.push({sx:px,sy:py,text:groupNumber(g.mem),
+        sub:facById[g.factionId].name,prio:pop,kind:"fac",g});
+    }
+    cands.sort((a,b)=>b.prio-a.prio);
+  }
+  const shown=placeLabels(cands);
+  for(const c of shown) drawLabel(c);
+
+  updateHUD(tier);
+  currentTier=tier;
+}
+
+function drawLabel(c){
+  const big = c.kind!=="sys";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  // number
+  ctx.font=(big?"600 15px ":"500 12px ")+MONO;
+  const y = c.sub? c.sy-4 : c.sy;
+  ctx.lineWidth=3.4; ctx.strokeStyle="rgba(8,10,14,.92)"; ctx.lineJoin="round";
+  ctx.strokeText(c.text,c.sx,y);
+  ctx.fillStyle = c.force? "#f2c6a0" : big? "#f0e9df":"#e9edf1";
+  ctx.fillText(c.text,c.sx,y);
+  // sublabel (group name)
+  if(c.sub){
+    ctx.font="600 8.5px "+DISP; ctx.fillStyle="rgba(180,150,120,.9)";
+    ctx.lineWidth=2.6; ctx.strokeStyle="rgba(8,10,14,.9)";
+    ctx.strokeText(c.sub.toUpperCase(),c.sx,c.sy+11);
+    ctx.fillText(c.sub.toUpperCase(),c.sx,c.sy+11);
+  }
+}
+const DISP='"Chakra Petch",system-ui,sans-serif';
+
+// ── HUD / panel updates ───────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+function updateHUD(tier){
+  $("hudZoom").textContent=(zoom/fitZoom).toFixed(1)+"×";
+  document.querySelectorAll("#ladder .rung").forEach(r=>{
+    const on=r.dataset.tier===tier;
+    if(on&&!r.classList.contains("on")){r.classList.add("pulse");
+      setTimeout(()=>r.classList.remove("pulse"),460);}
+    r.classList.toggle("on",on);
+  });
+}
+function updatePanel(){
+  const valueMode=mode!=="political";
+  // scope + ramp
+  const sn=$("scopeName"), ss=$("scopeSub");
+  if(valueMode && scopeFaction!=null){
+    const f=facById[scopeFaction];
+    const mem=systems.filter(s=>s.factionId===scopeFaction);
+    sn.textContent=f.name; sn.classList.remove("global");
+    ss.textContent=`ramp scoped to ${mem.length} systems`;
+  } else {
+    sn.textContent="Galaxy — global"; sn.classList.add("global");
+    ss.textContent=valueMode?"ramp spans all visible systems":"political — faction ownership";
+  }
+  const rampWrap=$("ramp");
+  rampWrap.style.display=valueMode?"block":"none";
+  if(valueMode){
+    $("rampBar").style.setProperty("--_top",topColor(mode));
+    $("rampBar").style.setProperty("--_floor",floorColor(mode));
+    const mem = scopeFaction!=null? systems.filter(s=>s.factionId===scopeFaction):systems;
+    let top;
+    if(mode==="population") top=fmtPop(Math.max(...mem.map(s=>s.pop)));
+    else if(mode==="development") top=Math.round(Math.max(...mem.map(s=>s.pot))*100)+" (potential)";
+    else top=Math.round(Math.max(...mem.map(s=>s.stab))*100);
+    $("rampTop").textContent=top;
+  }
+  // selected
+  const body=$("selBody"), btn=$("clearBtn");
+  if(selectedId==null){
+    body.innerHTML='<div class="sel-empty">No system selected.<br/>Click a cell to inspect it and scope the gradient to its faction.</div>';
+    btn.disabled=true;
+  } else {
+    const s=systems[selectedId], f=facById[s.factionId]||{name:"Unclaimed"}, r=regById[s.regionId];
+    const c=s.sunCol;
+    body.innerHTML=`
+      <div class="sel-name"><span class="sel-dot" style="color:rgb(${c[0]},${c[1]},${c[2]})"></span>${s.name}</div>
+      <div class="sel-meta">${f.name} · ${r.name} · ${s.sunClass.replace("_"," ")}</div>
+      <dl class="stats">
+        <dt>Population</dt><dd>${fmtPop(s.pop)}</dd>
+        <dt>Development</dt><dd>${Math.round(s.dev*100)}<span class="u"> / ${Math.round(s.pot*100)} cap</span></dd>
+        <dt>Stability</dt><dd>${Math.round(s.stab*100)}</dd>
+      </dl>`;
+    btn.disabled=false;
+  }
+}
+
+// ── Interaction ───────────────────────────────────────────────────────
+function worldFromEvent(e){
+  const wx=(e.clientX-panX)/zoom, wy=(e.clientY-panY)/zoom; return{wx,wy};
+}
+function siteAt(wx,wy){
+  const ix=Math.round(wx),iy=Math.round(wy);
+  if(ix<0||iy<0||ix>=MAP_W||iy>=MAP_H)return -1;
+  return owner[iy*MAP_W+ix];
+}
+let dragging=false, moved=false, downX=0, downY=0, lastX=0, lastY=0;
+cv.addEventListener("mousedown",e=>{dragging=true;moved=false;downX=lastX=e.clientX;downY=lastY=e.clientY;});
+window.addEventListener("mousemove",e=>{
+  if(dragging){
+    const dx=e.clientX-lastX,dy=e.clientY-lastY;
+    if(Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY)>4)moved=true;
+    panX+=dx;panY+=dy;lastX=e.clientX;lastY=e.clientY;render();return;
+  }
+  // hover — only over the canvas, not the floating console panels
+  if(e.target!==cv){if(hoverId!=null){hoverId=null;render();}$("tip").style.display="none";return;}
+  const{wx,wy}=worldFromEvent(e); const si=siteAt(wx,wy);
+  if(si!==hoverId){hoverId=si;render();}
+  const tip=$("tip");
+  if(si>=0){
+    const s=systems[si], f=facById[s.factionId]||{name:"Unclaimed"};
+    const vtxt = s.uncol?"uncolonised"
+      : mode==="population"||mode==="political"?fmtPop(s.pop)
+      : mode==="development"?Math.round(s.dev*100)+" dev"
+      : Math.round(s.stab*100)+" stab";
+    tip.innerHTML=`<div class="tn">${s.name}</div><div class="tf">${f.name} · ${regById[s.regionId].name}</div><div class="tv">${vtxt}</div>`;
+    tip.style.display="block";
+    tip.style.left=(e.clientX+14)+"px"; tip.style.top=(e.clientY+14)+"px";
+  } else tip.style.display="none";
+});
+window.addEventListener("mouseup",e=>{
+  if(!dragging)return; dragging=false;
+  if(moved)return;
+  // treat as click
+  const{wx,wy}=worldFromEvent(e); const si=siteAt(wx,wy);
+  if(si<0){ selectedId=null; scopeFaction=null; fillsDirty=true; updatePanel(); render(); return; }
+  const s=systems[si];
+  if(selectedId===si){ // click same → clear
+    selectedId=null; scopeFaction=null;
+  } else {
+    selectedId=si;
+    scopeFaction = mode!=="political" ? s.factionId : null;
+  }
+  fillsDirty=true; updatePanel(); render();
+});
+cv.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const f=Math.exp(-e.deltaY*0.0014);
+  const nz=Math.max(fitZoom*0.85,Math.min(fitZoom*6,zoom*f));
+  const wx=(e.clientX-panX)/zoom, wy=(e.clientY-panY)/zoom;
+  zoom=nz; panX=e.clientX-wx*zoom; panY=e.clientY-wy*zoom;
+  render();
+},{passive:false});
+cv.addEventListener("mouseleave",()=>{$("tip").style.display="none";if(hoverId!=null){hoverId=null;render();}});
+
+// ── Controls ──────────────────────────────────────────────────────────
+document.getElementById("modes").addEventListener("click",e=>{
+  const b=e.target.closest(".mode"); if(!b)return;
+  setMode(b.dataset.mode);
+});
+function setMode(m){
+  mode=m;
+  document.querySelectorAll(".mode").forEach(x=>x.setAttribute("aria-pressed",x.dataset.mode===m));
+  if(m==="political") scopeFaction=null;
+  else if(selectedId!=null) scopeFaction=systems[selectedId].factionId;
+  fillsDirty=true; updatePanel(); render();
+}
+$("clearBtn").addEventListener("click",()=>{
+  selectedId=null;scopeFaction=null;fillsDirty=true;updatePanel();render();});
+
+// tuning
+$("m1").addEventListener("input",e=>{tierM1=+e.target.value;$("v_m1").textContent=tierM1.toFixed(2)+"×";render();});
+$("m0").addEventListener("input",e=>{tierM0=+e.target.value;$("v_m0").textContent=tierM0.toFixed(2)+"×";render();});
+$("px").addEventListener("input",e=>{sysPx=+e.target.value;$("v_px").textContent=sysPx+"px";render();});
+$("deemp").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+  deemp=b.dataset.d;
+  document.querySelectorAll("#deemp button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.d===deemp));
+  if(scopeFaction!=null){fillsDirty=true;render();}});
+$("tunerHead").addEventListener("click",()=>document.getElementById("tuner").classList.toggle("collapsed"));
+
+// keyboard
+window.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){selectedId=null;scopeFaction=null;fillsDirty=true;updatePanel();render();}
+  else if(e.key==="r"||e.key==="R"){resetView();render();}
+  else if(e.key>="1"&&e.key<="4"){setMode(["political","population","development","stability"][+e.key-1]);}
+});
+window.addEventListener("resize",()=>{const zr=zoom/fitZoom;resize();zoom=fitZoom*zr;
+  panX=Math.min(Math.max(panX,viewW-MAP_W*zoom-40),40);render();});
+
+// ── Boot ──────────────────────────────────────────────────────────────
+resize(); resetView(); updatePanel(); render();
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(render);
+</script>
+</body>
+</html>
