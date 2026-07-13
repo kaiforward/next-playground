@@ -368,6 +368,10 @@ export function PixiMapCanvas({
     const cells = buildSystemCells(atlasData.systems, mapSize);
     p.cells = cells;
     p.valueChoroplethLayer.sync(cells, atlasData.systems);
+    p.valueChoroplethLayer.setFactionOutlines(
+      p.politicalTerritoryLayer.getFactionUnions(),
+      p.politicalTerritoryLayer.getFactionColors(),
+    );
     p.cellHighlightLayer.setCells(cells);
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 

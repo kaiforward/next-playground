@@ -9,6 +9,7 @@ import {
   type AggGroup, type AggregationTiers, type TierThresholds,
 } from "../number-aggregation";
 import type { SystemCells } from "../voronoi-cache";
+import type { MultiPolygon } from "../territory-utils";
 import type { AtlasSystem } from "@/lib/types/game";
 
 const NUMBER_STYLE = new TextStyle({ fontSize: 30, fill: 0xf0e9df, fontFamily: "monospace", fontWeight: "600" });
@@ -19,6 +20,11 @@ const NUMBER_STYLE = new TextStyle({ fontSize: 30, fill: 0xf0e9df, fontFamily: "
 const SYSTEM_NUMBER_SCALE = 1.3;
 const SYSTEM_NUMBER_RING_CLEAR = 36; // world units — just outside the 34-unit nav ring
 const SYSTEM_NUMBER_SCREEN_LIFT = 20; // extra on-screen px so the number's base clears the glyph
+
+// Faction-union border drawn over the value fills — bolder than the per-cell TERRITORY stroke so
+// political borders stay legible while a value mode is active. First-draft calibration knobs, tuned
+// in visual smoke.
+const FACTION_OUTLINE = { strokeAlpha: 0.7, strokeWidth: TERRITORY.strokeWidth * 3 } as const;
 
 // Modes whose reference max re-normalises to the focused faction's members when a faction is in scope.
 // Stability stays globally normalised even under focus — 0..1 unrest reads the same regardless of who's
@@ -46,6 +52,7 @@ const RESCALES_TO_SCOPE: Record<ValueMode, boolean> = {
 export class ValueChoroplethLayer {
   readonly container = new Container();
   private fills = new Graphics();
+  private outlines = new Graphics();
   private numbers = new Container();
   private pool: Text[] = [];
 
@@ -56,6 +63,8 @@ export class ValueChoroplethLayer {
   private reference = new Map<string, number>();
   private mode: ValueMode = "population";
   private scopeFaction: string | null = null;
+  private outlineUnions: Map<string, MultiPolygon> | null = null;
+  private outlineColors: Map<string, number> | null = null;
   private tiers: AggregationTiers = { system: [], factionRegion: [], faction: [] };
   private thresholds: TierThresholds = DEFAULT_TIER_THRESHOLDS;
   private referenceMax = 1;
@@ -68,6 +77,7 @@ export class ValueChoroplethLayer {
 
   constructor() {
     this.container.addChild(this.fills);
+    this.container.addChild(this.outlines);
     this.container.addChild(this.numbers);
     this.container.visible = false;
   }
@@ -106,6 +116,29 @@ export class ValueChoroplethLayer {
     this.scopeFaction = factionId;
     this.recomputeReferenceMax();
     this.drawFills();
+  }
+
+  /** Faction-union border over the value fills — stroke-only, exterior rings only, reusing the political
+   *  layer's cached unions (no new triangulation). Static per atlas/faction sync, so it lives in its own
+   *  Graphics and is NOT touched by the per-tick drawFills. */
+  setFactionOutlines(unions: Map<string, MultiPolygon> | null, colors: Map<string, number> | null) {
+    this.outlineUnions = unions;
+    this.outlineColors = colors;
+    this.drawOutlines();
+  }
+
+  private drawOutlines() {
+    this.outlines.clear();
+    if (!this.outlineUnions || !this.outlineColors) return;
+    for (const [factionId, multiPoly] of this.outlineUnions) {
+      const color = this.outlineColors.get(factionId);
+      if (color === undefined) continue;
+      for (const poly of multiPoly) {
+        const exterior = poly[0];
+        if (!exterior || exterior.length < 3) continue;
+        this.outlines.poly(exterior.flat()).stroke({ color, alpha: FACTION_OUTLINE.strokeAlpha, width: FACTION_OUTLINE.strokeWidth });
+      }
+    }
   }
 
   private recomputeReferenceMax() {
@@ -226,11 +259,13 @@ export class ValueChoroplethLayer {
   updateVisibility(lod: LODState) {
     if (!this.container.visible) return;
     this.fills.alpha = lod.valueChoroplethAlpha;
+    this.outlines.alpha = lod.valueChoroplethAlpha;
   }
 
   destroy() {
     for (const t of this.pool) t.destroy();
     this.fills.destroy();
+    this.outlines.destroy();
     this.numbers.destroy({ children: true });
     this.container.destroy({ children: true });
   }

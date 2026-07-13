@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
 import { BG_COLOR, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
-import { computeTerritoryPolygons } from "../territory-utils";
+import { computeTerritoryPolygons, type MultiPolygon } from "../territory-utils";
 import type { AtlasFaction, AtlasSystem } from "@/lib/types/game";
 
 const FACTION_NAME_STYLE = new TextStyle({
@@ -38,7 +38,7 @@ export class PoliticalTerritoryLayer {
   private labelContainer = new Container();
   private factionLabels = new Map<string, Text>();
 
-  private cachedTerritories: Map<string, [number, number][][][]> | null = null;
+  private cachedTerritories: Map<string, MultiPolygon> | null = null;
   private cachedColors: Map<string, number> | null = null;
   private lastFactionIds: string[] = [];
 
@@ -51,6 +51,17 @@ export class PoliticalTerritoryLayer {
   /** Show/hide the layer. When hidden, per-frame visibility logic still runs but nothing paints. */
   setActive(active: boolean) {
     this.container.visible = active;
+  }
+
+  /** Faction-union polygons keyed by factionId, from the last `sync()`. Shared with the value
+   *  choropleth layer so its faction-outline overlay reuses this triangulation instead of recomputing it. */
+  getFactionUnions(): Map<string, MultiPolygon> | null {
+    return this.cachedTerritories;
+  }
+
+  /** Faction id → 0xRRGGBB colour, from the last `sync()`. */
+  getFactionColors(): Map<string, number> | null {
+    return this.cachedColors;
   }
 
   /** Recompute territory polygons keyed by factionId. Call on system/faction data changes. */
