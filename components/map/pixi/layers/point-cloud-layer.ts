@@ -1,11 +1,11 @@
 import { Graphics, ParticleContainer, Particle, Texture } from "pixi.js";
 import type { Renderer } from "pixi.js";
 import type { AtlasSystem } from "@/lib/types/game";
-import { ECONOMY_COLORS, POINT_CLOUD } from "../theme";
+import { NEUTRAL_GLYPH, POINT_CLOUD } from "../theme";
 
 /**
  * GPU-accelerated point cloud for universe view.
- * Renders all systems as economy-colored dots using ParticleContainer.
+ * Renders all systems as neutral-tinted dots using ParticleContainer.
  * Not interactive — no pointer events.
  */
 export class PointCloudLayer {
@@ -58,7 +58,7 @@ export class PointCloudLayer {
         // Position and tint are set once at creation — atlas data is static
         p.x = sys.x;
         p.y = sys.y;
-        p.tint = ECONOMY_COLORS[sys.economyType].core;
+        p.tint = NEUTRAL_GLYPH.core;
 
         const scale = sys.isGateway
           ? POINT_CLOUD.dotRadius * POINT_CLOUD.gatewayScale / (POINT_CLOUD.textureSize / 2)

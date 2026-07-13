@@ -7,8 +7,6 @@ import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useUniverse } from "@/lib/hooks/use-universe";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
-import { TraitList } from "@/components/ui/trait-list";
-import { EconomyBadge } from "@/components/ui/economy-badge";
 import { ThemedPieChart } from "@/components/ui/themed-pie-chart";
 import { Badge } from "@/components/ui/badge";
 import { StatList, StatRow } from "@/components/ui/stat-row";
@@ -19,7 +17,6 @@ import { SystemConstructionSection } from "@/components/construction/system-cons
 import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { getPriceTrendPct } from "@/lib/utils/market";
-import { enrichTraits } from "@/lib/utils/traits";
 import { formatCredits, formatHeadcount } from "@/lib/utils/format";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
@@ -29,7 +26,6 @@ import { StabilityBadge } from "@/components/ui/stability-badge";
 import { GOODS } from "@/lib/constants/goods";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { getGoodColor } from "@/lib/constants/ui";
-import { computeTraitDanger } from "@/lib/engine/trait-gen";
 import type { GovernmentType } from "@/lib/types/game";
 
 // ── Economy goods list ─────────────────────────────────────────
@@ -93,28 +89,14 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     return universeData.factions.find((f) => f.id === factionId) ?? null;
   }, [universeData, systemInfo?.factionId, regionInfo?.dominantFactionId]);
 
-  const traits = useMemo(
-    () => enrichTraits(systemInfo?.traits ?? []),
-    [systemInfo?.traits],
-  );
-
   const systemEvents = useMemo(
     () => events.filter((e) => e.systemId === systemId),
     [events, systemId],
   );
 
-  // Connections
-  const connectionCount = useMemo(() => {
-    if (!universeData) return 0;
-    return universeData.connections.filter(
-      (c) => c.fromSystemId === systemId || c.toSystemId === systemId,
-    ).length;
-  }, [universeData, systemId]);
-
   // Economy info — net production per good from the system's industrial base.
   // Production (built base) and consumption (population) partition the goods into
   // net exporters (Produces) and net importers (Consumes).
-  const economyType = systemInfo?.economyType ?? "extraction";
   const { producedGoods, consumedGoods } = useMemo(() => {
     if (industry.visibility !== "visible") {
       return { producedGoods: [], consumedGoods: [] };
@@ -161,10 +143,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const govType: GovernmentType =
     factionInfo?.governmentType ?? regionInfo?.dominantGovernmentType ?? "frontier";
   const govDef = GOVERNMENT_TYPES[govType];
-  const traitDanger = computeTraitDanger(
-    (systemInfo?.traits ?? []).map((t) => ({ traitId: t.traitId, quality: t.quality })),
-  );
-  const totalDanger = traitDanger + govDef.dangerBaseline;
 
   // Population — realistic headcount from the LIVE tick-invalidated read (the
   // static substrate value is staleTime:Infinity and would show a frozen number).
@@ -208,9 +186,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                   <span className="text-sm text-text-tertiary">—</span>
                 )}
               </StatRow>
-              <StatRow label="Economy">
-                <EconomyBadge economyType={economyType} />
-              </StatRow>
               <StatRow label="Government">
                 <span className="text-sm text-white capitalize">{govDef.name}</span>
               </StatRow>
@@ -243,14 +218,8 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                   <span className="text-sm text-text-tertiary">—</span>
                 )}
               </StatRow>
-              <StatRow label="Traits">
-                <span className="text-sm text-text-primary">{traits.length}</span>
-              </StatRow>
-              <StatRow label="Connections">
-                <span className="text-sm text-text-primary">{connectionCount}</span>
-              </StatRow>
               <StatRow label="Danger">
-                <SystemDangerBadge systemId={systemId} baseDanger={totalDanger} />
+                <SystemDangerBadge systemId={systemId} baseDanger={govDef.dangerBaseline} />
               </StatRow>
               {systemInfo?.isGateway && (
                 <StatRow label="Gateway">
@@ -334,19 +303,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </CardContent>
         </Card>
       </div>
-
-      {/* System Traits — full width */}
-      {traits.length > 0 && (
-        <Card variant="bordered" padding="md">
-          <CardHeader
-            title="System Traits"
-            subtitle={`${traits.length} trait${traits.length !== 1 ? "s" : ""}`}
-          />
-          <CardContent>
-            <TraitList traits={traits} variant="full" />
-          </CardContent>
-        </Card>
-      )}
     </>
   );
 }

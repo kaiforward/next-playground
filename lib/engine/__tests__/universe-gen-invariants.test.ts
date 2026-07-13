@@ -1,15 +1,12 @@
 /**
  * Universe-generation invariants — multi-seed statistical validation.
  *
- * Validates physical-substrate invariants across many seeds:
- * 1. Feature quality tiers match rarity targets (50% tier 1, 35% tier 2, 15% tier 3).
- * 2. The substrate-driven economy types appear and none dominates — the
- *    "coherent + healthy" bar. Economy types derive from the physical substrate,
- *    so an even split is neither expected nor wanted (extraction/agricultural are
- *    pluralities); the population-gated 'industrial'/'tech' types are sparse until
- *    P4 calibration lifts the population magnitude.
- * 3. The trait catalog keeps a balanced strong-affinity spread (catalog data;
- *    affinities are vestigial, pending removal).
+ * Validates physical-substrate invariants across many seeds: the
+ * substrate-driven economy types appear and none dominates — the
+ * "coherent + healthy" bar. Economy types derive from the physical substrate,
+ * so an even split is neither expected nor wanted (extraction/agricultural are
+ * pluralities); the population-gated 'industrial'/'tech' types are sparse until
+ * P4 calibration lifts the population magnitude.
  *
  * Tests run full universe generation across multiple seeds for statistical confidence.
  */
@@ -26,7 +23,7 @@ import {
   REGION_NAMES,
 } from "@/lib/constants/universe-gen";
 import { buildGenParams } from "@/lib/world/gen";
-import type { EconomyType, QualityTier } from "@/lib/types/game";
+import type { EconomyType } from "@/lib/types/game";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -45,63 +42,7 @@ function generateAll(): GeneratedUniverse[] {
 // Pre-generate all universes once (shared across tests in this file)
 const universes = generateAll();
 
-// ── 1. Trait Quality Distributions ──────────────────────────────
-
-describe("Trait quality distributions across seeds", () => {
-  it("aggregate distribution matches rarity targets (50/35/15 ±5%)", () => {
-    const tierCounts: Record<QualityTier, number> = { 1: 0, 2: 0, 3: 0 };
-    let totalTraits = 0;
-
-    for (const universe of universes) {
-      for (const system of universe.systems) {
-        for (const trait of system.traits) {
-          tierCounts[trait.quality]++;
-          totalTraits++;
-        }
-      }
-    }
-
-    const pct1 = tierCounts[1] / totalTraits;
-    const pct2 = tierCounts[2] / totalTraits;
-    const pct3 = tierCounts[3] / totalTraits;
-
-    // Allow ±5% tolerance from targets
-    expect(pct1).toBeGreaterThan(0.45);
-    expect(pct1).toBeLessThan(0.55);
-    expect(pct2).toBeGreaterThan(0.30);
-    expect(pct2).toBeLessThan(0.40);
-    expect(pct3).toBeGreaterThan(0.10);
-    expect(pct3).toBeLessThan(0.20);
-  });
-
-  it("every individual seed stays within ±8% of rarity targets", () => {
-    for (const universe of universes) {
-      const tierCounts: Record<QualityTier, number> = { 1: 0, 2: 0, 3: 0 };
-      let totalTraits = 0;
-
-      for (const system of universe.systems) {
-        for (const trait of system.traits) {
-          tierCounts[trait.quality]++;
-          totalTraits++;
-        }
-      }
-
-      const pct1 = tierCounts[1] / totalTraits;
-      const pct2 = tierCounts[2] / totalTraits;
-      const pct3 = tierCounts[3] / totalTraits;
-
-      // Wider tolerance per-seed (smaller sample) but still meaningful
-      expect(pct1).toBeGreaterThan(0.42);
-      expect(pct1).toBeLessThan(0.58);
-      expect(pct2).toBeGreaterThan(0.27);
-      expect(pct2).toBeLessThan(0.43);
-      expect(pct3).toBeGreaterThan(0.07);
-      expect(pct3).toBeLessThan(0.23);
-    }
-  });
-});
-
-// ── 2. Economy Type Spread ──────────────────────────────────────
+// ── Economy Type Spread ──────────────────────────────────────────
 
 const ALL_ECONOMY_TYPES: EconomyType[] = [
   "agricultural", "extraction", "refinery", "industrial", "tech", "core",

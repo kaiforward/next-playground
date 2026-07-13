@@ -11,7 +11,6 @@
  */
 
 import { clamp } from "@/lib/utils/math";
-import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 
 export interface MarketTickEntry {
   goodId: string;
@@ -120,7 +119,7 @@ export function simulateEconomyTick(
 /**
  * Pre-resolved inputs for building a MarketTickEntry. Callers resolve
  * data-source-specific values (DB vs SimWorld) into this common shape; the
- * builder handles shared computation (trait bonus, gov consumption boost).
+ * builder handles shared computation (gov consumption boost).
  */
 export interface TickEntryInput {
   goodId: string;
@@ -142,8 +141,6 @@ export interface TickEntryInput {
   baseConsumptionRate?: number;
   /** Government consumption boost for this good. */
   govConsumptionBoost: number;
-  /** System traits (already validated). */
-  traits: GeneratedTrait[];
   /** Production-only suppression multiplier (1 = none). Strike state from unrest. */
   productionSuppress?: number;
 }

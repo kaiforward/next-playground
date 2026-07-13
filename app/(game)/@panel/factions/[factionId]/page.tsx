@@ -6,7 +6,6 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { EconomyBadge } from "@/components/ui/economy-badge";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatList, StatRow } from "@/components/ui/stat-row";
@@ -191,7 +190,6 @@ function FactionDetailContent({ factionId }: { factionId: string }) {
                           <Badge color="amber">Gateway</Badge>
                         )}
                       </span>
-                      <EconomyBadge economyType={s.economyType} />
                     </Link>
                   </li>
                 ))}

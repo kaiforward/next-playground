@@ -1,20 +1,16 @@
 /**
  * Substrate generation — pure, zero DB dependency,
  * deterministic given a seeded RNG. Rolls a system's sun class, body set,
- * per-body surface partition (deposit slots + quality bands), population, and
- * narrative features. Replaces the old trait-rolling path.
+ * per-body surface partition (deposit slots + quality bands), and population.
  */
 import type {
   BodyArchetypeId, ResourceVector, SunClass,
 } from "@/lib/types/game";
 import { BODY_ARCHETYPES, SUN_CLASSES, type SunClassDef } from "@/lib/constants/bodies";
 import { emptyResourceVector, sumResourceVectors, RESOURCE_TYPES } from "./resources";
-import { ALL_TRAIT_IDS, QUALITY_TIERS } from "@/lib/constants/traits";
-import { toQualityTier } from "@/lib/types/guards";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
-import type { GeneratedTrait } from "./trait-gen";
 import type { RNG } from "./universe-gen";
-import { weightedPick, randInt } from "./universe-gen";
+import { randInt } from "./universe-gen";
 import { depositGradeVector } from "@/lib/engine/deposit-grade";
 import { partitionBody, rollQualityBand } from "./substrate-space";
 
@@ -39,7 +35,6 @@ export interface GeneratedSubstrate {
   population: number;
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
   bodyDanger: number;
-  features: GeneratedTrait[];
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
   /** Total finite surface space across all bodies (SPACE_PER_SIZE × Σ size). */
@@ -104,24 +99,6 @@ function rollBody(rng: RNG, archId: BodyArchetypeId): GeneratedBody {
   };
 }
 
-function rollFeatures(rng: RNG): GeneratedTrait[] {
-  const count = randInt(rng, SUBSTRATE_GEN.FEATURE_COUNT.min, SUBSTRATE_GEN.FEATURE_COUNT.max);
-  const pool = [...ALL_TRAIT_IDS];
-  const features: GeneratedTrait[] = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
-    const idx = Math.floor(rng() * pool.length);
-    const traitId = pool[idx];
-    pool.splice(idx, 1);
-    const quality = toQualityTier(Number(weightedPick(rng, {
-      "1": QUALITY_TIERS[1].rarity,
-      "2": QUALITY_TIERS[2].rarity,
-      "3": QUALITY_TIERS[3].rarity,
-    })));
-    features.push({ traitId, quality });
-  }
-  return features;
-}
-
 export function generateSubstrate(rng: RNG): GeneratedSubstrate {
   const sunClass = rollSunClass(rng);
   const sun = SUN_CLASSES[sunClass];
@@ -134,7 +111,6 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
 
   const { availableSpace, generalSpace, habitableSpace, slotCap, yieldMult, bodyDanger } =
     substrateAggregates(bodies);
-  const features = rollFeatures(rng);
 
   // Bare substrate: no seeded industry or population. Faction capitals are stamped with the home-system
   // prefab (see world-gen); every other system starts as an empty deposit field and is colonised into.
@@ -146,7 +122,6 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
     popCap: 0,
     population: 0,
     bodyDanger,
-    features,
     buildings: {},
     availableSpace,
     generalSpace,

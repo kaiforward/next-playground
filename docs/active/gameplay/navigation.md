@@ -46,7 +46,6 @@ Systems retain a danger readout on the overview panel — it is player-independe
 | Source | Contribution |
 |---|---|
 | Government baseline | 0-10% (Frontier highest) |
-| Feature danger (`computeTraitDanger`) | -3% to +8% per feature. Positive: subspace_rift (+8%), pirate_stronghold (+8%), dark_nebula (+6%), ancient_minefield (+5%), ion_storm_corridor (+4%), solar_flare_activity (+3%), binary_star (+3%). Negative: lagrange_stations (-3%). Sums across the system's features |
 | Body danger | +5% per volcanic-world body (sum of body-archetype danger baselines) |
 
 Nothing consumes danger mechanically — there is no arrival-danger pipeline. Events and the future war layer are the intended consumers.

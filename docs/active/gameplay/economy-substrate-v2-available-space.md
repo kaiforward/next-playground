@@ -2,8 +2,8 @@
 
 > **Status: Active** — shipped in the Economy Substrate v2 milestone, replacing v1's resource-magnitude
 > vector with finite per-body space. Sits *under* the SP3 input-gating cascade (unchanged). This is the
-> detailed substrate reference; [system-traits.md](./system-traits.md) is the system-level overview and
-> [economy.md](./economy.md) covers how the substrate drives production, consumption, and pricing.
+> detailed substrate reference; [economy.md](./economy.md) covers how the substrate drives production,
+> consumption, and pricing.
 > Implementation: `lib/engine/substrate-space.ts` (pure partition/quality), `lib/engine/body-gen.ts`
 > (generation), `lib/engine/industry-seed.ts` (build-out), constants in `lib/constants/substrate-gen.ts`
 > + `lib/constants/bodies.ts`.

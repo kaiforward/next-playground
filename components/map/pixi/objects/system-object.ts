@@ -2,17 +2,11 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SystemVisibility } from "@/lib/types/game";
 import type { LODState } from "../lod";
-import { ECONOMY_COLORS, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
+import { NEUTRAL_GLYPH, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
   fill: TEXT_COLORS.primary,
-  fontFamily: "system-ui, -apple-system, sans-serif",
-  align: "center",
-});
-
-const ECON_STYLE = new TextStyle({
-  fontSize: SIZES.systemEconLabelSize,
   fontFamily: "system-ui, -apple-system, sans-serif",
   align: "center",
 });
@@ -56,8 +50,6 @@ function lodVisuallyEqual(a: LODState, b: LODState): boolean {
   return (
     a.showSystemNames === b.showSystemNames &&
     a.systemNameAlpha === b.systemNameAlpha &&
-    a.showEconomyLabels === b.showEconomyLabels &&
-    a.detailAlpha === b.detailAlpha &&
     a.showPillContent === b.showPillContent &&
     a.pillContentAlpha === b.pillContentAlpha &&
     a.showGlow === b.showGlow &&
@@ -74,8 +66,6 @@ export class SystemObject extends Container {
   private selectionRing: Graphics;
   private nameBg: Graphics;
   private nameLabel: Text;
-  private econBg: Graphics;
-  private econLabel: Text;
   private pricePill: PricePill;   // top-right — price-ramp delta
   private eventPill: EventPill;   // bottom-right — dominant event icon + count
 
@@ -138,13 +128,6 @@ export class SystemObject extends Container {
     this.nameLabel.position.set(0, LABEL.offsetY);
     this.nameBg.position.set(0, LABEL.offsetY);
 
-    // Economy label (same backing treatment)
-    this.econBg = new Graphics();
-    this.addChild(this.econBg);
-    this.econLabel = new Text({ text: "", style: ECON_STYLE, resolution: TEXT_RESOLUTION });
-    this.econLabel.anchor.set(0.5, 0);
-    this.addChild(this.econLabel);
-
     // Price pill (top-right of the glyph) — tinted to the price ramp.
     this.pricePill = this.createPricePill();
 
@@ -179,20 +162,19 @@ export class SystemObject extends Container {
     if (econChanged || visibilityChanged) {
       this.currentEconomy = data.economyType;
       this.currentVisibility = data.visibility;
-      const colors = ECONOMY_COLORS[data.economyType];
       const undeveloped = !data.developed;
 
-      // Undeveloped systems carry an economy-type label but no built economy, so
-      // they read as a hollow ring (labelled potential) rather than a filled disc
-      // (live economy). The ring keeps the economy colour; a faint fill stops the
-      // small marker from looking like a hole.
+      // Undeveloped systems carry no built economy, so they read as a hollow
+      // ring (labelled potential) rather than a filled disc (live economy).
+      // The ring keeps the glyph colour; a faint fill stops the small marker
+      // from looking like a hole.
       this.core.clear();
       this.core.circle(0, 0, SIZES.systemCoreRadius);
       if (undeveloped) {
-        this.core.fill({ color: colors.core, alpha: GLYPH.undevelopedFillAlpha });
-        this.core.stroke({ color: colors.core, width: GLYPH.undevelopedRingWidth });
+        this.core.fill({ color: NEUTRAL_GLYPH.core, alpha: GLYPH.undevelopedFillAlpha });
+        this.core.stroke({ color: NEUTRAL_GLYPH.core, width: GLYPH.undevelopedRingWidth });
       } else {
-        this.core.fill(colors.core);
+        this.core.fill(NEUTRAL_GLYPH.core);
       }
       this.core.alpha = isUnknown ? 0.4 : 1;
 
@@ -203,10 +185,6 @@ export class SystemObject extends Container {
         this.highlight.fill({ color: 0xffffff, alpha: isUnknown ? 0.2 : 0.6 });
         this.highlight.position.set(-3, -3);
       }
-
-      this.econLabel.text = data.economyType.toUpperCase();
-      this.econLabel.style.fill = colors.core;
-      this.drawLabelBg(this.econBg, this.econLabel);
     }
 
     // Halo is the overlay lens: it owns its own draw path so navigation state
@@ -224,25 +202,13 @@ export class SystemObject extends Container {
     }
 
     // Name — only update text + backing when changed (avoids Pixi texture
-    // regeneration for 600+ systems). The economy line stacks under the name
-    // *backing*, so its Y only shifts when the name's measured height changes —
-    // recompute it here, inside the same guard, not every update.
+    // regeneration for 600+ systems).
     if (data.name !== this.currentName) {
       this.currentName = data.name;
       this.nameLabel.text = data.name;
       this.drawLabelBg(this.nameBg, this.nameLabel);
-
-      // Use the name's measured height (≈14), not its 11px font size, or the
-      // two labels overlap.
-      const econY = LABEL.offsetY + this.nameLabel.height + LABEL.bgPadY * 2 + LABEL.lineGap;
-      this.econLabel.position.set(0, econY);
-      this.econBg.position.set(0, econY);
     }
     this.nameLabel.alpha = isUnknown ? 0.3 : 1;
-
-    // Unknown systems: hide economy label (ship/price/event pills gated in setLOD)
-    this.econLabel.visible = !isUnknown;
-    this.econBg.visible = !isUnknown;
 
     if (eventsChanged || visibilityChanged) {
       this.currentEventTypes = eventTypes.split(",").filter(Boolean);
@@ -274,7 +240,7 @@ export class SystemObject extends Container {
   private redrawHalo(data: SystemNodeData, isUnknown: boolean) {
     const tint = data.priceTint;
     const hasPrice = tint != null;
-    const haloColor = hasPrice ? tint : ECONOMY_COLORS[data.economyType].glow;
+    const haloColor = hasPrice ? tint : NEUTRAL_GLYPH.glow;
     // Undeveloped systems (no live economy, never priced) get a dimmed glow so
     // the filled-vs-hollow distinction reads at the halo level too.
     const haloAlpha = isUnknown
@@ -350,13 +316,6 @@ export class SystemObject extends Container {
     this.nameLabel.alpha = nameAlpha;
     this.nameBg.visible = lod.showSystemNames;
     this.nameBg.alpha = nameAlpha;
-
-    // Unknown systems: economy label hidden regardless of LOD
-    const showEcon = lod.showEconomyLabels && !isUnknown;
-    this.econLabel.visible = showEcon;
-    this.econLabel.alpha = lod.detailAlpha;
-    this.econBg.visible = showEcon;
-    this.econBg.alpha = lod.detailAlpha;
 
     // ── Corner pills: two-stage reveal ──
     // The coloured pill *shape* (bg) shows whenever its data is present — it

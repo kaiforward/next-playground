@@ -4,7 +4,6 @@
  */
 
 import type { EconomyType, ResourceVector, SunClass } from "@/lib/types/game";
-import type { GeneratedTrait } from "./trait-gen";
 import { generateSubstrate, substrateAggregates, type GeneratedBody } from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
 import { HOME_SYSTEM_PREFAB, homeworldGardenBody } from "./homeworld-prefab";
@@ -35,8 +34,6 @@ export interface GeneratedSystem {
   population: number;
   /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
   bodyDanger: number;
-  /** Narrative features (the pruned trait subset). */
-  traits: GeneratedTrait[];
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
   /** Total finite surface space across all bodies. */
@@ -118,20 +115,6 @@ export function distance(ax: number, ay: number, bx: number, by: number): number
 
 export function randInt(rng: RNG, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
-}
-
-export function weightedPick(
-  rng: RNG,
-  weights: Record<string, number>,
-): string {
-  const entries = Object.entries(weights);
-  const total = entries.reduce((sum, [, w]) => sum + w, 0);
-  let roll = rng() * total;
-  for (const [key, weight] of entries) {
-    roll -= weight;
-    if (roll <= 0) return key;
-  }
-  return entries[entries.length - 1][0];
 }
 
 // ── Union-Find (for Kruskal's MST) ─────────────────────────────
@@ -394,7 +377,6 @@ export function generateSystems(
       popCap: substrate.popCap,
       population: substrate.population,
       bodyDanger: substrate.bodyDanger,
-      traits: substrate.features,
       buildings: substrate.buildings,
       availableSpace: substrate.availableSpace,
       generalSpace: substrate.generalSpace,

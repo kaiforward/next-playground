@@ -7,7 +7,6 @@ import type { ModifierRow } from "@/lib/engine/events";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { computeSystemLabourSnapshot, buildingProduction } from "@/lib/engine/industry";
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
-import { toTraitId, toQualityTier } from "@/lib/types/guards";
 import { economyShardOrder } from "@/lib/engine/shard-order";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
@@ -80,10 +79,6 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
         demandRate: m.demandRate,
         storageCapacity: m.storageCapacity,
-        traits: sys.traits.map((t) => ({
-          traitId: toTraitId(t.traitId),
-          quality: toQualityTier(t.quality),
-        })),
       });
     }
     return Promise.resolve(views);

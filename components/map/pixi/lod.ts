@@ -19,16 +19,13 @@ export interface LODState {
 
   showSystemDots: boolean;
   showSystemNames: boolean;
-  showEconomyLabels: boolean;
   showTerritories: boolean;
   showRegionLabels: boolean;
   /** Scale factor for system dots at low zoom */
   systemDotScale: number;
   /** Alpha for system name labels (smooth fade) */
   systemNameAlpha: number;
-  /** Alpha for economy labels */
-  detailAlpha: number;
-  /** Alpha for the Regions (economy) territory layer. */
+  /** Alpha for the shared territory/choropleth layers (regions, stability, population, development). */
   territoryAlpha: number;
   /** Alpha for the Political (faction) territory layer. */
   politicalTerritoryAlpha: number;
@@ -69,13 +66,14 @@ export interface FadeConfig {
 
 /**
  * Tweak these to retune the map. Each key is one fading layer. The territory
- * configs intentionally start with the same shape so political and regions
- * mode read the same visually until product decides otherwise.
+ * configs intentionally start with the same shape so the political layer and
+ * the shared choropleth layers (regions, stability, population, development)
+ * read the same visually until product decides otherwise.
  */
 const LAYER_FADE = {
   /** Faction tint: full strength when zoomed out, half strength up close. */
   politicalTerritory: { start: 0.3, end: 0.7, min: 0.5 },
-  /** Region (economy) tint: same shape as political for visual parity. */
+  /** Shared choropleth alpha (regions/stability/population/development): same shape as political for visual parity. */
   regionsTerritory: { start: 0.3, end: 0.7, min: 0.5 },
   /** Region name labels: fade out before deep zoom — text clutters systems. */
   regionLabels: { start: 0.3, end: 0.5, min: 0 },
@@ -114,12 +112,11 @@ export function computeLOD(zoom: number): LODState {
     showSystemNames: zoom > 0.8,
     systemNameAlpha: smoothStep(0.8, 0.9, zoom),
 
-    // Economy labels ride the same 0.8–0.9 text band as the name.
-    showEconomyLabels: zoom > 0.8,
-    detailAlpha: smoothStep(0.8, 0.9, zoom),
-
-    // Territories never cull — they're the spatial frame for both modes.
-    // Each layer reads its own alpha so political and regions can diverge.
+    // Territories never cull — they're the spatial frame for every
+    // territory/choropleth mode (political, regions, stability, population,
+    // development). Political reads its own alpha; the other four share
+    // `territoryAlpha` so they can diverge from political but stay in sync
+    // with each other.
     showTerritories: true,
     territoryAlpha: computeFade(zoom, LAYER_FADE.regionsTerritory),
     politicalTerritoryAlpha: computeFade(zoom, LAYER_FADE.politicalTerritory),

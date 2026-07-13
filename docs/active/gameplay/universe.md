@@ -1,6 +1,6 @@
 # Universe & Map
 
-The game world — star systems, regions, connections, traits, and how the map is explored.
+The game world — star systems, regions, connections, and how the map is explored.
 
 ---
 
@@ -24,9 +24,25 @@ Each region has:
 
 Regions are purely geographic now — they group systems for naming, orientation, and dominant-economy display. They no longer carry a government type. Government is a property of the owning **faction**, sourced per-system from the faction that controls it (see [faction-system.md](./faction-system.md) §1). A region's "dominant government" shown on the map is derived from its most prevalent owning faction, not stored on the region.
 
-### System Traits & Economy Type
+### Economy Type
 
-Every system is built from a **physical substrate** — a sun and its bodies (planets, asteroid belts, gas giants), each holding a resource vector — plus **0–2 narrative features**. Economy type is derived **bottom-up** from the system's aggregate body resources and population, never assigned directly. Features (precursor ruins, anomalies, derelict fleets) carry no economic role — they modify danger baselines and gate exploration sites (the exploration layer is planned — see the [grand-strategy vision](../../planned/grand-strategy-vision.md)). The substrate model, feature catalog, and derivation rules live in [system-traits.md](./system-traits.md).
+Every system is built from a **physical substrate** — one sun and 1–N bodies (planets, asteroid belts, gas giants), each with a resource vector. Economy type is derived **bottom-up** from a system's aggregate body resources and population, never assigned directly.
+
+**Sun class** gates which body archetypes a system can roll and how many bodies it has (`SUN_CLASSES` in `lib/constants/bodies.ts`):
+
+| Sun class | Character | Favours |
+|---|---|---|
+| Yellow (Sol-like) | Temperate, most permissive | Habitable subtypes, balanced mixes |
+| Blue–white (hot) | High-energy inner system | Volcanic, barren rock, asteroid belts |
+| Orange dwarf (cool) | Dim, long-lived | Ocean/ice worlds, gas, marginal habitables |
+| Red dwarf (cold) | Faint frontier | Frozen worlds, gas giants, belts; sparse population |
+
+`deriveEconomyTypeLabel` (`lib/engine/economy-type.ts`) reads each resource's effective deposit potential (slot capacity × yield quality, summed across the system's bodies) plus population, and maps a system to one of six types:
+
+- **High-population systems** (population above a high threshold) read as developed: raw-dominant deposits → `industrial`; neither food- nor raw-dominant → `tech`; otherwise → `core`.
+- **Sparse/mid-population systems** follow their dominant deposit: food-dominant (arable + biomass share) → `agricultural`; raw-dominant (ore + minerals + gas + radioactive share) → `extraction`; otherwise (a mixed raw base) → `refinery`.
+
+Because raw building blocks are needed in huge volume and most bodies carry *some* extractable deposit, the galaxy reads **extraction-dominant by design** — the intended barren-but-alive shape (see [the available-space model](./economy-substrate-v2-available-space.md) for how deposit slots and habitability produce it), not a generation flaw. The label itself is **display-only**: nothing in the economy tick reads economy type — production derives from `WorldBuilding` counts and per-resource yield (see [economy.md](./economy.md)); the label drives only UI badges and `Region.dominantEconomy`.
 
 ### Systems
 
@@ -34,7 +50,6 @@ Each system has:
 - **Name**: Region-based naming (e.g., "Nexus-1-7")
 - **Economy type**: One of 6 types (agricultural, extraction, refinery, industrial, tech, core), derived from the system's aggregate body resources + population
 - **Bodies**: a sun + 1–N bodies, each with a resource vector (the economic substrate)
-- **Features**: 0–2 narrative traits with quality tiers
 - **Coordinates**: Fixed position via Poisson-disc sampling, assigned to nearest region
 - **Market**: one market per system carrying all 26 goods (there is no separate station entity — the market is keyed by system)
 - **Gateway flag**: 1-2 systems per region pair serve as inter-region connection points
@@ -120,7 +135,6 @@ Per-player, ship-based fog of war is planned: the galaxy's topology stays public
 
 When a system is selected on the map, the side panel shows:
 - System name, economy type, region, government
-- Compact trait list (top trait with quality stars, trait count)
 - Active events
 
 ### Route Planning (planned)
@@ -137,7 +151,6 @@ There is no interactive route planning — only the selection focus ring on a gl
 
 When viewing a system, the detail page shows:
 - System name, economy type badge, region name, government type
-- **Traits section**: All traits with quality stars (★★☆ for quality 2), name, and quality-appropriate description
 - Detail tabs: Overview, Market, Industry, Logistics, Population, Astrography
 
 ---
@@ -153,7 +166,7 @@ World-gen records a `startingSystemId` on `meta` — a core-economy system in th
 The configurable universe and tile-based map renderer are in place — scale ceiling is a performance target, not a design constraint. The faction foundation has also shipped: systems belong to factions with colored territory visualization, and government type is sourced per-faction rather than per-region (see [faction-system.md](./faction-system.md)). Remaining planned changes are war- and facility-oriented:
 
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
-- **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls (see [system-traits.md](./system-traits.md) §2.2)
+- **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls
 - **World-gen start state**: the grand-strategy pivot ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md) §5.4) replaces "factions own everything at seed" with small developed faction cores in a mostly-unclaimed galaxy (colonisation becomes a core loop)
 
 ---

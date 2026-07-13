@@ -431,7 +431,7 @@ Still open:
 ## 15. Relationship to existing docs
 
 - **[economy.md](../active/gameplay/economy.md)** (active) — the current single-stock model. This vision supersedes its pricing-anchor, economy-type, prosperity, and event-lever sections; the slippage/spread anti-exploit mechanics and the stock substrate carry forward.
-- **[system-traits.md](../active/gameplay/system-traits.md)** (active) — reframed into the two-layer bodies/features model (§3), with resource traits folded into the resource base.
+- **[universe.md](../active/gameplay/universe.md)** (active) — carries the sun-class table and `deriveEconomyTypeLabel` economy-type derivation that `system-traits.md` documented; that doc's narrative-feature/trait catalog is retired, not reframed.
 - **[faction-system.md](../active/gameplay/faction-system.md)** (active) — gains an economic-management dimension: monetary treasury, build decisions, directed logistics, and military-as-industrial-base (§12). Grounds its "planned" military-output and faction-facility hooks.
 - **production.md + production-roster.md** (deleted with the pivot; git history) — their goods vocabulary and supply chains shipped via SP1–SP3.
 - **player-facilities.md** (deleted with the pivot; git history) — the personal-player build system is retired; the faction build system is the game.

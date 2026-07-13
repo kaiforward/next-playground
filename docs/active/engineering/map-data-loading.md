@@ -24,7 +24,7 @@ Mixing these tiers would force the cacheable 80% of the payload to inherit the u
 
 ### Tier 1 — Atlas (the whole galaxy, loaded once)
 
-A single lightweight point-cloud of the entire universe: every system's id, position, region, economy type, gateway flag, and owning faction, plus all connections, region/faction metadata, and a `meta` block (`mapSize`, `systemCount`, `seed`). No names, descriptions, traits, prices, or events — just enough to draw the dots, region territories, and the navigation/adjacency graph.
+A single lightweight point-cloud of the entire universe: every system's id, position, region, economy type, gateway flag, and owning faction, plus all connections, region/faction metadata, and a `meta` block (`mapSize`, `systemCount`, `seed`). No names, descriptions, prices, or events — just enough to draw the dots, region territories, and the navigation/adjacency graph.
 
 - Fetched once at mount, held with `staleTime: Infinity` in TanStack Query.
 - Drives the universe-zoom point cloud, territory polygons, and the in-memory adjacency graph used for pathfinding.
@@ -39,7 +39,7 @@ The map is divided into a fixed 16×16 grid over the world (`lib/engine/tiles.ts
 
 Tile data comes in two flavours with deliberately different caching:
 
-**Static tile data** — names, economy types, trait hints. This is "star chart" data: it never changes for the life of a generated world.
+**Static tile data** — names, economy types. This is "star chart" data: it never changes for the life of a generated world.
 - One request per tile: `/api/game/systems/tile/static?col=X&row=Y`.
 - `staleTime: Infinity`, `gcTime: Infinity` — fetched once per tile, never refetched.
 - Activates slightly before names render (zoom ~0.35) so labels are ready when they fade in. Viewport callbacks are throttled to avoid a fetch storm during continuous zoom.
@@ -56,7 +56,7 @@ Source: `lib/services/dynamic-tiles.ts`, `app/api/game/systems/dynamic/route.ts`
 
 ### System detail (on click)
 
-Full per-system detail (description, traits, prices, stock, active events) loads on demand when a system is clicked, via the system-detail endpoint. Every system returns full intel — there is no visibility gate in this slice.
+Full per-system detail (description, prices, stock, active events) loads on demand when a system is clicked, via the system-detail endpoint. Every system returns full intel — there is no visibility gate in this slice.
 
 ---
 

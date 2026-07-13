@@ -81,9 +81,9 @@ Each good also has volume (1-2 cargo slots) and mass (0.5-2.5 kg) — stored in 
 
 ## Production & Consumption
 
-Production and consumption are **physical** — they derive from each system's seeded industrial base and population, not from an economy-type rate table. Economy type is a derived display label (see [system-traits.md](./system-traits.md)).
+Production and consumption are **physical** — they derive from each system's seeded industrial base and population, not from an economy-type rate table. Economy type is a derived display label (see [Universe](./universe.md#economy-type)).
 
-**Production** — capacity-driven and **input-gated**, computed per good `g` from the system's `WorldBuilding` rows (see [system-traits.md](./system-traits.md) §1.5):
+**Production** — capacity-driven and **input-gated**, computed per good `g` from the system's `WorldBuilding` rows:
 
 ```
 production_g = Σ(buildings whose output good is g)  count × outputPerUnit × labourFulfillment × inputGate_g × yield_g
@@ -95,7 +95,7 @@ yield_g           = system yieldMult[resource(g)]  for tier-0 extractables, else
 
 - **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, gas, …), each extracted from a body resource deposit with no recipe (`inputGate = 1`). Their building count is capped at world-gen by the system's **deposit slots** (a per-resource extractor ceiling), and their output is scaled by the resource's **yield multiplier** (`yieldMult`, the mean quality of the filled slots) — so both how *much* (slots) and how *rich* (quality) a body's deposits are drive extraction. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
 - **Tier-1+ manufacturers** — bounded by **general space** and labour, **and input-gated**: each building type carries an `inputs` recipe and draws those inputs from local market stock each tick. A manufacturer short of any input throttles its output proportionally (`inputGate_g < 1`), so shortages cascade down the chain. See [Supply Chain & Input-Gating](#supply-chain--input-gating).
-- **Population centres** (the `housing` building type) — a non-production type: they do not appear in production sums. Instead `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, sourced **entirely from built centres** on a body's habitable land — there is no body baseline (the v1 `bodyBaselinePopCap` is retired). Centres are sized at seed to staff the system's labour demand, but their `count` is no longer frozen — both it and the `popCap` it yields are **downward-mutable**, recomputed live each economy shard from the surviving housing (see [Infrastructure Decay](#infrastructure-decay)). See [system-traits.md](./system-traits.md) §1.4.
+- **Population centres** (the `housing` building type) — a non-production type: they do not appear in production sums. Instead `popCap = Σ(pop-centre count × POP_CENTRE_DENSITY)`, sourced **entirely from built centres** on a body's habitable land — there is no body baseline (the v1 `bodyBaselinePopCap` is retired). Centres are sized at seed to staff the system's labour demand, but their `count` is no longer frozen — both it and the `popCap` it yields are **downward-mutable**, recomputed live each economy shard from the surviving housing (see [Infrastructure Decay](#infrastructure-decay)). See [the available-space model](./economy-substrate-v2-available-space.md).
 
 **Consumption** — two channels drain each good's stock:
 

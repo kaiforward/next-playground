@@ -38,8 +38,6 @@ export interface SimSystem {
   population: number;
   /** Maximum sustainable population (logistic growth cap). */
   popCap: number;
-  /** System traits from generation (used for production modifiers). */
-  traits: { traitId: string; quality: number }[];
   /** Unrest accumulator (0…1) — integral of demand-weighted dissatisfaction. */
   unrest: number;
   /** Seeded industrial base — buildingType → whole-integer level count. */

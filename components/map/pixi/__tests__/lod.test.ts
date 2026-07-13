@@ -88,28 +88,23 @@ describe("system text shares one 0.8 → 0.9 fade band", () => {
   it("keeps all text hidden at and below 0.8", () => {
     const lod = computeLOD(0.8);
     expect(lod.showSystemNames).toBe(false);
-    expect(lod.showEconomyLabels).toBe(false);
     expect(lod.showPillContent).toBe(false);
     expect(lod.systemNameAlpha).toBe(0);
-    expect(lod.detailAlpha).toBe(0);
     expect(lod.pillContentAlpha).toBe(0);
   });
 
   it("fully reveals all text by 0.9", () => {
     const lod = computeLOD(0.9);
     expect(lod.showSystemNames).toBe(true);
-    expect(lod.showEconomyLabels).toBe(true);
     expect(lod.showPillContent).toBe(true);
     expect(lod.systemNameAlpha).toBe(1);
-    expect(lod.detailAlpha).toBe(1);
     expect(lod.pillContentAlpha).toBe(1);
   });
 
-  it("fades names, economy detail, and pill content in lockstep", () => {
+  it("fades names and pill content in lockstep", () => {
     const lod = computeLOD(0.85);
     expect(lod.systemNameAlpha).toBeGreaterThan(0);
     expect(lod.systemNameAlpha).toBeLessThan(1);
-    expect(lod.detailAlpha).toBe(lod.systemNameAlpha);
     expect(lod.pillContentAlpha).toBe(lod.systemNameAlpha);
   });
 });

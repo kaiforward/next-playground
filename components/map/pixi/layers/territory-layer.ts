@@ -1,9 +1,9 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
-import { BG_COLOR, ECONOMY_COLORS, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
+import { TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
 import { computeTerritoryPolygons } from "../territory-utils";
-import type { AtlasSystem, EconomyType } from "@/lib/types/game";
+import type { AtlasSystem } from "@/lib/types/game";
 
 const REGION_NAME_STYLE = new TextStyle({
   fontSize: 64,
@@ -19,15 +19,21 @@ interface RegionInfo {
   name: string;
 }
 
+/**
+ * Pixi layer that draws region territory outlines: a uniform neutral-slate
+ * border per region, no fill. Same Voronoi-union approach as the other
+ * territory-band layers, but cells are grouped by `regionId` and the border
+ * carries no economy or faction tint — it's a plain spatial outline. Region
+ * name labels sit at each region's system centroid.
+ */
 export class TerritoryLayer {
   readonly container = new Container();
   private territoryGraphics = new Graphics();
   private labelContainer = new Container();
   private regionLabels = new Map<string, Text>();
 
-  // Cached Voronoi results for lightweight fill-only redraws
+  // Cached Voronoi results for lightweight border-only redraws
   private cachedTerritories: Map<string, [number, number][][][]> | null = null;
-  private cachedRegionEconomy: Map<string, EconomyType> | null = null;
   private lastRegionIds: string[] = [];
 
   constructor() {
@@ -36,7 +42,7 @@ export class TerritoryLayer {
   }
 
   /**
-   * Compute and render filled territory polygons per region.
+   * Compute and render region border polygons.
    * Called when system data changes (not per frame).
    */
   sync(systems: AtlasSystem[], regions: RegionInfo[], mapSize: number) {
@@ -50,30 +56,6 @@ export class TerritoryLayer {
     const delaunay = Delaunay.from(points);
     const voronoi = delaunay.voronoi([0, 0, mapSize, mapSize]);
 
-    // Compute dominant economy per region for fill tinting
-    const regionEconomyCounts = new Map<string, Map<EconomyType, number>>();
-    for (const sys of systems) {
-      let counts = regionEconomyCounts.get(sys.regionId);
-      if (!counts) {
-        counts = new Map();
-        regionEconomyCounts.set(sys.regionId, counts);
-      }
-      counts.set(sys.economyType, (counts.get(sys.economyType) ?? 0) + 1);
-    }
-
-    const regionDominantEconomy = new Map<string, EconomyType>();
-    for (const [regionId, counts] of regionEconomyCounts) {
-      let maxCount = 0;
-      let dominant: EconomyType = "industrial";
-      for (const [econ, count] of counts) {
-        if (count > maxCount) {
-          maxCount = count;
-          dominant = econ;
-        }
-      }
-      regionDominantEconomy.set(regionId, dominant);
-    }
-
     // Compute territory polygons by unioning Voronoi cells per region
     const territories = computeTerritoryPolygons(
       systems.length,
@@ -81,12 +63,11 @@ export class TerritoryLayer {
       (i) => systems[i].regionId,
     );
 
-    // Cache for lightweight fill updates
+    // Cache for lightweight border redraws
     this.cachedTerritories = territories;
-    this.cachedRegionEconomy = regionDominantEconomy;
 
-    // Draw fills
-    this.drawFills();
+    // Draw borders
+    this.drawBorders();
 
     // Rebuild labels only if regions changed
     const regionIds = regions.map((r) => r.id).sort();
@@ -99,37 +80,36 @@ export class TerritoryLayer {
     }
   }
 
-  /** Redraw only polygon fills (no Voronoi recompute). */
-  private drawFills() {
-    if (!this.cachedTerritories || !this.cachedRegionEconomy) return;
+  /** Redraw only polygon borders (no Voronoi recompute). No fill — transparent interior. */
+  private drawBorders() {
+    if (!this.cachedTerritories) return;
 
     this.territoryGraphics.clear();
 
-    for (const [regionId, multiPoly] of this.cachedTerritories) {
-      const economy = this.cachedRegionEconomy.get(regionId) ?? "industrial";
-      const color = ECONOMY_COLORS[economy].core;
-      const fillAlpha = TERRITORY.fillAlpha;
-
+    for (const [, multiPoly] of this.cachedTerritories) {
       for (const poly of multiPoly) {
         // Exterior ring (first ring)
         const exterior = poly[0];
         if (!exterior || exterior.length < 3) continue;
 
         this.territoryGraphics.poly(exterior.flat());
-        this.territoryGraphics.fill({ color, alpha: fillAlpha });
-        this.territoryGraphics.poly(exterior.flat());
         this.territoryGraphics.stroke({
-          color,
+          color: TERRITORY.strokeColor,
           alpha: TERRITORY.strokeAlpha,
           width: TERRITORY.strokeWidth,
         });
 
-        // Holes (remaining rings) — cut out with background color
+        // Holes (remaining rings) — no fill underneath to cut out; stroke the
+        // hole ring itself so the inner boundary still reads.
         for (let h = 1; h < poly.length; h++) {
           const hole = poly[h];
           if (!hole || hole.length < 3) continue;
           this.territoryGraphics.poly(hole.flat());
-          this.territoryGraphics.fill({ color: BG_COLOR, alpha: fillAlpha });
+          this.territoryGraphics.stroke({
+            color: TERRITORY.strokeColor,
+            alpha: TERRITORY.strokeAlpha,
+            width: TERRITORY.strokeWidth,
+          });
         }
       }
     }

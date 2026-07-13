@@ -3,7 +3,6 @@ import {
   mulberry32,
   distance,
   randInt,
-  weightedPick,
   UnionFind,
   bridsonSample,
   assignRegions,
@@ -27,7 +26,6 @@ import {
 } from "@/lib/constants/universe-gen";
 import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
-import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -41,7 +39,7 @@ function defaultParams(): GenParams {
 function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
   return {
     name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
-    bodies: [], popCap: 0, population: 0, bodyDanger: 0, traits: [], buildings: {},
+    bodies: [], popCap: 0, population: 0, bodyDanger: 0, buildings: {},
     availableSpace: 0, generalSpace: 0, habitableSpace: 0,
     slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
@@ -123,20 +121,6 @@ describe("randInt", () => {
       expect(v).toBeLessThanOrEqual(10);
       expect(Number.isInteger(v)).toBe(true);
     }
-  });
-});
-
-describe("weightedPick", () => {
-  it("respects weight distribution", () => {
-    const rng = mulberry32(42);
-    const weights: Record<string, number> = { a: 90, b: 10 };
-    const counts: Record<string, number> = { a: 0, b: 0 };
-    for (let i = 0; i < 1000; i++) {
-      counts[weightedPick(rng, weights)]++;
-    }
-    // With 90/10 weights over 1000 trials, "a" should dominate
-    expect(counts.a).toBeGreaterThan(700);
-    expect(counts.b).toBeGreaterThan(0);
   });
 });
 
@@ -287,15 +271,6 @@ describe("generateSystems", () => {
     for (const sys of systems) {
       expect(sys.population).toBeGreaterThanOrEqual(0);
       expect(sys.population).toBeLessThanOrEqual(sys.popCap);
-    }
-  });
-
-  it("rolls 0–2 features per system, all narrative survivors", () => {
-    const { systems } = makeRegionsAndSystems();
-    for (const sys of systems) {
-      expect(sys.traits.length).toBeGreaterThanOrEqual(0);
-      expect(sys.traits.length).toBeLessThanOrEqual(2);
-      for (const t of sys.traits) expect(ALL_TRAIT_IDS).toContain(t.traitId);
     }
   });
 

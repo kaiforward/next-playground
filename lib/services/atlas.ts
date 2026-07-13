@@ -4,7 +4,7 @@ import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
 /**
  * Lightweight map data: positions, economies, regions, connections.
- * No names, descriptions, or traits — those are fetched via static/dynamic tiles.
+ * No names or descriptions — those are fetched via static/dynamic tiles.
  *
  * Each region's government is derived from its dominant owning faction
  * rather than stored on the region itself.

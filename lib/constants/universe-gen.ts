@@ -146,6 +146,3 @@ export const REGION_NAMES: string[] = [
   "Axiom",
   "Haven",
 ];
-
-/** Trait count range — uniform for all systems. */
-export const TRAIT_COUNT = { min: 2, max: 4 } as const;
