@@ -94,14 +94,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     [events, systemId],
   );
 
-  // Connections
-  const connectionCount = useMemo(() => {
-    if (!universeData) return 0;
-    return universeData.connections.filter(
-      (c) => c.fromSystemId === systemId || c.toSystemId === systemId,
-    ).length;
-  }, [universeData, systemId]);
-
   // Economy info — net production per good from the system's industrial base.
   // Production (built base) and consumption (population) partition the goods into
   // net exporters (Produces) and net importers (Consumes).
@@ -225,9 +217,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 ) : (
                   <span className="text-sm text-text-tertiary">—</span>
                 )}
-              </StatRow>
-              <StatRow label="Connections">
-                <span className="text-sm text-text-primary">{connectionCount}</span>
               </StatRow>
               <StatRow label="Danger">
                 <SystemDangerBadge systemId={systemId} baseDanger={govDef.dangerBaseline} />
