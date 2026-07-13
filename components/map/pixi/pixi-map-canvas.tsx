@@ -22,7 +22,7 @@ import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { ViewportBounds } from "@/lib/types/game";
-import { isValueMapMode, type MapMode } from "@/lib/types/map";
+import { isValueMapMode, isFactionInteractiveMode, type MapMode } from "@/lib/types/map";
 
 /** Shared empty map for value-choropleth modes with no data yet (avoids a fresh Map per render). */
 const EMPTY = new Map<string, number>();
@@ -101,6 +101,11 @@ export function PixiMapCanvas({
   // Store callbacks in refs so Pixi event handlers always see latest
   const callbacksRef = useRef({ onSelectSystem, onEmptyClick, onSelectFaction });
   callbacksRef.current = { onSelectSystem, onEmptyClick, onSelectFaction };
+
+  // Live map mode for the once-mounted interaction closures (ticker hover + faction hit-test): faction
+  // targeting is gated to modes that show factions (political + value), inert in regions/none.
+  const mapModeRef = useRef(mapMode);
+  mapModeRef.current = mapMode;
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
@@ -215,7 +220,7 @@ export function PixiMapCanvas({
         }),
         getFactionContext: () => ({
           unions: politicalTerritoryLayer.getFactionUnions(),
-          selectActive: camera.zoom < FACTION_SELECT_ZOOM,
+          selectActive: camera.zoom < FACTION_SELECT_ZOOM && isFactionInteractiveMode(mapModeRef.current),
         }),
       });
 
@@ -296,7 +301,7 @@ export function PixiMapCanvas({
         // whole faction under the cursor; zoomed IN it's the individual cell — mirroring the click.
         if (hoverScreen) {
           const wh = camera.screenToWorld(hoverScreen.x, hoverScreen.y);
-          if (camera.zoom < FACTION_SELECT_ZOOM) {
+          if (camera.zoom < FACTION_SELECT_ZOOM && isFactionInteractiveMode(mapModeRef.current)) {
             const unions = politicalTerritoryLayer.getFactionUnions();
             const factionId = unions ? findFactionAt(unions, wh.x, wh.y) : null;
             cellHighlightLayer.setHoveredFaction(factionId);

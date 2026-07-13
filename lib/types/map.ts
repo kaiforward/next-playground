@@ -17,3 +17,13 @@ export function isMapMode(value: unknown): value is MapMode {
 export function isValueMapMode(mode: MapMode): boolean {
   return mode === "population" || mode === "stability" || mode === "development";
 }
+
+/**
+ * True for the modes where a zoomed-out click/hover targets a FACTION: political (opens the faction
+ * panel) and the value modes (also re-scope the gradient to it). `regions` and `none` show no faction
+ * territory, so faction targeting is excluded there — a zoomed-out click falls through to selecting the
+ * individual cell/system, exactly as it does zoomed in.
+ */
+export function isFactionInteractiveMode(mode: MapMode): boolean {
+  return mode === "political" || isValueMapMode(mode);
+}
