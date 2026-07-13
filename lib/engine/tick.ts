@@ -11,7 +11,6 @@
  */
 
 import { clamp } from "@/lib/utils/math";
-import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 
 export interface MarketTickEntry {
   goodId: string;
@@ -142,8 +141,6 @@ export interface TickEntryInput {
   baseConsumptionRate?: number;
   /** Government consumption boost for this good. */
   govConsumptionBoost: number;
-  /** System traits (already validated). */
-  traits: GeneratedTrait[];
   /** Production-only suppression multiplier (1 = none). Strike state from unrest. */
   productionSuppress?: number;
 }

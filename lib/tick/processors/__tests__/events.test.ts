@@ -49,7 +49,6 @@ function makeSystem(
     governmentType: "frontier",
     population: 0,
     popCap: 1000,
-    traits: [],
     unrest: 0,
     buildings: {},
     buildingIdleMonths: {},

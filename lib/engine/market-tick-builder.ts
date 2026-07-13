@@ -3,7 +3,7 @@
  *
  * Both the live economy processor and the simulator build MarketTickEntry
  * objects through the same pipeline: good constants → government volatility
- * scaling → trait bonus → event production/consumption modifiers.
+ * scaling → event production/consumption modifiers.
  * (The legacy equilibrium-spread / self-sufficiency steps are gone — there is
  * no equilibrium target in the stock model.)
  */
@@ -13,7 +13,6 @@ import { type GovernmentDefinition } from "@/lib/constants/government";
 import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry } from "@/lib/engine/tick";
 import { marketBand } from "@/lib/engine/market-pricing";
-import type { GeneratedTrait } from "@/lib/engine/trait-gen";
 /** Result of resolving a market tick: the stock-sim entry plus the pricing anchor. */
 export interface ResolvedMarketTick {
   /** Input to the stock simulation (production/consumption rates, volatility, …). */
@@ -39,8 +38,6 @@ export interface MarketTickInput {
   baseConsumptionRate?: number;
   /** Government definition for the system's owning faction (undefined if none). */
   govDef?: GovernmentDefinition;
-  /** System traits (already validated). */
-  traits: GeneratedTrait[];
   /** Active economy modifiers for this system (already filtered). */
   modifiers: ModifierRow[];
   /** Modifier caps from constants. */
@@ -103,7 +100,6 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     baseProductionRate: input.baseProductionRate,
     baseConsumptionRate: input.baseConsumptionRate,
     govConsumptionBoost: input.govDef?.consumptionBoosts[input.goodId] ?? 0,
-    traits: input.traits,
     productionSuppress: input.productionSuppress,
   });
 

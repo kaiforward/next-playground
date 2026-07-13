@@ -7,7 +7,7 @@ import type { SimSystem } from "@/lib/engine/simulator/types";
 function sys(id: string, buildings: Record<string, number>, idle: Record<string, number> = {}): SimSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
-    governmentType: "frontier", population: 100, popCap: 200, traits: [],
+    governmentType: "frontier", population: 100, popCap: 200,
     unrest: 0.3, buildings, buildingIdleMonths: idle, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }

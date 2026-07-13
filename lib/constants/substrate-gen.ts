@@ -8,8 +8,6 @@ export const SUBSTRATE_GEN = {
   /** Body size multiplier band, uniform. */
   SIZE_MIN: 0.5,
   SIZE_MAX: 1.5,
-  /** Narrative feature count per system, uniform inclusive. */
-  FEATURE_COUNT: { min: 0, max: 2 },
   /** Economy-type classifier thresholds (see lib/engine/economy-type.ts). */
   ECON_POP_HIGH: 7000,        // population reference for "high population"
   ECON_POP_HIGH_FRAC: 0.6,    // popNorm ≥ this → developed economy

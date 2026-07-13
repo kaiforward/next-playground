@@ -27,7 +27,7 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId,
     control: factionId ? "developed" : "unclaimed", governmentType: "federation",
-    population, popCap, unrest, traits: [], buildings, buildingIdleMonths: {},
+    population, popCap, unrest, buildings, buildingIdleMonths: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }

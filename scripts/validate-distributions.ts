@@ -2,11 +2,8 @@
  * Layer 0 — Distribution validation across multiple seeds.
  *
  * Generates universes with 20+ seeds and validates:
- *   1. Quality tier distribution matches 50/35/15 targets
- *   2. Economy type distribution — no type dominates or is absent
- *   3. Region economy spread — no monotonous regions
- *   4. Trait count per system distribution
- *   5. Trait category spread
+ *   1. Economy type distribution — no type dominates or is absent
+ *   2. Region economy spread — no monotonous regions
  *
  * Usage:
  *   npx tsx --tsconfig tsconfig.json scripts/validate-distributions.ts
@@ -24,9 +21,7 @@ import {
   REGION_NAMES,
 } from "../lib/constants/universe-gen";
 import { buildGenParams } from "../lib/world/gen";
-import { QUALITY_TIERS, TRAITS } from "../lib/constants/traits";
-import type { EconomyType, QualityTier } from "../lib/types/game";
-import { ALL_QUALITY_TIERS } from "../lib/types/guards";
+import type { EconomyType } from "../lib/types/game";
 
 // ── Configuration ────────────────────────────────────────────────
 
@@ -42,11 +37,7 @@ const DEFAULT_PARAMS: GenParams = buildGenParams(0 /* overridden per run */, DEF
 
 interface SeedResult {
   seed: number;
-  totalTraits: number;
-  qualityCounts: Record<QualityTier, number>;
   economyCounts: Record<string, number>;
-  categoryCounts: Record<string, number>;
-  traitCountDistribution: Record<number, number>; // traits-per-system → count
   regionCoherence: { name: string; dominant: string; pct: number; monotonous: boolean }[];
   coherenceViolations: number;
   monotonousRegions: number;
@@ -58,27 +49,10 @@ function analyzeSeed(seed: number): SeedResult {
   const params: GenParams = { ...DEFAULT_PARAMS, seed };
   const universe: GeneratedUniverse = generateUniverse(params, REGION_NAMES);
 
-  const qualityCounts: Record<QualityTier, number> = { 1: 0, 2: 0, 3: 0 };
   const economyCounts: Record<string, number> = {};
-  const categoryCounts: Record<string, number> = {};
-  const traitCountDistribution: Record<number, number> = {};
-  let totalTraits = 0;
 
   for (const system of universe.systems) {
-    // Economy type
     economyCounts[system.economyType] = (economyCounts[system.economyType] ?? 0) + 1;
-
-    // Trait count distribution
-    const tc = system.traits.length;
-    traitCountDistribution[tc] = (traitCountDistribution[tc] ?? 0) + 1;
-
-    for (const trait of system.traits) {
-      totalTraits++;
-      qualityCounts[trait.quality]++;
-
-      const def = TRAITS[trait.traitId];
-      categoryCounts[def.category] = (categoryCounts[def.category] ?? 0) + 1;
-    }
   }
 
   // Region coherence
@@ -112,11 +86,7 @@ function analyzeSeed(seed: number): SeedResult {
 
   return {
     seed,
-    totalTraits,
-    qualityCounts,
     economyCounts,
-    categoryCounts,
-    traitCountDistribution,
     regionCoherence,
     coherenceViolations,
     monotonousRegions,
@@ -139,30 +109,6 @@ function run() {
 
   const elapsed = Date.now() - start;
   console.log(`Generation time: ${elapsed}ms (${(elapsed / SEED_COUNT).toFixed(1)}ms/seed)\n`);
-
-  // ── Quality tier distribution ────────────────────────────────
-  const totalTraitsAll = results.reduce((s, r) => s + r.totalTraits, 0);
-  const aggQuality: Record<QualityTier, number> = { 1: 0, 2: 0, 3: 0 };
-  for (const r of results) {
-    for (const q of ALL_QUALITY_TIERS) {
-      aggQuality[q] += r.qualityCounts[q];
-    }
-  }
-
-  console.log("── Quality Tier Distribution ──");
-  console.log(`Total traits across all seeds: ${totalTraitsAll}`);
-  const targets = { 1: 50, 2: 35, 3: 15 };
-  for (const q of ALL_QUALITY_TIERS) {
-    const pct = ((aggQuality[q] / totalTraitsAll) * 100).toFixed(1);
-    const target = targets[q];
-    const label = QUALITY_TIERS[q].label;
-    const diff = (parseFloat(pct) - target).toFixed(1);
-    const status = Math.abs(parseFloat(diff)) <= 5 ? "OK" : "WARN";
-    console.log(
-      `  Q${q} (${label.padEnd(12)}): ${String(aggQuality[q]).padStart(5)} (${pct.padStart(5)}%)  target: ${target}%  diff: ${diff.padStart(5)}%  [${status}]`,
-    );
-  }
-  console.log();
 
   // ── Economy type distribution ────────────────────────────────
   const allEconTypes: EconomyType[] = ["agricultural", "extraction", "refinery", "industrial", "tech", "core"];
@@ -221,47 +167,8 @@ function run() {
   }
   console.log();
 
-  // ── Trait count per system ───────────────────────────────────
-  const aggTraitCounts: Record<number, number> = {};
-  for (const r of results) {
-    for (const [count, freq] of Object.entries(r.traitCountDistribution)) {
-      aggTraitCounts[Number(count)] = (aggTraitCounts[Number(count)] ?? 0) + freq;
-    }
-  }
-
-  console.log("── Traits Per System ──");
-  for (const count of Object.keys(aggTraitCounts).map(Number).sort()) {
-    const freq = aggTraitCounts[count];
-    const pct = ((freq / totalSystems) * 100).toFixed(1);
-    const bar = "#".repeat(Math.round(parseFloat(pct)));
-    console.log(`  ${count} traits: ${String(freq).padStart(5)} (${pct.padStart(5)}%) ${bar}`);
-  }
-  console.log();
-
-  // ── Category distribution ────────────────────────────────────
-  const aggCategories: Record<string, number> = {};
-  for (const r of results) {
-    for (const [cat, count] of Object.entries(r.categoryCounts)) {
-      aggCategories[cat] = (aggCategories[cat] ?? 0) + count;
-    }
-  }
-
-  console.log("── Trait Category Distribution ──");
-  const catEntries = Object.entries(aggCategories).sort(([, a], [, b]) => b - a);
-  for (const [cat, count] of catEntries) {
-    const pct = ((count / totalTraitsAll) * 100).toFixed(1);
-    console.log(`  ${cat.padEnd(12)}: ${String(count).padStart(5)} (${pct.padStart(5)}%)`);
-  }
-  console.log();
-
   // ── Summary verdict ──────────────────────────────────────────
   const issues: string[] = [];
-  for (const q of ALL_QUALITY_TIERS) {
-    const pct = (aggQuality[q] / totalTraitsAll) * 100;
-    if (Math.abs(pct - targets[q]) > 5) {
-      issues.push(`Quality ${q} off by ${(pct - targets[q]).toFixed(1)}%`);
-    }
-  }
   for (const econ of allEconTypes) {
     if (!aggEcon[econ]) issues.push(`Economy type "${econ}" absent`);
     const econPct = ((aggEcon[econ] ?? 0) / totalSystems) * 100;

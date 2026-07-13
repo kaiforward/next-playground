@@ -8,7 +8,7 @@
  * composite key), not nested — the same normalized shape as the relational
  * schema this superseded. A row keeps its own synthetic `id` only when
  * something else references it by id; rows with a natural composite key
- * that nothing else points to (buildings, traits, connections, markets,
+ * that nothing else points to (buildings, connections, markets,
  * relations, alliance pacts) are keyed by that natural key instead.
  */
 
@@ -17,10 +17,8 @@ import type {
   Doctrine,
   EconomyType,
   GovernmentType,
-  QualityTier,
   ShipStatus,
   SunClass,
-  TraitId,
 } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
 
@@ -129,7 +127,7 @@ export interface WorldBody {
   qualRadioactive: number;
 }
 
-// ── Buildings / traits / connections ───────────────────────────
+// ── Buildings / connections ─────────────────────────────────────
 
 export interface WorldBuilding {
   systemId: string;
@@ -187,12 +185,6 @@ export interface WorldColonyEstablishProject extends WorldConstructionProjectBas
  * pool by the same `fundQueue`, so build-vs-colonise arbitrates on one budget.
  */
 export type WorldConstructionProject = WorldBuildProject | WorldColonyEstablishProject;
-
-export interface WorldTrait {
-  systemId: string;
-  traitId: TraitId;
-  quality: QualityTier;
-}
 
 export interface WorldConnection {
   fromId: string;
@@ -348,7 +340,6 @@ export interface World {
   buildings: WorldBuilding[];
   /** Open (in-flight) construction projects across all factions; a landed/completed project is removed. */
   constructionProjects: WorldConstructionProject[];
-  traits: WorldTrait[];
   connections: WorldConnection[];
   markets: WorldMarket[];
   factions: WorldFaction[];

@@ -107,7 +107,6 @@ export async function runEconomyProcessor(
       baseProductionRate: m.baseProductionRate != null ? m.baseProductionRate * catchUp : undefined,
       baseConsumptionRate: m.baseConsumptionRate != null ? m.baseConsumptionRate * catchUp : undefined,
       govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
-      traits: m.traits,
       productionSuppress: strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams),
       modifiers: modifiersBySystem.get(m.systemId) ?? [],
       modifierCaps,

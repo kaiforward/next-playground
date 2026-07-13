@@ -27,7 +27,6 @@ import {
 } from "@/lib/constants/universe-gen";
 import { buildGenParams } from "@/lib/world/gen";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
-import { ALL_TRAIT_IDS } from "@/lib/constants/traits";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -41,7 +40,7 @@ function defaultParams(): GenParams {
 function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem {
   return {
     name: `s${p.index}`, economyType: "extraction", sunClass: "yellow",
-    bodies: [], popCap: 0, population: 0, bodyDanger: 0, traits: [], buildings: {},
+    bodies: [], popCap: 0, population: 0, bodyDanger: 0, buildings: {},
     availableSpace: 0, generalSpace: 0, habitableSpace: 0,
     slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
@@ -287,15 +286,6 @@ describe("generateSystems", () => {
     for (const sys of systems) {
       expect(sys.population).toBeGreaterThanOrEqual(0);
       expect(sys.population).toBeLessThanOrEqual(sys.popCap);
-    }
-  });
-
-  it("rolls 0–2 features per system, all narrative survivors", () => {
-    const { systems } = makeRegionsAndSystems();
-    for (const sys of systems) {
-      expect(sys.traits.length).toBeGreaterThanOrEqual(0);
-      expect(sys.traits.length).toBeLessThanOrEqual(2);
-      for (const t of sys.traits) expect(ALL_TRAIT_IDS).toContain(t.traitId);
     }
   });
 
