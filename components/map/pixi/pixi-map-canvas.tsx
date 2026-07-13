@@ -19,7 +19,7 @@ import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { ViewportBounds } from "@/lib/types/game";
-import type { MapMode } from "@/lib/types/map";
+import { isValueMapMode, type MapMode } from "@/lib/types/map";
 
 /** Shared empty map for value-choropleth modes with no data yet (avoids a fresh Map per render). */
 const EMPTY = new Map<string, number>();
@@ -204,10 +204,7 @@ export function PixiMapCanvas({
         getMapData: () => mapDataRef.current,
         getCellContext: () => ({
           cells: pixiRef.current?.cells ?? null,
-          isValueMode:
-            mapModeRef.current === "population" ||
-            mapModeRef.current === "stability" ||
-            mapModeRef.current === "development",
+          isValueMode: isValueMapMode(mapModeRef.current),
           toWorld: (screenX, screenY) => camera.screenToWorld(screenX, screenY),
         }),
       });
@@ -351,9 +348,7 @@ export function PixiMapCanvas({
     if (!p || !pixiReady) return;
     p.territoryLayer.container.visible = mapMode === "regions";
     p.politicalTerritoryLayer.setActive(mapMode === "political");
-    p.valueChoroplethLayer.setActive(
-      mapMode === "population" || mapMode === "stability" || mapMode === "development",
-    );
+    p.valueChoroplethLayer.setActive(isValueMapMode(mapMode));
   }, [mapMode, pixiReady]);
 
   // ── Value choropleth fills (lightweight redraw on data change) ──────
