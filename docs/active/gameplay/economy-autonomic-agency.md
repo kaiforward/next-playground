@@ -221,9 +221,11 @@ scaling moved/built volume to wall-clock. Two processors join the tick pipeline:
   [faction-system](./faction-system.md#territorial-expansion-claim-and-develop) control-flag model):
   claim scores in-reach unclaimed systems (substrate × proximity, absolute so factions compare
   directly) and proposes one per faction, with cross-faction conflicts resolved deterministically
-  (highest score, seeded-RNG tiebreak); develop ranks a faction's own controlled systems by substrate
-  and flips its best one to `developed`, seeding a conserved colony population from the nearest
-  same-faction developed system. Only after these two steps does the build step run — the develop-gate
+  (highest score, seeded-RNG tiebreak); develop scores a faction's own controlled systems as colony
+  candidates (by ROI, on the same demand-rate axis as a build) and funds a **pool-funded, timed
+  colony-establish** for those that win pool priority, which on completion flips the system to
+  `developed` with a tiny conserved seed population and the housing to hold it (see
+  [colonisation](./colonisation.md)). Only after these two steps does the build step run — the develop-gate
   everywhere is `system.control === "developed"`, so a system claimed this pulse is build-eligible only
   once it has also been developed. Builds are applied as upward `WorldBuilding.count` increments
   (continuous Float; removal stays decay's job).
