@@ -72,7 +72,7 @@ function MarketContent({ systemId }: { systemId: string }) {
           systems={universeSystems}
           connections={universeConnections}
           onSelectSystem={(sysId) => {
-            router.push(`/?systemId=${sysId}`);
+            router.push(`/system/${sysId}`);
             setComparison(null);
           }}
           onClose={() => setComparison(null)}

@@ -845,9 +845,9 @@ git commit -m "feat(map): per-cell selection via analytic hit-testing in value m
 - Delete: `components/map/pixi/layers/development-territory-layer.ts`
 
 - [ ] **Step 1: Delete the three files** and remove their imports from `pixi-map-canvas.tsx` (should already be
-  unreferenced after Task 1.5). Do NOT delete `lib/utils/stability.ts` / `lib/utils/population.ts` /
-  `lib/utils/development.ts` — the `*RampLegend` components and the stability badge still import their ramp
-  helpers.
+  unreferenced after Task 1.5). Keep `lib/utils/stability.ts` — the stability badge still imports its ramp
+  helpers. (`lib/utils/population.ts` / `development.ts` were later removed during review: the map legend
+  now derives from the single `value-ramp.ts` source, so those modules became orphaned.)
 - [ ] **Step 2: Grep for dangling references.**
 
 Run: `git grep -n "TerritoryLayer" components/map/pixi | grep -iE "stability|population|development"`
