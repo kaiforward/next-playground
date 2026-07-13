@@ -64,7 +64,7 @@ interface PixiRefs {
   politicalTerritoryLayer: PoliticalTerritoryLayer;
   valueChoroplethLayer: ValueChoroplethLayer;
   logisticsFlowLayer: TradeFlowLayer;
-  /** Shared Voronoi cells (built once per atlas sync) — hit-testing consumes this in Task 1.6. */
+  /** Shared Voronoi cells (built once per atlas sync) — also consumed by value-mode click hit-testing. */
   cells: SystemCells | null;
 }
 
@@ -101,6 +101,11 @@ export function PixiMapCanvas({
   // Store latest data in ref for interaction handlers
   const mapDataRef = useRef(mapData);
   mapDataRef.current = mapData;
+
+  // Store latest map mode in a ref so the once-only setupInteractions closure
+  // sees the live value (value modes drive per-cell click hit-testing).
+  const mapModeRef = useRef(mapMode);
+  mapModeRef.current = mapMode;
 
   // Signal to trigger data sync after Pixi is ready
   const [pixiReady, setPixiReady] = useState(false);
@@ -197,6 +202,14 @@ export function PixiMapCanvas({
         systemLayer,
         getCallbacks: () => callbacksRef.current,
         getMapData: () => mapDataRef.current,
+        getCellContext: () => ({
+          cells: pixiRef.current?.cells ?? null,
+          isValueMode:
+            mapModeRef.current === "population" ||
+            mapModeRef.current === "stability" ||
+            mapModeRef.current === "development",
+          toWorld: (screenX, screenY) => camera.screenToWorld(screenX, screenY),
+        }),
       });
 
       // Keep camera screen size in sync with Pixi's own resize
@@ -321,7 +334,7 @@ export function PixiMapCanvas({
     p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions, mapSize);
 
     // Shared Voronoi cells for the value choropleth — stashed on the ref so
-    // interaction hit-testing (Task 1.6) can reuse the same geometry.
+    // value-mode click hit-testing can reuse the same geometry.
     const cells = buildSystemCells(atlasData.systems, mapSize);
     p.cells = cells;
     p.valueChoroplethLayer.sync(cells, atlasData.systems);
