@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { LODState } from "../lod";
 import type { Frustum } from "../frustum";
 import { TERRITORY, TEXT_RESOLUTION } from "../theme";
-import { valueRampColorPixi, ABSENT_COLOR, type ValueMode } from "../value-ramp";
+import { valueRampColorPixi, deEmphasize, ABSENT_COLOR, type ValueMode } from "../value-ramp";
 import { formatValueNumber } from "../number-format";
 import {
   buildAggregationGroups, pickTier, DEFAULT_TIER_THRESHOLDS,
@@ -19,6 +19,16 @@ const NUMBER_STYLE = new TextStyle({ fontSize: 30, fill: 0xf0e9df, fontFamily: "
 const SYSTEM_NUMBER_SCALE = 1.3;
 const SYSTEM_NUMBER_RING_CLEAR = 36; // world units — just outside the 34-unit nav ring
 const SYSTEM_NUMBER_SCREEN_LIFT = 20; // extra on-screen px so the number's base clears the glyph
+
+// Modes whose reference max re-normalises to the focused faction's members when a faction is in scope.
+// Stability stays globally normalised even under focus — 0..1 unrest reads the same regardless of who's
+// selected; pop/development re-scale so the focused faction's own brightest system reads as the top of
+// the ramp.
+const RESCALES_TO_SCOPE: Record<ValueMode, boolean> = {
+  population: true,
+  development: true,
+  stability: false,
+};
 
 /**
  * Generic per-cell value choropleth: colours every system's Voronoi cell from
@@ -41,6 +51,7 @@ export class ValueChoroplethLayer {
 
   private cells: SystemCells | null = null;
   private systems: AtlasSystem[] = [];
+  private factionBySystemId = new Map<string, string | null>();
   private values = new Map<string, number>();
   private reference = new Map<string, number>();
   private mode: ValueMode = "population";
@@ -70,12 +81,13 @@ export class ValueChoroplethLayer {
   sync(cells: SystemCells, systems: AtlasSystem[]) {
     this.cells = cells;
     this.systems = systems;
+    this.factionBySystemId = new Map(systems.map((s) => [s.id, s.factionId]));
     this.recomputeReferenceMax();
     this.drawFills();
     this.rebuildTiers();
   }
 
-  /** Per-mode tick data. reference == values for pop/stability; == potential for development. */
+  /** Per-mode tick data. reference == values for every value mode (development is raw points, not potential). */
   setValues(values: Map<string, number>, reference: Map<string, number>, mode: ValueMode) {
     this.values = values;
     this.reference = reference;
@@ -85,22 +97,24 @@ export class ValueChoroplethLayer {
     this.rebuildTiers();
   }
 
-  /** Phase 1: global only. Phase 2 re-normalises to a faction and de-emphasises the rest. */
+  /**
+   * Faction focus. When set, pop/development re-normalise to the focused faction's own max (its
+   * brightest system reads as the top of the ramp) and every out-of-scope cell is de-emphasised;
+   * stability stays globally normalised but still dims the rest.
+   */
   setScope(factionId: string | null) {
     this.scopeFaction = factionId;
     this.recomputeReferenceMax();
     this.drawFills();
   }
 
-  private scopeMembers(): AtlasSystem[] {
-    return this.scopeFaction == null
-      ? this.systems
-      : this.systems.filter((s) => s.factionId === this.scopeFaction);
-  }
-
   private recomputeReferenceMax() {
+    const scoped = this.scopeFaction != null && RESCALES_TO_SCOPE[this.mode];
+    const members = scoped
+      ? this.systems.filter((s) => s.factionId === this.scopeFaction)
+      : this.systems;
     let max = 0;
-    for (const s of this.scopeMembers()) max = Math.max(max, this.reference.get(s.id) ?? 0);
+    for (const s of members) max = Math.max(max, this.reference.get(s.id) ?? 0);
     this.referenceMax = max > 0 ? max : 1;
   }
 
@@ -111,8 +125,13 @@ export class ValueChoroplethLayer {
       // A cell absent from the value map is "nothing here" → black; a present system rides its ramp
       // (so an unstable-but-present system reads red, not black).
       const value = this.values.get(id);
-      const color =
+      let color =
         value === undefined ? ABSENT_COLOR : valueRampColorPixi(value, this.referenceMax, this.mode);
+      // Faction focus dims every out-of-scope cell, in every mode — independent of whether the mode
+      // rescales its reference max. The absent check above always wins: never dim a black cell.
+      if (color !== ABSENT_COLOR && this.scopeFaction != null && this.factionBySystemId.get(id) !== this.scopeFaction) {
+        color = deEmphasize(color, "both");
+      }
       for (const poly of multiPoly) {
         const exterior = poly[0];
         if (!exterior || exterior.length < 3) continue;
