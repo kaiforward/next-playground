@@ -1,16 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import type { AtlasData, UniverseData, StarSystemInfo, ActiveEvent } from "@/lib/types/game";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
-import { SystemDetailPanel } from "@/components/map/system-detail-panel";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
-import { useMapViewState } from "@/lib/hooks/use-map-view-state";
 import { useMapData } from "@/lib/hooks/use-map-data";
 import { useMapMode } from "@/lib/hooks/use-map-mode";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
@@ -202,15 +200,20 @@ export function StarMap({
     [universe.systems],
   );
 
-  // ── View state (selection, session persistence) ────────────────
-  const view = useMapViewState({
-    universe,
-    initialSelectedSystemId,
-  });
-
-  // Hide tier-1 quick-preview when a tier-2 panel route is active
+  // ── Selection = the open /system/[id] panel route (single source of truth) ──
+  const router = useRouter();
   const pathname = usePathname();
-  const isPanelOpen = pathname !== "/";
+  const selectedSystemId = useMemo(() => {
+    const match = /^\/system\/([^/]+)/.exec(pathname);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, [pathname]);
+  const selectedSystem = useMemo(
+    () =>
+      selectedSystemId
+        ? universe.systems.find((s) => s.id === selectedSystemId) ?? null
+        : null,
+    [selectedSystemId, universe.systems],
+  );
 
   // ── Derived map data ────────────────────────────────────────────
   const mapData = useMapData({
@@ -219,64 +222,58 @@ export function StarMap({
     visibleSystemIds,
     dynamicSystems,
     logisticsEdges,
-    selectedSystem: view.selectedSystem,
+    selectedSystem,
     systemRegionMap,
     regionMap,
     priceHeatmap: heatmapData,
     priceMode,
   });
 
-  // ── Destructure stable references for callback deps ──────────
-  const {
-    selectedSystem, selectSystem,
-    closeSystem, setMapReady,
-  } = view;
-
-  // ── Click handlers ────────────────────────────────────────────
-  const onSystemClick = useCallback(
-    (system: { id: string }) => {
-      const fullSystem = universe.systems.find((s) => s.id === system.id);
-      // Guard: viewport detail hasn't loaded yet — name is empty placeholder
-      if (!fullSystem || fullSystem.name === "") return;
-      selectSystem(fullSystem);
+  // ── Click handlers — navigate by id; the panel loads its own detail ──
+  const onSelectSystem = useCallback(
+    (systemId: string) => {
+      router.push(`/system/${systemId}`);
     },
-    [universe.systems, selectSystem],
+    [router],
   );
 
   const onEmptyClick = useCallback(() => {
-    closeSystem();
-  }, [closeSystem]);
+    router.push("/");
+  }, [router]);
 
-  // ── Center target (reactive — responds to systemId URL changes) ──
+  // ── Initial camera + reveal ────────────────────────────────────
+  // Center once on the system the map opened on (a /system/[id] deep-link or the
+  // legacy ?systemId= param). Clicks never recenter — they only open the side
+  // panel — so this is computed on mount only.
   type CenterTarget = { x: number; y: number; zoom: number };
-  const [centerTarget, setCenterTarget] = useState<CenterTarget | undefined>(() => {
-    if (!view.initialSelectedSystem) return undefined;
-    return { x: view.initialSelectedSystem.x, y: view.initialSelectedSystem.y, zoom: 1.2 };
+  const [centerTarget] = useState<CenterTarget | undefined>(() => {
+    const id = selectedSystemId ?? initialSelectedSystemId ?? null;
+    if (!id) return undefined;
+    const system = universe.systems.find((s) => s.id === id);
+    return system ? { x: system.x, y: system.y, zoom: 1.2 } : undefined;
   });
-  const prevSystemIdRef = useRef(initialSelectedSystemId);
+  const [mapReady, setMapReadyState] = useState(() => centerTarget === undefined);
 
+  // Migrate a legacy ?systemId= deep-link to the /system/[id] route so the panel
+  // opens and the cell highlights. Mount-only.
   useEffect(() => {
-    if (initialSelectedSystemId === prevSystemIdRef.current) return;
-    prevSystemIdRef.current = initialSelectedSystemId;
-    if (!initialSelectedSystemId) return;
-    const system = universe.systems.find((s) => s.id === initialSelectedSystemId);
-    if (system) {
-      selectSystem(system);
-      setCenterTarget({ x: system.x, y: system.y, zoom: 1.2 });
+    if (initialSelectedSystemId && !selectedSystemId) {
+      router.replace(`/system/${initialSelectedSystemId}`);
     }
-  }, [initialSelectedSystemId, universe.systems, selectSystem]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleReady = useCallback(() => {
-    setMapReady();
-  }, [setMapReady]);
+    setMapReadyState(true);
+  }, []);
 
   return (
-    <div className={`relative h-full w-full ${view.mapReady ? "opacity-100" : "opacity-0"}`}>
+    <div className={`relative h-full w-full ${mapReady ? "opacity-100" : "opacity-0"}`}>
       <PixiMapCanvas
         atlasData={liveAtlas}
         mapData={mapData}
         selectedSystem={selectedSystem}
-        onSystemClick={onSystemClick}
+        onSelectSystem={onSelectSystem}
         onEmptyClick={onEmptyClick}
         centerTarget={centerTarget}
         onReady={handleReady}
@@ -313,34 +310,17 @@ export function StarMap({
         setPriceMode={setPriceMode}
       />
 
-      {/* Detail panel overlay (hidden when a panel route is open) */}
-      {!isPanelOpen && (
-        <SystemDetailPanel
-          system={selectedSystem}
-          regionName={mapData.selectedRegionName}
-          factionName={mapData.selectedFactionName}
-          gatewayTargetRegions={mapData.selectedGatewayTargets}
-          activeEvents={mapData.eventsAtSelected}
-          visibility={mapData.selectedVisibility}
-          onClose={closeSystem}
-        />
-      )}
-
       {/* Cross-system price comparison panel (Price overlay) */}
-      {comparisonOpen && priceGoodId && view.selectedSystem && (
+      {comparisonOpen && priceGoodId && selectedSystem && (
         <MarketComparisonPanel
           goodId={priceGoodId}
           goodName={goods.find((g) => g.id === priceGoodId)?.name ?? priceGoodId}
-          fromSystemId={view.selectedSystem.id}
-          fromSystemName={view.selectedSystem.name}
+          fromSystemId={selectedSystem.id}
+          fromSystemName={selectedSystem.name}
           systems={systemsForComparison}
           connections={allConnections}
           onSelectSystem={(sysId) => {
-            const sys = universe.systems.find((s) => s.id === sysId);
-            if (sys) {
-              view.selectSystem(sys);
-              setCenterTarget({ x: sys.x, y: sys.y, zoom: 1.2 });
-            }
+            router.push(`/system/${sysId}`);
             setComparisonOpen(false);
           }}
           onClose={() => setComparisonOpen(false)}

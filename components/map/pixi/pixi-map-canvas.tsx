@@ -28,7 +28,7 @@ export interface PixiMapCanvasProps {
   atlasData: AtlasData;
   mapData: MapData;
   selectedSystem: StarSystemInfo | null;
-  onSystemClick: (system: StarSystemInfo) => void;
+  onSelectSystem: (systemId: string) => void;
   onEmptyClick: () => void;
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
@@ -72,7 +72,7 @@ export function PixiMapCanvas({
   atlasData,
   mapData,
   selectedSystem,
-  onSystemClick,
+  onSelectSystem,
   onEmptyClick,
   centerTarget,
   onReady,
@@ -89,23 +89,14 @@ export function PixiMapCanvas({
   const readyFired = useRef(false);
 
   // Store callbacks in refs so Pixi event handlers always see latest
-  const callbacksRef = useRef({ onSystemClick, onEmptyClick });
-  callbacksRef.current = { onSystemClick, onEmptyClick };
+  const callbacksRef = useRef({ onSelectSystem, onEmptyClick });
+  callbacksRef.current = { onSelectSystem, onEmptyClick };
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
 
   // Store previous viewport state to skip no-op callbacks (avoids 60 setTimeout/clearTimeout per sec)
   const lastViewportRef = useRef({ minX: 0, minY: 0, maxX: 0, maxY: 0, zoom: 0 });
-
-  // Store latest data in ref for interaction handlers
-  const mapDataRef = useRef(mapData);
-  mapDataRef.current = mapData;
-
-  // Store latest map mode in a ref so the once-only setupInteractions closure
-  // sees the live value (value modes drive per-cell click hit-testing).
-  const mapModeRef = useRef(mapMode);
-  mapModeRef.current = mapMode;
 
   // Signal to trigger data sync after Pixi is ready
   const [pixiReady, setPixiReady] = useState(false);
@@ -201,10 +192,8 @@ export function PixiMapCanvas({
         app,
         systemLayer,
         getCallbacks: () => callbacksRef.current,
-        getMapData: () => mapDataRef.current,
         getCellContext: () => ({
           cells: pixiRef.current?.cells ?? null,
-          isValueMode: isValueMapMode(mapModeRef.current),
           toWorld: (screenX, screenY) => camera.screenToWorld(screenX, screenY),
         }),
       });
