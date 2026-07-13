@@ -21,12 +21,19 @@ describe("formatValueNumber", () => {
     });
   });
 
-  describe("score modes — 0..1 rendered as 0–100", () => {
-    it("scales development/stability by 100 and rounds", () => {
+  describe("stability — 0..1 score rendered as 0–100", () => {
+    it("scales by 100 and rounds", () => {
       expect(formatValueNumber(0.9, "stability")).toBe("90");
-      expect(formatValueNumber(0.234, "development")).toBe("23");
-      expect(formatValueNumber(0, "development")).toBe("0");
       expect(formatValueNumber(1, "stability")).toBe("100");
+    });
+  });
+
+  describe("development — raw tier-weighted points, rounded", () => {
+    it("rounds the raw points value with no scaling", () => {
+      expect(formatValueNumber(23.4, "development")).toBe("23");
+      expect(formatValueNumber(0.234, "development")).toBe("0");
+      expect(formatValueNumber(0, "development")).toBe("0");
+      expect(formatValueNumber(142, "development")).toBe("142");
     });
   });
 });

@@ -197,8 +197,9 @@ export interface PopulationEntry {
   population: number;
 }
 
-/** Per-system development reading (0..1) for the development choropleth overlay. Tick-scoped: development
- *  changes as systems grow, so it rides a tick-invalidated path (not the static atlas). */
+/** Per-system development reading (raw tier-weighted development points) for the development
+ *  choropleth overlay. Tick-scoped: development changes as systems grow, so it rides a tick-invalidated
+ *  path (not the static atlas). */
 export interface DevelopmentEntry {
   systemId: string;
   development: number;
