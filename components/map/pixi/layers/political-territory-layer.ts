@@ -17,7 +17,7 @@ const FACTION_NAME_STYLE = new TextStyle({
 /** Factions with fewer systems than this don't get a name label. */
 const LABEL_MIN_TERRITORY = 6;
 
-/** Polygon fill / stroke alpha for political mode (slightly stronger than economy). */
+/** Polygon fill / stroke alpha for political mode (stronger than the Regions layer's neutral border). */
 const POLITICAL = {
   fillAlpha: 0.18,
   strokeAlpha: 0.55,
@@ -27,9 +27,10 @@ const POLITICAL = {
 /**
  * Pixi layer that paints faction-coloured territory polygons.
  *
- * Same Voronoi-union approach as the other territory-band layers, but cells
- * are grouped by `factionId` and tinted with `Faction.color`. The map's
- * mode toggle picks at most one territory layer to be visible at a time.
+ * Sibling of `TerritoryLayer`: same Voronoi-union approach, but cells are
+ * grouped by `factionId` (not `regionId`) and tinted with `Faction.color`.
+ * The map's overlay-toggle picks which of the two is visible — the user
+ * sees either the political palette or Regions' neutral border, never both.
  */
 export class PoliticalTerritoryLayer {
   readonly container = new Container();

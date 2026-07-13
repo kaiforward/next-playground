@@ -8,10 +8,11 @@ import {
 import type { MapMode } from "@/lib/types/map";
 
 /**
- * Owns the single-select map mode (the territory tint). One of "political",
- * "stability", "population", "development", or "none". Default `"political"`
- * — factions are the most gameplay-relevant tint. Persisted via the existing
- * `map-session` mechanism so a refresh preserves the user's last view.
+ * Owns the single-select map mode (the territory layer). One of "political",
+ * "regions", "stability", "population", "development", or "none". Default
+ * `"political"` — factions are the most gameplay-relevant tint. Persisted via
+ * the existing `map-session` mechanism so a refresh preserves the user's last
+ * view.
  */
 
 const DEFAULT_MODE: MapMode = "political";

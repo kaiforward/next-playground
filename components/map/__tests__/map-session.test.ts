@@ -127,9 +127,9 @@ describe("map-session", () => {
 
     it("preserves overlays when setting mode independently", () => {
       setOverlaysInSession({ logistics: true });
-      setModeInSession("stability");
+      setModeInSession("regions");
       const state = getMapSessionState();
-      expect(state?.mode).toBe("stability");
+      expect(state?.mode).toBe("regions");
       expect(state?.overlays?.logistics).toBe(true);
     });
 

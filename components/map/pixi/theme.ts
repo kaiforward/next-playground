@@ -5,7 +5,12 @@ export const NEUTRAL_GLYPH = { core: 0xcbd5e1, glow: 0x64748b } as const; // sla
 
 // ── Territory (universe view) ────────────────────────────────────
 
+// `strokeColor` is the neutral border used by the Regions layer (no economy
+// tint); `fillAlpha`/`strokeAlpha`/`strokeWidth` are shared by the choropleth
+// territory layers (stability/population/development), which paint their own
+// per-value colour into this shared alpha/width envelope.
 export const TERRITORY = {
+  strokeColor: 0x64748b, // slate-500, matches NEUTRAL_GLYPH.glow — Regions border only
   fillAlpha: 0.08,
   strokeAlpha: 0.3,
   strokeWidth: 2,

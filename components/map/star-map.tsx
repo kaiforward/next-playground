@@ -181,6 +181,11 @@ export function StarMap({
     [universe.regions],
   );
 
+  const regionInfos = useMemo(
+    () => universe.regions.map((r) => ({ id: r.id, name: r.name })),
+    [universe.regions],
+  );
+
   // ── All connections (needed by both navigation and data hooks) ─
   const allConnections = useMemo(
     (): ConnectionInfo[] =>
@@ -275,6 +280,7 @@ export function StarMap({
         onEmptyClick={onEmptyClick}
         centerTarget={centerTarget}
         onReady={handleReady}
+        regionInfos={regionInfos}
         mapMode={mapMode}
         onViewportChange={onViewportChange}
         showEvents={overlays.events}
