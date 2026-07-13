@@ -27,10 +27,9 @@ const POLITICAL = {
 /**
  * Pixi layer that paints faction-coloured territory polygons.
  *
- * Sibling of `TerritoryLayer`: same Voronoi-union approach, but cells are
- * grouped by `factionId` (not `regionId`) and tinted with `Faction.color`.
- * The map's overlay-toggle picks which of the two is visible — the user
- * sees either the economy palette or the political palette, never both.
+ * Same Voronoi-union approach as the other territory-band layers, but cells
+ * are grouped by `factionId` and tinted with `Faction.color`. The map's
+ * mode toggle picks at most one territory layer to be visible at a time.
  */
 export class PoliticalTerritoryLayer {
   readonly container = new Container();

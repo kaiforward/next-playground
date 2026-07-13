@@ -17,7 +17,6 @@ import {
 
 const MODE_LABELS: Record<MapMode, string> = {
   political: "Political",
-  regions: "Regions",
   stability: "Stability",
   population: "Population",
   development: "Development",

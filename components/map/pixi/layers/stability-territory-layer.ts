@@ -9,9 +9,9 @@ import type { AtlasSystem } from "@/lib/types/game";
 /**
  * Per-system stability choropleth. Geometry (one Voronoi cell per system) is
  * computed from atlas positions in sync() and cached; fills are redrawn from a
- * live unrest map in setStability() — same geometry-vs-fill split as
- * TerritoryLayer. Sits in the territory band; only one map MODE is visible at a
- * time, so it never stacks with the faction/region fills.
+ * live unrest map in setStability(). Sits in the territory band; only one map
+ * MODE is visible at a time, so it never stacks with the other territory
+ * fills.
  *
  * Semantics: high unrest = hot (red), low unrest = cool (green). Inverted from
  * the old prosperity ramp.
