@@ -1,9 +1,9 @@
 import { union, intersection, setPrecision } from "polyclip-ts";
 import type { Delaunay, Voronoi } from "d3-delaunay";
 
-type Ring = [number, number][];
-type Polygon = Ring[];
-type MultiPolygon = Polygon[];
+export type Ring = [number, number][];
+export type Polygon = Ring[];
+export type MultiPolygon = Polygon[];
 
 /**
  * Edge-cell rounding. Cells whose site is on the convex hull are clipped by
