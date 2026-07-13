@@ -6,9 +6,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { EconomyBadge } from "@/components/ui/economy-badge";
 import type { StarSystemInfo, ActiveEvent, SystemVisibility } from "@/lib/types/game";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
-import { TraitList } from "@/components/ui/trait-list";
 import { SectionHeader } from "@/components/ui/section-header";
-import { enrichTraits } from "@/lib/utils/traits";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 
 interface GatewayTarget {
@@ -132,16 +130,6 @@ export function SystemDetailPanel({
 
             {/* Active events */}
             {activeEvents && <ActiveEventsSection events={activeEvents} compact />}
-
-            {/* System traits */}
-            {system.traits && system.traits.length > 0 && (
-              <div>
-                <SectionHeader className="mb-2">
-                  Traits
-                </SectionHeader>
-                <TraitList traits={enrichTraits(system.traits)} variant="compact" />
-              </div>
-            )}
 
             {/* Coordinates */}
             <div>

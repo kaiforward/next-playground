@@ -2,7 +2,7 @@ import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem, marketsBySystem } from "./world-index";
 import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import type { GovernmentType, RegionInfo, SystemTraitInfo, UniverseData } from "@/lib/types/game";
+import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import {
@@ -39,13 +39,6 @@ export function getUniverse(): UniverseData {
     systemFactionsByRegion.set(s.regionId, list);
   }
 
-  const traitsBySystem = new Map<string, SystemTraitInfo[]>();
-  for (const t of world.traits) {
-    const list = traitsBySystem.get(t.systemId) ?? [];
-    list.push({ traitId: t.traitId, quality: t.quality });
-    traitsBySystem.set(t.systemId, list);
-  }
-
   const regionInfos: RegionInfo[] = world.regions.map((r) => {
     const dominantFactionId = deriveRegionDominantFaction(
       systemFactionsByRegion.get(r.id) ?? [],
@@ -77,7 +70,6 @@ export function getUniverse(): UniverseData {
       regionId: s.regionId,
       factionId: s.factionId,
       isGateway: s.isGateway,
-      traits: traitsBySystem.get(s.id) ?? [],
     })),
     connections: world.connections.map((c) => ({
       id: `${c.fromId}:${c.toId}`,
@@ -120,18 +112,12 @@ export function getSystemDetail(systemId: string): SystemDetailData {
     visibility: "visible",
     // Stations are gone from the world model — markets are per-system.
     station: null,
-    // Display data (name/category/description) is enriched client-side from
-    // the TRAITS catalog (`enrichTraits`) — the API carries only the facts.
-    traits: world.traits
-      .filter((t) => t.systemId === systemId)
-      .map((t) => ({ traitId: t.traitId, quality: t.quality })),
   };
 }
 
 /**
  * Physical substrate for one system — the static "what is physically here".
- * Resolves catalog display data (archetype names) server-side, mirroring how
- * getSystemDetail resolves trait names.
+ * Resolves catalog display data (archetype names) server-side.
  * Throws ServiceError(404) if the system does not exist.
  */
 export function getSystemSubstrate(systemId: string): SystemSubstrateData {
