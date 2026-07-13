@@ -21,10 +21,18 @@ const SYSTEM_NUMBER_SCALE = 1.3;
 const SYSTEM_NUMBER_RING_CLEAR = 36; // world units — just outside the 34-unit nav ring
 const SYSTEM_NUMBER_SCREEN_LIFT = 20; // extra on-screen px so the number's base clears the glyph
 
-// Faction-union border drawn over the value fills — bolder than the per-cell TERRITORY stroke so
-// political borders stay legible while a value mode is active. First-draft calibration knobs, tuned
-// in visual smoke.
-const FACTION_OUTLINE = { strokeAlpha: 0.7, strokeWidth: TERRITORY.strokeWidth * 3 } as const;
+// Faction-union border drawn over the value fills so political borders stay legible while a value mode
+// is active. `screenWidth` is a SCREEN-pixel thickness (world width = screenWidth / zoom, redrawn on
+// zoom change) so the border stays legibly thick at the zoomed-out faction view instead of thinning to a
+// hairline. `alignment: 1` insets the stroke to the INSIDE of each faction's boundary so two neighbours
+// sharing an edge render their own border on their own side (a centered stroke overlaps on the shared
+// edge and one paints over the other). Calibration knobs, tuned in visual smoke.
+const FACTION_OUTLINE = { strokeAlpha: 0.9, screenWidth: 7, alignment: 1 } as const;
+
+// Opacity of the value-choropleth cell fills. Well above the neutral TERRITORY.fillAlpha (0.08, used by
+// the political/region tints) so the value gradient reads as a vivid, saturated choropleth on the dark
+// map rather than washed out. Calibration knob — tuned in visual smoke.
+const VALUE_FILL_ALPHA = 0.5;
 
 // Modes whose reference max re-normalises to the focused faction's members when a faction is in scope.
 // Stability stays globally normalised even under focus — 0..1 unrest reads the same regardless of who's
@@ -65,6 +73,9 @@ export class ValueChoroplethLayer {
   private scopeFaction: string | null = null;
   private outlineUnions: Map<string, MultiPolygon> | null = null;
   private outlineColors: Map<string, number> | null = null;
+  // Camera zoom the faction outline was last stroked at — the border width is screen-constant
+  // (screenWidth / zoom), so it re-strokes on a meaningful zoom change (see updateOutlineZoom).
+  private outlineZoom = 1;
   private tiers: AggregationTiers = { system: [], factionRegion: [], faction: [] };
   private thresholds: TierThresholds = DEFAULT_TIER_THRESHOLDS;
   private referenceMax = 1;
@@ -130,15 +141,28 @@ export class ValueChoroplethLayer {
   private drawOutlines() {
     this.outlines.clear();
     if (!this.outlineUnions || !this.outlineColors) return;
+    const width = FACTION_OUTLINE.screenWidth / (this.outlineZoom > 0 ? this.outlineZoom : 1);
     for (const [factionId, multiPoly] of this.outlineUnions) {
       const color = this.outlineColors.get(factionId);
       if (color === undefined) continue;
       for (const poly of multiPoly) {
         const exterior = poly[0];
         if (!exterior || exterior.length < 3) continue;
-        this.outlines.poly(exterior.flat()).stroke({ color, alpha: FACTION_OUTLINE.strokeAlpha, width: FACTION_OUTLINE.strokeWidth });
+        this.outlines.poly(exterior.flat()).stroke({ color, alpha: FACTION_OUTLINE.strokeAlpha, width, alignment: FACTION_OUTLINE.alignment, join: "round", cap: "round" });
       }
     }
+  }
+
+  /**
+   * Keep the faction border a ~constant on-screen thickness: its world width is screenWidth / zoom, so it
+   * re-strokes when the camera zoom moves past a small relative band. Called per frame from the ticker
+   * while a value mode is active; the band gate keeps a continuous zoom gesture to a bounded number of
+   * re-strokes rather than one per frame.
+   */
+  updateOutlineZoom(zoom: number) {
+    if (zoom <= 0 || Math.abs(zoom - this.outlineZoom) / this.outlineZoom < 0.03) return;
+    this.outlineZoom = zoom;
+    this.drawOutlines();
   }
 
   private recomputeReferenceMax() {
@@ -169,7 +193,7 @@ export class ValueChoroplethLayer {
         const exterior = poly[0];
         if (!exterior || exterior.length < 3) continue;
         const flat = exterior.flat();
-        this.fills.poly(flat).fill({ color, alpha: TERRITORY.fillAlpha + 0.12 });
+        this.fills.poly(flat).fill({ color, alpha: VALUE_FILL_ALPHA });
         this.fills.poly(flat).stroke({ color, alpha: TERRITORY.strokeAlpha, width: TERRITORY.strokeWidth });
       }
     }

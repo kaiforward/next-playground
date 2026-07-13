@@ -16,6 +16,7 @@ import { ValueChoroplethLayer } from "./layers/value-choropleth-layer";
 import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
+import { findFactionAt } from "./faction-hit-test";
 import { BG_COLOR, FACTION_SELECT_ZOOM } from "./theme";
 import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
@@ -228,6 +229,7 @@ export function PixiMapCanvas({
       clearHover = () => {
         hoverScreen = null;
         cellHighlightLayer.setHovered(null);
+        cellHighlightLayer.setHoveredFaction(null);
         pixi.stage.cursor = "default";
       };
       canvas.addEventListener("pointerleave", clearHover);
@@ -284,16 +286,27 @@ export function PixiMapCanvas({
         territoryLayer.updateVisibility(lod);
         politicalTerritoryLayer.updateVisibility(lod);
         valueChoroplethLayer.updateVisibility(lod);
-        if (valueChoroplethLayer.container.visible) valueChoroplethLayer.updateNumbers(camera.zoom, frustum);
+        if (valueChoroplethLayer.container.visible) {
+          valueChoroplethLayer.updateNumbers(camera.zoom, frustum);
+          valueChoroplethLayer.updateOutlineZoom(camera.zoom);
+        }
 
-        // Resolve the hovered cell at most once per frame (pointermove fires far more often than we
-        // render); also drives the clickable-cell cursor over empty cell space, not just the star.
+        // Resolve the hover target at most once per frame (pointermove fires far more often than we
+        // render), and drive the clickable cursor. Zoomed OUT (faction-select range) the target is the
+        // whole faction under the cursor; zoomed IN it's the individual cell — mirroring the click.
         if (hoverScreen) {
-          const cells = pixiRef.current?.cells;
-          if (cells) {
-            const wh = camera.screenToWorld(hoverScreen.x, hoverScreen.y);
-            const hoveredId = cells.findSystemAt(wh.x, wh.y);
+          const wh = camera.screenToWorld(hoverScreen.x, hoverScreen.y);
+          if (camera.zoom < FACTION_SELECT_ZOOM) {
+            const unions = politicalTerritoryLayer.getFactionUnions();
+            const factionId = unions ? findFactionAt(unions, wh.x, wh.y) : null;
+            cellHighlightLayer.setHoveredFaction(factionId);
+            cellHighlightLayer.setHovered(null);
+            pixi.stage.cursor = factionId ? "pointer" : "default";
+          } else {
+            const cells = pixiRef.current?.cells;
+            const hoveredId = cells ? cells.findSystemAt(wh.x, wh.y) : null;
             cellHighlightLayer.setHovered(hoveredId);
+            cellHighlightLayer.setHoveredFaction(null);
             pixi.stage.cursor = hoveredId ? "pointer" : "default";
           }
           hoverScreen = null;
@@ -380,6 +393,7 @@ export function PixiMapCanvas({
       p.politicalTerritoryLayer.getFactionColors(),
     );
     p.cellHighlightLayer.setCells(cells);
+    p.cellHighlightLayer.setFactionUnions(p.politicalTerritoryLayer.getFactionUnions());
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
