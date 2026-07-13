@@ -16,8 +16,8 @@ describe("EXPANSION constants", () => {
     expect(EXPANSION.SCORE_FLOOR).toBeGreaterThan(0);
   });
 
-  it("carries the four substrate + proximity score weights and a positive colony seed", () => {
-    for (const k of ["habitable", "diversity", "trait", "proximity"] as const) {
+  it("carries the substrate + proximity score weights and a positive colony seed", () => {
+    for (const k of ["habitable", "diversity", "proximity"] as const) {
       expect(EXPANSION.SCORE_WEIGHTS[k]).toBeGreaterThan(0);
     }
     expect(EXPANSION.DEVELOP_HABITABLE_FLOOR).toBeGreaterThan(0);

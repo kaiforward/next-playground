@@ -14,8 +14,6 @@ export interface ClaimCandidate {
   habitableSpace: number;
   /** Count of resources this system has any deposit slot for. */
   resourceDiversity: number;
-  /** Σ of the system's trait qualities. */
-  traitQuality: number;
 }
 
 /** A faction's desire to claim `systemId` this pulse, with its comparable score. */
@@ -34,7 +32,6 @@ export interface ResolvedClaim {
 export interface ExpansionScoreWeights {
   habitable: number;
   diversity: number;
-  trait: number;
   /** Proximity discount strength; feeds 1 / (1 + proximity × minHops). */
   proximity: number;
 }
@@ -49,8 +46,7 @@ export interface ExpansionParams {
 export function scoreClaimCandidate(c: ClaimCandidate, w: ExpansionScoreWeights): number {
   const substrate =
     w.habitable * Math.max(0, c.habitableSpace) +
-    w.diversity * Math.max(0, c.resourceDiversity) +
-    w.trait * Math.max(0, c.traitQuality);
+    w.diversity * Math.max(0, c.resourceDiversity);
   const proximity = 1 / (1 + w.proximity * Math.max(0, c.minHops));
   return substrate * proximity;
 }

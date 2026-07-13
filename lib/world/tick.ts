@@ -382,12 +382,6 @@ function countResourceDiversity(s: SimSystem): number {
   for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) n++;
   return n;
 }
-/** Σ of the system's trait qualities — a claim/develop score input. */
-function sumTraitQuality(s: SimSystem): number {
-  let q = 0;
-  for (const t of s.traits) q += t.quality;
-  return q;
-}
 
 /** Apply resolved claims: the target becomes `controlled` and owned by the winning faction. The
  * `: SimSystem` return annotation contextually narrows the `"controlled"` literal to `SystemControl`
@@ -728,7 +722,6 @@ export async function runWorldTick(
           systemId: candidateId, minHops,
           habitableSpace: cand.habitableSpace,
           resourceDiversity: countResourceDiversity(cand),
-          traitQuality: sumTraitQuality(cand),
         });
       }
       return candidates;

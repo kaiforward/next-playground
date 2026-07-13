@@ -9,11 +9,11 @@ import {
 } from "@/lib/engine/expansion";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
-const WEIGHTS = { habitable: 1.0, diversity: 3.0, trait: 2.0, proximity: 0.5 };
+const WEIGHTS = { habitable: 1.0, diversity: 3.0, proximity: 0.5 };
 const PARAMS: ExpansionParams = { maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: WEIGHTS };
 
 function cand(p: Partial<ClaimCandidate> & { systemId: string }): ClaimCandidate {
-  return { minHops: 1, habitableSpace: 0, resourceDiversity: 0, traitQuality: 0, ...p };
+  return { minHops: 1, habitableSpace: 0, resourceDiversity: 0, ...p };
 }
 
 describe("scoreClaimCandidate", () => {
@@ -24,6 +24,14 @@ describe("scoreClaimCandidate", () => {
   });
   it("scores a zero-substrate candidate at 0", () => {
     expect(scoreClaimCandidate(cand({ systemId: "z" }), WEIGHTS)).toBe(0);
+  });
+  it("scores claims on substrate × proximity with no trait term", () => {
+    const w = { habitable: 1, diversity: 1, proximity: 0.1 };
+    const near = { systemId: "a", minHops: 1, habitableSpace: 100, resourceDiversity: 3 };
+    const far = { systemId: "b", minHops: 4, habitableSpace: 100, resourceDiversity: 3 };
+    expect(scoreClaimCandidate(near, w)).toBeGreaterThan(scoreClaimCandidate(far, w)); // proximity discount
+    // identical substrate + hops ⇒ identical score (nothing trait-derived left)
+    expect(scoreClaimCandidate({ ...near, systemId: "c" }, w)).toBeCloseTo(scoreClaimCandidate(near, w), 9);
   });
 });
 

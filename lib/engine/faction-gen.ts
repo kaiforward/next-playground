@@ -124,12 +124,6 @@ export function assignHomeworldOwnership(
 
 // ── Homeworld placement (spaced + seed-biased) ──────────────────
 
-function homeworldTraitQuality(s: GeneratedSystem): number {
-  let q = 0;
-  for (const t of s.traits) q += t.quality;
-  return q;
-}
-
 /** Count of resources this system has any deposit slot for — the "resource diversity" term. */
 function homeworldResourceDiversity(slotCap: ResourceVector): number {
   let n = 0;
@@ -139,8 +133,8 @@ function homeworldResourceDiversity(slotCap: ResourceVector): number {
 
 /**
  * Pick one well-spaced, high-substrate homeworld per faction. Score = weighted sum
- * of normalized (habitable base, resource diversity, trait quality) minus normalized
- * danger; greedy-select highest score first, requiring each pick to sit at least the
+ * of normalized (habitable base, resource diversity) minus normalized danger;
+ * greedy-select highest score first, requiring each pick to sit at least the
  * spacing threshold from all prior picks. The threshold relaxes on failure so a dense
  * galaxy degrades to "as spaced as it can be" rather than throwing on tight spacing; it
  * throws only when there are fewer systems than requested homeworlds, since each faction
@@ -155,12 +149,10 @@ export function placeHomeworlds(systems: GeneratedSystem[], count: number, mapSi
     );
   }
 
-  let maxHab = 1, maxDanger = 1, maxTrait = 1;
+  let maxHab = 1, maxDanger = 1;
   for (const s of systems) {
     if (s.habitableSpace > maxHab) maxHab = s.habitableSpace;
     if (s.bodyDanger > maxDanger) maxDanger = s.bodyDanger;
-    const tq = homeworldTraitQuality(s);
-    if (tq > maxTrait) maxTrait = tq;
   }
 
   const w = HOMEWORLD_PLACEMENT.SCORE_WEIGHTS;
@@ -171,8 +163,7 @@ export function placeHomeworlds(systems: GeneratedSystem[], count: number, mapSi
       y: s.y,
       score:
         w.habitable * (s.habitableSpace / maxHab) +
-        w.diversity * (homeworldResourceDiversity(s.slotCap) / RESOURCE_TYPES.length) +
-        w.trait * (homeworldTraitQuality(s) / maxTrait) -
+        w.diversity * (homeworldResourceDiversity(s.slotCap) / RESOURCE_TYPES.length) -
         w.danger * (s.bodyDanger / maxDanger),
     }))
     .sort((a, b) => b.score - a.score || a.idx - b.idx);
