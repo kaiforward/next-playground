@@ -98,7 +98,7 @@ export function TopBar() {
 
       {/* Center: simulation speed + tick/tps */}
       <div className="flex items-center gap-4 shrink-0">
-        <SpeedControls layout="horizontal" />
+        <SpeedControls />
         <TickReadout />
       </div>
 
