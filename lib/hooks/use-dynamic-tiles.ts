@@ -10,7 +10,8 @@ import type { DynamicTileSystem } from "@/lib/types/game";
  * No viewport dependency — data is cached per tick and viewport culling happens
  * client-side. This eliminates flicker and redundant API calls on pan/zoom.
  *
- * Invalidated on `shipArrived` and `eventNotifications`.
+ * Invalidated on the per-tick `economyTick` heartbeat (see useTickInvalidation)
+ * so event pills track silent spawns/phase-advances, not just notified ones.
  */
 export function useDynamicData(
   active: boolean,
