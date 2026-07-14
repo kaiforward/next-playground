@@ -62,7 +62,8 @@ function SystemPanelContent({
   const showOnMap = () => {
     if (!systemInfo) return;
     const loc = Number(searchParams.get("loc") ?? 0) + 1;
-    router.replace(`${basePath}?focus=${systemInfo.x},${systemInfo.y}&loc=${loc}`);
+    // Recentre from the CURRENT path (not basePath) so locating never resets the active sub-tab.
+    router.replace(`${pathname}?focus=${systemInfo.x},${systemInfo.y}&loc=${loc}`);
   };
 
   const headerAction = (

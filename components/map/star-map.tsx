@@ -373,7 +373,7 @@ export function StarMap({
         </QueryBoundary>
       )}
 
-      {/* Map controls dock (bottom-left) — main panel + floating Price panel */}
+      {/* Map controls dock (bottom-right) — main panel + floating Price panel */}
       <MapControlsDock
         mode={mapMode}
         setMode={setMapMode}
