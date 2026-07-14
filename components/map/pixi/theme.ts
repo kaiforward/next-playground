@@ -196,6 +196,9 @@ export const CAMERA = {
   maxZoom: 2.5,
   zoomStep: 0.001,   // per wheel delta pixel
   fitViewPadding: 0.15,
+  panKeySpeed: 900,  // keyboard pan, screen px/s (zoom-invariant)
+  panKeyBoost: 2,    // Shift multiplier
+  clickDragThreshold: 5,  // px of pointer travel that turns a click into a drag
 } as const;
 
 // ── Starfield ────────────────────────────────────────────────────

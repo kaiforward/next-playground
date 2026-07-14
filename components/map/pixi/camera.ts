@@ -6,6 +6,90 @@ export interface CameraState {
   zoom: number;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Keyboard-pan + click/drag helpers (pure)                          */
+/* ------------------------------------------------------------------ */
+
+export type PanDirection = "up" | "down" | "left" | "right";
+
+/** WASD + arrow keys → a pan direction; null for anything else. */
+export function codeToPanDirection(code: string): PanDirection | null {
+  switch (code) {
+    case "KeyW":
+    case "ArrowUp":
+      return "up";
+    case "KeyS":
+    case "ArrowDown":
+      return "down";
+    case "KeyA":
+    case "ArrowLeft":
+      return "left";
+    case "KeyD":
+    case "ArrowRight":
+      return "right";
+    default:
+      return null;
+  }
+}
+
+/** Sum held directions into a normalised screen-space vector (diagonals aren't faster). */
+function panVector(dirs: Iterable<PanDirection>): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  for (const d of dirs) {
+    if (d === "up") y -= 1;
+    else if (d === "down") y += 1;
+    else if (d === "left") x -= 1;
+    else x += 1;
+  }
+  const len = Math.hypot(x, y);
+  if (len === 0) return { x: 0, y: 0 };
+  return { x: x / len, y: y / len };
+}
+
+interface PanDeltaOptions {
+  dtMs: number;
+  zoom: number;
+  shiftHeld: boolean;
+  speed: number;
+  boost: number;
+}
+
+/**
+ * World-space camera delta for the held pan keys this frame. Speed is constant in *screen* space
+ * (÷ zoom), so panning feels identical at every zoom level; Shift applies the boost.
+ */
+export function keyboardPanDelta(
+  dirs: Iterable<PanDirection>,
+  { dtMs, zoom, shiftHeld, speed, boost }: PanDeltaOptions,
+): { dx: number; dy: number } {
+  const { x, y } = panVector(dirs);
+  if (x === 0 && y === 0) return { dx: 0, dy: 0 };
+  const screenPerSec = speed * (shiftHeld ? boost : 1);
+  const worldStep = (screenPerSec * (dtMs / 1000)) / zoom;
+  return { dx: x * worldStep, dy: y * worldStep };
+}
+
+/** True once the pointer has travelled past the threshold — a drag, not a click. */
+export function movedBeyond(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  threshold: number,
+): boolean {
+  return Math.hypot(bx - ax, by - ay) > threshold;
+}
+
+/** Focus lives in a text-entry field → keyboard pan must stand down so it doesn't eat keystrokes. */
+export function isTypingTarget(
+  el: { tagName: string; isContentEditable: boolean } | null,
+): boolean {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
+}
+
 interface CameraAnimation {
   startX: number;
   startY: number;
@@ -36,17 +120,27 @@ export class Camera {
   private lastPointerX = 0;
   private lastPointerY = 0;
 
+  // ── Keyboard-pan state ──────────────────────────────────────────
+  private heldDirs = new Set<PanDirection>();
+  private shiftHeld = false;
+
   // Bound handlers for cleanup
   private boundPointerDown: (e: PointerEvent) => void;
   private boundPointerMove: (e: PointerEvent) => void;
   private boundPointerUp: (e: PointerEvent) => void;
   private boundWheel: (e: WheelEvent) => void;
+  private boundKeyDown: (e: KeyboardEvent) => void;
+  private boundKeyUp: (e: KeyboardEvent) => void;
+  private boundBlur: () => void;
 
   constructor() {
     this.boundPointerDown = this.onPointerDown.bind(this);
     this.boundPointerMove = this.onPointerMove.bind(this);
     this.boundPointerUp = this.onPointerUp.bind(this);
     this.boundWheel = this.onWheel.bind(this);
+    this.boundKeyDown = this.onKeyDown.bind(this);
+    this.boundKeyUp = this.onKeyUp.bind(this);
+    this.boundBlur = this.clearHeldKeys.bind(this);
   }
 
   // ── Input binding ───────────────────────────────────────────────
@@ -57,6 +151,12 @@ export class Camera {
     canvas.addEventListener("pointerup", this.boundPointerUp);
     canvas.addEventListener("pointerleave", this.boundPointerUp);
     canvas.addEventListener("wheel", this.boundWheel, { passive: false });
+    // Keyboard pan is window-level so it works without first clicking the canvas.
+    window.addEventListener("keydown", this.boundKeyDown);
+    window.addEventListener("keyup", this.boundKeyUp);
+    // The window can't see keyup while it's blurred (alt-tab, devtools, app switch), so drop any held
+    // keys on blur — otherwise a key held at focus-loss would pan forever after the user returns.
+    window.addEventListener("blur", this.boundBlur);
   }
 
   detach(canvas: HTMLCanvasElement) {
@@ -65,6 +165,10 @@ export class Camera {
     canvas.removeEventListener("pointerup", this.boundPointerUp);
     canvas.removeEventListener("pointerleave", this.boundPointerUp);
     canvas.removeEventListener("wheel", this.boundWheel);
+    window.removeEventListener("keydown", this.boundKeyDown);
+    window.removeEventListener("keyup", this.boundKeyUp);
+    window.removeEventListener("blur", this.boundBlur);
+    this.clearHeldKeys();
   }
 
   setScreenSize(w: number, h: number) {
@@ -150,18 +254,39 @@ export class Camera {
 
   /** Call from Pixi ticker. Returns true if camera changed. */
   update(dtMs: number): boolean {
-    if (!this.animation) return false;
-    const a = this.animation;
-    a.elapsed += dtMs;
-    const t = Math.min(1, a.elapsed / a.duration);
-    const e = easeOutCubic(t);
+    let changed = false;
 
-    this.x = a.startX + (a.endX - a.startX) * e;
-    this.y = a.startY + (a.endY - a.startY) * e;
-    this.zoom = a.startZoom + (a.endZoom - a.startZoom) * e;
+    // Held-key panning, independent of any glide animation (a keypress cancels the glide).
+    if (this.heldDirs.size > 0) {
+      const { dx, dy } = keyboardPanDelta(this.heldDirs, {
+        dtMs,
+        zoom: this.zoom,
+        shiftHeld: this.shiftHeld,
+        speed: CAMERA.panKeySpeed,
+        boost: CAMERA.panKeyBoost,
+      });
+      if (dx !== 0 || dy !== 0) {
+        this.x += dx;
+        this.y += dy;
+        changed = true;
+      }
+    }
 
-    if (t >= 1) this.animation = null;
-    return true;
+    if (this.animation) {
+      const a = this.animation;
+      a.elapsed += dtMs;
+      const t = Math.min(1, a.elapsed / a.duration);
+      const e = easeOutCubic(t);
+
+      this.x = a.startX + (a.endX - a.startX) * e;
+      this.y = a.startY + (a.endY - a.startY) * e;
+      this.zoom = a.startZoom + (a.endZoom - a.startZoom) * e;
+
+      if (t >= 1) this.animation = null;
+      changed = true;
+    }
+
+    return changed;
   }
 
   get isAnimating(): boolean {
@@ -197,6 +322,32 @@ export class Camera {
     if (!(e.target instanceof HTMLElement)) return;
     const rect = e.target.getBoundingClientRect();
     this.zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY);
+  }
+
+  private onKeyDown(e: KeyboardEvent) {
+    // Stand down while the player is typing (save-name box, dev tools, …).
+    if (e.target instanceof HTMLElement && isTypingTarget(e.target)) return;
+    // Let modifier shortcuts through (Ctrl/Cmd+A select-all, Ctrl/Cmd+arrow, …) — only Shift, the
+    // pan boost, is ours. Without this the window-level listener would hijack them app-wide.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    this.shiftHeld = e.shiftKey;
+    const dir = codeToPanDirection(e.code);
+    if (!dir) return;
+    e.preventDefault(); // arrows would otherwise scroll the page
+    this.heldDirs.add(dir);
+    this.animation = null; // manual pan takes over any in-flight glide
+  }
+
+  private onKeyUp(e: KeyboardEvent) {
+    this.shiftHeld = e.shiftKey;
+    const dir = codeToPanDirection(e.code);
+    if (dir) this.heldDirs.delete(dir);
+  }
+
+  /** Drop all held pan keys — used on window blur (no keyup arrives while blurred) and on detach. */
+  private clearHeldKeys() {
+    this.heldDirs.clear();
+    this.shiftHeld = false;
   }
 
   // ── Internal ────────────────────────────────────────────────────

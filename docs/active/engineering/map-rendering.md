@@ -92,14 +92,27 @@ changes, not every frame.
 
 - **Every mode, any zoom:** click a Voronoi cell → open `/system/[id]`. Selection is analytic — a Voronoi cell is
   the set of points nearest its site, so `delaunay.find(x, y)` resolves the cell under the cursor in O(log n)
-  (`voronoi-cache.ts`), routed through the existing pointer flow. The star's own hitbox still works when zoomed
-  in; the cell hit-test catches clicks that miss it.
+  (`voronoi-cache.ts`), routed through the existing pointer flow. Selection resolves on pointer-**up** and only
+  when the pointer barely moved (< `CAMERA.clickDragThreshold`), so a quick click selects while a drag pans the
+  camera instead (see Navigation). The stage-level cell hit-test is the single selection path — it covers direct
+  star hits and clicks that miss the star alike.
 - **The one exception — zoomed out:** a faction click routes to `/factions/[id]`, opening the faction panel and
   re-scaling the value gradient (above).
 - **Selection ≠ camera.** A generic `?focus=<x>,<y>[,<zoom>]` param recentres the camera on any world coordinate
   (a system, later a fleet or event); `?systemId=<id>` is a convenience that resolves a system to its
   coordinates. A focus link never opens the panel, and a click (which routes to `/system/[id]`) never recentres —
   the two channels are independent.
+
+## Navigation
+
+Panning and zoom are camera-level (`camera.ts`), independent of selection:
+
+- **Mouse drag** pans; the **wheel** zooms toward the cursor. Because selection only fires on a barely-moved
+  pointer-up, a drag never also selects.
+- **Keyboard pan** — WASD **and** arrow keys, held for continuous panning (diagonals via two keys) at a constant
+  **screen-space** speed so it feels identical at every zoom; **Shift** applies a 2× boost. Listeners are
+  window-level (no need to click the canvas first) but stand down while a text field is focused, and a keypress
+  cancels any in-flight camera glide. All folded into the camera's existing per-frame `update()`.
 
 ## Star-type dots
 
