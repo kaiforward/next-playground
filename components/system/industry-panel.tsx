@@ -14,7 +14,7 @@ import {
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { QUALITY_BAND_TEXT } from "@/lib/constants/ui";
+import { QUALITY_BAND_TEXT, GRADE } from "@/lib/constants/ui";
 import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
 import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
 import type { IndustryHealth, IdleReason, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry } from "@/lib/engine/industry";
@@ -69,13 +69,6 @@ function HealthGlyph({ health, className = "", decorative = false }: { health: I
     </span>
   );
 }
-
-/** Labour-grade hues + names — distinct from health and from land (copper). Redundant U/T/E label at call sites. */
-const GRADE = {
-  unskilled: { bar: "bg-status-blue", text: "text-status-blue-light", tag: "U", name: "Unskilled" },
-  skill1: { bar: "bg-status-cyan", text: "text-status-cyan-light", tag: "T", name: "Technicians" },
-  skill2: { bar: "bg-status-purple", text: "text-status-purple-light", tag: "E", name: "Engineers" },
-} as const;
 
 // Faded-copper hatch = "housing can still grow here"; faint light hatch = idle capacity.
 const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 2px, transparent 2px 6px)";

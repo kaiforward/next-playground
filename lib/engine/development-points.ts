@@ -25,6 +25,7 @@ import type { GoodTier } from "@/lib/types/game";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { BUILDING_TYPES, COMPLEX_BY_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { computeSystemLabourSnapshot, effectiveFulfilment } from "@/lib/engine/industry";
+import { habitablePotentialPop, industryPotential } from "@/lib/engine/development";
 
 /** Points per staffed production level, by good tier. */
 const TIER_WEIGHT: Record<GoodTier, number> = { 0: 1, 1: 2, 2: 4 };
@@ -76,6 +77,60 @@ export function developmentPoints(input: DevelopmentPointsInput): number {
     industryTerm += count * effectiveFulfilment(state, tier) * DEVELOPMENT_POINTS.TIER_WEIGHT[tier];
   }
   const complexTerm = Math.min(1, complexCount) * DEVELOPMENT_POINTS.COMPLEX_POINTS;
+
+  return populationTerm + industryTerm + complexTerm;
+}
+
+/** Clamp a possibly-degenerate input to a finite, non-negative number. */
+function finiteNonNegative(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+/** The static substrate `developmentPotential` scores at full build-out (see its doc comment). */
+export interface DevelopmentPotentialInput {
+  /** Habitable land — housed at full occupancy for the ceiling's population term. */
+  habitableSpace: number;
+  /** Total worked-able deposit slots across all resources (Σ slot caps) — every slot worked at the ceiling. */
+  depositSlots: number;
+  /** Fungible general space — all given to staffed production at the ceiling. */
+  generalSpace: number;
+}
+
+/**
+ * The dev-points ceiling a system would score at full build-out of its own physical substrate — the
+ * SAME units as `developmentPoints`, so a vitals read can compute a linear
+ * `pct = developmentPoints / developmentPotential`, where 100% is the system's own natural ceiling (not
+ * a universe-wide reference, unlike `systemDevelopment`). Full build-out = full housing (population =
+ * `habitablePotentialPop`), every deposit slot worked, all general space given to staffed production,
+ * and the one allowed specialisation complex built:
+ *
+ *  - populationTerm: `habitablePotentialPop(habitableSpace) / POP_CENTRE_DENSITY` — the same
+ *    heads-to-level-equivalent conversion `developmentPoints` uses on raw population, base heads only
+ *    (no skilled uplift — the simplest defensible ceiling). Population dominates the score for most
+ *    systems, so this is the primary driver; the industry term below is second-order.
+ *  - industryTerm: `industryPotential(depositSlots, generalSpace)` — every deposit slot worked plus all
+ *    general space as factory, in the same space units `industryPotential` already defines — valued at
+ *    a single middle tier (`TIER_WEIGHT[1]`, tier-1) rather than guessing a tier-0/1/2 mix; a real
+ *    system's mixed build would generally score somewhere under this uniform ceiling.
+ *  - complexTerm: one `COMPLEX_POINTS` bump (the industrial pinnacle, cap 1/system), gated on having any
+ *    general space to build it on — so a system with literally nothing to build on reads a true 0, not a
+ *    phantom complex.
+ *
+ * Guards: pure, deterministic, always finite and ≥ 0 — degenerate/negative inputs clamp to 0 rather than
+ * propagating NaN/Infinity; a system with no habitable land, no deposit slots, and no general space
+ * returns exactly 0 (the consumer treats potential 0 ⇒ pct 0).
+ *
+ * First-draft calibration knob (which tier values general-space production) — tune in visual smoke; only
+ * the shape above (a legible ceiling a real system's developmentPoints generally sits under) is fixed.
+ */
+export function developmentPotential(input: DevelopmentPotentialInput): number {
+  const habitableSpace = finiteNonNegative(input.habitableSpace);
+  const depositSlots = finiteNonNegative(input.depositSlots);
+  const generalSpace = finiteNonNegative(input.generalSpace);
+
+  const populationTerm = habitablePotentialPop(habitableSpace) / POP_CENTRE_DENSITY;
+  const industryTerm = industryPotential(depositSlots, generalSpace) * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
+  const complexTerm = generalSpace > 0 ? DEVELOPMENT_POINTS.COMPLEX_POINTS : 0;
 
   return populationTerm + industryTerm + complexTerm;
 }

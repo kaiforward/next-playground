@@ -28,6 +28,7 @@ export function useTickInvalidation() {
         // territory + filled/hollow markers so the map paints expansion live.
         queryClient.invalidateQueries({ queryKey: queryKeys.ownership });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemPopulationAll });
+        queryClient.invalidateQueries({ queryKey: queryKeys.systemVitalsAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemIndustryAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.systemLogisticsAll });
         // Construction advances every funded pulse (same monthly economy tick) — refresh both surfaces.

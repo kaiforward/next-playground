@@ -174,6 +174,43 @@ export type SystemPopulationData =
   | { visibility: "unknown" };
 export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
 
+// ── System vitals (overview vital tiles: stability / development / population) ──
+export interface SystemVitalsStability {
+  /** (1 − unrest) × 100. */
+  pct: number;
+  unrest: number;
+}
+export interface SystemVitalsDevelopment {
+  /** Raw tier-weighted `developmentPoints` — same units as the map choropleth. */
+  points: number;
+  /** This system's own full-build-out ceiling (`developmentPotential`), not a universe-wide reference. */
+  potential: number;
+  /** clamp(points / potential, 0, 1) × 100 — never exceeds 100 even though `points` can slightly
+   *  exceed a base-heads-only `potential`. */
+  pct: number;
+}
+/** Population composition — always sums to max(0, headcount). */
+export interface SystemVitalsPopulationComposition {
+  unskilled: number;
+  technicians: number;
+  engineers: number;
+  unemployed: number;
+}
+export interface SystemVitalsPopulation {
+  headcount: number;
+  composition: SystemVitalsPopulationComposition;
+}
+/** Assembled read for the overview's three vital tiles — discriminated on visibility. */
+export type SystemVitalsData =
+  | {
+      visibility: "visible";
+      stability: SystemVitalsStability;
+      development: SystemVitalsDevelopment;
+      population: SystemVitalsPopulation;
+    }
+  | { visibility: "unknown" };
+export type SystemVitalsResponse = ApiResponse<SystemVitalsData>;
+
 // ── System substrate (physical / static — astrography flavour) ───────────────
 export interface BodyView {
   id: string;

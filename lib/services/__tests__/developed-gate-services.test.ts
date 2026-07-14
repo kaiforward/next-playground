@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemPopulation } from "@/lib/services/system-population";
+import { getSystemVitals } from "@/lib/services/system-vitals";
 import { getSystemIndustry } from "@/lib/services/universe";
 import { getSystemLogistics } from "@/lib/services/trade-flow";
 import { getMarket } from "@/lib/services/market";
@@ -17,6 +18,7 @@ describe("system-detail services gate on developed control", () => {
     const undeveloped = world.systems.find((s) => s.control !== "developed")!;
 
     expect(getSystemPopulation(undeveloped.id)).toEqual({ visibility: "unknown" });
+    expect(getSystemVitals(undeveloped.id)).toEqual({ visibility: "unknown" });
     expect(getSystemIndustry(undeveloped.id)).toEqual({ visibility: "unknown" });
     expect(getSystemLogistics(undeveloped.id)).toEqual({ visibility: "unknown" });
     expect(getMarket(undeveloped.id)).toEqual({ stationId: undeveloped.id, entries: [] });
@@ -28,6 +30,7 @@ describe("system-detail services gate on developed control", () => {
     const developed = world.systems.find((s) => s.control === "developed")!;
 
     expect(getSystemPopulation(developed.id).visibility).toBe("visible");
+    expect(getSystemVitals(developed.id).visibility).toBe("visible");
     expect(getSystemIndustry(developed.id).visibility).toBe("visible");
   });
 });

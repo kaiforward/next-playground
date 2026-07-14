@@ -31,6 +31,9 @@ export const queryKeys = {
   // Per-system dynamic population/unrest/demand — tick-invalidated.
   systemPopulationAll: ["systemPopulation"] as const,
   systemPopulation: (systemId: string) => ["systemPopulation", systemId] as const,
+  // Per-system overview vitals (stability/development/population) — tick-invalidated.
+  systemVitalsAll: ["systemVitals"] as const,
+  systemVitals: (systemId: string) => ["systemVitals", systemId] as const,
   // Per-system industrial base + supply-chain state — tick-invalidated.
   systemIndustryAll: ["systemIndustry"] as const,
   systemIndustry: (systemId: string) => ["systemIndustry", systemId] as const,

@@ -3,7 +3,11 @@
  * the disk adapter lives in `save-files.ts`, the only Node-edge file in
  * `lib/world`; this module only turns a `World` into a JSON string and back.
  *
- * Bump `SAVE_FORMAT_VERSION` any time `World`'s shape (types.ts) changes.
+ * Bump `SAVE_FORMAT_VERSION` for any `World`-shape (types.ts) change that would
+ * make an old save invalid or misread — i.e. a new REQUIRED field, or a changed
+ * meaning/shape of an existing one. An additive OPTIONAL field that old saves can
+ * legitimately omit does NOT need a bump: the field simply stays `undefined` on
+ * load, which is correct.
  * `deserializeWorld` does structural spot-checks, not exhaustive validation,
  * so an old save's shape can drift from the current `World` type without
  * tripping any of the checks below — the version bump is what makes old
