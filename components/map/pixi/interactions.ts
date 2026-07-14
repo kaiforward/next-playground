@@ -2,8 +2,9 @@ import type { Application, FederatedPointerEvent } from "pixi.js";
 import type { SystemLayer } from "./layers/system-layer";
 import type { SystemCells } from "./voronoi-cache";
 import { SystemObject } from "./objects/system-object";
-import { ANIM } from "./theme";
+import { ANIM, CAMERA } from "./theme";
 import { findFactionAt } from "./faction-hit-test";
+import { movedBeyond } from "./camera";
 import type { MultiPolygon } from "./territory-utils";
 
 interface InteractionCallbacks {
@@ -47,12 +48,9 @@ export function setupInteractions({
   getFactionContext,
 }: InteractionOptions): () => void {
   // ── System binding ────────────────────────────────────────────
+  // Selection is resolved centrally on the stage's pointer-up (below) via the Voronoi cell hit-test —
+  // a star always sits inside its own cell, so the object only owns hover.
   function bindSystem(obj: SystemObject) {
-    obj.on("pointerdown", (e) => {
-      e.stopPropagation();
-      getCallbacks().onSelectSystem(obj.systemId);
-    });
-
     obj.on("pointerover", () => {
       // Hover reveals overlay-gated pills.
       obj.setHovered(true);
@@ -71,11 +69,23 @@ export function setupInteractions({
   // Auto-bind new objects created during sync
   systemLayer.onObjectCreated = bindSystem;
 
-  // ── Stage click (empty space) ─────────────────────────────────
+  // ── Stage selection (pointer-up, click vs drag) ───────────────
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
 
-  const onStageClick = (e: FederatedPointerEvent) => {
+  // Selection resolves on pointer-UP, and only when the pointer barely moved between down and up. A
+  // real drag (past CAMERA.clickDragThreshold) pans the camera — handled by Camera's own DOM
+  // listeners — and must NOT also select, which is what made the clickable cells "swallow" pans.
+  let downX = 0;
+  let downY = 0;
+  const onStageDown = (e: FederatedPointerEvent) => {
+    downX = e.global.x;
+    downY = e.global.y;
+  };
+
+  const onStageUp = (e: FederatedPointerEvent) => {
+    if (movedBeyond(downX, downY, e.global.x, e.global.y, CAMERA.clickDragThreshold)) return;
+
     const { onSelectSystem, onEmptyClick, onSelectFaction } = getCallbacks();
     const { cells, toWorld } = getCellContext();
     const w = toWorld(e.global.x, e.global.y);
@@ -92,9 +102,8 @@ export function setupInteractions({
       }
     }
 
-    // A click anywhere inside a system's Voronoi cell selects that system — in
-    // every map mode, at every zoom. The star's own pointerdown handles direct
-    // hits (and stopPropagation()s), so this resolves clicks that miss a star.
+    // A click anywhere inside a system's Voronoi cell selects that system — in every map mode, at
+    // every zoom, whether or not it landed on the star.
     if (cells) {
       const systemId = cells.findSystemAt(w.x, w.y);
       if (systemId != null) {
@@ -106,12 +115,14 @@ export function setupInteractions({
     // Outside the map extent → clear the selection.
     onEmptyClick();
   };
-  app.stage.on("pointerdown", onStageClick);
+  app.stage.on("pointerdown", onStageDown);
+  app.stage.on("pointerup", onStageUp);
 
   // ── Cleanup ───────────────────────────────────────────────────
   return () => {
     for (const obj of systemLayer.getAllObjects()) obj.removeAllListeners();
     systemLayer.onObjectCreated = undefined;
-    app.stage.off("pointerdown", onStageClick);
+    app.stage.off("pointerdown", onStageDown);
+    app.stage.off("pointerup", onStageUp);
   };
 }
