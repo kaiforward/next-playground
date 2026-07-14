@@ -1,6 +1,7 @@
 import { Container } from "pixi.js";
 import { SystemObject } from "../objects/system-object";
 import type { SystemNodeData } from "@/lib/hooks/use-map-data";
+import type { MapMode } from "@/lib/types/map";
 import type { Frustum } from "../frustum";
 import type { LODState } from "../lod";
 
@@ -18,6 +19,9 @@ export class SystemLayer {
   // later). Defaults ON so glyphs created before the first overlay sync don't
   // flash hidden.
   private showEvents = true;
+  // Active map mode — stored so objects created later inherit it (they subdue
+  // the star dot under value modes). Pushed to live objects via setMode.
+  private currentMode: MapMode = "none";
   onObjectCreated?: (obj: SystemObject) => void;
 
   /** Toggle active state. Hides container when inactive — objects are preserved. */
@@ -35,6 +39,17 @@ export class SystemLayer {
     this.showEvents = events;
     for (const obj of this.objects.values()) {
       obj.setOverlayFlags(events);
+    }
+  }
+
+  /**
+   * Set the active map mode. Stored so objects created later inherit it, and
+   * pushed to all live objects now (they subdue the star dot under value modes).
+   */
+  setMode(mode: MapMode) {
+    this.currentMode = mode;
+    for (const obj of this.objects.values()) {
+      obj.setMode(mode);
     }
   }
 
@@ -91,6 +106,7 @@ export class SystemLayer {
         this.container.addChild(obj);
         this.onObjectCreated?.(obj);
         obj.setOverlayFlags(this.showEvents);
+        obj.setMode(this.currentMode);
         obj.update(data, id === this.selectedId);
         createdThisFrame++;
       }
