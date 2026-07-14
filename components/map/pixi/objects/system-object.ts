@@ -1,9 +1,14 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SunClass, SystemVisibility } from "@/lib/types/game";
 import { isValueMapMode, type MapMode } from "@/lib/types/map";
 import type { LODState } from "../lod";
 import { SUN_CLASS_COLORS_PIXI, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
+import { getGlowTexture, GLOW_TEXTURE_SIZE } from "./glow-texture";
+
+// Scale that maps the shared glow texture down to the bloom's world diameter.
+// Multiplied by the LOD dot-scale each frame in setLOD.
+const BLOOM_BASE_SCALE = (GLYPH.bloomRadius * 2) / GLOW_TEXTURE_SIZE;
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -60,7 +65,8 @@ function lodVisuallyEqual(a: LODState, b: LODState): boolean {
 export class SystemObject extends Container {
   systemId = "";
 
-  private core: Graphics;         // star-type dot (bloom under-disc + bright core)
+  private bloom: Sprite;          // soft radial glow under the core (shared gradient texture)
+  private core: Graphics;         // crisp bright core disc
   private hoverRing: Graphics;    // star-coloured ring, shown only on hover
   private selectionRing: Graphics;
   private nameBg: Graphics;
@@ -104,7 +110,13 @@ export class SystemObject extends Container {
     this.selectionRing = new Graphics();
     this.addChild(this.selectionRing);
 
-    // Star-type dot: bloom under-disc + bright core in one Graphics.
+    // Soft radial bloom (shared gradient texture, tinted per star colour) — sits
+    // under the core so the dot has a glow that actually fades to transparent.
+    this.bloom = new Sprite(getGlowTexture());
+    this.bloom.anchor.set(0.5);
+    this.addChild(this.bloom);
+
+    // Star-type dot: a crisp bright core disc over the bloom.
     this.core = new Graphics();
     this.addChild(this.core);
 
@@ -201,10 +213,15 @@ export class SystemObject extends Container {
     const isUnknown = this.currentVisibility === "unknown";
     const subdued = isValueMapMode(this.currentMode);
 
+    // Crisp bright core.
     this.core.clear();
-    this.core.circle(0, 0, GLYPH.bloomRadius).fill({ color, alpha: subdued ? 0.1 : 0.22 });
     this.core.circle(0, 0, GLYPH.coreRadius).fill({ color });
     this.core.alpha = isUnknown ? 0.4 : subdued ? 0.5 : 1;
+
+    // Soft glow — the texture carries the radial fade; tint + alpha carry colour
+    // and strength. Subdued under value modes so the Voronoi cell reads.
+    this.bloom.tint = color;
+    this.bloom.alpha = isUnknown ? 0.2 : subdued ? 0.18 : 0.5;
 
     this.hoverRing.clear();
     this.hoverRing.circle(0, 0, GLYPH.hoverRingRadius).stroke({ color, width: 2, alpha: 0.9 });
@@ -327,6 +344,7 @@ export class SystemObject extends Container {
     this.selectionRing.scale.set(lod.systemDotScale);
     this.hoverRing.scale.set(lod.systemDotScale);
     this.hoverRing.visible = this.isHovered;
+    this.bloom.scale.set(BLOOM_BASE_SCALE * lod.systemDotScale);
   }
 
   /** Two-stage LOD helper: toggle a pill's content nodes (text/icons) together.
