@@ -53,6 +53,7 @@ describe("getAtlas", () => {
       economyType: system.economyType,
       isGateway: system.isGateway,
       developed: system.control === "developed",
+      sunClass: system.sunClass,
     });
 
     const faction = world.factions[0];
@@ -61,6 +62,14 @@ describe("getAtlas", () => {
 
     for (const c of atlas.connections) {
       expect(c.id).toBe(`${c.fromSystemId}:${c.toSystemId}`);
+    }
+  });
+
+  it("copies sunClass onto every AtlasSystem", () => {
+    const atlas = getAtlas();
+    expect(atlas.systems.length).toBeGreaterThan(0);
+    for (const s of atlas.systems) {
+      expect(["blue_white", "yellow", "orange_dwarf", "red_dwarf"]).toContain(s.sunClass);
     }
   });
 

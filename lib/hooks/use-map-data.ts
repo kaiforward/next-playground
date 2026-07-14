@@ -7,6 +7,7 @@ import type {
   ActiveEvent,
   DynamicTileSystem,
   EconomyType,
+  SunClass,
   SystemVisibility,
 } from "@/lib/types/game";
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
@@ -27,6 +28,8 @@ export interface SystemNodeData {
   y: number;
   name: string;
   economyType: EconomyType;
+  /** Star spectral class — colours the map's star-type dot. */
+  sunClass: SunClass;
   /** True when the system is developed (control === 'developed'). Undeveloped systems render
    *  as a hollow marker — labelled potential, not owned. */
   developed: boolean;
@@ -154,6 +157,7 @@ export function useMapData({
         y: system.y,
         name: system.name,
         economyType: system.economyType,
+        sunClass: system.sunClass,
         developed: system.developed ?? true,
         regionId: system.regionId,
         isGateway: system.isGateway,
