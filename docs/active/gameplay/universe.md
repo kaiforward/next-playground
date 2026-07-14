@@ -114,7 +114,7 @@ There is no player fleet, so the map has no fleet layer — no fleet-presence do
 
 ### Overlays & Control Panel
 
-The map's controls float at the bottom-left in a dock (`components/map/map-controls-dock.tsx`) that stacks panels upward. The main panel (`map-overlay-controls.tsx`, state in `lib/hooks/use-map-overlays.ts`) holds two vertically-stacked sections:
+The map's controls float at the bottom-right in a dock (`components/map/map-controls-dock.tsx`) that stacks panels upward. The main panel (`map-overlay-controls.tsx`, state in `lib/hooks/use-map-overlays.ts`) holds two vertically-stacked sections:
 
 - **Mode** (single-select) — Political / Regions / Stability / None. Political and Regions paint faction/region polygons; **Stability** paints a per-system Voronoi choropleth tinted by each system's stability (the inverse of `unrest` — Stable, Tense, Unrest, Strike, Collapse), with an inline legend under the selector. None hides the territory band.
 - **Overlays** (multi-select) — Events, Logistics, Price. Each row carries its glyph element's colour so the panel doubles as the key; the price-ramp and logistics tier legends appear in hover tooltips beside the row so they cost no permanent height.

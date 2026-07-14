@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { tv } from "tailwind-variants";
 import { X } from "lucide-react";
@@ -10,27 +10,16 @@ import { X } from "lucide-react";
 /* ------------------------------------------------------------------ */
 
 const panel = tv({
-  base: "absolute inset-0 z-30 flex items-center justify-center",
   slots: {
-    backdrop: "absolute inset-0 transition-opacity duration-200",
-    content:
-      "relative bg-surface border border-border rounded-lg shadow-2xl flex flex-col overflow-hidden transition-all duration-200",
+    base: "fixed left-0 bottom-0 top-[var(--topbar-height)] z-30 w-[clamp(400px,30vw,560px)] bg-surface border-r border-border-strong shadow-[8px_0_30px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden transition-all duration-200",
     header:
       "flex items-center justify-between px-6 py-4 border-b border-border shrink-0",
     title: "text-lg font-bold font-display text-text-primary",
     subtitle: "text-sm text-text-secondary mt-0.5",
     closeBtn:
       "p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors",
-    body: "flex-1 overflow-y-auto p-6",
+    body: "flex-1 overflow-y-auto p-6 [scrollbar-gutter:stable]",
   },
-  variants: {
-    size: {
-      md: { content: "w-[min(720px,80%)] h-[90%]" },
-      lg: { content: "w-[min(960px,85%)] h-[90%]" },
-      xl: { content: "w-[min(1200px,90%)] h-[90%]" },
-    },
-  },
-  defaultVariants: { size: "md" },
 });
 
 /* ------------------------------------------------------------------ */
@@ -41,31 +30,20 @@ interface DetailPanelProps {
   title: string;
   subtitle?: React.ReactNode;
   headerAction?: React.ReactNode;
-  size?: "md" | "lg" | "xl";
   /** Path to navigate to when the panel is closed (default: "/"). */
   backPath?: string;
   children: React.ReactNode;
 }
 
-export function DetailPanel({ title, subtitle, headerAction, size, backPath = "/", children }: DetailPanelProps) {
+export function DetailPanel({ title, subtitle, headerAction, backPath = "/", children }: DetailPanelProps) {
   const router = useRouter();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const styles = panel({ size });
+  const styles = panel();
   const [mounted, setMounted] = useState(false);
 
   // Trigger enter animation after first paint
   useEffect(() => {
     const frame = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(frame);
-  }, []);
-
-  // Move focus into the panel on open and restore it to the previously-focused element on close, so
-  // the modal (role="dialog" aria-modal) is keyboard-reachable and never strands focus behind it.
-  useEffect(() => {
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.focus();
-    return () => previouslyFocused?.focus();
   }, []);
 
   const close = useCallback(() => {
@@ -86,51 +64,36 @@ export function DetailPanel({ title, subtitle, headerAction, size, backPath = "/
   }, [close]);
 
   return (
-    <div className={styles.base()}>
-      {/* Transparent backdrop — click to close */}
-      <div
-        className={styles.backdrop()}
-        style={{ opacity: mounted ? 1 : 0 }}
-        onClick={close}
-      />
-
-      {/* Panel */}
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        className={styles.content()}
-        style={{
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? "scale(1)" : "scale(0.97)",
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        {/* Header */}
-        <div className={styles.header()}>
-          <div>
-            <h2 className={styles.title()}>{title}</h2>
-            {subtitle && <div className={styles.subtitle()}>{subtitle}</div>}
-          </div>
-          <div className="flex items-center gap-2">
-            {headerAction}
-            <button
-              onClick={close}
-              className={styles.closeBtn()}
-              aria-label="Close panel"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+    <aside
+      className={styles.base()}
+      style={{
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? "translateX(0)" : "translateX(-100%)",
+      }}
+      aria-label={title}
+    >
+      {/* Header */}
+      <div className={styles.header()}>
+        <div>
+          <h2 className={styles.title()}>{title}</h2>
+          {subtitle && <div className={styles.subtitle()}>{subtitle}</div>}
         </div>
-
-        {/* Body */}
-        <div className={styles.body()}>
-          {children}
+        <div className="flex items-center gap-2">
+          {headerAction}
+          <button
+            onClick={close}
+            className={styles.closeBtn()}
+            aria-label="Close panel"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
       </div>
-    </div>
+
+      {/* Body */}
+      <div className={styles.body()}>
+        {children}
+      </div>
+    </aside>
   );
 }
-

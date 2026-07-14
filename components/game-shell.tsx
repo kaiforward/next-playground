@@ -1,78 +1,41 @@
 "use client";
 
-import { createContext, useContext } from "react";
-import { GameSidebar } from "@/components/game-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { TickProvider, useTickContext } from "@/lib/hooks/use-tick-context";
+import { TickProvider } from "@/lib/hooks/use-tick-context";
 import { useTickInvalidation } from "@/lib/hooks/use-tick-invalidation";
 import { DevToolsPanel } from "@/components/dev-tools/dev-tools-panel";
 import { DevOverlayProvider } from "@/components/dev-tools/dev-overlay-context";
-import { useSidebar, type UseSidebarReturn } from "@/lib/hooks/use-sidebar";
-
-/* ------------------------------------------------------------------ */
-/*  Sidebar context                                                   */
-/* ------------------------------------------------------------------ */
-
-const SidebarContext = createContext<UseSidebarReturn | null>(null);
-
-export function useSidebarContext(): UseSidebarReturn {
-  const ctx = useContext(SidebarContext);
-  if (!ctx) throw new Error("useSidebarContext must be used within GameShell");
-  return ctx;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Shell                                                             */
 /* ------------------------------------------------------------------ */
 
 interface GameShellProps {
-  defaultSidebarCollapsed?: boolean;
   panel?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export function GameShell({ defaultSidebarCollapsed, panel, children }: GameShellProps) {
+export function GameShell({ panel, children }: GameShellProps) {
   return (
     <TickProvider>
       <DevOverlayProvider>
-        <GameShellInner defaultSidebarCollapsed={defaultSidebarCollapsed} panel={panel}>
-          {children}
-        </GameShellInner>
+        <GameShellInner panel={panel}>{children}</GameShellInner>
       </DevOverlayProvider>
     </TickProvider>
   );
 }
 
-function GameShellInner({ defaultSidebarCollapsed, panel, children }: GameShellProps) {
-  const { currentTick } = useTickContext();
-  const sidebar = useSidebar(defaultSidebarCollapsed);
+function GameShellInner({ panel, children }: GameShellProps) {
   useTickInvalidation();
 
   return (
-    <SidebarContext.Provider value={sidebar}>
-      <div className="min-h-screen flex bg-background text-foreground">
-        <GameSidebar
-          currentTick={currentTick}
-          collapsed={sidebar.collapsed}
-          onToggle={sidebar.toggle}
-        />
-
-        <div
-          className="flex-1 flex flex-col min-w-0 transition-[margin-left] duration-200 ease-in-out"
-          style={{
-            marginLeft: sidebar.collapsed
-              ? "var(--sidebar-collapsed-width)"
-              : "var(--sidebar-width)",
-          }}
-        >
-          <TopBar />
-          <main className="flex-1 relative overflow-hidden">
-            {children}
-            {panel}
-          </main>
-          {process.env.NODE_ENV === "development" && <DevToolsPanel />}
-        </div>
-      </div>
-    </SidebarContext.Provider>
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <TopBar />
+      <main className="flex-1 relative overflow-hidden">
+        {children}
+        {panel}
+      </main>
+      {process.env.NODE_ENV === "development" && <DevToolsPanel />}
+    </div>
   );
 }

@@ -347,7 +347,7 @@ function FeedbackSection() {
 
 export default function StyleguidePanelPage() {
   return (
-    <DetailPanel title="Foundry Style Guide" size="xl">
+    <DetailPanel title="Foundry Style Guide">
       <div className="space-y-10">
         <ColorsSection />
         <TypographySection />

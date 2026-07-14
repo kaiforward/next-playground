@@ -51,7 +51,6 @@ export default function DiplomacyPanelPage() {
     <DetailPanel
       title="Diplomacy"
       subtitle="How the factions feel about each other — pair-wise relation scores across the galaxy."
-      size="xl"
       backPath="/factions"
     >
       <QueryBoundary>

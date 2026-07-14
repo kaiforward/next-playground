@@ -63,8 +63,6 @@
   --color-status-slate-light: #cbd5e1;
 
   /* Layout */
-  --sidebar-width: 200px;
-  --sidebar-collapsed-width: 48px;
   --topbar-height: 40px;
 }
 
@@ -73,6 +71,7 @@ body {
   color: var(--color-foreground);
   font-family: var(--font-sans);
   min-width: 1024px;
+  scrollbar-gutter: stable;
 }
 
 /* Diagonal grid overlay */
@@ -100,4 +99,28 @@ body::after {
     rgba(208, 106, 66, 0.04) 0%,
     transparent 70%
   );
+}
+
+/* Foundry-themed scrollbars (Chromium / Electron) — thin, square, slate → copper on hover.
+   The thumb's surface-colored border pads it into a slim sliver; no rounding, on-brand. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 148, 158, 0.32) transparent;
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 148, 158, 0.3);
+  border: 3px solid var(--color-surface);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

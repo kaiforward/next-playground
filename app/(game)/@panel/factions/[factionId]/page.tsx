@@ -23,7 +23,7 @@ function FactionDetailContent({ factionId }: { factionId: string }) {
   const { faction } = useFaction(factionId);
 
   return (
-    <DetailPanel title={faction.name} size="xl" backPath="/factions">
+    <DetailPanel title={faction.name}>
       <FactionCard faction={faction} size="md" className="mb-6" />
 
       <FactionConstructionCard factionId={faction.id} />

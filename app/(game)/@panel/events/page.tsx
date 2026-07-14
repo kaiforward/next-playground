@@ -147,7 +147,7 @@ function EventsContent() {
 
 export default function EventsPanelPage() {
   return (
-    <DetailPanel title="Events" size="lg">
+    <DetailPanel title="Events">
       <QueryBoundary>
         <EventsContent />
       </QueryBoundary>
