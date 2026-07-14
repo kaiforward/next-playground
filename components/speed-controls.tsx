@@ -14,38 +14,33 @@ const SPEED_OPTIONS: { value: Speed; label: React.ReactNode; title: string }[] =
 ];
 
 /**
- * Simulation speed picker + achieved-TPS readout, driven by the SSE payload
- * (current speed) and the speed mutation. Lives in the sidebar status section.
+ * Simulation speed picker (button row), driven by the SSE payload (current
+ * speed) and the speed mutation. The topbar renders the tick/TPS readout
+ * alongside it.
  */
 export function SpeedControls() {
-  const { speed, achievedTps } = useTickContext();
+  const { speed } = useTickContext();
   const speedMutation = useSpeedMutation();
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex gap-1">
-        {SPEED_OPTIONS.map((option) => (
-          <Button
-            key={String(option.value)}
-            variant={speed === option.value ? "primary" : "ghost"}
-            size="xs"
-            className="flex-1 px-0"
-            title={option.title}
-            // Icon-only options (Pause/FastForward) have no visible text, so give
-            // them an accessible name; the "1×"/"5×" options already read fine.
-            aria-label={typeof option.label === "string" ? undefined : option.title}
-            aria-pressed={speed === option.value}
-            disabled={speedMutation.isPending}
-            onClick={() => speedMutation.mutate(option.value)}
-          >
-            {option.label}
-          </Button>
-        ))}
-      </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-text-secondary">TPS</span>
-        <span className="font-mono text-text-primary">{achievedTps}</span>
-      </div>
+    <div className="flex gap-1 shrink-0">
+      {SPEED_OPTIONS.map((option) => (
+        <Button
+          key={String(option.value)}
+          variant={speed === option.value ? "primary" : "ghost"}
+          size="xs"
+          className="px-0 w-7"
+          title={option.title}
+          // Icon-only options (Pause/FastForward) have no visible text, so give
+          // them an accessible name; the "1×"/"5×" options already read fine.
+          aria-label={typeof option.label === "string" ? undefined : option.title}
+          aria-pressed={speed === option.value}
+          disabled={speedMutation.isPending}
+          onClick={() => speedMutation.mutate(option.value)}
+        >
+          {option.label}
+        </Button>
+      ))}
     </div>
   );
 }

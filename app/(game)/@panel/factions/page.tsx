@@ -116,7 +116,6 @@ export default function FactionsPanelPage() {
     <DetailPanel
       title="Factions"
       subtitle="Powers of the known galaxy — governments, doctrines, and territory."
-      size="lg"
     >
       <QueryBoundary>
         <FactionsContent />

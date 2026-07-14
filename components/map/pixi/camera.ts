@@ -216,11 +216,24 @@ export class Camera {
     }
   }
 
-  setCenter(x: number, y: number, zoom: number, duration: number = ANIM.setCenterDuration) {
+  /**
+   * Centre the camera on world (x,y). `centerOffsetX` shifts the target left by that many screen
+   * px worth of world units (at the final zoom), so the point lands `centerOffsetX` px RIGHT of
+   * screen-center instead of dead-center — used to clear a left-docked drawer. Default 0 keeps the
+   * point exactly at screen-center (unchanged behaviour).
+   */
+  setCenter(
+    x: number,
+    y: number,
+    zoom: number,
+    duration: number = ANIM.setCenterDuration,
+    centerOffsetX = 0,
+  ) {
+    const cx = centerOffsetX ? x - centerOffsetX / zoom : x;
     if (duration > 0) {
-      this.animateTo(x, y, zoom, duration);
+      this.animateTo(cx, y, zoom, duration);
     } else {
-      this.x = x;
+      this.x = cx;
       this.y = y;
       this.zoom = zoom;
     }

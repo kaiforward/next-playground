@@ -311,8 +311,9 @@ export function StarMap({
   // state on an input change — and keyed on the query string, so a per-tick atlas refresh (which
   // churns universe.systems) never recentres, and a click (which changes only the pathname, not
   // these params) never recentres. Leaving centerTarget untouched keeps its reference stable, so
-  // the canvas's centre effect no-ops on ticks.
-  const focusKey = `${searchParams.get("focus") ?? ""}|${initialSelectedSystemId ?? ""}`;
+  // the canvas's centre effect no-ops on ticks. `loc` is a monotonic click-nonce a locate action
+  // bumps so re-locating to the SAME coordinates (unchanged ?focus) still re-fires the recentre.
+  const focusKey = `${searchParams.get("focus") ?? ""}|${searchParams.get("loc") ?? ""}|${initialSelectedSystemId ?? ""}`;
   const [appliedFocusKey, setAppliedFocusKey] = useState(focusKey);
   if (focusKey !== appliedFocusKey) {
     setAppliedFocusKey(focusKey);
@@ -325,6 +326,21 @@ export function StarMap({
     setMapReadyState(true);
   }, []);
 
+  // ── Camera recenter offset — clear the docked drawer ────────────
+  // The drawer renders for any non-root panel route (root "/" shows no panel — see selectedSystemId /
+  // selectedFactionId above). When docked, shift the centerTarget point right so a focused system
+  // lands in the visible ~70% of the viewport instead of under the drawer (EU5/Vic3 behaviour). Width
+  // must track detail-panel.tsx's `w-[clamp(400px,30vw,560px)]` — no shared constant across the CSS
+  // class and this JS value, so keep them in sync by hand if that clamp changes. Plain consts (not
+  // memoised) so a live resize self-corrects on the next render; the value stays numerically stable
+  // when nothing changed, so it won't spuriously re-fire the centerTarget effect.
+  const drawerDocked = pathname !== "/";
+  const drawerWidthPx =
+    drawerDocked && typeof window !== "undefined"
+      ? Math.min(560, Math.max(400, 0.3 * window.innerWidth))
+      : 0;
+  const centerOffsetX = drawerWidthPx / 2;
+
   return (
     <div className={`relative h-full w-full ${mapReady ? "opacity-100" : "opacity-0"}`}>
       <PixiMapCanvas
@@ -335,6 +351,7 @@ export function StarMap({
         onEmptyClick={onEmptyClick}
         onSelectFaction={onSelectFaction}
         centerTarget={centerTarget}
+        centerOffsetX={centerOffsetX}
         onReady={handleReady}
         regionInfos={regionInfos}
         mapMode={mapMode}
@@ -356,7 +373,7 @@ export function StarMap({
         </QueryBoundary>
       )}
 
-      {/* Map controls dock (bottom-left) — main panel + floating Price panel */}
+      {/* Map controls dock (bottom-right) — main panel + floating Price panel */}
       <MapControlsDock
         mode={mapMode}
         setMode={setMapMode}

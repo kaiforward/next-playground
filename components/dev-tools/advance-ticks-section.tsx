@@ -7,7 +7,7 @@ import { useAdvanceTicksMutation } from "@/lib/hooks/use-dev-tools";
 
 /**
  * Synchronously advance N ticks — useful while the loop is paused. Pacing
- * (pause/1×/5×/max) lives in the sidebar SpeedControls, not here.
+ * (pause/1×/5×/max) lives in the topbar's SpeedControls, not here.
  */
 export function AdvanceTicksSection() {
   const [advanceCount, setAdvanceCount] = useState(10);

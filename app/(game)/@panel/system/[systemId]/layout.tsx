@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
@@ -23,6 +23,8 @@ function SystemPanelContent({
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const ownership = useOwnership();
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Live developed tier (tick-invalidated). Non-developed systems show only Overview +
   // Astrography; the four economy tabs (Population/Industry/Logistics/Market) are hidden.
@@ -52,13 +54,26 @@ function SystemPanelContent({
     </span>
   );
 
+  // Recenter the live map behind the docked drawer without closing it: drive the map's `?focus=`
+  // channel on the CURRENT panel path (keeps the drawer route mounted + applies the clear-offset)
+  // rather than navigating to "/", which would unmount the drawer. `loc` is a monotonic click-nonce
+  // so re-locating to the same system (unchanged `?focus`) still re-fires the recentre. `replace`
+  // keeps repeated locates out of the history stack.
+  const showOnMap = () => {
+    if (!systemInfo) return;
+    const loc = Number(searchParams.get("loc") ?? 0) + 1;
+    // Recentre from the CURRENT path (not basePath) so locating never resets the active sub-tab.
+    router.replace(`${pathname}?focus=${systemInfo.x},${systemInfo.y}&loc=${loc}`);
+  };
+
   const headerAction = (
     <>
       <SystemCadenceCountdown systemId={systemId} />
       <Button
         variant="ghost"
         size="xs"
-        href={`/?systemId=${systemId}`}
+        onClick={showOnMap}
+        disabled={!systemInfo}
         aria-label="Show on map"
       >
         <MapPinIcon />
@@ -72,7 +87,6 @@ function SystemPanelContent({
       title={systemInfo?.name ?? "System"}
       subtitle={subtitle}
       headerAction={headerAction}
-      size="xl"
     >
       {/* Tab bar */}
       <TabList className="mb-6" aria-label="System tabs">
