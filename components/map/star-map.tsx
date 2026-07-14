@@ -325,6 +325,19 @@ export function StarMap({
     setMapReadyState(true);
   }, []);
 
+  // ── Camera recenter offset — clear the docked drawer ────────────
+  // The drawer renders for any non-root panel route (root "/" shows no panel — see selectedSystemId /
+  // selectedFactionId above). When docked, shift the centerTarget point right so a focused system
+  // lands in the visible ~70% of the viewport instead of under the drawer (EU5/Vic3 behaviour). Width
+  // must track detail-panel.tsx's `w-[clamp(400px,30vw,560px)]` — no shared constant across the CSS
+  // class and this JS value, so keep them in sync by hand if that clamp changes.
+  const drawerDocked = pathname !== "/";
+  const centerOffsetX = useMemo(() => {
+    if (!drawerDocked || typeof window === "undefined") return 0;
+    const drawerWidthPx = Math.min(560, Math.max(400, 0.3 * window.innerWidth));
+    return drawerWidthPx / 2;
+  }, [drawerDocked]);
+
   return (
     <div className={`relative h-full w-full ${mapReady ? "opacity-100" : "opacity-0"}`}>
       <PixiMapCanvas
@@ -335,6 +348,7 @@ export function StarMap({
         onEmptyClick={onEmptyClick}
         onSelectFaction={onSelectFaction}
         centerTarget={centerTarget}
+        centerOffsetX={centerOffsetX}
         onReady={handleReady}
         regionInfos={regionInfos}
         mapMode={mapMode}

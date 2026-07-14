@@ -36,6 +36,8 @@ export interface PixiMapCanvasProps {
   /** Zoomed-out click on a faction's territory (see `theme.ts` `FACTION_SELECT_ZOOM`) — every mode. */
   onSelectFaction: (factionId: string) => void;
   centerTarget?: { x: number; y: number; zoom: number };
+  /** Screen px to shift the centerTarget point right of screen-center (clears a left-docked drawer). Default 0. */
+  centerOffsetX?: number;
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
   /**
@@ -84,6 +86,7 @@ export function PixiMapCanvas({
   onEmptyClick,
   onSelectFaction,
   centerTarget,
+  centerOffsetX = 0,
   onReady,
   regionInfos,
   mapMode = "political",
@@ -490,12 +493,18 @@ export function PixiMapCanvas({
     if (centerTarget === lastCenterRef.current) return;
     lastCenterRef.current = centerTarget;
     const isInitial = !readyFired.current;
-    p.camera.setCenter(centerTarget.x, centerTarget.y, centerTarget.zoom, isInitial ? 0 : 400);
+    p.camera.setCenter(
+      centerTarget.x,
+      centerTarget.y,
+      centerTarget.zoom,
+      isInitial ? 0 : 400,
+      centerOffsetX,
+    );
     if (isInitial) {
       readyFired.current = true;
       onReady();
     }
-  }, [centerTarget, onReady, pixiReady]);
+  }, [centerTarget, centerOffsetX, onReady, pixiReady]);
 
   return (
     <div

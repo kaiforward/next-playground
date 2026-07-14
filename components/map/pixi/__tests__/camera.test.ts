@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  Camera,
   codeToPanDirection,
   keyboardPanDelta,
   movedBeyond,
@@ -95,6 +96,29 @@ describe("movedBeyond — click-vs-drag threshold", () => {
   it("is true once the pointer moved past the threshold (a drag)", () => {
     expect(movedBeyond(0, 0, 6, 0, 5)).toBe(true);
     expect(movedBeyond(10, 10, 0, 0, 5)).toBe(true);
+  });
+});
+
+describe("Camera.setCenter — offset-aware centering (clears a left-docked drawer)", () => {
+  it("lands the target exactly at screen-center when centerOffsetX is 0 (default, unchanged behaviour)", () => {
+    const camera = new Camera();
+    camera.setScreenSize(1000, 800);
+    camera.setCenter(50, 50, 1, 0);
+    expect(camera.worldToScreen(50, 50).x).toBeCloseTo(500);
+  });
+
+  it("shifts the target centerOffsetX px right of screen-center when set", () => {
+    const camera = new Camera();
+    camera.setScreenSize(1000, 800);
+    camera.setCenter(50, 50, 1, 0, 240);
+    expect(camera.worldToScreen(50, 50).x).toBeCloseTo(500 + 240);
+  });
+
+  it("keeps the offset in screen px regardless of zoom", () => {
+    const camera = new Camera();
+    camera.setScreenSize(1000, 800);
+    camera.setCenter(50, 50, 2, 0, 240);
+    expect(camera.worldToScreen(50, 50).x).toBeCloseTo(500 + 240);
   });
 });
 
