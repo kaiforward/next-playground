@@ -8,6 +8,7 @@ const cardVariants = tv({
       bordered: "border border-border border-l-2 border-l-accent",
     },
     padding: {
+      xs: "p-2",
       sm: "p-3",
       md: "p-5",
       lg: "p-7",
