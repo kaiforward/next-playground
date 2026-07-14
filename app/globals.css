@@ -71,6 +71,7 @@ body {
   color: var(--color-foreground);
   font-family: var(--font-sans);
   min-width: 1024px;
+  scrollbar-gutter: stable;
 }
 
 /* Diagonal grid overlay */
@@ -98,10 +99,6 @@ body::after {
     rgba(208, 106, 66, 0.04) 0%,
     transparent 70%
   );
-}
-
-body {
-  scrollbar-gutter: stable;
 }
 
 /* Foundry-themed scrollbars (Chromium / Electron) — thin, square, slate → copper on hover.
