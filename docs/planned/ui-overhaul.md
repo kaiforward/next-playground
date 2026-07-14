@@ -1,7 +1,7 @@
 # UI Overhaul — Map Legibility & System-Detail Redesign
 
-> **Status:** Planned (roadmap) for WS1/WS2/WS4/WS5. WS3 (cleanup pass) has shipped. Captures the full set of
-> UI issues raised for the map and system-detail surfaces, grouped into sequenced workstreams. Each
+> **Status:** Planned (roadmap) for WS2/WS4/WS5. WS3 (cleanup) and WS1 (map spine) have shipped. Captures the
+> full set of UI issues raised for the map and system-detail surfaces, grouped into sequenced workstreams. Each
 > remaining workstream gets its own `docs/build-plans/` entry when it starts; until then it's specced here at
 > intent level and designed in detail when picked up.
 
@@ -59,25 +59,28 @@ Pure structural removals; no calibration.
   (region-targeted event modifiers, relations, and derivations still read it).
 - **`[Sys 7]` Connection count is removed** from the system overview.
 
-### WS1 · Map rendering & selection overhaul — the "EU5 spine" _(foundational)_
+### WS1 · Map rendering & selection overhaul — the "EU5 spine" _(SHIPPED)_
 
-> **Detailed design:** [ui-ws1-voronoi-map.md](./ui-ws1-voronoi-map.md) — interaction model, rendering
-> architecture, and open questions. The items below are the intent-level summary.
+> **Detailed spec:** [map-rendering.md](../active/engineering/map-rendering.md) — the shipped interaction model,
+> ramp semantics, and rendering architecture. The items below are the issue-level summary of what shipped.
 
 The Voronoi-centric rewrite the rest of the map leans on.
 
-- **`[Map 1]` Numbers inside Voronoi cells** for value modes (stability / population / development); hide the
-  star markers at distance so cells + numbers carry the read. (Reference: EU5 map-mode number-in-province.)
-- **`[Map 2]` Score 0 → black** on the dev/pop (and other value) modes, so low, similar values are
-  distinguishable.
-- **`[Map 3]` Faction outline + per-system cells** shown together in modes — the individual Voronoi cells
-  *and* a bolder faction border.
-- **`[Map 4]` Clickable Voronoi cells** — selection works at range via cells (no per-star hitbox / label
-  render issues); the star is shown when zoomed in, as now.
-- **`[Map 5]` Fix system icons not refreshing** — folded into the rebuild.
-- **`[Sys 4]` System-object visual** — hover styles, a larger transparent selection zone, and the system as a
-  small star dot **coloured by star type with a gradient** (this is where WS3's removed economy colour is
-  replaced).
+- **`[Map 1]` Numbers inside Voronoi cells** for the three value modes (stability / population / development),
+  coalescing system → faction-within-region → faction on zoom-out; star markers give way to cells + numbers at
+  distance.
+- **`[Map 2]` Black reserved for "absent"** — a cell with no live value (undeveloped) reads black, and
+  population / development also draw a literal 0 black, while stability's 0 (max unrest) rides the red floor.
+  Present values ride a per-mode relative ramp normalised to the scope max.
+- **`[Map 3]` Faction outline + per-system cells** shown together — per-system value fills under a
+  faction-union border.
+- **`[Map 4]` Clickable Voronoi cells** — selection works at any zoom via analytic per-cell hit-testing (the
+  star hitbox still works zoomed in); a zoomed-out faction click opens the faction panel and re-scales the
+  gradient to it.
+- **`[Map 5]` System icons refresh** on the tick heartbeat — folded into the rebuild.
+- **`[Sys 4]` System-object visual** — hover styling, a larger cell selection zone, and the system as a small
+  star dot **coloured by star type with a radial-gradient bloom** (replacing WS3's interim neutral slate),
+  subdued under value modes.
 
 ### WS2 · Map modes _(depends on WS1's mode framework)_
 
@@ -128,6 +131,6 @@ The Voronoi-centric rewrite the rest of the map leans on.
 
 ## Sequence
 
-WS3 (cleanup, shipped) → WS1 (map spine) → WS2 (map modes) → WS4 (system detail). WS5 (gameplay) is independent and
-can slot in any time. Map-heavy workstreams (WS1, WS2, WS4 layout) get a browser-viewable HTML prototype
-approved before implementation.
+WS3 (cleanup, shipped) → WS1 (map spine, shipped) → WS2 (map modes) → WS4 (system detail). WS5 (gameplay) is
+independent and can slot in any time. Map-heavy workstreams (WS1, WS2, WS4 layout) get a browser-viewable HTML
+prototype approved before implementation.
