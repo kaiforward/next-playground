@@ -33,11 +33,17 @@ export function useTickInvalidation() {
         // Construction advances every funded pulse (same monthly economy tick) — refresh both surfaces.
         queryClient.invalidateQueries({ queryKey: queryKeys.systemConstructionAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.factionConstructionAll });
+        // Dynamic overlay data (events, danger, presence) changes on the same
+        // world pulse. It can't ride eventNotifications alone: that feed fires
+        // only for notification-bearing spawns/advances (+ expiries), so a silent
+        // spawn or phase-advance would leave the map's event pills stale. The
+        // heartbeat fires every tick, so pills are never more than one tick behind.
+        queryClient.invalidateQueries({ queryKey: queryKeys.dynamicVisible });
       }),
-      // Event notifications → refresh events cache and dynamic data (event state changed)
+      // Event notifications → refresh the events feed (detail panel). The map's
+      // dynamic overlay is refreshed on the tick heartbeat above, not here.
       subscribeToEvent("eventNotifications", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.events });
-        queryClient.invalidateQueries({ queryKey: queryKeys.dynamicVisible });
       }),
     ];
 
