@@ -330,13 +330,15 @@ export function StarMap({
   // selectedFactionId above). When docked, shift the centerTarget point right so a focused system
   // lands in the visible ~70% of the viewport instead of under the drawer (EU5/Vic3 behaviour). Width
   // must track detail-panel.tsx's `w-[clamp(400px,30vw,560px)]` — no shared constant across the CSS
-  // class and this JS value, so keep them in sync by hand if that clamp changes.
+  // class and this JS value, so keep them in sync by hand if that clamp changes. Plain consts (not
+  // memoised) so a live resize self-corrects on the next render; the value stays numerically stable
+  // when nothing changed, so it won't spuriously re-fire the centerTarget effect.
   const drawerDocked = pathname !== "/";
-  const centerOffsetX = useMemo(() => {
-    if (!drawerDocked || typeof window === "undefined") return 0;
-    const drawerWidthPx = Math.min(560, Math.max(400, 0.3 * window.innerWidth));
-    return drawerWidthPx / 2;
-  }, [drawerDocked]);
+  const drawerWidthPx =
+    drawerDocked && typeof window !== "undefined"
+      ? Math.min(560, Math.max(400, 0.3 * window.innerWidth))
+      : 0;
+  const centerOffsetX = drawerWidthPx / 2;
 
   return (
     <div className={`relative h-full w-full ${mapReady ? "opacity-100" : "opacity-0"}`}>
