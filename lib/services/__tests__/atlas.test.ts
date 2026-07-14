@@ -65,11 +65,12 @@ describe("getAtlas", () => {
     }
   });
 
-  it("copies sunClass onto every AtlasSystem", () => {
+  it("copies each system's sunClass through from its world row", () => {
     const atlas = getAtlas();
     expect(atlas.systems.length).toBeGreaterThan(0);
-    for (const s of atlas.systems) {
-      expect(["blue_white", "yellow", "orange_dwarf", "red_dwarf"]).toContain(s.sunClass);
+    for (const system of world.systems) {
+      const atlasSystem = atlas.systems.find((s) => s.id === system.id)!;
+      expect(atlasSystem.sunClass).toBe(system.sunClass);
     }
   });
 
