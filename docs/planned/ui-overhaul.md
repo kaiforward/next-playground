@@ -91,6 +91,10 @@ The Voronoi-centric rewrite the rest of the map leans on.
 
 ### WS4 · System-detail screen redesign
 
+> **Designed — detailed spec + phased build plan:** [ui-ws4-system-detail.md](./ui-ws4-system-detail.md)
+> (browser prototype approved). The items below are the issue-level summary; the spec is authoritative
+> and expands scope to the shared docked-shell reshape, the faction screen, and the reusable vitals grid.
+
 - **`[Sys 1]` Industry/deposit breakdown.** The Industry tab doesn't show a proper deposit breakdown. Replace
   the header bar + bars with **chipped bars** (divided into the number of available units, a distinct colour
   for filled), or move to a **proper table** for maximum clarity. For industry, show a single extra "empty"
