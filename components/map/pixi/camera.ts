@@ -131,6 +131,7 @@ export class Camera {
   private boundWheel: (e: WheelEvent) => void;
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
+  private boundBlur: () => void;
 
   constructor() {
     this.boundPointerDown = this.onPointerDown.bind(this);
@@ -139,6 +140,7 @@ export class Camera {
     this.boundWheel = this.onWheel.bind(this);
     this.boundKeyDown = this.onKeyDown.bind(this);
     this.boundKeyUp = this.onKeyUp.bind(this);
+    this.boundBlur = this.clearHeldKeys.bind(this);
   }
 
   // ── Input binding ───────────────────────────────────────────────
@@ -152,6 +154,9 @@ export class Camera {
     // Keyboard pan is window-level so it works without first clicking the canvas.
     window.addEventListener("keydown", this.boundKeyDown);
     window.addEventListener("keyup", this.boundKeyUp);
+    // The window can't see keyup while it's blurred (alt-tab, devtools, app switch), so drop any held
+    // keys on blur — otherwise a key held at focus-loss would pan forever after the user returns.
+    window.addEventListener("blur", this.boundBlur);
   }
 
   detach(canvas: HTMLCanvasElement) {
@@ -162,7 +167,8 @@ export class Camera {
     canvas.removeEventListener("wheel", this.boundWheel);
     window.removeEventListener("keydown", this.boundKeyDown);
     window.removeEventListener("keyup", this.boundKeyUp);
-    this.heldDirs.clear();
+    window.removeEventListener("blur", this.boundBlur);
+    this.clearHeldKeys();
   }
 
   setScreenSize(w: number, h: number) {
@@ -321,6 +327,9 @@ export class Camera {
   private onKeyDown(e: KeyboardEvent) {
     // Stand down while the player is typing (save-name box, dev tools, …).
     if (e.target instanceof HTMLElement && isTypingTarget(e.target)) return;
+    // Let modifier shortcuts through (Ctrl/Cmd+A select-all, Ctrl/Cmd+arrow, …) — only Shift, the
+    // pan boost, is ours. Without this the window-level listener would hijack them app-wide.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     this.shiftHeld = e.shiftKey;
     const dir = codeToPanDirection(e.code);
     if (!dir) return;
@@ -333,6 +342,12 @@ export class Camera {
     this.shiftHeld = e.shiftKey;
     const dir = codeToPanDirection(e.code);
     if (dir) this.heldDirs.delete(dir);
+  }
+
+  /** Drop all held pan keys — used on window blur (no keyup arrives while blurred) and on detach. */
+  private clearHeldKeys() {
+    this.heldDirs.clear();
+    this.shiftHeld = false;
   }
 
   // ── Internal ────────────────────────────────────────────────────

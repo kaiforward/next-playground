@@ -78,12 +78,20 @@ export function setupInteractions({
   // listeners — and must NOT also select, which is what made the clickable cells "swallow" pans.
   let downX = 0;
   let downY = 0;
+  let downRecorded = false;
   const onStageDown = (e: FederatedPointerEvent) => {
     downX = e.global.x;
     downY = e.global.y;
+    downRecorded = true;
   };
 
   const onStageUp = (e: FederatedPointerEvent) => {
+    // Only resolve a click for a pointerup that had its own pointerdown on the stage. Without one
+    // (a gesture begun over an overlay, dragged onto the canvas) the down coords are stale, so skip
+    // rather than measure travel from a bogus origin.
+    const hadDown = downRecorded;
+    downRecorded = false;
+    if (!hadDown) return;
     if (movedBeyond(downX, downY, e.global.x, e.global.y, CAMERA.clickDragThreshold)) return;
 
     const { onSelectSystem, onEmptyClick, onSelectFaction } = getCallbacks();
