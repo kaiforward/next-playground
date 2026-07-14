@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
@@ -23,6 +23,8 @@ function SystemPanelContent({
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const ownership = useOwnership();
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Live developed tier (tick-invalidated). Non-developed systems show only Overview +
   // Astrography; the four economy tabs (Population/Industry/Logistics/Market) are hidden.
@@ -52,12 +54,16 @@ function SystemPanelContent({
     </span>
   );
 
-  // Recenter the live map behind the docked drawer without closing it: stay on the current
-  // panel path and drive the map's `?focus=` channel (which applies the drawer clear-offset)
-  // rather than navigating to "/", which would drop this panel route and unmount the drawer.
-  const showOnMapHref = systemInfo
-    ? `${basePath}?focus=${systemInfo.x},${systemInfo.y}`
-    : basePath;
+  // Recenter the live map behind the docked drawer without closing it: drive the map's `?focus=`
+  // channel on the CURRENT panel path (keeps the drawer route mounted + applies the clear-offset)
+  // rather than navigating to "/", which would unmount the drawer. `loc` is a monotonic click-nonce
+  // so re-locating to the same system (unchanged `?focus`) still re-fires the recentre. `replace`
+  // keeps repeated locates out of the history stack.
+  const showOnMap = () => {
+    if (!systemInfo) return;
+    const loc = Number(searchParams.get("loc") ?? 0) + 1;
+    router.replace(`${basePath}?focus=${systemInfo.x},${systemInfo.y}&loc=${loc}`);
+  };
 
   const headerAction = (
     <>
@@ -65,7 +71,8 @@ function SystemPanelContent({
       <Button
         variant="ghost"
         size="xs"
-        href={showOnMapHref}
+        onClick={showOnMap}
+        disabled={!systemInfo}
         aria-label="Show on map"
       >
         <MapPinIcon />

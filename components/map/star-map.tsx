@@ -311,8 +311,9 @@ export function StarMap({
   // state on an input change — and keyed on the query string, so a per-tick atlas refresh (which
   // churns universe.systems) never recentres, and a click (which changes only the pathname, not
   // these params) never recentres. Leaving centerTarget untouched keeps its reference stable, so
-  // the canvas's centre effect no-ops on ticks.
-  const focusKey = `${searchParams.get("focus") ?? ""}|${initialSelectedSystemId ?? ""}`;
+  // the canvas's centre effect no-ops on ticks. `loc` is a monotonic click-nonce a locate action
+  // bumps so re-locating to the SAME coordinates (unchanged ?focus) still re-fires the recentre.
+  const focusKey = `${searchParams.get("focus") ?? ""}|${searchParams.get("loc") ?? ""}|${initialSelectedSystemId ?? ""}`;
   const [appliedFocusKey, setAppliedFocusKey] = useState(focusKey);
   if (focusKey !== appliedFocusKey) {
     setAppliedFocusKey(focusKey);
