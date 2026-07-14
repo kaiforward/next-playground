@@ -2,13 +2,14 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { LODState } from "../lod";
 import type { Frustum } from "../frustum";
 import { TERRITORY, TEXT_RESOLUTION } from "../theme";
-import { valueRampColorPixi, ABSENT_COLOR, type ValueMode } from "../value-ramp";
+import { valueRampColorPixi, deEmphasize, ABSENT_COLOR, type ValueMode } from "../value-ramp";
 import { formatValueNumber } from "../number-format";
 import {
   buildAggregationGroups, pickTier, DEFAULT_TIER_THRESHOLDS,
   type AggGroup, type AggregationTiers, type TierThresholds,
 } from "../number-aggregation";
 import type { SystemCells } from "../voronoi-cache";
+import type { MultiPolygon } from "../territory-utils";
 import type { AtlasSystem } from "@/lib/types/game";
 
 const NUMBER_STYLE = new TextStyle({ fontSize: 30, fill: 0xf0e9df, fontFamily: "monospace", fontWeight: "600" });
@@ -19,6 +20,29 @@ const NUMBER_STYLE = new TextStyle({ fontSize: 30, fill: 0xf0e9df, fontFamily: "
 const SYSTEM_NUMBER_SCALE = 1.3;
 const SYSTEM_NUMBER_RING_CLEAR = 36; // world units — just outside the 34-unit nav ring
 const SYSTEM_NUMBER_SCREEN_LIFT = 20; // extra on-screen px so the number's base clears the glyph
+
+// Faction-union border drawn over the value fills so political borders stay legible while a value mode
+// is active. `screenWidth` is a SCREEN-pixel thickness (world width = screenWidth / zoom, redrawn on
+// zoom change) so the border stays legibly thick at the zoomed-out faction view instead of thinning to a
+// hairline. `alignment: 1` insets the stroke to the INSIDE of each faction's boundary so two neighbours
+// sharing an edge render their own border on their own side (a centered stroke overlaps on the shared
+// edge and one paints over the other). Calibration knobs, tuned in visual smoke.
+const FACTION_OUTLINE = { strokeAlpha: 0.9, screenWidth: 7, alignment: 1 } as const;
+
+// Opacity of the value-choropleth cell fills. Well above the neutral TERRITORY.fillAlpha (0.08, used by
+// the political/region tints) so the value gradient reads as a vivid, saturated choropleth on the dark
+// map rather than washed out. Calibration knob — tuned in visual smoke.
+const VALUE_FILL_ALPHA = 0.5;
+
+// Modes whose reference max re-normalises to the focused faction's members when a faction is in scope.
+// Stability stays globally normalised even under focus — 0..1 unrest reads the same regardless of who's
+// selected; pop/development re-scale so the focused faction's own brightest system reads as the top of
+// the ramp.
+const RESCALES_TO_SCOPE: Record<ValueMode, boolean> = {
+  population: true,
+  development: true,
+  stability: false,
+};
 
 /**
  * Generic per-cell value choropleth: colours every system's Voronoi cell from
@@ -36,15 +60,22 @@ const SYSTEM_NUMBER_SCREEN_LIFT = 20; // extra on-screen px so the number's base
 export class ValueChoroplethLayer {
   readonly container = new Container();
   private fills = new Graphics();
+  private outlines = new Graphics();
   private numbers = new Container();
   private pool: Text[] = [];
 
   private cells: SystemCells | null = null;
   private systems: AtlasSystem[] = [];
+  private factionBySystemId = new Map<string, string | null>();
   private values = new Map<string, number>();
   private reference = new Map<string, number>();
   private mode: ValueMode = "population";
   private scopeFaction: string | null = null;
+  private outlineUnions: Map<string, MultiPolygon> | null = null;
+  private outlineColors: Map<string, number> | null = null;
+  // Camera zoom the faction outline was last stroked at — the border width is screen-constant
+  // (screenWidth / zoom), so it re-strokes on a meaningful zoom change (see updateOutlineZoom).
+  private outlineZoom = 1;
   private tiers: AggregationTiers = { system: [], factionRegion: [], faction: [] };
   private thresholds: TierThresholds = DEFAULT_TIER_THRESHOLDS;
   private referenceMax = 1;
@@ -57,6 +88,7 @@ export class ValueChoroplethLayer {
 
   constructor() {
     this.container.addChild(this.fills);
+    this.container.addChild(this.outlines);
     this.container.addChild(this.numbers);
     this.container.visible = false;
   }
@@ -70,12 +102,13 @@ export class ValueChoroplethLayer {
   sync(cells: SystemCells, systems: AtlasSystem[]) {
     this.cells = cells;
     this.systems = systems;
+    this.factionBySystemId = new Map(systems.map((s) => [s.id, s.factionId]));
     this.recomputeReferenceMax();
     this.drawFills();
     this.rebuildTiers();
   }
 
-  /** Per-mode tick data. reference == values for pop/stability; == potential for development. */
+  /** Per-mode tick data. reference == values for every value mode (development is raw points, not potential). */
   setValues(values: Map<string, number>, reference: Map<string, number>, mode: ValueMode) {
     this.values = values;
     this.reference = reference;
@@ -85,22 +118,60 @@ export class ValueChoroplethLayer {
     this.rebuildTiers();
   }
 
-  /** Phase 1: global only. Phase 2 re-normalises to a faction and de-emphasises the rest. */
+  /**
+   * Faction focus. When set, pop/development re-normalise to the focused faction's own max (its
+   * brightest system reads as the top of the ramp) and every out-of-scope cell is de-emphasised;
+   * stability stays globally normalised but still dims the rest.
+   */
   setScope(factionId: string | null) {
     this.scopeFaction = factionId;
     this.recomputeReferenceMax();
     this.drawFills();
   }
 
-  private scopeMembers(): AtlasSystem[] {
-    return this.scopeFaction == null
-      ? this.systems
-      : this.systems.filter((s) => s.factionId === this.scopeFaction);
+  /** Faction-union border over the value fills — stroke-only, exterior rings only, reusing the political
+   *  layer's cached unions (no new triangulation). Static per atlas/faction sync, so it lives in its own
+   *  Graphics and is NOT touched by the per-tick drawFills. */
+  setFactionOutlines(unions: Map<string, MultiPolygon> | null, colors: Map<string, number> | null) {
+    this.outlineUnions = unions;
+    this.outlineColors = colors;
+    this.drawOutlines();
+  }
+
+  private drawOutlines() {
+    this.outlines.clear();
+    if (!this.outlineUnions || !this.outlineColors) return;
+    const width = FACTION_OUTLINE.screenWidth / (this.outlineZoom > 0 ? this.outlineZoom : 1);
+    for (const [factionId, multiPoly] of this.outlineUnions) {
+      const color = this.outlineColors.get(factionId);
+      if (color === undefined) continue;
+      for (const poly of multiPoly) {
+        const exterior = poly[0];
+        if (!exterior || exterior.length < 3) continue;
+        this.outlines.poly(exterior.flat()).stroke({ color, alpha: FACTION_OUTLINE.strokeAlpha, width, alignment: FACTION_OUTLINE.alignment, join: "round", cap: "round" });
+      }
+    }
+  }
+
+  /**
+   * Keep the faction border a ~constant on-screen thickness: its world width is screenWidth / zoom, so it
+   * re-strokes when the camera zoom moves past a small relative band. Called per frame from the ticker
+   * while a value mode is active; the band gate keeps a continuous zoom gesture to a bounded number of
+   * re-strokes rather than one per frame.
+   */
+  updateOutlineZoom(zoom: number) {
+    if (zoom <= 0 || Math.abs(zoom - this.outlineZoom) / this.outlineZoom < 0.03) return;
+    this.outlineZoom = zoom;
+    this.drawOutlines();
   }
 
   private recomputeReferenceMax() {
+    const scoped = this.scopeFaction != null && RESCALES_TO_SCOPE[this.mode];
+    const members = scoped
+      ? this.systems.filter((s) => s.factionId === this.scopeFaction)
+      : this.systems;
     let max = 0;
-    for (const s of this.scopeMembers()) max = Math.max(max, this.reference.get(s.id) ?? 0);
+    for (const s of members) max = Math.max(max, this.reference.get(s.id) ?? 0);
     this.referenceMax = max > 0 ? max : 1;
   }
 
@@ -111,13 +182,18 @@ export class ValueChoroplethLayer {
       // A cell absent from the value map is "nothing here" → black; a present system rides its ramp
       // (so an unstable-but-present system reads red, not black).
       const value = this.values.get(id);
-      const color =
+      let color =
         value === undefined ? ABSENT_COLOR : valueRampColorPixi(value, this.referenceMax, this.mode);
+      // Faction focus dims every out-of-scope cell, in every mode — independent of whether the mode
+      // rescales its reference max. The absent check above always wins: never dim a black cell.
+      if (color !== ABSENT_COLOR && this.scopeFaction != null && this.factionBySystemId.get(id) !== this.scopeFaction) {
+        color = deEmphasize(color, "both");
+      }
       for (const poly of multiPoly) {
         const exterior = poly[0];
         if (!exterior || exterior.length < 3) continue;
         const flat = exterior.flat();
-        this.fills.poly(flat).fill({ color, alpha: TERRITORY.fillAlpha + 0.12 });
+        this.fills.poly(flat).fill({ color, alpha: VALUE_FILL_ALPHA });
         this.fills.poly(flat).stroke({ color, alpha: TERRITORY.strokeAlpha, width: TERRITORY.strokeWidth });
       }
     }
@@ -207,11 +283,13 @@ export class ValueChoroplethLayer {
   updateVisibility(lod: LODState) {
     if (!this.container.visible) return;
     this.fills.alpha = lod.valueChoroplethAlpha;
+    this.outlines.alpha = lod.valueChoroplethAlpha;
   }
 
   destroy() {
     for (const t of this.pool) t.destroy();
     this.fills.destroy();
+    this.outlines.destroy();
     this.numbers.destroy({ children: true });
     this.container.destroy({ children: true });
   }

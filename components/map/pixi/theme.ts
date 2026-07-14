@@ -62,6 +62,11 @@ export const VIEW_TIERS = {
   bufferStart: 0.28,  // start creating SystemObjects before crossfade
 } as const;
 
+/** Zoom at/below which a stage click selects a FACTION (its union), not the individual system.
+ *  Aligned with DEFAULT_TIER_THRESHOLDS.factionToRegion (number-aggregation.ts) — the zoom below which
+ *  the faction number tier + unions dominate. Calibration knob; keep these two in step when tuning. */
+export const FACTION_SELECT_ZOOM = 0.285;
+
 // ── Sizes ────────────────────────────────────────────────────────
 
 export const SIZES = {
