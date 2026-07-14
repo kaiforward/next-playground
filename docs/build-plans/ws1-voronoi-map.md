@@ -1093,67 +1093,85 @@ git add lib/types/game.ts lib/services/atlas.ts lib/hooks/use-map-data.ts compon
 git commit -m "feat(map): thread sunClass through the atlas to the map nodes (WS1)"
 ```
 
-### Task 3.2: Star-type dot rendering
+### Task 3.2: Star-type dot rendering — full glyph replacement
+
+**Scope decision (locked with the user):** this is not a recolour — it **replaces the old zoomed-in glyph
+wholesale**. The old `SystemObject` body is three round elements: `glow` (the semi-opaque halo), `core` (the
+filled disc / hollow-when-undeveloped ring), and `highlight` (the specular white dot). All three go, replaced by
+**one star-type dot**. Removed with them: the **hollow-when-un-settled** distinction (every system now shows its
+star dot regardless of `developed` — colonisation reads from the value-mode cell fill / political territory, not
+the glyph) and the **ambient halo entirely** (option (a): the halo is not kept even for the Price overlay — the
+Price overlay degrades to pill-only until WS2 promotes price to a first-class cell-choropleth mode, which is the
+very next workstream). **Kept:** the dashed `selectionRing` (selection indicator, orthogonal) and both corner
+pills (price / event).
 
 **Files:**
-- Modify: `components/map/pixi/theme.ts` (add `SUN_CLASS_COLORS_PIXI`)
-- Modify: `components/map/pixi/objects/system-object.ts` (colour the core by star type; subdue in value modes)
+- Modify: `components/map/pixi/theme.ts` (add `SUN_CLASS_COLORS_PIXI`; the `glow`/halo constants in `GLYPH` and
+  the undeveloped-ring constants become dead once the halo + hollow branch are gone — remove them)
+- Modify: `components/map/pixi/objects/system-object.ts` (delete `glow` + `highlight` + the hollow branch + the
+  whole `redrawHalo` path; render `core` as the star-type dot; subdue in value modes)
+- Modify: `components/map/pixi/layers/system-layer.ts` (thread the active `MapMode` into the objects so they can
+  subdue the dot under value modes)
 
 - [ ] **Step 1:** In `theme.ts`, add a Pixi palette derived from `SUN_CLASS_COLORS`
   (`lib/constants/ui.ts` — hex strings): `export const SUN_CLASS_COLORS_PIXI: Record<SunClass, number> = { yellow: 0xfacc15, blue_white: 0x93c5fd, orange_dwarf: 0xfb923c, red_dwarf: 0xf87171 }`.
-  Replace the `NEUTRAL_GLYPH` anchor comment usage.
-- [ ] **Step 2:** In `system-object.ts` `update()` (the glyph draw, ~162–188) and `redrawHalo` (~240–256), colour
-  the `core` and `glow` from `SUN_CLASS_COLORS_PIXI[data.sunClass]` instead of the flat `NEUTRAL_GLYPH`. Render
-  the dot as a small star with a radial gradient (core → darker edge) — in Pixi v8 use a two-stop `FillGradient`
-  or layer a bright core disc over a dimmer larger disc if a gradient fill regresses (prototype fell back to
-  core+glow layering; pick whichever renders crisp at `CAMERA.maxZoom`). In **value modes** render the dot
-  subdued (lower alpha / smaller) so the cell carries the value; in **political / none** it carries the star
-  colour at full strength. `SystemObject` needs the current mode — pass it via `setOverlayFlags`/a `setMode`
-  method threaded from `SystemLayer.sync`.
-- [ ] **Step 3: Build + smoke.** Dots are tinted by star type (reds/oranges dominant, occasional blue-white);
-  subdued under value modes, full under political/none. Run: `npx next build --webpack`.
-- [ ] **Step 4: Commit**
+  Remove `NEUTRAL_GLYPH` (or its now-unused fields) and the halo/undeveloped constants in `GLYPH` that only the
+  deleted paths read. (Leave `GLYPH.navRingRadius`/`selectedRingWidth` — the selection ring keeps them.)
+- [ ] **Step 2: Rip out the old body.** In `system-object.ts` remove the `glow` and `highlight` Graphics (fields,
+  constructor `addChild`s, `redrawHalo`, the specular-highlight block, and every `this.glow`/`this.highlight`
+  reference incl. in `setLOD`/`destroy`). Delete the `undeveloped` hollow-ring branch in `update()`. The
+  price-tint plumbing that only fed the halo (`redrawHalo`'s use of `priceTint`) goes; **keep** `priceTint`/
+  `priceDelta` tracking that feeds the price *pill* (`redrawPricePill`).
+- [ ] **Step 3: Render the star dot.** Draw `core` as a small star-type dot coloured
+  `SUN_CLASS_COLORS_PIXI[data.sunClass]` — a bright core disc over a slightly larger, dimmer disc of the same hue
+  (core+glow *layering*, not a `FillGradient`; the prototype found gradient fills regress at `CAMERA.maxZoom`).
+  Redraw it when `data.sunClass`/`visibility` changes (add `currentSunClass` to the diff-guard; drop
+  `currentEconomy` from the glyph guard — economy no longer colours anything). Unknown-visibility systems keep
+  their dimmed alpha.
+- [ ] **Step 4: Subdue under value modes.** `SystemObject` needs the active mode — add `setMode(mode: MapMode)`
+  (marks LOD dirty like `setOverlayFlags`) and thread it from `SystemLayer.sync`. In a **value mode** render the
+  dot subdued (lower alpha and/or smaller) so the Voronoi cell carries the value; in **political / none** it
+  carries the star colour at full strength.
+- [ ] **Step 5: Build + smoke.** Dots are tinted by star type (reds/oranges dominant, occasional blue-white); no
+  halo, no specular, no hollow rings; subdued under value modes, full under political/none; selection ring +
+  pills still render. Run: `npx next build --webpack`.
+- [ ] **Step 6: Commit**
 
 ```bash
-git add components/map/pixi/theme.ts components/map/pixi/objects/system-object.ts
-git commit -m "feat(map): colour the system dot by star type, subdued under value modes (WS1)"
+git add components/map/pixi/theme.ts components/map/pixi/objects/system-object.ts components/map/pixi/layers/system-layer.ts
+git commit -m "feat(map): replace the system glyph with a star-type dot, drop halo + hollow rings (WS1)"
 ```
 
-### Task 3.3: Hover style + larger transparent selection hit-zone
+### Task 3.3: ~~Larger selection hit-zone~~ — DROPPED (hover folded into 3.2)
 
-**Files:**
-- Modify: `components/map/pixi/objects/system-object.ts`, `components/map/pixi/theme.ts` (`SIZES.systemHitRadius`)
+**Cut (verified in code).** `[Sys 4]`'s larger hit-zone is redundant: since Phase 2, `interactions.ts`
+(`onStageClick`) resolves a click anywhere in a system's Voronoi **cell** to that system, **in every mode at
+every zoom** (not value-mode-gated). The star's `hitCircle` and the cell hit-test already select the same
+system, so a bigger star hitbox adds nothing. The one worthwhile remnant — a clearer hover style (`ANIM.hoverScale`
+plus a subtle star-coloured ring) — folds into Task 3.2's dot render. True cell-wide *hover* highlight would be
+new stage-level work and is out of scope for Phase 3.
 
-- [ ] **Step 1:** Fold in `[Sys 4]`: a clearer hover style (the existing `ANIM.hoverScale` plus a subtle
-  star-coloured ring) and a **larger transparent selection hit-zone** — bump the invisible `hitCircle` radius
-  (`SIZES.systemHitRadius`, theme.ts:70) or add a second larger invisible hit disc, so stars are easier to click
-  at low zoom. (Cell hit-testing from Phase 1 covers value modes; this improves political/none where the star is
-  the target.)
-- [ ] **Step 2: Build + smoke.** Hover reads clearly; stars are comfortably clickable at low zoom. Run:
-  `npx next build --webpack`.
-- [ ] **Step 3: Commit**
+### Task 3.4: Event-pill refresh fix
 
-```bash
-git add components/map/pixi/objects/system-object.ts components/map/pixi/theme.ts
-git commit -m "feat(map): clearer hover + larger star selection hit-zone (WS1)"
-```
-
-### Task 3.4: Icons-not-refreshing fix
+Narrowed from the original "icons not refreshing" (`[Map 5]`): that bug hit both the event pills **and** the
+old hollow-when-un-settled system icon. Task 3.2 deletes the hollow-icon rendering, so only the **event-pill**
+half remains.
 
 **Files:**
 - Modify: `components/map/pixi/objects/system-object.ts` and/or `components/map/pixi/layers/system-layer.ts`
 
-- [ ] **Step 1: Reproduce + diagnose.** `[Map 5]`: identify the case where event/price pill icons fail to refresh
-  after a tick. Likely the diff-guard in `system-object.ts` `update()` (the `current*` change-detection fields,
-  ~76–84) skips a redraw when the underlying data changed but the guarded key did not. Add the missing field to
-  the change check, or invalidate the texture on the relevant data change.
-- [ ] **Step 2: Build + smoke.** Trigger an event / price change on a system and confirm the icon updates on the
-  next tick without a full remount. Run: `npx next build --webpack`.
+- [ ] **Step 1: Reproduce + diagnose.** Identify why an event pill goes stale after a tick. Two candidates:
+  (a) the type-only diff-guard in `system-object.ts` `update()` (`eventsChanged` compares
+  `activeEvents.map(e => e.type)` only) misses a change the pill actually renders; (b) `system-layer.sync` does
+  not re-run `update()` on the affected systems each tick, so fresh event data never reaches the object. Confirm
+  which before touching code.
+- [ ] **Step 2: Build + smoke.** Trigger an event change on a system and confirm the pill updates on the next
+  tick without a full remount. Run: `npx next build --webpack`.
 - [ ] **Step 3: Commit**
 
 ```bash
 git add components/map/pixi/objects/system-object.ts components/map/pixi/layers/system-layer.ts
-git commit -m "fix(map): refresh system pill icons on data change (WS1)"
+git commit -m "fix(map): refresh system event pills on tick data change (WS1)"
 ```
 
 - [ ] **Step 4: Open the Phase 3 PR** into `feat/economy-rework-base`.
@@ -1179,8 +1197,9 @@ git commit -m "fix(map): refresh system pill icons on data change (WS1)"
 - **Development as raw tier-weighted points, coloured relative to scope max (EU5 model)** → Task 2.1.
 - **Political + value coexistence (faction-union outline)** → Task 2.4.
 - **Zoomed-out faction selection (political + value focus)** → Task 2.5.
-- **Star-type dot (sunClass plumbing + Pixi dot)** → Tasks 3.1, 3.2.
-- **`[Sys 4]` hover + hit-zone** → Task 3.3. **`[Map 5]` icons refresh** → Task 3.4.
+- **Star-type dot (sunClass plumbing + full glyph replacement: halo + hollow rings removed)** → Tasks 3.1, 3.2.
+- **`[Sys 4]` hover** → folded into Task 3.2; the larger hit-zone is dropped (cell hit-test already covers it,
+  Task 3.3). **`[Map 5]` event-pill refresh** → Task 3.4.
 - **Three-layers → one-layer consolidation** → Tasks 1.4, 1.5, 1.7.
 - **Deferred (not in this plan, per spec):** stored "sectors"; a true "control" mode; panel offset (WS4); new
   modes migration/price/logistics (WS2); "Hide" de-emphasis as a user toggle (kept reachable, not built).
