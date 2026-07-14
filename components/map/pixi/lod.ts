@@ -34,8 +34,6 @@ export interface LODState {
   valueChoroplethAlpha: number;
   /** Alpha for region name labels */
   regionLabelAlpha: number;
-  /** Whether to show glow effects */
-  showGlow: boolean;
   /** Alpha for the directed-logistics overlay layer (smooth fade in 0.4 → 0.6). */
   logisticsAlpha: number;
   /** Whether pill TEXT/ICON content shows (shapes show earlier, with the layer). */
@@ -134,9 +132,6 @@ export function computeLOD(zoom: number): LODState {
 
     // Scale dots down at low zoom (min 0.35, max 1.0)
     systemDotScale: Math.max(0.35, Math.min(1.0, smoothStep(0.15, 0.5, zoom))),
-
-    // Glow effects only at medium+ zoom
-    showGlow: zoom > 0.45,
 
     // Trade-flow overlay fades in across the crossfade-to-system band
     logisticsAlpha: smoothStep(0.4, 0.6, zoom),

@@ -1,8 +1,9 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SystemNodeData, SystemEventInfo } from "@/lib/hooks/use-map-data";
-import type { SystemVisibility } from "@/lib/types/game";
+import type { SunClass, SystemVisibility } from "@/lib/types/game";
+import { isValueMapMode, type MapMode } from "@/lib/types/map";
 import type { LODState } from "../lod";
-import { NEUTRAL_GLYPH, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
+import { SUN_CLASS_COLORS_PIXI, SIZES, TEXT_COLORS, EVENT_DOT_COLORS, EVENT_ICON, GLYPH, PILL, PILL_ANCHOR, LABEL, TEXT_RESOLUTION } from "../theme";
 
 const NAME_STYLE = new TextStyle({
   fontSize: SIZES.systemLabelSize,
@@ -52,7 +53,6 @@ function lodVisuallyEqual(a: LODState, b: LODState): boolean {
     a.systemNameAlpha === b.systemNameAlpha &&
     a.showPillContent === b.showPillContent &&
     a.pillContentAlpha === b.pillContentAlpha &&
-    a.showGlow === b.showGlow &&
     a.systemDotScale === b.systemDotScale
   );
 }
@@ -60,9 +60,8 @@ function lodVisuallyEqual(a: LODState, b: LODState): boolean {
 export class SystemObject extends Container {
   systemId = "";
 
-  private glow: Graphics;
-  private core: Graphics;
-  private highlight: Graphics;
+  private core: Graphics;         // star-type dot (bloom under-disc + bright core)
+  private hoverRing: Graphics;    // star-coloured ring, shown only on hover
   private selectionRing: Graphics;
   private nameBg: Graphics;
   private nameLabel: Text;
@@ -74,7 +73,8 @@ export class SystemObject extends Container {
 
   // Track state for update diffing
   private currentName = "";
-  private currentEconomy = "";
+  private currentSunClass: SunClass = "yellow";
+  private currentMode: MapMode = "none";
   private currentVisibility: SystemVisibility = "unknown";
   private currentSelected = false;
   private currentEventTypes: string[] = [];
@@ -100,21 +100,18 @@ export class SystemObject extends Container {
   constructor() {
     super();
 
-    // Glow / soft-body halo (bottom)
-    this.glow = new Graphics();
-    this.addChild(this.glow);
-
-    // Selection focus ring (behind core)
+    // Selection focus ring (behind the dot)
     this.selectionRing = new Graphics();
     this.addChild(this.selectionRing);
 
-    // Core circle
+    // Star-type dot: bloom under-disc + bright core in one Graphics.
     this.core = new Graphics();
     this.addChild(this.core);
 
-    // Highlight dot
-    this.highlight = new Graphics();
-    this.addChild(this.highlight);
+    // Hover ring — star-coloured, above the dot, toggled on hover.
+    this.hoverRing = new Graphics();
+    this.hoverRing.visible = false;
+    this.addChild(this.hoverRing);
 
     // Name label, over a semi-transparent backing for legibility against the
     // ring/halo behind it. Backing is added first so it sits behind the text;
@@ -148,7 +145,7 @@ export class SystemObject extends Container {
     this.systemId = data.id;
     this.position.set(data.x, data.y);
 
-    const econChanged = data.economyType !== this.currentEconomy;
+    const sunClassChanged = data.sunClass !== this.currentSunClass;
     const visibilityChanged = data.visibility !== this.currentVisibility;
     const selectedChanged = isSelected !== this.currentSelected;
     const eventTypes = data.activeEvents?.map((e) => e.type).join(",") ?? "";
@@ -159,44 +156,20 @@ export class SystemObject extends Container {
 
     const isUnknown = data.visibility === "unknown";
 
-    if (econChanged || visibilityChanged) {
-      this.currentEconomy = data.economyType;
+    if (sunClassChanged || visibilityChanged) {
+      this.currentSunClass = data.sunClass;
       this.currentVisibility = data.visibility;
-      const undeveloped = !data.developed;
-
-      // Undeveloped systems carry no built economy, so they read as a hollow
-      // ring (labelled potential) rather than a filled disc (live economy).
-      // The ring keeps the glyph colour; a faint fill stops the small marker
-      // from looking like a hole.
-      this.core.clear();
-      this.core.circle(0, 0, SIZES.systemCoreRadius);
-      if (undeveloped) {
-        this.core.fill({ color: NEUTRAL_GLYPH.core, alpha: GLYPH.undevelopedFillAlpha });
-        this.core.stroke({ color: NEUTRAL_GLYPH.core, width: GLYPH.undevelopedRingWidth });
-      } else {
-        this.core.fill(NEUTRAL_GLYPH.core);
-      }
-      this.core.alpha = isUnknown ? 0.4 : 1;
-
-      // The specular highlight implies a solid body — drop it on hollow markers.
-      this.highlight.clear();
-      if (!undeveloped) {
-        this.highlight.circle(0, 0, 4);
-        this.highlight.fill({ color: 0xffffff, alpha: isUnknown ? 0.2 : 0.6 });
-        this.highlight.position.set(-3, -3);
-      }
+      this.drawStar();
     }
 
-    // Halo is the overlay lens: it owns its own draw path so navigation state
-    // (which used to redraw the glow) can't clobber the price tint.
-    if (econChanged || visibilityChanged || priceChanged) {
+    // Price data now feeds only the top-right pill (the ambient halo is gone).
+    if (visibilityChanged || priceChanged) {
       this.currentPriceTint = data.priceTint;
       this.currentPriceDelta = data.priceDelta;
-      this.redrawHalo(data, isUnknown);
       this.redrawPricePill();
     }
 
-    if (econChanged || selectedChanged || visibilityChanged) {
+    if (selectedChanged || visibilityChanged) {
       this.currentSelected = isSelected;
       this.updateSelectionRing(isSelected);
     }
@@ -219,6 +192,33 @@ export class SystemObject extends Container {
     this.lodDirty = true;
   }
 
+  /** Draw the star-type dot (+ hover ring) from tracked sunClass / visibility /
+   *  mode. A dim same-hue bloom under a bright core disc — no gradient fill
+   *  (regresses at max zoom). Value modes subdue the dot so the Voronoi cell
+   *  carries the value; unknown systems dim. */
+  private drawStar() {
+    const color = SUN_CLASS_COLORS_PIXI[this.currentSunClass];
+    const isUnknown = this.currentVisibility === "unknown";
+    const subdued = isValueMapMode(this.currentMode);
+
+    this.core.clear();
+    this.core.circle(0, 0, GLYPH.bloomRadius).fill({ color, alpha: subdued ? 0.1 : 0.22 });
+    this.core.circle(0, 0, GLYPH.coreRadius).fill({ color });
+    this.core.alpha = isUnknown ? 0.4 : subdued ? 0.5 : 1;
+
+    this.hoverRing.clear();
+    this.hoverRing.circle(0, 0, GLYPH.hoverRingRadius).stroke({ color, width: 2, alpha: 0.9 });
+  }
+
+  /** Set the active map mode (subdues the dot under value modes). Marks LOD
+   *  dirty so the next frame reapplies. */
+  setMode(mode: MapMode) {
+    if (this.currentMode === mode) return;
+    this.currentMode = mode;
+    this.drawStar();
+    this.lodDirty = true;
+  }
+
   /** Set whether the event pill shows ambiently (overlay flag). When off, the
    *  pill still reveals on hover/selection. Marks LOD dirty so the next frame
    *  reapplies. */
@@ -233,26 +233,6 @@ export class SystemObject extends Container {
     if (this.isHovered === hovered) return;
     this.isHovered = hovered;
     this.lodDirty = true;
-  }
-
-  /** Draw the soft-body halo — the overlay lens. Price ramp when price data is
-   *  present, else the economy glow tint. The single owner of `this.glow`. */
-  private redrawHalo(data: SystemNodeData, isUnknown: boolean) {
-    const tint = data.priceTint;
-    const hasPrice = tint != null;
-    const haloColor = hasPrice ? tint : NEUTRAL_GLYPH.glow;
-    // Undeveloped systems (no live economy, never priced) get a dimmed glow so
-    // the filled-vs-hollow distinction reads at the halo level too.
-    const haloAlpha = isUnknown
-      ? 0.05
-      : !data.developed
-        ? GLYPH.haloUndevelopedAlpha
-        : hasPrice
-          ? GLYPH.haloPriceAlpha
-          : GLYPH.haloAlpha;
-    this.glow.clear();
-    this.glow.circle(0, 0, GLYPH.haloRadius);
-    this.glow.fill({ color: haloColor, alpha: haloAlpha });
   }
 
   /** Size a label's backing rect to the (already-set) text, centred under its
@@ -342,12 +322,11 @@ export class SystemObject extends Container {
       this.eventPill.count.alpha = contentAlpha;
     }
 
-    this.glow.visible = lod.showGlow;
-
-    // Scale core + highlight by LOD
+    // Scale the dot + rings by LOD; the hover ring shows only while hovered.
     this.core.scale.set(lod.systemDotScale);
-    this.highlight.scale.set(lod.systemDotScale);
     this.selectionRing.scale.set(lod.systemDotScale);
+    this.hoverRing.scale.set(lod.systemDotScale);
+    this.hoverRing.visible = this.isHovered;
   }
 
   /** Two-stage LOD helper: toggle a pill's content nodes (text/icons) together.

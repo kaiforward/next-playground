@@ -1,7 +1,17 @@
 import type { SystemEventInfo } from "@/lib/hooks/use-map-data";
+import type { SunClass } from "@/lib/types/game";
 
-// Interim single glyph colour — WS1 (map overhaul) recolours the glyph by star type.
+// Neutral tint for the far-zoom point cloud. The zoomed-in system dot is coloured
+// by star type (SUN_CLASS_COLORS_PIXI); distant points stay neutral.
 export const NEUTRAL_GLYPH = { core: 0xcbd5e1, glow: 0x64748b } as const; // slate-300 / slate-500
+
+/** Star-type dot palette (Pixi 0xRRGGBB) — mirrors SUN_CLASS_COLORS (lib/constants/ui.ts). */
+export const SUN_CLASS_COLORS_PIXI: Record<SunClass, number> = {
+  yellow:       0xfacc15,
+  blue_white:   0x93c5fd,
+  orange_dwarf: 0xfb923c,
+  red_dwarf:    0xf87171,
+};
 
 // ── Territory (universe view) ────────────────────────────────────
 
@@ -86,16 +96,12 @@ export const SIZES = {
 } as const;
 
 // ── Glyph radial budget (world units, glyph-local) ───────────────
-// Each concentric element owns a fixed radius band so the price halo and the
-// selection ring never collide.
+// Each concentric element owns a fixed radius band so the star bloom, hover
+// ring, and selection ring never collide.
 export const GLYPH = {
-  coreRadius:        12,   // economy core (unchanged, matches SIZES.systemCoreRadius)
-  haloRadius:        20,   // soft-body lens (was the 40px glow — pulled in)
-  haloAlpha:         0.16, // economy default
-  haloPriceAlpha:    0.5,  // when the halo carries the price ramp
-  haloUndevelopedAlpha: 0.06, // dimmed glow for undeveloped systems (no live economy)
-  undevelopedRingWidth: 2.5,  // hollow-core stroke for undeveloped systems
-  undevelopedFillAlpha: 0.15, // faint core fill so the hollow marker doesn't read as a hole
+  coreRadius:        12,   // star-type dot core (matches SIZES.systemCoreRadius)
+  bloomRadius:       20,   // dim same-hue under-disc — a soft star bloom, no halo
+  hoverRingRadius:   19,   // star-coloured ring shown on hover
   navRingRadius:     34,   // outermost, dashed
   selectedRingWidth: 4,    // selection ring — bright white dashed focus ring
 } as const;
@@ -114,7 +120,7 @@ export const PILL = {
 // just outside the halo — so pills read as orbiting the glyph rather than
 // crowding the core. The vertical anchor is the horizontal one plus half a pill
 // height, because pills are vertically centred on their anchor.
-const PILL_CORNER_RADIUS = 22;                          // > GLYPH.haloRadius (20)
+const PILL_CORNER_RADIUS = 22;                          // just outside the star bloom (GLYPH.bloomRadius 20)
 const PILL_CORNER_XY = PILL_CORNER_RADIUS / Math.SQRT2; // ≈ 15.6 per axis
 export const PILL_ANCHOR = {
   x:       PILL_CORNER_XY,                        // inner vertical edge of L/R pills

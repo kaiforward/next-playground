@@ -413,6 +413,7 @@ export function PixiMapCanvas({
     p.territoryLayer.container.visible = mapMode === "regions";
     p.politicalTerritoryLayer.setActive(mapMode === "political");
     p.valueChoroplethLayer.setActive(isValueMapMode(mapMode));
+    p.systemLayer.setMode(mapMode);
   }, [mapMode, pixiReady]);
 
   // ── Highlight the selected cell (the open /system/[id] panel) ──
