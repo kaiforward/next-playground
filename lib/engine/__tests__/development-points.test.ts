@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { developmentPoints, DEVELOPMENT_POINTS, type DevelopmentPointsInput } from "@/lib/engine/development-points";
+import {
+  developmentPoints,
+  developmentPotential,
+  DEVELOPMENT_POINTS,
+  type DevelopmentPointsInput,
+  type DevelopmentPotentialInput,
+} from "@/lib/engine/development-points";
 
 /**
  * Fixture: a system's development-points inputs. Defaults are empty (no pop, no buildings) so each
@@ -118,5 +124,69 @@ describe("developmentPoints — map-only raw tier-weighted score", () => {
     const dev = developmentPoints(pointsInput({ population: -50, buildings: { ore: 2 } }));
     expect(Number.isFinite(dev)).toBe(true);
     expect(dev).toBeGreaterThanOrEqual(0);
+  });
+});
+
+/**
+ * Fixture: a system's static substrate — the full-build-out ceiling inputs. Defaults are a barren,
+ * empty frontier (no habitable land, no deposit slots, no general space) so each test opts into only
+ * the fields it exercises.
+ */
+function potentialInput(partial: Partial<DevelopmentPotentialInput>): DevelopmentPotentialInput {
+  return { habitableSpace: 0, depositSlots: 0, generalSpace: 0, ...partial };
+}
+
+describe("developmentPotential — full-build-out dev-points ceiling", () => {
+  it("exceeds a partially-built real system's developmentPoints (pct sits in a legible 0-100 band)", () => {
+    // A moderately built (not maxed) system: some housing, some staffed tier-0 extraction, well short
+    // of the habitable land / deposit slots / general space it could theoretically fill.
+    const population = 300;
+    const currentPoints = developmentPoints(pointsInput({ population, buildings: { ore: 10 } }));
+    const potential = developmentPotential(
+      potentialInput({ habitableSpace: 400, depositSlots: 20, generalSpace: 100 }),
+    );
+    expect(potential).toBeGreaterThan(currentPoints);
+  });
+
+  it("is exactly 0 for a system with no habitable land, no deposit slots, and no general space", () => {
+    expect(developmentPotential(potentialInput({}))).toBe(0);
+  });
+
+  it("rises with habitableSpace (monotonic)", () => {
+    const base = { depositSlots: 5, generalSpace: 10 };
+    const small = developmentPotential(potentialInput({ ...base, habitableSpace: 100 }));
+    const large = developmentPotential(potentialInput({ ...base, habitableSpace: 200 }));
+    expect(large).toBeGreaterThan(small);
+  });
+
+  it("rises with depositSlots (monotonic)", () => {
+    const base = { habitableSpace: 100, generalSpace: 10 };
+    const few = developmentPotential(potentialInput({ ...base, depositSlots: 2 }));
+    const many = developmentPotential(potentialInput({ ...base, depositSlots: 20 }));
+    expect(many).toBeGreaterThan(few);
+  });
+
+  it("rises with generalSpace (monotonic)", () => {
+    const base = { habitableSpace: 100, depositSlots: 5 };
+    const small = developmentPotential(potentialInput({ ...base, generalSpace: 5 }));
+    const large = developmentPotential(potentialInput({ ...base, generalSpace: 50 }));
+    expect(large).toBeGreaterThan(small);
+  });
+
+  it("stays finite and non-negative for a huge, fully substrate-rich system", () => {
+    const potential = developmentPotential(
+      potentialInput({ habitableSpace: 1_000_000, depositSlots: 10_000, generalSpace: 100_000 }),
+    );
+    expect(Number.isFinite(potential)).toBe(true);
+    expect(potential).toBeGreaterThanOrEqual(0);
+  });
+
+  it("clamps negative/degenerate inputs to 0 rather than going negative or non-finite", () => {
+    const potential = developmentPotential(
+      potentialInput({ habitableSpace: -100, depositSlots: -5, generalSpace: -10 }),
+    );
+    expect(Number.isFinite(potential)).toBe(true);
+    expect(potential).toBeGreaterThanOrEqual(0);
+    expect(potential).toBe(0);
   });
 });

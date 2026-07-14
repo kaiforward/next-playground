@@ -25,6 +25,20 @@ export const QUALITY_BAND_DOT: Record<QualityBandId, string> = {
   rich: "bg-text-accent",
 };
 
+// ── Labour grade colors ──────────────────────────────────────
+// Distinct from health and from land (copper). Shared by the Industry panel's
+// staffing bars and the system-detail Population vital tile's composition bar
+// — `bar`/`text` are Tailwind utility classes, `color` is the same hue as a
+// raw CSS value for contexts (e.g. inline `style`) that can't take a class.
+
+export type LabourGrade = "unskilled" | "skill1" | "skill2";
+
+export const GRADE: Record<LabourGrade, { bar: string; text: string; color: string; tag: string; name: string }> = {
+  unskilled: { bar: "bg-status-blue", text: "text-status-blue-light", color: "var(--color-status-blue)", tag: "U", name: "Unskilled" },
+  skill1: { bar: "bg-status-cyan", text: "text-status-cyan-light", color: "var(--color-status-cyan)", tag: "T", name: "Technicians" },
+  skill2: { bar: "bg-status-purple", text: "text-status-purple-light", color: "var(--color-status-purple)", tag: "E", name: "Engineers" },
+};
+
 /** Mapping from event type to Badge/dot color. */
 export const EVENT_TYPE_BADGE_COLOR: Record<
   keyof typeof EVENT_DEFINITIONS,

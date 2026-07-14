@@ -138,6 +138,7 @@ export function toSimSystems(world: World): SimSystem[] {
     world.factions.map((f) => [f.id, f.governmentType]),
   );
 
+  // One pass over the flat building rows builds both the count roster and the idle-months roster.
   const buildingsBySystem = new Map<string, Record<string, number>>();
   const idleMonthsBySystem = new Map<string, Record<string, number>>();
   for (const b of world.buildings) {

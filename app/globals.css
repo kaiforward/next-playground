@@ -102,11 +102,9 @@ body::after {
 }
 
 /* Foundry-themed scrollbars (Chromium / Electron) — thin, square, slate → copper on hover.
-   The thumb's surface-colored border pads it into a slim sliver; no rounding, on-brand. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(139, 148, 158, 0.32) transparent;
-}
+   The thumb's surface-colored border pads it into a slim sliver; no rounding, on-brand.
+   No standard `scrollbar-width`/`scrollbar-color`: in Chromium those suppress the
+   `::-webkit-scrollbar` pseudo-elements entirely, and the Electron target is always Chromium. */
 ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
