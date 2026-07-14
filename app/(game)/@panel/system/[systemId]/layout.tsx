@@ -52,13 +52,20 @@ function SystemPanelContent({
     </span>
   );
 
+  // Recenter the live map behind the docked drawer without closing it: stay on the current
+  // panel path and drive the map's `?focus=` channel (which applies the drawer clear-offset)
+  // rather than navigating to "/", which would drop this panel route and unmount the drawer.
+  const showOnMapHref = systemInfo
+    ? `${basePath}?focus=${systemInfo.x},${systemInfo.y}`
+    : basePath;
+
   const headerAction = (
     <>
       <SystemCadenceCountdown systemId={systemId} />
       <Button
         variant="ghost"
         size="xs"
-        href={`/?systemId=${systemId}`}
+        href={showOnMapHref}
         aria-label="Show on map"
       >
         <MapPinIcon />
