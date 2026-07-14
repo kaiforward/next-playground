@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isMapMode, isValueMapMode, MAP_MODES } from "@/lib/types/map";
+import { isMapMode, isValueMapMode, isFactionInteractiveMode, MAP_MODES } from "@/lib/types/map";
 
 describe("MapMode", () => {
   it("includes the territory modes in the mode set and ordering", () => {
@@ -27,5 +27,19 @@ describe("isValueMapMode", () => {
     expect(isValueMapMode("political")).toBe(false);
     expect(isValueMapMode("regions")).toBe(false);
     expect(isValueMapMode("none")).toBe(false);
+  });
+});
+
+describe("isFactionInteractiveMode", () => {
+  it("is true for the modes that show faction territory (political + the value modes)", () => {
+    // Political opens the faction panel; the value modes also re-scope the gradient to the faction.
+    expect(isFactionInteractiveMode("political")).toBe(true);
+    expect(isFactionInteractiveMode("population")).toBe(true);
+    expect(isFactionInteractiveMode("stability")).toBe(true);
+    expect(isFactionInteractiveMode("development")).toBe(true);
+  });
+  it("is false for modes with no faction territory (a zoomed-out click falls through to the system)", () => {
+    expect(isFactionInteractiveMode("regions")).toBe(false);
+    expect(isFactionInteractiveMode("none")).toBe(false);
   });
 });

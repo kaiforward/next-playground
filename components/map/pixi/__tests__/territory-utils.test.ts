@@ -90,6 +90,40 @@ describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
     }
   });
 
+  it("clips an interior cell that balloons into a sparse void without ever touching the box", () => {
+    // A tight 3×3 grid (spacing 50) plus one lone site ~8000 units to the right, all well inside a large
+    // box. The grid's middle-right cell balloons rightward toward the lone site's bisector (~3900 units
+    // away) with NO vertex anywhere near the box — the exact case the old box-vertex-only clip test
+    // missed. The extent-based clip (any vertex past ~DISC_RADIUS_FACTOR × the median nearest-neighbour
+    // spacing) trims it, so every output vertex stays within the clip radius of its own site. Un-clipped,
+    // that vertex would sit ~3900 units out; here it must land within ~1.25× the 50-unit spacing.
+    const SPACING = 50;
+    const CLIP_RADIUS = 1.25 * SPACING; // DISC_RADIUS_FACTOR × median nearest-neighbour spacing
+    const pts: [number, number][] = [];
+    const ids: string[] = [];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        pts.push([50000 + c * SPACING, 50000 + r * SPACING]);
+        ids.push(`g${r}-${c}`);
+      }
+    }
+    pts.push([58000, 50000]); // lone site — the void the grid balloons into (median NN stays 50)
+    ids.push("lone");
+
+    const voronoi = Delaunay.from(pts).voronoi([0, 0, 100000, 100000]);
+    const cells = computeTerritoryPolygons(pts.length, voronoi, (i) => ids[i]);
+
+    for (let i = 0; i < pts.length; i++) {
+      const [sx, sy] = pts[i];
+      const poly = cells.get(ids[i]);
+      expect(poly).toBeDefined();
+      if (!poly) continue;
+      for (const [x, y] of poly.flat(2)) {
+        expect(Math.hypot(x - sx, y - sy)).toBeLessThan(CLIP_RADIUS * 1.5);
+      }
+    }
+  });
+
   it("skips systems whose group key is null", () => {
     const pts: [number, number][] = [
       [100, 100], [900, 100], [500, 900],

@@ -44,6 +44,18 @@ describe("developmentPoints — map-only raw tier-weighted score", () => {
     expect(tier2).toBeGreaterThan(tier0);
   });
 
+  it("scores a licensed-and-staffed tier-1 producer above the same producer with no academy to license it", () => {
+    // `fuel` is a tier-1 good — its jobs need skill-1 (technicians), which only exist where a
+    // vocational school licenses them. With the licence, the tier-1 industry term (TIER_WEIGHT[1])
+    // turns on and the filled technicians add a skilled-population uplift; without it the tier-1
+    // fulfilment is gated to 0 and the factories contribute nothing. This exercises the tier-1 path
+    // that the tier-0/tier-2 cases don't touch.
+    const population = 200;
+    const licensed = developmentPoints(pointsInput({ population, buildings: { fuel: 2, vocational_school: 1 } }));
+    const unlicensed = developmentPoints(pointsInput({ population, buildings: { fuel: 2 } }));
+    expect(licensed).toBeGreaterThan(unlicensed);
+  });
+
   it("adds ~0 industry points for skilled production with no academy to license it (fulfilment gated to 0)", () => {
     // Skill-1/skill-2 jobs exist only where an academy licenses them (skill1Cap/skill2Cap = 0 here), so
     // effectiveFulfilment for a tier-2 good is gated to 0 regardless of headcount — the electronics
@@ -66,6 +78,18 @@ describe("developmentPoints — map-only raw tier-weighted score", () => {
     const withComplex = developmentPoints(pointsInput({ population, buildings: { heavy_industry_complex: 1 } }));
     const withoutComplex = developmentPoints(pointsInput({ population, buildings: {} }));
     expect(withComplex - withoutComplex).toBeCloseTo(DEVELOPMENT_POINTS.COMPLEX_POINTS, 6);
+  });
+
+  it("caps the complex bump at one per system even with multiple complexes built", () => {
+    // The industrial pinnacle is worth a single fixed bump regardless of how many complexes a system
+    // stacks (Math.min(1, complexCount)). Two different complex families in one system still add exactly
+    // one COMPLEX_POINTS over the no-complex baseline — not two.
+    const population = 50;
+    const twoComplexes = developmentPoints(
+      pointsInput({ population, buildings: { heavy_industry_complex: 1, electronics_complex: 1 } }),
+    );
+    const noComplex = developmentPoints(pointsInput({ population, buildings: {} }));
+    expect(twoComplexes - noComplex).toBeCloseTo(DEVELOPMENT_POINTS.COMPLEX_POINTS, 6);
   });
 
   it("a system with present population and staffed industry scores from industry (not merely population)", () => {

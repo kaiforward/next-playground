@@ -36,4 +36,17 @@ describe("findFactionAt (ray-casting point-in-union hit test)", () => {
     expect(findFactionAt(unions, 50, 50)).toBeNull(); // inside the hole
     expect(findFactionAt(unions, 10, 10)).toBe("c"); // inside the ring, outside the hole
   });
+
+  it("matches a faction whose union has multiple disjoint pieces (each a separate polygon)", () => {
+    // computeTerritoryPolygons can group a faction's non-adjacent systems into one MultiPolygon with
+    // several disjoint exterior rings — so the hit-test must scan every polygon in the union, not just
+    // the first. Here faction "d" owns two separate squares with a gap between them.
+    const unions = new Map<string, MultiPolygon>([
+      ["d", [[square(0, 0, 100, 100)], [square(200, 0, 300, 100)]]],
+    ]);
+
+    expect(findFactionAt(unions, 50, 50)).toBe("d"); // first piece
+    expect(findFactionAt(unions, 250, 50)).toBe("d"); // second (disjoint) piece
+    expect(findFactionAt(unions, 150, 50)).toBeNull(); // in the gap between d's two pieces
+  });
 });
