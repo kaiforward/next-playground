@@ -226,6 +226,13 @@ export function StarMap({
     const match = /^\/system\/([^/]+)/.exec(pathname);
     return match ? decodeURIComponent(match[1]) : null;
   }, [pathname]);
+  // ── Faction focus = the open /factions/[id] panel route ──
+  // Zoom-gated in the value-choropleth layer: re-normalises pop/development to this faction and
+  // de-emphasises the rest; stability dims but never rescales (see ValueChoroplethLayer.setScope).
+  const selectedFactionId = useMemo(() => {
+    const match = /^\/factions\/([^/]+)/.exec(pathname);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, [pathname]);
   const selectedSystem = useMemo(
     () =>
       selectedSystemId
@@ -259,6 +266,15 @@ export function StarMap({
   const onEmptyClick = useCallback(() => {
     router.push("/");
   }, [router]);
+
+  // Zoomed-out click on a faction's territory — opens the faction panel, which re-normalises the
+  // value scope to it (see selectedFactionId above / ValueChoroplethLayer.setScope).
+  const onSelectFaction = useCallback(
+    (factionId: string) => {
+      router.push(`/factions/${factionId}`);
+    },
+    [router],
+  );
 
   // ── Camera focus target (generic: centre the map on any location) ──────
   // Anything can "locate on the map" by linking to the query:
@@ -316,6 +332,7 @@ export function StarMap({
         selectedSystem={selectedSystem}
         onSelectSystem={onSelectSystem}
         onEmptyClick={onEmptyClick}
+        onSelectFaction={onSelectFaction}
         centerTarget={centerTarget}
         onReady={handleReady}
         regionInfos={regionInfos}
@@ -325,6 +342,7 @@ export function StarMap({
         stabilityBySystem={visibleStability}
         populationBySystem={visiblePopulation}
         developmentBySystem={visibleDevelopment}
+        selectedFactionId={selectedFactionId}
       />
 
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}

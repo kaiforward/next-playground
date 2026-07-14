@@ -7,10 +7,10 @@ import { queryKeys } from "@/lib/query/keys";
 import type { DevelopmentEntry } from "@/lib/types/game";
 
 /**
- * All-systems development (0..1), keyed by systemId. Tick-scoped (no viewport
- * dep), mirrors `usePopulation`/`useStability`. Gated by `active` so the map
- * only pays the request when the development mode is selected. The ramp is
- * ABSOLUTE (see ValueChoroplethLayer), so this hook carries the raw values.
+ * All-systems development (raw tier-weighted development points), keyed by systemId. Tick-scoped (no
+ * viewport dep), mirrors `usePopulation`/`useStability`. Gated by `active` so the map only pays the
+ * request when the development mode is selected. The ramp colours relative to the scope max (see
+ * ValueChoroplethLayer), so this hook carries the raw values.
  */
 export function useDevelopment(active: boolean = true): Map<string, number> {
   const { data } = useQuery({

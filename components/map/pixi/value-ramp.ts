@@ -24,6 +24,12 @@ const RESERVES_ABSENT_ZERO: Record<ValueMode, boolean> = {
   stability: false,
 };
 
+// De-emphasis treatments for out-of-scope cells (faction focus). "desat" mixes each channel toward the
+// luminance grey; "dim" multiplies each channel down; "both" applies desat then dim and is the only
+// treatment currently wired up by the layer. "hide" (full suppression) is a future toggle, not built.
+const DESAT_AMOUNT = 0.6; // 0 = no change, 1 = full grey — calibration knob
+const DIM_FACTOR = 0.5; // channel multiplier — calibration knob
+
 function pack(c: readonly [number, number, number]): number {
   return (c[0] << 16) | (c[1] << 8) | c[2];
 }
@@ -58,6 +64,36 @@ export function valueRampColorPixi(value: number, referenceMax: number, mode: Va
 export function rampFloorPixi(mode: ValueMode): number { return pack(RAMPS[mode][0][1]); }
 export function rampTopPixi(mode: ValueMode): number { return pack(RAMPS[mode][RAMPS[mode].length - 1][1]); }
 export const ABSENT_COLOR = ABSENT;
+
+/** De-emphasis treatments for an out-of-scope cell (faction focus). "both" desaturates then dims. */
+export type DeEmphasis = "both" | "dim" | "desat";
+
+function desatChannels(r: number, g: number, b: number): [number, number, number] {
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  return [
+    r + (lum - r) * DESAT_AMOUNT,
+    g + (lum - g) * DESAT_AMOUNT,
+    b + (lum - b) * DESAT_AMOUNT,
+  ];
+}
+function dimChannels(r: number, g: number, b: number): [number, number, number] {
+  return [r * DIM_FACTOR, g * DIM_FACTOR, b * DIM_FACTOR];
+}
+
+/**
+ * Colour for an out-of-scope cell under faction focus: greys toward luminance and/or darkens a ramp
+ * colour so the focused faction's cells read as clearly brighter. Never returns `ABSENT_COLOR` for a
+ * ramp colour (every ramp stop sits well above rgb(8,9,12), so desat+dim can't collide with it).
+ */
+export function deEmphasize(color: number, treatment: DeEmphasis): number {
+  const r0 = (color >> 16) & 0xff;
+  const g0 = (color >> 8) & 0xff;
+  const b0 = color & 0xff;
+  let [r, g, b] = [r0, g0, b0];
+  if (treatment === "desat" || treatment === "both") [r, g, b] = desatChannels(r, g, b);
+  if (treatment === "dim" || treatment === "both") [r, g, b] = dimChannels(r, g, b);
+  return pack([Math.round(r), Math.round(g), Math.round(b)]);
+}
 
 /**
  * CSS `rgb(...)` stops (low→high) for a mode's ramp — the single source the map

@@ -16,12 +16,13 @@ import { ValueChoroplethLayer } from "./layers/value-choropleth-layer";
 import { CellHighlightLayer } from "./layers/cell-highlight-layer";
 import { TradeFlowLayer, LOGISTICS_FLOW_CONFIG } from "./layers/trade-flow-layer";
 import { setupInteractions } from "./interactions";
-import { BG_COLOR } from "./theme";
+import { findFactionAt } from "./faction-hit-test";
+import { BG_COLOR, FACTION_SELECT_ZOOM } from "./theme";
 import { buildSystemCells, type SystemCells } from "./voronoi-cache";
 import type { MapData } from "@/lib/hooks/use-map-data";
 import type { StarSystemInfo, AtlasData } from "@/lib/types/game";
 import type { ViewportBounds } from "@/lib/types/game";
-import { isValueMapMode, type MapMode } from "@/lib/types/map";
+import { isValueMapMode, isFactionInteractiveMode, type MapMode } from "@/lib/types/map";
 
 /** Shared empty map for value-choropleth modes with no data yet (avoids a fresh Map per render). */
 const EMPTY = new Map<string, number>();
@@ -32,6 +33,8 @@ export interface PixiMapCanvasProps {
   selectedSystem: StarSystemInfo | null;
   onSelectSystem: (systemId: string) => void;
   onEmptyClick: () => void;
+  /** Zoomed-out click on a faction's territory (see `theme.ts` `FACTION_SELECT_ZOOM`) — every mode. */
+  onSelectFaction: (factionId: string) => void;
   centerTarget?: { x: number; y: number; zoom: number };
   onReady: () => void;
   regionInfos: { id: string; name: string }[];
@@ -48,8 +51,10 @@ export interface PixiMapCanvasProps {
   stabilityBySystem?: Map<string, number>;
   /** Per-system population for the population choropleth, or empty when mode is off. */
   populationBySystem?: Map<string, number>;
-  /** Per-system development (0..1) for the development choropleth, or empty when mode is off. */
+  /** Per-system development (raw tier-weighted development points) for the development choropleth, or empty when mode is off. */
   developmentBySystem?: Map<string, number>;
+  /** The focused faction (from the /factions/[id] route), or null. Value modes re-normalise pop/development to it and de-emphasise the rest; stability dims but does not rescale. */
+  selectedFactionId?: string | null;
 }
 
 /** Holds all mutable Pixi references. Created once during mount. */
@@ -77,6 +82,7 @@ export function PixiMapCanvas({
   selectedSystem,
   onSelectSystem,
   onEmptyClick,
+  onSelectFaction,
   centerTarget,
   onReady,
   regionInfos,
@@ -86,14 +92,20 @@ export function PixiMapCanvas({
   stabilityBySystem,
   populationBySystem,
   developmentBySystem,
+  selectedFactionId = null,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pixiRef = useRef<PixiRefs | null>(null);
   const readyFired = useRef(false);
 
   // Store callbacks in refs so Pixi event handlers always see latest
-  const callbacksRef = useRef({ onSelectSystem, onEmptyClick });
-  callbacksRef.current = { onSelectSystem, onEmptyClick };
+  const callbacksRef = useRef({ onSelectSystem, onEmptyClick, onSelectFaction });
+  callbacksRef.current = { onSelectSystem, onEmptyClick, onSelectFaction };
+
+  // Live map mode for the once-mounted interaction closures (ticker hover + faction hit-test): faction
+  // targeting is gated to modes that show factions (political + value), inert in regions/none.
+  const mapModeRef = useRef(mapMode);
+  mapModeRef.current = mapMode;
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
@@ -206,6 +218,10 @@ export function PixiMapCanvas({
           cells: pixiRef.current?.cells ?? null,
           toWorld: (screenX, screenY) => camera.screenToWorld(screenX, screenY),
         }),
+        getFactionContext: () => ({
+          unions: politicalTerritoryLayer.getFactionUnions(),
+          selectActive: camera.zoom < FACTION_SELECT_ZOOM && isFactionInteractiveMode(mapModeRef.current),
+        }),
       });
 
       // Hover: outline the cell under the cursor (every mode, every zoom). pointermove fires far
@@ -218,6 +234,7 @@ export function PixiMapCanvas({
       clearHover = () => {
         hoverScreen = null;
         cellHighlightLayer.setHovered(null);
+        cellHighlightLayer.setHoveredFaction(null);
         pixi.stage.cursor = "default";
       };
       canvas.addEventListener("pointerleave", clearHover);
@@ -274,16 +291,27 @@ export function PixiMapCanvas({
         territoryLayer.updateVisibility(lod);
         politicalTerritoryLayer.updateVisibility(lod);
         valueChoroplethLayer.updateVisibility(lod);
-        if (valueChoroplethLayer.container.visible) valueChoroplethLayer.updateNumbers(camera.zoom, frustum);
+        if (valueChoroplethLayer.container.visible) {
+          valueChoroplethLayer.updateNumbers(camera.zoom, frustum);
+          valueChoroplethLayer.updateOutlineZoom(camera.zoom);
+        }
 
-        // Resolve the hovered cell at most once per frame (pointermove fires far more often than we
-        // render); also drives the clickable-cell cursor over empty cell space, not just the star.
+        // Resolve the hover target at most once per frame (pointermove fires far more often than we
+        // render), and drive the clickable cursor. Zoomed OUT (faction-select range) the target is the
+        // whole faction under the cursor; zoomed IN it's the individual cell — mirroring the click.
         if (hoverScreen) {
-          const cells = pixiRef.current?.cells;
-          if (cells) {
-            const wh = camera.screenToWorld(hoverScreen.x, hoverScreen.y);
-            const hoveredId = cells.findSystemAt(wh.x, wh.y);
+          const wh = camera.screenToWorld(hoverScreen.x, hoverScreen.y);
+          if (camera.zoom < FACTION_SELECT_ZOOM && isFactionInteractiveMode(mapModeRef.current)) {
+            const unions = politicalTerritoryLayer.getFactionUnions();
+            const factionId = unions ? findFactionAt(unions, wh.x, wh.y) : null;
+            cellHighlightLayer.setHoveredFaction(factionId);
+            cellHighlightLayer.setHovered(null);
+            pixi.stage.cursor = factionId ? "pointer" : "default";
+          } else {
+            const cells = pixiRef.current?.cells;
+            const hoveredId = cells ? cells.findSystemAt(wh.x, wh.y) : null;
             cellHighlightLayer.setHovered(hoveredId);
+            cellHighlightLayer.setHoveredFaction(null);
             pixi.stage.cursor = hoveredId ? "pointer" : "default";
           }
           hoverScreen = null;
@@ -365,7 +393,12 @@ export function PixiMapCanvas({
     const cells = buildSystemCells(atlasData.systems, mapSize);
     p.cells = cells;
     p.valueChoroplethLayer.sync(cells, atlasData.systems);
+    p.valueChoroplethLayer.setFactionOutlines(
+      p.politicalTerritoryLayer.getFactionUnions(),
+      p.politicalTerritoryLayer.getFactionColors(),
+    );
     p.cellHighlightLayer.setCells(cells);
+    p.cellHighlightLayer.setFactionUnions(p.politicalTerritoryLayer.getFactionUnions());
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
@@ -392,8 +425,8 @@ export function PixiMapCanvas({
   // ── Value choropleth fills (lightweight redraw on data change) ──────
   // One setter for all three value modes — the layer's ramp + aggregation
   // tiers are keyed off the `ValueMode` passed alongside the value map.
-  // Phase 1: reference == value map (dev uses current-development max as its
-  // v1 reference; potential lands in Phase 2).
+  // Reference == value map for every mode: population and development both
+  // colour by value ÷ scope-max (no "vs potential" or "vs own ceiling" reference).
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
@@ -405,6 +438,14 @@ export function PixiMapCanvas({
       p.valueChoroplethLayer.setValues(developmentBySystem ?? EMPTY, developmentBySystem ?? EMPTY, "development");
     }
   }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, pixiReady]);
+
+  // ── Value-mode faction focus (scope) — driven by the /factions/[id] route ──
+  // Separate from the per-tick value effect: scope changes only on mode/faction change, not every tick.
+  useEffect(() => {
+    const p = pixiRef.current;
+    if (!p || !pixiReady) return;
+    p.valueChoroplethLayer.setScope(isValueMapMode(mapMode) ? (selectedFactionId ?? null) : null);
+  }, [mapMode, selectedFactionId, pixiReady]);
 
   // ── Sync map data → system objects + connections ──────────────────
   useEffect(() => {
