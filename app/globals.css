@@ -99,3 +99,31 @@ body::after {
     transparent 70%
   );
 }
+
+body {
+  scrollbar-gutter: stable;
+}
+
+/* Foundry-themed scrollbars (Chromium / Electron) — thin, square, slate → copper on hover.
+   The thumb's surface-colored border pads it into a slim sliver; no rounding, on-brand. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 148, 158, 0.32) transparent;
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 148, 158, 0.3);
+  border: 3px solid var(--color-surface);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

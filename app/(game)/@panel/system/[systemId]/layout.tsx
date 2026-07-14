@@ -72,7 +72,6 @@ function SystemPanelContent({
       title={systemInfo?.name ?? "System"}
       subtitle={subtitle}
       headerAction={headerAction}
-      size="xl"
     >
       {/* Tab bar */}
       <TabList className="mb-6" aria-label="System tabs">
