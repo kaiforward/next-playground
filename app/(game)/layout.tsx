@@ -4,7 +4,7 @@ import { GameQueryProvider } from "@/components/providers/query-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameShell } from "@/components/game-shell";
 
-export default async function GameLayout({
+export default function GameLayout({
   children,
   panel,
 }: {
