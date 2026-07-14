@@ -13,12 +13,15 @@ const panel = tv({
   slots: {
     base: "fixed left-0 bottom-0 top-[var(--topbar-height)] z-30 w-[clamp(400px,30vw,560px)] bg-surface border-r border-border-strong shadow-[8px_0_30px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden transition-all duration-200",
     header:
-      "flex items-center justify-between px-6 py-4 border-b border-border shrink-0",
+      "flex items-center justify-between px-4 py-3 border-b border-border shrink-0",
     title: "text-lg font-bold font-display text-text-primary",
     subtitle: "text-sm text-text-secondary mt-0.5",
     closeBtn:
       "p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors",
-    body: "flex-1 overflow-y-auto p-6 [scrollbar-gutter:stable]",
+    // Pinned sub-header (e.g. sub-tabs) between the fixed header and the scrolling
+    // body — horizontal padding aligns it with the body content.
+    subHeader: "shrink-0 px-4 pt-3",
+    body: "flex-1 overflow-y-auto px-4 py-4 [scrollbar-gutter:stable]",
   },
 });
 
@@ -30,12 +33,14 @@ interface DetailPanelProps {
   title: string;
   subtitle?: React.ReactNode;
   headerAction?: React.ReactNode;
+  /** Pinned content below the header, above the scrolling body (e.g. sub-tabs). */
+  subHeader?: React.ReactNode;
   /** Path to navigate to when the panel is closed (default: "/"). */
   backPath?: string;
   children: React.ReactNode;
 }
 
-export function DetailPanel({ title, subtitle, headerAction, backPath = "/", children }: DetailPanelProps) {
+export function DetailPanel({ title, subtitle, headerAction, subHeader, backPath = "/", children }: DetailPanelProps) {
   const router = useRouter();
   const styles = panel();
   const [mounted, setMounted] = useState(false);
@@ -89,6 +94,9 @@ export function DetailPanel({ title, subtitle, headerAction, backPath = "/", chi
           </button>
         </div>
       </div>
+
+      {/* Pinned sub-header (sub-tabs) */}
+      {subHeader && <div className={styles.subHeader()}>{subHeader}</div>}
 
       {/* Body */}
       <div className={styles.body()}>

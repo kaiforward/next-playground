@@ -87,20 +87,20 @@ function SystemPanelContent({
       title={systemInfo?.name ?? "System"}
       subtitle={subtitle}
       headerAction={headerAction}
+      subHeader={
+        <TabList aria-label="System tabs">
+          {tabs.map((tab) => (
+            <TabLink
+              key={tab.href}
+              href={tab.href}
+              active={tab.active}
+            >
+              {tab.label}
+            </TabLink>
+          ))}
+        </TabList>
+      }
     >
-      {/* Tab bar */}
-      <TabList className="mb-6" aria-label="System tabs">
-        {tabs.map((tab) => (
-          <TabLink
-            key={tab.href}
-            href={tab.href}
-            active={tab.active}
-          >
-            {tab.label}
-          </TabLink>
-        ))}
-      </TabList>
-
       {/* Active tab content */}
       {children}
     </DetailPanel>
