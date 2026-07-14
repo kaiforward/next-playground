@@ -164,6 +164,7 @@ export function StarMap({
         economyType: as.economyType,
         isGateway: as.isGateway,
         developed: as.developed,
+        sunClass: as.sunClass,
         name: tileData?.name ?? "",
         description: "",
       };

@@ -3,7 +3,7 @@ import { buildSystemCells } from "@/components/map/pixi/voronoi-cache";
 import type { AtlasSystem } from "@/lib/types/game";
 
 const sys = (id: string, x: number, y: number): AtlasSystem => ({
-  id, x, y, regionId: "r", factionId: "f", economyType: "agricultural", isGateway: false, developed: true,
+  id, x, y, regionId: "r", factionId: "f", economyType: "agricultural", isGateway: false, developed: true, sunClass: "yellow",
 });
 
 describe("buildSystemCells", () => {

@@ -5,7 +5,7 @@ import {
 import type { AtlasSystem } from "@/lib/types/game";
 
 const sys = (id: string, x: number, y: number, factionId: string | null, regionId: string): AtlasSystem => ({
-  id, x, y, regionId, factionId, economyType: "agricultural", isGateway: false, developed: true,
+  id, x, y, regionId, factionId, economyType: "agricultural", isGateway: false, developed: true, sunClass: "yellow",
 });
 
 describe("buildAggregationGroups", () => {

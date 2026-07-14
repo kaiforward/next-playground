@@ -27,6 +27,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "sol",
       name: "Sol",
       economyType: "core",
+      sunClass: "yellow",
       x: 400,
       y: 300,
       description:
@@ -39,6 +40,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "alpha_centauri",
       name: "Alpha Centauri",
       economyType: "tech",
+      sunClass: "yellow",
       x: 600,
       y: 200,
       description:
@@ -51,6 +53,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "kepler",
       name: "Kepler",
       economyType: "extraction",
+      sunClass: "orange_dwarf",
       x: 250,
       y: 150,
       description:
@@ -63,6 +66,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "vega",
       name: "Vega",
       economyType: "agricultural",
+      sunClass: "blue_white",
       x: 200,
       y: 350,
       description:
@@ -75,6 +79,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "sirius",
       name: "Sirius",
       economyType: "industrial",
+      sunClass: "blue_white",
       x: 550,
       y: 420,
       description:
@@ -87,6 +92,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "proxima",
       name: "Proxima",
       economyType: "extraction",
+      sunClass: "red_dwarf",
       x: 700,
       y: 350,
       description: "A remote but mineral-rich frontier outpost.",
@@ -98,6 +104,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "arcturus",
       name: "Arcturus",
       economyType: "core",
+      sunClass: "orange_dwarf",
       x: 350,
       y: 480,
       description:
@@ -110,6 +117,7 @@ export const MOCK_UNIVERSE: UniverseData = {
       id: "barnard",
       name: "Barnard",
       economyType: "agricultural",
+      sunClass: "red_dwarf",
       x: 500,
       y: 100,
       description:

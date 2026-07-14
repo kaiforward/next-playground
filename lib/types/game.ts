@@ -133,6 +133,8 @@ export interface StarSystemInfo {
    *  systems have a substrate economy-type label but no open build-gate. Loaded
    *  by the atlas/map path; absent on lighter paths that don't query control. */
   developed?: boolean;
+  /** Star spectral class — drives the map's star-type dot colour. */
+  sunClass: SunClass;
 }
 
 /** Lightweight faction shape returned alongside universe data for client lookup. */
@@ -236,6 +238,8 @@ export interface AtlasSystem {
    *  carry a substrate-derived economy-type label but remain unopened — the map draws
    *  them as a hollow marker. */
   developed: boolean;
+  /** Star spectral class — drives the map's star-type dot colour. */
+  sunClass: SunClass;
 }
 
 /** Lightweight faction row included alongside atlas data for political-map rendering. */

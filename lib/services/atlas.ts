@@ -61,6 +61,7 @@ export function getAtlas(): AtlasData {
       economyType: s.economyType,
       isGateway: s.isGateway,
       developed: s.control === "developed",
+      sunClass: s.sunClass,
     })),
     connections: world.connections.map((c) => ({
       id: `${c.fromId}:${c.toId}`,
