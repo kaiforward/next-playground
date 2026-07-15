@@ -308,3 +308,29 @@ export type FactionListResponse = ApiResponse<FactionSummary[]>;
 export type FactionDetailResponse = ApiResponse<FactionDetail>;
 export type RelationsMatrixResponse = ApiResponse<RelationsMatrixData>;
 
+// ── Faction vitals (Overview aggregate tiles: territory / population / stability / development) ──
+/**
+ * Faction-level roll-up of the same vitals the system overview shows, aggregated over the faction's
+ * economically-active systems. Extensive quantities (population, development points/potential) SUM;
+ * stability is a POPULATION-WEIGHTED mean so a populous core dominates and spreading into small
+ * systems can't dilute it. Tick-dynamic, so it rides the tick-invalidated read (separate from the
+ * static faction detail). Not visibility-gated — the faction screen is a god-view.
+ */
+export interface FactionVitalsData {
+  /** Every system the faction owns (regardless of development). */
+  territorySize: number;
+  /** Systems that contribute to the pop/stability/development roll-up (control === "developed"). */
+  activeSystemCount: number;
+  /** Σ population across active systems. */
+  population: number;
+  /** Population-weighted mean stability (1 − unrest) × 100; 0 when the faction has no active systems. */
+  stabilityPct: number;
+  /** Σ tier-weighted development points — same units as the map choropleth. */
+  developmentPoints: number;
+  /** Σ development potential (the tile meter's denominator). */
+  developmentPotential: number;
+  /** clamp(Σpoints / Σpotential, 0, 1) × 100 — the faction's overall build-out vs its ceiling. */
+  developmentPct: number;
+}
+export type FactionVitalsResponse = ApiResponse<FactionVitalsData>;
+

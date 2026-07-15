@@ -50,4 +50,7 @@ export const queryKeys = {
   factions: ["factions"] as const,
   faction: (factionId: string) => ["factions", factionId] as const,
   factionRelations: ["factions", "relations"] as const,
+  // Per-faction overview vitals roll-up (territory/pop/stability/development) — tick-invalidated.
+  factionVitalsAll: ["factionVitals"] as const,
+  factionVitals: (factionId: string) => ["factionVitals", factionId] as const,
 };

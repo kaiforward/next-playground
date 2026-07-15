@@ -32,9 +32,8 @@ export interface VitalTileProps {
 
 /**
  * One "vital" stat tile — loud label + big mono value, an optional 5px meter fill or a
- * `children` body slot, and an optional trailing hint row. Matches the system-detail
- * oracle's `.vital` tile language (`docs/build-plans/ws4-system-detail-prototype.html`);
- * reused unmodified by the faction Overview grid.
+ * `children` body slot, and an optional trailing hint row. The system Overview and the
+ * faction Overview grids reuse it unmodified.
  */
 export function VitalTile({ label, dotColor, value, unit, meter, hint, children, colSpan = 1 }: VitalTileProps) {
   const hasHintRow = hint !== undefined;

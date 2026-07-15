@@ -67,7 +67,9 @@ export function StarMap({
   const { overlays, toggle } = useMapOverlays();
   const { logisticsEdges } = useTradeFlow(overlays.logistics);
   const stabilityBySystem = useStability(mapMode === "stability");
-  const populationBySystem = usePopulation(mapMode === "population");
+  // Population is fetched for its own choropleth AND as the weights for stability's population-weighted
+  // aggregation (so a faction's stability number tracks its people, not its raw system count).
+  const populationBySystem = usePopulation(mapMode === "population" || mapMode === "stability");
   const developmentBySystem = useDevelopment(mapMode === "development");
 
   // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
