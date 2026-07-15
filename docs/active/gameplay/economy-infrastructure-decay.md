@@ -209,21 +209,21 @@ scattered:
 
 **Goal:** one at-a-glance view of the three quantities, per land-type and per building, plus a **decay/health
 read** now that the substrate moves — is this system holding at equilibrium (built ≈ used), sitting on idle
-capacity that will rot, or actively decaying under unrest? The panel should make "this world is thriving / coasting
-/ falling apart" obvious without reading numbers.
+capacity that will shed, or torn down under unrest? The panel should make "this world is stable / contracting /
+collapsing" obvious without reading numbers.
 
 **Shipped design** (collaborative, prototype-first — not an agent invoking `frontend-design` blind). The panel
-groups buildings by the two physical land **pools** — **Deposit land** (extractors) and **General land**
-(housing + factories, shared) — each with a stacked land bar whose free tail two-tones the **habitable** sub-cap
-(housing-growable vs factory-only). A system **health strip** (thriving / coasting / declining via
-`industryHealth`) carries a `stable · idle · collapsing` building tally and an info-icon legend popover. Each
-building row shows **in-use vs built** as a health-coloured bar — green stable / amber idle / red collapsing,
-green holding below 100% via the `IDLE_COASTING_FRACTION` deadband, red past `IDLE_COLLAPSING_FRACTION` or on
-unrest-teardown / overshoot — with the % and decimal magnitude, the binding `cause`, and per-input `needs` chips
-for producers. The read path surfaces per-building `used` + `idleReason` and a `buildingHealth` helper
-(`lib/engine/industry.ts`, fed by live `outputUptake`); the trade balance (produces-vs-consumes) is kept as the
-one secondary block. Honours the Foundry theme and reuses `components/ui` primitives. It landed **last**, so it
-renders the finished, moving substrate.
+groups buildings by the two physical land **pools** — **Deposit land** (extractors, a per-resource table) and
+**General land** (housing + factories, a housing/factory/free magnitude bar whose free tail two-tones the
+**habitable** sub-cap in units). A system **health strip** (`stable / contracting / collapsing` via
+`industryHealth`) carries a per-building tally and an info-icon legend popover. The pool tables read
+**worked/slots** (staffing keeps a decimal; slot and output counts are whole, `≥1K` abbreviated) with a
+health glyph per row, gold-when-rich yield, and per-input `needs` lines for producers. Health is grounded in
+the decay engine's exact triggers via `buildingHealth`/`industryHealth` (`lib/engine/industry.ts`): a row is
+**collapsing** under unrest teardown, **contracting** when a WHOLE level is idle (`floor(built − used) ≥ 1`,
+the marginal level the engine sheds), else **stable** — so the label can never contradict what actually
+decays. Fed by live `used` + `outputUptake`. Honours the Foundry theme and reuses `components/ui` primitives.
+It landed **last**, so it renders the finished, moving substrate.
 
 ---
 
