@@ -2,9 +2,8 @@ import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import { developmentPoints, developmentPotential } from "@/lib/engine/development-points";
+import { developmentPointsAndPotential } from "@/lib/services/system-development";
 import { computeLabourAllocation, labourParts } from "@/lib/engine/industry";
-import { resourceVectorFromColumns, sumResourceVector } from "@/lib/engine/resources";
 import { clamp } from "@/lib/utils/math";
 import type { SystemVitalsData } from "@/lib/types/api";
 
@@ -27,24 +26,7 @@ export function getSystemVitals(systemId: string): SystemVitalsData {
   // Development: points scored vs this system's own physical ceiling. potential ≤ 0 clamps
   // pct to 0 rather than dividing by zero — the clamp also absorbs points slightly exceeding
   // a base-heads-only potential (never reads over 100%).
-  const points = developmentPoints({ buildings, population: system.population });
-  const slotCap = resourceVectorFromColumns(
-    {
-      slotGas: system.slotGas,
-      slotMinerals: system.slotMinerals,
-      slotOre: system.slotOre,
-      slotBiomass: system.slotBiomass,
-      slotArable: system.slotArable,
-      slotWater: system.slotWater,
-      slotRadioactive: system.slotRadioactive,
-    },
-    "slot",
-  );
-  const potential = developmentPotential({
-    habitableSpace: system.habitableSpace,
-    generalSpace: system.generalSpace,
-    depositSlots: sumResourceVector(slotCap),
-  });
+  const { points, potential } = developmentPointsAndPotential(system, buildings);
   const developmentPct = potential > 0 ? clamp(points / potential, 0, 1) * 100 : 0;
 
   // Population: role composition from the same labour-allocation the Industry/Labour panels use.

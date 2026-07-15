@@ -34,6 +34,8 @@ export function useTickInvalidation() {
         // Construction advances every funded pulse (same monthly economy tick) — refresh both surfaces.
         queryClient.invalidateQueries({ queryKey: queryKeys.systemConstructionAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.factionConstructionAll });
+        // Faction Overview vitals (pop/stability/development roll-up + territory) advance every tick.
+        queryClient.invalidateQueries({ queryKey: queryKeys.factionVitalsAll });
         // Dynamic overlay data (events, danger, presence) changes on the same
         // world pulse. It can't ride eventNotifications alone: that feed fires
         // only for notification-bearing spawns/advances (+ expiries), so a silent

@@ -80,7 +80,11 @@ Colour is always per-cell; **numbers coalesce upward** as you zoom out (`number-
 3. **Whole faction** — furthest out.
 
 `pickTier(zoom)` selects the finest tier for the current zoom; the aggregate is **mode-appropriate** —
-population → **sum**, stability / development → **average**. Numbers are pooled `Text` objects placed at each
+**extensive** magnitudes (population, development points) → **sum**, so a faction spreading into new systems
+*adds* rather than dilutes; **intensive** stability (`1 − unrest`) → a **population-weighted mean**, so a
+populous stable core dominates and a tiny outpost can't drag the number down (`weightedMean`, shared with the
+faction Overview roll-up). Absent-value members (undeveloped, no value) are skipped, never counted as a
+dragging 0. Numbers are pooled `Text` objects placed at each
 group's centroid, **frustum-gated** and **greedy-collision-avoided** (highest-value groups placed first, a label
 skipped if its screen rect overlaps a placed one). Placement re-runs only when the tier or frustum meaningfully
 changes, not every frame.

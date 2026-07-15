@@ -1,3 +1,4 @@
+import { weightedMean } from "@/lib/utils/math";
 import type { AtlasSystem } from "@/lib/types/game";
 import type { ValueMode } from "./value-ramp";
 
@@ -9,7 +10,7 @@ export interface AggGroup {
   cx: number;
   cy: number;
   memberIds: string[];
-  value: number; // population → sum; development / stability → average
+  value: number; // population / development → sum; stability → population-weighted mean
 }
 
 export interface AggregationTiers {
@@ -18,12 +19,15 @@ export interface AggregationTiers {
   faction: AggGroup[];
 }
 
-const isAverageMode = (m: ValueMode) => m !== "population";
+// Stability is the only INTENSIVE mode — a rate (1 − unrest) that must be population-weighted so a
+// populous core dominates and a tiny outpost can't drag it down. Population and development are
+// EXTENSIVE magnitudes → summed, so spreading into new systems adds instead of diluting.
+const isWeightedMode = (m: ValueMode) => m === "stability";
 
-export function aggregateValue(vals: number[], mode: ValueMode): number {
+export function aggregateValue(vals: number[], weights: number[], mode: ValueMode): number {
   if (vals.length === 0) return 0;
-  const sum = vals.reduce((a, b) => a + b, 0);
-  return isAverageMode(mode) ? sum / vals.length : sum;
+  if (isWeightedMode(mode)) return weightedMean(vals, weights);
+  return vals.reduce((a, b) => a + b, 0);
 }
 
 function push<K>(map: Map<K, AtlasSystem[]>, key: K, s: AtlasSystem): void {
@@ -36,6 +40,7 @@ export function buildAggregationGroups(
   systems: AtlasSystem[],
   values: Map<string, number>,
   mode: ValueMode,
+  weights?: Map<string, number>,
 ): AggregationTiers {
   const system: AggGroup[] = [];
   const frMap = new Map<string, AtlasSystem[]>();
@@ -48,22 +53,28 @@ export function buildAggregationGroups(
     push(faMap, s.factionId, s);
   }
 
-  const groupFrom = (key: string, tier: Tier, mem: AtlasSystem[]): AggGroup => ({
-    key,
-    tier,
-    cx: mem.reduce((a, s) => a + s.x, 0) / mem.length,
-    cy: mem.reduce((a, s) => a + s.y, 0) / mem.length,
-    memberIds: mem.map((s) => s.id),
+  const groupFrom = (key: string, tier: Tier, mem: AtlasSystem[]): AggGroup => {
     // Aggregate only over members that HAVE a value — an absent system (e.g. undeveloped, so no
-    // stability) must not count as a 0 that drags an average down; it's simply not part of the total.
-    value: aggregateValue(
-      mem.flatMap((s) => {
-        const v = values.get(s.id);
-        return v === undefined ? [] : [v];
-      }),
-      mode,
-    ),
-  });
+    // stability) must not count as a 0 that drags the number down; it's simply not part of the total.
+    // Weights parallel the kept values (stability weights by population); a missing weight defaults to
+    // 1 so a population-weighted mean degrades to a plain mean rather than dropping the member.
+    const vals: number[] = [];
+    const wts: number[] = [];
+    for (const s of mem) {
+      const v = values.get(s.id);
+      if (v === undefined) continue;
+      vals.push(v);
+      wts.push(weights?.get(s.id) ?? 1);
+    }
+    return {
+      key,
+      tier,
+      cx: mem.reduce((a, s) => a + s.x, 0) / mem.length,
+      cy: mem.reduce((a, s) => a + s.y, 0) / mem.length,
+      memberIds: mem.map((s) => s.id),
+      value: aggregateValue(vals, wts, mode),
+    };
+  };
 
   return {
     system,

@@ -96,3 +96,15 @@ export function formatPeople(pop: number): string {
     maximumSignificantDigits: 3,
   }).format(pop * PEOPLE_PER_UNIT);
 }
+
+/**
+ * Splits a compact magnitude string (e.g. "2.42M", "980K", "0") into its numeric value and unit
+ * suffix, so a VitalTile can render the unit small. Matches the shape `formatPeople`'s Intl
+ * compact-notation output always takes.
+ */
+export function splitMagnitude(formatted: string): { value: string; unit?: string } {
+  const match = formatted.match(/^([\d.,]+)([A-Za-z]*)$/);
+  if (!match) return { value: formatted };
+  const [, value, unit] = match;
+  return { value, unit: unit || undefined };
+}
