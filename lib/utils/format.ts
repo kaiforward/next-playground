@@ -39,6 +39,23 @@ export function formatMagnitude(value: number): string {
   return "<0.1";
 }
 
+/**
+ * Compact whole-unit magnitude for tight numeric columns: a whole number below
+ * 1000, then k / M abbreviated above (999 → "999", 1240 → "1.2k", 12400 → "12k",
+ * 3_400_000 → "3.4M"). One decimal only below ×10 of each suffix, whole above.
+ * For unit/good counts where a bare four-digit number would crowd the column.
+ */
+export function formatUnitsShort(value: number): string {
+  if (value <= 0) return "0";
+  if (value < 1000) return String(Math.round(value));
+  if (value < 1_000_000) {
+    const k = value / 1000;
+    return `${k >= 10 ? Math.round(k) : Math.round(k * 10) / 10}k`;
+  }
+  const m = value / 1_000_000;
+  return `${m >= 10 ? Math.round(m) : Math.round(m * 10) / 10}M`;
+}
+
 /** People represented by one abstract population unit. */
 export const PEOPLE_PER_UNIT = 1_000_000;
 

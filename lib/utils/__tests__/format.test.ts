@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude, formatPeople } from "../format";
+import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude, formatPeople, formatUnitsShort } from "../format";
 
 describe("formatNumber", () => {
   it("rounds to the nearest integer", () => {
@@ -12,6 +12,21 @@ describe("formatNumber", () => {
   });
   it("renders zero (e.g. an uninhabited system's population)", () => {
     expect(formatNumber(0)).toBe("0");
+  });
+});
+
+describe("formatUnitsShort", () => {
+  it("shows whole numbers below 1000", () => {
+    expect(formatUnitsShort(0)).toBe("0");
+    expect(formatUnitsShort(18.6)).toBe("19");
+    expect(formatUnitsShort(999)).toBe("999");
+  });
+  it("abbreviates thousands (one decimal below 10k, whole above)", () => {
+    expect(formatUnitsShort(1240)).toBe("1.2k");
+    expect(formatUnitsShort(12400)).toBe("12k");
+  });
+  it("abbreviates millions", () => {
+    expect(formatUnitsShort(3_400_000)).toBe("3.4M");
   });
 });
 

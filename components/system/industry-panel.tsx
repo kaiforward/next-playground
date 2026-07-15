@@ -16,52 +16,50 @@ import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { QUALITY_BAND_TEXT, QUALITY_BAND_LABEL, GRADE } from "@/lib/constants/ui";
 import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descriptions";
 import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
-import type { IndustryHealth, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry, SubstrateSpace } from "@/lib/engine/industry";
+import type { IndustryHealth, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry } from "@/lib/engine/industry";
 import type { GoodTier } from "@/lib/types/game";
-import { formatMagnitude, formatPeople } from "@/lib/utils/format";
+import { formatMagnitude, formatPeople, formatUnitsShort } from "@/lib/utils/format";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
-import { SegmentedControl } from "@/components/form/segmented-control";
-import { useIndustryView, type IndustryView } from "@/lib/hooks/use-industry-view";
-import { chipStates, depositChipRows, generalLandSegments, type Chip, type DepositChipRow } from "@/components/system/industry-chips";
+import { depositRows, generalLand, type DepositRow, type GeneralLand } from "@/components/system/industry-rows";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 
-/** Health → the labels/colours in one place so the badge, tally and text agree. */
-const HEALTH: Record<IndustryHealth, { sys: string; badge: BadgeColor; text: string }> = {
-  thriving:  { sys: "Thriving",  badge: "green", text: "text-status-green-light" },
-  coasting:  { sys: "Coasting",  badge: "amber", text: "text-status-amber-light" },
-  declining: { sys: "Declining", badge: "red",   text: "text-status-red-light" },
+/**
+ * Health → label / badge colour / text colour / glyph, in one place so the badge, tally, row
+ * indicators and legend agree. Grounded in the decay engine (see industryHealth): a shape-first
+ * glyph keeps it colourblind-safe. Stable holds, contracting slowly sheds idle levels, collapsing
+ * is unrest teardown.
+ */
+const HEALTH: Record<IndustryHealth, { label: string; badge: BadgeColor; text: string; glyph: string }> = {
+  stable:      { label: "Stable",      badge: "green", text: "text-status-green-light", glyph: "●" },
+  contracting: { label: "Contracting", badge: "amber", text: "text-status-amber-light", glyph: "▽" },
+  collapsing:  { label: "Collapsing",  badge: "red",   text: "text-status-red-light",   glyph: "▼" },
 };
 
-/** Trend glyph per health — shape-first (colourblind-safe), colour reinforces. */
-const HEALTH_GLYPH: Record<IndustryHealth, string> = {
-  thriving: "▲",
-  coasting: "▬",
-  declining: "▼",
-};
-
-// Faint light hatch = idle capacity; red hatch = skill jobs no academy can license (the licensing wall).
+// Faint light hatch = idle labour capacity; red hatch = skill jobs no academy can license; copper
+// hatch = free habitable land (housing can still grow here).
 const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(201,209,217,0.06) 4px 8px)";
 const GAP_HATCH = "repeating-linear-gradient(135deg, rgba(240,97,109,0.45) 0 4px, transparent 4px 8px)";
+const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 2px, transparent 2px 6px)";
 
 /**
- * The one at-a-glance state signal: a trend glyph coloured by health. Carries the health
- * word as its accessible name, unless `decorative` — set that where the word is already
- * adjacent visible text (e.g. the system Badge) so screen readers don't announce it twice.
+ * The at-a-glance health signal: a shape coloured by health, carrying the health word as its
+ * accessible name unless `decorative` (set where the word is already adjacent, so screen readers
+ * don't say it twice).
  */
 function HealthGlyph({ health, className = "", decorative = false }: { health: IndustryHealth; className?: string; decorative?: boolean }) {
   return (
     <span
-      aria-label={decorative ? undefined : HEALTH[health].sys}
+      aria-label={decorative ? undefined : HEALTH[health].label}
       aria-hidden={decorative || undefined}
-      title={HEALTH[health].sys}
+      title={HEALTH[health].label}
       className={`font-mono leading-none ${HEALTH[health].text} ${className}`}
     >
-      {HEALTH_GLYPH[health]}
+      {HEALTH[health].glyph}
     </span>
   );
 }
@@ -90,83 +88,7 @@ function label(id: string): string {
   return ACADEMY_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
-// ── Chip grammar primitives ──────────────────────────────────────────────────
-
-/** One 14px chip. Copper fill = working level; red = built-idle; dashed = unbuilt. `housing` recolours the fill. */
-function ChipSquare({ chip, housing = false }: { chip: Chip; housing?: boolean }) {
-  if (chip.kind === "unbuilt") {
-    return <span className="h-3.5 w-3.5 shrink-0 border border-dashed border-accent" />;
-  }
-  if (chip.kind === "idle") {
-    return <span className="h-3.5 w-3.5 shrink-0 border border-status-red/70 bg-status-red/25" />;
-  }
-  return (
-    <span className="relative h-3.5 w-3.5 shrink-0 overflow-hidden border border-border-strong">
-      <span
-        className={`absolute inset-y-0 left-0 ${housing ? "bg-accent" : "bg-accent-muted"}`}
-        style={{ width: `${Math.round(chip.fill * 100)}%` }}
-      />
-    </span>
-  );
-}
-
-/** A wrapping chip bar — grows to fill the row, wraps gracefully on double-figure deposits. */
-function ChipBar({ chips }: { chips: Chip[] }) {
-  return (
-    <span className="flex flex-1 flex-wrap content-start items-center gap-[3px]">
-      {chips.map((c, i) => (
-        <ChipSquare key={i} chip={c} />
-      ))}
-    </span>
-  );
-}
-
-/** Shared chip-row layout: name (top-anchored) · wrapping chips · qty · out, with an optional line below. */
-function ChipRow({
-  name,
-  chips,
-  qty,
-  out,
-  below,
-}: {
-  name: React.ReactNode;
-  chips: Chip[];
-  qty: React.ReactNode;
-  out: React.ReactNode;
-  below?: React.ReactNode;
-}) {
-  return (
-    <div className="py-[3px]">
-      {/* items-start so a wrapped multi-line chip bar keeps name/qty/out anchored to the top line */}
-      <div className="flex items-start gap-2.5">
-        <div className="w-[92px] shrink-0 pt-px text-xs leading-tight text-text-primary">{name}</div>
-        <ChipBar chips={chips} />
-        <span className="w-[52px] shrink-0 pt-px text-right font-mono text-[10.5px] text-text-secondary">{qty}</span>
-        <span className="w-11 shrink-0 pt-px text-right font-mono text-[11px] text-text-secondary">{out}</span>
-      </div>
-      {below}
-    </div>
-  );
-}
-
-/** Legend swatch (11px) keyed to the chip states, so the legend can't drift from the chips it documents. */
-function LegendSquare({ kind, housing = false }: { kind: Chip["kind"]; housing?: boolean }) {
-  if (kind === "unbuilt") return <span className="inline-block h-2.5 w-2.5 border border-dashed border-accent align-middle" />;
-  if (kind === "idle") return <span className="inline-block h-2.5 w-2.5 border border-status-red/70 bg-status-red/25 align-middle" />;
-  return <span className={`inline-block h-2.5 w-2.5 align-middle ${housing ? "bg-accent" : "bg-accent-muted"}`} />;
-}
-
-/** Per-pool chip legend — the four states in words, plus what a partial fill means. */
-function ChipLegend({ workedLabel, partialLabel }: { workedLabel: string; partialLabel: string }) {
-  return (
-    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-secondary">
-      <span className="inline-flex items-center gap-1"><LegendSquare kind="staffed" /> {workedLabel}</span>
-      <span className="inline-flex items-center gap-1"><LegendSquare kind="idle" /> Built · idle</span>
-      <span className="inline-flex items-center gap-1"><LegendSquare kind="unbuilt" /> {workedLabel === "Worked" ? "Unbuilt slot" : "Room to build"}</span>
-      <span className="text-text-tertiary">partial = {partialLabel}</span>
-    </div>
-  );
-}
+// ── Small shared pieces ──────────────────────────────────────────────────────
 
 /** Pool header: title · sub · right-aligned metric. */
 function PoolHead({ title, sub, right }: { title: string; sub?: string; right: React.ReactNode }) {
@@ -179,20 +101,38 @@ function PoolHead({ title, sub, right }: { title: string; sub?: string; right: R
   );
 }
 
-/** A gold-when-rich yield tag reused by chip name + table cell. */
-function YieldTag({ mult, band }: { mult: number; band: DepositChipRow["band"] }) {
+/** Gold-when-rich yield tag — reused by deposit name + tooltip. */
+function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
   return <span className={`font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>×{mult.toFixed(2)}</span>;
+}
+
+/** `worked/total` where only the worked figure carries a decimal, and it colours by health when not stable. */
+function Worked({ worked, total, health }: { worked: number; total: number; health: IndustryHealth }) {
+  return (
+    <>
+      <span className={health === "stable" ? "text-text-primary" : HEALTH[health].text}>{worked.toFixed(1)}</span>/{total}
+    </>
+  );
+}
+
+/** Foundry table head cell — tight, uppercase, right-alignable. */
+function Th({ children, right = false }: { children: React.ReactNode; right?: boolean }) {
+  return (
+    <th className={`border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary ${right ? "text-right" : "text-left"}`}>
+      {children}
+    </th>
+  );
 }
 
 // ── Tooltips ─────────────────────────────────────────────────────────────────
 
-/** Deposit row tooltip: resource · yield band · working/slots · the goods extracted from it. */
-function DepositTooltipBody({ row, contributors }: { row: DepositChipRow; contributors: BuildingEntry[] }) {
+/** Deposit tooltip: resource · yield band · built/slots · worked · the goods extracted from it. */
+function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
       <p className="font-mono text-[10px] text-text-tertiary">
-        yield ×{row.yieldMult.toFixed(2)} · {QUALITY_BAND_LABEL[row.band]} · {row.worked.toFixed(1)}/{row.slotCap} worked
+        yield ×{row.yieldMult.toFixed(2)} · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.slotCap} slots built · {row.worked.toFixed(1)} worked
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
@@ -200,7 +140,7 @@ function DepositTooltipBody({ row, contributors }: { row: DepositChipRow; contri
           {contributors.map((b) => (
             <div key={b.buildingType} className="flex items-center justify-between gap-3 text-[11px]">
               <span className="text-text-primary">{label(b.buildingType)}</span>
-              <span className="font-mono text-text-secondary">{b.output !== undefined ? formatMagnitude(b.output) : "0"}/cyc</span>
+              <span className="font-mono text-text-secondary">{b.output !== undefined ? formatUnitsShort(b.output) : "0"}/cyc</span>
             </div>
           ))}
         </div>
@@ -209,7 +149,7 @@ function DepositTooltipBody({ row, contributors }: { row: DepositChipRow; contri
   );
 }
 
-/** Rich per-building tooltip: header · description · per-grade filled/needed · footer. Producers get the grade split; housing/academies a lighter body. */
+/** Rich per-building tooltip: header · description · per-grade filled/needed · footer. Producers get the grade split. */
 function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
   const isComplex = COMPLEX_TYPES.includes(b.buildingType);
@@ -225,8 +165,6 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
   const wall = grades.find((g) => g.wall);
   const tierLabel = b.tier >= 0 ? TIER_LABELS[goodTier] : undefined;
   const complexFamily = isComplex ? COMPLEX_BY_TYPE[b.buildingType] : undefined;
-  // The buff depends only on this complex's own count (linear below one full complex), so a
-  // single-entry record reads the same strength the production engine applies.
   const familyBuff = complexFamily ? familyAnchorBuff({ [b.buildingType]: b.count }, complexFamily.goods[0] ?? "") : 1;
 
   return (
@@ -270,7 +208,7 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
 
       {isProducer && (
         <p className="border-t border-border/60 pt-1.5 text-[11px] leading-snug text-text-tertiary">
-          Output <span className="font-mono text-text-secondary">{b.output !== undefined ? formatMagnitude(b.output) : "0"}</span>/cyc — staffing{" "}
+          Output <span className="font-mono text-text-secondary">{b.output !== undefined ? formatUnitsShort(b.output) : "0"}</span>/cyc — staffing{" "}
           <span className="font-mono text-text-secondary">{Math.round(b.staffedFraction * 100)}%</span>
           {wall && wall.fulfil < 1 ? (
             <>
@@ -285,14 +223,43 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
   );
 }
 
-// ── Chipped view ─────────────────────────────────────────────────────────────
+// ── Tables ───────────────────────────────────────────────────────────────────
 
-/** Supply-chain "needs" line under a production row: each input, green ✓ or red ⚠ with the throttle %. */
+/** Deposit table: per-resource slot fill — health glyph · resource · worked/slots · yield · output. */
+function DepositTable({ rows, contributorsFor }: { rows: DepositRow[]; contributorsFor: (r: DepositRow["resource"]) => BuildingEntry[] }) {
+  return (
+    <table className="w-full border-collapse">
+      <thead>
+        <tr><Th>Deposit</Th><Th right>Worked</Th><Th right>Yield</Th><Th right>Out/cyc</Th></tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.resource} className="border-b border-border/40 last:border-b-0">
+            <td className="px-1.5 py-1 text-[12px] text-text-primary">
+              <span className="flex items-center gap-1.5">
+                <HealthGlyph health={row.health} className="text-[9px]" />
+                <Tooltip>
+                  <TooltipTriggerLabel className="capitalize">{row.resource}</TooltipTriggerLabel>
+                  <TooltipContent className="w-56"><DepositTooltipBody row={row} contributors={contributorsFor(row.resource)} /></TooltipContent>
+                </Tooltip>
+              </span>
+            </td>
+            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.slotCap} health={row.health} /></td>
+            <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
+            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Supply-chain "needs" line: each recipe input, green ✓ or red ⚠ with the throttle %. */
 function NeedsLine({ supply }: { supply: SystemIndustryReadout["supplyChain"][number] }) {
   const inputs = Object.keys(GOOD_RECIPES[supply.goodId] ?? {});
   if (inputs.length === 0) return null;
   return (
-    <p className="mt-1 ml-[102px] flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-4 text-[11px]">
       <span className="font-mono uppercase tracking-wide text-text-tertiary/80">needs</span>
       {inputs.map((input) => {
         const short = supply.throttledBy.includes(input);
@@ -302,107 +269,65 @@ function NeedsLine({ supply }: { supply: SystemIndustryReadout["supplyChain"][nu
           </span>
         );
       })}
-    </p>
+    </span>
   );
 }
 
-/** One deposit chip row — resource + ×yield · bounded slot chips · working/slots · out. */
-function DepositRow({ row, contributors }: { row: DepositChipRow; contributors: BuildingEntry[] }) {
-  return (
-    <ChipRow
-      name={
-        <Tooltip>
-          <TooltipTriggerLabel className="inline-flex items-center gap-1 capitalize">
-            {row.resource} <YieldTag mult={row.yieldMult} band={row.band} />
-          </TooltipTriggerLabel>
-          <TooltipContent className="w-56">
-            <DepositTooltipBody row={row} contributors={contributors} />
-          </TooltipContent>
-        </Tooltip>
-      }
-      chips={row.chips}
-      qty={<><span className="text-text-primary">{row.worked.toFixed(1)}</span>/{row.slotCap}</>}
-      out={row.output > 0 ? row.output.toFixed(1) : "—"}
-    />
-  );
-}
-
-/** One production/specialisation chip row — built-quantity chips (+ room chip) · staffed/built · out. */
-function BuildingChipRow({
-  b,
+/** Production table: factories + specialisation — health glyph · name (tooltip) · worked/built · output, with a needs sub-row. */
+function ProductionTable({
+  buildings,
   labour,
-  hasRoom,
-  supply,
+  unrest,
+  supplyByGood,
 }: {
-  b: BuildingEntry;
+  buildings: BuildingEntry[];
   labour: SystemLabour;
-  hasRoom: boolean;
-  supply?: SystemIndustryReadout["supplyChain"][number];
+  unrest: number;
+  supplyByGood: Map<string, SystemIndustryReadout["supplyChain"][number]>;
 }) {
-  const staffed = b.count * b.staffedFraction;
-  return (
-    <ChipRow
-      name={
-        <Tooltip>
-          <TooltipTriggerLabel className="text-text-primary">{label(b.buildingType)}</TooltipTriggerLabel>
-          <TooltipContent className="w-64">
-            <BuildingTooltipBody b={b} labour={labour} />
-          </TooltipContent>
-        </Tooltip>
-      }
-      chips={chipStates(b.count, b.count, staffed, hasRoom)}
-      qty={<><span className="text-text-primary">{formatMagnitude(staffed)}</span>/{formatMagnitude(b.count)}</>}
-      out={b.output !== undefined ? formatMagnitude(b.output) : "—"}
-      below={supply ? <NeedsLine supply={supply} /> : undefined}
-    />
-  );
-}
-
-/** The general-land housing/factory/free magnitude bar (continuous capacity — not slot-like). */
-function MagBar({ space }: { space: SubstrateSpace }) {
-  const segments = generalLandSegments(space);
-  const seg: Record<string, string> = { housing: "bg-accent", factory: "bg-accent-muted", free: "bg-transparent" };
-  return (
-    <div className="flex h-3.5 overflow-hidden border border-border bg-surface-active">
-      {segments.map((s) => (
-        <div key={s.key} className={`${seg[s.key]} border-r-2 border-surface last:border-r-0`} style={{ width: `${s.fraction * 100}%` }} />
-      ))}
-    </div>
-  );
-}
-
-// ── Table view ───────────────────────────────────────────────────────────────
-
-type Align = "l" | "r";
-
-/** A tight, right-aligned-numeric Foundry table — the precise alternative to the chips. */
-function MiniTable({ head, align, rows }: { head: string[]; align: Align[]; rows: React.ReactNode[][] }) {
   return (
     <table className="w-full border-collapse">
       <thead>
-        <tr>
-          {head.map((h, i) => (
-            <th
-              key={i}
-              className={`border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary ${align[i] === "r" ? "text-right" : "text-left"}`}
-            >
-              {h}
-            </th>
-          ))}
-        </tr>
+        <tr><Th>Building</Th><Th right>Worked</Th><Th right>Out/cyc</Th></tr>
       </thead>
       <tbody>
-        {rows.map((r, ri) => (
-          <tr key={ri} className="border-b border-border/40 last:border-b-0">
-            {r.map((cell, ci) => (
-              <td key={ci} className={`px-1.5 py-1 text-[12px] ${align[ci] === "r" ? "text-right font-mono text-text-secondary" : "text-text-primary"}`}>
-                {cell}
+        {buildings.map((b) => {
+          const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
+          const supply = b.outputGood ? supplyByGood.get(b.outputGood) : undefined;
+          const hasNeeds = supply && Object.keys(GOOD_RECIPES[supply.goodId] ?? {}).length > 0;
+          return (
+            <tr key={b.buildingType} className={hasNeeds ? "" : "border-b border-border/40 last:border-b-0"}>
+              <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasNeeds ? "pb-0.5" : "pb-1"}`}>
+                <span className="flex items-center gap-1.5">
+                  <HealthGlyph health={health} className="text-[9px]" />
+                  <Tooltip>
+                    <TooltipTriggerLabel>{label(b.buildingType)}</TooltipTriggerLabel>
+                    <TooltipContent className="w-64"><BuildingTooltipBody b={b} labour={labour} /></TooltipContent>
+                  </Tooltip>
+                </span>
+                {hasNeeds && supply && <NeedsLine supply={supply} />}
               </td>
-            ))}
-          </tr>
-        ))}
+              <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} /></td>
+              <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
+  );
+}
+
+/** General-land magnitude bar: housing / factory / habitable-free (hatched) / factory-only free. */
+function MagBar({ land }: { land: GeneralLand }) {
+  const total = land.general > 0 ? land.general : 1;
+  const w = (v: number) => `${(v / total) * 100}%`;
+  return (
+    <div className="flex h-3.5 overflow-hidden border border-border bg-surface-active">
+      <div className="border-r-2 border-surface bg-accent" style={{ width: w(land.housing) }} />
+      <div className="border-r-2 border-surface bg-accent-muted" style={{ width: w(land.factory) }} />
+      <div className="border-r-2 border-surface" style={{ width: w(land.habitableFree), backgroundImage: COPPER_HATCH }} />
+      <div style={{ width: w(land.factoryFree) }} />
+    </div>
   );
 }
 
@@ -418,20 +343,16 @@ function LegendTooltip() {
       </TooltipTrigger>
       <TooltipContent className="w-64 space-y-2">
         <div>
-          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Chips — one per slot / unit</p>
+          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Health — mirrors what decays</p>
           <ul className="space-y-0.5 text-[11px] text-text-secondary">
-            <li><LegendSquare kind="staffed" /> <span className="ml-1">built &amp; working — partial fill = fractional working / staffing</span></li>
-            <li><LegendSquare kind="idle" /> <span className="ml-1">built but wholly idle — wasted, decaying capacity</span></li>
-            <li><LegendSquare kind="unbuilt" /> <span className="ml-1">buildable — a free deposit slot, or room to build more</span></li>
+            <li><HealthGlyph health="stable" className="mr-1 text-[9px]" decorative /> stable — understaffed by under a whole unit; nothing sheds</li>
+            <li><HealthGlyph health="contracting" className="mr-1 text-[9px]" decorative /> contracting — a whole level sits idle; the marginal level sheds after a buffer</li>
+            <li><HealthGlyph health="collapsing" className="mr-1 text-[9px]" decorative /> collapsing — unrest teardown; levels tear down immediately</li>
           </ul>
         </div>
         <div>
-          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">General land bar</p>
-          <p className="text-[11px] text-text-secondary">
-            <span aria-hidden className="mr-1 inline-block h-2 w-3 bg-accent align-middle" /> housing &nbsp;
-            <span aria-hidden className="mr-1 inline-block h-2 w-3 bg-accent-muted align-middle" /> factories &nbsp;
-            <span aria-hidden className="mr-1 inline-block h-2 w-3 border border-border bg-surface-active align-middle" /> free
-          </p>
+          <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
+          <p className="text-[11px] text-text-secondary"><span className="font-mono">worked/slots</span> is units in use of the deposit's slots (staffed &amp; selling); <span className="font-mono">out/cyc</span> is real output after input gates.</p>
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
@@ -448,9 +369,7 @@ function LegendTooltip() {
 
 /**
  * One skilled grade's licensing row: tag · name · a bar whose full width is max(licensed, jobs) —
- * the filled part is `working = min(licensed, jobs)`, the tail is faint idle seats (over-provisioned)
- * or a red unlicensed-jobs gap (the academy is the wall). Numbers read working / licensed, or
- * working / jobs when the academy is short. Mirrors the per-building "needs …" caption.
+ * the filled part is working, the tail is faint idle seats or a red unlicensed-jobs gap.
  */
 function LicensingRow({ grade, pool, buildHint }: { grade: "skill1" | "skill2"; pool: LabourPool; buildHint: string }) {
   const l = skillLicensing(pool.have, pool.need);
@@ -497,8 +416,7 @@ function BasketTooltipBody({ grade, basket }: { grade: "skill1" | "skill2"; bask
         {basket.map((entry) => (
           <div key={entry.goodId} className="flex items-center justify-between gap-3">
             <span className="text-[11px] text-text-primary">{label(entry.goodId)}</span>
-            {/* Fixed decimals, not formatMagnitude — per-head rates sit below its 0.1 cutoff at
-                ECONOMY_SCALE=1, which would collapse every row to "<0.1". */}
+            {/* Fixed decimals — per-head rates sit below formatMagnitude's 0.1 cutoff at ECONOMY_SCALE=1. */}
             <span className="font-mono text-[10px] text-text-secondary">{entry.perHead.toFixed(3)}/cyc</span>
           </div>
         ))}
@@ -508,9 +426,8 @@ function BasketTooltipBody({ grade, basket }: { grade: "skill1" | "skill2"; bask
 }
 
 /**
- * System-wide labour: the population decomposed into what it is actually doing — disjoint
- * role buckets (unskilled / technicians / engineers) + unemployed, one bar summing to the
- * population — then per-skill academy licensing (working vs licensed seats).
+ * System-wide labour: population decomposed into disjoint role buckets (unskilled / technicians /
+ * engineers) + unemployed, one bar summing to the population — then per-skill academy licensing.
  */
 function LabourCard({
   labour,
@@ -541,7 +458,6 @@ function LabourCard({
         </span>
       </div>
 
-      {/* Population decomposition — one bar, disjoint buckets, sums to population. */}
       <div
         role="img"
         aria-label={`Population ${formatPeople(pop)}: ${working.map((w) => `${formatPeople(w.value)} ${w.label.toLowerCase()}`).join(", ")}, ${formatPeople(allocation.unemployed)} unemployed`}
@@ -556,22 +472,16 @@ function LabourCard({
           const chip = (
             <>
               <span aria-hidden className={`inline-block h-2 w-2 ${w.bar}`} />
-              <span>
-                {w.label} <span className="text-text-primary">{formatPeople(w.value)}</span>
-              </span>
+              <span>{w.label} <span className="text-text-primary">{formatPeople(w.value)}</span></span>
             </>
           );
           if (!w.basket) {
-            return (
-              <span key={w.key} className="inline-flex items-center gap-1.5">{chip}</span>
-            );
+            return <span key={w.key} className="inline-flex items-center gap-1.5">{chip}</span>;
           }
           return (
             <Tooltip key={w.key}>
               <TooltipTriggerLabel className="inline-flex items-center gap-1.5">{chip}</TooltipTriggerLabel>
-              <TooltipContent className="w-56">
-                <BasketTooltipBody grade={w.key} basket={w.basket} />
-              </TooltipContent>
+              <TooltipContent className="w-56"><BasketTooltipBody grade={w.key} basket={w.basket} /></TooltipContent>
             </Tooltip>
           );
         })}
@@ -595,7 +505,6 @@ function LabourCard({
 
 export function IndustryPanel({ systemId }: { systemId: string }) {
   const data = useSystemIndustry(systemId);
-  const { view, setView } = useIndustryView();
 
   if (data.visibility === "unknown") {
     return <EmptyState message="This system isn't developed yet — no industry to survey." />;
@@ -607,38 +516,35 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
   }
 
-  // System health from the per-building used totals (the idle gap the decay loop runs on).
-  const totalBuilt = buildings.reduce((s, b) => s + b.count, 0);
-  const totalUsed = buildings.reduce((s, b) => s + b.used, 0);
-  const idleFraction = totalBuilt > 0 ? Math.max(0, (totalBuilt - totalUsed) / totalBuilt) : 0;
-  const sysHealth = industryHealth({ labourFulfillment, unrest, idleFraction, unrestDecayThreshold: THRESHOLD });
-
-  // Per-building health for the tally (rows recompute it themselves — cheap, keeps them self-contained).
-  const tally: Record<IndustryHealth, number> = { thriving: 0, coasting: 0, declining: 0 };
+  // System health + per-building tally, grounded in the decay engine: a level sheds only under
+  // unrest teardown or when a WHOLE level is idle (floor(built − used) ≥ 1).
+  const totalIdleLevels = buildings.reduce((s, b) => s + Math.max(0, Math.floor(b.count - b.used)), 0);
+  const sysHealth = industryHealth({ unrest, idleLevels: totalIdleLevels, unrestDecayThreshold: THRESHOLD });
+  const tally: Record<IndustryHealth, number> = { stable: 0, contracting: 0, collapsing: 0 };
   for (const b of buildings) {
     tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD })]++;
   }
 
-  // Group by land pool. Extractors sit on deposit slots; factories/complexes on general land
-  // (housing folds into the magbar; academies into the Labour card's licensing rows).
+  // Extractors sit on deposit slots; factories/complexes on general land (housing folds into the
+  // magbar; academies into the Labour card's licensing rows).
   const extractors = buildings.filter(
     (b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType) && !COMPLEX_TYPES.includes(b.buildingType),
   );
   const factories = buildings.filter((b) => b.tier >= 1);
   const complexes = buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType));
+  const buildingRows = [...factories, ...complexes];
 
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
-  const depositRows = depositChipRows(deposits, extractors);
-  const contributorsFor = (resource: DepositChipRow["resource"]) =>
+  const depRows = depositRows(deposits, extractors, unrest, THRESHOLD);
+  const contributorsFor = (resource: DepositRow["resource"]) =>
     extractors.filter((b) => BUILDING_TYPES[b.buildingType]?.resource === resource);
 
-  const depositWorked = depositRows.reduce((s, r) => s + r.worked, 0);
-  const depositSlots = depositRows.reduce((s, r) => s + r.slotCap, 0);
-  const generalFree = Math.max(0, space.general - space.generalUsed);
+  const depWorked = depRows.reduce((s, r) => s + r.worked, 0);
+  const depSlots = depRows.reduce((s, r) => s + r.slotCap, 0);
+  const land = generalLand(space);
+  const generalUsed = land.housing + land.factory;
+  const generalFree = land.habitableFree + land.factoryFree;
   const hasRoom = generalFree > 0.01;
-  const genSegments = generalLandSegments(space);
-
-  const staffedOf = (b: BuildingEntry) => b.count * b.staffedFraction;
 
   return (
     <div className="space-y-4">
@@ -647,139 +553,57 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         <div className="flex items-center gap-2.5">
           <Badge color={HEALTH[sysHealth].badge}>
             <HealthGlyph health={sysHealth} className="mr-1 text-xs" decorative />
-            {HEALTH[sysHealth].sys}
+            {HEALTH[sysHealth].label}
           </Badge>
-          <span className="ml-auto flex items-center gap-3 font-mono text-xs text-text-secondary">
+          <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
             <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
             <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
-            <SegmentedControl<IndustryView>
-              ariaLabel="Industry view"
-              name="industryView"
-              value={view}
-              onChange={setView}
-              options={[
-                { value: "chipped", label: "Chipped" },
-                { value: "table", label: "Table" },
-              ]}
-            />
             <LegendTooltip />
           </span>
         </div>
         <p className="mt-1.5 flex gap-3 font-mono text-[11px]">
-          <span className="text-status-green-light">{tally.thriving} stable</span>
-          <span className="text-status-amber-light">{tally.coasting} idle</span>
-          <span className="text-status-red-light">{tally.declining} collapsing</span>
+          <span className="text-status-green-light">{tally.stable} stable</span>
+          <span className="text-status-amber-light">{tally.contracting} contracting</span>
+          <span className="text-status-red-light">{tally.collapsing} collapsing</span>
         </p>
       </Card>
 
       <LabourCard labour={labour} allocation={labourAllocation} skillBaskets={skillBaskets} />
 
-      {view === "chipped" ? (
-        <>
-          {/* Deposit land — per-resource slot chips */}
-          {depositRows.length > 0 && (
-            <Card variant="bordered" padding="xs">
-              <PoolHead
-                title="Deposit land"
-                sub="extractors · full slot count"
-                right={<><span className="text-text-primary">{depositWorked.toFixed(1)}</span>/{depositSlots} worked</>}
-              />
-              <div className="space-y-px">
-                {depositRows.map((row) => (
-                  <DepositRow key={row.resource} row={row} contributors={contributorsFor(row.resource)} />
-                ))}
-              </div>
-              <ChipLegend workedLabel="Worked" partialLabel="fractional working" />
-            </Card>
-          )}
+      {/* Deposit land */}
+      {depRows.length > 0 && (
+        <Card variant="bordered" padding="xs">
+          <PoolHead
+            title="Deposit land"
+            sub="extractors"
+            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{depSlots} worked</>}
+          />
+          <DepositTable rows={depRows} contributorsFor={contributorsFor} />
+        </Card>
+      )}
 
-          {/* General land — housing/factory/free aggregate + production chips */}
-          <Card variant="bordered" padding="xs">
-            <PoolHead
-              title="General land"
-              sub="aggregate capacity"
-              right={<><span className="text-text-primary">{formatMagnitude(space.generalUsed)}</span>/{formatMagnitude(space.general)} · <span className="text-accent">{formatMagnitude(generalFree)} free</span></>}
-            />
-            <MagBar space={space} />
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-secondary">
-              <span className="inline-flex items-center gap-1"><LegendSquare kind="staffed" housing /> Housing {formatMagnitude(genSegments[0].value)}</span>
-              <span className="inline-flex items-center gap-1"><LegendSquare kind="staffed" /> Factories {formatMagnitude(genSegments[1].value)}</span>
-              <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border bg-surface-active align-middle" /> Free {formatMagnitude(genSegments[2].value)}</span>
-            </div>
+      {/* General land — aggregate capacity */}
+      <Card variant="bordered" padding="xs">
+        <PoolHead
+          title="General land"
+          sub="housing + factories"
+          right={<><span className="text-text-primary">{formatMagnitude(generalUsed)}</span>/{formatMagnitude(land.general)} · <span className="text-accent">{formatMagnitude(generalFree)} free</span></>}
+        />
+        <MagBar land={land} />
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-secondary">
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 bg-accent" /> Housing {formatMagnitude(land.housing)}</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 bg-accent-muted" /> Factories {formatMagnitude(land.factory)}</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border" style={{ backgroundImage: COPPER_HATCH }} /> Habitable {formatMagnitude(land.habitable)}</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border bg-surface-active" /> Free {formatMagnitude(generalFree)}</span>
+        </div>
+      </Card>
 
-            {factories.length > 0 && (
-              <>
-                <p className="mb-0.5 mt-3 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Production — quantity built</p>
-                <div className="space-y-px">
-                  {factories.map((b) => (
-                    <BuildingChipRow key={b.buildingType} b={b} labour={labour} hasRoom={hasRoom} supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined} />
-                  ))}
-                </div>
-                <ChipLegend workedLabel="Built & staffed" partialLabel="staffing" />
-              </>
-            )}
-
-            {complexes.length > 0 && (
-              <>
-                <p className="mb-0.5 mt-3 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Specialisation</p>
-                <div className="space-y-px">
-                  {complexes.map((b) => (
-                    <BuildingChipRow key={b.buildingType} b={b} labour={labour} hasRoom={hasRoom} />
-                  ))}
-                </div>
-              </>
-            )}
-          </Card>
-        </>
-      ) : (
-        <>
-          {/* Table view — the precise alternative */}
-          {depositRows.length > 0 && (
-            <Card variant="bordered" padding="xs">
-              <PoolHead title="Deposit land" right={<><span className="text-text-primary">{depositWorked.toFixed(1)}</span>/{depositSlots} slots worked</>} />
-              <MiniTable
-                head={["Deposit", "Worked", "Yield", "Out/cyc"]}
-                align={["l", "r", "r", "r"]}
-                rows={depositRows.map((row) => [
-                  <span key="n" className="capitalize">{row.resource}</span>,
-                  <span key="w" className={row.worked / row.slotCap < 0.5 ? "text-status-amber-light" : undefined}>
-                    <span className="text-text-primary">{row.worked.toFixed(1)}</span>/{row.slotCap}
-                  </span>,
-                  <YieldTag key="y" mult={row.yieldMult} band={row.band} />,
-                  <span key="o" className="text-text-primary">{row.output > 0 ? row.output.toFixed(1) : "—"}</span>,
-                ])}
-              />
-            </Card>
-          )}
-
-          <Card variant="bordered" padding="xs">
-            <PoolHead title="General land" right={<><span className="text-text-primary">{formatMagnitude(space.generalUsed)}</span>/{formatMagnitude(space.general)} used</>} />
-            <MiniTable
-              head={["Use", "Units", "Share"]}
-              align={["l", "r", "r"]}
-              rows={genSegments.map((s) => [
-                <span key="u" className="capitalize">{s.key === "free" ? "Free" : s.key === "factory" ? "Factories" : "Housing"}</span>,
-                <span key="n" className="text-text-primary">{formatMagnitude(s.value)}</span>,
-                `${Math.round(s.fraction * 100)}%`,
-              ])}
-            />
-          </Card>
-
-          {(factories.length > 0 || complexes.length > 0) && (
-            <Card variant="bordered" padding="xs">
-              <PoolHead title="Production" right={hasRoom ? <span className="text-accent">room to build</span> : `${factories.length + complexes.length} built`} />
-              <MiniTable
-                head={["Building", "Staffed", "Out/cyc"]}
-                align={["l", "r", "r"]}
-                rows={[...factories, ...complexes].map((b) => [
-                  label(b.buildingType),
-                  <span key="s"><span className="text-text-primary">{formatMagnitude(staffedOf(b))}</span>/{formatMagnitude(b.count)}</span>,
-                  <span key="o" className="text-text-primary">{b.output !== undefined ? formatMagnitude(b.output) : "—"}</span>,
-                ])}
-              />
-            </Card>
-          )}
-        </>
+      {/* Production + specialisation */}
+      {buildingRows.length > 0 && (
+        <Card variant="bordered" padding="xs">
+          <PoolHead title="Production" sub="factories + specialisation" right={hasRoom ? <span className="text-accent">room to build</span> : `${buildingRows.length} built`} />
+          <ProductionTable buildings={buildingRows} labour={labour} unrest={unrest} supplyByGood={supplyByGood} />
+        </Card>
       )}
     </div>
   );

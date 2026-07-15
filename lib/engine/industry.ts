@@ -28,8 +28,6 @@ import {
   PRODUCTION_STORAGE_PER_UNIT,
   POP_CENTRE_STORAGE,
   POP_CENTRE_STORAGE_DEFAULT,
-  IDLE_COASTING_FRACTION,
-  IDLE_COLLAPSING_FRACTION,
   labourTotal,
   INPUT_DEMAND_MULTIPLIER,
   FAMILY_BY_GOOD,
@@ -582,31 +580,32 @@ export interface SystemIndustryReadout {
   skillBaskets: { technicians: SkillBasketEntry[]; engineers: SkillBasketEntry[] };
 }
 
-/** Coarse industry health read, derived from the decay-loop quantities. */
-export type IndustryHealth = "thriving" | "coasting" | "declining";
+/**
+ * Coarse industry health, grounded in the infrastructure-decay engine's *exact* triggers so the
+ * label never contradicts what actually decays. The engine removes a whole level only when unrest
+ * tears it down, or a WHOLE level sits idle (floor(built − used) ≥ 1) past the sustained-idle buffer.
+ */
+export type IndustryHealth = "stable" | "contracting" | "collapsing";
 
 export interface IndustryHealthInput {
-  /** System-wide labour ratio in [0,1]. */
-  labourFulfillment: number;
   /** Stored unrest integral 0…1. */
   unrest: number;
-  /** Σ idle capacity (built − staffed) ÷ Σ built across the base, in [0,1]. */
-  idleFraction: number;
-  /** θ_decay — unrest at/above this means active unrest-teardown (the snowball). */
+  /** Total whole idle levels across the built base — Σ max(0, floor(built − used)). */
+  idleLevels: number;
+  /** θ_decay — unrest strictly above this tears a level down immediately (the discrete collapse). */
   unrestDecayThreshold: number;
 }
 
 /**
- * Coarse "thriving / coasting / falling apart" read for the Industry panel, grounded
- * in the same quantities the decay loop runs on:
- *  - declining: unrest at/above the decay threshold (capacity is actively torn down),
- *  - coasting: meaningful idle capacity that disuse decay will slowly shed,
- *  - thriving: built ≈ used and calm.
+ * System-level health mirroring what the decay engine removes:
+ *  - collapsing: unrest above θ_decay → whole levels tear down immediately, even in use.
+ *  - contracting: ≥1 whole idle level somewhere → the marginal idle level(s) shed after the buffer.
+ *  - stable: otherwise — capacity understaffed by less than a whole unit is never decayed.
  */
 export function industryHealth(input: IndustryHealthInput): IndustryHealth {
-  if (input.unrest >= input.unrestDecayThreshold) return "declining";
-  if (input.idleFraction >= IDLE_COASTING_FRACTION) return "coasting";
-  return "thriving";
+  if (input.unrest > input.unrestDecayThreshold) return "collapsing";
+  if (input.idleLevels >= 1) return "contracting";
+  return "stable";
 }
 
 export interface BuildingHealthInput {
@@ -616,26 +615,22 @@ export interface BuildingHealthInput {
   built: number;
   /** Stored unrest integral 0…1. */
   unrest: number;
-  /** θ_decay — unrest at/above this means active unrest-teardown. */
+  /** θ_decay — unrest strictly above this tears a level down immediately. */
   unrestDecayThreshold: number;
 }
 
 /**
- * Per-building health for the Industry panel's row colour, grounded in the decay
- * loop: declining when capacity is torn down fast (unrest teardown, housing
- * overshoot, or severe idle ≥ IDLE_COLLAPSING_FRACTION), coasting when disuse decay
- * nibbles past the slack deadband (≥ IDLE_COASTING_FRACTION), thriving when in use
- * within the deadband and calm.
+ * Per-building health on the same decay triggers: collapsing under unrest teardown, contracting when
+ * a WHOLE level is idle (floor(built − used) ≥ 1 — the marginal idle level the engine sheds), else
+ * stable. Fractional understaffing below one unit (e.g. 1.9/2.0, even 1.1/2.0) is stable — the engine
+ * never touches it; housing overshoot yields a negative gap and is likewise not a decay trigger.
  */
 export function buildingHealth(input: BuildingHealthInput): IndustryHealth {
   const { used, built, unrest, unrestDecayThreshold } = input;
-  if (built <= 0) return "thriving";
-  if (used > built) return "declining"; // over capacity (overshoot death-sink)
-  if (unrest >= unrestDecayThreshold) return "declining"; // unrest teardown
-  const idle = Math.max(0, Math.min(1, 1 - used / built));
-  if (idle >= IDLE_COLLAPSING_FRACTION) return "declining";
-  if (idle >= IDLE_COASTING_FRACTION) return "coasting";
-  return "thriving";
+  if (built <= 0) return "stable";
+  if (unrest > unrestDecayThreshold) return "collapsing";
+  if (Math.floor(built - used) >= 1) return "contracting"; // ≥1 whole idle level (mirrors idleLevels())
+  return "stable";
 }
 
 /** Turn a per-head consumption constant into display-ready basket entries, richest first. */
