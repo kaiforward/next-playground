@@ -73,13 +73,36 @@ system reads green; demand chart segments read; oracle match.
 
 ## Phase 4 — Faction screen tabs
 
-Split `app/(game)/@panel/factions/[factionId]/page.tsx` into **Overview / Diplomacy / Territory** tabs
-(reuse the system tab pattern). Overview reuses the `VitalTile` grid for aggregates (territory / total
-pop / avg stability / total-avg development). Diplomacy = relations + alliances + recent events.
-Territory = the fuller system list.
+Split the single faction `page.tsx` into a `layout.tsx` (`DetailPanel` + `subHeader` `TabList` from a
+`FACTION_TABS` constant) with nested **Overview / Diplomacy / Territory** route pages — the exact
+system-tab pattern.
+
+- **Overview** — `FactionCard` + the `VitalTile` grid rolled up over the faction's economically-active
+  systems, + compacted government/doctrine (homeworld + flavour) + the construction card.
+- **Diplomacy** — alliances + relation-score stance + recent diplomatic events (lifted verbatim).
+- **Territory** — the full owned-system list (the old 20-cap `territorySample` uncapped and renamed
+  `FactionDetail.territory`) + the political-map note.
+
+**Weighted aggregates (the one new decision, applied on BOTH the panel and the map).** Averaging faction
+stats per-system makes expansion *look* like decline — spreading thin, not weakening. So:
+
+- **Extensive** stats (population, development points) → **SUM**. The faction Development tile shows
+  *total* points (`formatUnitsShort`) with a "% of potential" meter (`Σpoints / Σpotential`).
+- **Intensive** stability (`1 − unrest`) → **population-weighted mean** (`weightedMean`, in
+  `lib/utils/math`), so a populous core dominates.
+- New tick-dynamic `getFactionVitals` service (`/api/game/factions/[id]/vitals` + `useFactionVitals`,
+  tick-invalidated), kept separate from the static faction detail. Shares `developmentPointsAndPotential`
+  (`lib/services/system-development.ts`) with the system overview.
+
+**Folded-in map fix** (same weighting bug, surfaced during this pass): `number-aggregation.aggregateValue`
+took a plain mean for development *and* stability. Now development → sum (extensive), stability →
+population-weighted mean (weights threaded via `usePopulation` extended to stability mode →
+`setValues` → `buildAggregationGroups`). `weightedMean` is the shared formula. Active
+`map-rendering.md` updated to match.
 
 **Verify:** faction panel is tabbed, Overview vitals match the system grid, nothing lost from the old
-scroll.
+scroll; on the map, a faction that spreads into small systems no longer sees its stability/development
+number sag.
 
 ---
 

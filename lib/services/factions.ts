@@ -68,7 +68,8 @@ export interface FactionRelatedEvent {
 export interface FactionDetail extends FactionSummary {
   doctrineDescription: string;
   governmentDescription: string;
-  territorySample: FactionTerritorySystem[];
+  /** Every system the faction owns, gateways first then name-sorted (the Territory tab's list). */
+  territory: FactionTerritorySystem[];
   relations: FactionRelationRow[];
   alliances: FactionAllianceRow[];
   recentEvents: FactionRelatedEvent[];
@@ -141,8 +142,8 @@ export function listFactions(): FactionSummary[] {
     .map((f) => toSummary(f, world, counts.get(f.id) ?? 0, totalSystems));
 }
 
-/** Detail for one faction with territory sample, per-faction relations, and active alliances. */
-export function getFactionDetail(factionId: string, territorySampleLimit = 20): FactionDetail {
+/** Detail for one faction with its full territory list, per-faction relations, and active alliances. */
+export function getFactionDetail(factionId: string): FactionDetail {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
   if (!faction) {
@@ -237,10 +238,9 @@ export function getFactionDetail(factionId: string, territorySampleLimit = 20): 
   }
   alliancesList.sort((a, b) => b.formedAtTick - a.formedAtTick);
 
-  const territorySample: FactionTerritorySystem[] = world.systems
+  const territory: FactionTerritorySystem[] = world.systems
     .filter((s) => s.factionId === factionId)
     .sort((a, b) => Number(b.isGateway) - Number(a.isGateway) || a.name.localeCompare(b.name))
-    .slice(0, territorySampleLimit)
     .map((s) => ({
       id: s.id,
       name: s.name,
@@ -252,7 +252,7 @@ export function getFactionDetail(factionId: string, territorySampleLimit = 20): 
     ...toSummary(faction, world, territorySize, totalSystems),
     governmentDescription: GOVERNMENT_TYPES[faction.governmentType].description,
     doctrineDescription: DOCTRINES[faction.doctrine].description,
-    territorySample,
+    territory,
     relations,
     alliances: alliancesList,
     recentEvents,

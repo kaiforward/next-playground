@@ -144,10 +144,10 @@ describe("getFactionDetail", () => {
     expect(detail.recentEvents[0].otherFactionName).toBeNull();
   });
 
-  it("orders the territory sample with gateways first", () => {
+  it("orders the territory list with gateways first", () => {
     // A homeworld-only galaxy owns one system per faction; grant one faction a second
     // owned system and force that second one to be the sole gateway, so gateway-first
-    // ordering in the territory sample is observable.
+    // ordering in the territory list is observable.
     const faction = world.factions[0];
     const target = world.systems.find((s) => s.factionId !== faction.id)!;
     setWorld({
@@ -160,8 +160,8 @@ describe("getFactionDetail", () => {
     });
 
     const detail = getFactionDetail(faction.id);
-    expect(detail.territorySample[0].id).toBe(target.id);
-    expect(detail.territorySample[0].isGateway).toBe(true);
+    expect(detail.territory[0].id).toBe(target.id);
+    expect(detail.territory[0].isGateway).toBe(true);
   });
 });
 

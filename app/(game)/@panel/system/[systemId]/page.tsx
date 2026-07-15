@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SystemConstructionSection } from "@/components/construction/system-construction-section";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
-import { formatPeople } from "@/lib/utils/format";
+import { formatPeople, splitMagnitude } from "@/lib/utils/format";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { useSystemVitals } from "@/lib/hooks/use-system-vitals";
@@ -24,18 +24,6 @@ import {
   CompositionBar,
 } from "@/components/ui/vital-tile";
 import type { GovernmentType } from "@/lib/types/game";
-
-/**
- * Splits a compact magnitude string (e.g. "2.42M", "980K", "0") into its numeric
- * value and unit suffix, so a VitalTile can render the unit small. Matches the
- * shape `formatPeople`'s Intl compact-notation output always takes.
- */
-function splitMagnitude(formatted: string): { value: string; unit?: string } {
-  const match = formatted.match(/^([\d.,]+)([A-Za-z]*)$/);
-  if (!match) return { value: formatted };
-  const [, value, unit] = match;
-  return { value, unit: unit || undefined };
-}
 
 // ── Quiet context strip — a tight 2-up key/value row, deliberately smaller
 // than the vitals grid (no tall StatList). ──
