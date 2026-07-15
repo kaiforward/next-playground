@@ -189,7 +189,7 @@ export class InMemoryEventsWorld implements EventsWorld {
       if (!isFinite(shock.value)) continue;
       const delta =
         shock.mode === "percentage"
-          ? Math.round(market.stock * shock.value)
+          ? market.stock * shock.value // continuous goods delta — no rounding (rounding breaks scale-invariance)
           : shock.value;
       // Single-stock model: a "supply" shock moves stock directly; a "demand"
       // shock moves it inversely (more demand → scarcer → lower stock).

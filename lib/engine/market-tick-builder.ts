@@ -9,6 +9,7 @@
  */
 
 import { GOODS } from "@/lib/constants/goods";
+import { scaleValue } from "@/lib/constants/economy-scale";
 import { type GovernmentDefinition } from "@/lib/constants/government";
 import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry } from "@/lib/engine/tick";
@@ -99,7 +100,9 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     volatility,
     baseProductionRate: input.baseProductionRate,
     baseConsumptionRate: input.baseConsumptionRate,
-    govConsumptionBoost: input.govDef?.consumptionBoosts[input.goodId] ?? 0,
+    // Goods-magnitude consumption term — rides ECONOMY_SCALE like every other consumption
+    // rate, else it's an unscaled absolute that dominates consumption at low scale.
+    govConsumptionBoost: scaleValue(input.govDef?.consumptionBoosts[input.goodId] ?? 0),
     productionSuppress: input.productionSuppress,
   });
 

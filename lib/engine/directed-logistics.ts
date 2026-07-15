@@ -150,7 +150,10 @@ export function matchFactionTransfers(
     }
     if (!best) continue;
 
-    const affordable = Math.floor(budget / best.perUnit);
+    // Continuous goods — no quantization to whole units (rounding down loses up to one
+    // unit per transfer, negligible at high ECONOMY_SCALE but a large fraction of a small
+    // budget at low scale, breaking scale-invariance of budget-bound transfers).
+    const affordable = budget / best.perUnit;
     const quantity = Math.min(d.shortfall, best.source.drawable, affordable);
     if (quantity <= 0) continue;
 
