@@ -428,37 +428,40 @@ describe("buildIndustryReadout — skill idle reason split", () => {
 
 describe("industryHealth", () => {
   const T = 0.75; // unrestDecayThreshold
-  it("is 'declining' when unrest is at/above the decay threshold (snowball)", () => {
-    expect(industryHealth({ labourFulfillment: 1, unrest: 0.8, idleFraction: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining");
+  it("is 'collapsing' when unrest is above the decay threshold (teardown)", () => {
+    expect(industryHealth({ unrest: 0.8, idleLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("collapsing");
   });
-  it("is 'coasting' when idle capacity is meaningful but unrest is calm", () => {
-    expect(industryHealth({ labourFulfillment: 0.5, unrest: 0.1, idleFraction: 0.4, unrestDecayThreshold: T })).toBe<IndustryHealth>("coasting");
+  it("is 'contracting' when at least one whole level is idle and unrest is calm", () => {
+    expect(industryHealth({ unrest: 0.1, idleLevels: 3, unrestDecayThreshold: T })).toBe<IndustryHealth>("contracting");
   });
-  it("is 'thriving' when built ≈ used and unrest is calm", () => {
-    expect(industryHealth({ labourFulfillment: 1, unrest: 0.1, idleFraction: 0.02, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving");
+  it("is 'stable' when no whole level is idle and unrest is calm", () => {
+    expect(industryHealth({ unrest: 0.1, idleLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+  });
+  it("does not fire at exactly the threshold (mirrors the engine's strictly-above teardown)", () => {
+    expect(industryHealth({ unrest: T, idleLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
   });
 });
 
 describe("buildingHealth (per-building)", () => {
   const T = 0.75; // unrestDecayThreshold
 
-  it("is 'declining' when used exceeds built (housing overshoot)", () => {
-    expect(buildingHealth({ used: 12, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining");
+  it("is 'collapsing' when unrest is above the decay threshold (teardown, even in use)", () => {
+    expect(buildingHealth({ used: 10, built: 10, unrest: 0.8, unrestDecayThreshold: T })).toBe<IndustryHealth>("collapsing");
   });
-  it("is 'declining' when unrest is at/above the decay threshold (teardown)", () => {
-    expect(buildingHealth({ used: 10, built: 10, unrest: 0.8, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining");
+  it("is 'contracting' when a whole level is idle — 0.9/2.0 → floor(1.1) = 1 idle level", () => {
+    expect(buildingHealth({ used: 0.9, built: 2, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("contracting");
   });
-  it("is 'declining' when idle capacity is severe (≥ IDLE_COLLAPSING_FRACTION)", () => {
-    expect(buildingHealth({ used: 3, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("declining"); // idle 0.7
+  it("is 'stable' when understaffed by less than a whole unit — 1.5/2.0", () => {
+    expect(buildingHealth({ used: 1.5, built: 2, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
   });
-  it("is 'coasting' when idle is past the deadband but not severe", () => {
-    expect(buildingHealth({ used: 8, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("coasting"); // idle 0.2
+  it("is 'stable' at 1.9/2.0 — the engine never sheds a sub-unit idle gap", () => {
+    expect(buildingHealth({ used: 1.9, built: 2, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
   });
-  it("is 'thriving' when in use within the slack deadband and calm", () => {
-    expect(buildingHealth({ used: 9.5, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving"); // idle 0.05
+  it("does not treat housing overshoot (used > built) as decay — it's a population sink, not infra", () => {
+    expect(buildingHealth({ used: 12, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
   });
-  it("is 'thriving' when nothing is built (no base to decay)", () => {
-    expect(buildingHealth({ used: 0, built: 0, unrest: 1, unrestDecayThreshold: T })).toBe<IndustryHealth>("thriving");
+  it("is 'stable' when nothing is built (no base to decay)", () => {
+    expect(buildingHealth({ used: 0, built: 0, unrest: 1, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
   });
 });
 
