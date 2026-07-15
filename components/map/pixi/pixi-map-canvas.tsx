@@ -439,6 +439,9 @@ export function PixiMapCanvas({
     } else if (mapMode === "stability") {
       // Stability is population-weighted at the aggregate tiers — pass population as the weights so a
       // faction/region number is dominated by its populous systems, not diluted by tiny outposts.
+      // Stability + population are two separate tick-invalidated queries, so on an economy tick this
+      // effect re-runs as each lands (the second run re-applies the fresh weights). That's an accepted
+      // extra redraw at tick cadence — not per-frame — so it isn't worth coalescing the two queries.
       p.valueChoroplethLayer.setValues(
         stabilityBySystem ?? EMPTY,
         stabilityBySystem ?? EMPTY,

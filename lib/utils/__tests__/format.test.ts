@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude, formatPeople, formatUnitsShort } from "../format";
+import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude, formatPeople, formatUnitsShort, splitMagnitude } from "../format";
 
 describe("formatNumber", () => {
   it("rounds to the nearest integer", () => {
@@ -92,5 +92,20 @@ describe("formatMagnitude", () => {
   });
   it("renders a true zero (absent) as '0'", () => {
     expect(formatMagnitude(0)).toBe("0");
+  });
+});
+
+describe("splitMagnitude", () => {
+  it("splits a compact magnitude into value + unit suffix", () => {
+    expect(splitMagnitude("2.42M")).toEqual({ value: "2.42", unit: "M" });
+    expect(splitMagnitude("980K")).toEqual({ value: "980", unit: "K" });
+    expect(splitMagnitude("3.8M")).toEqual({ value: "3.8", unit: "M" });
+  });
+  it("returns an undefined unit (not '') when there is no suffix", () => {
+    expect(splitMagnitude("0")).toEqual({ value: "0", unit: undefined });
+    expect(splitMagnitude("1,234")).toEqual({ value: "1,234", unit: undefined });
+  });
+  it("returns the raw string unsplit when the input doesn't match the magnitude shape", () => {
+    expect(splitMagnitude("N/A")).toEqual({ value: "N/A" });
   });
 });
