@@ -69,6 +69,9 @@ export class ValueChoroplethLayer {
   private factionBySystemId = new Map<string, string | null>();
   private values = new Map<string, number>();
   private reference = new Map<string, number>();
+  // Per-system weights for the population-weighted aggregation of intensive modes (stability weights
+  // by population). Empty for the summed modes (population/development), where it's ignored.
+  private weights = new Map<string, number>();
   private mode: ValueMode = "population";
   private scopeFaction: string | null = null;
   private outlineUnions: Map<string, MultiPolygon> | null = null;
@@ -108,10 +111,20 @@ export class ValueChoroplethLayer {
     this.rebuildTiers();
   }
 
-  /** Per-mode tick data. reference == values for every value mode (development is raw points, not potential). */
-  setValues(values: Map<string, number>, reference: Map<string, number>, mode: ValueMode) {
+  /**
+   * Per-mode tick data. reference == values for every value mode (development is raw points, not
+   * potential). `weights` feeds the population-weighted aggregation of intensive modes (stability
+   * weighted by population); pass it in stability mode, omit for the summed modes.
+   */
+  setValues(
+    values: Map<string, number>,
+    reference: Map<string, number>,
+    mode: ValueMode,
+    weights: Map<string, number> = new Map(),
+  ) {
     this.values = values;
     this.reference = reference;
+    this.weights = weights;
     this.mode = mode;
     this.recomputeReferenceMax();
     this.drawFills();
@@ -210,7 +223,7 @@ export class ValueChoroplethLayer {
    * arrays, frustum-gating and greedily placing labels.
    */
   private rebuildTiers() {
-    const raw = buildAggregationGroups(this.systems, this.values, this.mode);
+    const raw = buildAggregationGroups(this.systems, this.values, this.mode, this.weights);
     this.tiers = {
       system: raw.system.filter((g) => g.value > 0).sort((a, b) => b.value - a.value),
       factionRegion: raw.factionRegion.sort((a, b) => b.value - a.value),
