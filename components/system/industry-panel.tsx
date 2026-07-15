@@ -108,13 +108,13 @@ function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
 }
 
 /**
- * `worked/total`, coloured by health when not stable. `whole` rounds the worked figure (deposit slots
- * and housing occupancy read as whole units); otherwise it keeps one decimal (factory/complex staffing).
+ * `fill/capacity`, coloured by health when not stable. The fill keeps one decimal (the fractional
+ * working level is the signal); the capacity reads as a whole count of slots / built levels.
  */
-function Worked({ worked, total, health, whole = false }: { worked: number; total: number; health: IndustryHealth; whole?: boolean }) {
+function Worked({ worked, total, health }: { worked: number; total: number; health: IndustryHealth }) {
   return (
     <>
-      <span className={health === "stable" ? "text-text-primary" : HEALTH[health].text}>{whole ? Math.round(worked) : worked.toFixed(1)}</span>/{total}
+      <span className={health === "stable" ? "text-text-primary" : HEALTH[health].text}>{worked.toFixed(1)}</span>/{Math.round(total)}
     </>
   );
 }
@@ -248,7 +248,7 @@ function DepositTable({ rows, contributorsFor }: { rows: DepositRow[]; contribut
                 </Tooltip>
               </span>
             </td>
-            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.slotCap} health={row.health} whole /></td>
+            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.slotCap} health={row.health} /></td>
             <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
             <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
           </tr>
@@ -283,13 +283,11 @@ function BuildingRow({
   labour,
   unrest,
   supply,
-  whole,
 }: {
   b: BuildingEntry;
   labour: SystemLabour;
   unrest: number;
   supply?: SystemIndustryReadout["supplyChain"][number];
-  whole: boolean;
 }) {
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const hasNeeds = supply && Object.keys(GOOD_RECIPES[supply.goodId] ?? {}).length > 0;
@@ -305,7 +303,7 @@ function BuildingRow({
         </span>
         {hasNeeds && supply && <NeedsLine supply={supply} />}
       </td>
-      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} whole={whole} /></td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} /></td>
       <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
     </tr>
   );
@@ -318,7 +316,7 @@ function BuildingsTable({
   unrest,
   supplyByGood,
 }: {
-  groups: Array<{ title: string; buildings: BuildingEntry[]; whole: boolean }>;
+  groups: Array<{ title: string; buildings: BuildingEntry[] }>;
   labour: SystemLabour;
   unrest: number;
   supplyByGood: Map<string, SystemIndustryReadout["supplyChain"][number]>;
@@ -345,7 +343,6 @@ function BuildingsTable({
                 labour={labour}
                 unrest={unrest}
                 supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined}
-                whole={group.whole}
               />
             ))}
           </Fragment>
@@ -569,11 +566,11 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     (b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType) && !COMPLEX_TYPES.includes(b.buildingType),
   );
   // General-land building groups (housing folds into the magbar too; academies live in the Labour card).
-  // Only production staffing keeps a decimal — housing occupancy reads as whole homes.
+  // Specialisation sits above Production — the complexes buff the families beneath them.
   const buildingGroups = [
-    { title: "Housing", buildings: buildings.filter((b) => b.tier === -1), whole: true },
-    { title: "Production", buildings: buildings.filter((b) => b.tier >= 1), whole: false },
-    { title: "Specialisation", buildings: buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType)), whole: false },
+    { title: "Housing", buildings: buildings.filter((b) => b.tier === -1) },
+    { title: "Specialisation", buildings: buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType)) },
+    { title: "Production", buildings: buildings.filter((b) => b.tier >= 1) },
   ];
 
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
@@ -617,7 +614,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <PoolHead
             title="Deposit land"
             sub="extractors"
-            right={<><span className="text-text-primary">{Math.round(depWorked)}</span>/{depSlots} worked</>}
+            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{depSlots} worked</>}
           />
           <DepositTable rows={depRows} contributorsFor={contributorsFor} />
         </Card>
