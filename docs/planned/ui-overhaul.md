@@ -1,6 +1,6 @@
 # UI Overhaul — Map Legibility & System-Detail Redesign
 
-> **Status:** Planned (roadmap) for WS2/WS4/WS5. WS3 (cleanup) and WS1 (map spine) have shipped. Captures the
+> **Status:** Planned (roadmap) for WS2/WS5. WS3 (cleanup), WS1 (map spine), and WS4 (system + faction detail) have shipped. Captures the
 > full set of UI issues raised for the map and system-detail surfaces, grouped into sequenced workstreams. Each
 > remaining workstream gets its own `docs/build-plans/` entry when it starts; until then it's specced here at
 > intent level and designed in detail when picked up.
@@ -89,25 +89,29 @@ The Voronoi-centric rewrite the rest of the map leans on.
 - **`[Map 7]` Price as a first-class map mode**, not the current overlay.
 - **`[Map 8]` Logistics** — **open:** keep as an overlay or promote to a map mode.
 
-### WS4 · System-detail screen redesign
+### WS4 · System- & faction-detail redesign _(SHIPPED)_
 
-> **Designed — detailed spec + phased build plan:** [ui-ws4-system-detail.md](./ui-ws4-system-detail.md)
-> (browser prototype approved). The items below are the issue-level summary; the spec is authoritative
-> and expands scope to the shared docked-shell reshape, the faction screen, and the reusable vitals grid.
+> **Detailed spec:** [detail-panels.md](../active/design-system/detail-panels.md) — the shipped docked-drawer
+> shell, the tabbed system + faction screens, the reusable vitals grid, and the quantity-aware faction
+> aggregation. The items below are the issue-level summary of what shipped.
 
-- **`[Sys 1]` Industry/deposit breakdown.** The Industry tab doesn't show a proper deposit breakdown. Replace
-  the header bar + bars with **chipped bars** (divided into the number of available units, a distinct colour
-  for filled), or move to a **proper table** for maximum clarity. For industry, show a single extra "empty"
-  chip to represent available general space.
-- **`[Sys 2]` Fix stale collapsing/declining labels** _(moved here from WS3)_. The Industry tab shows
-  red/orange decay/health labels under rules that no longer apply — most things should read green now. The
-  labels are UI strings in `industry-panel.tsx`; the thresholds are `IDLE_COASTING_FRACTION` (0.15),
-  `IDLE_COLLAPSING_FRACTION` (0.5), and unrest θ (0.75) in `industry.ts`/`infrastructure.ts`. Needs live-data
-  calibration — done with the tab redesign, not as a throwaway patch.
-- **`[Sys 3]` Show tech/engineer good consumption** in the Industry/logistics view. **Open data question:**
-  does the pop-page consumption figure already include the skilled-worker (technician/engineer) tiers, or are
-  they additive? Resolve against `demandRateForGood` / the consumption model before designing the readout.
-- **`[Sys 8]` Gamify the overview layout** — offset the panel left, full-height, less wide.
+The detail surfaces became **left-docked, non-blocking drawers** over a live map, tabbed over a reusable
+vitals grid; the faction screen split into tabs; and faction/region roll-ups became quantity-aware.
+
+- **`[Sys 8]` Gamified overview layout** — the centered modal became a left-docked, full-height,
+  non-blocking drawer (the map stays interactive; clicking another system re-points the drawer in place),
+  and the sidebar folded into the top bar.
+- **`[Sys 1]` Industry/deposit breakdown** — the header bar + bars became compact **deposit/space tables**
+  (settled on tables over chips after the prototype), preserving the Labour card, supply-chain rows, and
+  health glyphs.
+- **`[Sys 2]` Stale industry labels fixed** — health re-grounded on the infrastructure-decay engine's exact
+  triggers and renamed **stable / contracting / collapsing**, so a healthy system reads green (no threshold
+  guesswork; the old idle-fraction constants are gone).
+- **`[Sys 3]` Tech/engineer consumption shown** — resolved **additive**; the Population tab's demand chart
+  segments each good into base / technician / engineer.
+- **Faction screen tabbed** (Overview / Diplomacy / Territory) over the same vitals grid. The Overview
+  aggregates **and** the map's zoomed-out numbers are quantity-aware — extensive magnitudes sum, stability
+  is population-weighted — so a faction spreading into new systems no longer reads as decline.
 
 ### WS5 · Gameplay rule — pops die → undeveloped _(engine, not UI; specced/built separately)_
 
@@ -130,11 +134,9 @@ The Voronoi-centric rewrite the rest of the map leans on.
 
 - WS2 `[Map 6]`: migration mode — arrows vs. number.
 - WS2 `[Map 8]`: logistics — overlay vs. map mode.
-- WS4 `[Sys 3]`: does pop-consumption already include the technician/engineer tiers?
-- WS4 `[Sys 1]`: chipped bars vs. table for the industry/deposit breakdown (settle in an HTML prototype).
 
 ## Sequence
 
-WS3 (cleanup, shipped) → WS1 (map spine, shipped) → WS2 (map modes) → WS4 (system detail). WS5 (gameplay) is
-independent and can slot in any time. Map-heavy workstreams (WS1, WS2, WS4 layout) get a browser-viewable HTML
-prototype approved before implementation.
+WS3 (cleanup, shipped) → WS1 (map spine, shipped) → WS4 (system + faction detail, shipped) → WS2 (map modes,
+next). WS5 (gameplay) is independent and can slot in any time. Map-heavy workstreams (WS1, WS2, WS4 layout) get
+a browser-viewable HTML prototype approved before implementation.
