@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { GOODS } from "@/lib/constants/goods";
 import {
@@ -106,11 +107,14 @@ function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
   return <span className={`font-mono text-[9.5px] ${QUALITY_BAND_TEXT[band]}`}>×{mult.toFixed(2)}</span>;
 }
 
-/** `worked/total` where only the worked figure carries a decimal, and it colours by health when not stable. */
-function Worked({ worked, total, health }: { worked: number; total: number; health: IndustryHealth }) {
+/**
+ * `worked/total`, coloured by health when not stable. `whole` rounds the worked figure (deposit slots
+ * and housing occupancy read as whole units); otherwise it keeps one decimal (factory/complex staffing).
+ */
+function Worked({ worked, total, health, whole = false }: { worked: number; total: number; health: IndustryHealth; whole?: boolean }) {
   return (
     <>
-      <span className={health === "stable" ? "text-text-primary" : HEALTH[health].text}>{worked.toFixed(1)}</span>/{total}
+      <span className={health === "stable" ? "text-text-primary" : HEALTH[health].text}>{whole ? Math.round(worked) : worked.toFixed(1)}</span>/{total}
     </>
   );
 }
@@ -244,7 +248,7 @@ function DepositTable({ rows, contributorsFor }: { rows: DepositRow[]; contribut
                 </Tooltip>
               </span>
             </td>
-            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.slotCap} health={row.health} /></td>
+            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.slotCap} health={row.health} whole /></td>
             <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
             <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
           </tr>
@@ -273,45 +277,79 @@ function NeedsLine({ supply }: { supply: SystemIndustryReadout["supplyChain"][nu
   );
 }
 
-/** Production table: factories + specialisation — health glyph · name (tooltip) · worked/built · output, with a needs sub-row. */
-function ProductionTable({
-  buildings,
+/** One general-land building row — health glyph · name (tooltip) · worked/built · output, with a needs sub-row. */
+function BuildingRow({
+  b,
+  labour,
+  unrest,
+  supply,
+  whole,
+}: {
+  b: BuildingEntry;
+  labour: SystemLabour;
+  unrest: number;
+  supply?: SystemIndustryReadout["supplyChain"][number];
+  whole: boolean;
+}) {
+  const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
+  const hasNeeds = supply && Object.keys(GOOD_RECIPES[supply.goodId] ?? {}).length > 0;
+  return (
+    <tr className={hasNeeds ? "" : "border-b border-border/40"}>
+      <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasNeeds ? "pb-0.5" : "pb-1"}`}>
+        <span className="flex items-center gap-1.5">
+          <HealthGlyph health={health} className="text-[9px]" />
+          <Tooltip>
+            <TooltipTriggerLabel>{label(b.buildingType)}</TooltipTriggerLabel>
+            <TooltipContent className="w-64"><BuildingTooltipBody b={b} labour={labour} /></TooltipContent>
+          </Tooltip>
+        </span>
+        {hasNeeds && supply && <NeedsLine supply={supply} />}
+      </td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} whole={whole} /></td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
+    </tr>
+  );
+}
+
+/** General-land buildings, grouped under Housing / Production / Specialisation subheadings. */
+function BuildingsTable({
+  groups,
   labour,
   unrest,
   supplyByGood,
 }: {
-  buildings: BuildingEntry[];
+  groups: Array<{ title: string; buildings: BuildingEntry[]; whole: boolean }>;
   labour: SystemLabour;
   unrest: number;
   supplyByGood: Map<string, SystemIndustryReadout["supplyChain"][number]>;
 }) {
+  const active = groups.filter((g) => g.buildings.length > 0);
+  if (active.length === 0) return null;
   return (
-    <table className="w-full border-collapse">
+    <table className="mt-3 w-full border-collapse">
       <thead>
         <tr><Th>Building</Th><Th right>Worked</Th><Th right>Out/cyc</Th></tr>
       </thead>
       <tbody>
-        {buildings.map((b) => {
-          const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
-          const supply = b.outputGood ? supplyByGood.get(b.outputGood) : undefined;
-          const hasNeeds = supply && Object.keys(GOOD_RECIPES[supply.goodId] ?? {}).length > 0;
-          return (
-            <tr key={b.buildingType} className={hasNeeds ? "" : "border-b border-border/40 last:border-b-0"}>
-              <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasNeeds ? "pb-0.5" : "pb-1"}`}>
-                <span className="flex items-center gap-1.5">
-                  <HealthGlyph health={health} className="text-[9px]" />
-                  <Tooltip>
-                    <TooltipTriggerLabel>{label(b.buildingType)}</TooltipTriggerLabel>
-                    <TooltipContent className="w-64"><BuildingTooltipBody b={b} labour={labour} /></TooltipContent>
-                  </Tooltip>
-                </span>
-                {hasNeeds && supply && <NeedsLine supply={supply} />}
+        {active.map((group) => (
+          <Fragment key={group.title}>
+            <tr>
+              <td colSpan={3} className="px-1.5 pb-0.5 pt-2.5 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                {group.title}
               </td>
-              <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} /></td>
-              <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
             </tr>
-          );
-        })}
+            {group.buildings.map((b) => (
+              <BuildingRow
+                key={b.buildingType}
+                b={b}
+                labour={labour}
+                unrest={unrest}
+                supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined}
+                whole={group.whole}
+              />
+            ))}
+          </Fragment>
+        ))}
       </tbody>
     </table>
   );
@@ -530,9 +568,13 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const extractors = buildings.filter(
     (b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType) && !COMPLEX_TYPES.includes(b.buildingType),
   );
-  const factories = buildings.filter((b) => b.tier >= 1);
-  const complexes = buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType));
-  const buildingRows = [...factories, ...complexes];
+  // General-land building groups (housing folds into the magbar too; academies live in the Labour card).
+  // Only production staffing keeps a decimal — housing occupancy reads as whole homes.
+  const buildingGroups = [
+    { title: "Housing", buildings: buildings.filter((b) => b.tier === -1), whole: true },
+    { title: "Production", buildings: buildings.filter((b) => b.tier >= 1), whole: false },
+    { title: "Specialisation", buildings: buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType)), whole: false },
+  ];
 
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
   const depRows = depositRows(deposits, extractors, unrest, THRESHOLD);
@@ -544,7 +586,6 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const land = generalLand(space);
   const generalUsed = land.housing + land.factory;
   const generalFree = land.habitableFree + land.factoryFree;
-  const hasRoom = generalFree > 0.01;
 
   return (
     <div className="space-y-4">
@@ -576,7 +617,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <PoolHead
             title="Deposit land"
             sub="extractors"
-            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{depSlots} worked</>}
+            right={<><span className="text-text-primary">{Math.round(depWorked)}</span>/{depSlots} worked</>}
           />
           <DepositTable rows={depRows} contributorsFor={contributorsFor} />
         </Card>
@@ -596,15 +637,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border" style={{ backgroundImage: COPPER_HATCH }} /> Habitable {formatMagnitude(land.habitable)}</span>
           <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border bg-surface-active" /> Free {formatMagnitude(generalFree)}</span>
         </div>
+        <BuildingsTable groups={buildingGroups} labour={labour} unrest={unrest} supplyByGood={supplyByGood} />
       </Card>
-
-      {/* Production + specialisation */}
-      {buildingRows.length > 0 && (
-        <Card variant="bordered" padding="xs">
-          <PoolHead title="Production" sub="factories + specialisation" right={hasRoom ? <span className="text-accent">room to build</span> : `${buildingRows.length} built`} />
-          <ProductionTable buildings={buildingRows} labour={labour} unrest={unrest} supplyByGood={supplyByGood} />
-        </Card>
-      )}
     </div>
   );
 }
