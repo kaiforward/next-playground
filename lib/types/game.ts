@@ -103,13 +103,6 @@ export interface StaticTileSystem {
 
 export type SystemVisibility = "visible" | "unknown";
 
-/** Dynamic system data — events and danger for visible systems. */
-export interface DynamicTileSystem {
-  id: string;
-  eventTypeIds: EventTypeId[];
-  danger: number;
-}
-
 export type ShipStatus = "docked" | "in_transit";
 
 export interface GameWorldState {
@@ -205,6 +198,14 @@ export interface PopulationEntry {
 export interface DevelopmentEntry {
   systemId: string;
   development: number;
+}
+
+/** Per-system migration attractiveness reading for the migration choropleth overlay — the same pull
+ *  score the migration processor acts on. Developed systems only: an undeveloped system has no
+ *  meaningful attraction, so the service gates it out rather than the map drawing a hollow value. */
+export interface MigrationEntry {
+  systemId: string;
+  attraction: number;
 }
 
 /** Per-system ownership reading for the political territory + system markers. Tick-scoped: ownership

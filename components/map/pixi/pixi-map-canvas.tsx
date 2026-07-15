@@ -47,14 +47,14 @@ export interface PixiMapCanvasProps {
    */
   mapMode?: MapMode;
   onViewportChange?: (bounds: ViewportBounds, zoom: number) => void;
-  /** Ambient display of the event pill (still reveals on hover/select). */
-  showEvents: boolean;
   /** Per-system stability (0…1, = 1 − unrest) for the stability choropleth, or empty when mode is off. */
   stabilityBySystem?: Map<string, number>;
   /** Per-system population for the population choropleth, or empty when mode is off. */
   populationBySystem?: Map<string, number>;
   /** Per-system development (raw tier-weighted development points) for the development choropleth, or empty when mode is off. */
   developmentBySystem?: Map<string, number>;
+  /** Per-system migration attractiveness (developed systems only) for the migration choropleth, or empty when mode is off. */
+  migrationBySystem?: Map<string, number>;
   /** The focused faction (from the /factions/[id] route), or null. Value modes re-normalise pop/development to it and de-emphasise the rest; stability dims but does not rescale. */
   selectedFactionId?: string | null;
 }
@@ -91,10 +91,10 @@ export function PixiMapCanvas({
   regionInfos,
   mapMode = "political",
   onViewportChange,
-  showEvents,
   stabilityBySystem,
   populationBySystem,
   developmentBySystem,
+  migrationBySystem,
   selectedFactionId = null,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -450,8 +450,10 @@ export function PixiMapCanvas({
       );
     } else if (mapMode === "development") {
       p.valueChoroplethLayer.setValues(developmentBySystem ?? EMPTY, developmentBySystem ?? EMPTY, "development");
+    } else if (mapMode === "migration") {
+      p.valueChoroplethLayer.setValues(migrationBySystem ?? EMPTY, migrationBySystem ?? EMPTY, "migration", populationBySystem ?? EMPTY);
     }
-  }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, pixiReady]);
+  }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, migrationBySystem, pixiReady]);
 
   // ── Value-mode faction focus (scope) — driven by the /factions/[id] route ──
   // Separate from the per-tick value effect: scope changes only on mode/faction change, not every tick.
@@ -471,15 +473,6 @@ export function PixiMapCanvas({
     p.connectionLayer.sync(mapData.connections, mapData.systems);
     p.logisticsFlowLayer.sync(mapData.systems, mapData.logisticsFlowEdges);
   }, [mapData, selectedSystem, pixiReady]);
-
-  // ── Propagate the events overlay flag to the system layer ──
-  // Gates ambient display of the event pill. Cheap setter — kept out of the
-  // data sync so toggling the overlay doesn't re-run every sync.
-  useEffect(() => {
-    const p = pixiRef.current;
-    if (!p || !pixiReady) return;
-    p.systemLayer.setOverlayVisibility({ events: showEvents });
-  }, [showEvents, pixiReady]);
 
   // ── Initial fitView (only when no centerTarget) ────────────────
   useEffect(() => {

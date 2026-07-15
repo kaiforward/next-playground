@@ -34,10 +34,19 @@ describe("valueRampColorPixi", () => {
   });
 });
 
-describe("population palette — red→green with black reserved for zero", () => {
+describe("population palette — two-pole red→green with black reserved for zero", () => {
   it("reads black at zero and the red floor for a tiny present value", () => {
     expect(valueRampColorPixi(0, 100, "population")).toBe(ABSENT_COLOR);
     expect(valueRampColorPixi(0.0001, 1, "population")).toBe(rampFloorPixi("population"));
+  });
+  it("the reference-max value reads the green endpoint", () => {
+    expect(valueRampColorPixi(50, 50, "population")).toBe(rampTopPixi("population"));
+  });
+  it("a near-zero present value reads the red endpoint", () => {
+    expect(valueRampColorPixi(0.0001, 100, "population")).toBe(rampFloorPixi("population"));
+  });
+  it("has no amber midpoint — exactly 2 stops", () => {
+    expect(rampCssStops("population")).toHaveLength(2);
   });
 });
 
@@ -48,9 +57,28 @@ describe("stability — present-zero rides the red floor, not black", () => {
   });
 });
 
+describe("migration — red→green, no reserved-zero (absence is developed gating)", () => {
+  it("the reference-max value reads green, a tiny present value reads red", () => {
+    expect(valueRampColorPixi(50, 50, "migration")).toBe(rampTopPixi("migration"));
+    expect(valueRampColorPixi(0.0001, 50, "migration")).toBe(rampFloorPixi("migration"));
+  });
+  it("RESERVES_ABSENT_ZERO is false — a literal 0 rides the red floor, not black", () => {
+    expect(valueRampColorPixi(0, 1, "migration")).toBe(rampFloorPixi("migration"));
+    expect(valueRampColorPixi(0, 1, "migration")).not.toBe(ABSENT_COLOR);
+  });
+  it("a tiny present value is never ABSENT_COLOR — rides the red floor, unlike population's literal-0", () => {
+    expect(valueRampColorPixi(0.0001, 1, "migration")).not.toBe(ABSENT_COLOR);
+  });
+  it("rampCssStops is a red→green two-stop legend", () => {
+    const migrationStops = rampCssStops("migration");
+    expect(migrationStops).toHaveLength(2);
+    expect(migrationStops[0]).toMatch(/^rgb\(/);
+  });
+});
+
 describe("rampCssStops / ABSENT_CSS — the legend's single source", () => {
   it("returns one rgb() stop per ramp anchor", () => {
-    const stops = rampCssStops("population");
+    const stops = rampCssStops("development");
     expect(stops).toHaveLength(3);
     expect(stops[0]).toMatch(/^rgb\(/);
   });

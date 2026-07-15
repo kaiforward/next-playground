@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import type { AtlasData, UniverseData, StarSystemInfo, ActiveEvent } from "@/lib/types/game";
-import type { ConnectionInfo } from "@/lib/engine/navigation";
+import type { AtlasData, UniverseData, StarSystemInfo } from "@/lib/types/game";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
@@ -14,17 +13,13 @@ import { useMapMode } from "@/lib/hooks/use-map-mode";
 import { useMapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useStaticTiles } from "@/lib/hooks/use-static-tiles";
 import { useVisibility } from "@/lib/hooks/use-visibility";
-import { useDynamicData } from "@/lib/hooks/use-dynamic-tiles";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useTradeFlow } from "@/lib/hooks/use-trade-flow";
 import { useStability } from "@/lib/hooks/use-stability";
 import { usePopulation } from "@/lib/hooks/use-population";
 import { useDevelopment } from "@/lib/hooks/use-development";
-import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
+import { useMigration } from "@/lib/hooks/use-migration";
 import { buildSystemRegionMap } from "@/lib/utils/region";
-import { useGoods } from "@/lib/hooks/use-goods";
-import { MarketComparisonPanel } from "@/components/market/market-comparison-panel";
-import { QueryBoundary } from "@/components/ui/query-boundary";
 
 /** Default zoom the camera settles at when focusing/centring on a location. */
 const FOCUS_ZOOM = 1.2;
@@ -42,21 +37,18 @@ function parseFocusParam(raw: string | null): CenterTarget | null {
 interface StarMapProps {
   atlas: AtlasData;
   initialSelectedSystemId?: string;
-  events?: ActiveEvent[];
 }
 
 export function StarMap({
   atlas,
   initialSelectedSystemId,
-  events = [],
 }: StarMapProps) {
   // ── Progressive data loading ────────────────────────────────────
-  const { systems: tileSystems, onViewportChange, active, zoom } = useStaticTiles(
+  const { systems: tileSystems, onViewportChange, zoom } = useStaticTiles(
     atlas.meta.mapSize,
   );
   const { showMapDebug } = useDevOverlay();
   const { visibleSystemIds } = useVisibility();
-  const { dynamicSystems } = useDynamicData(active);
   // Live ownership (faction + developed tier) — tick-invalidated on the monthly claim/develop pulse.
   // Overlaid onto the static atlas so territory + markers repaint as factions expand (the atlas itself
   // stays staleTime:Infinity — only ownership rides the dynamic path).
@@ -71,6 +63,7 @@ export function StarMap({
   // aggregation (so a faction's stability number tracks its people, not its raw system count).
   const populationBySystem = usePopulation(mapMode === "population" || mapMode === "stability");
   const developmentBySystem = useDevelopment(mapMode === "development");
+  const migrationBySystem = useMigration(mapMode === "migration");
 
   // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
   // the player can currently sense. We store STABILITY (1 − unrest), not raw unrest,
@@ -108,32 +101,16 @@ export function StarMap({
     return gated;
   }, [developmentBySystem, visibleSystemIds]);
 
-  // ── Price overlay control state (good picker + comparison panel) ──
-  const [priceGoodId, setPriceGoodId] = useState<string | null>(null);
-  const [priceMode, setPriceMode] = useState<"buy" | "sell">("buy");
-  const [comparisonOpen, setComparisonOpen] = useState(false);
-
-  // ── Price heatmap data (per-system price for the selected good) ──
-  // Tagged with the good it was fetched for, and surfaced only when the tag
-  // matches the current selection. This avoids a stale flash when switching
-  // goods AND sidesteps an effect-ordering race: a separate "clear on change"
-  // effect runs after the fetcher's write (child effects fire before parent
-  // effects), so for an already-cached good — which resolves synchronously in
-  // the same commit — the clear would clobber the fetched data and the markers
-  // would never reappear. Deriving instead of clearing has no competing write.
-  const heatmapActive = overlays.priceHeatmap && !!priceGoodId;
-  const [heatmapState, setHeatmapState] = useState<{
-    goodId: string;
-    data: Map<string, { currentPrice: number; basePrice: number }>;
-  } | null>(null);
-
-  const heatmapData =
-    heatmapActive && heatmapState?.goodId === priceGoodId
-      ? heatmapState.data
-      : null;
-
-  // Cached goods catalog — staleTime: Infinity, ~12 rows, one fetch per session.
-  const goods = useGoods();
+  // Migration is dynamic story state too — same fog gate. The developed-only gate
+  // already lives in the service (`getMigrationBySystem` returns developed systems
+  // only), so this memo applies just the fog restriction, like population/development.
+  const visibleMigration = useMemo(() => {
+    const gated = new Map<string, number>();
+    for (const [systemId, attraction] of migrationBySystem) {
+      if (visibleSystemIds.has(systemId)) gated.set(systemId, attraction);
+    }
+    return gated;
+  }, [migrationBySystem, visibleSystemIds]);
 
   // Overlay live ownership (factionId + developed) onto the static atlas. The base atlas is fetched
   // once (staleTime:Infinity); ownership refetches on the monthly pulse, so a new liveAtlas identity
@@ -205,22 +182,6 @@ export function StarMap({
     [universe.regions],
   );
 
-  // ── All connections (needed by both navigation and data hooks) ─
-  const allConnections = useMemo(
-    (): ConnectionInfo[] =>
-      universe.connections.map((c) => ({
-        fromSystemId: c.fromSystemId,
-        toSystemId: c.toSystemId,
-        fuelCost: c.fuelCost,
-      })),
-    [universe.connections],
-  );
-
-  const systemsForComparison = useMemo(
-    () => universe.systems.map((s) => ({ id: s.id, name: s.name })),
-    [universe.systems],
-  );
-
   // ── Selection = the open /system/[id] panel route (single source of truth) ──
   const router = useRouter();
   const pathname = usePathname();
@@ -247,15 +208,11 @@ export function StarMap({
   // ── Derived map data ────────────────────────────────────────────
   const mapData = useMapData({
     universe,
-    events,
     visibleSystemIds,
-    dynamicSystems,
     logisticsEdges,
     selectedSystem,
     systemRegionMap,
     regionMap,
-    priceHeatmap: heatmapData,
-    priceMode,
   });
 
   // ── Click handlers — navigate by id; the panel loads its own detail ──
@@ -358,82 +315,23 @@ export function StarMap({
         regionInfos={regionInfos}
         mapMode={mapMode}
         onViewportChange={onViewportChange}
-        showEvents={overlays.events}
         stabilityBySystem={visibleStability}
         populationBySystem={visiblePopulation}
         developmentBySystem={visibleDevelopment}
+        migrationBySystem={visibleMigration}
         selectedFactionId={selectedFactionId}
       />
 
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}
       {showMapDebug && <MapZoomDebug zoom={zoom} />}
 
-      {/* Price heatmap data fetcher — only mounts when overlay+good are active. */}
-      {heatmapActive && priceGoodId && (
-        <QueryBoundary loadingFallback={null}>
-          <PriceHeatmapDataFetcher goodId={priceGoodId} onData={setHeatmapState} />
-        </QueryBoundary>
-      )}
-
-      {/* Map controls dock (bottom-right) — main panel + floating Price panel */}
+      {/* Map controls dock (bottom-right) */}
       <MapControlsDock
         mode={mapMode}
         setMode={setMapMode}
         overlays={overlays}
         toggle={toggle}
-        priceGoodId={priceGoodId}
-        setPriceGoodId={setPriceGoodId}
-        goods={goods}
-        onOpenComparisonTable={() => setComparisonOpen(true)}
-        priceMode={priceMode}
-        setPriceMode={setPriceMode}
       />
-
-      {/* Cross-system price comparison panel (Price overlay) */}
-      {comparisonOpen && priceGoodId && selectedSystem && (
-        <MarketComparisonPanel
-          goodId={priceGoodId}
-          goodName={goods.find((g) => g.id === priceGoodId)?.name ?? priceGoodId}
-          fromSystemId={selectedSystem.id}
-          fromSystemName={selectedSystem.name}
-          systems={systemsForComparison}
-          connections={allConnections}
-          onSelectSystem={(sysId) => {
-            router.push(`/system/${sysId}`);
-            setComparisonOpen(false);
-          }}
-          onClose={() => setComparisonOpen(false)}
-        />
-      )}
     </div>
   );
-}
-
-/**
- * Suspense-isolated price-data fetcher. Lives outside StarMap so the
- * suspending hook only mounts when the heatmap overlay is active, and
- * lifts the resulting map back up via the `onData` callback.
- */
-function PriceHeatmapDataFetcher({
-  goodId,
-  onData,
-}: {
-  goodId: string;
-  onData: (state: {
-    goodId: string;
-    data: Map<string, { currentPrice: number; basePrice: number }>;
-  }) => void;
-}) {
-  const { entries } = useMarketComparison(goodId);
-  const map = useMemo(() => {
-    const m = new Map<string, { currentPrice: number; basePrice: number }>();
-    for (const e of entries) {
-      m.set(e.systemId, { currentPrice: e.currentPrice, basePrice: e.basePrice });
-    }
-    return m;
-  }, [entries]);
-  useEffect(() => {
-    onData({ goodId, data: map });
-  }, [goodId, map, onData]);
-  return null;
 }

@@ -42,11 +42,6 @@ function buildRows(lod: LODState): DebugRow[] {
       active: lod.showRegionLabels && lod.regionLabelAlpha > VISIBLE,
     },
     { label: "logistics", value: a2(lod.logisticsAlpha), active: lod.logisticsAlpha > VISIBLE },
-    {
-      label: "pill content",
-      value: lod.showPillContent ? a2(lod.pillContentAlpha) : "off",
-      active: lod.showPillContent && lod.pillContentAlpha > VISIBLE,
-    },
   ];
 }
 

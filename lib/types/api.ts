@@ -4,10 +4,8 @@ import type {
   AtlasData,
   StarSystemInfo,
   StaticTileSystem,
-  DynamicTileSystem,
   MarketEntry,
   MarketComparisonEntry,
-  GoodInfo,
   ActiveEvent,
   SunClass,
   GoodTier,
@@ -15,6 +13,7 @@ import type {
   StabilityEntry,
   PopulationEntry,
   DevelopmentEntry,
+  MigrationEntry,
   OwnershipEntry,
   ResourceVector,
 } from "./game";
@@ -37,7 +36,6 @@ export type NewGameResponse = ApiResponse<WorldMeta>;
 export type UniverseResponse = ApiResponse<UniverseData>;
 export type AtlasResponse = ApiResponse<AtlasData>;
 export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
-export type DynamicTileResponse = ApiResponse<{ systems: DynamicTileSystem[] }>;
 export type VisibilityResponse = ApiResponse<{ systemIds: string[] }>;
 export interface TradeFlowEdgeInfo {
   /** Net source system for the dominant good (where particles spawn). */
@@ -58,6 +56,7 @@ export type TradeFlowResponse = ApiResponse<TradeFlowEdges>;
 export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
 export type PopulationResponse = ApiResponse<{ systems: PopulationEntry[] }>;
 export type DevelopmentResponse = ApiResponse<{ systems: DevelopmentEntry[] }>;
+export type MigrationResponse = ApiResponse<{ systems: MigrationEntry[] }>;
 export type OwnershipResponse = ApiResponse<{ systems: OwnershipEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
@@ -296,7 +295,6 @@ export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
 
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
-export type GoodsResponse = ApiResponse<{ goods: GoodInfo[] }>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;
 
 import type {
