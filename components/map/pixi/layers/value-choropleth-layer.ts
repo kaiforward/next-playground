@@ -36,12 +36,23 @@ const VALUE_FILL_ALPHA = 0.5;
 
 // Modes whose reference max re-normalises to the focused faction's members when a faction is in scope.
 // Stability stays globally normalised even under focus — 0..1 unrest reads the same regardless of who's
-// selected; pop/development re-scale so the focused faction's own brightest system reads as the top of
-// the ramp.
+// selected; pop/development/migration re-scale so the focused faction's own brightest/most-attractive
+// system reads as the top of the ramp.
 const RESCALES_TO_SCOPE: Record<ValueMode, boolean> = {
   population: true,
   development: true,
   stability: false,
+  migration: true,
+};
+
+// Modes that show aggregated numbers over the choropleth fill. population/development/stability keep
+// their numbers; migration is a colour-first heatmap with no on-map numbers — a `false` entry
+// makes rebuildTiers/updateNumbers lease no Text and print nothing for that mode.
+const SHOWS_NUMBERS: Record<ValueMode, boolean> = {
+  population: true,
+  development: true,
+  stability: true,
+  migration: false,
 };
 
 /**
@@ -195,8 +206,9 @@ export class ValueChoroplethLayer {
       // A cell absent from the value map is "nothing here" → black; a present system rides its ramp
       // (so an unstable-but-present system reads red, not black).
       const value = this.values.get(id);
-      let color =
-        value === undefined ? ABSENT_COLOR : valueRampColorPixi(value, this.referenceMax, this.mode);
+      let color = value === undefined
+        ? ABSENT_COLOR
+        : valueRampColorPixi(value, this.referenceMax, this.mode);
       // Faction focus dims every out-of-scope cell, in every mode — independent of whether the mode
       // rescales its reference max. The absent check above always wins: never dim a black cell.
       if (color !== ABSENT_COLOR && this.scopeFaction != null && this.factionBySystemId.get(id) !== this.scopeFaction) {
@@ -223,6 +235,13 @@ export class ValueChoroplethLayer {
    * arrays, frustum-gating and greedily placing labels.
    */
   private rebuildTiers() {
+    // Colour-only modes (migration) show no numbers — skip the aggregation entirely rather than
+    // build tiers nobody reads.
+    if (!SHOWS_NUMBERS[this.mode]) {
+      this.tiers = { system: [], factionRegion: [], faction: [] };
+      this.numbersDirty = true;
+      return;
+    }
     const raw = buildAggregationGroups(this.systems, this.values, this.mode, this.weights);
     this.tiers = {
       system: raw.system.filter((g) => g.value > 0).sort((a, b) => b.value - a.value),
@@ -259,6 +278,13 @@ export class ValueChoroplethLayer {
     this.numbersDirty = false;
     this.lastNumbersZoom = zoom;
     f.minX = frustum.minX; f.minY = frustum.minY; f.maxX = frustum.maxX; f.maxY = frustum.maxY;
+
+    // Colour-only modes (migration) lease no Text — hide whatever the pool holds from a prior
+    // mode and stop; drawFills (the colour) is untouched and still runs every value change.
+    if (!SHOWS_NUMBERS[this.mode]) {
+      for (const t of this.pool) t.visible = false;
+      return;
+    }
 
     const tier = pickTier(zoom, this.thresholds);
     const groups: AggGroup[] =

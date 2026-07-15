@@ -6,12 +6,13 @@ covers what is done with it once it arrives.
 
 ## Headline
 
-The map is **EU5-style**: value map-modes are read from the **number printed inside each system's Voronoi cell**,
-with colour complementing rather than carrying the meaning, and everything stays **selectable at any zoom** via
-the cell rather than a tiny star hitbox. Each system's dot is coloured by its **star type**. Three value modes
-(stability / population / development) share one relative-gradient choropleth; two structural modes (political /
-regions) and a plain "none" round out the toggle, and two additive overlays (price, logistics) sit on top of any
-mode.
+The map is **EU5-style**: the **magnitude** value modes (population / development / stability) are read from the
+**number printed inside each system's Voronoi cell**, with colour complementing rather than carrying the meaning;
+the **migration** mode is a colour-only attractiveness heatmap (no natural printed unit). Everything stays
+**selectable at any zoom** via the cell rather than a tiny star hitbox. Each system's dot is coloured by its
+**star type**. Four value modes (stability / population / development / migration) share one choropleth; two
+structural modes (political / regions) and a plain "none" round out the toggle, and a single additive **logistics**
+overlay sits on top of any mode.
 
 ## Map modes
 
@@ -20,14 +21,15 @@ A single mode toggle (`MapMode` in `lib/types/map.ts`) selects what the territor
 - **Political** — faction ownership. Zoomed in, cells are per-system; zoomed out they merge into faction shapes.
 - **Regions** — transparent fills with uniform neutral-slate borders (`0x64748b`). `regionId` is sim-load-bearing
   (region-targeted event modifiers, relations, derivations); only its colouring is neutral.
-- **Stability / Population / Development** — the three **value modes**, rendered by the shared value-choropleth
-  layer (below). `isValueMode()` gates the value-mode-only behaviours (cell numbers, faction re-scaling).
+- **Stability / Population / Development / Migration** — the **value modes**, rendered by the shared
+  value-choropleth layer (below). `isValueMapMode()` gates the value-mode-only behaviours (cell numbers, faction
+  re-scaling). **Migration** is the per-system **attractiveness** heatmap (reuses `migrationAttractiveness`) —
+  colour-only (a `SHOWS_NUMBERS` gate suppresses cell numbers) and **developed-gated** (undeveloped = absent =
+  black); it re-scales to a focused faction's worlds like population/development.
 - **None** — no territory fill.
 
-Two **overlays** are additive and sit on top of whichever mode is active:
+One **overlay** is additive and sits on top of whichever mode is active:
 
-- **Price** — a per-system **pill** at the top-right of each glyph carrying the buy/sell deal-quality tint for a
-  picked good (green ↔ red ramp), with a buy/sell perspective sub-toggle. It is a pill, not an ambient halo.
 - **Logistics** — directed faction hauls drawn as curved convoy arcs with travelling particles.
 
 ## Value modes — relative, faction-scopable gradients
@@ -40,9 +42,12 @@ meaning. Ramp semantics (`components/map/pixi/value-ramp.ts`):
   undeveloped system with no live value) draws black. Population and development additionally reserve black for a
   literal **0** (0 people / nothing built). Stability does **not** — every present system has a stability, and 0
   (maximal unrest) rides the red floor.
-- **Per-mode hues.** Population is the classic **red → amber → green** heat ramp (green = most). Stability runs
-  **red (unstable) → teal → cyan (calm)** — it is shown as stability (`1 − unrest`), gated on the live `developed`
-  flag so undeveloped space reads black. Development rides a **grey floor → warm copper** hue.
+- **Per-mode hues.** Population and migration both run a **two-pole red → green** heat ramp (green = most /
+  most-attractive; the amber midpoint was dropped so the value-quality modes share one colour language). Population
+  keeps literal-**0 = black**; migration does **not** reserve black for 0 (a developed system always has a real
+  attractiveness — black means only undeveloped/absent). Stability runs **red (unstable) → teal → cyan (calm)** — it
+  is shown as stability (`1 − unrest`), gated on the live `developed` flag so undeveloped space reads black.
+  Development rides a **grey floor → warm copper** hue.
 - **Development value = raw "development points"**, not a fraction. A map-only pure score
   (`lib/engine/development-points.ts`) sums a population term (people, skilled people weighted more) and a
   **staffed**-industry term (per staffed production level: tier-0 = 1, tier-1 = 2, tier-2 = 4; each
@@ -145,7 +150,9 @@ point cloud stays neutral slate.
 - **Stored "sectors"** → the war / casus-belli system (the derived `(faction, region)` group serves the map now).
 - **A true "control" mode** (occupation %) → arrives with the war system; slots into this same value-mode
   framework.
-- **Price as a first-class map mode, migration mode, logistics-as-mode** → the next map-modes workstream (WS2 in
-  [ui-overhaul.md](../../planned/ui-overhaul.md)), which builds on this mode framework. Price is an overlay pill
-  today.
+- **Migration mode** shipped in the map-modes workstream (WS2 P1) as the attractiveness heatmap above. A **price**
+  map mode was built then **cut as premature** for the current grand-strategy form (the buy/sell deal-quality
+  framing is a trader hangover) — its price pill + overlay are removed too; market data lives on the per-system
+  Market panel. **Migration movement arrows + logistics-as-mode** are the deferred **WS2 P2** flow-viz pass
+  ([ui-ws2-map-modes.md](../../planned/ui-ws2-map-modes.md)).
 - **Panel offset / gamified layout** → the system-detail workstream (WS4).

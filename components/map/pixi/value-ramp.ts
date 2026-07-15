@@ -1,27 +1,32 @@
-export type ValueMode = "population" | "development" | "stability";
+export type ValueMode = "population" | "development" | "stability" | "migration";
 
 type Stop = readonly [number, readonly [number, number, number]];
 
 // Black (ABSENT) means "nothing here" — no system / no data / out of sensor range. Absence is decided
 // by the CONSUMER (a cell missing from the value map is black); the ramps below only cover a mode's
-// PRESENT range. population/development additionally reserve black for a literal 0 (0 people / 0
-// development = nothing built). stability does NOT: every present system has a stability, and 0
-// (maximal unrest) rides the red floor, not black. Population is the classic red→amber→green heat ramp
-// (green = most); stability runs red (unstable) → teal → cyan (calm); development rides a grey floor →
-// warm hue. Stops are [t, [r,g,b]] with t ascending 0..1.
+// PRESENT range. population additionally reserves black for a literal 0 (0 people = nothing there).
+// stability/migration do NOT: every present (developed) system has a real value there, and its
+// floor (maximal unrest / least attractive) rides the red end of the ramp, not black —
+// absence is reserved for undeveloped/marketless systems, decided by the caller. Population and
+// migration share one two-pole red→green ramp (green = most/best) — a single value-mode colour language;
+// stability runs red (unstable) → teal → cyan (calm); development rides a grey floor → warm hue. Stops
+// are [t, [r,g,b]] with t ascending 0..1.
 const ABSENT = 0x08090c;
 const RAMPS: Record<ValueMode, readonly Stop[]> = {
-  population: [[0, [239, 68, 68]], [0.5, [245, 158, 11]], [1, [34, 197, 94]]], // red → amber → green
+  population: [[0, [239, 68, 68]], [1, [34, 197, 94]]], // red → green
   development: [[0, [80, 84, 92]], [0.5, [158, 74, 44]], [1, [224, 132, 95]]], // grey floor → warm hue
   stability: [[0, [239, 68, 68]], [0.5, [26, 120, 140]], [1, [103, 232, 249]]], // red (unstable) → teal → cyan (calm)
+  migration: [[0, [239, 68, 68]], [1, [34, 197, 94]]], // red → green (attractiveness)
 };
 
-// Modes where a literal 0 means "nothing" and is drawn black (rather than the ramp floor). Stability is
-// excluded — its 0 is "maximally unstable", a real state that rides the red floor.
+// Modes where a literal 0 means "nothing" and is drawn black (rather than the ramp floor). Stability
+// and migration are excluded — their 0 (or negative) is a real, present-system value that rides
+// the red floor; absence for migration is the developed/market gate, not a literal-0 check.
 const RESERVES_ABSENT_ZERO: Record<ValueMode, boolean> = {
   population: true,
   development: true,
   stability: false,
+  migration: false,
 };
 
 // De-emphasis treatments for out-of-scope cells (faction focus). "desat" mixes each channel toward the

@@ -1,4 +1,3 @@
-import type { SystemEventInfo } from "@/lib/hooks/use-map-data";
 import type { SunClass } from "@/lib/types/game";
 
 // Neutral tint for the far-zoom point cloud. The zoomed-in system dot is coloured
@@ -37,27 +36,6 @@ export const EDGE = {
   gatewayGlow: { color: 0xf59e0b, alpha: 0.15, width: 7.0 },
 } as const;
 
-// ── Event dot colors ─────────────────────────────────────────────
-
-export const EVENT_DOT_COLORS: Record<SystemEventInfo["color"], number> = {
-  red:    0xef4444,
-  amber:  0xf59e0b,
-  purple: 0xa855f7,
-  green:  0x22c55e,
-  blue:   0x3b82f6,
-  slate:  0x94a3b8,
-};
-
-// Event icon by colour bucket (SystemEventInfo.color already categorises).
-export const EVENT_ICON: Record<SystemEventInfo["color"], string> = {
-  red:    "⚔",   // conflict / raid
-  amber:  "▲",   // boom / shock
-  purple: "✦",   // anomaly / precursor
-  green:  "★",   // festival / boon
-  blue:   "⚛",   // tech
-  slate:  "●",   // generic
-};
-
 // ── Point cloud (universe view) ─────────────────────────────────
 
 export const POINT_CLOUD = {
@@ -90,7 +68,6 @@ export const SIZES = {
   regionLabelSize:    14,
   regionSubLabelSize: 10,
   gatewayDotRadius:    5,
-  eventDotRadius:      4,
   dashLength:          6,
   dashGap:             4,
 } as const;
@@ -106,43 +83,16 @@ export const GLYPH = {
   selectedRingWidth: 4,    // selection ring — bright white dashed focus ring
 } as const;
 
-// ── Unified corner-pill geometry (all four corners share this) ───
-export const PILL = {
-  height:    18,
-  corner:    5,
-  padX:      5,
-  gap:       3,   // gap between a pill's icon and its count text
-  offset:    4,   // radial gap between pill edge and core
-} as const;
-
-// ── Corner-pill anchors (top-right price, bottom-right event) ───
-// Each pill's inner corner (the one nearest the core) sits on the 45° diagonal,
-// just outside the halo — so pills read as orbiting the glyph rather than
-// crowding the core. The vertical anchor is the horizontal one plus half a pill
-// height, because pills are vertically centred on their anchor.
-const PILL_CORNER_RADIUS = 22;                          // just outside the star bloom (GLYPH.bloomRadius 20)
-const PILL_CORNER_XY = PILL_CORNER_RADIUS / Math.SQRT2; // ≈ 15.6 per axis
-export const PILL_ANCHOR = {
-  x:       PILL_CORNER_XY,                        // inner vertical edge of L/R pills
-  yTop:    -(PILL_CORNER_XY + PILL.height / 2),   // top pills (anchor centre)
-  yBottom: PILL_CORNER_XY + PILL.height / 2,      // bottom pills (anchor centre)
-} as const;
-
 // ── System label backing (name) ──────────────────────────────────
 // The name label sits below the glyph and can fall behind the nav ring /
-// halo, so it gets a semi-transparent black backing for legibility. It's
-// pushed far enough down to clear the bottom corner-pills: the event pill
-// (and the mirror space a bottom-left pill would use) reaches
-// `yBottom + height/2` below centre, so the name's top starts a few px past
-// that.
-const BOTTOM_PILL_REACH = PILL_ANCHOR.yBottom + PILL.height / 2; // ≈ 34
+// halo, so it gets a semi-transparent black backing for legibility.
 export const LABEL = {
   bgFill:   0x000000,
   bgAlpha:  0.55,
   bgPadX:   4,
   bgPadY:   1.5,
   bgCorner: 3,
-  offsetY:  BOTTOM_PILL_REACH + 4, // ≈ 38 — name top clears the bottom pills
+  offsetY:  38, // px below glyph centre, clear of the nav/selection ring
 } as const;
 
 // ── Animation ────────────────────────────────────────────────────

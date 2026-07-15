@@ -59,7 +59,7 @@ The tick event stream (SSE) is **de-authed and single-client** — the multiplay
 
 ## No fog of war
 
-Every system is fully visible. The dynamic-data service (`lib/services/dynamic-tiles.ts`) returns events + danger for **all** systems, and the visibility endpoint returns every system id. Per-player, ship-based visibility is planned (see [grand-strategy-vision.md](../../planned/grand-strategy-vision.md)); the data plumbing is in [map-data-loading.md](./map-data-loading.md).
+Every system is fully visible — the visibility endpoint returns every system id. Per-player, ship-based visibility is planned (see [grand-strategy-vision.md](../../planned/grand-strategy-vision.md)); the data plumbing is in [map-data-loading.md](./map-data-loading.md).
 
 ## Purity & multiplayer-someday guardrails
 

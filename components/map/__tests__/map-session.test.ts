@@ -64,22 +64,10 @@ describe("map-session", () => {
       expect("politicalTerritory" in (overlays ?? {})).toBe(false);
     });
 
-    it("keeps events when present, including an explicit false", () => {
-      // `events` defaults ON, so an explicit `false` must round-trip —
-      // a dropped key would silently revert to the default on hydrate.
+    it("drops a non-boolean logistics value during parse", () => {
       sessionStorage.setItem(
         "stellarTrader:mapState",
-        JSON.stringify({ overlays: { events: false, logistics: true } }),
-      );
-      const overlays = getMapSessionState()?.overlays;
-      expect(overlays?.events).toBe(false);
-      expect(overlays?.logistics).toBe(true);
-    });
-
-    it("drops a non-boolean events value during parse", () => {
-      sessionStorage.setItem(
-        "stellarTrader:mapState",
-        JSON.stringify({ overlays: { events: "yes" } }),
+        JSON.stringify({ overlays: { logistics: "yes" } }),
       );
       // Non-boolean is ignored; with no valid overlay keys left, overlays
       // collapses to undefined (same as the legacy-only case above).
@@ -89,20 +77,18 @@ describe("map-session", () => {
     it("drops the retired fleet key during parse", () => {
       sessionStorage.setItem(
         "stellarTrader:mapState",
-        JSON.stringify({ overlays: { fleet: false, events: true } }),
+        JSON.stringify({ overlays: { fleet: false, logistics: true } }),
       );
       const overlays = getMapSessionState()?.overlays;
-      expect(overlays?.events).toBe(true);
+      expect(overlays?.logistics).toBe(true);
       expect("fleet" in (overlays ?? {})).toBe(false);
     });
 
-    it("round-trips an explicit events:false through the write path", () => {
+    it("round-trips an explicit logistics:true through the write path", () => {
       // Exercises setOverlaysInSession → writeSessionState → getMapSessionState
-      // end-to-end (not just a seeded parse): a default-ON overlay turned off
-      // must survive the write, or it would silently revert on hydrate.
-      setOverlaysInSession({ events: false, logistics: true });
+      // end-to-end (not just a seeded parse).
+      setOverlaysInSession({ logistics: true });
       const overlays = getMapSessionState()?.overlays;
-      expect(overlays?.events).toBe(false);
       expect(overlays?.logistics).toBe(true);
     });
   });

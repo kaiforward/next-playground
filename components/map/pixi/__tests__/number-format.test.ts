@@ -36,4 +36,12 @@ describe("formatValueNumber", () => {
       expect(formatValueNumber(142, "development")).toBe("142");
     });
   });
+
+  describe("migration — raw value, rounded (unused while colour-only; kept honest)", () => {
+    it("rounds with no scaling, does NOT fall into the stability ×100 branch", () => {
+      expect(formatValueNumber(0.9, "migration")).toBe("1");
+      expect(formatValueNumber(23.4, "migration")).toBe("23");
+      expect(formatValueNumber(0, "migration")).toBe("0");
+    });
+  });
 });

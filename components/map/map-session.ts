@@ -5,9 +5,7 @@ import { isMapMode, type MapMode } from "@/lib/types/map";
 const SESSION_KEY = "stellarTrader:mapState";
 
 export interface MapOverlaysState {
-  events?: boolean;
   logistics?: boolean;
-  priceHeatmap?: boolean;
 }
 
 export interface MapSessionState {
@@ -18,18 +16,12 @@ export interface MapSessionState {
 function parseOverlays(value: unknown): MapOverlaysState | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const out: MapOverlaysState = {};
-  if ("events" in value && typeof value.events === "boolean") {
-    out.events = value.events;
-  }
   if ("logistics" in value && typeof value.logistics === "boolean") {
     out.logistics = value.logistics;
   }
-  if ("priceHeatmap" in value && typeof value.priceHeatmap === "boolean") {
-    out.priceHeatmap = value.priceHeatmap;
-  }
-  // Legacy keys (`politicalTerritory`, `fleet`, `shipRoutes`) are silently
-  // dropped — mode migrated to its own axis; fleet overlays died with the
-  // single-player pivot.
+  // Legacy keys (`politicalTerritory`, `fleet`, `shipRoutes`, `priceHeatmap`, `events`) are
+  // silently dropped — mode migrated to its own axis; fleet overlays died with the
+  // single-player pivot; events was removed as a map concept.
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

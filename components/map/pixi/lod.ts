@@ -36,10 +36,6 @@ export interface LODState {
   regionLabelAlpha: number;
   /** Alpha for the directed-logistics overlay layer (smooth fade in 0.4 → 0.6). */
   logisticsAlpha: number;
-  /** Whether pill TEXT/ICON content shows (shapes show earlier, with the layer). */
-  showPillContent: boolean;
-  /** Alpha for pill text/icon content (smooth fade). */
-  pillContentAlpha: number;
 }
 
 /** Cubic smoothstep: 0 at edge0, 1 at edge1 with smooth acceleration/deceleration */
@@ -135,11 +131,5 @@ export function computeLOD(zoom: number): LODState {
 
     // Trade-flow overlay fades in across the crossfade-to-system band
     logisticsAlpha: smoothStep(0.4, 0.6, zoom),
-
-    // Pill content (text/icon) reveals with system names on the 0.8–0.9 text
-    // band — the pill shapes still appear far earlier (with systemLayerAlpha),
-    // so far-out pills read as bare colour until the labels come in.
-    showPillContent: zoom > 0.8,
-    pillContentAlpha: smoothStep(0.8, 0.9, zoom),
   };
 }

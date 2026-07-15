@@ -3,12 +3,15 @@ import { isMapMode, isValueMapMode, isFactionInteractiveMode, MAP_MODES } from "
 
 describe("MapMode", () => {
   it("includes the territory modes in the mode set and ordering", () => {
-    expect(MAP_MODES).toEqual(["political", "regions", "stability", "population", "development", "none"]);
+    expect(MAP_MODES).toEqual([
+      "political", "regions", "stability", "population", "development", "migration", "none",
+    ]);
     expect(isMapMode("political")).toBe(true);
     expect(isMapMode("regions")).toBe(true);
     expect(isMapMode("stability")).toBe(true);
     expect(isMapMode("population")).toBe(true);
     expect(isMapMode("development")).toBe(true);
+    expect(isMapMode("migration")).toBe(true);
     expect(isMapMode("none")).toBe(true);
   });
   it("rejects unknown modes", () => {
@@ -22,6 +25,7 @@ describe("isValueMapMode", () => {
     expect(isValueMapMode("population")).toBe(true);
     expect(isValueMapMode("stability")).toBe(true);
     expect(isValueMapMode("development")).toBe(true);
+    expect(isValueMapMode("migration")).toBe(true);
   });
   it("is false for the topology / off modes", () => {
     expect(isValueMapMode("political")).toBe(false);
@@ -37,6 +41,7 @@ describe("isFactionInteractiveMode", () => {
     expect(isFactionInteractiveMode("population")).toBe(true);
     expect(isFactionInteractiveMode("stability")).toBe(true);
     expect(isFactionInteractiveMode("development")).toBe(true);
+    expect(isFactionInteractiveMode("migration")).toBe(true);
   });
   it("is false for modes with no faction territory (a zoomed-out click falls through to the system)", () => {
     expect(isFactionInteractiveMode("regions")).toBe(false);

@@ -3,20 +3,17 @@
 import { useSearchParams } from "next/navigation";
 import { StarMap } from "@/components/map/star-map";
 import { useAtlas } from "@/lib/hooks/use-atlas";
-import { useEvents } from "@/lib/hooks/use-events";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { LoadingFallback } from "@/components/ui/loading-fallback";
 
 function MapContent({ initialSystemId }: { initialSystemId?: string }) {
   const { atlas } = useAtlas();
-  const { events } = useEvents();
 
   return (
     <div className="h-[calc(100vh-var(--topbar-height))] w-full relative">
       <StarMap
         atlas={atlas}
         initialSelectedSystemId={initialSystemId}
-        events={events}
       />
     </div>
   );

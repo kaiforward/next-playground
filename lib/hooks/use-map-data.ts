@@ -4,23 +4,13 @@ import { useMemo } from "react";
 import type {
   UniverseData,
   StarSystemInfo,
-  ActiveEvent,
-  DynamicTileSystem,
   EconomyType,
   SunClass,
   SystemVisibility,
 } from "@/lib/types/game";
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
-import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
-import { priceRampColorPixi } from "@/lib/utils/price-ramp";
 
 // ── Types ───────────────────────────────────────────────────────
-
-export interface SystemEventInfo {
-  type: string;
-  color: "red" | "amber" | "purple" | "green" | "blue" | "slate";
-  priority: number;
-}
 
 export interface SystemNodeData {
   id: string;
@@ -36,11 +26,6 @@ export interface SystemNodeData {
   regionId: string;
   isGateway: boolean;
   visibility: SystemVisibility;
-  activeEvents?: SystemEventInfo[];
-  /** Price-ramp tint for the active heatmap good, or null when none/overlay off. */
-  priceTint: number | null;
-  /** Signed % deviation from base price for the active heatmap good, or null when none. */
-  priceDelta: number | null;
 }
 
 export interface ConnectionData {
@@ -59,10 +44,7 @@ export interface MapData {
    * (sorted). Empty when the Logistics overlay is off — the Pixi layer renders nothing.
    */
   logisticsFlowEdges: Map<string, TradeFlowEdgeInfo>;
-  /** Per-system price data for the active heatmap good. Null when overlay is off. */
-  priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
   // Detail panel data
-  eventsAtSelected: ActiveEvent[];
   selectedGatewayTargets: { regionId: string; regionName: string }[];
   selectedRegionName: string | undefined;
   selectedFactionName: string | undefined;
@@ -74,15 +56,11 @@ export interface MapData {
 
 interface UseMapDataOptions {
   universe: UniverseData;
-  events: ActiveEvent[];
   visibleSystemIds: Set<string>;
-  dynamicSystems: DynamicTileSystem[];
   logisticsEdges: TradeFlowEdgeInfo[];
   selectedSystem: StarSystemInfo | null;
   systemRegionMap: Map<string, string>;
   regionMap: Map<string, { id: string; name: string }>;
-  priceHeatmap: Map<string, { currentPrice: number; basePrice: number }> | null;
-  priceMode: "buy" | "sell";
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -106,51 +84,18 @@ function keyByCanonicalPair(
 
 export function useMapData({
   universe,
-  events,
   visibleSystemIds,
-  dynamicSystems,
   logisticsEdges,
   selectedSystem,
   systemRegionMap,
   regionMap,
-  priceHeatmap,
-  priceMode,
 }: UseMapDataOptions): MapData {
-  // ── Events per system (from dynamic data) ────────────────────
-  const eventsPerSystem = useMemo(() => {
-    const map = new Map<string, SystemEventInfo[]>();
-    for (const ds of dynamicSystems) {
-      if (ds.eventTypeIds.length === 0) continue;
-      map.set(
-        ds.id,
-        ds.eventTypeIds.map((type) => ({
-          type,
-          color: EVENT_TYPE_BADGE_COLOR[type] ?? "slate",
-          priority: EVENT_TYPE_DANGER_PRIORITY[type] ?? 0,
-        })),
-      );
-    }
-    return map;
-  }, [dynamicSystems]);
-
-  // ── Events at selected system (gated by visibility) ──────────
-  const eventsAtSelected = useMemo(() => {
-    if (!selectedSystem) return [];
-    if (!visibleSystemIds.has(selectedSystem.id)) return [];
-    return events.filter((e) => e.systemId === selectedSystem.id);
-  }, [selectedSystem, events, visibleSystemIds]);
-
   // ── System nodes (all systems) ────────────────────────────────
   const systems = useMemo((): SystemNodeData[] => {
     return universe.systems.map((system) => {
       const visibility: SystemVisibility = visibleSystemIds.has(system.id)
         ? "visible"
         : "unknown";
-      const price = priceHeatmap?.get(system.id) ?? null;
-      const priceTint = price ? priceRampColorPixi(price.currentPrice, price.basePrice, priceMode) : null;
-      const priceDelta = price
-        ? Math.round((price.currentPrice / price.basePrice - 1) * 100)
-        : null;
       return {
         id: system.id,
         x: system.x,
@@ -162,12 +107,9 @@ export function useMapData({
         regionId: system.regionId,
         isGateway: system.isGateway,
         visibility,
-        activeEvents: eventsPerSystem.get(system.id),
-        priceTint,
-        priceDelta,
       };
     });
-  }, [universe.systems, eventsPerSystem, visibleSystemIds, priceHeatmap, priceMode]);
+  }, [universe.systems, visibleSystemIds]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
@@ -248,8 +190,6 @@ export function useMapData({
     systems,
     connections,
     logisticsFlowEdges,
-    priceHeatmap,
-    eventsAtSelected,
     selectedGatewayTargets,
     selectedRegionName,
     selectedFactionName,

@@ -3,7 +3,6 @@
 import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
-import { PRICE_RAMP_STOPS } from "@/lib/utils/price-ramp";
 import { rampCssStops, ABSENT_CSS, type ValueMode } from "@/components/map/pixi/value-ramp";
 import { RadioGroup } from "@/components/form/radio-group";
 import { CheckboxInput } from "@/components/form/checkbox-input";
@@ -19,11 +18,12 @@ const MODE_LABELS: Record<MapMode, string> = {
   stability: "Stability",
   population: "Population",
   development: "Development",
+  migration: "Migration",
   none: "None",
 };
 
 /** Overlays whose colour mapping isn't self-evident carry a hover/focus legend. */
-type LegendKind = "price" | "logistics";
+type LegendKind = "logistics";
 
 interface OverlayDef {
   key: MapOverlayKey;
@@ -39,8 +39,6 @@ interface OverlayDef {
  * pulled from the same constants the Pixi renderer uses so they can't drift.
  */
 const OVERLAY_DEFS: ReadonlyArray<OverlayDef> = [
-  { key: "events", label: "Events", swatch: "#f59e0b" }, // EVENT_DOT_COLORS.amber
-  { key: "priceHeatmap", label: "Price", swatch: PRICE_RAMP_STOPS.premium, legend: "price" },
   { key: "logistics", label: "Logistics", swatch: pixiHexToCss(TIER_COLOR[1]), legend: "logistics" },
 ];
 
@@ -57,6 +55,8 @@ const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({
       <PopulationRampLegend />
     ) : m === "development" ? (
       <DevelopmentRampLegend />
+    ) : m === "migration" ? (
+      <MigrationRampLegend />
     ) : undefined,
 }));
 
@@ -141,36 +141,8 @@ function SectionHeading({ children }: { children: string }) {
 
 /** Legend body for a tooltip — the surrounding box is supplied by TooltipContent. */
 function OverlayLegend({ kind }: { kind: LegendKind }) {
-  if (kind === "price") return <PriceRampLegend />;
-  return <LogisticsLegend />;
-}
-
-const PRICE_RAMP = [
-  PRICE_RAMP_STOPS.deepBargain,
-  PRICE_RAMP_STOPS.bargain,
-  PRICE_RAMP_STOPS.neutral,
-  PRICE_RAMP_STOPS.premium,
-  PRICE_RAMP_STOPS.deepPremium,
-].join(", ");
-
-function PriceRampLegend() {
-  return (
-    <div>
-      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
-        Price vs Base
-      </h5>
-      <div
-        className="h-2 w-full"
-        style={{ background: `linear-gradient(to right, ${PRICE_RAMP})` }}
-        aria-hidden
-      />
-      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
-        <span>0.6×</span>
-        <span>base</span>
-        <span>1.4×</span>
-      </div>
-    </div>
-  );
+  if (kind === "logistics") return <LogisticsLegend />;
+  return null;
 }
 
 /**
@@ -243,6 +215,28 @@ function DevelopmentRampLegend() {
       </div>
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
         Population + industry a system has built and worked, measured against the galaxy&rsquo;s biggest. Black = none.
+      </p>
+    </div>
+  );
+}
+
+function MigrationRampLegend() {
+  return (
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Migration
+      </h5>
+      <div
+        className="h-2 w-full"
+        style={{ background: rampGradient("migration") }}
+        aria-hidden
+      />
+      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>Crowded</span>
+        <span>Attractive</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+        Where population is drawn — room, jobs and calm. Black = undeveloped or out of sensor range.
       </p>
     </div>
   );

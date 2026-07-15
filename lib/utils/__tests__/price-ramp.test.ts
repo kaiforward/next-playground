@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { priceRampColor, priceRampColorPixi, PRICE_RAMP_STOPS } from "../price-ramp";
+import {
+  priceRampColor,
+  priceRampColorPixi,
+  PRICE_RAMP_STOPS,
+} from "../price-ramp";
 
 describe("priceRampColor mode-awareness", () => {
   it("buy mode (default): cheap = green, expensive = red", () => {

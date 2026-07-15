@@ -4,22 +4,21 @@ export const queryKeys = {
   marketAll: ["market"] as const,
   market: (systemId: string) => ["market", systemId] as const,
   marketByGood: (goodId: string) => ["market", "by-good", goodId] as const,
-  goods: ["goods"] as const,
   events: ["events"] as const,
   devEconomy: ["devEconomy"] as const,
   // Atlas + progressive loading
   atlas: ["atlas"] as const,
   staticTile: (col: number, row: number, mapSize: number) =>
     ["staticTile", col, row, mapSize] as const,
-  // Visibility + dynamic data (separated concerns)
   visibility: ["visibility"] as const,
-  dynamicVisible: ["dynamicVisible"] as const,
   // All-systems stability (tick-scoped — badge + map choropleth)
   stability: ["stability"] as const,
   // All-systems population (tick-scoped — map choropleth)
   populationMap: ["populationMap"] as const,
   // All-systems development 0..1 (tick-scoped — map choropleth)
   developmentMap: ["developmentMap"] as const,
+  // All-systems migration attractiveness, developed systems only (tick-scoped — map choropleth)
+  migrationMap: ["migrationMap"] as const,
   // All-systems ownership (faction + developed tier — tick-scoped; political territory + markers)
   ownership: ["ownership"] as const,
   // Trade flow overlay (tick-scoped, gated by overlay toggle)

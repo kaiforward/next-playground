@@ -83,10 +83,14 @@ describe("aggregateValue", () => {
     // (0.2·10 + 0.8·30) / 40 = 26/40
     expect(aggregateValue([0.2, 0.8], [10, 30], "stability")).toBeCloseTo(26 / 40, 10);
   });
+  it("population-weights the migration mode (intensive — an attraction rate, like stability)", () => {
+    expect(aggregateValue([0.2, 0.8], [10, 30], "migration")).toBeCloseTo(26 / 40, 10);
+  });
   it("returns 0 for an empty group (no divide-by-zero)", () => {
     expect(aggregateValue([], [], "population")).toBe(0);
     expect(aggregateValue([], [], "development")).toBe(0);
     expect(aggregateValue([], [], "stability")).toBe(0);
+    expect(aggregateValue([], [], "migration")).toBe(0);
   });
 });
 

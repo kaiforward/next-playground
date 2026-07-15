@@ -82,12 +82,23 @@ The Voronoi-centric rewrite the rest of the map leans on.
   star dot **coloured by star type with a radial-gradient bloom** (replacing WS3's interim neutral slate),
   subdued under value modes.
 
-### WS2 · Map modes _(depends on WS1's mode framework)_
+### WS2 · Map modes _(P1 shipped: migration mode in, price cut; P2 flow-viz later)_
 
-- **`[Map 6]` Migration mode** — visualise population flow. **Open:** arrows (directional) vs. a per-cell
-  number. EU5-style arrows are the reference.
-- **`[Map 7]` Price as a first-class map mode**, not the current overlay.
-- **`[Map 8]` Logistics** — **open:** keep as an overlay or promote to a map mode.
+> **Detailed spec:** [ui-ws2-map-modes.md](./ui-ws2-map-modes.md) — the design pass split WS2 into P1 (value modes)
+> and P2 (flow-viz, a later dedicated pass). P1 shipped Migration; Price was built then cut. Summary below.
+
+- **`[Map 6]` Migration mode** → the **attractiveness heatmap** (the *pull*, reusing `migrationAttractiveness`),
+  colour-only red→green — matching Vic3/EU5, where attraction *is* the migration map mode. **P1 — SHIPPED.** The
+  realized **movement arrows** (built *inside* the mode, EU4-trade model) are the flow-viz half → **P2**.
+- **`[Map 7]` Price map mode** → **CUT (premature).** Built in P1, then removed: the buy/sell deal-quality framing
+  is a **trader hangover** with no consuming mechanic in the current grand-strategy form. The pre-existing price
+  **pill + overlay were removed too**; market data stays on the per-system Market panel. Revisit — as a
+  *scarcity/surplus* per-system read or a *faction-aggregate* "who has good X" read — when a faction-trading
+  mechanic exists.
+- **`[Map 8]` Logistics** → **stays an overlay**, its final fate settled holistically in the **P2** flow-viz pass
+  (the last remaining overlay; same problem the arrows solve).
+- **Event pills + overlay removed (P1, shipped)** for cleanliness — the Events page + data stay; events-as-mode
+  deferred to the events rework. The population ramp was also simplified to **two-pole red→green** (amber dropped).
 
 ### WS4 · System- & faction-detail redesign _(SHIPPED)_
 
@@ -130,13 +141,15 @@ vitals grid; the faction screen split into tabs; and faction/region roll-ups bec
   star-type colour in WS1 — no throwaway palette.
 - Stale industry labels `[Sys 2]`: **moved to WS4** (same surface, needs live calibration).
 
-## Open questions (resolve when the owning workstream starts)
+## Open questions
 
-- WS2 `[Map 6]`: migration mode — arrows vs. number.
-- WS2 `[Map 8]`: logistics — overlay vs. map mode.
+- WS2's open decisions are **resolved** — see [ui-ws2-map-modes.md](./ui-ws2-map-modes.md): migration mode = the
+  attractiveness heatmap (movement arrows → P2); logistics stays an overlay (fate settled in P2).
 
 ## Sequence
 
-WS3 (cleanup, shipped) → WS1 (map spine, shipped) → WS4 (system + faction detail, shipped) → WS2 (map modes,
-next). WS5 (gameplay) is independent and can slot in any time. Map-heavy workstreams (WS1, WS2, WS4 layout) get
-a browser-viewable HTML prototype approved before implementation.
+WS3 (cleanup, shipped) → WS1 (map spine, shipped) → WS4 (system + faction detail, shipped) → WS2 (map modes:
+P1 value modes shipped — migration in, price cut; P2 flow-viz later). WS5 (gameplay) is independent and can slot in any time. Map-heavy
+workstreams get a browser-viewable HTML prototype approved before implementation — **WS2 P1 is the exception**
+(it reuses the shipped value-choropleth + ramp, so there is no new visual to prototype; WS2 P2's flow-viz keeps
+its prototype).
