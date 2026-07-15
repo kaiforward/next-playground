@@ -37,8 +37,6 @@ export interface MarketTickEntry {
 }
 
 export interface EconomySimParams {
-  /** Noise as a fraction of the per-entry band width (maxStock - minStock). */
-  noiseFraction: number;
   /**
    * Operating-ceiling cover multiple on targetStock. The production self-limiting
    * factor saturates at holdCover × targetStock, not at maxStock. Passed in (not
@@ -88,9 +86,8 @@ export function outputUptake(stock: number, minStock: number, maxStock: number):
 export function simulateEconomyTick(
   markets: MarketTickEntry[],
   params: EconomySimParams,
-  rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { noiseFraction, holdCover } = params;
+  const { holdCover } = params;
 
   return markets.map((entry) => {
     let stock = entry.stock;
@@ -107,8 +104,7 @@ export function simulateEconomyTick(
       stock -= effectiveConsumption * selfLimitingFactor(stock, minStock, entry.targetStock, "consume");
     }
 
-    const noise = (rng() * 2 - 1) * noiseFraction * (maxStock - minStock) * (entry.volatility ?? 1);
-    stock = clamp(stock + noise, minStock, maxStock);
+    stock = clamp(stock, minStock, maxStock);
 
     return { ...entry, stock };
   });

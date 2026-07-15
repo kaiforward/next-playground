@@ -14,7 +14,6 @@ import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
-import { mulberry32 } from "@/lib/engine/universe-gen";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import type { TickContext } from "@/lib/tick/types";
@@ -34,7 +33,6 @@ const FIXTURE_BAND = marketBand({ demandRate: 1, storageCapacity: 120, priceFloo
 const ECON_PARAMS = {
   interval: 1,
   simParams: {
-    noiseFraction: 0, // deterministic — no noise
     holdCover: 1.3,
   },
   modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
@@ -125,7 +123,7 @@ describe("economy processor: strike suppression", () => {
     const calmWorld = new InMemoryEconomyWorld(
       { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, prodStock)], modifiers: [] },
     );
-    await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS });
     const calmStock = calmWorld.markets.find((m) => m.goodId === goodId)!.stock;
 
     // Run with unrest well above the strike threshold (0.5).
@@ -133,7 +131,7 @@ describe("economy processor: strike suppression", () => {
     const strikeWorld = new InMemoryEconomyWorld(
       { systems: [strikeSystem], markets: [makeMarket("sys-strike", goodId, prodStock)], modifiers: [] },
     );
-    await runEconomyProcessor(strikeWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(strikeWorld, makeCtx(0), { ...ECON_PARAMS });
     const strikeStock = strikeWorld.markets.find((m) => m.goodId === goodId)!.stock;
 
     // Production is suppressed so the struck producer accumulates less stock.
@@ -150,7 +148,7 @@ describe("economy processor: strike suppression", () => {
     const calmWorld = new InMemoryEconomyWorld(
       { systems: [calmSystem], markets: [makeMarket("sys-calm", goodId, prodStock)], modifiers: [] },
     );
-    await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(calmWorld, makeCtx(0), { ...ECON_PARAMS });
     const calmStock = calmWorld.markets.find((m) => m.goodId === goodId)!.stock;
 
     // Unrest just below threshold — should behave like unrest=0.
@@ -158,7 +156,7 @@ describe("economy processor: strike suppression", () => {
     const belowWorld = new InMemoryEconomyWorld(
       { systems: [belowSystem], markets: [makeMarket("sys-below", goodId, prodStock)], modifiers: [] },
     );
-    await runEconomyProcessor(belowWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(belowWorld, makeCtx(0), { ...ECON_PARAMS });
     const belowStock = belowWorld.markets.find((m) => m.goodId === goodId)!.stock;
 
     // No suppression applied — both stocks should match.
@@ -176,14 +174,14 @@ describe("economy processor: strike suppression", () => {
     const calmConsWorld = new InMemoryEconomyWorld(
       { systems: [calmConsumer], markets: [makeMarket("c-calm", goodId, highStock)], modifiers: [] },
     );
-    await runEconomyProcessor(calmConsWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(calmConsWorld, makeCtx(0), { ...ECON_PARAMS });
     const calmConsStock = calmConsWorld.markets.find((m) => m.goodId === goodId)!.stock;
 
     const strikeConsumer = makeConsumerSystem("c-strike", 0.9);
     const strikeConsWorld = new InMemoryEconomyWorld(
       { systems: [strikeConsumer], markets: [makeMarket("c-strike", goodId, highStock)], modifiers: [] },
     );
-    await runEconomyProcessor(strikeConsWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(strikeConsWorld, makeCtx(0), { ...ECON_PARAMS });
     const strikeConsStock = strikeConsWorld.markets.find((m) => m.goodId === goodId)!.stock;
 
     expect(strikeConsStock).toBeCloseTo(calmConsStock, 5);
@@ -200,7 +198,7 @@ describe("economy processor: dissatisfaction signal", () => {
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-c", "food", midStock)], modifiers: [] },
     );
-    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     expect(result.economySignals).toBeDefined();
     expect(result.economySignals!.dissatisfactionBySystem).toBeInstanceOf(Map);
   });
@@ -212,7 +210,7 @@ describe("economy processor: dissatisfaction signal", () => {
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-starved", "food", FIXTURE_BAND.minStock + 1)], modifiers: [] },
     );
-    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     const d = result.economySignals!.dissatisfactionBySystem.get("sys-starved") ?? 0;
     expect(d).toBeGreaterThan(0);
   });
@@ -223,7 +221,7 @@ describe("economy processor: dissatisfaction signal", () => {
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-fed", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
     );
-    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     const d = result.economySignals!.dissatisfactionBySystem.get("sys-fed") ?? 1;
     expect(d).toBeLessThan(0.1);
   });
@@ -234,7 +232,7 @@ describe("economy processor: dissatisfaction signal", () => {
     const starvedWorld = new InMemoryEconomyWorld(
       { systems: [starved], markets: [makeMarket("sys-s", "food", FIXTURE_BAND.minStock + 1)], modifiers: [] },
     );
-    const starvedResult = await runEconomyProcessor(starvedWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const starvedResult = await runEconomyProcessor(starvedWorld, makeCtx(0), { ...ECON_PARAMS });
     const dStarved = starvedResult.economySignals!.dissatisfactionBySystem.get("sys-s") ?? 0;
 
     const fed = makeConsumerSystem("sys-f", 0);
@@ -242,7 +240,7 @@ describe("economy processor: dissatisfaction signal", () => {
     const fedWorld = new InMemoryEconomyWorld(
       { systems: [fed], markets: [makeMarket("sys-f", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
     );
-    const fedResult = await runEconomyProcessor(fedWorld, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const fedResult = await runEconomyProcessor(fedWorld, makeCtx(0), { ...ECON_PARAMS });
     const dFed = fedResult.economySignals!.dissatisfactionBySystem.get("sys-f") ?? 0;
 
     expect(dStarved).toBeGreaterThan(dFed);
@@ -260,7 +258,7 @@ describe("economy processor: dissatisfaction signal", () => {
       markets: [makeMarket(systemId, "food", FIXTURE_BAND.targetStock)],
       modifiers: [],
     });
-    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     const d = result.economySignals?.dissatisfactionBySystem.get(systemId) ?? 1;
     expect(d).toBeLessThan(0.05); // at the anchor → content (was >> 0.05 pre-change)
   });
@@ -273,7 +271,7 @@ describe("economy processor: dissatisfaction signal", () => {
     const world = new InMemoryEconomyWorld(
       { systems: [producer], markets: [makeMarket("sys-p", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
     );
-    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     const d = result.economySignals!.dissatisfactionBySystem.get("sys-p") ?? 1;
     expect(d).toBeLessThan(0.05);
   });
@@ -290,7 +288,7 @@ describe("economy processor: monthly pulse coverage", () => {
 
     // Boundary tick (tick % interval === 0): the signal covers ALL systems.
     const wOn = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
-    const onResult = await runEconomyProcessor(wOn, makeCtx(interval), { ...ECON_PARAMS, interval, rng: mulberry32(1) });
+    const onResult = await runEconomyProcessor(wOn, makeCtx(interval), { ...ECON_PARAMS, interval });
     const processed = [...onResult.economySignals!.dissatisfactionBySystem.keys()].sort((a, b) => a.localeCompare(b));
     expect(processed).toEqual(sortedIds);
     expect(onResult.globalEvents!.economyTick![0].systemCount).toBe(systems.length);
@@ -298,7 +296,7 @@ describe("economy processor: monthly pulse coverage", () => {
     // Off-boundary ticks: no economySignals at all (decay + population then skip).
     for (let t = 1; t < interval; t++) {
       const wOff = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
-      const offResult = await runEconomyProcessor(wOff, makeCtx(t), { ...ECON_PARAMS, interval, rng: mulberry32(1) });
+      const offResult = await runEconomyProcessor(wOff, makeCtx(t), { ...ECON_PARAMS, interval });
       expect(offResult.economySignals).toBeUndefined();
       expect(offResult.globalEvents!.economyTick![0].systemCount).toBe(0);
     }
@@ -308,7 +306,7 @@ describe("economy processor: monthly pulse coverage", () => {
     const systems = Array.from({ length: 5 }, (_, i) => makeProducerSystem(`s-${i}`, 0));
     const markets = systems.map((s) => makeMarket(s.id, "food", 100));
     const world = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
-    const result = await runEconomyProcessor(world, makeCtx(3), { ...ECON_PARAMS, interval: 1, rng: mulberry32(1) });
+    const result = await runEconomyProcessor(world, makeCtx(3), { ...ECON_PARAMS, interval: 1 });
     expect(result.economySignals!.dissatisfactionBySystem.size).toBe(systems.length);
   });
 
@@ -325,13 +323,13 @@ describe("economy processor: monthly pulse coverage", () => {
     const w1 = new InMemoryEconomyWorld(
       { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
     );
-    await runEconomyProcessor(w1, makeCtx(0), { ...ECON_PARAMS, interval: 1, rng: mulberry32(7) });
+    await runEconomyProcessor(w1, makeCtx(0), { ...ECON_PARAMS, interval: 1 });
     const drain1 = start - w1.markets.find((m) => m.goodId === goodId)!.stock;
 
     const w2 = new InMemoryEconomyWorld(
       { systems: [makeConsumerSystem("c", 0)], markets: [makeMarket("c", goodId, start)], modifiers: [] },
     );
-    await runEconomyProcessor(w2, makeCtx(0), { ...ECON_PARAMS, interval: 2, rng: mulberry32(7) });
+    await runEconomyProcessor(w2, makeCtx(0), { ...ECON_PARAMS, interval: 2 });
     const drain2 = start - w2.markets.find((m) => m.goodId === goodId)!.stock;
 
     // Doubling the interval doubles the per-resolution step (catchUpFactor(2)/catchUpFactor(1) = 2).
@@ -403,8 +401,8 @@ describe("economy processor: supply-chain input-gating", () => {
       modifiers: [],
     });
 
-    await runEconomyProcessor(worldA, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
-    await runEconomyProcessor(worldB, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(42) });
+    await runEconomyProcessor(worldA, makeCtx(0), { ...ECON_PARAMS });
+    await runEconomyProcessor(worldB, makeCtx(0), { ...ECON_PARAMS });
 
     const metalsA = worldA.markets.find((m) => m.goodId === "metals")!.stock;
     const metalsB = worldB.markets.find((m) => m.goodId === "metals")!.stock;
@@ -428,7 +426,7 @@ describe("economy processor: outputUptake signal", () => {
       markets: [makeMarket("p-high", goodId, FIXTURE_BAND.maxStock - 1)],
       modifiers: [],
     });
-    const r1 = await runEconomyProcessor(pinned, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const r1 = await runEconomyProcessor(pinned, makeCtx(0), { ...ECON_PARAMS });
     const uHigh = r1.economySignals!.outputUptakeBySystem.get("p-high")!.get(goodId)!;
 
     const draining = new InMemoryEconomyWorld({
@@ -436,7 +434,7 @@ describe("economy processor: outputUptake signal", () => {
       markets: [makeMarket("p-low", goodId, FIXTURE_BAND.minStock + 1)],
       modifiers: [],
     });
-    const r2 = await runEconomyProcessor(draining, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const r2 = await runEconomyProcessor(draining, makeCtx(0), { ...ECON_PARAMS });
     const uLow = r2.economySignals!.outputUptakeBySystem.get("p-low")!.get(goodId)!;
 
     expect(uHigh).toBeLessThan(0.2);
@@ -450,7 +448,7 @@ describe("economy processor: outputUptake signal", () => {
       markets: [makeMarket("c", "food", 100)],
       modifiers: [],
     });
-    const r = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, rng: mulberry32(1) });
+    const r = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     expect(r.economySignals!.outputUptakeBySystem.get("c")).toBeUndefined();
   });
 });

@@ -39,7 +39,7 @@ export async function runEconomyProcessor(
   ctx: TickContext,
   params: EconomyProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng, interval, simParams, modifierCaps, strikeParams } = params;
+  const { interval, simParams, modifierCaps, strikeParams } = params;
 
   const allSystemIds = await world.getSystemIds();
   const { start, end } = pulseShard(allSystemIds.length, ctx.tick, interval);
@@ -115,7 +115,7 @@ export async function runEconomyProcessor(
 
   const tickEntries: MarketTickEntry[] = resolved.map((r) => r.entry);
   const entrySystemIds = markets.map((m) => m.systemId);
-  const simulated = simulateCoupledEconomyTick(tickEntries, entrySystemIds, simParams, rng);
+  const simulated = simulateCoupledEconomyTick(tickEntries, entrySystemIds, simParams);
 
   // anchorMult comes straight off the resolved tick — the builder already
   // aggregated the system's modifiers, so there's no second aggregation pass.
