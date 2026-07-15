@@ -100,7 +100,7 @@ function DemandChart({ demand }: { demand: PopulationDemandEntry[] }) {
   return (
     <>
       <DemandLegend />
-      <div className="max-h-72 space-y-1 overflow-y-auto">
+      <div className="space-y-1">
         {bars.map((b) => (
           <DemandBarRow key={b.goodId} bar={b} />
         ))}
