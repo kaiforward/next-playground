@@ -77,31 +77,29 @@ and never reported that its seed fired zero transfers in 500 ticks.
 
 This is the same shape as the ECONOMY_SCALE gap below: the harness is correct, and silent about it.
 
-### Live fossils of the split: unreachable sim-only branches in the events processor
+### Live fossils of the split: the events processor's injection path (resolved in PR1)
 
-Found while fixing `events-world.ts`'s doc rot in PR1. `EventsProcessorParams` has two fields whose
-non-default values **no caller can produce** — leftovers from when the sim was a separate
-orchestration that could inject events and suppress spawning:
+Found while fixing `events-world.ts`'s doc rot. `EventsProcessorParams` had two fields whose
+non-default values **no caller could produce** — leftovers from when the sim was a separate
+orchestration that could inject events and suppress spawning. The doc comments dressed this up as a
+real sim/live difference ("Sim-only injections to apply this tick. Live always [] / undefined."),
+which is exactly the false belief this project exists to kill.
 
-- **`injections`** — `runWorldTick` never passes it. The `if (injections && injections.length > 0)`
-  branch (`lib/tick/processors/events.ts:268-270`) is therefore dead in the game; only
-  `events.test.ts:224,242` reach it.
-- **`spawnEnabled`** — `tick.ts:547` always passes `true`. The `false` path (`events.ts:309`) is
-  reached only by `events.test.ts:132`.
+- **`injections`** — **deleted in PR1.** `runWorldTick` never passed it, so the 46-line branch was
+  dead in the game; only two tests reached it. One of those tests defended against "what a malformed
+  sim config could submit" — the config channel PR1 deleted — using an `as never` cast to fabricate
+  an input no caller could produce. The branch also carried a postfix `!` in production code. Both
+  are banned by CLAUDE.md, and both lived in code nothing could run. Removal was confirmed
+  byte-identical.
+- **`spawnEnabled` — kept, deliberately.** Not dead, just always-`true`: the param is read on every
+  spawn tick and only its `false` value is unreachable. A player-facing "disable random events"
+  toggle is plausible once the Phase 3 seat exists, so hardcoding the branch now and re-adding it
+  later is churn. An always-true param is the smaller honest cost. Its doc comment says so plainly.
 
-PR1 made this visible by replacing the doc comments that dressed it up as a sim/live difference
-("Sim-only injections to apply this tick. Live always [] / undefined."). The comments now state
-plainly that only tests pass these.
-
-**Decision needed before PR3** — the two are not alike:
-
-- Deleting `injections` and its branch is clearly right: it is dead in production, and the two tests
-  exercising it test a capability nothing has (the `sim-constants.test.ts` pattern exactly). Removing
-  it is byte-identical-safe, since the branch never runs.
-- Deleting `spawnEnabled` is arguable. It is always-true today, but a player-facing "disable random
-  events" toggle is plausible once the Phase 3 seat exists. Hardcoding the branch now and re-adding
-  it later is churn; keeping an always-true param is a small honest cost. **Recommend keeping
-  `spawnEnabled`, deleting `injections`.**
+**The generalisable lesson for PR2–4:** doc rot is not cosmetic here. Each "Live: X. Sim: Y." comment
+marks a place where the split left real unreachable code behind, and the comment is what stopped
+anyone noticing. Fix the comment honestly and the dead code becomes self-evident. Expect more of this
+when PR3 sweeps the remaining rot (`lib/engine/tick.ts:115`, `adapters/memory/events.ts:27`).
 
 ### Dead code
 

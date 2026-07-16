@@ -120,14 +120,4 @@ export interface EventsProcessorParams {
   definitions: Record<EventTypeId, import("@/lib/constants/events").EventDefinition>;
   /** Gates random spawning on a spawn tick. `runWorldTick` always passes true; only tests pass false. */
   spawnEnabled: boolean;
-  /** Specific events to spawn this tick. `runWorldTick` never passes this — tests only. */
-  injections?: InjectionRequest[];
-}
-
-/** Request to spawn a specific event at a system this tick. */
-export interface InjectionRequest {
-  type: EventTypeId;
-  systemId: string;
-  regionId: string;
-  severity: number;
 }
