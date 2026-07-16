@@ -1,8 +1,8 @@
 /**
  * EventsWorld — data interface for the events processor.
  *
- * Adapters in `lib/tick/adapters/{prisma,memory}/events.ts` implement it.
- * See `docs/design/active/processor-architecture.md` and
+ * The in-memory adapter in `lib/tick/adapters/memory/events.ts` implements it.
+ * See `docs/active/engineering/processor-architecture.md` and
  * `lib/tick/world/migration-world.ts` for the broader pattern.
  */
 
@@ -78,8 +78,8 @@ export interface EventsWorld {
   getSystems(): Promise<SystemWithName[]>;
 
   /**
-   * Neighbors of each given system. Bulk-fetched (single DB query in live;
-   * filter+map in memory) — keyed by source systemId.
+   * Neighbors of each given system. Bulk-fetched in one filter+map pass —
+   * keyed by source systemId.
    */
   getNeighborsBySystem(
     systemIds: string[],

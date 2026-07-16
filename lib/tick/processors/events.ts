@@ -37,10 +37,9 @@ import type {
 } from "@/lib/tick/world/events-world";
 
 /**
- * Expand ShockRow[] for a single system into SystemShock[]. The processor
- * body owns shock-mode handling now — the live adapter used to expand inline,
- * the sim used to drop the mode entirely. Both bugs go away once the work
- * happens here.
+ * Expand a system's ShockRow[] into SystemShock[], preserving each row's shock
+ * mode. Yields nothing for a null systemId (a region-scoped event) or an empty
+ * row set.
  */
 function expandShocks(rows: ShockRow[], systemId: string | null): SystemShock[] {
   if (!systemId || rows.length === 0) return [];

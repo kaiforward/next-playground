@@ -96,12 +96,6 @@ Audited against current code. `file:line` are the definition sites.
 
 Seeded stock and industrial input-demand scale automatically (derived from the above) — no edit.
 
-### Sim trading-pressure (keeps the knob complete)
-
-| Symbol | File | Note |
-|---|---|---|
-| `bots.startingCredits` (500) | `lib/engine/simulator/constants.ts` | Scaled `× S` explicitly so bots can buy the ×S economy at invariant prices. |
-
 ### Deliberately NOT scaled
 
 | Symbol | File | Why |
