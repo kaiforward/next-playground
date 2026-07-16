@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { applyDevelopments, applyBuildingIncreases } from "@/lib/world/tick";
 import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
-import type { SimSystem } from "@/lib/engine/simulator/types";
+import type { TickSystem } from "@/lib/tick/rows";
 import type { SystemDevelopment, BuildBuildingUpdate } from "@/lib/tick/world/directed-build-world";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { housingPopCap } from "@/lib/engine/industry";
 
-/** Minimal valid SimSystem fixture — only the fields `applyDevelopments` reads/writes matter for
+/** Minimal valid TickSystem fixture — only the fields `applyDevelopments` reads/writes matter for
  * this suite; the rest are innocuous placeholders that still type-check. */
-function makeSystem(id: string, population: number): SimSystem {
+function makeSystem(id: string, population: number): TickSystem {
   return {
     id,
     name: id,
@@ -29,7 +29,7 @@ function makeSystem(id: string, population: number): SimSystem {
   };
 }
 
-function totalPopulation(systems: SimSystem[]): number {
+function totalPopulation(systems: TickSystem[]): number {
   return systems.reduce((n, s) => n + s.population, 0);
 }
 
@@ -122,7 +122,7 @@ describe("applyDevelopments", () => {
 });
 
 describe("applyBuildingIncreases — popCap tracks built housing", () => {
-  function developedColony(id: string, housingLevels: number, population: number): SimSystem {
+  function developedColony(id: string, housingLevels: number, population: number): TickSystem {
     const s = makeSystem(id, population);
     s.control = "developed";
     s.buildings = { [HOUSING_TYPE]: housingLevels };

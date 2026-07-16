@@ -13,37 +13,35 @@ import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { EventDefinition, EventTypeId } from "@/lib/constants/events";
 import type {
-  SimConnection,
-  SimEvent,
-  SimMarketEntry,
-  SimSystem,
-} from "@/lib/engine/simulator/types";
+  TickConnection,
+  TickEvent,
+  TickMarket,
+  TickSystem,
+} from "@/lib/tick/rows";
 
 /**
- * In-memory adapter. Owns mutable slices of the simulator's world for the
- * duration of one `runEventsProcessor` call; the caller reads the final
- * state via the public arrays after the processor returns.
+ * In-memory adapter. Owns mutable slices of the tick's rows for the duration of
+ * one `runEventsProcessor` call; the caller reads the final state via the public
+ * arrays after the processor returns.
  *
- * Modifiers in SimWorld don't carry an eventId, so when an event advances
- * or expires we rebuild the modifier set from the remaining active events.
- * Matches Prisma's `onDelete: Cascade` semantics for free and avoids the
- * sim's previous end-of-tick "rebuild all modifiers" pass.
+ * Modifier rows carry no eventId, so when an event advances or expires the
+ * modifier set is rebuilt from the remaining active events.
  */
 export class InMemoryEventsWorld implements EventsWorld {
-  events: SimEvent[];
+  events: TickEvent[];
   modifiers: ModifierRow[];
-  markets: SimMarketEntry[];
+  markets: TickMarket[];
   nextId: number;
 
   constructor(
     initial: {
-      events: SimEvent[];
+      events: TickEvent[];
       modifiers: ModifierRow[];
-      markets: SimMarketEntry[];
+      markets: TickMarket[];
       nextId: number;
     },
-    private readonly systems: SimSystem[],
-    private readonly connections: SimConnection[],
+    private readonly systems: TickSystem[],
+    private readonly connections: TickConnection[],
     private readonly definitions: Record<EventTypeId, EventDefinition>,
   ) {
     this.events = [...initial.events];
@@ -170,7 +168,7 @@ export class InMemoryEventsWorld implements EventsWorld {
   applyShocks(shocks: SystemShock[]): Promise<number> {
     if (shocks.length === 0) return Promise.resolve(0);
 
-    const marketByKey = new Map<string, SimMarketEntry>();
+    const marketByKey = new Map<string, TickMarket>();
     for (const m of this.markets) {
       marketByKey.set(`${m.systemId}|${m.goodId}`, m);
     }
@@ -180,7 +178,7 @@ export class InMemoryEventsWorld implements EventsWorld {
     // ambient flavour, but they can't unfreeze an inert market.
     const controlBySystem = new Map(this.systems.map((s) => [s.id, s.control]));
 
-    const touched = new Set<SimMarketEntry>();
+    const touched = new Set<TickMarket>();
     for (const shock of shocks) {
       const control = controlBySystem.get(shock.systemId);
       if (control === undefined || !isEconomicallyActive(control)) continue;

@@ -67,8 +67,8 @@ export interface TickProcessorResult {
   economySignals?: EconomySignals;
 }
 
-/** The full event payload emitted by one tick's run. */
-export interface TickEventRaw {
+/** The full payload one tick's run hands to the broadcast layer. */
+export interface TickBroadcastRaw {
   currentTick: number;
   /** Merged global events from all processors. */
   events: Partial<GlobalEventMap>;

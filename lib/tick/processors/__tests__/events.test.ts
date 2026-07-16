@@ -6,11 +6,11 @@ import { mulberry32 } from "@/lib/engine/universe-gen";
 import type { EventsProcessorParams } from "@/lib/tick/world/events-world";
 import type { TickContext } from "@/lib/tick/types";
 import type {
-  SimConnection,
-  SimEvent,
-  SimMarketEntry,
-  SimSystem,
-} from "@/lib/engine/simulator/types";
+  TickConnection,
+  TickEvent,
+  TickMarket,
+  TickSystem,
+} from "@/lib/tick/rows";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SystemShock } from "@/lib/tick/world/events-world";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
@@ -37,8 +37,8 @@ function makeParams(
 function makeSystem(
   id: string,
   regionId: string,
-  control: SimSystem["control"] = "developed",
-): SimSystem {
+  control: TickSystem["control"] = "developed",
+): TickSystem {
   return {
     id,
     name: id.toUpperCase(),
@@ -63,7 +63,7 @@ function makeMarket(
   systemId: string,
   goodId: string,
   stock: number,
-): SimMarketEntry {
+): TickMarket {
   return {
     systemId,
     goodId,
@@ -78,10 +78,10 @@ function makeMarket(
 }
 
 function makeWorld(opts: {
-  systems: SimSystem[];
-  connections?: SimConnection[];
-  events?: SimEvent[];
-  markets?: SimMarketEntry[];
+  systems: TickSystem[];
+  connections?: TickConnection[];
+  events?: TickEvent[];
+  markets?: TickMarket[];
   modifiers?: ModifierRow[];
 }) {
   return new InMemoryEventsWorld(
@@ -145,7 +145,7 @@ describe("runEventsProcessor", () => {
   });
 
   it("expires an event whose final phase has elapsed", async () => {
-    const ev: SimEvent = {
+    const ev: TickEvent = {
       id: "ev1",
       type: "trade_festival",
       // trade_festival has phases [setup, festival]; "festival" is the last.
@@ -170,14 +170,14 @@ describe("runEventsProcessor", () => {
     expect(result.globalEvents?.eventNotifications?.length).toBeGreaterThan(0);
   });
 
-  it("applies percentage-mode shocks (sim used to ignore mode)", async () => {
+  it("applies percentage-mode shocks", async () => {
     // Build a synthetic event whose next-phase shock is percentage-mode.
     // We construct it manually rather than waiting for a real spawn so the
     // test stays focused on shock-mode handling.
     const def = EVENT_DEFINITIONS.trade_festival;
     const firstPhase = def.phases[0];
 
-    const ev: SimEvent = {
+    const ev: TickEvent = {
       id: "ev1",
       type: "trade_festival",
       phase: firstPhase.name,
@@ -201,8 +201,8 @@ describe("runEventsProcessor", () => {
 
     // Whether shocks fired depends on the canonical event def's shock list.
     // What we're asserting here is that the processor completes without
-    // crashing on percentage-mode shocks (the old sim used to silently
-    // mis-apply them). Market values must be within their per-market band.
+    // crashing on percentage-mode shocks. Market values must be within
+    // their per-market band.
     for (const m of world.markets) {
       const band = marketBandForRow(m, m);
       expect(m.stock).toBeGreaterThanOrEqual(band.minStock);
@@ -214,12 +214,12 @@ describe("runEventsProcessor", () => {
     // A pact event with phaseDuration=1 would normally advance/expire on the
     // next tick. The events processor must leave it alone — the relations
     // processor owns expiry via metadata.expiresAtTick.
-    const pact: SimEvent = {
+    const pact: TickEvent = {
       id: "ev-pact",
       type: "pact_under_negotiation",
       phase: "negotiation",
       // Relations-owned events have no system/region target; placeholders here
-      // satisfy the SimEvent type without exercising any per-system logic.
+      // satisfy the TickEvent type without exercising any per-system logic.
       systemId: "",
       regionId: "",
       startTick: 0,
@@ -228,12 +228,12 @@ describe("runEventsProcessor", () => {
       severity: 1,
       sourceEventId: null,
     };
-    const dissolution: SimEvent = {
+    const dissolution: TickEvent = {
       id: "ev-diss",
       type: "alliance_dissolved",
       phase: "dissolving",
       // Relations-owned events have no system/region target; placeholders here
-      // satisfy the SimEvent type without exercising any per-system logic.
+      // satisfy the TickEvent type without exercising any per-system logic.
       systemId: "",
       regionId: "",
       startTick: 0,

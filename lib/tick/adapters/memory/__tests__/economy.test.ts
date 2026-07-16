@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { buildingProduction, computeLabourState } from "@/lib/engine/industry";
 import { makeResourceVector, unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
-import type { SimSystem, SimMarketEntry } from "@/lib/engine/simulator/types";
+import type { TickSystem, TickMarket } from "@/lib/tick/rows";
 
-function sys(overrides: Partial<SimSystem>): SimSystem {
+function sys(overrides: Partial<TickSystem>): TickSystem {
   return {
     id: "s1", name: "S1", economyType: "extraction", regionId: "r1",
     factionId: "f1", control: "developed", governmentType: "frontier",
@@ -15,7 +15,7 @@ function sys(overrides: Partial<SimSystem>): SimSystem {
   };
 }
 
-const market = (goodId: string): SimMarketEntry => ({
+const market = (goodId: string): TickMarket => ({
   systemId: "s1", goodId, basePrice: 35, stock: 100, anchorMult: 1,
   demandRate: 1, priceFloor: 0.5, priceCeiling: 2, storageCapacity: 0,
 });
@@ -81,7 +81,7 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
   it("does not scale tier-1 output by tier-0 yields (yield term is tier-0 only)", async () => {
     // 'metals' is a tier-1 good; its production must be invariant to the ore yield.
     // vocational_school licenses metals' skill1 demand (5×7=35 ≪ 150) so it isn't skill-gated.
-    const metalsSys = (yields: ReturnType<typeof unitResourceVector>): SimSystem =>
+    const metalsSys = (yields: ReturnType<typeof unitResourceVector>): TickSystem =>
       sys({ economyType: "industrial", buildings: { metals: 5, vocational_school: 1 }, yields });
     const unitYield = new InMemoryEconomyWorld(
       { systems: [metalsSys(unitResourceVector())], markets: [market("metals")], modifiers: [] },

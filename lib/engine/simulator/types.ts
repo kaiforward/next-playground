@@ -1,89 +1,15 @@
 /**
- * Simulator types — shape types shared by the tick processors' in-memory
- * adapters (`lib/tick/adapters/memory/*`), plus the calibration harness's own
- * config/results/health types.
+ * Calibration-harness types — the config it takes, the results it returns, and
+ * the market/event/region health shapes its analyzers compute.
  *
- * The bot/player/world-orchestration types that used to live here (`SimWorld`,
- * `SimShip`, `SimPlayer`, `BotConfig`, per-tick trade metrics, …) died with the
- * bot layer — `World` (`lib/world/types.ts`) is the one world model now, and
- * `runWorldTick` (`lib/world/tick.ts`) is the one tick pipeline. What remains
- * here are the flat row shapes the shared memory adapters require (still
- * distinct from `World*` rows — see `lib/world/tick.ts`'s join helpers for the
- * bridge) and the harness's own config/results types.
+ * The tick's own row types live in `lib/tick/rows.ts`; the one world model is
+ * `World` (`lib/world/types.ts`) and the one tick pipeline is `runWorldTick`
+ * (`lib/world/tick.ts`).
  */
 
 import type { EventTypeId } from "@/lib/constants/events";
-import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
-import type { World, SystemControl } from "@/lib/world/types";
-
-// ── Adapter row shapes ──────────────────────────────────────────
-
-export interface SimSystem {
-  id: string;
-  name: string;
-  economyType: EconomyType;
-  regionId: string;
-  /** Owning faction's stable id, or null for independent systems. Drives the faction-bounded flow topology. */
-  factionId: string | null;
-  /** Three-state ownership — gates development builds and the claim/develop expansion steps. */
-  control: SystemControl;
-  /** Owning faction's government — sourced per-system. */
-  governmentType: GovernmentType;
-  /** Abstract population magnitude — drives labour + per-capita consumption. */
-  population: number;
-  /** Maximum sustainable population (logistic growth cap). */
-  popCap: number;
-  /** Unrest accumulator (0…1) — integral of demand-weighted dissatisfaction. */
-  unrest: number;
-  /** Seeded industrial base — buildingType → whole-integer level count. */
-  buildings: Record<string, number>;
-  /** Per-buildingType sustained-idle countdown (parallel to `buildings`); the decay buffer's state. */
-  buildingIdleMonths: Record<string, number>;
-  /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
-  yields: ResourceVector;
-  /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */
-  slotCap: ResourceVector;
-  /** Body-derived fungible build space — tier-1+ factories + housing draw here. */
-  generalSpace: number;
-  /** Habitable subset of build space — additionally caps housing. */
-  habitableSpace: number;
-}
-
-export interface SimConnection {
-  fromSystemId: string;
-  toSystemId: string;
-  fuelCost: number;
-}
-
-export interface SimMarketEntry {
-  systemId: string;
-  goodId: string;
-  basePrice: number;
-  stock: number;
-  /** Stored pricing-anchor multiplier (1 = none); written by the economy processor. */
-  anchorMult: number;
-  /** Stored local demand rate (civilian demand — per-capita baseline + skilled baskets — floored at seed). */
-  demandRate: number;
-  priceFloor: number;
-  priceCeiling: number;
-  /** Built infrastructure storage capacity for this good — the infrastructure term of maxStock. */
-  storageCapacity: number;
-}
-
-export interface SimEvent {
-  id: string;
-  type: EventTypeId;
-  phase: string;
-  /** Target system, or null for region/pair-level events (e.g. relations-owned events). */
-  systemId: string | null;
-  /** Target region, or null. */
-  regionId: string | null;
-  startTick: number;
-  phaseStartTick: number;
-  phaseDuration: number;
-  severity: number;
-  sourceEventId: string | null;
-}
+import type { GovernmentType } from "@/lib/types/game";
+import type { World } from "@/lib/world/types";
 
 // ── Calibration harness config ──────────────────────────────────
 

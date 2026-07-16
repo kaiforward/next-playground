@@ -5,17 +5,17 @@ import type {
   IdleMonthsUpdate,
   PopCapUpdate,
 } from "@/lib/tick/world/infrastructure-world";
-import type { SimSystem } from "@/lib/engine/simulator/types";
+import type { TickSystem } from "@/lib/tick/rows";
 
 /**
  * In-memory adapter for the infrastructure-decay processor. Owns a mutable copy of
- * the simulator's systems for one processor run; the caller reads `systems` back
+ * the tick's system rows for one processor run; the caller reads `systems` back
  * after the processor returns. Decays are downward-only and floored at 0.
  */
 export class InMemoryInfrastructureWorld implements InfrastructureWorld {
-  systems: SimSystem[];
+  systems: TickSystem[];
 
-  constructor(initial: { systems: SimSystem[] }) {
+  constructor(initial: { systems: TickSystem[] }) {
     this.systems = initial.systems.map((s) => ({
       ...s,
       buildings: { ...s.buildings },

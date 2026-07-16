@@ -1,19 +1,19 @@
 import type {
   PopulationStateView, PopulationUpdate, PopulationWorld,
 } from "@/lib/tick/world/population-world";
-import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
+import type { TickMarket, TickSystem } from "@/lib/tick/rows";
 import type { ResourceVector } from "@/lib/types/game";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { unitResourceVector } from "@/lib/engine/resources";
 
-/** In-memory adapter for the population processor (sim + unit tests). */
+/** In-memory adapter for the population processor (harness + unit tests). */
 export class InMemoryPopulationWorld implements PopulationWorld {
-  systems: SimSystem[];
-  markets: SimMarketEntry[];
+  systems: TickSystem[];
+  markets: TickMarket[];
 
-  constructor(initial: { systems: SimSystem[]; markets: SimMarketEntry[] }) {
+  constructor(initial: { systems: TickSystem[]; markets: TickMarket[] }) {
     this.systems = initial.systems.map((s) => ({ ...s }));
     this.markets = initial.markets.map((m) => ({ ...m }));
   }

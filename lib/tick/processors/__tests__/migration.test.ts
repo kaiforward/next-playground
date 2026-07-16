@@ -3,7 +3,7 @@ import { runMigrationProcessor } from "../migration";
 import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { TickContext } from "@/lib/tick/types";
-import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
+import type { TickConnection, TickSystem } from "@/lib/tick/rows";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 const OFF = 100; // employedGradientThreshold above any achievable |gradient| ⇒ staffed migration off
@@ -23,7 +23,7 @@ const EDGE_TICK = 0;
 // 1000 jobs — enough headroom for the destination to absorb the migrants each case moves.
 const JOBS = { food: 100 };
 
-function sys(id: string, factionId: string | null, population: number, popCap: number, unrest: number, buildings: Record<string, number> = {}): SimSystem {
+function sys(id: string, factionId: string | null, population: number, popCap: number, unrest: number, buildings: Record<string, number> = {}): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId,
     control: factionId ? "developed" : "unclaimed", governmentType: "federation",
@@ -31,7 +31,7 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
-const conn = (a: string, b: string, fuelCost = 10): SimConnection => ({ fromSystemId: a, toSystemId: b, fuelCost });
+const conn = (a: string, b: string, fuelCost = 10): TickConnection => ({ fromSystemId: a, toSystemId: b, fuelCost });
 const ctx = (tick: number): TickContext => ({ tick, results: new Map() });
 
 describe("migration processor", () => {

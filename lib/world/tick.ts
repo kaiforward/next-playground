@@ -72,7 +72,7 @@ import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
 import type {
   TickContext,
-  TickEventRaw,
+  TickBroadcastRaw,
   GlobalEventMap,
 } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
@@ -85,10 +85,10 @@ import type {
 } from "@/lib/tick/world/directed-build-world";
 
 import type {
-  SimConnection,
-  SimMarketEntry,
-  SimSystem,
-} from "@/lib/engine/simulator/types";
+  TickConnection,
+  TickMarket,
+  TickSystem,
+} from "@/lib/tick/rows";
 import type {
   World,
   WorldBuilding,
@@ -112,15 +112,15 @@ export function tickRng(seed: number, tick: number): RNG {
   return mulberry32((seed ^ Math.imul(tick + 1, 0x9e3779b1)) >>> 0);
 }
 
-// ── World → Sim row joins (World omits catalog/derived data the shared
+// ── World → tick row joins (World omits catalog/derived data the shared
 // adapters expect inlined) ──────────────────────────────────────
 
 /**
- * Exported alongside `toSimSystems`/`toSimMarkets` — the calibration harness
+ * Exported alongside `toTickSystems`/`toTickMarkets` — the calibration harness
  * (`lib/engine/simulator/runner.ts`) reuses these same joins to build the
- * Sim-shaped views its (pre-existing) health analyzers read.
+ * tick-row views its (pre-existing) health analyzers read.
  */
-export function toSimConnections(world: World): SimConnection[] {
+export function toTickConnections(world: World): TickConnection[] {
   return world.connections.map((c) => ({
     fromSystemId: c.fromId,
     toSystemId: c.toId,
@@ -130,10 +130,10 @@ export function toSimConnections(world: World): SimConnection[] {
 
 /**
  * Join a system's owning faction's governmentType and its building roster
- * (separate flat World arrays) onto one SimSystem row per system — the
+ * (separate flat World arrays) onto one TickSystem row per system — the
  * shape the in-memory tick adapters (`lib/tick/adapters/memory/*`) expect.
  */
-export function toSimSystems(world: World): SimSystem[] {
+export function toTickSystems(world: World): TickSystem[] {
   const governmentByFaction = new Map<string, GovernmentType>(
     world.factions.map((f) => [f.id, f.governmentType]),
   );
@@ -189,7 +189,7 @@ export function toSimSystems(world: World): SimSystem[] {
 }
 
 /** Join each market row's good-catalog data (basePrice/floor/ceiling — code constants, not World state). */
-export function toSimMarkets(world: World): SimMarketEntry[] {
+export function toTickMarkets(world: World): TickMarket[] {
   return world.markets.map((m) => {
     const good = GOODS[m.goodId];
     return {
@@ -206,31 +206,31 @@ export function toSimMarkets(world: World): SimMarketEntry[] {
   });
 }
 
-// ── Sim → World row merges (write only the fields tick processors mutate;
+// ── Tick → World row merges (write only the fields tick processors mutate;
 // everything else is immutable substrate) ──────────────────────
 
-function mergeSystemsIntoWorld(worldSystems: WorldSystem[], simSystems: SimSystem[]): WorldSystem[] {
-  const byId = new Map(simSystems.map((s) => [s.id, s]));
+function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSystem[]): WorldSystem[] {
+  const byId = new Map(tickSystems.map((s) => [s.id, s]));
   return worldSystems.map((s) => {
-    const sim = byId.get(s.id);
-    if (!sim) return s;
+    const tickSystem = byId.get(s.id);
+    if (!tickSystem) return s;
     // factionId + control propagate so the claim/develop expansion steps persist; for every
     // unchanged system they equal the original.
     return {
       ...s,
-      factionId: sim.factionId,
-      control: sim.control,
-      population: sim.population,
-      popCap: sim.popCap,
-      unrest: sim.unrest,
+      factionId: tickSystem.factionId,
+      control: tickSystem.control,
+      population: tickSystem.population,
+      popCap: tickSystem.popCap,
+      unrest: tickSystem.unrest,
     };
   });
 }
 
 /** Flatten each system's building Record back to World's one-row-per-(system,type) shape. */
-function flattenBuildings(simSystems: SimSystem[]): WorldBuilding[] {
+function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
   const rows: WorldBuilding[] = [];
-  for (const s of simSystems) {
+  for (const s of tickSystems) {
     for (const [buildingType, count] of Object.entries(s.buildings)) {
       if (count > 0) {
         rows.push({ systemId: s.id, buildingType, count, idleMonths: s.buildingIdleMonths[buildingType] ?? 0 });
@@ -240,19 +240,19 @@ function flattenBuildings(simSystems: SimSystem[]): WorldBuilding[] {
   return rows;
 }
 
-function mergeMarketsIntoWorld(worldMarkets: WorldMarket[], simMarkets: SimMarketEntry[]): WorldMarket[] {
-  const byKey = new Map(simMarkets.map((m) => [`${m.systemId}|${m.goodId}`, m]));
+function mergeMarketsIntoWorld(worldMarkets: WorldMarket[], tickMarkets: TickMarket[]): WorldMarket[] {
+  const byKey = new Map(tickMarkets.map((m) => [`${m.systemId}|${m.goodId}`, m]));
   return worldMarkets.map((m) => {
-    const sim = byKey.get(`${m.systemId}|${m.goodId}`);
-    if (!sim) return m;
-    return { ...m, stock: sim.stock, anchorMult: sim.anchorMult, demandRate: sim.demandRate };
+    const tickMarket = byKey.get(`${m.systemId}|${m.goodId}`);
+    if (!tickMarket) return m;
+    return { ...m, stock: tickMarket.stock, anchorMult: tickMarket.anchorMult, demandRate: tickMarket.demandRate };
   });
 }
 
 // ── Directed-logistics / directed-build row builders (per-system rows the
 // two planners share) ───────────────────────────────────────────
 
-function marketRowsBySystem(markets: SimMarketEntry[]): Map<string, MarketRowForLogistics[]> {
+function marketRowsBySystem(markets: TickMarket[]): Map<string, MarketRowForLogistics[]> {
   const bySystem = new Map<string, MarketRowForLogistics[]>();
   for (const m of markets) {
     const row: MarketRowForLogistics = {
@@ -274,7 +274,7 @@ function marketRowsBySystem(markets: SimMarketEntry[]): Map<string, MarketRowFor
 }
 
 function buildLogisticsRows(
-  systems: SimSystem[],
+  systems: TickSystem[],
   marketsBySystem: Map<string, MarketRowForLogistics[]>,
 ): SystemLogisticsRow[] {
   return systems.map((s) => ({
@@ -288,7 +288,7 @@ function buildLogisticsRows(
 }
 
 function buildBuildRows(
-  systems: SimSystem[],
+  systems: TickSystem[],
   marketsBySystem: Map<string, MarketRowForLogistics[]>,
 ): SystemBuildRow[] {
   return systems.map((s) => ({
@@ -306,7 +306,7 @@ function buildBuildRows(
   }));
 }
 
-function applyStockUpdates(markets: SimMarketEntry[], updates: Map<string, number>): SimMarketEntry[] {
+function applyStockUpdates(markets: TickMarket[], updates: Map<string, number>): TickMarket[] {
   if (updates.size === 0) return markets;
   return markets.map((m) => {
     const newStock = updates.get(`${m.systemId}|${m.goodId}`);
@@ -345,7 +345,7 @@ function patchMarketRowStocks(
   return patched;
 }
 
-export function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuildingUpdate[]): SimSystem[] {
+export function applyBuildingIncreases(systems: TickSystem[], updates: BuildBuildingUpdate[]): TickSystem[] {
   if (updates.length === 0) return systems;
   const bySystem = new Map<string, Map<string, number>>();
   for (const u of updates) {
@@ -368,19 +368,19 @@ export function applyBuildingIncreases(systems: SimSystem[], updates: BuildBuild
 }
 
 /** Count of resources this system has any deposit slot for — a claim/develop score input. */
-function countResourceDiversity(s: SimSystem): number {
+function countResourceDiversity(s: TickSystem): number {
   let n = 0;
   for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) n++;
   return n;
 }
 
 /** Apply resolved claims: the target becomes `controlled` and owned by the winning faction. The
- * `: SimSystem` return annotation contextually narrows the `"controlled"` literal to `SystemControl`
+ * `: TickSystem` return annotation contextually narrows the `"controlled"` literal to `SystemControl`
  * (no `as`). */
-function applyClaims(systems: SimSystem[], claims: SystemClaim[]): SimSystem[] {
+function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[] {
   if (claims.length === 0) return systems;
   const factionBySystem = new Map(claims.map((c) => [c.systemId, c.factionId]));
-  return systems.map((s): SimSystem => {
+  return systems.map((s): TickSystem => {
     const factionId = factionBySystem.get(s.id);
     if (factionId === undefined) return s;
     return { ...s, factionId, control: "controlled" };
@@ -391,14 +391,14 @@ function applyClaims(systems: SimSystem[], claims: SystemClaim[]): SimSystem[] {
  * Apply completed colony establishments: the target flips `developed`, receives the conserved seed
  * population (capped by what its stored source can spare), and lands its bundled housing so `popCap ≥
  * seedPop` on arrival (viable by construction — docs/planned/economy-colonisation-cost.md §2). The `:
- * SimSystem` annotation narrows the `"developed"` literal. `available` tracks each source's remaining
+ * TickSystem` annotation narrows the `"developed"` literal. `available` tracks each source's remaining
  * spendable population across the loop so two establishments sharing a source draw from the same
  * (shrinking) balance rather than both reading the original snapshot — otherwise a shared source would
  * mint population that was never conserved. popCap is raised to the placed housing's capacity (never
  * lowered) — the same figure infrastructure-decay recomputes next tick, set here so the colony is viable
  * the instant it exists.
  */
-export function applyDevelopments(systems: SimSystem[], developments: SystemDevelopment[]): SimSystem[] {
+export function applyDevelopments(systems: TickSystem[], developments: SystemDevelopment[]): TickSystem[] {
   if (developments.length === 0) return systems;
   const bySystem = new Map(systems.map((s) => [s.id, s]));
   const popDelta = new Map<string, number>();
@@ -417,7 +417,7 @@ export function applyDevelopments(systems: SimSystem[], developments: SystemDeve
     developed.add(d.systemId);
     housingBySystem.set(d.systemId, (housingBySystem.get(d.systemId) ?? 0) + d.housingLevels);
   }
-  return systems.map((s): SimSystem => {
+  return systems.map((s): TickSystem => {
     const delta = popDelta.get(s.id) ?? 0;
     const nowDeveloped = developed.has(s.id);
     if (delta === 0 && !nowDeveloped) return s;
@@ -497,7 +497,7 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 
 export async function runWorldTick(
   world: World,
-): Promise<{ world: World; events: TickEventRaw; markets: SimMarketEntry[] }> {
+): Promise<{ world: World; events: TickBroadcastRaw; markets: TickMarket[] }> {
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
   const scaled = scaleEventCaps(world.systems.length);
@@ -505,16 +505,16 @@ export async function runWorldTick(
   const globalEvents: Partial<GlobalEventMap> = {};
   const processorsRun: string[] = [];
 
-  let systems = toSimSystems(world);
-  let markets = toSimMarkets(world);
-  const connections = toSimConnections(world);
+  let systems = toTickSystems(world);
+  let markets = toTickMarkets(world);
+  const connections = toTickConnections(world);
   let ships = world.ships;
   let flowEvents = world.flowEvents;
   let relations = world.relations;
   let alliancePacts = world.alliancePacts;
   let constructionProjects = world.constructionProjects;
   let nextId = world.nextId;
-  // Tracks each event's metadata across the events stage (SimEvent has no
+  // Tracks each event's metadata across the events stage (TickEvent has no
   // metadata field — see lib/engine/simulator/types.ts's doc comment).
   const metadataByEventId = new Map(world.events.map((e) => [e.id, e.metadata]));
   let events: WorldEvent[] = world.events;
@@ -688,7 +688,7 @@ export async function runWorldTick(
     // Ownership lookups reused by both providers.
     const factionBySystem = new Map(systems.map((s) => [s.id, s.factionId]));
     const controlBySystem = new Map(systems.map((s) => [s.id, s.control]));
-    const simById = new Map(systems.map((s) => [s.id, s]));
+    const tickSystemById = new Map(systems.map((s) => [s.id, s]));
 
     // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
     const reachProvider = (factionId: string): ClaimCandidate[] => {
@@ -706,7 +706,7 @@ export async function runWorldTick(
       }
       const candidates: ClaimCandidate[] = [];
       for (const [candidateId, minHops] of minHopByCandidate) {
-        const cand = simById.get(candidateId);
+        const cand = tickSystemById.get(candidateId);
         if (!cand) continue;
         candidates.push({
           systemId: candidateId, minHops,
@@ -857,15 +857,15 @@ export async function runWorldTick(
     nextId,
   };
 
-  const tickEvents: TickEventRaw = {
+  const tickEvents: TickBroadcastRaw = {
     currentTick: tick,
     events: globalEvents,
     processors: processorsRun,
   };
 
-  // `markets` is already this tick's final Sim-shaped join (same one folded
+  // `markets` is already this tick's final market-row join (same one folded
   // into nextWorld above) — returned so callers that need the Sim view (the
-  // calibration harness) don't have to re-run toSimMarkets(nextWorld) right
+  // calibration harness) don't have to re-run toTickMarkets(nextWorld) right
   // after we just built it.
   return { world: nextWorld, events: tickEvents, markets };
 }

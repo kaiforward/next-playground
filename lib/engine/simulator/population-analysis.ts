@@ -1,4 +1,4 @@
-import type { SimSystem } from "./types";
+import type { TickSystem } from "@/lib/tick/rows";
 
 export interface InfrastructureSummary {
   /** Total building count across all systems at tick 0. */
@@ -12,14 +12,14 @@ export interface InfrastructureSummary {
 }
 
 /** Σ of all building counts in a system. */
-function totalBuilt(s: SimSystem): number {
+function totalBuilt(s: TickSystem): number {
   let n = 0;
   for (const count of Object.values(s.buildings)) n += Math.max(0, count);
   return n;
 }
 
 export function summarizeInfrastructure(
-  systems: SimSystem[],
+  systems: TickSystem[],
   initialBuildingTotal: number,
 ): InfrastructureSummary {
   let builtEnd = 0;
@@ -77,7 +77,7 @@ export interface PopulationSummary {
 }
 
 export function summarizePopulation(
-  systems: SimSystem[],
+  systems: TickSystem[],
   totalStart: number,
   strikeThreshold: number,
 ): PopulationSummary {

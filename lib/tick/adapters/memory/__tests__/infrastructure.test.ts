@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastructure";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
-import type { SimSystem } from "@/lib/engine/simulator/types";
+import type { TickSystem } from "@/lib/tick/rows";
 
-function sys(id: string, buildings: Record<string, number>, idle: Record<string, number> = {}): SimSystem {
+function sys(id: string, buildings: Record<string, number>, idle: Record<string, number> = {}): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 100, popCap: 200,

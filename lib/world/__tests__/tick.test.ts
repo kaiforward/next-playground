@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick, toSimSystems } from "../tick";
+import { runWorldTick, toTickSystems } from "../tick";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import type { WorldShip } from "../types";
@@ -82,7 +82,7 @@ describe("runWorldTick", () => {
     expect(world).toEqual(snapshot);
   });
 
-  it("returns a TickEventRaw whose currentTick matches the new world's tick", async () => {
+  it("returns a TickBroadcastRaw whose currentTick matches the new world's tick", async () => {
     const world = generateWorld({ systemCount: 100, seed: 42 });
     const { world: after, events } = await runWorldTick(world);
     expect(events.currentTick).toBe(after.meta.currentTick);
@@ -116,17 +116,17 @@ describe("runWorldTick", () => {
     }
   });
 
-  it("toSimSystems seeds buildingIdleMonths from WorldBuilding.idleMonths", () => {
+  it("toTickSystems seeds buildingIdleMonths from WorldBuilding.idleMonths", () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const target = base.buildings[0].systemId;
     const world = {
       ...base,
       buildings: base.buildings.map((b) => (b.systemId === target ? { ...b, idleMonths: 4 } : b)),
     };
-    const sim = toSimSystems(world).find((s) => s.id === target);
-    expect(sim).toBeDefined();
+    const tickSystem = toTickSystems(world).find((s) => s.id === target);
+    expect(tickSystem).toBeDefined();
     for (const b of world.buildings.filter((b) => b.systemId === target)) {
-      expect(sim?.buildingIdleMonths[b.buildingType]).toBe(4);
+      expect(tickSystem?.buildingIdleMonths[b.buildingType]).toBe(4);
     }
   });
 
@@ -166,14 +166,14 @@ describe("runWorldTick", () => {
     for (const u of after.constructionProjects) if (u.kind === "build") expect(Number.isInteger(u.levels)).toBe(true);
   });
 
-  it("round-trips building idleMonths across a non-decay tick (the field survives the sim serialize round-trip)", async () => {
+  it("round-trips building idleMonths across a non-decay tick (the field survives the row/World serialize round-trip)", async () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const world = { ...base, buildings: base.buildings.map((b) => ({ ...b, idleMonths: 7 })) };
     const seeded = new Set(world.buildings.map((b) => `${b.systemId}|${b.buildingType}`));
     const { world: after } = await runWorldTick(world);
     // Infrastructure decay consumes idleMonths, but only on an economy-update tick (it is gated
     // behind economySignals); this single tick from a fresh world is not one, so every building
-    // that existed at seed round-trips its idleMonths unchanged through the sim. Newly-built rows
+    // that existed at seed round-trips its idleMonths unchanged through the tick. Newly-built rows
     // are excluded — they start at 0.
     for (const b of after.buildings) {
       if (seeded.has(`${b.systemId}|${b.buildingType}`)) {

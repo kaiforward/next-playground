@@ -50,7 +50,7 @@ For processors that shard by system (economy) or by edge (migration), the shard 
 
 ### World → view joins
 
-`World` (`lib/world/types.ts`) is schema-faithful flat rows and deliberately omits catalog/derived data the adapters expect inlined (a good's `basePrice`/`floor`/`ceiling`, a system's owning faction's `governmentType`). `runWorldTick` performs those joins **once per tick** (`toSimSystems`/`toSimMarkets`/`toSimConnections`, exported so the harness's health analyzers reuse them) before handing the views to the adapters.
+`World` (`lib/world/types.ts`) is schema-faithful flat rows and deliberately omits catalog/derived data the adapters expect inlined (a good's `basePrice`/`floor`/`ceiling`, a system's owning faction's `governmentType`). `runWorldTick` performs those joins **once per tick** (`toTickSystems`/`toTickMarkets`/`toTickConnections`, exported so the harness's health analyzers reuse them) before handing the views to the adapters. The joined rows are the tick's own working types (`lib/tick/rows.ts`) — mutable per-tick copies, merged back into the next `World` at the end of the tick.
 
 ---
 
