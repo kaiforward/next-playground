@@ -9,12 +9,13 @@ calibration harness both call it. But the vocabulary still describes a two-backe
 longer exists: the tick's own working types are named `Sim*` and live inside a directory called
 `simulator/`, and a 259-line constants-override system survives that nothing reads.
 
-This project removes the Sim-vs-World concept entirely. It is **rename, move, and delete only — no
-behaviour change**. Every number the game produces must be identical afterward, and the harness
-itself is the gate that proves it.
+This project removes the Sim-vs-World concept entirely. PR1–3 are **rename, move, and delete only —
+no behaviour change**: every number the game produces must be identical afterward, and the harness
+itself is the gate that proves it. PR4 then adds the one thing the harness genuinely lacks — the
+ability to report what it ran — on a codebase already proven unchanged.
 
-Two adjacent problems are deliberately **out of scope** and tracked separately (see Follow-ups):
-harness *coverage*, and the market round-trip *perf* win.
+The market round-trip *perf* win is deliberately **out of scope** and sequenced after (see
+Follow-ups). It is unlocked by this work: `TickMarket` is what gets deleted.
 
 ---
 
@@ -59,6 +60,23 @@ its row types from a directory named `simulator`. The directory name asserts a s
 not have — which is why the split keeps being believed, and why doc comments asserting it read as
 plausible.
 
+### The harness cannot report what it did not exercise
+
+The harness's real weakness — a reporting gap, not a correctness or divergence one:
+
+- **No analyzer measures logistics activity.** `market-analysis.ts:10` imports `DIRECTED_LOGISTICS`
+  only to compute surplus/deficit *thresholds* (`:231-232`) — it measures market cover, never
+  whether a transfer happened.
+- `runner.ts:94-98` discards `result.events` entirely, taking only `.world` and `.markets`.
+- `SimFlowEvent` is defined and unwired — the shape for exactly this measurement, never built.
+
+By contrast `build-analysis.ts` has the instinct already: its own comment describes splitting
+construction projects "to tell 'proposes nothing' from 'never funds'". Logistics has no equivalent.
+The session-18 `Math.floor` bug survived review because the harness ran directed-logistics faithfully
+and never reported that its seed fired zero transfers in 500 ticks.
+
+This is the same shape as the ECONOMY_SCALE gap below: the harness is correct, and silent about it.
+
 ### Dead code
 
 - `lib/engine/simulator/constants.ts` (259 lines) — `SimConstants`, `SimConstantOverrides`,
@@ -101,11 +119,14 @@ of the two proposed variants that survives. Fold this into the perf project.
 
 ## Scope
 
-**In:** renaming, moving, and deleting the Sim concept; the ECONOMY_SCALE hardening below; doc
-fixes.
+**In:** renaming, moving, and deleting the Sim concept (PR1–3); doc fixes; and, in PR4 only, the
+ECONOMY_SCALE hardening and the logistics-activity metric.
 
-**Out:** any behaviour change; the harness coverage problem; the market round-trip perf work; the
-tick-boundary-gating work (parked on `perf/tick-boundary-gating`).
+**Out:** any change to the simulation's numbers — in *any* PR, including PR4, whose additions are
+report-only; the market round-trip perf work; the tick-boundary-gating work (parked on
+`perf/tick-boundary-gating`).
+
+There is no harness-coverage workstream — it was considered and dissolved (see Follow-ups).
 
 ---
 
@@ -153,6 +174,12 @@ in `tick-loop.ts` — which is what it actually is — freeing `TickEvent` for t
 - `lib/engine/__tests__/sim-constants.test.ts`
 - `SimRegion`, `SimFlowEvent`
 
+`SimFlowEvent` is deleted **even though PR4 adds the logistics metric it was evidently meant for**.
+It is a near-duplicate of `WorldFlowEvent`, which already exists and is already populated by
+directed-logistics (`tick.ts:675-676`); PR4 reads that instead. Note `world.flowEvents` is pruned to
+`TRADE_SIMULATION.FLOW_HISTORY_TICKS` (`tick.ts:679-680`), so a whole-run count must accumulate
+per-tick rather than read the final world.
+
 Two live tests currently reach real values *through* the dead indirection and must import directly
 instead — which is the point:
 
@@ -179,6 +206,8 @@ not exist. Kill the noun, keep the verb. Renaming the npm script would churn CLA
 muscle memory for no clarity gain.
 
 ### ECONOMY_SCALE hardening
+
+**Lands in PR4**, not PR3 — it adds output, and PR1–3 must stay byte-identical (see Verification).
 
 The coupling is already correct by default (see Findings). Two narrow gaps remain:
 
@@ -211,9 +240,9 @@ a function — enormous churn to fix a landmine a 3-line assert defuses.
 
 ## Verification
 
-Everything here is a rename, a move, or a deletion of unreferenced code. **No number may change.**
-The harness is deterministic (seeded `tickRng`; no wall-clock in processor bodies), so it proves
-this directly:
+PR1–3 are a rename, a move, or a deletion of unreferenced code. **No number may change, and no
+output may be added.** The harness is deterministic (seeded `tickRng`; no wall-clock in processor
+bodies), so it proves this directly:
 
 ```
 npm run simulate -- --json    # before, fixed seed → capture
@@ -223,9 +252,15 @@ npm run simulate -- --json    # after, same seed → must match
 
 Any diff is a real behaviour change the refactor smuggled in.
 
-**Timing fields must be stripped before comparing** — `SimResults.elapsedMs` is wall-clock. Confirm
-which fields `buildExperimentResult` leaks (at minimum `elapsedMs`) and exclude them; do not assume
-the set.
+**This gate is the reason the project is safe, and it is deliberately kept absolute for PR1–3.** All
+new output — the ECONOMY_SCALE print, the logistics metric — is quarantined in PR4 precisely so this
+comparison stays "identical, no exceptions" rather than the weaker "identical except the new fields".
+PR4 then adds output to a codebase already proven unchanged, and its own gate is the narrower
+"every pre-existing field unchanged; new fields additive".
+
+**Timing fields must be stripped before comparing** — the results carry `elapsedMs`, which is
+wall-clock. Confirm which fields `buildExperimentResult` leaks (at minimum `elapsedMs`) and exclude
+them; do not assume the set.
 
 Layered gates, per CLAUDE.md: `npx tsc`, `npx vitest run`, `npx next build --webpack`.
 
@@ -238,15 +273,17 @@ treat a falling count here as a gate failure.
 
 ## Sequencing
 
-Three PRs, **straight to main**, delete first.
+Four PRs, **straight to main**, delete first.
 
-| PR | Contents |
-|---|---|
-| **1. Delete the corpse** | `constants.ts`, `sim-constants.test.ts`, `SimRegion`, `SimFlowEvent`; redirect the two tests reaching through the dead indirection. Pure deletion, no rename — shrinks what PR2 must rename. |
-| **2. Move + rename the row types** | `Sim*` → `Tick*` into `lib/tick/rows.ts`; `toSim*` → `toTick*`; `TickEventRaw` → `TickBroadcastRaw`. The large mechanical diff, isolated. |
-| **3. Move the harness** | Directory move; `HarnessConfig`/`HarnessResults`/`runTickHarness`; ECONOMY_SCALE print + assert; all doc fixes; delete this build plan. |
+| PR | Contents | Gate |
+|---|---|---|
+| **1. Delete the corpse** | `constants.ts`, `sim-constants.test.ts`, `SimRegion`, `SimFlowEvent`; redirect the two tests reaching through the dead indirection. Pure deletion, no rename — shrinks what PR2 must rename. | byte-identical |
+| **2. Move + rename the row types** | `Sim*` → `Tick*` into `lib/tick/rows.ts`; `toSim*` → `toTick*`; `TickEventRaw` → `TickBroadcastRaw`. The large mechanical diff, isolated. | byte-identical |
+| **3. Move the harness** | Directory move to `lib/tick-harness/`; `HarnessConfig`/`HarnessResults`/`runTickHarness`; all doc fixes. | byte-identical |
+| **4. Make the harness say what it ran** | ECONOMY_SCALE print + assert; logistics-activity metric. The only PR that changes output. Delete this build plan. | pre-existing fields unchanged; new fields additive |
 
-Each carries the byte-identical gate independently.
+PR1–3 carry the absolute gate independently. PR4 is deliberately last so the three mechanical PRs
+are provable against an unweakened comparison.
 
 **Deliberate deviation from CLAUDE.md**, agreed with the user: the convention says multi-PR features
 use a shared feature branch. These are not phases of one feature — each is independently shippable
@@ -257,22 +294,33 @@ for something that is not one feature. They are sequential, so each rebases onto
 
 ## Follow-ups (out of scope, booked)
 
-1. **Harness coverage** — the next project. The harness runs the same code as the game; the open
-   question is what it never *exercises*. Known gaps: seeds that never fire directed-logistics (the
-   session-18 `Math.floor` bug survived review because of exactly this); save/load is never
-   round-tripped (belongs in Vitest, not the harness — the harness's scope is the tick); and, once
-   the Phase 3 player seat exists, player actions will have no driver. Note also that
-   `vitest.config.ts:14` pins `ECONOMY_SCALE: "1"`, so the whole suite tests a scale nobody plays
-   at — defensible **only because** `economy-scale-invariance.test.ts` and
-   `economy-scale-dynamic-invariance.test.ts` prove S-invariance. Those two tests are the
-   load-bearing bridge; when invariance broke in session 18, every magnitude test silently became
-   meaningless.
+**There is no separate "harness coverage" project.** It was considered and dissolved: the harness
+runs the same code as the game, so there is no "does the sim implement X" question to investigate —
+the rename is what keeps that answered. Of the three gaps originally grouped under it, save/load and
+player actions are both outside the harness's scope by definition (the harness tests the tick
+processors and the data they consume/produce, nothing else), and the third — "seeds have gaps" — is
+a permanent condition of testing, not a deliverable. What was real in it is the reporting gap, now
+PR4.
 
-2. **The market round-trip perf win** — `TickMarket` differs from `WorldMarket` by three static
+To `docs/BACKLOG.md` rather than a project:
+
+- **[S] Alarm the ECONOMY_SCALE invariance bridge** — `vitest.config.ts:14` pins
+  `ECONOMY_SCALE: "1"`, so the whole suite tests a scale nobody plays at. This is defensible **only
+  because** `economy-scale-invariance.test.ts` and `economy-scale-dynamic-invariance.test.ts` prove
+  S-invariance; those two tests are the load-bearing bridge that makes S=1 testing valid for an
+  S=100 game. When invariance broke in session 18 (the directed-logistics `Math.floor`), the bridge
+  collapsed and every magnitude assertion in the suite silently became meaningless, with nothing
+  detecting it. Worth making that dependency explicit and alarmed.
+
+Larger, sequenced after this project:
+
+1. **The market round-trip perf win** — `TickMarket` differs from `WorldMarket` by three static
    `GOODS` constants (`basePrice`, `priceFloor`, `priceCeiling`). `mergeMarketsIntoWorld` costs
    27.1ms/tick at 2,400 systems (49.9% of an off-boundary tick) stripping them back off. Deleting
    the round-trip — processors reading `GOODS[goodId]` at point of use — is the fix, not caching
    it. See the BACKLOG correction above for why the proposed identity check cannot work.
 
-3. **Tick-boundary gating** — parked on `perf/tick-boundary-gating`. Its scoping assumed the market
-   round-trip cost stays; if follow-up 2 lands first, re-measure before designing it.
+2. **Tick-boundary gating** — parked on `perf/tick-boundary-gating`. Its scoping assumed the market
+   round-trip cost stays; if follow-up 1 lands first, re-measure before designing it. Its gating
+   targets (economy/migration/logistics/build) are ~13% of wall time, versus the round-trip's ~50%,
+   so the ordering matters.
