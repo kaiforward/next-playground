@@ -35,7 +35,7 @@ describe("spawnEvent", () => {
 
     expect(result.data.type).toBe("solar_storm");
     expect(result.data.phase).toBe(firstPhase.name);
-    expect(result.data.eventId).toMatch(/^sim-/);
+    expect(result.data.eventId).toMatch(/^event-/);
 
     const after = getWorld();
     const event = after.events.find((e) => e.id === result.data.eventId);

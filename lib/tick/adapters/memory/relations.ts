@@ -94,7 +94,9 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   tradeFlows: MemoryTradeFlow[];
   events: MemoryRelationEvent[];
   /** Public (unlike the other memory adapters' private counters) so callers threading
-   *  World.nextId across stages (lib/world/tick.ts) can read the post-run value back. */
+   *  World.nextId across stages (lib/world/tick.ts) can read the post-run value back.
+   *  Relation events share the `event-` id namespace with the events adapter, so that
+   *  threading is what keeps ids unique — the prefix does not disambiguate them. */
   nextId: number;
 
   constructor(initial: {
@@ -256,7 +258,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   ): Promise<string[]> {
     const ids: string[] = [];
     for (const c of creates) {
-      const id = `mem-rel-${this.nextId++}`;
+      const id = `event-${this.nextId++}`;
       ids.push(id);
       this.events.push({
         id,
