@@ -3,15 +3,17 @@ import {
   takeMarketSnapshot,
   computeMarketHealth,
 } from "../market-analysis";
-import type { TickMarket } from "@/lib/tick/rows";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
+import type { WorldMarket } from "@/lib/world/types";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
+import { GOODS } from "@/lib/constants/goods";
 
 function market(
   systemId: string,
   goodId: string,
   stock: number,
-): TickMarket {
-  return { systemId, goodId, basePrice: 100, stock, anchorMult: 1, demandRate: 1, priceFloor: 0.2, priceCeiling: 5.0, storageCapacity: 0 };
+): WorldMarket {
+  return { systemId, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 
 describe("takeMarketSnapshot", () => {
@@ -25,7 +27,7 @@ describe("takeMarketSnapshot", () => {
     expect(snaps[0].systemId).toBe("sys-1");
     expect(snaps[0].goodId).toBe("water");
     expect(snaps[0].stock).toBe(TARGET_COVER);
-    expect(snaps[0].price).toBe(100); // stock == reference ⇒ spot price == basePrice
+    expect(snaps[0].price).toBe(GOODS.water.basePrice); // stock == reference ⇒ spot price == basePrice
   });
 });
 
@@ -69,13 +71,18 @@ describe("computeMarketHealth — stock drift", () => {
 
 describe("computeMarketHealth — stock pins", () => {
   it("reports the per-good fraction of markets clamped at the floor or ceiling", () => {
-    // ore: both markets sit at/below minStock (TARGET_COVER/priceCeiling = 8) → fully floor-pinned.
-    // luxuries: one at maxStock (TARGET_COVER/priceFloor = 200), one mid-band → half ceiling-pinned, none at floor.
+    // Each stock is placed against its OWN good's band (ore and luxuries have
+    // different price ceilings), so the fixture can't drift outside the band it
+    // means to probe.
+    // ore: both markets at/below minStock → fully floor-pinned.
+    // luxuries: one at maxStock, one mid-band → half ceiling-pinned, none at floor.
+    const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);
+    const luxBand = marketBandForRow(market("sys-1", "luxuries", 0), GOODS.luxuries);
     const { stockPins } = computeMarketHealth([
-      market("sys-1", "ore", 5),
-      market("sys-2", "ore", 6),
-      market("sys-1", "luxuries", 200),
-      market("sys-2", "luxuries", 100),
+      market("sys-1", "ore", oreBand.minStock),
+      market("sys-2", "ore", oreBand.minStock - 1),
+      market("sys-1", "luxuries", luxBand.maxStock),
+      market("sys-2", "luxuries", (luxBand.minStock + luxBand.maxStock) / 2),
     ]);
 
     const ore = stockPins.find((p) => p.goodId === "ore");
@@ -99,9 +106,13 @@ describe("computeMarketHealth — stock pins", () => {
 
 describe("computeMarketHealth — price dispersion", () => {
   it("reports zero dispersion for a single-system good and positive for a split one", () => {
+    // Both water stocks sit strictly inside the band (TARGET_COVER/priceCeiling
+    // = 20 … TARGET_COVER/priceFloor = 80), so their prices are unclamped and
+    // genuinely differ — outside it both would pin to the same bound and read as
+    // zero dispersion.
     const { priceDispersion } = computeMarketHealth([
-      market("sys-1", "water", 200), // price ≈ 25
-      market("sys-2", "water", 140), // price ≈ 36 → spread across systems
+      market("sys-1", "water", TARGET_COVER), // at the anchor → price == basePrice
+      market("sys-2", "water", TARGET_COVER * 0.75), // scarcer → dearer
       market("sys-1", "luxuries", 20), // single system → no dispersion
     ]);
 

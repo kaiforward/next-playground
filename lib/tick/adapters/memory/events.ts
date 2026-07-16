@@ -11,13 +11,14 @@ import type {
 import { buildModifiersForPhase, type ModifierRow } from "@/lib/engine/events";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { isEconomicallyActive } from "@/lib/engine/control";
+import { GOODS } from "@/lib/constants/goods";
 import type { EventDefinition, EventTypeId } from "@/lib/constants/events";
 import type {
   TickConnection,
   TickEvent,
-  TickMarket,
   TickSystem,
 } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 
 /**
  * In-memory adapter. Owns mutable slices of the tick's rows for the duration of
@@ -30,14 +31,14 @@ import type {
 export class InMemoryEventsWorld implements EventsWorld {
   events: TickEvent[];
   modifiers: ModifierRow[];
-  markets: TickMarket[];
+  markets: WorldMarket[];
   nextId: number;
 
   constructor(
     initial: {
       events: TickEvent[];
       modifiers: ModifierRow[];
-      markets: TickMarket[];
+      markets: WorldMarket[];
       nextId: number;
     },
     private readonly systems: TickSystem[],
@@ -168,7 +169,7 @@ export class InMemoryEventsWorld implements EventsWorld {
   applyShocks(shocks: SystemShock[]): Promise<number> {
     if (shocks.length === 0) return Promise.resolve(0);
 
-    const marketByKey = new Map<string, TickMarket>();
+    const marketByKey = new Map<string, WorldMarket>();
     for (const m of this.markets) {
       marketByKey.set(`${m.systemId}|${m.goodId}`, m);
     }
@@ -178,7 +179,7 @@ export class InMemoryEventsWorld implements EventsWorld {
     // ambient flavour, but they can't unfreeze an inert market.
     const controlBySystem = new Map(this.systems.map((s) => [s.id, s.control]));
 
-    const touched = new Set<TickMarket>();
+    const touched = new Set<WorldMarket>();
     for (const shock of shocks) {
       const control = controlBySystem.get(shock.systemId);
       if (control === undefined || !isEconomicallyActive(control)) continue;
@@ -198,7 +199,7 @@ export class InMemoryEventsWorld implements EventsWorld {
       touched.add(market);
     }
     for (const market of touched) {
-      const band = marketBandForRow(market, market);
+      const band = marketBandForRow(market, GOODS[market.goodId]);
       market.stock = Math.max(band.minStock, Math.min(band.maxStock, market.stock));
     }
     return Promise.resolve(touched.size);

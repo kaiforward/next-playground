@@ -8,7 +8,7 @@
  */
 
 import { generateWorld } from "@/lib/world/gen";
-import { runWorldTick, toTickSystems, toTickMarkets } from "@/lib/world/tick";
+import { runWorldTick, toTickSystems } from "@/lib/world/tick";
 import { takeMarketSnapshot, computeMarketHealth, SNAPSHOT_INTERVAL } from "./market-analysis";
 import {
   trackEventLifecycles,
@@ -18,7 +18,7 @@ import {
 import { summarizeLogistics } from "./logistics-analysis";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
-import type { WorldFlowEvent } from "@/lib/world/types";
+import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
 import type {
   HarnessConfig,
   HarnessResults,
@@ -26,7 +26,7 @@ import type {
   EventLifecycle,
   RegionOverviewEntry,
 } from "./types";
-import type { TickEvent, TickMarket } from "@/lib/tick/rows";
+import type { TickEvent } from "@/lib/tick/rows";
 
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
 interface ActiveEventRecord {
@@ -89,18 +89,16 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     0,
   );
 
-  // Kept in sync with `world` every tick — reused as both this tick's
-  // post-tick snapshot and next tick's pre-tick snapshot, so the good-catalog
-  // join (toTickMarkets) runs once per tick instead of twice.
-  let currentMarkets: TickMarket[] = toTickMarkets(world);
+  // Kept in sync with `world` every tick — reused as both this tick's post-tick
+  // snapshot and next tick's pre-tick snapshot, so a tick's market rows are held
+  // across the loop boundary rather than re-read per use.
+  let currentMarkets: WorldMarket[] = world.markets;
 
   for (let t = 0; t < config.tickCount; t++) {
     const preTickMarkets = currentMarkets;
 
     const result = await runWorldTick(world);
     world = result.world;
-    // runWorldTick already built this tick's market rows internally —
-    // reuse it instead of re-running the toTickMarkets join over `world`.
     currentMarkets = result.markets;
 
     for (const f of world.flowEvents) {

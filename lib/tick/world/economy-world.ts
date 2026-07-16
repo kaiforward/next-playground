@@ -27,7 +27,6 @@ export interface MarketView {
    *  region-targeted modifiers via this. */
   regionId: string;
   goodId: string;
-  basePrice: number;
   stock: number;
   /** Government of the system's owning faction — read per-market. */
   governmentType: GovernmentType;

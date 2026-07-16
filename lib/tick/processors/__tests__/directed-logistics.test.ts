@@ -25,7 +25,7 @@ describe("MemoryDirectedLogisticsWorld", () => {
   });
 });
 
-// ── market band math (anchorMult:1, demandRate:1, priceFloor:0.5, priceCeiling:2.0)
+// ── market band math (anchorMult:1, demandRate:1; GOODS.food priceFloor:0.5, priceCeiling:2.0)
 // targetStock = 40×1×1 = 40; minStock = 40/2 = 20; maxStock = 40/0.5 + storageCapacity = 80+storageCapacity.
 // mA: stock=95, storageCapacity=20 → targetStock=40; surplusThreshold=40×1.4=56; 95≥56 ✓ surplus; drawable=95−40=55.
 // mB: stock=10, storageCapacity=20 → targetStock=40; deficitThreshold=40×0.8=32; 10<32 ✓ deficit; shortfall=40−10=30.
@@ -35,7 +35,7 @@ describe("MemoryDirectedLogisticsWorld", () => {
 function market(id: string, goodId: string, stock: number, storageCapacity: number) {
   return {
     id, goodId, stock,
-    basePrice: 30, anchorMult: 1, demandRate: 1, priceFloor: 0.5, priceCeiling: 2.0, storageCapacity,
+    anchorMult: 1, demandRate: 1, storageCapacity,
   };
 }
 

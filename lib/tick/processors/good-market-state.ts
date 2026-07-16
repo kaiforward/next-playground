@@ -7,6 +7,7 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { GOODS } from "@/lib/constants/goods";
 import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/industry";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
@@ -26,7 +27,7 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
 
   const goods: GoodMarketState[] = [];
   for (const m of row.markets) {
-    const band = marketBandForRow(m, m);
+    const band = marketBandForRow(m, GOODS[m.goodId]);
     const civ = consByKey.get(m.goodId) ?? 0;
     const industrial = inputDemandFromProduction(m.goodId, prodByKey);
     goods.push({

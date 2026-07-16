@@ -9,10 +9,8 @@ import { computeSystemLabourSnapshot, buildingProduction } from "@/lib/engine/in
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { economyShardOrder } from "@/lib/engine/shard-order";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import type {
-  TickMarket,
-  TickSystem,
-} from "@/lib/tick/rows";
+import type { TickSystem } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 
 /**
  * In-memory adapter for the economy processor.
@@ -23,17 +21,17 @@ import type {
  * public fields once the processor returns.
  *
  * The synthetic `MarketView.id` (`"${systemId}|${goodId}"`) round-trips into
- * `MarketUpdate.id`, letting the adapter locate the underlying TickMarket
+ * `MarketUpdate.id`, letting the adapter locate the underlying market row
  * by composite key on write.
  */
 export class InMemoryEconomyWorld implements EconomyWorld {
   systems: TickSystem[];
-  markets: TickMarket[];
+  markets: WorldMarket[];
   modifiers: ModifierRow[];
 
   constructor(initial: {
     systems: TickSystem[];
-    markets: TickMarket[];
+    markets: WorldMarket[];
     modifiers: ModifierRow[];
   }) {
     this.systems = initial.systems.map((s) => ({ ...s }));
@@ -72,7 +70,6 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         systemId: m.systemId,
         regionId: sys.regionId,
         goodId: m.goodId,
-        basePrice: m.basePrice,
         stock: m.stock,
         governmentType: sys.governmentType,
         baseProductionRate: production > 0 ? production : undefined,

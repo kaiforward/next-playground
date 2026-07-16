@@ -108,3 +108,21 @@ export function curveForGood(
     ceilingMult,
   };
 }
+
+/**
+ * Convenience adapter: derive the price curve from a market row plus its good's
+ * catalog entry — the curve counterpart to `marketBandForRow`, and the same
+ * reason to exist (the five-argument call is never repeated).
+ */
+export function curveForRow(
+  row: { demandRate: number; anchorMult?: number },
+  good: { basePrice: number; priceFloor: number; priceCeiling: number },
+): MarketCurve {
+  return curveForGood(
+    good.basePrice,
+    good.priceFloor,
+    good.priceCeiling,
+    row.demandRate,
+    row.anchorMult ?? 1,
+  );
+}

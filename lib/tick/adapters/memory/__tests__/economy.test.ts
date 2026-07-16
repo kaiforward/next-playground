@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { buildingProduction, computeLabourState } from "@/lib/engine/industry";
 import { makeResourceVector, unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
-import type { TickSystem, TickMarket } from "@/lib/tick/rows";
+import type { TickSystem } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 
 function sys(overrides: Partial<TickSystem>): TickSystem {
   return {
@@ -15,9 +16,9 @@ function sys(overrides: Partial<TickSystem>): TickSystem {
   };
 }
 
-const market = (goodId: string): TickMarket => ({
-  systemId: "s1", goodId, basePrice: 35, stock: 100, anchorMult: 1,
-  demandRate: 1, priceFloor: 0.5, priceCeiling: 2, storageCapacity: 0,
+const market = (goodId: string): WorldMarket => ({
+  systemId: "s1", goodId, stock: 100, anchorMult: 1,
+  demandRate: 1, storageCapacity: 0,
 });
 
 describe("InMemoryEconomyWorld — capacity-driven production", () => {

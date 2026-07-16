@@ -8,12 +8,13 @@ import type { TickContext } from "@/lib/tick/types";
 import type {
   TickConnection,
   TickEvent,
-  TickMarket,
   TickSystem,
 } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 import type { ModifierRow } from "@/lib/engine/events";
 import type { SystemShock } from "@/lib/tick/world/events-world";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
 function makeCtx(tick: number): TickContext {
@@ -59,21 +60,22 @@ function makeSystem(
   };
 }
 
+// Band for this fixture, from the good's own catalog constants (GOODS.food:
+// priceFloor 0.5, priceCeiling 2.0) — demandRate 1 ⇒ targetStock = TARGET_COVER
+// (40), minStock = 40/2 = 20, maxStock = 40/0.5 + 120 = 200. The storage term
+// buys the headroom the shock tests below need to stay inside the band.
 function makeMarket(
   systemId: string,
   goodId: string,
   stock: number,
-): TickMarket {
+): WorldMarket {
   return {
     systemId,
     goodId,
-    basePrice: 100,
     stock,
     anchorMult: 1,
     demandRate: 1,
-    priceFloor: 0.2,
-    priceCeiling: 5.0,
-    storageCapacity: 0,
+    storageCapacity: 120,
   };
 }
 
@@ -81,7 +83,7 @@ function makeWorld(opts: {
   systems: TickSystem[];
   connections?: TickConnection[];
   events?: TickEvent[];
-  markets?: TickMarket[];
+  markets?: WorldMarket[];
   modifiers?: ModifierRow[];
 }) {
   return new InMemoryEventsWorld(
@@ -204,7 +206,7 @@ describe("runEventsProcessor", () => {
     // crashing on percentage-mode shocks. Market values must be within
     // their per-market band.
     for (const m of world.markets) {
-      const band = marketBandForRow(m, m);
+      const band = marketBandForRow(m, GOODS[m.goodId]);
       expect(m.stock).toBeGreaterThanOrEqual(band.minStock);
       expect(m.stock).toBeLessThanOrEqual(band.maxStock);
     }
@@ -330,8 +332,8 @@ describe("InMemoryEventsWorld.applyShocks", () => {
     await world.applyShocks([
       shock({ parameter: "supply", mode: "absolute", value: 10_000 }),
     ]);
-    // makeMarket fixture: demandRate=1, priceFloor=0.2, storageCapacity=0
-    // → maxStock = TARGET_COVER/priceFloor + 0 = 40/0.2 = 200
+    // makeMarket fixture: demandRate=1, GOODS.food priceFloor=0.5, storageCapacity=120
+    // → maxStock = TARGET_COVER/priceFloor + 120 = 40/0.5 + 120 = 200
     expect(world.markets[0].stock).toBe(200);
   });
 

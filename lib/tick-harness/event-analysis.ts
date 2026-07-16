@@ -7,20 +7,22 @@
  */
 
 import type { EventTypeId } from "@/lib/constants/events";
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
+import { GOODS } from "@/lib/constants/goods";
 import type {
   EventLifecycle,
   EventBoundaryPrice,
   EventImpact,
   GoodPriceChange,
 } from "./types";
-import type { TickEvent, TickMarket } from "@/lib/tick/rows";
+import type { TickEvent } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
 /** Snapshot current prices at a system from a markets array ([] for region/pair-level events with no system). */
 function snapshotPrices(
-  markets: TickMarket[],
+  markets: WorldMarket[],
   systemId: string | null,
 ): EventBoundaryPrice[] {
   if (systemId === null) return [];
@@ -28,7 +30,7 @@ function snapshotPrices(
     .filter((m) => m.systemId === systemId)
     .map((m) => ({
       goodId: m.goodId,
-      price: spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock),
+      price: spotPrice(curveForRow(m, GOODS[m.goodId]), m.stock),
     }));
 }
 
@@ -55,10 +57,10 @@ interface ActiveEventRecord {
  */
 export function trackEventLifecycles(
   events: TickEvent[],
-  markets: TickMarket[],
+  markets: WorldMarket[],
   tick: number,
   activeEvents: Map<string, ActiveEventRecord>,
-  preTickMarkets: TickMarket[],
+  preTickMarkets: WorldMarket[],
 ): EventLifecycle[] {
   const completed: EventLifecycle[] = [];
   const currentIds = new Set(events.map((e) => e.id));
@@ -104,7 +106,7 @@ export function trackEventLifecycles(
 export function flushActiveEvents(
   activeEvents: Map<string, ActiveEventRecord>,
   endTick: number,
-  finalMarkets: TickMarket[],
+  finalMarkets: WorldMarket[],
 ): EventLifecycle[] {
   const remaining: EventLifecycle[] = [];
   for (const [id, info] of activeEvents) {

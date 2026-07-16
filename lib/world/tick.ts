@@ -12,16 +12,22 @@
  * → relations. Economy signals flow between stages via the in-memory
  * `TickContext.results` map.
  *
- * `World`'s flat rows (`WorldSystem`, `WorldMarket`, …) don't match the
- * adapters' `Tick*` row shapes field-for-field (see the join/merge helpers
- * below) — `World` is schema-faithful and omits catalog data (goods'
- * basePrice/floor/ceiling, a system's owning faction's governmentType) that
- * the adapters expect inlined. Those joins happen once per tick, from World
- * substrate that shouldn't itself be recomputed here.
+ * Some of `World`'s flat rows (`WorldSystem`, …) don't match the adapters'
+ * `Tick*` row shapes field-for-field (see the join/merge helpers below) —
+ * `World` is schema-faithful and omits derived data (a system's owning
+ * faction's governmentType, its building roster) that the adapters expect
+ * inlined. Those joins happen once per tick, from World substrate that
+ * shouldn't itself be recomputed here.
+ *
+ * Markets are deliberately NOT among them: `WorldMarket` is already the tick's
+ * market row, so the adapters read and write it directly and no per-tick join
+ * or merge exists. A good's catalog constants (basePrice/priceFloor/
+ * priceCeiling) are read from `GOODS[goodId]` where they're used. Joining them
+ * onto every one of the galaxy's ~26 × systemCount market rows and stripping
+ * them back off cost half of every tick.
  */
 
 import { mulberry32, type RNG } from "@/lib/engine/universe-gen";
-import { GOODS } from "@/lib/constants/goods";
 import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
@@ -86,7 +92,6 @@ import type {
 
 import type {
   TickConnection,
-  TickMarket,
   TickSystem,
 } from "@/lib/tick/rows";
 import type {
@@ -116,7 +121,7 @@ export function tickRng(seed: number, tick: number): RNG {
 // adapters expect inlined) ──────────────────────────────────────
 
 /**
- * Exported alongside `toTickSystems`/`toTickMarkets` — the calibration harness
+ * Exported alongside `toTickSystems` — the calibration harness
  * (`lib/tick-harness/runner.ts`) reuses these same joins to build the
  * tick-row views its (pre-existing) health analyzers read.
  */
@@ -188,24 +193,6 @@ export function toTickSystems(world: World): TickSystem[] {
   }));
 }
 
-/** Join each market row's good-catalog data (basePrice/floor/ceiling — code constants, not World state). */
-export function toTickMarkets(world: World): TickMarket[] {
-  return world.markets.map((m) => {
-    const good = GOODS[m.goodId];
-    return {
-      systemId: m.systemId,
-      goodId: m.goodId,
-      basePrice: good.basePrice,
-      stock: m.stock,
-      anchorMult: m.anchorMult,
-      demandRate: m.demandRate,
-      priceFloor: good.priceFloor,
-      priceCeiling: good.priceCeiling,
-      storageCapacity: m.storageCapacity,
-    };
-  });
-}
-
 // ── Tick → World row merges (write only the fields tick processors mutate;
 // everything else is immutable substrate) ──────────────────────
 
@@ -240,30 +227,18 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
   return rows;
 }
 
-function mergeMarketsIntoWorld(worldMarkets: WorldMarket[], tickMarkets: TickMarket[]): WorldMarket[] {
-  const byKey = new Map(tickMarkets.map((m) => [`${m.systemId}|${m.goodId}`, m]));
-  return worldMarkets.map((m) => {
-    const tickMarket = byKey.get(`${m.systemId}|${m.goodId}`);
-    if (!tickMarket) return m;
-    return { ...m, stock: tickMarket.stock, anchorMult: tickMarket.anchorMult, demandRate: tickMarket.demandRate };
-  });
-}
-
 // ── Directed-logistics / directed-build row builders (per-system rows the
 // two planners share) ───────────────────────────────────────────
 
-function marketRowsBySystem(markets: TickMarket[]): Map<string, MarketRowForLogistics[]> {
+function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLogistics[]> {
   const bySystem = new Map<string, MarketRowForLogistics[]>();
   for (const m of markets) {
     const row: MarketRowForLogistics = {
       id: `${m.systemId}|${m.goodId}`,
       goodId: m.goodId,
       stock: m.stock,
-      basePrice: m.basePrice,
       anchorMult: m.anchorMult,
       demandRate: m.demandRate,
-      priceFloor: m.priceFloor,
-      priceCeiling: m.priceCeiling,
       storageCapacity: m.storageCapacity,
     };
     const list = bySystem.get(m.systemId);
@@ -306,7 +281,7 @@ function buildBuildRows(
   }));
 }
 
-function applyStockUpdates(markets: TickMarket[], updates: Map<string, number>): TickMarket[] {
+function applyStockUpdates(markets: WorldMarket[], updates: Map<string, number>): WorldMarket[] {
   if (updates.size === 0) return markets;
   return markets.map((m) => {
     const newStock = updates.get(`${m.systemId}|${m.goodId}`);
@@ -497,7 +472,7 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 
 export async function runWorldTick(
   world: World,
-): Promise<{ world: World; events: TickBroadcastRaw; markets: TickMarket[] }> {
+): Promise<{ world: World; events: TickBroadcastRaw; markets: WorldMarket[] }> {
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
   const scaled = scaleEventCaps(world.systems.length);
@@ -506,7 +481,12 @@ export async function runWorldTick(
   const processorsRun: string[] = [];
 
   let systems = toTickSystems(world);
-  let markets = toTickMarkets(world);
+  // Starts as `world.markets` itself — no copy. Every stage that writes markets
+  // hands back fresh rows (each adapter copies on construction) rather than
+  // mutating the rows it was given, so this may alias the previous world until a
+  // stage replaces it, and the final array folds straight back into nextWorld.
+  // A stage that mutated a row in place would corrupt the previous world.
+  let markets = world.markets;
   const connections = toTickConnections(world);
   let ships = world.ships;
   let flowEvents = world.flowEvents;
@@ -848,7 +828,7 @@ export async function runWorldTick(
     systems: mergeSystemsIntoWorld(world.systems, systems),
     buildings: flattenBuildings(systems),
     constructionProjects,
-    markets: mergeMarketsIntoWorld(world.markets, markets),
+    markets,
     events,
     modifiers: rebuildWorldModifiers(events, scaled.definitions),
     ships,
@@ -864,9 +844,8 @@ export async function runWorldTick(
     processors: processorsRun,
   };
 
-  // `markets` is already this tick's final market-row join (same one folded
-  // into nextWorld above) — returned so callers that need the tick's market
-  // rows (the calibration harness) don't have to re-run toTickMarkets(nextWorld)
-  // right after we just built it.
+  // `markets` is the same array folded into nextWorld above — returned so
+  // callers that want this tick's market rows (the calibration harness) can
+  // take them without reaching back into the world.
   return { world: nextWorld, events: tickEvents, markets };
 }

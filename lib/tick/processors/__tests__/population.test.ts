@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { runPopulationProcessor } from "../population";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import type { TickContext } from "@/lib/tick/types";
-import type { TickMarket, TickSystem } from "@/lib/tick/rows";
+import type { TickSystem } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
@@ -24,8 +25,8 @@ function sys(id: string, population: number, popCap: number, unrest = 0, buildin
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
-function market(systemId: string, goodId: string): TickMarket {
-  return { systemId, goodId, basePrice: 100, stock: 100, anchorMult: 1, demandRate: 1, priceFloor: 10, priceCeiling: 500, storageCapacity: 0 };
+function market(systemId: string, goodId: string): WorldMarket {
+  return { systemId, goodId, stock: 100, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>): TickContext {
   return { tick: 0, results: new Map([["economy", { economySignals: { dissatisfactionBySystem: d, outputUptakeBySystem: new Map() } }]]) };

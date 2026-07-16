@@ -30,8 +30,8 @@ function mkConstruction(
 // food market with a high demandRate so the band's targetStock is large — stock 1 is a deep deficit.
 function foodMarket(systemId: string, stock: number): MarketRowForLogistics {
   return {
-    id: `${systemId}|food`, goodId: "food", stock, basePrice: 10, anchorMult: 1,
-    demandRate: 1000, priceFloor: 0.5, priceCeiling: 3.0, storageCapacity: 0,
+    id: `${systemId}|food`, goodId: "food", stock, anchorMult: 1,
+    demandRate: 1000, storageCapacity: 0,
   };
 }
 

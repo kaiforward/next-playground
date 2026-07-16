@@ -6,13 +6,14 @@
  * world state.
  */
 
-import { spotPrice, curveForGood, marketBand, midPriceAt } from "@/lib/engine/market-pricing";
+import { spotPrice, curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { GOODS } from "@/lib/constants/goods";
 import type {
   MarketSnapshot, MarketHealthSummary,
   PriceLevelSummary, CoverLevelEntry,
 } from "./types";
-import type { TickMarket } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 
 /** Default: sample every 50 ticks. */
 export const SNAPSHOT_INTERVAL = 50;
@@ -25,28 +26,28 @@ export const SNAPSHOT_INTERVAL = 50;
 const BAND_PROXIMITY_FRAC = 0.02;
 
 /** True when a market's stock sits within `BAND_PROXIMITY_FRAC` of the band floor. */
-function nearBandFloor(m: TickMarket, band: { minStock: number; maxStock: number }): boolean {
+function nearBandFloor(m: WorldMarket, band: { minStock: number; maxStock: number }): boolean {
   const step = BAND_PROXIMITY_FRAC * (band.maxStock - band.minStock);
   return m.stock <= band.minStock + step;
 }
 
-function nearBandCeiling(m: TickMarket, band: { minStock: number; maxStock: number }): boolean {
+function nearBandCeiling(m: WorldMarket, band: { minStock: number; maxStock: number }): boolean {
   const step = BAND_PROXIMITY_FRAC * (band.maxStock - band.minStock);
   return m.stock >= band.maxStock - step;
 }
 
 /** Take a snapshot of all market prices at the current tick. */
-export function takeMarketSnapshot(markets: TickMarket[]): MarketSnapshot[] {
+export function takeMarketSnapshot(markets: WorldMarket[]): MarketSnapshot[] {
   return markets.map((m) => ({
     systemId: m.systemId,
     goodId: m.goodId,
     stock: m.stock,
-    price: spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock),
+    price: spotPrice(curveForRow(m, GOODS[m.goodId]), m.stock),
   }));
 }
 
 /** Compute market health summary from the final market state. */
-export function computeMarketHealth(markets: TickMarket[]): MarketHealthSummary {
+export function computeMarketHealth(markets: WorldMarket[]): MarketHealthSummary {
   return {
     priceDispersion: computePriceDispersion(markets),
     stockDrift: computeStockDrift(markets),
@@ -64,12 +65,12 @@ export function computeMarketHealth(markets: TickMarket[]): MarketHealthSummary 
  * Low dispersion = prices are uniform = no reason to trade this good.
  */
 function computePriceDispersion(
-  markets: TickMarket[],
+  markets: WorldMarket[],
 ): { goodId: string; avgStdDev: number }[] {
   // Group prices by good
   const pricesByGood = new Map<string, number[]>();
   for (const m of markets) {
-    const price = spotPrice(curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult), m.stock);
+    const price = spotPrice(curveForRow(m, GOODS[m.goodId]), m.stock);
     let prices = pricesByGood.get(m.goodId);
     if (!prices) {
       prices = [];
@@ -98,18 +99,12 @@ function computePriceDispersion(
  * where the good prices at base.
  */
 function computeStockDrift(
-  markets: TickMarket[],
+  markets: WorldMarket[],
 ): { goodId: string; avgStockDrift: number }[] {
   const driftsByGood = new Map<string, number[]>();
 
   for (const m of markets) {
-    const reference = curveForGood(
-      m.basePrice,
-      m.priceFloor,
-      m.priceCeiling,
-      m.demandRate,
-      m.anchorMult,
-    ).targetStock;
+    const reference = curveForRow(m, GOODS[m.goodId]).targetStock;
     const drift = m.stock - reference;
     let drifts = driftsByGood.get(m.goodId);
     if (!drifts) {
@@ -140,7 +135,7 @@ function computeStockDrift(
  * the unambiguous supply pathology. Sorted by total pinned fraction descending.
  */
 function computeStockPins(
-  markets: TickMarket[],
+  markets: WorldMarket[],
 ): { goodId: string; floorFrac: number; ceilingFrac: number }[] {
   const byGood = new Map<string, { floor: number; ceiling: number; total: number }>();
 
@@ -151,7 +146,7 @@ function computeStockPins(
       byGood.set(m.goodId, agg);
     }
     agg.total += 1;
-    const band = marketBand({ demandRate: m.demandRate, storageCapacity: m.storageCapacity, priceFloor: m.priceFloor, priceCeiling: m.priceCeiling, anchorMult: m.anchorMult });
+    const band = marketBandForRow(m, GOODS[m.goodId]);
     if (nearBandFloor(m, band)) agg.floor += 1;
     else if (nearBandCeiling(m, band)) agg.ceiling += 1;
   }
@@ -189,14 +184,12 @@ function quantile(xs: number[], q: number): number {
  * read. Mirrors the DB audit's PRICE LEVELS section: a galaxy stuck cheap (median
  * « 1, high cheapFrac) is the overproduction signature this phase fixes.
  */
-function computePriceLevels(markets: TickMarket[]): PriceLevelSummary {
+function computePriceLevels(markets: WorldMarket[]): PriceLevelSummary {
   const ratios: number[] = [];
   for (const m of markets) {
-    const price = midPriceAt(
-      curveForGood(m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult),
-      m.stock,
-    );
-    ratios.push(price / m.basePrice);
+    const good = GOODS[m.goodId];
+    const price = midPriceAt(curveForRow(m, good), m.stock);
+    ratios.push(price / good.basePrice);
   }
   const n = ratios.length || 1;
   const cheap = ratios.filter((r) => r < 0.9).length;
@@ -216,12 +209,10 @@ function computePriceLevels(markets: TickMarket[]): PriceLevelSummary {
  * Per-good distribution of cover = stock / anchor. Surplus/deficit use the same
  * thresholds as directed logistics so the harness read lines up with the live audit.
  */
-function computeCoverLevels(markets: TickMarket[]): CoverLevelEntry[] {
+function computeCoverLevels(markets: WorldMarket[]): CoverLevelEntry[] {
   const coversByGood = new Map<string, number[]>();
   for (const m of markets) {
-    const target = curveForGood(
-      m.basePrice, m.priceFloor, m.priceCeiling, m.demandRate, m.anchorMult,
-    ).targetStock;
+    const target = curveForRow(m, GOODS[m.goodId]).targetStock;
     if (target <= 0) continue;
     const list = coversByGood.get(m.goodId) ?? [];
     list.push(m.stock / target);

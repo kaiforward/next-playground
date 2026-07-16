@@ -6,16 +6,17 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 
-/** One market's raw band inputs (mirrors the fields marketBandForRow consumes). */
+/**
+ * One market's raw band inputs (mirrors the fields marketBandForRow consumes).
+ * The good's price multiples are catalog constants, not row state — read them
+ * from `GOODS[goodId]` alongside this row.
+ */
 export interface MarketRowForLogistics {
   id: string;
   goodId: string;
   stock: number;
-  basePrice: number;
   anchorMult: number;
   demandRate: number;
-  priceFloor: number;
-  priceCeiling: number;
   storageCapacity: number;
 }
 

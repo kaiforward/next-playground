@@ -15,16 +15,20 @@ import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
-import { marketBand } from "@/lib/engine/market-pricing";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { GOODS } from "@/lib/constants/goods";
 import type { TickContext } from "@/lib/tick/types";
-import type { TickMarket, TickSystem } from "@/lib/tick/rows";
+import type { TickSystem } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 
-// Per-market band derived from the makeMarket fixture params:
-//   demandRate=1, priceFloor=0.2, priceCeiling=5.0, storageCapacity=120
+// The band the processor itself resolves for the makeMarket fixture — same
+// GOODS lookup it does internally, so the stock values below sit where the test
+// intends rather than outside the real band.
+//   demandRate=1, storageCapacity=120; GOODS.food priceFloor=0.5, priceCeiling=2.0
 //   → targetStock = TARGET_COVER(40) × 1 = 40
-//   → minStock    = 40 / 5.0 = 8   (scarcity reserve / price floor)
-//   → maxStock    = 40 / 0.2 + 120 = 200 + 120 = 320  (infrastructure ceiling)
-const FIXTURE_BAND = marketBand({ demandRate: 1, storageCapacity: 120, priceFloor: 0.2, priceCeiling: 5.0 });
+//   → minStock    = 40 / 2.0 = 20   (scarcity reserve / price floor)
+//   → maxStock    = 40 / 0.5 + 120 = 80 + 120 = 200  (infrastructure ceiling)
+const FIXTURE_BAND = marketBandForRow({ demandRate: 1, storageCapacity: 120 }, GOODS.food);
 
 // interval=1 → the whole system list is processed every tick (single shard).
 // catchUpFactor(1) = 1/REFERENCE_INTERVAL scales the per-update step uniformly;
@@ -89,19 +93,16 @@ function makeConsumerSystem(id: string, unrest: number): TickSystem {
   };
 }
 
-function makeMarket(systemId: string, goodId: string, stock: number): TickMarket {
+function makeMarket(systemId: string, goodId: string, stock: number): WorldMarket {
   return {
     systemId,
     goodId,
-    basePrice: 50,
     stock,
     anchorMult: 1,
     demandRate: 1,
-    priceFloor: 0.2,
-    priceCeiling: 5.0,
     // storageCapacity widens the per-market band's maxStock:
-    //   maxStock = TARGET_COVER/priceFloor + storageCapacity = 40/0.2 + 120 = 320
-    //   minStock = TARGET_COVER/priceCeiling = 40/5 = 8
+    //   maxStock = TARGET_COVER/priceFloor + storageCapacity = 40/0.5 + 120 = 200
+    //   minStock = TARGET_COVER/priceCeiling = 40/2 = 20
     // Tests derive their stock values from FIXTURE_BAND, so they always fall
     // within this market's own [minStock, maxStock] band.
     storageCapacity: 120,

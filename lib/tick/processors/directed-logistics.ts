@@ -1,6 +1,7 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { GOODS } from "@/lib/constants/goods";
 import {
   matchFactionTransfers,
   systemLogisticsGeneration,
@@ -75,7 +76,7 @@ export async function runDirectedLogisticsProcessor(
   const marketByKey = new Map<string, MarketEntry>();
   for (const r of rows) {
     for (const m of r.markets) {
-      const band = marketBandForRow(m, m);
+      const band = marketBandForRow(m, GOODS[m.goodId]);
       marketByKey.set(`${r.systemId}|${m.goodId}`, {
         ...m,
         systemId: r.systemId,
