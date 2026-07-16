@@ -180,13 +180,17 @@ directed-logistics (`tick.ts:675-676`); PR4 reads that instead. Note `world.flow
 `TRADE_SIMULATION.FLOW_HISTORY_TICKS` (`tick.ts:679-680`), so a whole-run count must accumulate
 per-tick rather than read the final world.
 
-Two live tests currently reach real values *through* the dead indirection and must import directly
+Also delete `lib/engine/simulator/__tests__/economy-scale-pressure.test.ts`. Its only test asserts
+`bots.startingCredits` scales with `ECONOMY_SCALE` — for a bot layer that no longer exists. `bots`
+appears nowhere outside `constants.ts` and the two dead test files, so there is no live value to
+redirect it to; it dies with the mechanism.
+
+**One** live test reaches a real value *through* the dead indirection and must import directly
 instead — which is the point:
 
 - `lib/tick/processors/__tests__/economy.test.ts:38` — `DEFAULT_SIM_CONSTANTS.events.modifierCaps`
-  → `MODIFIER_CAPS` from `lib/constants/events`
-- `lib/engine/simulator/__tests__/economy-scale-pressure.test.ts:6` — `resolveConstants()` → the
-  underlying constants directly
+  → `MODIFIER_CAPS` from `lib/constants/events`. Equivalent by construction: `constants.ts:163`
+  builds the field as `modifierCaps: { ...MODIFIER_CAPS }`.
 
 ### Harness internals
 
@@ -258,9 +262,29 @@ comparison stays "identical, no exceptions" rather than the weaker "identical ex
 PR4 then adds output to a codebase already proven unchanged, and its own gate is the narrower
 "every pre-existing field unchanged; new fields additive".
 
-**Timing fields must be stripped before comparing** — the results carry `elapsedMs`, which is
-wall-clock. Confirm which fields `buildExperimentResult` leaks (at minimum `elapsedMs`) and exclude
-them; do not assume the set.
+**Confirmed gate recipe** — verified by running it, and it took two corrections to get right, so use
+it verbatim:
+
+    npm run simulate -- --json 2>/dev/null \
+      | grep -v '"elapsedMs"' \
+      | sed -E 's/[0-9]+ms/Xms/g' \
+      > baseline.norm
+
+Two wall-clock sources leak into stdout, not one:
+
+- **`"elapsedMs"`** — the only wall-clock *field* in the results. Everything else in the payload is
+  deterministic: `finalWorld` is seeded (`gen.ts:81` — world-gen never calls `Date.now()`),
+  `WorldMeta` carries no timestamp, `populationSnapshots` are `Map`s that `JSON.stringify` renders
+  as `{}` (stable). `buildExperimentResult` also leaks a `timestamp`, but it serves only the saved
+  experiment file (`simulate.ts:348`), not `--json`.
+- **`in <N>ms` in the `[events]` spawn log** — the events processor `console.log`s per-spawn
+  diagnostics to **stdout**, so `2>/dev/null` does not remove them. Normalise the durations rather
+  than dropping the lines: the rest of each line (active count, caps, events/modifiers/shocks
+  created) is real signal worth diffing.
+
+Baseline at 600 systems / 500 ticks / seed 42 is **1,221,348 lines / 28MB**, and two independent
+runs are identical under this filter — the simulation is deterministic; only its diagnostics were
+not. PR1 passed this gate with zero diff.
 
 Layered gates, per CLAUDE.md: `npx tsc`, `npx vitest run`, `npx next build --webpack`.
 
