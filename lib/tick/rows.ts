@@ -65,6 +65,12 @@ export interface TickMarket {
   storageCapacity: number;
 }
 
+/**
+ * Deliberately omits `WorldEvent.metadata`, which only relations-spawned events
+ * carry and only the relations processor reads. The events stage would drop it,
+ * so `runWorldTick` preserves it out-of-band in a by-id side map and re-attaches
+ * it when mapping this row back to `WorldEvent`.
+ */
 export interface TickEvent {
   id: string;
   type: EventTypeId;

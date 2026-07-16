@@ -10,6 +10,7 @@ function makeCtx(tick: number, results: TickContext["results"] = new Map()): Tic
 
 function makeWorld(score: number, opts: { alliance?: boolean; events?: { id: string; type: "pact_under_negotiation" | "alliance_dissolved" | "border_conflict"; expiresAtTick: number }[] } = {}) {
   return new InMemoryRelationsWorld({
+    nextId: 1,
     factions: [
       {
         id: "fa",
