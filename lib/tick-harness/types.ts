@@ -157,6 +157,12 @@ export interface RegionOverviewEntry {
 
 export interface HarnessResults {
   config: HarnessConfig;
+  /**
+   * The economy scale the run actually resolved at. Not a `HarnessConfig` input —
+   * it is an ambient module constant read from the environment at import, so the
+   * run reports it rather than setting it.
+   */
+  economyScale: number;
   /** Market state sampled at regular intervals. */
   marketSnapshots: { tick: number; markets: MarketSnapshot[] }[];
   /** Derived market health metrics. */

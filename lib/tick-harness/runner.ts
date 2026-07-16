@@ -16,6 +16,7 @@ import {
   computeEventImpacts,
 } from "./event-analysis";
 import { summarizeLogistics } from "./logistics-analysis";
+import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
 import type { WorldFlowEvent } from "@/lib/world/types";
 import type {
@@ -142,6 +143,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
   return {
     config,
+    economyScale: ECONOMY_SCALE,
     marketSnapshots,
     marketHealth,
     eventImpacts,

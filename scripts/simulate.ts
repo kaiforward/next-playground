@@ -29,8 +29,26 @@ import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "..
 import { summarizeColonisation } from "../lib/tick-harness/build-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
+import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
 import { toTickSystems } from "../lib/world/tick";
 import type { HarnessConfig, HarnessResults } from "../lib/tick-harness/types";
+
+// Enforce the import-order invariant the dotenv import above depends on. ES modules
+// evaluate imports in source order, and economy-scale.ts resolves ECONOMY_SCALE at
+// module load — so an import placed above `dotenv/config` that transitively reaches
+// it would bake in the code default before .env was read, and every magnitude the
+// run reports would silently belong to a different economy than the one requested.
+// Comparing the resolved constant against the environment turns that into a crash.
+if (process.env.ECONOMY_SCALE !== undefined) {
+  const requested = toEconomyScale(process.env.ECONOMY_SCALE);
+  if (requested !== ECONOMY_SCALE) {
+    throw new Error(
+      `ECONOMY_SCALE mismatch: the environment asks for ${requested}, but the constants resolved to ` +
+        `${ECONOMY_SCALE}. An import above "dotenv/config" in scripts/simulate.ts reached ` +
+        `lib/constants/economy-scale.ts before .env was loaded — move it below the dotenv import.`,
+    );
+  }
+}
 
 // ── Argument parsing ────────────────────────────────────────────
 
@@ -345,7 +363,8 @@ async function runExperiment(configPath: string, jsonOutput: boolean): Promise<v
 
   console.log(
     `Running experiment${label ? ` "${label}"` : ""}: ` +
-    `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems\n`,
+    `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems, ` +
+    `economy scale ${ECONOMY_SCALE}\n`,
   );
 
   const results = await runTickHarness(config, label);
@@ -418,7 +437,8 @@ async function main(): Promise<void> {
   };
 
   console.log(
-    `Running quick-run: ${config.systemCount} systems, ${config.tickCount} ticks, seed ${config.seed}\n`,
+    `Running quick-run: ${config.systemCount} systems, ${config.tickCount} ticks, ` +
+    `seed ${config.seed}, economy scale ${ECONOMY_SCALE}\n`,
   );
 
   const results = await runTickHarness(config);

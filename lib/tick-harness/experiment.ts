@@ -41,6 +41,8 @@ export interface ExperimentResult {
   label?: string;
   timestamp: string;
   config: HarnessConfig;
+  /** The scale the run resolved at — a saved result is unreadable without knowing it. */
+  economyScale: number;
   marketHealth: HarnessResults["marketHealth"];
   eventImpacts: HarnessResults["eventImpacts"];
   elapsedMs: number;
@@ -54,6 +56,7 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     label: results.label,
     timestamp: new Date().toISOString(),
     config: results.config,
+    economyScale: results.economyScale,
     marketHealth: results.marketHealth,
     eventImpacts: results.eventImpacts,
     elapsedMs: results.elapsedMs,
