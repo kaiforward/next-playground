@@ -58,6 +58,16 @@ Naming this list is the point — the spec splits this work across four PRs and 
 
 ---
 
+## Execution note (2026-07-16) — the audit caught the sweep cherry-picking its own class
+
+Recorded because it is the third instance of the same lesson and the spec's whole thesis.
+
+Task 3 was written from a line-numbered hitlist and fixed **two** of the **six** World interfaces that named an `lib/tick/adapters/{prisma,memory}/…` fork. Task 6 Step 1's grep — with the `prisma` pattern added after review — caught the other four, plus `adapters/memory/events.ts:195` and `world/trade-flow-topology.ts:24`. Two active gameplay docs made the same false-peer claim about the harness (`economy.md:134`, `economy-specialisation.md:97`; the harness imports neither `supply-chain.ts` nor `industry.ts`).
+
+**A hitlist is not a sweep.** The grep is the instrument — it is what turns "the files I happened to notice" into "the class". Every one of these was invisible to a diff-scoped read.
+
+**Where the line was drawn:** `lib/tick/` is now zero-Prisma. The wider Postgres-fossil rot *outside* the tick (`lib/types/guards.ts`, `lib/world/gen.ts`, `lib/utils/format.ts`, …) is booked as a `[S]` item in `docs/BACKLOG.md` rather than smuggled into a harness-move PR — it is a different class (a deleted ORM described as live) and does not contradict this PR's thesis.
+
 ## The doc sweep, and why it is a task and not a chore
 
 **⚠ The method trap this PR exists to avoid:** a move/deletion PR's rot is **not in its own diff**. PR1's review found an active doc documenting a symbol PR1 had just deleted — rot the PR *created*, true on `main` and false on merge, invisible to every diff-scoped reviewer because the file was in no chunk. It surfaced only from a repo-wide grep of the deleted symbols. PR3 moves a whole directory, so this bites hardest here. **The grep in Task 6 is the instrument, not the reviewer.**
