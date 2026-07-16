@@ -316,7 +316,13 @@ Expected: **no output**. `tsc` cannot catch a stale name in a comment or a test 
 npx vitest run
 ```
 
-Expected: all pass, **same count as `main`** (1649). Unlike PR1, nothing is deleted here — a changed count means something was lost.
+Expected: **the same result as `main`, whatever that is** — nothing is deleted here, so a changed count means something was lost. Measured on `main` at `26150fe` for comparison: **1628 tests / 147 files**.
+
+**Known pre-existing local flake, not this PR's:** two heavy world-tick tests (`economy-scale-dynamic-invariance.test.ts`'s scale-normalised-stock test and `tick.test.ts`'s building-level invariant) exceed Vitest's 5 s default under full-suite parallel load on a loaded dev machine, and pass in isolation (~1.9 s). **`main` fails the same two, identically (1626 passed / 2 failed / 1628).** CI is green on `main`, so this is a local-load artifact rather than red CI. Do not "fix" it inside this PR — a mechanical rename must not carry unrelated churn. Compare against `main` rather than against green, and confirm both pass in isolation:
+
+```bash
+npx vitest run lib/world/__tests__/economy-scale-dynamic-invariance.test.ts lib/world/__tests__/tick.test.ts
+```
 
 - [ ] **Step 7: Commit**
 
