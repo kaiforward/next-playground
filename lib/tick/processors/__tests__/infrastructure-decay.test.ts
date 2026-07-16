@@ -4,11 +4,11 @@ import { InMemoryInfrastructureWorld } from "@/lib/tick/adapters/memory/infrastr
 import { HOUSING_TYPE, POP_CENTRE_DENSITY, BUILDING_TYPES, labourTotal } from "@/lib/constants/industry";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickContext, EconomySignals } from "@/lib/tick/types";
-import type { SimSystem } from "@/lib/engine/simulator/types";
+import type { TickSystem } from "@/lib/tick/rows";
 
 const ORE_LABOUR = labourTotal(BUILDING_TYPES.ore!.labour!);
 
-function sys(id: string, over: Partial<SimSystem>): SimSystem {
+function sys(id: string, over: Partial<TickSystem>): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 100, popCap: 200,

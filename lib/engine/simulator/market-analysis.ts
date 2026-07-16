@@ -9,9 +9,10 @@
 import { spotPrice, curveForGood, marketBand, midPriceAt } from "@/lib/engine/market-pricing";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type {
-  MarketSnapshot, MarketHealthSummary, SimMarketEntry,
+  MarketSnapshot, MarketHealthSummary,
   PriceLevelSummary, CoverLevelEntry,
 } from "./types";
+import type { TickMarket } from "@/lib/tick/rows";
 
 /** Default: sample every 50 ticks. */
 export const SNAPSHOT_INTERVAL = 50;
@@ -24,18 +25,18 @@ export const SNAPSHOT_INTERVAL = 50;
 const BAND_PROXIMITY_FRAC = 0.02;
 
 /** True when a market's stock sits within `BAND_PROXIMITY_FRAC` of the band floor. */
-function nearBandFloor(m: SimMarketEntry, band: { minStock: number; maxStock: number }): boolean {
+function nearBandFloor(m: TickMarket, band: { minStock: number; maxStock: number }): boolean {
   const step = BAND_PROXIMITY_FRAC * (band.maxStock - band.minStock);
   return m.stock <= band.minStock + step;
 }
 
-function nearBandCeiling(m: SimMarketEntry, band: { minStock: number; maxStock: number }): boolean {
+function nearBandCeiling(m: TickMarket, band: { minStock: number; maxStock: number }): boolean {
   const step = BAND_PROXIMITY_FRAC * (band.maxStock - band.minStock);
   return m.stock >= band.maxStock - step;
 }
 
 /** Take a snapshot of all market prices at the current tick. */
-export function takeMarketSnapshot(markets: SimMarketEntry[]): MarketSnapshot[] {
+export function takeMarketSnapshot(markets: TickMarket[]): MarketSnapshot[] {
   return markets.map((m) => ({
     systemId: m.systemId,
     goodId: m.goodId,
@@ -45,7 +46,7 @@ export function takeMarketSnapshot(markets: SimMarketEntry[]): MarketSnapshot[] 
 }
 
 /** Compute market health summary from the final market state. */
-export function computeMarketHealth(markets: SimMarketEntry[]): MarketHealthSummary {
+export function computeMarketHealth(markets: TickMarket[]): MarketHealthSummary {
   return {
     priceDispersion: computePriceDispersion(markets),
     stockDrift: computeStockDrift(markets),
@@ -63,7 +64,7 @@ export function computeMarketHealth(markets: SimMarketEntry[]): MarketHealthSumm
  * Low dispersion = prices are uniform = no reason to trade this good.
  */
 function computePriceDispersion(
-  markets: SimMarketEntry[],
+  markets: TickMarket[],
 ): { goodId: string; avgStdDev: number }[] {
   // Group prices by good
   const pricesByGood = new Map<string, number[]>();
@@ -97,7 +98,7 @@ function computePriceDispersion(
  * where the good prices at base.
  */
 function computeStockDrift(
-  markets: SimMarketEntry[],
+  markets: TickMarket[],
 ): { goodId: string; avgStockDrift: number }[] {
   const driftsByGood = new Map<string, number[]>();
 
@@ -139,7 +140,7 @@ function computeStockDrift(
  * the unambiguous supply pathology. Sorted by total pinned fraction descending.
  */
 function computeStockPins(
-  markets: SimMarketEntry[],
+  markets: TickMarket[],
 ): { goodId: string; floorFrac: number; ceilingFrac: number }[] {
   const byGood = new Map<string, { floor: number; ceiling: number; total: number }>();
 
@@ -188,7 +189,7 @@ function quantile(xs: number[], q: number): number {
  * read. Mirrors the DB audit's PRICE LEVELS section: a galaxy stuck cheap (median
  * « 1, high cheapFrac) is the overproduction signature this phase fixes.
  */
-function computePriceLevels(markets: SimMarketEntry[]): PriceLevelSummary {
+function computePriceLevels(markets: TickMarket[]): PriceLevelSummary {
   const ratios: number[] = [];
   for (const m of markets) {
     const price = midPriceAt(
@@ -213,9 +214,9 @@ function computePriceLevels(markets: SimMarketEntry[]): PriceLevelSummary {
 // ── Cover levels (stock / targetStock, per good) ────────────────
 /**
  * Per-good distribution of cover = stock / anchor. Surplus/deficit use the same
- * thresholds as directed logistics so the sim read lines up with the live audit.
+ * thresholds as directed logistics so the harness read lines up with the live audit.
  */
-function computeCoverLevels(markets: SimMarketEntry[]): CoverLevelEntry[] {
+function computeCoverLevels(markets: TickMarket[]): CoverLevelEntry[] {
   const coversByGood = new Map<string, number[]>();
   for (const m of markets) {
     const target = curveForGood(

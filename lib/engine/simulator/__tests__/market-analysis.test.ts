@@ -3,14 +3,14 @@ import {
   takeMarketSnapshot,
   computeMarketHealth,
 } from "../market-analysis";
-import type { SimMarketEntry } from "../types";
+import type { TickMarket } from "@/lib/tick/rows";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 
 function market(
   systemId: string,
   goodId: string,
   stock: number,
-): SimMarketEntry {
+): TickMarket {
   return { systemId, goodId, basePrice: 100, stock, anchorMult: 1, demandRate: 1, priceFloor: 0.2, priceCeiling: 5.0, storageCapacity: 0 };
 }
 

@@ -9,19 +9,18 @@
 import type { EventTypeId } from "@/lib/constants/events";
 import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
 import type {
-  SimEvent,
-  SimMarketEntry,
   EventLifecycle,
   EventBoundaryPrice,
   EventImpact,
   GoodPriceChange,
 } from "./types";
+import type { TickEvent, TickMarket } from "@/lib/tick/rows";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
 /** Snapshot current prices at a system from a markets array ([] for region/pair-level events with no system). */
 function snapshotPrices(
-  markets: SimMarketEntry[],
+  markets: TickMarket[],
   systemId: string | null,
 ): EventBoundaryPrice[] {
   if (systemId === null) return [];
@@ -55,11 +54,11 @@ interface ActiveEventRecord {
  *   (used to capture start prices for newly-detected events)
  */
 export function trackEventLifecycles(
-  events: SimEvent[],
-  markets: SimMarketEntry[],
+  events: TickEvent[],
+  markets: TickMarket[],
   tick: number,
   activeEvents: Map<string, ActiveEventRecord>,
-  preTickMarkets: SimMarketEntry[],
+  preTickMarkets: TickMarket[],
 ): EventLifecycle[] {
   const completed: EventLifecycle[] = [];
   const currentIds = new Set(events.map((e) => e.id));
@@ -105,7 +104,7 @@ export function trackEventLifecycles(
 export function flushActiveEvents(
   activeEvents: Map<string, ActiveEventRecord>,
   endTick: number,
-  finalMarkets: SimMarketEntry[],
+  finalMarkets: TickMarket[],
 ): EventLifecycle[] {
   const remaining: EventLifecycle[] = [];
   for (const [id, info] of activeEvents) {

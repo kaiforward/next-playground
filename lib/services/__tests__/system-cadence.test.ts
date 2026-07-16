@@ -8,7 +8,7 @@ import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
 import { emptyResourceVector } from "@/lib/engine/resources";
 import type { World, WorldSystem } from "@/lib/world/types";
-import type { SimSystem } from "@/lib/engine/simulator/types";
+import type { TickSystem } from "@/lib/tick/rows";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
 
 // A realistic system template (every required field populated by the real
@@ -49,7 +49,7 @@ function buildWorld(systems: WorldSystem[]): World {
 
 // Minimal fixtures for the tick adapters' constructor inputs (only the fields
 // economyShardOrder/factionShardKeys and the adapter constructors touch).
-function makeSimSystem(id: string, factionId: string | null): SimSystem {
+function makeTickSystem(id: string, factionId: string | null): TickSystem {
   return {
     id,
     name: id,
@@ -102,7 +102,7 @@ describe("shard-order helpers vs. the tick adapters (drift guard)", () => {
     const ids = ["zulu", "alpha", "mike", "bravo", "yankee"];
     // Developed systems (via a faction id) so the economy-participation gate in
     // getSystemIds is a no-op here — this guards ordering drift, not the gate.
-    const systems = ids.map((id) => makeSimSystem(id, "faction-a"));
+    const systems = ids.map((id) => makeTickSystem(id, "faction-a"));
     const world = new InMemoryEconomyWorld({ systems, markets: [], modifiers: [] });
 
     const fromAdapter = await world.getSystemIds();

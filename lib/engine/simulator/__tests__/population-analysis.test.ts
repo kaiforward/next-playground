@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { detectPingPong, summarizeInfrastructure } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
-import type { SimSystem } from "@/lib/engine/simulator/types";
+import type { TickSystem } from "@/lib/tick/rows";
 
 /**
  * Characterization tests for detectPingPong. If any of these fail the
@@ -62,7 +62,7 @@ describe("detectPingPong", () => {
   });
 });
 
-function infraSys(id: string, buildings: Record<string, number>, popCap: number): SimSystem {
+function infraSys(id: string, buildings: Record<string, number>, popCap: number): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 50, popCap,

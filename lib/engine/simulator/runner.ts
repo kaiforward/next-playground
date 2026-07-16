@@ -8,7 +8,7 @@
  */
 
 import { generateWorld } from "@/lib/world/gen";
-import { runWorldTick, toSimSystems, toSimMarkets } from "@/lib/world/tick";
+import { runWorldTick, toTickSystems, toTickMarkets } from "@/lib/world/tick";
 import { takeMarketSnapshot, computeMarketHealth, SNAPSHOT_INTERVAL } from "./market-analysis";
 import {
   trackEventLifecycles,
@@ -22,13 +22,12 @@ import type {
   MarketSnapshot,
   EventLifecycle,
   RegionOverviewEntry,
-  SimEvent,
-  SimMarketEntry,
 } from "./types";
+import type { TickEvent, TickMarket } from "@/lib/tick/rows";
 
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
 interface ActiveEventRecord {
-  type: SimEvent["type"];
+  type: TickEvent["type"];
   systemId: string | null;
   severity: number;
   startTick: number;
@@ -46,9 +45,9 @@ export async function runSimulation(config: SimConfig, label?: string): Promise<
 
   // Region overview — dominant government type per region, derived from
   // faction ownership. Ties broken alphabetically.
-  const simSystemsAtStart = toSimSystems(world);
+  const tickSystemsAtStart = toTickSystems(world);
   const systemsByRegion = new Map<string, GovernmentType[]>();
-  for (const s of simSystemsAtStart) {
+  for (const s of tickSystemsAtStart) {
     const list = systemsByRegion.get(s.regionId) ?? [];
     list.push(s.governmentType);
     systemsByRegion.set(s.regionId, list);
@@ -78,23 +77,23 @@ export async function runSimulation(config: SimConfig, label?: string): Promise<
   const completedEvents: EventLifecycle[] = [];
 
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
-  const initialBuildingTotal = simSystemsAtStart.reduce(
+  const initialBuildingTotal = tickSystemsAtStart.reduce(
     (sum, s) => sum + Object.values(s.buildings).reduce((a, c) => a + Math.max(0, c), 0),
     0,
   );
 
   // Kept in sync with `world` every tick — reused as both this tick's
   // post-tick snapshot and next tick's pre-tick snapshot, so the good-catalog
-  // join (toSimMarkets) runs once per tick instead of twice.
-  let currentMarkets: SimMarketEntry[] = toSimMarkets(world);
+  // join (toTickMarkets) runs once per tick instead of twice.
+  let currentMarkets: TickMarket[] = toTickMarkets(world);
 
   for (let t = 0; t < config.tickCount; t++) {
     const preTickMarkets = currentMarkets;
 
     const result = await runWorldTick(world);
     world = result.world;
-    // runWorldTick already built this tick's Sim-shaped markets internally —
-    // reuse it instead of re-running the toSimMarkets join over `world`.
+    // runWorldTick already built this tick's market rows internally —
+    // reuse it instead of re-running the toTickMarkets join over `world`.
     currentMarkets = result.markets;
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {

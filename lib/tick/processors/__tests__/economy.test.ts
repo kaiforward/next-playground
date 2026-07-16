@@ -17,7 +17,7 @@ import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import type { TickContext } from "@/lib/tick/types";
-import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
+import type { TickMarket, TickSystem } from "@/lib/tick/rows";
 
 // Per-market band derived from the makeMarket fixture params:
 //   demandRate=1, priceFloor=0.2, priceCeiling=5.0, storageCapacity=120
@@ -47,7 +47,7 @@ function makeCtx(tick = 0): TickContext {
  * Producer system: arable-rich, low population. Produces food, minimal consumption.
  * Consumer system: arable-barren, large population. Consumes food, no production.
  */
-function makeProducerSystem(id: string, unrest: number): SimSystem {
+function makeProducerSystem(id: string, unrest: number): TickSystem {
   return {
     id,
     name: id,
@@ -68,7 +68,7 @@ function makeProducerSystem(id: string, unrest: number): SimSystem {
   };
 }
 
-function makeConsumerSystem(id: string, unrest: number): SimSystem {
+function makeConsumerSystem(id: string, unrest: number): TickSystem {
   return {
     id,
     name: id,
@@ -89,7 +89,7 @@ function makeConsumerSystem(id: string, unrest: number): SimSystem {
   };
 }
 
-function makeMarket(systemId: string, goodId: string, stock: number): SimMarketEntry {
+function makeMarket(systemId: string, goodId: string, stock: number): TickMarket {
   return {
     systemId,
     goodId,
@@ -359,7 +359,7 @@ describe("economy processor: supply-chain input-gating", () => {
     // so production can occur when ore is available and be fully blocked when gate = 0.
     const MID_METALS = FIXTURE_BAND.minStock + 10; // ≈ 18 — well within [floor=8, ceiling≈52]
 
-    function makeSmeltingSystem(id: string): SimSystem {
+    function makeSmeltingSystem(id: string): TickSystem {
       return {
         id,
         name: id,

@@ -8,7 +8,7 @@
  * industry (the stranded symptom), and whether the construction queue is proposing nothing for
  * colonies (a planner/decision gap) or proposing but never funding them (a pacing/starvation gap).
  */
-import type { SimSystem } from "./types";
+import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
@@ -72,7 +72,7 @@ export interface ColonisationSummary {
   };
 }
 
-function slotCapTotal(s: SimSystem): number {
+function slotCapTotal(s: TickSystem): number {
   let n = 0;
   for (const v of Object.values(s.slotCap)) n += Math.max(0, v);
   return n;
@@ -99,7 +99,7 @@ function projectKind(buildingType: string): string {
  * system is a colony.
  */
 export function summarizeColonisation(
-  systems: SimSystem[],
+  systems: TickSystem[],
   homeworldIds: Set<string>,
   projects: WorldConstructionProject[],
 ): ColonisationSummary {

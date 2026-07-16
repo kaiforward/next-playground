@@ -29,7 +29,7 @@ import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "..
 import { summarizeColonisation } from "../lib/engine/simulator/build-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
-import { toSimSystems } from "../lib/world/tick";
+import { toTickSystems } from "../lib/world/tick";
 import type { SimConfig, SimResults } from "../lib/engine/simulator/types";
 
 // ── Argument parsing ────────────────────────────────────────────
@@ -84,8 +84,8 @@ function formatTable(results: SimResults): string {
   const { marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
-  // summaries below — they used to each call toSimSystems(finalWorld) separately.
-  const finalSimSystems = toSimSystems(finalWorld);
+  // summaries below — they used to each call toTickSystems(finalWorld) separately.
+  const finalTickSystems = toTickSystems(finalWorld);
 
   const lines: string[] = [];
 
@@ -169,7 +169,7 @@ function formatTable(results: SimResults): string {
   // Population and unrest summary
   {
     const pop = summarizePopulation(
-      finalSimSystems,
+      finalTickSystems,
       initialPopulationTotal,
       STRIKE_PARAMS.threshold,
     );
@@ -200,7 +200,7 @@ function formatTable(results: SimResults): string {
 
   // Infrastructure decay summary
   {
-    const infra = summarizeInfrastructure(finalSimSystems, initialBuildingTotal);
+    const infra = summarizeInfrastructure(finalTickSystems, initialBuildingTotal);
     lines.push("");
     lines.push("Infrastructure (end of simulation):");
     const iWidths = [24, 16];
@@ -218,7 +218,7 @@ function formatTable(results: SimResults): string {
   // Colonisation / build-loop health — does a colonised system actually get built out?
   {
     const homeworldIds = new Set(finalWorld.factions.map((f) => f.homeworldId));
-    const col = summarizeColonisation(finalSimSystems, homeworldIds, finalWorld.constructionProjects);
+    const col = summarizeColonisation(finalTickSystems, homeworldIds, finalWorld.constructionProjects);
     lines.push("");
     lines.push("Colonisation & Build Loop (end of simulation):");
     const cWidths = [30, 12, 12];

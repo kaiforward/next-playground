@@ -10,30 +10,30 @@ import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { economyShardOrder } from "@/lib/engine/shard-order";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
-  SimMarketEntry,
-  SimSystem,
-} from "@/lib/engine/simulator/types";
+  TickMarket,
+  TickSystem,
+} from "@/lib/tick/rows";
 
 /**
  * In-memory adapter for the economy processor.
  *
- * Owns mutable slices of the simulator's world for the duration of one
- * `runEconomyProcessor` call. Markets are mutated in place (the simulator
- * already passes copies of its state in); the caller reads the final
- * arrays via the public fields once the processor returns.
+ * Owns mutable slices of the tick's rows for the duration of one
+ * `runEconomyProcessor` call. Markets are mutated in place (the caller
+ * already passes copies in); the caller reads the final arrays via the
+ * public fields once the processor returns.
  *
  * The synthetic `MarketView.id` (`"${systemId}|${goodId}"`) round-trips into
- * `MarketUpdate.id`, letting the adapter locate the underlying SimMarketEntry
+ * `MarketUpdate.id`, letting the adapter locate the underlying TickMarket
  * by composite key on write.
  */
 export class InMemoryEconomyWorld implements EconomyWorld {
-  systems: SimSystem[];
-  markets: SimMarketEntry[];
+  systems: TickSystem[];
+  markets: TickMarket[];
   modifiers: ModifierRow[];
 
   constructor(initial: {
-    systems: SimSystem[];
-    markets: SimMarketEntry[];
+    systems: TickSystem[];
+    markets: TickMarket[];
     modifiers: ModifierRow[];
   }) {
     this.systems = initial.systems.map((s) => ({ ...s }));

@@ -4,7 +4,7 @@ import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, HEAVY_INDUSTRY_COMPLEX,
 } from "@/lib/constants/industry";
 import { unitResourceVector, emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
-import type { SimSystem } from "@/lib/engine/simulator/types";
+import type { TickSystem } from "@/lib/tick/rows";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
 
@@ -25,7 +25,7 @@ function devSys(
     buildings?: Record<string, number>;
     slotCap?: ResourceVector;
   } = {},
-): SimSystem {
+): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1",
     control: opts.control ?? "developed",

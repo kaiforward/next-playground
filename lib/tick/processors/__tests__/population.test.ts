@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { runPopulationProcessor } from "../population";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import type { TickContext } from "@/lib/tick/types";
-import type { SimMarketEntry, SimSystem } from "@/lib/engine/simulator/types";
+import type { TickMarket, TickSystem } from "@/lib/tick/rows";
 import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
@@ -17,14 +17,14 @@ const popOnly = (population: number): CivilianDemandBasis => ({
   engineers: 0,
 });
 
-function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): SimSystem {
+function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed", governmentType: "federation",
     population, popCap, unrest, buildings, buildingIdleMonths: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
-function market(systemId: string, goodId: string): SimMarketEntry {
+function market(systemId: string, goodId: string): TickMarket {
   return { systemId, goodId, basePrice: 100, stock: 100, anchorMult: 1, demandRate: 1, priceFloor: 10, priceCeiling: 500, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>): TickContext {

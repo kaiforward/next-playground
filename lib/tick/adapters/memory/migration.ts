@@ -5,19 +5,19 @@ import type {
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import { labourDemand } from "@/lib/engine/industry";
 import type { ColonistSystem } from "@/lib/engine/colonist-delivery";
-import type { SimConnection, SimSystem } from "@/lib/engine/simulator/types";
+import type { TickConnection, TickSystem } from "@/lib/tick/rows";
 
 /**
- * In-memory adapter for the migration processor (sim + unit tests). Open edges
+ * In-memory adapter for the migration processor (harness + unit tests). Open edges
  * are built from the same faction-bounded topology helper as trade-flow.
  */
 export class InMemoryMigrationWorld implements MigrationWorld {
-  systems: SimSystem[];
+  systems: TickSystem[];
   private openEdgesCache: EdgeView[] | null;
 
   constructor(
-    initial: { systems: SimSystem[] },
-    private readonly connections: SimConnection[],
+    initial: { systems: TickSystem[] },
+    private readonly connections: TickConnection[],
     /** Precomputed open edges (e.g. shared with trade-flow for the same tick); self-computes on first use when omitted. */
     precomputedOpenEdges?: EdgeView[],
   ) {
