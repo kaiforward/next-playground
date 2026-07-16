@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   ExperimentConfigSchema,
-  experimentToSimConfig,
-} from "@/lib/tick-harness/experiment";
+  experimentToHarnessConfig,
+} from "../experiment";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 
 describe("ExperimentConfig", () => {
@@ -42,8 +42,8 @@ describe("ExperimentConfig", () => {
     });
   });
 
-  describe("experimentToSimConfig", () => {
-    it("maps config fields directly onto SimConfig", () => {
+  describe("experimentToHarnessConfig", () => {
+    it("maps config fields directly onto HarnessConfig", () => {
       const exp = ExperimentConfigSchema.parse({
         label: "test",
         seed: 99,
@@ -51,7 +51,7 @@ describe("ExperimentConfig", () => {
         systemCount: 120,
       });
 
-      const { config, label } = experimentToSimConfig(exp);
+      const { config, label } = experimentToHarnessConfig(exp);
 
       expect(label).toBe("test");
       expect(config).toEqual({ systemCount: 120, seed: 99, tickCount: 200 });
@@ -59,7 +59,7 @@ describe("ExperimentConfig", () => {
 
     it("omits label when none is specified", () => {
       const exp = ExperimentConfigSchema.parse({});
-      const { label } = experimentToSimConfig(exp);
+      const { label } = experimentToHarnessConfig(exp);
       expect(label).toBeUndefined();
     });
   });

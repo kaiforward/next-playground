@@ -13,7 +13,7 @@ import type { World } from "@/lib/world/types";
 
 // ── Calibration harness config ──────────────────────────────────
 
-export interface SimConfig {
+export interface HarnessConfig {
   systemCount: number;
   seed: number;
   tickCount: number;
@@ -126,8 +126,8 @@ export interface RegionOverviewEntry {
 
 // ── Results ─────────────────────────────────────────────────────
 
-export interface SimResults {
-  config: SimConfig;
+export interface HarnessResults {
+  config: HarnessConfig;
   /** Market state sampled at regular intervals. */
   marketSnapshots: { tick: number; markets: MarketSnapshot[] }[];
   /** Derived market health metrics. */

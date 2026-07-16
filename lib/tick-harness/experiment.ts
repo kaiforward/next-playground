@@ -1,16 +1,15 @@
 /**
  * Experiment system — YAML config parsing, validation, and result serialization.
  *
- * The calibration harness is now a thin wrapper over `generateWorld` +
- * `runWorldTick` (see `docs/build-plans/pivot-phase2-engine-extraction.md`
- * Task 5): there is no per-run constants-override channel any more —
+ * The calibration harness is a thin wrapper over `generateWorld` +
+ * `runWorldTick`: there is no per-run constants-override channel —
  * `runWorldTick` reads the same code constants the live game does — so an
  * experiment config only names the world to generate and how long to run it.
  */
 
 import { z } from "zod";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
-import type { SimConfig, SimResults } from "./types";
+import type { HarnessConfig, HarnessResults } from "./types";
 
 // ── Zod schema ───────────────────────────────────────────────────
 
@@ -25,9 +24,9 @@ export type ExperimentConfig = z.infer<typeof ExperimentConfigSchema>;
 
 // ── Conversion ───────────────────────────────────────────────────
 
-/** Convert a validated experiment config to SimConfig. */
-export function experimentToSimConfig(exp: ExperimentConfig): {
-  config: SimConfig;
+/** Convert a validated experiment config to HarnessConfig. */
+export function experimentToHarnessConfig(exp: ExperimentConfig): {
+  config: HarnessConfig;
   label?: string;
 } {
   return {
@@ -41,16 +40,16 @@ export function experimentToSimConfig(exp: ExperimentConfig): {
 export interface ExperimentResult {
   label?: string;
   timestamp: string;
-  config: SimConfig;
-  marketHealth: SimResults["marketHealth"];
-  eventImpacts: SimResults["eventImpacts"];
+  config: HarnessConfig;
+  marketHealth: HarnessResults["marketHealth"];
+  eventImpacts: HarnessResults["eventImpacts"];
   elapsedMs: number;
 }
 
 /**
- * Wrap SimResults into a self-documenting experiment result for saving.
+ * Wrap HarnessResults into a self-documenting experiment result for saving.
  */
-export function buildExperimentResult(results: SimResults): ExperimentResult {
+export function buildExperimentResult(results: HarnessResults): ExperimentResult {
   return {
     label: results.label,
     timestamp: new Date().toISOString(),
