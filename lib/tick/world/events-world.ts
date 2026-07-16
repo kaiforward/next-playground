@@ -107,24 +107,24 @@ export interface EventsWorld {
   applyShocks(shocks: SystemShock[]): Promise<number>;
 }
 
-/** Per-tick params passed alongside the world. Sim and live differ here. */
+/** Per-tick params passed alongside the world, all sourced by `runWorldTick`. */
 export interface EventsProcessorParams {
   rng: () => number;
-  /** Live: scaleEventCaps result. Sim: SimConstants.events caps. */
+  /** From `scaleEventCaps`: the global cap scales with system count, the per-system cap is flat. */
   caps: { maxEventsGlobal: number; maxEventsPerSystem: number };
-  /** Live: scaleEventCaps result. Sim: SimConstants.events.maxBatchSpawn. */
+  /** Max events spawned in one spawn tick — `ceil(maxEventsGlobal / 50)`. */
   batchSize: number;
-  /** Live: EVENT_SPAWN_INTERVAL. Sim: SimConstants.events.spawnInterval. */
+  /** Ticks between spawn attempts (`EVENT_SPAWN_INTERVAL`). */
   spawnInterval: number;
-  /** Live: SCALED_DEFINITIONS. Sim: SCALED.definitions. */
+  /** Event definitions with each type's `maxActive` scaled by system count. */
   definitions: Record<EventTypeId, import("@/lib/constants/events").EventDefinition>;
-  /** Live: true. Sim: false when disableRandomEvents is set. */
+  /** Gates random spawning on a spawn tick. `runWorldTick` always passes true; only tests pass false. */
   spawnEnabled: boolean;
-  /** Sim-only injections to apply this tick. Live always [] / undefined. */
+  /** Specific events to spawn this tick. `runWorldTick` never passes this — tests only. */
   injections?: InjectionRequest[];
 }
 
-/** Sim-only request to spawn a specific event at a system this tick. */
+/** Request to spawn a specific event at a system this tick. */
 export interface InjectionRequest {
   type: EventTypeId;
   systemId: string;
