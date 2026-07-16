@@ -43,8 +43,10 @@ next-env.d.ts
 /app/generated/prisma
 
 
-# experiment results (auto-saved by simulate --config)
-/experiments
+# experiment results (auto-saved by simulate --config). Exclude the directory's
+# CONTENTS, not the directory: git cannot re-include anything under an excluded
+# directory, so `/experiments` would make the examples/ negation below a no-op.
+/experiments/*
 !/experiments/examples/
 
 # single-player world saves (local JSON files, not build output)
