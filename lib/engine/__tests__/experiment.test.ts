@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   ExperimentConfigSchema,
   experimentToSimConfig,
-} from "../simulator/experiment";
+} from "@/lib/tick-harness/experiment";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 
 describe("ExperimentConfig", () => {

@@ -19,18 +19,18 @@ import "dotenv/config";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
-import { runSimulation } from "../lib/engine/simulator/runner";
+import { runSimulation } from "../lib/tick-harness/runner";
 import {
   ExperimentConfigSchema,
   experimentToSimConfig,
   buildExperimentResult,
-} from "../lib/engine/simulator/experiment";
-import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/engine/simulator/population-analysis";
-import { summarizeColonisation } from "../lib/engine/simulator/build-analysis";
+} from "../lib/tick-harness/experiment";
+import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
+import { summarizeColonisation } from "../lib/tick-harness/build-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { toTickSystems } from "../lib/world/tick";
-import type { SimConfig, SimResults } from "../lib/engine/simulator/types";
+import type { SimConfig, SimResults } from "../lib/tick-harness/types";
 
 // ── Argument parsing ────────────────────────────────────────────
 
