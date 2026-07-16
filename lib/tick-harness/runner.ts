@@ -15,7 +15,10 @@ import {
   flushActiveEvents,
   computeEventImpacts,
 } from "./event-analysis";
+import { summarizeLogistics } from "./logistics-analysis";
+import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
+import type { WorldFlowEvent } from "@/lib/world/types";
 import type {
   HarnessConfig,
   HarnessResults,
@@ -73,6 +76,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
   const populationSnapshots: Array<Map<string, number>> = [];
+  // Whole-run flow log. The world's own `flowEvents` is pruned to the retention
+  // window every tick, so a run longer than that window can only be totalled by
+  // taking each tick's transfers as they happen.
+  const logisticsFlows: WorldFlowEvent[] = [];
   const activeEventTracker = new Map<string, ActiveEventRecord>();
   const completedEvents: EventLifecycle[] = [];
 
@@ -95,6 +102,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     // runWorldTick already built this tick's market rows internally —
     // reuse it instead of re-running the toTickMarkets join over `world`.
     currentMarkets = result.markets;
+
+    for (const f of world.flowEvents) {
+      if (f.tick === world.meta.currentTick) logisticsFlows.push(f);
+    }
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {
       marketSnapshots.push({ tick: world.meta.currentTick, markets: takeMarketSnapshot(currentMarkets) });
@@ -132,9 +143,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
   return {
     config,
+    economyScale: ECONOMY_SCALE,
     marketSnapshots,
     marketHealth,
     eventImpacts,
+    logisticsActivity: summarizeLogistics(logisticsFlows),
     regionOverview,
     label,
     elapsedMs: performance.now() - start,

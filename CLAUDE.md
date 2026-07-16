@@ -164,7 +164,7 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 **Verifying changes (dev has no live universe)**
 - Verify generation/economy CHANGES by intrinsic coherence, not bit-identical parity vs old output — seeded RNG shifts by design when the draws change.
 - Prove a gameplay mechanic works via the simulator (the real tick) measuring the actual OUTCOME — not isolated engine fixtures (which pass while the galaxy is 100% broken). Add a sim metric when a symptom hides in aggregate health.
-- Until all mechanisms ship, calibrate the economy to a COARSE health bar only (no NaN/runaway/pinning; greedy≫random; dispersion; liquidity) — defer precision tuning (it's perishable) and loosen magnitude-pinning tests to ranges.
+- Until all mechanisms ship, calibrate the economy to a COARSE health bar only (no NaN/runaway/pinning; dispersion; liquidity) — defer precision tuning (it's perishable) and loosen magnitude-pinning tests to ranges.
 
 **Before building a mechanic**
 - Map its runtime interactions with ALL shipped mechanics (decay, staffing, pop viability) first — a plan that ignores staffing builds unstaffable capacity that decay then eats.

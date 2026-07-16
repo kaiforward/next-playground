@@ -29,8 +29,26 @@ import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "..
 import { summarizeColonisation } from "../lib/tick-harness/build-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
+import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
 import { toTickSystems } from "../lib/world/tick";
 import type { HarnessConfig, HarnessResults } from "../lib/tick-harness/types";
+
+// Enforce the import-order invariant the dotenv import above depends on. ES modules
+// evaluate imports in source order, and economy-scale.ts resolves ECONOMY_SCALE at
+// module load — so an import placed above `dotenv/config` that transitively reaches
+// it would bake in the code default before .env was read, and every magnitude the
+// run reports would silently belong to a different economy than the one requested.
+// Comparing the resolved constant against the environment turns that into a crash.
+if (process.env.ECONOMY_SCALE !== undefined) {
+  const requested = toEconomyScale(process.env.ECONOMY_SCALE);
+  if (requested !== ECONOMY_SCALE) {
+    throw new Error(
+      `ECONOMY_SCALE mismatch: the environment asks for ${requested}, but the constants resolved to ` +
+        `${ECONOMY_SCALE}. An import above "dotenv/config" in scripts/simulate.ts reached ` +
+        `lib/constants/economy-scale.ts before .env was loaded — move it below the dotenv import.`,
+    );
+  }
+}
 
 // ── Argument parsing ────────────────────────────────────────────
 
@@ -81,7 +99,7 @@ function fmtNum(n: number): string {
 }
 
 function formatTable(results: HarnessResults): string {
-  const { marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
+  const { marketHealth, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
   // summaries below — they used to each call toTickSystems(finalWorld) separately.
@@ -247,6 +265,31 @@ function formatTable(results: HarnessResults): string {
     }
   }
 
+  // Logistics activity — did directed-logistics actually move anything?
+  {
+    const lg = logisticsActivity;
+    lines.push("");
+    lines.push("Logistics Activity (whole run):");
+    const lWidths = [24, 16];
+    lines.push([pad("Metric", lWidths[0]), rpad("Value", lWidths[1])].join(" | "));
+    lines.push(lWidths.map((w) => "-".repeat(w)).join("-+-"));
+    const lRows: [string, string][] = [
+      ["Transfers", fmtNum(lg.transferCount)],
+      ["Ticks with transfers", String(lg.activeTicks)],
+      ["Quantity moved", fmtNum(lg.totalQuantity)],
+      ["Mean transfer size", lg.meanTransferSize.toFixed(1)],
+      ["Systems participating", String(lg.participatingSystems)],
+      ["Goods moved", String(lg.byGood.length)],
+    ];
+    for (const [l, v] of lRows) lines.push([pad(l, lWidths[0]), rpad(v, lWidths[1])].join(" | "));
+    if (lg.byGood.length > 0) {
+      const top = lg.byGood.slice(0, 5).map((g) => `${g.goodId} ${fmtNum(g.quantity)}`).join(", ");
+      lines.push(`  heaviest goods: ${top}`);
+    } else {
+      lines.push("  NOTHING MOVED — directed-logistics recorded no transfers this run");
+    }
+  }
+
   // Event impact (top 20 only — full list in JSON output)
   if (eventImpacts.length > 0) {
     const topEvents = eventImpacts.slice(0, 20);
@@ -320,7 +363,8 @@ async function runExperiment(configPath: string, jsonOutput: boolean): Promise<v
 
   console.log(
     `Running experiment${label ? ` "${label}"` : ""}: ` +
-    `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems\n`,
+    `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems, ` +
+    `economy scale ${ECONOMY_SCALE}\n`,
   );
 
   const results = await runTickHarness(config, label);
@@ -393,7 +437,8 @@ async function main(): Promise<void> {
   };
 
   console.log(
-    `Running quick-run: ${config.systemCount} systems, ${config.tickCount} ticks, seed ${config.seed}\n`,
+    `Running quick-run: ${config.systemCount} systems, ${config.tickCount} ticks, ` +
+    `seed ${config.seed}, economy scale ${ECONOMY_SCALE}\n`,
   );
 
   const results = await runTickHarness(config);

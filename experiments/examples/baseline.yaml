@@ -1,9 +1,8 @@
+# The canonical template — every key an experiment config accepts.
+# The harness generates a world and runs the real tick over it, so a config only
+# names the world to generate and how long to run it. Constants come from the
+# same code the live game reads; there is no per-run override channel.
 label: baseline
 seed: 42
 ticks: 500
-
-bots:
-  - strategy: random
-    count: 1
-  - strategy: greedy
-    count: 1
+systemCount: 600
