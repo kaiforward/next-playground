@@ -36,6 +36,18 @@ Well-defined, can start now.
   Measured 2026-07-16 by temporarily instrumenting `runWorldTick` section boundaries (scratch, not
   committed); marks accounted for 100% of wall time. Sibling costs for scale: events 10.5ms, economy
   2.4ms, `mergeSystems` 0.57ms, `flattenBuildings` 0.13ms, `rebuildModifiers` 0.06ms.
+- **[S] The default quick-run is too short to exercise logistics** — `npm run simulate` runs 500 ticks,
+  and directed-logistics does not move a single unit before tick 456. Measured at 600 systems / seed 42:
+  the 500-tick default reports **30 transfers over 2 pulses across 19 systems and 6 of 26 goods**, while
+  the same world at 1500 ticks reports **14,200 transfers over 44 pulses across 473 systems and 25 of 26
+  goods**. The cause is colonisation pacing, not a logistics fault: the galaxy is still expanding at tick
+  500 (~70 of 600 systems developed), and a faction needs two developed systems within `MAX_HOPS` before
+  anything can move. Once it starts it never misses — 62 pulses fit in 1500 ticks, logistics fires on
+  every one from pulse 19, and 62 − 19 + 1 = the 44 measured exactly. So the default run calibrates a
+  pre-logistics galaxy: one of the three pillars is essentially outside its window. Decide between
+  raising the default tick count (a ~3× slower "quick" check) and documenting the warm-up so the
+  Logistics Activity block is read as "too early" rather than "broken". Logistics-activity numbers
+  in a 500-tick report are not evidence of health either way.
 - **[S] Alarm the ECONOMY_SCALE invariance bridge** — `vitest.config.ts` pins `ECONOMY_SCALE: "1"`, so
   the whole suite tests a scale nobody plays at (the code default, and the game's scale, is 100). That
   is defensible **only because** `lib/engine/__tests__/economy-scale-invariance.test.ts` and
