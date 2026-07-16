@@ -1,16 +1,9 @@
-# Equilibrium-rework calibration: long-run sim to settle the anchor-relative
-# economy and confirm HOLD_COVER against the coarse health bar (prices off the
-# floor, cover near the anchor, unrest/growth sane, greedy >> random, no pinning).
+# Equilibrium calibration: a long run to settle the anchor-relative economy and
+# confirm HOLD_COVER against the coarse health bar (prices off the floor, cover
+# near the anchor, unrest/growth sane, no pinning).
 # Read the "Price levels" + "Cover" + "Population & Unrest" blocks in the report.
-# Reproducible record for HOLD_COVER=1.3 (see lib/constants/economy.ts).
+# HOLD_COVER comes from lib/constants/economy.ts, not from this file — a config
+# cannot override a constant — so this run validates whatever it is set to.
 label: equilibrium-calibration
 seed: 42
 ticks: 3000
-bots:
-  - strategy: greedy
-    count: 8
-  - strategy: random
-    count: 8
-overrides:
-  economy:
-    holdCover: 1.3
