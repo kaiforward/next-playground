@@ -44,7 +44,15 @@ This is the safety net for the entire PR. **Do this before touching any code** �
 
 **Why this exact command:** `npm run simulate -- --json` runs the quick-run path (`scripts/simulate.ts:389-405`) — `DEFAULT_SYSTEM_COUNT` systems, 500 ticks, seed 42 — and prints `JSON.stringify(results, null, 2)` where `results` is `SimResults`. That payload includes `finalWorld`, so the comparison covers every system, market, event, and population figure in the galaxy after 500 ticks.
 
-**Why only `elapsedMs` is stripped:** `SimResults` (`lib/engine/simulator/types.ts:216-238`) has exactly one wall-clock field, `elapsedMs`. Everything else is deterministic: `finalWorld` is seeded (`gen.ts:81` documents that world-gen never calls `Date.now()`), `WorldMeta` (`lib/world/types.ts:27-33`) carries no timestamp, and `populationSnapshots` are `Map`s that `JSON.stringify` renders as `{}` — useless but stable. Note `buildExperimentResult` (`experiment.ts:52-61`) *also* leaks a `timestamp`, but that function is only used for the saved experiment file (`simulate.ts:348`), **not** for `--json` output, so it is not in scope here.
+**What must be filtered, and why (verified by running it, not by reading):**
+
+1. **`"elapsedMs"`** — `SimResults` (`lib/engine/simulator/types.ts:216-238`) has exactly one wall-clock *field*. Everything else in the payload is deterministic: `finalWorld` is seeded (`gen.ts:81` documents that world-gen never calls `Date.now()`), `WorldMeta` (`lib/world/types.ts:27-33`) carries no timestamp, and `populationSnapshots` are `Map`s that `JSON.stringify` renders as `{}` — useless but stable. Note `buildExperimentResult` (`experiment.ts:52-61`) *also* leaks a `timestamp`, but it serves only the saved experiment file (`simulate.ts:348`), **not** `--json` output.
+
+2. **`in <N>ms` inside the `[events]` spawn log** — the events processor `console.log`s per-spawn diagnostics to **stdout**, e.g. `[events] Spawn tick 5: 0 active, 600 systems, caps={global:150,batch:3}, selected 3 in 4ms, created 3 events + 5 modifiers + 0 shocks in 3ms`. These carry wall-clock durations and vary run to run. `2>/dev/null` does **not** remove them — they are not on stderr.
+
+Filtering `elapsedMs` alone leaves ~92 varying lines and the gate never goes green. `sed -E 's/[0-9]+ms/Xms/g'` normalises the durations while **keeping the rest of each log line inside the comparison** (active-event count, system count, caps, events/modifiers/shocks created) — all real signal worth diffing. Do not drop the lines wholesale.
+
+**Verified 2026-07-16:** two independent pre-change runs produced identical output across **1,221,348 lines / 28MB** under this filter. The simulation is deterministic; only the diagnostics were not.
 
 - [ ] **Step 1: Resolve your scratchpad path**
 
@@ -61,32 +69,39 @@ Expected: the path echoes back.
 - [ ] **Step 2: Capture the baseline**
 
 ```bash
-npm run simulate -- --json 2>/dev/null | grep -v '"elapsedMs"' > "<SCRATCH>/baseline.txt"
+npm run simulate -- --json 2>/dev/null \
+  | grep -v '"elapsedMs"' \
+  | sed -E 's/[0-9]+ms/Xms/g' \
+  > "<SCRATCH>/baseline.norm"
 ```
 
-`grep -v` rather than `jq` because `jq` is not a guaranteed dependency on this machine. This run takes a while — 500 ticks over `DEFAULT_SYSTEM_COUNT` systems. If it exceeds the default 2-minute Bash timeout, re-run with `timeout: 600000`.
+`grep -v`/`sed` rather than `jq` because `jq` is not a guaranteed dependency on this machine. This run takes ~1-2 min (600 systems, 500 ticks, seed 42) — pass `timeout: 600000` to the Bash tool, since it exceeds the 2-minute default.
 
 - [ ] **Step 3: Sanity-check the baseline is real**
 
 ```bash
-wc -l "<SCRATCH>/baseline.txt"
-grep -c '"systemId"' "<SCRATCH>/baseline.txt"
+wc -l "<SCRATCH>/baseline.norm"
+grep -c '"systemId"' "<SCRATCH>/baseline.norm"
+grep -c '"finalWorld"' "<SCRATCH>/baseline.norm"
 ```
 
-Expected: tens of thousands of lines, and a large non-zero `systemId` count. A near-empty file means the run failed and the whole gate is worthless — stop and diagnose before proceeding.
+Expected (2026-07-16 reference): **1,221,348 lines**, **174,969** `systemId` occurrences, **1** `finalWorld`. A near-empty file means the run failed and the whole gate is worthless — stop and diagnose. A green gate over an empty file is worse than no gate.
 
 - [ ] **Step 4: Confirm the baseline is reproducible**
 
 Run the exact same command again to a second file and diff them:
 
 ```bash
-npm run simulate -- --json 2>/dev/null | grep -v '"elapsedMs"' > "<SCRATCH>/baseline2.txt"
-diff "<SCRATCH>/baseline.txt" "<SCRATCH>/baseline2.txt" && echo "STABLE"
+npm run simulate -- --json 2>/dev/null \
+  | grep -v '"elapsedMs"' \
+  | sed -E 's/[0-9]+ms/Xms/g' \
+  > "<SCRATCH>/baseline2.norm"
+diff "<SCRATCH>/baseline.norm" "<SCRATCH>/baseline2.norm" && echo "STABLE"
 ```
 
-Expected: `STABLE`, no diff output.
+Expected: `STABLE`, no diff output. **Confirmed 2026-07-16.**
 
-**If this diffs, stop and report.** It means the harness is not deterministic, which contradicts the spec's central assumption and invalidates the gate for all of PR1–3. That is a finding worth more than this PR.
+**If this diffs, stop and investigate — do not widen the filter to make it pass.** The distinction that matters: a diff in *diagnostic* output (a timing, a duration) is a filter problem; a diff in *simulation values* (a stock, a population, a price) means the harness is not deterministic, which contradicts the spec's central assumption and invalidates the gate for all of PR1–3. That would be a finding worth more than this PR. Read the diff before deciding which you have.
 
 No commit — this task produces scratch only.
 
@@ -317,8 +332,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: Re-run the harness and compare against the baseline**
 
 ```bash
-npm run simulate -- --json 2>/dev/null | grep -v '"elapsedMs"' > "<SCRATCH>/after.txt"
-diff "<SCRATCH>/baseline.txt" "<SCRATCH>/after.txt" && echo "IDENTICAL"
+npm run simulate -- --json 2>/dev/null \
+  | grep -v '"elapsedMs"' \
+  | sed -E 's/[0-9]+ms/Xms/g' \
+  > "<SCRATCH>/after.norm"
+diff "<SCRATCH>/baseline.norm" "<SCRATCH>/after.norm" && echo "IDENTICAL"
 ```
 
 Expected: `IDENTICAL`, no diff output.
@@ -380,18 +398,28 @@ them; do not assume the set.
 with:
 
 ```markdown
-**Confirmed gate recipe** (PR1):
+**Confirmed gate recipe** — verified 2026-07-16 by running it, and it took two corrections to get
+right, so use it verbatim:
 
-```
-npm run simulate -- --json 2>/dev/null | grep -v '"elapsedMs"' > baseline.txt
-```
+    npm run simulate -- --json 2>/dev/null \
+      | grep -v '"elapsedMs"' \
+      | sed -E 's/[0-9]+ms/Xms/g' \
+      > baseline.norm
 
-`--json` prints `SimResults`, whose only wall-clock field is `elapsedMs`. Everything else is
-deterministic: `finalWorld` is seeded (`gen.ts:81` — world-gen never calls `Date.now()`),
-`WorldMeta` carries no timestamp, and `populationSnapshots` are `Map`s that `JSON.stringify`
-renders as `{}` (stable). `buildExperimentResult` *also* leaks a `timestamp`, but it serves only
-the saved experiment file (`simulate.ts:348`), not `--json` output. `grep -v` rather than `jq` —
-`jq` is not a guaranteed dependency here.
+Two wall-clock sources leak into stdout, not one:
+
+- **`"elapsedMs"`** — the only wall-clock *field* in `SimResults`. Everything else in the payload is
+  deterministic: `finalWorld` is seeded (`gen.ts:81` — world-gen never calls `Date.now()`),
+  `WorldMeta` carries no timestamp, `populationSnapshots` are `Map`s that `JSON.stringify` renders
+  as `{}` (stable). `buildExperimentResult` also leaks a `timestamp`, but it serves only the saved
+  experiment file (`simulate.ts:348`), not `--json`.
+- **`in <N>ms` in the `[events]` spawn log** — the events processor `console.log`s per-spawn
+  diagnostics to **stdout**, so `2>/dev/null` does not remove them. Normalise the durations rather
+  than dropping the lines: the rest of each line (active count, caps, events/modifiers/shocks
+  created) is real signal worth diffing.
+
+Baseline at 600 systems / 500 ticks / seed 42: **1,221,348 lines, 28MB**, two independent runs
+identical. `grep`/`sed` rather than `jq` — `jq` is not a guaranteed dependency here.
 ```
 
 - [ ] **Step 5: Commit the spec fix**
