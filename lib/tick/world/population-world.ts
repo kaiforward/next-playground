@@ -3,7 +3,7 @@
  *
  * The processor runs over the systems the economy just processed this tick (the
  * economy shard), reading the dissatisfaction the economy recorded for them.
- * Adapters in `lib/tick/adapters/{prisma,memory}/population.ts` implement this.
+ * The adapter in `lib/tick/adapters/memory/population.ts` implements this.
  */
 import type { UnrestParams, PopulationParams } from "@/lib/engine/population";
 export interface PopulationStateView {

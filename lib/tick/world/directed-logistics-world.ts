@@ -1,6 +1,6 @@
 /**
  * DirectedLogisticsWorld — data interface for the directed-logistics processor.
- * Adapters in lib/tick/adapters/{prisma,memory}/directed-logistics.ts implement it.
+ * The adapter in `lib/tick/adapters/memory/directed-logistics.ts` implements it.
  * Sharding is PER-FACTION (matching needs all of a faction's systems at once), so the
  * adapter returns whole-faction system groups for the faction shard due this tick.
  */

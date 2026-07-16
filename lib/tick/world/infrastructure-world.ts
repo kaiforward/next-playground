@@ -1,7 +1,7 @@
 /**
  * InfrastructureWorld — data interface for the infrastructure-decay processor.
  *
- * Adapters in `lib/tick/adapters/{prisma,memory}/infrastructure.ts` implement this.
+ * The adapter in `lib/tick/adapters/memory/infrastructure.ts` implements this.
  * The shared processor body (`runInfrastructureDecayProcessor`) reads the building
  * roster + population + unrest, computes downward-only count deltas off the economy's
  * fresh signals, and writes them plus the recomputed popCap.

@@ -1,12 +1,12 @@
 /**
  * EconomyWorld — data interface for the economy processor.
  *
- * Adapters in `lib/tick/adapters/{prisma,memory}/economy.ts` implement this
+ * The adapter in `lib/tick/adapters/memory/economy.ts` implements this
  * interface. The fixed-interval system shard (which systems update this tick)
  * and the simulate→write loop live in the shared processor body
  * (`runEconomyProcessor`).
  *
- * See `docs/design/active/processor-architecture.md` for the broader pattern.
+ * See `docs/active/engineering/processor-architecture.md` for the broader pattern.
  */
 
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";

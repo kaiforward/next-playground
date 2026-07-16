@@ -192,9 +192,8 @@ export class InMemoryEventsWorld implements EventsWorld {
       // Single-stock model: a "supply" shock moves stock directly; a "demand"
       // shock moves it inversely (more demand → scarcer → lower stock).
       const signed = shock.parameter === "supply" ? delta : -delta;
-      // Accumulate unclamped, then clamp once below — parity with the Prisma
-      // adapter, which only clamps at write time. Clamping per-shock here would
-      // diverge when ≥2 shocks hit the same market in one tick.
+      // Accumulate unclamped, then clamp once below — clamping per-shock here
+      // would diverge when ≥2 shocks hit the same market in one tick.
       market.stock += signed;
       touched.add(market);
     }

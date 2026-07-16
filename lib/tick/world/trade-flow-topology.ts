@@ -21,9 +21,8 @@ export interface EdgeView {
  * and the result is sorted by that key so the work-budget cursor is
  * deterministic across processor runs.
  *
- * Pure and DB-free (type-only import of `EdgeView`) so both the live Prisma
- * adapter and the in-memory adapter share one implementation, and the
- * memory-adapter unit tests never transitively load `lib/prisma`.
+ * Pure (type-only import of `EdgeView`), so the adapter and the unit tests
+ * share one implementation.
  */
 export function buildOpenEdges(
   connections: ReadonlyArray<{

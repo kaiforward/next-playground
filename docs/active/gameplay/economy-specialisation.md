@@ -94,7 +94,7 @@ on the deposit-slot model, capped by deposits rather than general space.
 ## How the pieces interact
 
 The `LabourState` threads through every consumer of the production math, so the skill gate is applied
-identically on the live tick, the simulator, decay, the seed, and the forecast:
+identically on the live tick, decay, the seed, and the forecast:
 
 - **Production** (`buildingProduction`, both tick adapters, `capacityGoodRates`) — output uses
   `effectiveFulfilment(tier)` instead of the old scalar `labourFulfillment`.
