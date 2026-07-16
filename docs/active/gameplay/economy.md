@@ -143,19 +143,18 @@ At seed/reset time each market's starting stock is **cover-based** (`getInitialS
 
 All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-| Government | Volatility | Danger | Consumption boosts |
-|---|---|---|---|
-| Federation | 0.8× | 0.00 | medicine |
-| Corporate | 0.9× | 0.02 | luxuries |
-| Authoritarian | 0.7× | 0.00 | weapons, fuel |
-| Frontier | 1.5× | 0.10 | — |
-| Cooperative | 0.7× | 0.00 | food, medicine |
-| Technocratic | 1.0× | 0.01 | electronics |
-| Militarist | 1.3× | 0.05 | weapons, fuel, machinery |
-| Theocratic | 0.8× | 0.03 | food, medicine, textiles |
+| Government | Danger | Consumption boosts |
+|---|---|---|
+| Federation | 0.00 | medicine |
+| Corporate | 0.02 | luxuries |
+| Authoritarian | 0.00 | weapons, fuel |
+| Frontier | 0.10 | — |
+| Cooperative | 0.00 | food, medicine |
+| Technocratic | 0.01 | electronics |
+| Militarist | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.03 | food, medicine, textiles |
 
 ### Government Effects on Gameplay
-- **Volatility modifier**: Scales price-noise amplitude. Frontier = wild swings, authoritarian = smooth predictability.
 - **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
 - **Consumption boosts**: Extra consumption per tick for specific goods (e.g., authoritarian +1 weapons consumption) — drains stock faster, raising price.
 
@@ -197,8 +196,7 @@ The economy processor groups the shard's markets **by system** and runs the coup
 1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
 2. **Input-gated, self-limiting production** — the building-capacity production rate is throttled by `inputGate` (recipe-input availability; 1 for tier-0), then by the self-limiting `sqrt((MAX − stock) / (MAX − MIN))` ceiling. Near the ceiling, production approaches zero (warehouses full). Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces output. The recipe inputs are then drawn from local stock in proportion to actual output (drawable-above-floor; see [Supply Chain & Input-Gating](#supply-chain--input-gating)).
 3. **Self-limiting consumption** — its population-scaled civilian consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left). Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
-4. **Noise** — random walk scaled by good volatility and government modifier, sized as a **fraction of the market's own band width** (`NOISE_FRACTION × (maxStock − minStock)`), so the jitter is proportional everywhere — negligible drift on a deep market, the same relative wobble on a thin one (the old absolute `±3` was negligible on a wide band and overwhelming on a small one).
-5. **Clamp** — stock bounded to the market's per-market `[minStock, maxStock]` band.
+4. **Clamp** — stock bounded to the market's per-market `[minStock, maxStock]` band.
 
 There is no mean-reversion step and no demand axis — both are gone from the single-stock model.
 
@@ -206,7 +204,6 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 | Parameter | Value | Effect |
 |---|---|---|
 | Elasticity `k` | 1 | Curve steepness (price reaction to stock gap) |
-| Noise fraction | `NOISE_FRACTION` (≈0.02) of band width | Micro-volatility, relative to each market's band, scaled by volatility × government |
 | Stock band | per-market `[minStock, maxStock]` | Demand-derived floor reserve + infrastructure-derived ceiling (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) |
 | Production rate | capacity-driven, input-gated | `Σ count × outputPerUnit × labourFulfillment × inputGate`; scaled by self-limiting + strike suppression |
 | Consumption rate | civilian + production-input | civilian `perCapitaNeed × population` (self-limiting, never strike-suppressed) + tier-1+ recipe-input draw from local stock |
@@ -272,7 +269,7 @@ ECONOMY      run second - per system (markets grouped, recipe-topological
    |                      order): apply event modifiers -> input-gated produce
    |                      (throttled by recipe inputs + strike suppression if
    |                      unrest high) -> draw recipe inputs from local stock
-   |                      -> consume -> noise -> clamp (single stock value);
+   |                      -> consume -> clamp (single stock value);
    |                      records per-system satisfaction (delivered/demanded)
    |                      via ctx.results for the population processor
    v
@@ -309,10 +306,10 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                demand rate -> days-of-supply pricing reference;
                                net balance + facility storage -> per-market band
                                -> seed stock + import dependence;
-                               government -> volatility, boosts
+                               government -> consumption boosts
 2  Tick evolution (each tick)  input-gated self-limiting production (the
                                supply-chain cascade) + civilian consumption,
-                               strike suppression (from unrest), noise,
+                               strike suppression (from unrest),
                                clamp, directed logistics, infrastructure decay
                                (count -> used, live popCap), population
                                growth/decline, migration, demandRate rewrite

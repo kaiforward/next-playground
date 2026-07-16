@@ -7,10 +7,9 @@
  *
  * Each entry carries its own [minStock, maxStock] pricing band (set by the
  * demand-pricing step upstream). Only stock ABOVE the per-good floor is
- * drawable, so input draws never breach any entry's band. Civilian consumption,
- * noise, and clamp are identical to the flat tick (lib/engine/tick.ts), whose
- * selfLimitingFactor this engine reuses. Noise scales to the per-entry band
- * width (noiseFraction × (maxStock − minStock)), not a global amplitude.
+ * drawable, so input draws never breach any entry's band. Civilian consumption
+ * and the band clamp are identical to the flat tick (lib/engine/tick.ts), whose
+ * selfLimitingFactor this engine reuses.
  */
 import { clamp } from "@/lib/utils/math";
 import {
@@ -57,9 +56,8 @@ export function inputGate(
 export function simulateSystemEconomyTick(
   entries: MarketTickEntry[],
   params: EconomySimParams,
-  rng: () => number = Math.random,
 ): MarketTickEntry[] {
-  const { noiseFraction, holdCover } = params;
+  const { holdCover } = params;
 
   // Build per-good band lookups from entry data.
   const minStockMap = new Map<string, number>();
@@ -111,8 +109,7 @@ export function simulateSystemEconomyTick(
       s -= effectiveConsumption * selfLimitingFactor(s, minStock, entry.targetStock, "consume");
     }
 
-    const noise = (rng() * 2 - 1) * noiseFraction * (maxStock - minStock) * (entry.volatility ?? 1);
-    s = clamp(s + noise, minStock, maxStock);
+    s = clamp(s, minStock, maxStock);
     stock.set(entry.goodId, s);
   }
 
@@ -129,7 +126,6 @@ export function simulateCoupledEconomyTick(
   entries: MarketTickEntry[],
   systemIds: string[],
   params: EconomySimParams,
-  rng: () => number = Math.random,
 ): MarketTickEntry[] {
   const groups = new Map<string, number[]>();
   systemIds.forEach((sysId, i) => {
@@ -141,7 +137,6 @@ export function simulateCoupledEconomyTick(
     const simulated = simulateSystemEconomyTick(
       indices.map((i) => entries[i]),
       params,
-      rng,
     );
     indices.forEach((i, j) => {
       result[i] = simulated[j];

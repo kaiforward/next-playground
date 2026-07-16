@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import { inputGate, simulateSystemEconomyTick, simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { MarketTickEntry, EconomySimParams } from "@/lib/engine/tick";
 
-const PARAMS: EconomySimParams = { noiseFraction: 0, holdCover: 1.3 };
-const noRng = () => 0.5; // noise = 0 when noiseFraction = 0
+const PARAMS: EconomySimParams = { holdCover: 1.3 };
 
 // Convenience: build a full MarketTickEntry with per-entry band defaults.
 function entry(
@@ -56,7 +55,6 @@ describe("simulateSystemEconomyTick", () => {
     const out = simulateSystemEconomyTick(
       [entry("ore", 6), entry("metals", 50, 20)],
       PARAMS,
-      noRng,
     );
     const ore = out.find((e) => e.goodId === "ore")!;
     expect(ore.stock).toBeGreaterThanOrEqual(5);
@@ -68,7 +66,6 @@ describe("simulateSystemEconomyTick", () => {
     const out = simulateSystemEconomyTick(
       [entry("metals", 50, 10), entry("ore", 5, 30)],
       PARAMS,
-      noRng,
     );
     const metals = out.find((e) => e.goodId === "metals")!;
     // ore produced 30 (self-limited) before metals draws ⇒ metals output > 0.
@@ -76,7 +73,7 @@ describe("simulateSystemEconomyTick", () => {
   });
 
   it("leaves a no-recipe, no-producer good driven only by consumption", () => {
-    const out = simulateSystemEconomyTick([entry("water", 100, undefined, 8)], PARAMS, noRng);
+    const out = simulateSystemEconomyTick([entry("water", 100, undefined, 8)], PARAMS);
     expect(out[0].stock).toBeLessThan(100);
   });
 
@@ -84,7 +81,6 @@ describe("simulateSystemEconomyTick", () => {
     const out = simulateSystemEconomyTick(
       [entry("metals", 50, 5), entry("ore", 100, 5)],
       PARAMS,
-      noRng,
     );
     expect(out.map((e) => e.goodId)).toEqual(["metals", "ore"]);
   });
@@ -103,15 +99,14 @@ describe("simulateSystemEconomyTick", () => {
         entry("components", 50, 10),
       ],
       PARAMS,
-      noRng,
     );
     const minerals = out.find((e) => e.goodId === "minerals")!;
     expect(minerals.stock).toBeGreaterThanOrEqual(5);
   });
 
   it("cascade: cutting ore supply throttles metals output", () => {
-    const rich = simulateSystemEconomyTick([entry("ore", 150, 0), entry("metals", 50, 20)], PARAMS, noRng);
-    const starved = simulateSystemEconomyTick([entry("ore", 6, 0), entry("metals", 50, 20)], PARAMS, noRng);
+    const rich = simulateSystemEconomyTick([entry("ore", 150, 0), entry("metals", 50, 20)], PARAMS);
+    const starved = simulateSystemEconomyTick([entry("ore", 6, 0), entry("metals", 50, 20)], PARAMS);
     const richMetals = rich.find((e) => e.goodId === "metals")!.stock;
     const starvedMetals = starved.find((e) => e.goodId === "metals")!.stock;
     expect(starvedMetals).toBeLessThan(richMetals);
@@ -120,23 +115,18 @@ describe("simulateSystemEconomyTick", () => {
   // ── Per-entry band tests ─────────────────────────────────────────
 
   it("clamps to the PER-ENTRY band, not a global band", () => {
-    // ore has a tight band [10, 50]; a large noise fraction must not push it past 50.
+    // ore has a tight band [10, 50]; stock seeded above its own ceiling must clamp to 50.
     const oreEntry: MarketTickEntry = {
       goodId: "ore",
-      stock: 50,
+      stock: 60, // above this entry's maxStock (50)
       minStock: 10,
       targetStock: 30,
       maxStock: 50,
       productionRate: 0,
       consumptionRate: 0,
     };
-    const out = simulateSystemEconomyTick(
-      [oreEntry],
-      { noiseFraction: 0.5, holdCover: 1.3 },
-      () => 1, // always +max noise
-    );
-    expect(out[0].stock).toBeLessThanOrEqual(50);
-    expect(out[0].stock).toBeGreaterThanOrEqual(10);
+    const out = simulateSystemEconomyTick([oreEntry], PARAMS);
+    expect(out[0].stock).toBe(50); // clamped down to the per-entry ceiling
   });
 
   it("input draw respects the INPUT good's own per-entry floor (different minStocks)", () => {
@@ -160,25 +150,9 @@ describe("simulateSystemEconomyTick", () => {
       maxStock: 200,
       productionRate: 10,
     };
-    const out = simulateSystemEconomyTick([oreEntry, metalsEntry], PARAMS, noRng);
+    const out = simulateSystemEconomyTick([oreEntry, metalsEntry], PARAMS);
     const oreOut = out.find((e) => e.goodId === "ore")!;
     expect(oreOut.stock).toBeGreaterThanOrEqual(20); // never breaches ore's own floor
-  });
-
-  it("noise scales to per-entry band width, not a global amplitude", () => {
-    // narrow band [40, 60] → band-width 20; noiseFraction 0.5 → max noise 10.
-    // Starting at 50, rng()=1 → noise = +10 → clamps to 60.
-    const narrowEntry: MarketTickEntry = {
-      goodId: "water",
-      stock: 50,
-      minStock: 40,
-      targetStock: 50,
-      maxStock: 60,
-      productionRate: 0,
-      consumptionRate: 0,
-    };
-    const out = simulateSystemEconomyTick([narrowEntry], { noiseFraction: 0.5, holdCover: 1.3 }, () => 1)[0];
-    expect(out.stock).toBeCloseTo(60, 5); // 50 + 10 noise, clamped at 60
   });
 });
 
@@ -186,9 +160,8 @@ describe("simulateSystemEconomyTick — operating ceiling", () => {
   it("idles production at the operating ceiling in the coupled tick", () => {
     // tier-0 good (no recipe) → input gate 1. holdCover 1.3 × targetStock 100 = 130.
     const out = simulateSystemEconomyTick(
-      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, maxStock: 200, volatility: 1, productionRate: 10 }],
+      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 10 }],
       PARAMS,
-      noRng,
     );
     expect(out[0].stock).toBeCloseTo(130, 5); // throttled to ~0 at the operating ceiling
   });
@@ -204,7 +177,7 @@ describe("simulateCoupledEconomyTick", () => {
       { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 20 }, // B
     ];
     const systemIds = ["A", "A", "B", "B"];
-    const out = simulateCoupledEconomyTick(entries, systemIds, PARAMS, () => 0.5);
+    const out = simulateCoupledEconomyTick(entries, systemIds, PARAMS);
     expect(out.map((e) => e.goodId)).toEqual(["ore", "metals", "ore", "metals"]);
     const aMetals = out[1].stock;
     const bMetals = out[3].stock;

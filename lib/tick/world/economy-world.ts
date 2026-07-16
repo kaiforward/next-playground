@@ -72,11 +72,9 @@ export interface EconomyWorld {
 
 /** Per-tick params passed alongside the world. Sim and live differ here. */
 export interface EconomyProcessorParams {
-  /** RNG for market noise. Live: Math.random. Sim: seeded. */
-  rng: () => number;
   /** Ticks for the shard to refresh every system once (fixed gameplay cadence). */
   interval: number;
-  /** Economy simulation params (noise fraction for relative-band noise). */
+  /** Economy simulation params (production operating-ceiling cover). */
   simParams: EconomySimParams;
   /** Caps applied when aggregating event modifiers per market. */
   modifierCaps: ModifierCaps;

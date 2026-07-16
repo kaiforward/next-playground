@@ -97,6 +97,35 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(world.stockUpdates.get("mA")!).toBeCloseTo(95 - (mBStock - 10), 6);
   });
 
+  it("applies a fractional transfer without quantizing (scale-invariance guard)", async () => {
+    // The engine matcher works in continuous goods units; the processor must apply the
+    // transfer as-is. A fractional deficit stock (10.3) makes the shortfall fractional
+    // (40 − 10.3 = 29.7); flooring here would drop it to 29. That lost unit is ~2% at
+    // these magnitudes but a large fraction at ECONOMY_SCALE=1 and negligible at 100 —
+    // the exact scale-variance this guards. Budget (population-scaled) and drawable (55)
+    // both exceed the shortfall, so the shortfall is the binding, fractional quantity.
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10.3, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(
+      world,
+      { tick: DUE_TICK },
+      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+    );
+    expect(world.flows[0].quantity).toBeCloseTo(29.7, 6); // the fraction survives — NOT 29
+    expect(world.stockUpdates.get("mB")!).toBeCloseTo(40, 6); // filled exactly to the anchor
+    // conservation: donor lost exactly the fractional amount the recipient gained
+    expect(world.stockUpdates.get("mA")!).toBeCloseTo(95 - 29.7, 6);
+  });
+
   it("does nothing for an empty world", async () => {
     // empty world → getFactionShardKeys() returns [] → factionKeys.length === 0 → early return (before shardRange)
     const world = new MemoryDirectedLogisticsWorld([]);

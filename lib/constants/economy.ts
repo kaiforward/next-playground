@@ -1,7 +1,5 @@
 /** Economy simulation constants — used by the economy tick. */
 export const ECONOMY_CONSTANTS = {
-  /** Noise as a fraction of the per-entry band width (used by the relative-noise tick). */
-  NOISE_FRACTION: 0.02,
   /**
    * Operating-ceiling cover: a producer holds up to HOLD_COVER × the days-of-supply
    * anchor (targetStock) before idling spare capacity. The production self-limiting

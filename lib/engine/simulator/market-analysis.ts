@@ -7,7 +7,6 @@
  */
 
 import { spotPrice, curveForGood, marketBand, midPriceAt } from "@/lib/engine/market-pricing";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type {
   MarketSnapshot, MarketHealthSummary, SimMarketEntry,
@@ -18,19 +17,21 @@ import type {
 export const SNAPSHOT_INTERVAL = 50;
 
 /**
- * True when a market's stock is within one relative noise step of the given
- * band boundary. The noise step is `NOISE_FRACTION × (maxStock - minStock)` —
- * the same amplitude the tick engine uses. A market in this zone gets
- * re-clamped every turn and noise only jitters it inside the buffer.
+ * Relative tolerance for "effectively pinned to a band boundary" in the pinning
+ * health metric — a small fraction of the band width, so a market resting within
+ * this buffer of a boundary counts as boundary-pinned rather than mid-band.
  */
+const BAND_PROXIMITY_FRAC = 0.02;
+
+/** True when a market's stock sits within `BAND_PROXIMITY_FRAC` of the band floor. */
 function nearBandFloor(m: SimMarketEntry, band: { minStock: number; maxStock: number }): boolean {
-  const noiseStep = ECONOMY_CONSTANTS.NOISE_FRACTION * (band.maxStock - band.minStock);
-  return m.stock <= band.minStock + noiseStep;
+  const step = BAND_PROXIMITY_FRAC * (band.maxStock - band.minStock);
+  return m.stock <= band.minStock + step;
 }
 
 function nearBandCeiling(m: SimMarketEntry, band: { minStock: number; maxStock: number }): boolean {
-  const noiseStep = ECONOMY_CONSTANTS.NOISE_FRACTION * (band.maxStock - band.minStock);
-  return m.stock >= band.maxStock - noiseStep;
+  const step = BAND_PROXIMITY_FRAC * (band.maxStock - band.minStock);
+  return m.stock >= band.maxStock - step;
 }
 
 /** Take a snapshot of all market prices at the current tick. */

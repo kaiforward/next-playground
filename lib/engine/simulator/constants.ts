@@ -23,7 +23,6 @@ import { scaleValue } from "@/lib/constants/economy-scale";
 
 export interface SimConstants {
   economy: {
-    noiseFraction: number;
     /** Operating-ceiling cover multiple (produce throttle saturates at holdCover × anchor). */
     holdCover: number;
     /** Ticks for the system shard to refresh every system once. */
@@ -39,7 +38,6 @@ export interface SimConstants {
     tier: number;
     volume: number;
     mass: number;
-    volatility: number;
     priceFloor: number;
     priceCeiling: number;
   }>;
@@ -120,7 +118,6 @@ function buildDefaults(): SimConstants {
       tier: def.tier,
       volume: def.volume,
       mass: def.mass,
-      volatility: def.volatility,
       priceFloor: def.priceFloor,
       priceCeiling: def.priceCeiling,
     };
@@ -143,7 +140,6 @@ function buildDefaults(): SimConstants {
 
   return {
     economy: {
-      noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION,
       holdCover: ECONOMY_CONSTANTS.HOLD_COVER,
       interval: ECONOMY_UPDATE_INTERVAL,
     },

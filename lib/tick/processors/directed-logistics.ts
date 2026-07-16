@@ -94,7 +94,10 @@ export async function runDirectedLogisticsProcessor(
   const flows: LogisticsFlowInsert[] = [];
 
   for (const t of allTransfers) {
-    const qty = Math.floor(t.quantity);
+    // Stock is a continuous float balance — do NOT quantize the transfer. Flooring here
+    // would re-break the goods-side scale-invariance the engine matcher preserves (losing
+    // up to one unit per transfer, a large fraction at low ECONOMY_SCALE, negligible high).
+    const qty = t.quantity;
     if (!Number.isFinite(qty) || qty <= 0) continue;
 
     const from = marketByKey.get(`${t.fromSystemId}|${t.goodId}`);

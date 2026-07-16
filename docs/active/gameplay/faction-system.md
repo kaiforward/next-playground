@@ -132,16 +132,16 @@ Two factions can share a government type and still be bitter enemies. A federati
 
 Concrete economic modifiers per government type. These are the live shipped values from `GOVERNMENT_TYPES`.
 
-| Government | Volatility | Danger | Consumption boost |
-|---|---|---|---|
-| Federation | 0.8× | 0.00 | medicine |
-| Corporate | 0.9× | 0.02 | luxuries |
-| Authoritarian | 0.7× | 0.00 | weapons, fuel |
-| Frontier | 1.5× | 0.10 | — |
-| Cooperative | 0.7× | 0.00 | food, medicine |
-| Technocratic | 1.0× | 0.01 | electronics |
-| Militarist | 1.3× | 0.05 | weapons, fuel, machinery |
-| Theocratic | 0.8× | 0.03 | food, medicine, textiles |
+| Government | Danger | Consumption boost |
+|---|---|---|
+| Federation | 0.00 | medicine |
+| Corporate | 0.02 | luxuries |
+| Authoritarian | 0.00 | weapons, fuel |
+| Frontier | 0.10 | — |
+| Cooperative | 0.00 | food, medicine |
+| Technocratic | 0.01 | electronics |
+| Militarist | 0.05 | weapons, fuel, machinery |
+| Theocratic | 0.03 | food, medicine, textiles |
 
 ---
 

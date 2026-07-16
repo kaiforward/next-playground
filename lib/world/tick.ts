@@ -568,9 +568,8 @@ export async function runWorldTick(
   // ── economy ──
   const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
   const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
-    rng,
     interval: ECONOMY_UPDATE_INTERVAL,
-    simParams: { noiseFraction: ECONOMY_CONSTANTS.NOISE_FRACTION, holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
+    simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
     modifierCaps: MODIFIER_CAPS,
     strikeParams: STRIKE_PARAMS,
   });

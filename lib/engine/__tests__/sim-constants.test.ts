@@ -17,7 +17,7 @@ describe("SimConstants", () => {
   describe("resolveConstants() defaults", () => {
     it("economy matches ECONOMY_CONSTANTS", () => {
       const c = resolveConstants();
-      expect(c.economy.noiseFraction).toBe(ECONOMY_CONSTANTS.NOISE_FRACTION);
+      expect(c.economy.holdCover).toBe(ECONOMY_CONSTANTS.HOLD_COVER);
     });
 
     it("goods base prices match GOODS", () => {
@@ -100,8 +100,8 @@ describe("SimConstants", () => {
 
   describe("resolveConstants() with overrides", () => {
     it("overrides a single economy field", () => {
-      const c = resolveConstants({ economy: { noiseFraction: 0.05 } });
-      expect(c.economy.noiseFraction).toBe(0.05);
+      const c = resolveConstants({ economy: { holdCover: 1.5 } });
+      expect(c.economy.holdCover).toBe(1.5);
     });
 
     it("overrides a single good base price, preserves others", () => {

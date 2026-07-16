@@ -134,5 +134,8 @@ export function getInitialStock(
   const total = production + consumption;
   const producerShare = total > 0 ? production / total : 0.5; // 1 producer, 0 consumer
   const coverMult = SEED_COVER_MIN + producerShare * (SEED_COVER_MAX - SEED_COVER_MIN);
-  return Math.round(Math.max(band.minStock, Math.min(band.maxStock, band.targetStock * coverMult)));
+  // Stock is a continuous float balance — do NOT round to whole units. Rounding the seed
+  // quantizes it (~0.3% error at ECONOMY_SCALE=1, negligible at 100), which breaks the
+  // goods-side scale-invariance from tick 0 and compounds through every economy pulse.
+  return Math.max(band.minStock, Math.min(band.maxStock, band.targetStock * coverMult));
 }
