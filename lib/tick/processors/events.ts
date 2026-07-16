@@ -37,10 +37,9 @@ import type {
 } from "@/lib/tick/world/events-world";
 
 /**
- * Expand ShockRow[] for a single system into SystemShock[]. The processor
- * body owns shock-mode handling now — the live adapter used to expand inline,
- * the sim used to drop the mode entirely. Both bugs go away once the work
- * happens here.
+ * Expand a system's ShockRow[] into SystemShock[], preserving each row's shock
+ * mode. Yields nothing for a null systemId (a region-scoped event) or an empty
+ * row set.
  */
 function expandShocks(rows: ShockRow[], systemId: string | null): SystemShock[] {
   if (!systemId || rows.length === 0) return [];
@@ -54,18 +53,16 @@ function expandShocks(rows: ShockRow[], systemId: string | null): SystemShock[] 
 }
 
 /**
- * Pure processor body. Same logic runs against the Prisma adapter (live game)
- * or the in-memory adapter (simulator + unit tests). All knobs that differ
- * between live and sim (RNG, caps, batch size, definitions, spawn gating,
- * pending injections) come in via `params`.
+ * Pure processor body, run against the in-memory adapter — the one backend.
+ * Knobs the body shouldn't hard-code (RNG, caps, batch size, definitions,
+ * spawn gating) arrive via `params`.
  */
 export async function runEventsProcessor(
   world: EventsWorld,
   ctx: TickContext,
   params: EventsProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { rng, caps, batchSize, spawnInterval, definitions, spawnEnabled, injections } =
-    params;
+  const { rng, caps, batchSize, spawnInterval, definitions, spawnEnabled } = params;
 
   const notifications: EventNotificationPayload[] = [];
 
@@ -264,47 +261,7 @@ export async function runEventsProcessor(
     console.log(`[events] Expired ${expiredIds.length} event(s)`);
   }
 
-  // ── 4. Injections (sim-only; live passes [] / undefined) ──────
-  if (injections && injections.length > 0) {
-    const injectionCreates: EventCreate[] = [];
-    for (const inj of injections) {
-      const def = definitions[inj.type];
-      if (!def) continue;
-      const firstPhase = def.phases[0];
-      const duration = rollPhaseDuration(firstPhase.durationRange, rng);
-      injectionCreates.push({
-        type: inj.type,
-        phase: firstPhase.name,
-        systemId: inj.systemId,
-        regionId: inj.regionId,
-        startTick: ctx.tick,
-        phaseStartTick: ctx.tick,
-        phaseDuration: duration,
-        severity: inj.severity,
-        sourceEventId: null,
-        modifiers: buildModifiersForPhase(
-          firstPhase,
-          inj.systemId,
-          inj.regionId,
-          inj.severity,
-        ),
-      });
-    }
-
-    if (injectionCreates.length > 0) {
-      await world.createEvents(injectionCreates);
-      const injectionShocks: SystemShock[] = [];
-      for (const c of injectionCreates) {
-        const def = definitions[c.type]!;
-        injectionShocks.push(
-          ...expandShocks(buildShocksForPhase(def.phases[0], c.severity), c.systemId),
-        );
-      }
-      await world.applyShocks(injectionShocks);
-    }
-  }
-
-  // ── 5. Spawn new events on spawn ticks ─────────────────────────
+  // ── 4. Spawn new events on spawn ticks ─────────────────────────
   const isSpawnTick = ctx.tick % spawnInterval === 0;
   if (isSpawnTick && spawnEnabled) {
     // Re-snapshot post-expiry for accurate cap checking

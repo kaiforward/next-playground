@@ -210,46 +210,6 @@ describe("runEventsProcessor", () => {
     }
   });
 
-  it("creates injected events at the requested system", async () => {
-    const systems = [
-      makeSystem("s1", "r1"),
-      makeSystem("s2", "r1"),
-    ];
-    const world = makeWorld({ systems });
-
-    await runEventsProcessor(
-      world,
-      makeCtx(1),
-      makeParams({
-        injections: [
-          { type: "trade_festival", systemId: "s2", regionId: "r1", severity: 1 },
-        ],
-      }),
-    );
-
-    expect(world.events).toHaveLength(1);
-    expect(world.events[0].type).toBe("trade_festival");
-    expect(world.events[0].systemId).toBe("s2");
-  });
-
-  it("skips unknown event types in injections without crashing", async () => {
-    const world = makeWorld({ systems: [makeSystem("s1", "r1")] });
-
-    await runEventsProcessor(
-      world,
-      makeCtx(1),
-      makeParams({
-        injections: [
-          // Deliberately invalid — cast through unknown to bypass the type
-          // check, mirroring what a malformed sim config could submit.
-          { type: "not_a_real_type" as never, systemId: "s1", regionId: "r1", severity: 1 },
-        ],
-      }),
-    );
-
-    expect(world.events).toEqual([]);
-  });
-
   it("skips lifecycle for relations-owned event types (pact_under_negotiation, alliance_dissolved)", async () => {
     // A pact event with phaseDuration=1 would normally advance/expire on the
     // next tick. The events processor must leave it alone — the relations

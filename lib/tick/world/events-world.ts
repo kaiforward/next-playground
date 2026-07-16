@@ -1,8 +1,8 @@
 /**
  * EventsWorld — data interface for the events processor.
  *
- * Adapters in `lib/tick/adapters/{prisma,memory}/events.ts` implement it.
- * See `docs/design/active/processor-architecture.md` and
+ * The in-memory adapter in `lib/tick/adapters/memory/events.ts` implements it.
+ * See `docs/active/engineering/processor-architecture.md` and
  * `lib/tick/world/migration-world.ts` for the broader pattern.
  */
 
@@ -78,8 +78,8 @@ export interface EventsWorld {
   getSystems(): Promise<SystemWithName[]>;
 
   /**
-   * Neighbors of each given system. Bulk-fetched (single DB query in live;
-   * filter+map in memory) — keyed by source systemId.
+   * Neighbors of each given system. Bulk-fetched in one filter+map pass —
+   * keyed by source systemId.
    */
   getNeighborsBySystem(
     systemIds: string[],
@@ -107,27 +107,17 @@ export interface EventsWorld {
   applyShocks(shocks: SystemShock[]): Promise<number>;
 }
 
-/** Per-tick params passed alongside the world. Sim and live differ here. */
+/** Per-tick params passed alongside the world, all sourced by `runWorldTick`. */
 export interface EventsProcessorParams {
   rng: () => number;
-  /** Live: scaleEventCaps result. Sim: SimConstants.events caps. */
+  /** From `scaleEventCaps`: the global cap scales with system count, the per-system cap is flat. */
   caps: { maxEventsGlobal: number; maxEventsPerSystem: number };
-  /** Live: scaleEventCaps result. Sim: SimConstants.events.maxBatchSpawn. */
+  /** Max events spawned in one spawn tick — `ceil(maxEventsGlobal / 50)`. */
   batchSize: number;
-  /** Live: EVENT_SPAWN_INTERVAL. Sim: SimConstants.events.spawnInterval. */
+  /** Ticks between spawn attempts (`EVENT_SPAWN_INTERVAL`). */
   spawnInterval: number;
-  /** Live: SCALED_DEFINITIONS. Sim: SCALED.definitions. */
+  /** Event definitions with each type's `maxActive` scaled by system count. */
   definitions: Record<EventTypeId, import("@/lib/constants/events").EventDefinition>;
-  /** Live: true. Sim: false when disableRandomEvents is set. */
+  /** Gates random spawning on a spawn tick. `runWorldTick` always passes true; only tests pass false. */
   spawnEnabled: boolean;
-  /** Sim-only injections to apply this tick. Live always [] / undefined. */
-  injections?: InjectionRequest[];
-}
-
-/** Sim-only request to spawn a specific event at a system this tick. */
-export interface InjectionRequest {
-  type: EventTypeId;
-  systemId: string;
-  regionId: string;
-  severity: number;
 }

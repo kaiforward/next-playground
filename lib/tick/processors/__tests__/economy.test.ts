@@ -13,7 +13,7 @@ import { describe, it, expect } from "vitest";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
-import { DEFAULT_SIM_CONSTANTS } from "@/lib/engine/simulator/constants";
+import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import type { TickContext } from "@/lib/tick/types";
@@ -35,7 +35,7 @@ const ECON_PARAMS = {
   simParams: {
     holdCover: 1.3,
   },
-  modifierCaps: DEFAULT_SIM_CONSTANTS.events.modifierCaps,
+  modifierCaps: MODIFIER_CAPS,
   strikeParams: STRIKE_PARAMS,
 };
 

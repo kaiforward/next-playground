@@ -18,11 +18,6 @@ import type { World, SystemControl } from "@/lib/world/types";
 
 // ── Adapter row shapes ──────────────────────────────────────────
 
-export interface SimRegion {
-  id: string;
-  name: string;
-}
-
 export interface SimSystem {
   id: string;
   name: string;
@@ -88,14 +83,6 @@ export interface SimEvent {
   phaseDuration: number;
   severity: number;
   sourceEventId: string | null;
-}
-
-export interface SimFlowEvent {
-  tick: number;
-  fromSystemId: string;
-  toSystemId: string;
-  goodId: string;
-  quantity: number;
 }
 
 // ── Calibration harness config ──────────────────────────────────
