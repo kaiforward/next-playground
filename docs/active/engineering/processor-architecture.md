@@ -50,7 +50,9 @@ For processors that shard by system (economy) or by edge (migration), the shard 
 
 ### World → view joins
 
-`World` (`lib/world/types.ts`) is schema-faithful flat rows and deliberately omits catalog/derived data the adapters expect inlined (a good's `basePrice`/`floor`/`ceiling`, a system's owning faction's `governmentType`). `runWorldTick` performs those joins **once per tick** (`toTickSystems`/`toTickMarkets`/`toTickConnections`, exported so the harness's health analyzers reuse them) before handing the views to the adapters. The joined rows are the tick's own working types (`lib/tick/rows.ts`) — mutable per-tick copies, merged back into the next `World` at the end of the tick.
+`World` (`lib/world/types.ts`) is schema-faithful flat rows and deliberately omits derived data some adapters expect inlined (a system's owning faction's `governmentType`, its building roster). `runWorldTick` performs those joins **once per tick** (`toTickSystems`/`toTickConnections`, exported so the harness's health analyzers reuse them) before handing the views to the adapters. The joined rows are the tick's own working types (`lib/tick/rows.ts`) — mutable per-tick copies, merged back into the next `World` at the end of the tick.
+
+A row type earns a `Tick*` shape only by differing from its `World` row. Markets do not: `WorldMarket` **is** the tick's market row, so the adapters read and write it directly, with no join in and no merge back. A good's catalog constants (`basePrice`/`priceFloor`/`priceCeiling`) are code constants, not row state — read them from `GOODS[goodId]` at the point of use (`marketBandForRow(row, GOODS[row.goodId])`), never by widening the row to carry them. Joining constants onto every market row in the galaxy and stripping them back off once cost half of every tick.
 
 ---
 
