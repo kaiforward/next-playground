@@ -15,9 +15,9 @@ import type { EconomySimParams } from "@/lib/engine/tick";
 import type { StrikeParams } from "@/lib/engine/population";
 
 /**
- * Flat market row + the system context the processor needs. The adapter
- * resolves `goodId` to its canonical key so the processor body never thinks
- * about that.
+ * Flat market row + the system context the processor needs. `goodId` is
+ * already the canonical good key on the row, so the processor body never
+ * thinks about resolution.
  */
 export interface MarketView {
   /** Adapter-owned identifier — round-trips into `MarketUpdate.id`. */
