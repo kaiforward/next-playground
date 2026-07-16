@@ -77,6 +77,32 @@ and never reported that its seed fired zero transfers in 500 ticks.
 
 This is the same shape as the ECONOMY_SCALE gap below: the harness is correct, and silent about it.
 
+### Live fossils of the split: unreachable sim-only branches in the events processor
+
+Found while fixing `events-world.ts`'s doc rot in PR1. `EventsProcessorParams` has two fields whose
+non-default values **no caller can produce** — leftovers from when the sim was a separate
+orchestration that could inject events and suppress spawning:
+
+- **`injections`** — `runWorldTick` never passes it. The `if (injections && injections.length > 0)`
+  branch (`lib/tick/processors/events.ts:268-270`) is therefore dead in the game; only
+  `events.test.ts:224,242` reach it.
+- **`spawnEnabled`** — `tick.ts:547` always passes `true`. The `false` path (`events.ts:309`) is
+  reached only by `events.test.ts:132`.
+
+PR1 made this visible by replacing the doc comments that dressed it up as a sim/live difference
+("Sim-only injections to apply this tick. Live always [] / undefined."). The comments now state
+plainly that only tests pass these.
+
+**Decision needed before PR3** — the two are not alike:
+
+- Deleting `injections` and its branch is clearly right: it is dead in production, and the two tests
+  exercising it test a capability nothing has (the `sim-constants.test.ts` pattern exactly). Removing
+  it is byte-identical-safe, since the branch never runs.
+- Deleting `spawnEnabled` is arguable. It is always-true today, but a player-facing "disable random
+  events" toggle is plausible once the Phase 3 seat exists. Hardcoding the branch now and re-adding
+  it later is churn; keeping an always-true param is a small honest cost. **Recommend keeping
+  `spawnEnabled`, deleting `injections`.**
+
 ### Dead code
 
 - `lib/engine/simulator/constants.ts` (259 lines) — `SimConstants`, `SimConstantOverrides`,
