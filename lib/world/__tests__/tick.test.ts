@@ -166,6 +166,43 @@ describe("runWorldTick", () => {
     for (const u of after.constructionProjects) if (u.kind === "build") expect(Number.isInteger(u.levels)).toBe(true);
   });
 
+  it("issues every id from one monotonic counter threaded across the tick's stages", async () => {
+    // Events and construction projects draw ids from the same World.nextId counter, threaded stage
+    // by stage: the events adapter mints, hands the advanced counter back, directed-build mints from
+    // there, and the relations adapter takes it next. The id prefix does not disambiguate them — the
+    // threading is what keeps them distinct — so a stage that failed to read the counter back would
+    // silently reissue a value that is already live.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const world = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
+    const after = await runTicks(world, 120);
+
+    const eventIds = after.events.map((e) => e.id);
+    const projectIds = after.constructionProjects.map((p) => p.id);
+    // Both mint sites must have actually fired, or the assertions below prove nothing.
+    expect(eventIds.length).toBeGreaterThan(0);
+    expect(projectIds.length).toBeGreaterThan(0);
+
+    const counterValue = (id: string) => Number(id.slice(id.indexOf("-") + 1));
+    const issued = [...eventIds, ...projectIds].map(counterValue);
+    for (const n of issued) expect(Number.isInteger(n)).toBe(true);
+    // No two live ids share a counter value, across both prefixes.
+    expect(new Set(issued).size).toBe(issued.length);
+    // The counter leads everything it has issued — a stage that dropped its read-back would leave
+    // nextId behind a live id and reissue it on the next tick.
+    for (const n of issued) expect(n).toBeLessThan(after.nextId);
+  });
+
   it("round-trips building idleMonths across a non-decay tick (the field survives the row/World serialize round-trip)", async () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const world = { ...base, buildings: base.buildings.map((b) => ({ ...b, idleMonths: 7 })) };

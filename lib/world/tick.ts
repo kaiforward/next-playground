@@ -514,8 +514,9 @@ export async function runWorldTick(
   let alliancePacts = world.alliancePacts;
   let constructionProjects = world.constructionProjects;
   let nextId = world.nextId;
-  // Tracks each event's metadata across the events stage (TickEvent has no
-  // metadata field — see lib/engine/simulator/types.ts's doc comment).
+  // Preserves each event's metadata across the events stage, whose row type
+  // (`TickEvent`, lib/tick/rows.ts) has no metadata field — re-attached at the
+  // WorldEvent mapping below.
   const metadataByEventId = new Map(world.events.map((e) => [e.id, e.metadata]));
   let events: WorldEvent[] = world.events;
 
@@ -864,8 +865,8 @@ export async function runWorldTick(
   };
 
   // `markets` is already this tick's final market-row join (same one folded
-  // into nextWorld above) — returned so callers that need the Sim view (the
-  // calibration harness) don't have to re-run toTickMarkets(nextWorld) right
-  // after we just built it.
+  // into nextWorld above) — returned so callers that need the tick's market
+  // rows (the calibration harness) don't have to re-run toTickMarkets(nextWorld)
+  // right after we just built it.
   return { world: nextWorld, events: tickEvents, markets };
 }

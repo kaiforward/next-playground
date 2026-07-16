@@ -96,7 +96,8 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   /** Public (unlike the other memory adapters' private counters) so callers threading
    *  World.nextId across stages (lib/world/tick.ts) can read the post-run value back.
    *  Relation events share the `event-` id namespace with the events adapter, so that
-   *  threading is what keeps ids unique — the prefix does not disambiguate them. */
+   *  threading is what keeps ids unique — the prefix does not disambiguate them. Required
+   *  for the same reason: a defaulted counter would reissue live ids. */
   nextId: number;
 
   constructor(initial: {
@@ -107,7 +108,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
     connections?: MemoryConnection[];
     tradeFlows?: MemoryTradeFlow[];
     events?: MemoryRelationEvent[];
-    nextId?: number;
+    nextId: number;
   }) {
     this.factions = initial.factions.map((f) => ({
       ...f,
@@ -134,7 +135,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
       ...e,
       metadata: { ...e.metadata },
     }));
-    this.nextId = initial.nextId ?? 1;
+    this.nextId = initial.nextId;
   }
 
   getFactions(): Promise<FactionView[]> {
