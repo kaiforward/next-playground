@@ -81,7 +81,7 @@ function fmtNum(n: number): string {
 }
 
 function formatTable(results: HarnessResults): string {
-  const { marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
+  const { marketHealth, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
   // summaries below — they used to each call toTickSystems(finalWorld) separately.
@@ -244,6 +244,31 @@ function formatTable(results: HarnessResults): string {
     const kinds = Object.entries(col.queue.colonyByKind);
     if (kinds.length > 0) {
       lines.push(`  colony projects by kind: ${kinds.map(([k, n]) => `${k}=${n}`).join(", ")}`);
+    }
+  }
+
+  // Logistics activity — did directed-logistics actually move anything?
+  {
+    const lg = logisticsActivity;
+    lines.push("");
+    lines.push("Logistics Activity (whole run):");
+    const lWidths = [24, 16];
+    lines.push([pad("Metric", lWidths[0]), rpad("Value", lWidths[1])].join(" | "));
+    lines.push(lWidths.map((w) => "-".repeat(w)).join("-+-"));
+    const lRows: [string, string][] = [
+      ["Transfers", fmtNum(lg.transferCount)],
+      ["Ticks with transfers", String(lg.activeTicks)],
+      ["Quantity moved", fmtNum(lg.totalQuantity)],
+      ["Mean transfer size", lg.meanTransferSize.toFixed(1)],
+      ["Systems participating", String(lg.participatingSystems)],
+      ["Goods moved", String(lg.byGood.length)],
+    ];
+    for (const [l, v] of lRows) lines.push([pad(l, lWidths[0]), rpad(v, lWidths[1])].join(" | "));
+    if (lg.byGood.length > 0) {
+      const top = lg.byGood.slice(0, 5).map((g) => `${g.goodId} ${fmtNum(g.quantity)}`).join(", ");
+      lines.push(`  heaviest goods: ${top}`);
+    } else {
+      lines.push("  NOTHING MOVED — directed-logistics recorded no transfers this run");
     }
   }
 

@@ -115,6 +115,35 @@ export interface EventImpact {
   weightedPriceImpactPct: number;
 }
 
+// ── Logistics activity ──────────────────────────────────────────
+
+/** One good's logistics totals across the run. */
+export interface LogisticsGoodActivity {
+  goodId: string;
+  transferCount: number;
+  quantity: number;
+}
+
+/**
+ * Whole-run directed-logistics activity. Accumulated per tick rather than read
+ * off the final world: `world.flowEvents` only retains a rolling window
+ * (`TRADE_SIMULATION.FLOW_HISTORY_TICKS`).
+ */
+export interface LogisticsActivitySummary {
+  /** Flow events recorded across the whole run. 0 in a populated galaxy means the matcher never fired. */
+  transferCount: number;
+  /** Ticks carrying at least one transfer — logistics resolves on the monthly pulse, so a healthy run is rhythmic. */
+  activeTicks: number;
+  /** Total quantity moved across the run. */
+  totalQuantity: number;
+  /** totalQuantity / transferCount — the magnitude canary. 0 when nothing moved. */
+  meanTransferSize: number;
+  /** Distinct systems that sent or received at least once. */
+  participatingSystems: number;
+  /** Per-good totals, heaviest first. A good that never moved is absent. */
+  byGood: LogisticsGoodActivity[];
+}
+
 // ── Region overview ─────────────────────────────────────────────
 
 export interface RegionOverviewEntry {
@@ -134,6 +163,8 @@ export interface HarnessResults {
   marketHealth: MarketHealthSummary;
   /** Impact measurement for each event that occurred. */
   eventImpacts: EventImpact[];
+  /** Whole-run directed-logistics activity — did goods actually move. */
+  logisticsActivity: LogisticsActivitySummary;
   /** Region overview for understanding the generated universe. */
   regionOverview: RegionOverviewEntry[];
   /** Optional label for experiment tracking. */
