@@ -174,7 +174,7 @@ The configurable universe and tile-based map renderer are in place — scale cei
 ## System Interactions
 
 - **Substrate → Economy**: A system's aggregate body resources + population determine its economy-type label; production/consumption then run off that label (see [economy.md](./economy.md))
-- **Government → Economy**: A system's government type — sourced from its owning faction — determines its market modifiers (volatility, equilibrium, taxes). See [economy.md](./economy.md) and [faction-system.md](./faction-system.md) §1
+- **Government → Economy**: A system's government type — sourced from its owning faction — determines its market modifiers (consumption boosts, danger baseline). See [economy.md](./economy.md) and [faction-system.md](./faction-system.md) §1
 - **Navigation**: Connection graph defines travel routes and fuel costs. Gateway systems are strategic chokepoints (see [navigation.md](./navigation.md))
 - **Events**: Events spawn at specific systems based on economy type and affect neighboring systems via spread (see [events.md](./events.md))
 - **Faction system**: Factions control systems, with government type tied to faction rather than region (see [faction-system.md](./faction-system.md)). Territory is rendered as colored polygons on the map

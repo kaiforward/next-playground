@@ -2,8 +2,8 @@
  * Shared market tick entry builder.
  *
  * Both the live economy processor and the simulator build MarketTickEntry
- * objects through the same pipeline: good constants → government volatility
- * scaling → event production/consumption modifiers.
+ * objects through the same pipeline: good constants → event production/
+ * consumption modifiers.
  * (The legacy equilibrium-spread / self-sufficiency steps are gone — there is
  * no equilibrium target in the stock model.)
  */
@@ -16,7 +16,7 @@ import { buildMarketTickEntry, type MarketTickEntry } from "@/lib/engine/tick";
 import { marketBand } from "@/lib/engine/market-pricing";
 /** Result of resolving a market tick: the stock-sim entry plus the pricing anchor. */
 export interface ResolvedMarketTick {
-  /** Input to the stock simulation (production/consumption rates, volatility, …). */
+  /** Input to the stock simulation (production/consumption rates, …). */
   entry: MarketTickEntry;
   /**
    * Pricing-anchor multiplier from active `anchor_shift` modifiers (1 = none).
@@ -56,12 +56,6 @@ export interface MarketTickInput {
 export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTick {
   const goodDef = GOODS[input.goodId];
 
-  // Government scales volatility (amplifies/dampens noise).
-  const baseVolatility = goodDef?.volatility ?? 1;
-  const volatility = input.govDef
-    ? baseVolatility * input.govDef.volatilityModifier
-    : baseVolatility;
-
   // Aggregate modifiers first so anchorMult is available before band computation.
   // The band must track event anchor shifts: a bumper-harvest doubling the anchor
   // should also widen the stock band so the ceiling doesn't clip the raised target.
@@ -97,7 +91,6 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     minStock: band.minStock,
     targetStock: band.targetStock,
     maxStock: band.maxStock,
-    volatility,
     baseProductionRate: input.baseProductionRate,
     baseConsumptionRate: input.baseConsumptionRate,
     // Goods-magnitude consumption term — rides ECONOMY_SCALE like every other consumption

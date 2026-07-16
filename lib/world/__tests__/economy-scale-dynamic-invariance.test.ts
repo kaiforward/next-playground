@@ -12,11 +12,12 @@ import { describe, it, expect, vi, afterEach } from "vitest";
  * The invariant breaks the instant any goods-magnitude term is quantised
  * (`Math.round`/`floor` on a goods amount) or left as an unscaled absolute — those
  * are a rounding error at S=100 but a large fraction at S=1, so they diverge only
- * at low scale and compound through every monthly pulse. This test is the guard
- * that pinned four such terms (seed stock rounding, event-shock rounding, logistics
- * transfer flooring, and the unscaled government consumption boost); it runs long
- * enough to cover the first monthly economy pulse, where the government-consumption
- * term first bites.
+ * at low scale and compound through every monthly pulse. This broad end-to-end guard
+ * reliably exercises the seed-stock de-rounding (from tick 0) and the government
+ * consumption scaling (it runs past the first monthly economy pulse, where that term
+ * first bites). The logistics-transfer term is guarded directly by a focused unit test
+ * (`lib/tick/processors/__tests__/directed-logistics.test.ts`) instead, because directed
+ * transfers don't reliably fire within this short window for an arbitrary seed.
  *
  * ECONOMY_SCALE is resolved once at module import, so each scale runs against a
  * freshly-imported constants + tick graph (resetModules + stubEnv), mirroring the
@@ -52,7 +53,7 @@ afterEach(() => {
 
 describe("ECONOMY_SCALE dynamic invariance", () => {
   it("per-(system,good) stock is scale-normalised-identical across the first monthly pulse", async () => {
-    const SEED = 745878428; // an event-heavy seed with colonies — exercises shocks + logistics
+    const SEED = 745878428; // colonies + a monthly pulse in-window (logistics is covered by a focused test)
     const SYSTEM_COUNT = 60;
     const TICKS = 30; // past the first economy pulse (tick 24), where the gov-consumption term bites
     const TOL = 1e-6; // pure FP is ~1e-15 here; a quantised/absolute term diverges ~1e-3+

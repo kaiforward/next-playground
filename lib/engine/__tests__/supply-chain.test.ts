@@ -160,7 +160,7 @@ describe("simulateSystemEconomyTick — operating ceiling", () => {
   it("idles production at the operating ceiling in the coupled tick", () => {
     // tier-0 good (no recipe) → input gate 1. holdCover 1.3 × targetStock 100 = 130.
     const out = simulateSystemEconomyTick(
-      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, maxStock: 200, volatility: 1, productionRate: 10 }],
+      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 10 }],
       PARAMS,
     );
     expect(out[0].stock).toBeCloseTo(130, 5); // throttled to ~0 at the operating ceiling

@@ -61,6 +61,6 @@ Nothing consumes danger mechanically — there is no arrival-danger pipeline. Ev
 
 ## System Interactions
 
-- **Economy**: Government modifiers affect market volatility and equilibrium (see [economy.md](./economy.md))
+- **Economy**: Government modifiers add per-good consumption boosts (see [economy.md](./economy.md))
 - **Events**: Events disrupt production and add navigation-domain danger modifiers; only the danger *readout* consumes them now (see [events.md](./events.md))
 - **Faction system** (planned): Faction territory will determine government type. War zones will have elevated danger (see [faction-system.md](./faction-system.md))

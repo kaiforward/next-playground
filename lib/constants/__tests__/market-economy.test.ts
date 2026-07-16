@@ -140,7 +140,7 @@ describe("getInitialStock", () => {
     // No production or consumption → total===0, producerShare fallback = 0.5,
     // demandRate = MIN_DEMAND=0.05. Fallback band: priceFloor=0.5, priceCeiling=2.0,
     // storageCapacity=0 → targetStock=2, minStock=1, maxStock=4.
-    // coverMult = 0.5+0.5*(1.5-0.5)=1.0 → seed = round(max(1,min(4,2*1))) = 2.
+    // coverMult = 0.5+0.5*(1.5-0.5)=1.0 → seed = max(1,min(4,2*1)) = 2.
     const seed = getInitialStock({}, unitResourceVector(), 1000, "not_a_good");
     expect(seed).toBeGreaterThanOrEqual(1);
     expect(seed).toBeLessThanOrEqual(4);
