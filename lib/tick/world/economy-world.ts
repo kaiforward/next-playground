@@ -15,9 +15,9 @@ import type { EconomySimParams } from "@/lib/engine/tick";
 import type { StrikeParams } from "@/lib/engine/population";
 
 /**
- * Flat market row + the system context the processor needs. Adapters
- * resolve `goodId` to its canonical key (live: maps via good.name; sim:
- * already canonical) so the processor body never thinks about that.
+ * Flat market row + the system context the processor needs. The adapter
+ * resolves `goodId` to its canonical key so the processor body never thinks
+ * about that.
  */
 export interface MarketView {
   /** Adapter-owned identifier — round-trips into `MarketUpdate.id`. */
@@ -70,7 +70,7 @@ export interface EconomyWorld {
   getUnrest(systemIds: string[]): Promise<Map<string, number>>;
 }
 
-/** Per-tick params passed alongside the world. Sim and live differ here. */
+/** Per-tick params passed alongside the world, all sourced by `runWorldTick`. */
 export interface EconomyProcessorParams {
   /** Ticks for the shard to refresh every system once (fixed gameplay cadence). */
   interval: number;

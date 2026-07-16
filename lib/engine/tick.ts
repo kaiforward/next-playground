@@ -111,9 +111,9 @@ export function simulateEconomyTick(
 // ── Tick entry builder ──────────────────────────────────────────
 
 /**
- * Pre-resolved inputs for building a MarketTickEntry. Callers resolve
- * data-source-specific values (DB vs SimWorld) into this common shape; the
- * builder handles shared computation (gov consumption boost).
+ * Pre-resolved inputs for building a MarketTickEntry — the caller resolves its
+ * own row shape into this common shape, and the builder handles the shared
+ * computation (gov consumption boost).
  */
 export interface TickEntryInput {
   goodId: string;

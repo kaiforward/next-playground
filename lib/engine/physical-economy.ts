@@ -3,8 +3,8 @@
  *
  * Civilian consumption derives from a demand basis: the flat per-capita baseline
  * plus additive per-grade baskets weighted by skilled work performed. The
- * per-good production/consumption snapshot shape is shared by the live tick,
- * the simulator, and the read service so there is one source of truth.
+ * per-good production/consumption snapshot shape is shared by the live tick and
+ * the read service so there is one source of truth.
  * Production itself is capacity-driven and lives in `industry.ts`.
  */
 import {

@@ -5,7 +5,7 @@
  * (2) Demand-pulled, labour-gated industry pass — finds structural deficits (a
  *     deficit with no reachable surplus) and allocates production capacity, capped
  *     to what the already-resident population can staff (no co-built housing here).
- * The processor maps DB/sim rows into BuildSystemState and applies the returned PlannedBuild[].
+ * The processor maps tick rows into BuildSystemState and applies the returned PlannedBuild[].
  */
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
@@ -42,7 +42,7 @@ export interface BuildGoodState {
   /**
    * Local production rate of this good. A self-supplier (production ≥ demand) is never a
    * structural deficit — its low standing stock is throughput, not need (mirrors the logistics
-   * matcher's self-supply gate). Optional for engine-test fixtures; the live/sim path always
+   * matcher's self-supply gate). Optional for engine-test fixtures; the tick path always
    * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
    */
   production?: number;

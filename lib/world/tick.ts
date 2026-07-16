@@ -4,7 +4,7 @@
  * The pure processor bodies (`lib/tick/processors/*`) run here against
  * in-memory adapters (`lib/tick/adapters/memory/*`). This is the ONLY
  * tick body — the live game's tick loop (`lib/world/tick-loop.ts`) and the
- * calibration harness (`lib/engine/simulator/runner.ts`) both call it.
+ * calibration harness (`lib/tick-harness/runner.ts`) both call it.
  *
  * Stage order is the processors' dependency topological order:
  * ship-arrivals → events → economy → infrastructure-decay →
@@ -13,7 +13,7 @@
  * `TickContext.results` map.
  *
  * `World`'s flat rows (`WorldSystem`, `WorldMarket`, …) don't match the
- * adapters' `Sim*` row shapes field-for-field (see the join/merge helpers
+ * adapters' `Tick*` row shapes field-for-field (see the join/merge helpers
  * below) — `World` is schema-faithful and omits catalog data (goods'
  * basePrice/floor/ceiling, a system's owning faction's governmentType) that
  * the adapters expect inlined. Those joins happen once per tick, from World
@@ -117,7 +117,7 @@ export function tickRng(seed: number, tick: number): RNG {
 
 /**
  * Exported alongside `toTickSystems`/`toTickMarkets` — the calibration harness
- * (`lib/engine/simulator/runner.ts`) reuses these same joins to build the
+ * (`lib/tick-harness/runner.ts`) reuses these same joins to build the
  * tick-row views its (pre-existing) health analyzers read.
  */
 export function toTickConnections(world: World): TickConnection[] {
@@ -157,8 +157,8 @@ export function toTickSystems(world: World): TickSystem[] {
     regionId: s.regionId,
     factionId: s.factionId,
     control: s.control,
-    // Every seeded system has a non-null factionId; the fallback covers the
-    // same edge case the Prisma adapter guards (a mid-write gap).
+    // Every seeded system has a non-null factionId; the fallback covers a
+    // mid-write gap.
     governmentType: s.factionId
       ? (governmentByFaction.get(s.factionId) ?? "frontier")
       : "frontier",

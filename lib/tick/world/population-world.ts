@@ -28,7 +28,7 @@ export interface PopulationWorld {
   rewriteDemandRates(pops: Array<{ systemId: string; population: number }>): Promise<void>;
 }
 
-/** Per-run params (sim and live differ; calibratable). */
+/** Per-run params passed alongside the world, all sourced by `runWorldTick`; calibratable. */
 export interface PopulationProcessorParams {
   unrest: UnrestParams;
   population: PopulationParams;

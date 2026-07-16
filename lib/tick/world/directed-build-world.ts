@@ -1,8 +1,8 @@
 /**
  * DirectedBuildWorld — data interface for the directed-build processor.
- * Adapters in lib/tick/adapters/{prisma,memory}/directed-build.ts implement it (the
- * Prisma adapter lands in the follow-on live-wiring plan). Sharding is PER-FACTION
- * (the build planner needs all of a faction's systems at once), matching logistics.
+ * The adapter in `lib/tick/adapters/memory/directed-build.ts` implements it.
+ * Sharding is PER-FACTION (the build planner needs all of a faction's systems
+ * at once), matching logistics.
  */
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";

@@ -53,7 +53,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       yieldsBySystemId.set(s.id, s.yields);
     }
     // Cache the labour snapshot per system — shared across all of a system's markets
-    // (mirrors the prisma adapter); computeSystemLabourSnapshot scans the whole building set.
+    // computeSystemLabourSnapshot scans the whole building set.
     const labourBySystem = new Map<string, SystemLabourSnapshot>();
     this.markets = this.markets.map((m) => {
       const population = popBySystem.get(m.systemId);

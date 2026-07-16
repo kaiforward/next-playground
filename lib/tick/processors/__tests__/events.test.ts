@@ -310,7 +310,7 @@ describe("InMemoryEventsWorld.applyShocks", () => {
   it("accumulates multiple shocks on one market then clamps once (not per-shock)", async () => {
     // Per-shock clamping would give 80: (100 + 150 → clamp 200) − 120 = 80.
     // Accumulate-then-clamp gives 130: clamp(100 + 150 − 120). The latter is
-    // the contract (parity with the Prisma adapter).
+    // the contract.
     const world = makeWorld({
       systems: [makeSystem("s1", "r1")],
       markets: [makeMarket("s1", "food", 100)],
