@@ -89,7 +89,7 @@ perishable).
    (`CivilianDemandBasis`); `consumptionBreakdown()` exposes the three terms for display.
 2. **Tick adapters** (`lib/tick/adapters/memory/*`, economy + population) — the
    one-pass `computeSystemLabourSnapshot` (`lib/engine/industry.ts`) bundles `LabourState` +
-   basis, computed once per system. Live and sim stay identical.
+   basis, computed once per system. There is one code path, so this is identical everywhere.
 3. **`capacityGoodRates`** (`lib/engine/industry.ts` readout) — already has buildings +
    population; same allocation, same formula.
 4. **Pricing + satisfaction** — the `demandRate` civilian term (`lib/constants/market-economy.ts`)

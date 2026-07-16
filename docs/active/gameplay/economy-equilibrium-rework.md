@@ -133,7 +133,7 @@ existing dev seed stay on `S = 1` until then.
 
 The simulator already runs the same economy / population / logistics processor bodies as live, in-memory,
 deterministically, thousands of ticks in seconds — but its `marketHealth` output reports only price
-*stdev*, not the price-level distribution we need. Port the audit's signals into `SimResults.marketHealth`:
+*stdev*, not the price-level distribution we need. Port the audit's signals into `HarnessResults.marketHealth`:
 
 - price/base distribution: median, p10, p90, %cheap (<0.9×) / near (0.9–1.1×) / expensive (>1.1×);
 - per-good cover (stock/anchor), %surplus / %deficit.

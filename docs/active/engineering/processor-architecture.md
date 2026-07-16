@@ -20,11 +20,11 @@ lib/tick/adapters/memory/<name>.ts    ← the in-memory adapter (the only backen
 lib/tick/processors/<name>.ts         ← pure processor body
 ```
 
-The body depends **only** on its World interface, never on concrete row storage. `runWorldTick` (`lib/world/tick.ts`) constructs an `InMemoryXxxWorld` over the current `World` and calls `run<Name>Processor(world, ctx, params)`. That single pipeline is what both the live `TickLoop` and the calibration harness (`lib/engine/simulator/runner.ts`) invoke — see [tick-engine.md](./tick-engine.md) and [single-player-runtime.md](./single-player-runtime.md).
+The body depends **only** on its World interface, never on concrete row storage. `runWorldTick` (`lib/world/tick.ts`) constructs an `InMemoryXxxWorld` over the current `World` and calls `run<Name>Processor(world, ctx, params)`. That single pipeline is what both the live `TickLoop` and the calibration harness (`lib/tick-harness/runner.ts`) invoke — see [tick-engine.md](./tick-engine.md) and [single-player-runtime.md](./single-player-runtime.md).
 
 ### Why keep the interface with one backend?
 
-With a single backend, the World interface isn't a live/sim abstraction — it's a thin, useful seam:
+With a single backend, the World interface isn't a multi-backend abstraction — it's a thin, useful seam:
 
 - **Boundary narrowing** — the adapter narrows any string-typed columns to validated unions (via `lib/types/guards.ts`) once, on the way out, so the body receives `EconomyType`/`GovernmentType`/`EventTypeId` directly and `unknown` stays banned at the edge.
 - **Explicit read/write surface** — the interface documents exactly what a processor may touch; the body can't reach into unrelated world state.
