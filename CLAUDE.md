@@ -45,6 +45,7 @@ Design docs (under `docs/`):
 
 Doc conventions:
 - **No `docs/archive/`** — superseded design docs are deleted (git is the history). The tree is only active (current rules) / planned (unbuilt) / build-plans (transient).
+- **Booking is the cost of being allowed to delete** — before deleting a doc, grep it for work it routes elsewhere ("→ BACKLOG", deferred, follow-up) and confirm each item was *actually* booked (`git log -S` the destination file; a plan saying "routed to BACKLOG" is not evidence anyone did it). A retiring doc is routinely the only record on `main` of the work it defers, so deleting it unbooked destroys that record silently — and git history is not a substitute, because nobody greps deleted files for a lever they don't know exists.
 - **Active docs describe current reality in present tense** — no change-history/timeline ("removed in Phase 2"), no ephemeral phase nicknames or numbers; a deferred feature is stated as present-fact + a minimal planned-doc pointer.
 - **Specs lead with a concise human-readable headline** of the key mechanics + interactions; math/specifics go in later detail sections.
 
@@ -117,6 +118,7 @@ Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't
 - Native `<dialog>` modal: never set `m-0`/`inset-auto` — it breaks `showModal()` UA centering.
 
 **Misc**
+- **`git ls-files` is the instrument; `ls` lies.** A `.gitignore` negation under an excluded *directory* is a silent no-op — git cannot re-include anything beneath an excluded directory, so `/experiments` + `!/experiments/examples/` tracked nothing for as long as it existed (fixed by excluding the directory's *contents*: `/experiments/*`). The failure is invisible on disk: the files are right there, `ls` shows them, editors open them, and only `git ls-files` reveals the repo never had them. Before assuming a path is versioned — especially before `git rm`, a move, or "it's in the repo, I can see it" — check `git ls-files`, not `ls`.
 - **Tailwind v4 (`@tailwindcss/oxide`) auto-scans the whole project — incl. `docs/*.md` — for class candidates.** A backslash-hex sequence in scanned prose (a Windows path like `…\c5612caa…`, a regex `\d`/`\c`) is read as a CSS escape and rejected as `Invalid code point <n>` at `globals.css:1:1`, aborting `npm run build`. `docs/` is excluded via `@source not "../docs"` in `globals.css`; keep non-source prose out of the scan (or add another `@source not`). Note this only surfaces on a real `next build` (Turbopack) — `tsc` and Vitest stay green — and only on a branch whose offending doc was actually pushed, so CI catches it but local `tsc`-only checks won't.
 
 ## UI Components
