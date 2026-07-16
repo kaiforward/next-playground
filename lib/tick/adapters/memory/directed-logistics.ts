@@ -6,7 +6,7 @@ import type {
 } from "@/lib/tick/world/directed-logistics-world";
 import { factionShardKeys } from "@/lib/engine/shard-order";
 
-/** In-memory DirectedLogisticsWorld for unit tests + the simulator. Captures writes for assertions. */
+/** The DirectedLogisticsWorld adapter — the only backend. Captures writes for assertions. */
 export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   readonly stockUpdates = new Map<string, number>();
   readonly flows: LogisticsFlowInsert[] = [];

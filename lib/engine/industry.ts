@@ -11,8 +11,8 @@
  * `effectiveFulfilment` picks the pools a good's tier actually draws on (tier-0:
  * labourFulfil only; tier-1: + skill1Fulfil; tier-2: + skill2Fulfil).
  * Input-gating (the recipe `inputs`) is not applied here — that is the
- * supply-chain cascade. The same functions feed the live tick, the simulator,
- * and the substrate read service.
+ * supply-chain cascade. The same functions feed the live tick and the
+ * substrate read service.
  */
 import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { CivilianDemandBasis, SubstrateGoodRate } from "@/lib/engine/physical-economy";

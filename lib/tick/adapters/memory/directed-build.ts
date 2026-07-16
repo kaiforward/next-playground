@@ -9,7 +9,7 @@ import type { WorldConstructionProject } from "@/lib/world/types";
 import { developmentRefs, type DevelopmentRefs } from "@/lib/engine/development";
 import { sumResourceVector } from "@/lib/engine/resources";
 
-/** In-memory DirectedBuildWorld for unit tests + the simulator. Captures writes for assertions + write-back. */
+/** The DirectedBuildWorld adapter — the only backend. Captures writes for assertions + write-back. */
 export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   /** New absolute building counts written this run (landed whole levels). */
   readonly buildingUpdates: BuildBuildingUpdate[] = [];

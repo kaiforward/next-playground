@@ -25,9 +25,8 @@ import type {
 import { pairKey } from "@/lib/tick/world/relations-world";
 
 /**
- * Pure processor body. Same logic runs against the Prisma adapter (live game)
- * and the in-memory adapter (unit tests). All knobs that vary come in via
- * `params`.
+ * Pure processor body, run against the in-memory adapter by `runWorldTick`.
+ * All knobs that vary come in via `params`.
  *
  * Per-tick sequence:
  *   1. Snapshot factions / pairs / alliances / events / borders / trade.

@@ -24,7 +24,7 @@ export function toEconomyScale(value: string): number {
 /**
  * Active economy scale, resolved once from the environment. Defaults to 100 — the scale the game is
  * balanced and played at — so the calibration harness matches the live game without needing `.env` set
- * (the dev server auto-loads `.env`; the headless sim doesn't). Tests pin this to 1 via the vitest
+ * (the dev server auto-loads `.env`; the headless harness doesn't). Tests pin this to 1 via the vitest
  * config (their magnitude assertions are written at unit scale).
  */
 export const ECONOMY_SCALE: number = toEconomyScale(process.env.ECONOMY_SCALE ?? "100");

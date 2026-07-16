@@ -1,12 +1,12 @@
 /**
  * RelationsWorld — data interface for the relations processor.
  *
- * Adapters in `lib/tick/adapters/{prisma,memory}/relations.ts` implement it.
- * See `docs/design/active/processor-architecture.md` for the broader pattern.
+ * The adapter in `lib/tick/adapters/memory/relations.ts` implements it.
+ * See `docs/active/engineering/processor-architecture.md` for the broader pattern.
  *
  * Pair convention: unordered pairs are stored with `factionAId < factionBId`.
- * Both the Prisma adapter and the memory adapter enforce this on every read
- * and write; callers see the same canonical ordering everywhere.
+ * The adapter enforces this on every read and write; callers see the same
+ * canonical ordering everywhere.
  */
 
 import type { Doctrine, FactionStatus, GovernmentType } from "@/lib/types/game";

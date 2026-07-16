@@ -1,9 +1,8 @@
 /**
  * Shared market tick entry builder.
  *
- * Both the live economy processor and the simulator build MarketTickEntry
- * objects through the same pipeline: good constants → event production/
- * consumption modifiers.
+ * The economy processor builds its MarketTickEntry objects through this
+ * pipeline: good constants → event production/consumption modifiers.
  * (The legacy equilibrium-spread / self-sufficiency steps are gone — there is
  * no equilibrium target in the stock model.)
  */
@@ -48,9 +47,8 @@ export interface MarketTickInput {
 }
 
 /**
- * Resolve a market tick from data-source-agnostic inputs. Used by both the live
- * economy processor and the simulator so the tick logic is identical. Returns
- * the stock-sim `entry` and the pricing `anchorMult` (derived from the same
+ * Resolve a market tick from data-source-agnostic inputs. Returns the
+ * stock-sim `entry` and the pricing `anchorMult` (derived from the same
  * modifier aggregation) so the caller never re-aggregates.
  */
 export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTick {

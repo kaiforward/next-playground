@@ -13,10 +13,10 @@ Single-player grand-strategy game (working title pending) in a procedurally gene
 - `npm run dev` — Start dev server (Turbopack)
 - `npm run build` — Production build. **Use `npx next build --webpack` as the PR build gate** (Turbopack build has other quirks; webpack is the stable gate).
 - `npx vitest run` — Run unit tests
-- `npm run simulate` — Quick headless sanity check over the real tick (`lib/engine/simulator/runner.ts`). Reports intrinsic economy-health metrics.
+- `npm run simulate` — Quick headless sanity check over the real tick (`lib/tick-harness/runner.ts`). Reports intrinsic economy-health metrics.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`).
 
-The simulator is a **calibration harness**, not a game feature — it runs `runWorldTick` (the exact tick the live loop runs) headlessly and reports economy-health metrics for validating changes before they ship. There is only one tick body, so the harness and the live game run literally the same code (no sim-only "bots" or strategies). World generation is `generateWorld(systemCount, seed)` (`lib/world/gen.ts`) invoked in-process on **New game**; there is no seed script and no database.
+The calibration harness (`lib/tick-harness/`) is a dev instrument, not a game feature — it runs `runWorldTick` (the exact tick the live loop runs) headlessly and reports economy-health metrics for validating changes before they ship. There is only one tick body, so the harness and the live game run literally the same code (no harness-only "bots" or strategies). World generation is `generateWorld(systemCount, seed)` (`lib/world/gen.ts`) invoked in-process on **New game**; there is no seed script and no database.
 
 ## Tech Stack
 
@@ -29,6 +29,7 @@ Core layers (fixed roles — see CLAUDE.md conventions for rules):
 - `lib/world/` — Single-player runtime substrate: the in-memory world store (`store.ts`, a globalThis singleton), world-gen (`gen.ts`), save/load (`save.ts` pure + `save-files.ts`, the only `fs` importer in `lib/`), the tick loop (`tick-loop.ts`), and the one shared tick body `runWorldTick` (`tick.ts`). See `docs/active/engineering/single-player-runtime.md`.
 - `lib/services/` — All world-state reads and business logic (read the in-memory world; no DB). Route handlers are thin wrappers.
 - `lib/tick/` — Processor pipeline. Each processor splits into a typed `World` interface (`lib/tick/world/`), a single in-memory adapter (`lib/tick/adapters/memory/`), and a pure processor body (`lib/tick/processors/`). `runWorldTick` drives them; the live game and the calibration harness run the same bodies. See `docs/active/engineering/processor-architecture.md`.
+- `lib/tick-harness/` — The calibration harness: a dev instrument that runs `generateWorld` + `runWorldTick` headlessly for N ticks and reports economy-health metrics (`npm run simulate`). Not game logic and not engine-pure — it drives the real tick and analyzes its output. Its scope is the tick processors and the data they consume/produce, nothing else.
 - `app/api/game/` — Thin HTTP wrappers: call service → NextResponse.json (no auth).
 - `app/(game)/` — Game UI pages. `app/start/` — start screen (Continue / Load / New game).
 

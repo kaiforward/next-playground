@@ -23,9 +23,9 @@ import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
 
 /**
- * Pure processor body. Same logic runs against the Prisma adapter (live game)
- * or the in-memory adapter (simulator + unit tests). All knobs that differ
- * between live and sim (RNG, sim params) come in via `params`.
+ * Pure processor body, run against the in-memory adapter by `runWorldTick`.
+ * Per-run knobs the body must not hard-code (the production cover, modifier
+ * caps, the strike regime) come in via `params`.
  *
  * Monthly resolution pulse: on the boundary tick (`tick % interval === 0`) the
  * whole system list resolves at once via `pulseShard`; every other tick is a

@@ -1,12 +1,12 @@
 /**
  * EconomyWorld — data interface for the economy processor.
  *
- * Adapters in `lib/tick/adapters/{prisma,memory}/economy.ts` implement this
+ * The adapter in `lib/tick/adapters/memory/economy.ts` implements this
  * interface. The fixed-interval system shard (which systems update this tick)
  * and the simulate→write loop live in the shared processor body
  * (`runEconomyProcessor`).
  *
- * See `docs/design/active/processor-architecture.md` for the broader pattern.
+ * See `docs/active/engineering/processor-architecture.md` for the broader pattern.
  */
 
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
@@ -15,9 +15,9 @@ import type { EconomySimParams } from "@/lib/engine/tick";
 import type { StrikeParams } from "@/lib/engine/population";
 
 /**
- * Flat market row + the system context the processor needs. Adapters
- * resolve `goodId` to its canonical key (live: maps via good.name; sim:
- * already canonical) so the processor body never thinks about that.
+ * Flat market row + the system context the processor needs. `goodId` is
+ * already the canonical good key on the row, so the processor body never
+ * thinks about resolution.
  */
 export interface MarketView {
   /** Adapter-owned identifier — round-trips into `MarketUpdate.id`. */
@@ -70,7 +70,7 @@ export interface EconomyWorld {
   getUnrest(systemIds: string[]): Promise<Map<string, number>>;
 }
 
-/** Per-tick params passed alongside the world. Sim and live differ here. */
+/** Per-tick params passed alongside the world, all sourced by `runWorldTick`. */
 export interface EconomyProcessorParams {
   /** Ticks for the shard to refresh every system once (fixed gameplay cadence). */
   interval: number;

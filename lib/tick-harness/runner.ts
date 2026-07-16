@@ -1,10 +1,10 @@
 /**
  * Calibration harness runner — generate a world, loop `runWorldTick`,
  * snapshot/analyze. A thin wrapper over the shared tick pipeline
- * (`lib/world/tick.ts`): there is no bot layer and no per-run constants
- * override any more (see `experiment.ts`'s doc comment) — `runSimulation`
- * exists to drive the real engine for calibration health checks, not to
- * simulate player trading.
+ * (`lib/world/tick.ts`): `runTickHarness` exists to drive the real engine for
+ * calibration health checks, not to simulate player trading. There is no bot
+ * layer and no per-run constants override — it runs the same code constants
+ * the live game does.
  */
 
 import { generateWorld } from "@/lib/world/gen";
@@ -17,8 +17,8 @@ import {
 } from "./event-analysis";
 import type { GovernmentType } from "@/lib/types/game";
 import type {
-  SimConfig,
-  SimResults,
+  HarnessConfig,
+  HarnessResults,
   MarketSnapshot,
   EventLifecycle,
   RegionOverviewEntry,
@@ -36,9 +36,9 @@ interface ActiveEventRecord {
 }
 
 /**
- * Run a full calibration simulation and return results.
+ * Run the full calibration harness and return results.
  */
-export async function runSimulation(config: SimConfig, label?: string): Promise<SimResults> {
+export async function runTickHarness(config: HarnessConfig, label?: string): Promise<HarnessResults> {
   const start = performance.now();
 
   let world = generateWorld({ systemCount: config.systemCount, seed: config.seed });

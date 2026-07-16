@@ -267,7 +267,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
         phase: c.phase,
         systemId: c.systemId,
         regionId: c.regionId,
-        // Mirror Prisma adapter: startTick == phaseStartTick on create.
+        // startTick == phaseStartTick on create.
         startTick: currentTick,
         phaseStartTick: currentTick,
         phaseDuration: c.phaseDuration,

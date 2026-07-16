@@ -19,18 +19,18 @@ import "dotenv/config";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
-import { runSimulation } from "../lib/engine/simulator/runner";
+import { runTickHarness } from "../lib/tick-harness/runner";
 import {
   ExperimentConfigSchema,
-  experimentToSimConfig,
+  experimentToHarnessConfig,
   buildExperimentResult,
-} from "../lib/engine/simulator/experiment";
-import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/engine/simulator/population-analysis";
-import { summarizeColonisation } from "../lib/engine/simulator/build-analysis";
+} from "../lib/tick-harness/experiment";
+import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
+import { summarizeColonisation } from "../lib/tick-harness/build-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { toTickSystems } from "../lib/world/tick";
-import type { SimConfig, SimResults } from "../lib/engine/simulator/types";
+import type { HarnessConfig, HarnessResults } from "../lib/tick-harness/types";
 
 // ── Argument parsing ────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ function fmtNum(n: number): string {
   return n.toFixed(0);
 }
 
-function formatTable(results: SimResults): string {
+function formatTable(results: HarnessResults): string {
   const { marketHealth, eventImpacts, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
@@ -316,14 +316,14 @@ async function runExperiment(configPath: string, jsonOutput: boolean): Promise<v
     process.exit(1);
   }
 
-  const { config, label } = experimentToSimConfig(validated.data);
+  const { config, label } = experimentToHarnessConfig(validated.data);
 
   console.log(
     `Running experiment${label ? ` "${label}"` : ""}: ` +
     `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems\n`,
   );
 
-  const results = await runSimulation(config, label);
+  const results = await runTickHarness(config, label);
 
   if (jsonOutput) {
     console.log(JSON.stringify(results, null, 2));
@@ -386,7 +386,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const config: SimConfig = {
+  const config: HarnessConfig = {
     systemCount: DEFAULT_SYSTEM_COUNT,
     seed: 42,
     tickCount: 500,
@@ -396,7 +396,7 @@ async function main(): Promise<void> {
     `Running quick-run: ${config.systemCount} systems, ${config.tickCount} ticks, seed ${config.seed}\n`,
   );
 
-  const results = await runSimulation(config);
+  const results = await runTickHarness(config);
 
   if (args.json) {
     console.log(JSON.stringify(results, null, 2));
