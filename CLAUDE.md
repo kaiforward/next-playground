@@ -147,6 +147,7 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 - Feature branch per feature (`feat/feature-name`), PR to main when complete.
 - Commit after each meaningful unit of work (new model, API route, component).
 - **Break large features into 2-4 phase PRs** — each PR small enough to hold full convention context. Review against the quality checklist after each phase, not just at the end. A 12-phase plan should ship as 3-4 PRs, not one monolithic branch. (A markdown-only/tooling change is a single PR — the phase-PR rule is for code features.)
+- **The PR unit is the cohesive PART/sub-project, not its internal phases.** A part may be organised internally into Phase A/B/C — those are check-in **pauses**, not separate PRs. Accumulate them all on the one part-branch and match how the prior part shipped (if Part 1 was one PR, Part 2 is one PR). The 2-4-PR split above is for a *single* sub-project genuinely too big for one PR — never read a build plan's "3 phases" as "3 PRs".
 - **Multi-PR features use a shared feature branch:** branch off main, phase PRs merge into the shared branch, one final PR shared→main. Shared branches keep a clean atomic per-feature history — phase branches squash in; no merge/bugfix/impl-detail commits on shared.
 - **Merge shared→main (or phase→shared) as squash or fast-forward, never a regular merge commit** — squash when phase-commit subjects carry build-noise (`PR3`/`Phase B`/etc.), else fast-forward to keep clean atomic per-feature history.
 - **Never open a PR whose base is another open PR's branch.** Squash is the merge default here, so merging the base PR rewrites its commits and deletes its branch — which **permanently auto-closes** the stacked PR. GitHub refuses to reopen it or retarget it, and restoring the deleted base ref does not help; the only way out is a replacement PR. Branch sequential work off `main` and wait, or accept the replacement. If you are ever mid-stack anyway: grab the base branch's head SHA **before** merging (`--delete-branch` removes the local branch too, so the name is gone and the SHA is the only handle), then `git rebase --onto origin/main <old-base-head-SHA> <branch>`.
@@ -155,6 +156,8 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 
 ### Review process
 - Review with `/uber-review`. Local reviews diff against the shared feature branch (not main) when one exists; PR reviews are fine as-is.
+- **Open the PR *before* reviewing** — push and open it, then run the review, so findings land as PR comments. Don't gate PR creation on a clean review.
+- **Review each sub-feature GOING INTO shared, so shared→main needs only a light sanity pass.** Each sub-feature is its own small branch, `/uber-review`'d while it is small and still in context. An expensive whole-branch review at the end is the *symptom* of having skipped that per-feature gate — not the standard (SP5 autonomic-light accumulated 49 commits / ~8k lines / 56 files on one branch and forced exactly that).
 - **PR-mode `/uber-review`: check out the PR head first**, else agents review stale base-branch code.
 - **Scale the review to substantive surface, not file count.** Deletion-heavy PRs: strip pure-deletion files from the reviewed diff (`--diff-filter=d`; pass the deleted-file list as context — the big token lever), bump `--chunk-size`, prune `--only` reviewers whose domain was deleted.
 - **Fix cheap + self-contained + already-touching Minor findings in-task** — don't reflexively defer them; deferred ones get an explicit owned cleanup pass, not a weak final-review sink.
@@ -173,7 +176,7 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 - Verify a foundation exposes the discrete primitives the upper layers need before building on it; interaction specs are not integration proof.
 
 **UI / dataviz**
-- UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype the user approves BEFORE implementation — never an agent invoking frontend-design blind.
+- UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype the user approves BEFORE implementation — never an agent invoking frontend-design blind. Go breadth-first: rough wireframes to react to, then refine the chosen one — don't jump straight to a single polished prototype.
 - A shared/segmented bar is for two consumers of ONE datapoint, never N differently-scaled series (those get separate bars; per-grade detail → tooltip mini-bars).
 
 **Scripts**
