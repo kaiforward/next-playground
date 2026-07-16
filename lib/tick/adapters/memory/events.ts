@@ -143,7 +143,7 @@ export class InMemoryEventsWorld implements EventsWorld {
     const results: EventCreateResult[] = [];
 
     for (const c of creates) {
-      const id = `sim-${this.nextId++}`;
+      const id = `event-${this.nextId++}`;
       this.events.push({
         id,
         type: c.type,

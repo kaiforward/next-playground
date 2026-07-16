@@ -76,7 +76,7 @@ export function spawnEvent(params: {
   const tick = world.meta.currentTick;
 
   // Same id namespace the in-memory events adapter mints from.
-  const eventId = `sim-${world.nextId}`;
+  const eventId = `event-${world.nextId}`;
   const event: WorldEvent = {
     id: eventId,
     type: params.eventType,
