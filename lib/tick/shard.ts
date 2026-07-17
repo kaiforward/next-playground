@@ -54,6 +54,20 @@ export function catchUpFactor(interval: number): number {
 }
 
 /**
+ * Whether `tick` is a resolution-pulse tick for `interval` — the predicate behind
+ * {@link pulseShard}'s all-or-nothing window.
+ *
+ * Exported so `runWorldTick` can gate a pulse stage's *setup* on the same condition
+ * the processor bails on internally. The two must stay one definition: a gate that
+ * disagreed with the processor would either build setup nothing reads, or skip
+ * setup a running processor needs.
+ */
+export function isPulseTick(tick: number, interval: number): boolean {
+  const iv = Math.max(1, Math.floor(interval));
+  return ((tick % iv) + iv) % iv === 0;
+}
+
+/**
  * Pulse coverage: the whole item list on the resolution-pulse tick
  * (`tick % interval === 0`), empty on every other tick — the monthly-pulse
  * counterpart to {@link shardRange}'s rolling slice. Processors that resolve the
@@ -63,7 +77,5 @@ export function catchUpFactor(interval: number): number {
  */
 export function pulseShard(total: number, tick: number, interval: number): ShardWindow {
   if (total <= 0) return { start: 0, end: 0 };
-  const iv = Math.max(1, Math.floor(interval));
-  const g = ((tick % iv) + iv) % iv; // non-negative group index
-  return g === 0 ? { start: 0, end: total } : { start: 0, end: 0 };
+  return isPulseTick(tick, interval) ? { start: 0, end: total } : { start: 0, end: 0 };
 }
