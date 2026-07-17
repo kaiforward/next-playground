@@ -6,7 +6,7 @@
  */
 
 import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock, demandRateForGood } from "@/lib/constants/market-economy";
+import { getInitialStock, civilianDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot, facilityStorageForGood } from "@/lib/engine/industry";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { deriveDominantEconomy } from "@/lib/engine/faction-gen";
@@ -193,7 +193,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
         goodId,
         stock: Number.isFinite(stock) ? stock : 0,
         anchorMult: 1,
-        demandRate: demandRateForGood(goodId, demandBasis),
+        demandRate: civilianDemandRateForGood(goodId, demandBasis),
         storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
       };
     });

@@ -28,7 +28,7 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
   const demand = demandFootprint(basis).map((e) => ({
     goodId: e.goodId,
     goodName: GOODS[e.goodId]?.name ?? e.goodId,
-    demandRate: e.demandRate,
+    demandRate: e.civilianDemandRate,
     breakdown: consumptionBreakdown(e.goodId, basis),
   }));
 

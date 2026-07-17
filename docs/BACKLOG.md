@@ -26,53 +26,29 @@ Well-defined, can start now.
   takes untrusted JSON, so a save written before the union (or hand-edited) needs a guard in
   `lib/types/guards.ts` narrowing `string` → `GoodId` with a decided failure mode (reject the save vs
   drop the row). Don't start it without settling that.
-- **[S] The default quick-run is too short to exercise logistics** — `npm run simulate` runs 500 ticks,
-  and directed-logistics does not move a single unit before tick 456. Measured at 600 systems / seed 42:
-  the 500-tick default reports **30 transfers over 2 pulses across 19 systems and 6 of 26 goods**, while
-  the same world at 1500 ticks reports **14,200 transfers over 44 pulses across 473 systems and 25 of 26
-  goods**. The cause is colonisation pacing, not a logistics fault: the galaxy is still expanding at tick
-  500 (~70 of 600 systems developed), and a faction needs two developed systems within `MAX_HOPS` before
-  anything can move. Once it starts it never misses — 62 pulses fit in 1500 ticks, logistics fires on
-  every one from pulse 19, and 62 − 19 + 1 = the 44 measured exactly. So the default run calibrates a
-  pre-logistics galaxy: one of the three pillars is essentially outside its window. Decide between
-  raising the default tick count (a ~3× slower "quick" check) and documenting the warm-up so the
-  Logistics Activity block is read as "too early" rather than "broken". Logistics-activity numbers
-  in a 500-tick report are not evidence of health either way.
-- **[S] Alarm the ECONOMY_SCALE invariance bridge** — `vitest.config.ts` pins `ECONOMY_SCALE: "1"`, so
-  the whole suite tests a scale nobody plays at (the code default, and the game's scale, is 100). That
-  is defensible **only because** `lib/engine/__tests__/economy-scale-invariance.test.ts` and
-  `lib/world/__tests__/economy-scale-dynamic-invariance.test.ts` prove the economy is S-invariant —
-  those two tests are the load-bearing bridge that makes S=1 testing valid for an S=100 game. When
-  invariance broke (the directed-logistics `Math.floor` that quantized the matcher's continuous
-  transfers away), the bridge collapsed and every magnitude assertion in the suite silently became
-  meaningless, with nothing detecting it. Make the dependency explicit and alarmed, so the next
-  invariance break fails loudly at the bridge instead of quietly everywhere else.
-- **[S] Two different quantities are both called `demandRate`** — `WorldMarket.demandRate` (stored) is
-  civilian consumption **plus** industrial input draw: the days-of-supply pricing denominator and the
-  logistics deficit anchor. `demandRateForGood` (`lib/constants/market-economy.ts:59`) is civilian
-  **only** — it feeds `demandFootprint`, which is what the Population panel's demand chart renders. Both
-  are correct for their context (the SPEC deliberately sums both channels for pricing so a refinery
-  world's Ore "prices honestly rather than cheap-when-scarce"; a population panel should show what the
-  population demands). The hazard is purely comprehension: a reader hits `demandRate` and assumes it is
-  the pricing denominator when it is not. Rename `demandRateForGood` → `civilianDemandRateForGood` (and
-  the `demandRate` key on demand-footprint entries follows), and give `WorldMarket.demandRate` a doc
-  comment naming it as civilian + industrial and as the pricing/logistics anchor. The doc comment is the
-  load-bearing half; rename the stored field only if it reads clearly at its call sites. **No calculation
-  changes** — existing tests must pass untouched apart from the rename.
-- **[S] The economy reads building counts before directed-build lands them** — within one tick the economy
-  stage runs before directed-build (`lib/world/tick.ts`, economy pulse gate vs the build stage below it), so
-  a building completing on the monthly boundary is invisible to that boundary's economy and waits a full
-  month to be economically recognised. This is an artifact of processor ordering, **not** the deliberate
-  demand-anchor lag (which is booked and intended) — nobody decided it is correct; it just is. Worth a look
-  whenever processor order is next on the table (e.g. if the economy is ever split into a read-inputs phase
-  before build and an apply-effects phase after). Surfaced during the interval-awareness work; low urgency.
-- **[S] `popCap`'s only rise path has no test** — `popCap` is stored and rises **only** at
-  `lib/world/tick.ts:348` (`Math.max(s.popCap, housingPopCap(buildings))`, inside `applyBuildingIncreases`,
-  gated on housing being among the landed types). Infrastructure decay is downward-only and will not
-  repair it, so any refactor that lands housing by another path welds a colony's cap to its seed level
-  **permanently** — it builds housing and never grows into it, silently, with nothing else failing. That
-  is a lot of load on one unasserted line. Add an explicit test: popCap rises when a housing project
-  completes.
+- **[M] The economy recognises completed buildings a month late (construction-vs-economy ordering)** —
+  on the monthly turnover tick the economy stage runs (`lib/world/tick.ts`, economy pulse ~L590) before
+  directed-build funds and lands buildings (~L832), and economy is monthly, so a building that **completes
+  on the turnover is invisible to that turnover's economy and waits a full month** for the next pulse to
+  price/produce/consume against it. Real artifact of processor ordering — **not** the deliberate
+  demand-anchor lag (which is booked and intended).
+  Verified this session (don't re-derive): the lag is carried by the *funding/completion* order, **not**
+  the landing. Directed-build already lands buildings at the END of the pulse, so extracting only the
+  landing into a pre-economy processor is a **no-op** — economy's next run is a month away either way. The
+  only thing that shortens the lag is running the construction **funding/completion decision** ahead of
+  economy on the turnover tick (a new processor before the economy stage).
+  That is a genuine tradeoff, not a free win. Today's stage order is
+  `economy → population → directed-logistics → directed-build`, so directed-build funds off **this** month's
+  post-population pop (`factionThroughputPool`) and post-logistics stocks (`patchMarketRowStocks`). Pulled
+  ahead of economy it funds off **last** month's (month-start) pop + pre-logistics stocks. So:
+  keep today's order (construction reads fresh state; economy sees completions a month late) **or** reorder
+  (economy sees completions immediately; construction plans off month-start state). **We get a lag one way
+  or the other** — so decide by **precedent**: check what **EU5 / Victoria 3** do (does a finished building
+  register with the same economic tick it completes on, or the next?) and match it. If we reorder, two open
+  structural questions: (a) does the claim/develop half of directed-build move ahead of economy too, or only
+  build-completion? (b) splitting build off directed-logistics breaks their shared hop-BFS and the
+  `patchMarketRowStocks` stock-patch coupling — how is that rewired? Belongs with the deferred
+  processor-order pass; not urgent.
 - **[S] Purge the Postgres fossils outside `lib/tick/`** — Prisma was deleted in the Phase-2 pivot, but comments across `lib/types/game.ts:1`, `lib/types/guards.ts:2-4` ("Runtime type guards for Prisma boundary values" — the boundaries are now save-file `deserialize` + API `JSON.parse`), `lib/utils/format.ts:67`, `lib/utils/__tests__/format.test.ts:44`, `lib/world/types.ts:3`, `lib/world/gen.ts:3,49` (points at `prisma/seed.ts`, deleted), `lib/engine/relations.ts:3`, and `lib/engine/system-trade-flow.ts:4,7` still describe it as live. Mostly "no Prisma dependency" negative-space claims that are now vacuous, plus two that point a reader at deleted files. The tick's own two-backend claims were swept with the harness rename; this is the same rot in the layers that PR's scope didn't reach. Comment-only, zero risk. Find them with: `grep -rni "prisma" --include="*.ts" lib/`.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.

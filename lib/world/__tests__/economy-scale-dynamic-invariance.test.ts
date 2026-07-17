@@ -3,6 +3,12 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 /**
  * Dynamic ECONOMY_SCALE invariance — the whole tick, not just static constants.
  *
+ * ⚠ One of the two LOAD-BEARING invariance-bridge tests (with the static
+ * lib/engine/__tests__/economy-scale-invariance.test.ts). Together they are the proof that makes the
+ * whole suite's S=1 pin (vitest.config.ts `env.ECONOMY_SCALE`) valid for the S=100 game: weaken or
+ * delete either and every magnitude assertion in the suite silently becomes meaningless. See
+ * vitest.config.ts for the full note.
+ *
  * ECONOMY_SCALE (S) scales the goods side of the economy (production, consumption,
  * stock, storage) but NOT population, which is a headcount. Running the same seed
  * for the same ticks at S=1 vs S=100 must therefore produce scale-normalised-

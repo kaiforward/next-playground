@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick, toTickSystems } from "../tick";
+import { runWorldTick, toTickSystems, applyBuildingIncreases } from "../tick";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
+import { housingPopCap } from "@/lib/engine/industry";
+import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type { WorldShip } from "../types";
 
 async function runTicks(world: ReturnType<typeof generateWorld>, count: number) {
@@ -344,5 +346,48 @@ describe("runWorldTick — per-stage wiring", () => {
 
     expect(after.flowEvents.some((f) => f.tick === staleTick)).toBe(false);
     expect(after.flowEvents.some((f) => f.tick === freshTick)).toBe(true);
+  });
+});
+
+// ── applyBuildingIncreases: popCap's sole rise path ──────────────────
+// popCap is stored and rises ONLY here — Math.max(s.popCap, housingPopCap(buildings)) when housing
+// is among the landed types (mirrors the develop-transition seed). Infrastructure decay is
+// downward-only and never repairs it, so a refactor that lands housing by another path, or drops the
+// Math.max, silently welds a colony's cap to its seed level: it builds housing and never grows into
+// it, with nothing else failing. These pin that one line.
+describe("applyBuildingIncreases — popCap", () => {
+  const firstSystem = () => toTickSystems(generateWorld({ systemCount: 100, seed: 42 }))[0];
+
+  it("raises popCap when a completed housing project lands", () => {
+    const base = { ...firstSystem(), popCap: 0 };
+    const housingLevels = (base.buildings[HOUSING_TYPE] ?? 0) + 5;
+    const [after] = applyBuildingIncreases(
+      [base],
+      [{ systemId: base.id, buildingType: HOUSING_TYPE, count: housingLevels }],
+    );
+    expect(after.popCap).toBe(housingPopCap({ ...base.buildings, [HOUSING_TYPE]: housingLevels }));
+    expect(after.popCap).toBeGreaterThan(0);
+  });
+
+  it("leaves popCap unchanged when a non-housing project lands", () => {
+    const base = { ...firstSystem(), popCap: 12_345 };
+    const [after] = applyBuildingIncreases(
+      [base],
+      [{ systemId: base.id, buildingType: "food", count: (base.buildings["food"] ?? 0) + 3 }],
+    );
+    expect(after.popCap).toBe(12_345);
+  });
+
+  it("never lowers popCap — housing below the stored cap leaves it (the Math.max guard)", () => {
+    const s = firstSystem();
+    const housingLevels = (s.buildings[HOUSING_TYPE] ?? 0) + 1;
+    // A stored cap deliberately above the landed housing's capacity: the guard must keep it.
+    const capAbove = housingPopCap({ ...s.buildings, [HOUSING_TYPE]: housingLevels }) + 5_000;
+    const base = { ...s, popCap: capAbove };
+    const [after] = applyBuildingIncreases(
+      [base],
+      [{ systemId: base.id, buildingType: HOUSING_TYPE, count: housingLevels }],
+    );
+    expect(after.popCap).toBe(capAbove);
   });
 });

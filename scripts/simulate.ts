@@ -27,6 +27,7 @@ import {
 } from "../lib/tick-harness/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
 import { summarizeColonisation } from "../lib/tick-harness/build-analysis";
+import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
@@ -287,6 +288,13 @@ function formatTable(results: HarnessResults): string {
       lines.push(`  heaviest goods: ${top}`);
     } else {
       lines.push("  NOTHING MOVED — directed-logistics recorded no transfers this run");
+    }
+    if (results.config.tickCount < LOGISTICS_WARMUP_TICKS) {
+      lines.push(
+        `  warm-up: ${results.config.tickCount} ticks is below the ~${LOGISTICS_WARMUP_TICKS}-tick logistics ` +
+        `warm-up window — directed-logistics is colonisation-gated and barely moves before ~tick 456 at ` +
+        `default scale, so read low activity as "too early", not "broken" (a matured read needs ~1500 ticks).`,
+      );
     }
   }
 

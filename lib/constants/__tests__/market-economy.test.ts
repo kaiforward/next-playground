@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   TARGET_COVER,
   getInitialStock,
-  demandRateForGood,
+  civilianDemandRateForGood,
   totalDemandRateForGood,
   MIN_DEMAND,
   demandFootprint,
@@ -25,44 +25,44 @@ const popOnly = (population: number): CivilianDemandBasis => ({
   engineers: 0,
 });
 
-describe("demandRateForGood", () => {
+describe("civilianDemandRateForGood", () => {
   it("returns per-capita-need × population for a populated system", () => {
-    const rate = demandRateForGood("water", popOnly(1000));
+    const rate = civilianDemandRateForGood("water", popOnly(1000));
     expect(rate).toBeCloseTo(GOOD_CONSUMPTION.water * 1000);
   });
 
   it("scales linearly with population", () => {
-    const low = demandRateForGood("food", popOnly(500));
-    const high = demandRateForGood("food", popOnly(1000));
+    const low = civilianDemandRateForGood("food", popOnly(500));
+    const high = civilianDemandRateForGood("food", popOnly(1000));
     expect(high).toBeCloseTo(low * 2);
   });
 
   it("floors at MIN_DEMAND for a zero-population system", () => {
-    expect(demandRateForGood("luxuries", popOnly(0))).toBe(MIN_DEMAND);
+    expect(civilianDemandRateForGood("luxuries", popOnly(0))).toBe(MIN_DEMAND);
   });
 
   it("floors at MIN_DEMAND for an unknown good", () => {
-    expect(demandRateForGood("not_a_good", popOnly(1000))).toBe(MIN_DEMAND);
+    expect(civilianDemandRateForGood("not_a_good", popOnly(1000))).toBe(MIN_DEMAND);
   });
 });
 
-describe("demandRateForGood with skilled work", () => {
+describe("civilianDemandRateForGood with skilled work", () => {
   it("skilled heads raise basket-good demand above the population-only rate", () => {
-    const flat = demandRateForGood("luxuries", popOnly(1000));
-    const skilled = demandRateForGood("luxuries", { population: 1000, technicians: 150, engineers: 40 });
+    const flat = civilianDemandRateForGood("luxuries", popOnly(1000));
+    const skilled = civilianDemandRateForGood("luxuries", { population: 1000, technicians: 150, engineers: 40 });
     expect(skilled).toBeGreaterThan(flat);
   });
 
   it("non-basket goods are unchanged by skilled work", () => {
-    const flat = demandRateForGood("food", popOnly(1000));
-    const skilled = demandRateForGood("food", { population: 1000, technicians: 150, engineers: 40 });
+    const flat = civilianDemandRateForGood("food", popOnly(1000));
+    const skilled = civilianDemandRateForGood("food", { population: 1000, technicians: 150, engineers: 40 });
     expect(skilled).toBeCloseTo(flat, 10);
   });
 });
 
 describe("totalDemandRateForGood", () => {
   it("equals civilian demand when no buildings consume the good", () => {
-    expect(totalDemandRateForGood("ore", popOnly(1000), {}, unitResourceVector())).toBeCloseTo(demandRateForGood("ore", popOnly(1000)), 6);
+    expect(totalDemandRateForGood("ore", popOnly(1000), {}, unitResourceVector())).toBeCloseTo(civilianDemandRateForGood("ore", popOnly(1000)), 6);
   });
 
   it("adds the production-input draw on top of civilian demand", () => {
@@ -75,8 +75,8 @@ describe("totalDemandRateForGood", () => {
     const industrial = inputDemandForGood(buildings, "ore", FULL, unitResourceVector());
     expect(industrial).toBeGreaterThan(0);
     const total = totalDemandRateForGood("ore", popOnly(1000), buildings, unitResourceVector());
-    expect(total).toBeCloseTo(demandRateForGood("ore", popOnly(1000)) + industrial, 6);
-    expect(total).toBeGreaterThan(demandRateForGood("ore", popOnly(1000)));
+    expect(total).toBeCloseTo(civilianDemandRateForGood("ore", popOnly(1000)) + industrial, 6);
+    expect(total).toBeGreaterThan(civilianDemandRateForGood("ore", popOnly(1000)));
   });
 
   it("floors at MIN_DEMAND when both civilian and industrial demand are zero", () => {
@@ -90,7 +90,7 @@ describe("getInitialStock", () => {
     // small population consumes: a strong net water producer.
     const buildings = { water: 20 };
     const yields = unitResourceVector();
-    const reference = TARGET_COVER * demandRateForGood("water", popOnly(100));
+    const reference = TARGET_COVER * civilianDemandRateForGood("water", popOnly(100));
     const seed = getInitialStock(buildings, yields, 100, "water");
     expect(seed).toBeGreaterThan(reference);
   });
@@ -99,7 +99,7 @@ describe("getInitialStock", () => {
     // No water extractors + high population → pure consumer.
     const buildings = {};
     const yields = unitResourceVector();
-    const reference = TARGET_COVER * demandRateForGood("water", popOnly(2000));
+    const reference = TARGET_COVER * civilianDemandRateForGood("water", popOnly(2000));
     const seed = getInitialStock(buildings, yields, 2000, "water");
     expect(seed).toBeLessThan(reference);
   });
@@ -127,7 +127,7 @@ describe("getInitialStock", () => {
     const pop = 100000, good = "water";
     const g = GOODS[good];
     const band = marketBand({
-      demandRate: demandRateForGood(good, popOnly(pop)),
+      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
       storageCapacity: facilityStorageForGood({}, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
@@ -150,7 +150,7 @@ describe("getInitialStock", () => {
     const pop = 800, good = "ore", producer = { ore: 6 }, consumer = {};
     const g = GOODS[good];
     const band = marketBand({
-      demandRate: demandRateForGood(good, popOnly(pop)),
+      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
       storageCapacity: facilityStorageForGood(producer, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
@@ -167,13 +167,13 @@ describe("demandFootprint", () => {
     const f = demandFootprint(popOnly(10_000));
     expect(f.length).toBeGreaterThan(0);
     for (let i = 1; i < f.length; i++) {
-      expect(f[i - 1].demandRate).toBeGreaterThanOrEqual(f[i].demandRate);
+      expect(f[i - 1].civilianDemandRate).toBeGreaterThanOrEqual(f[i].civilianDemandRate);
     }
-    expect(f[0].demandRate).toBeCloseTo(demandRateForGood(f[0].goodId, popOnly(10_000)), 6);
+    expect(f[0].civilianDemandRate).toBeCloseTo(civilianDemandRateForGood(f[0].goodId, popOnly(10_000)), 6);
     // water/food carry the highest per-capita need (0.004), so they lead at scale.
     expect(["water", "food"]).toContain(f[0].goodId);
   });
   it("floors every good at MIN_DEMAND for a zero population", () => {
-    expect(demandFootprint(popOnly(0)).every((e) => e.demandRate === MIN_DEMAND)).toBe(true);
+    expect(demandFootprint(popOnly(0)).every((e) => e.civilianDemandRate === MIN_DEMAND)).toBe(true);
   });
 });

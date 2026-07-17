@@ -4,7 +4,7 @@ import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import type { TickContext } from "@/lib/tick/types";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
-import { demandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
+import { civilianDemandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -58,7 +58,7 @@ describe("population processor", () => {
     expect(a.population).toBeCloseTo(499, 6);
     const m = world.markets.find((mm) => mm.systemId === "a")!;
     // demandRate = civilian-only floor for food at pop 499 (no production-input draw here).
-    expect(m.demandRate).toBeCloseTo(demandRateForGood("food", popOnly(499)), 5);
+    expect(m.demandRate).toBeCloseTo(civilianDemandRateForGood("food", popOnly(499)), 5);
   });
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's
@@ -82,7 +82,7 @@ describe("population processor", () => {
     // Ore has no per-capita need, so civilian-only gives MIN_DEMAND. Ore is also not a
     // basket good, so the population-only basis matches the system's real (technician-
     // bearing) basis for this good.
-    const civilianOnly = demandRateForGood("ore", popOnly(afterPop));
+    const civilianOnly = civilianDemandRateForGood("ore", popOnly(afterPop));
     const withIndustrial = totalDemandRateForGood("ore", popOnly(afterPop), buildings, unitResourceVector());
 
     // The smelter's ore draw must push the rate above the civilian-only floor.
@@ -108,8 +108,8 @@ describe("population processor", () => {
     expect(snap.basis.technicians).toBeGreaterThan(0);
 
     // The technician basket term separates the real basis from population-only…
-    expect(demandRateForGood("consumer_goods", snap.basis)).toBeGreaterThan(
-      demandRateForGood("consumer_goods", popOnly(afterPop)),
+    expect(civilianDemandRateForGood("consumer_goods", snap.basis)).toBeGreaterThan(
+      civilianDemandRateForGood("consumer_goods", popOnly(afterPop)),
     );
     // …and the market row carries the real-basis total, not the population-only one.
     const realBasisTotal = totalDemandRateForGood("consumer_goods", snap.basis, buildings, unitResourceVector(), snap.state);

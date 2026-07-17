@@ -56,7 +56,7 @@ export const SEED_COVER_MAX = 1.5;
  * consumptionRate); the population processor recomputes it as population and
  * the labour allocation move.
  */
-export function demandRateForGood(goodId: string, basis: CivilianDemandBasis): number {
+export function civilianDemandRateForGood(goodId: string, basis: CivilianDemandBasis): number {
   return Math.max(consumptionRate(goodId, basis), MIN_DEMAND);
 }
 
@@ -85,17 +85,19 @@ export function totalDemandRateForGood(
 }
 
 /**
- * Per-good demand a system's civilian demand basis generates, descending by
- * magnitude — the consumption footprint that drives each market's demandRate.
+ * Per-good CIVILIAN demand a system's demand basis generates, descending by
+ * magnitude — the population's own consumption footprint (what the Population
+ * panel's demand chart renders), NOT the stored WorldMarket.demandRate pricing
+ * anchor (which also folds in industrial input draw — see totalDemandRateForGood).
  * Only goods with a positive per-capita need appear; each entry equals
- * demandRateForGood (so it floors at MIN_DEMAND). Pure — driven by the civilian
- * demand basis — matches demandRateForGood.
+ * civilianDemandRateForGood (so it floors at MIN_DEMAND). Pure — driven by the
+ * civilian demand basis.
  */
-export function demandFootprint(basis: CivilianDemandBasis): Array<{ goodId: string; demandRate: number }> {
+export function demandFootprint(basis: CivilianDemandBasis): Array<{ goodId: string; civilianDemandRate: number }> {
   return Object.keys(GOOD_CONSUMPTION)
     .filter((goodId) => GOOD_CONSUMPTION[goodId] > 0)
-    .map((goodId) => ({ goodId, demandRate: demandRateForGood(goodId, basis) }))
-    .sort((a, b) => b.demandRate - a.demandRate);
+    .map((goodId) => ({ goodId, civilianDemandRate: civilianDemandRateForGood(goodId, basis) }))
+    .sort((a, b) => b.civilianDemandRate - a.civilianDemandRate);
 }
 
 /**
@@ -120,7 +122,7 @@ export function getInitialStock(
   const production = buildingProduction(buildings, goodId, snap.state, yields);
   const consumption = consumptionRate(goodId, snap.basis);
 
-  const demandRate = demandRateForGood(goodId, snap.basis);
+  const demandRate = civilianDemandRateForGood(goodId, snap.basis);
   const g = GOODS[goodId];
   const band = g
     ? marketBand({

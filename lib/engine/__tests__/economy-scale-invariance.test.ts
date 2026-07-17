@@ -1,3 +1,13 @@
+/**
+ * Static ECONOMY_SCALE invariance — the magnitude constants + the seed/pricing path, priced through
+ * the real market band at S=1 vs S=100.
+ *
+ * ⚠ One of the two LOAD-BEARING invariance-bridge tests (with the dynamic
+ * lib/world/__tests__/economy-scale-dynamic-invariance.test.ts). Together they are the proof that
+ * makes the whole suite's S=1 pin (vitest.config.ts `env.ECONOMY_SCALE`) valid for the S=100 game:
+ * weaken or delete either and every magnitude assertion in the suite silently becomes meaningless.
+ * See vitest.config.ts for the full note.
+ */
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 // Load the constants-magnitude graph fresh at a chosen ECONOMY_SCALE. resetModules
@@ -23,14 +33,14 @@ function scenario(mods: Awaited<ReturnType<typeof loadAtScale>>) {
   const buildings: Record<string, number> = { food: 10, [industryConsts.HOUSING_TYPE]: 5 };
 
   const popOnly = { population: pop, technicians: 0, engineers: 0 };
-  const demandFood = market.demandRateForGood("food", popOnly);             // need-driven
-  const demandFloored = market.demandRateForGood("ship_frames", { population: 1, technicians: 0, engineers: 0 }); // MIN_DEMAND-floored
+  const demandFood = market.civilianDemandRateForGood("food", popOnly);             // need-driven
+  const demandFloored = market.civilianDemandRateForGood("ship_frames", { population: 1, technicians: 0, engineers: 0 }); // MIN_DEMAND-floored
   const storageCapacity = industryEngine.facilityStorageForGood(buildings, "food");
 
   // Basket-good demand with skilled work: luxuries scale through consumptionRate's
   // SKILL2_CONSUMPTION term, which rides ECONOMY_SCALE the same as GOOD_CONSUMPTION
   // (both flow through scaleRecord).
-  const demandLuxuriesSkilled = market.demandRateForGood("luxuries", { population: pop, technicians: 0, engineers: 200 });
+  const demandLuxuriesSkilled = market.civilianDemandRateForGood("luxuries", { population: pop, technicians: 0, engineers: 200 });
 
   const band = pricing.marketBand({
     demandRate: demandFood,
