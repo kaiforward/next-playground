@@ -59,10 +59,13 @@ Well-defined, can start now.
   comment naming it as civilian + industrial and as the pricing/logistics anchor. The doc comment is the
   load-bearing half; rename the stored field only if it reads clearly at its call sites. **No calculation
   changes** — existing tests must pass untouched apart from the rename.
-- **[S] Stale "48-tick agency clock" claims in the docs** — `docs/SPEC.md:158` and
-  `docs/active/gameplay/economy-autonomic-agency.md:211`/`:265` describe a 48-tick agency clock and
-  per-faction staggering. Neither is true: `MONTH_LENGTH = 24` and `pulseShard` resolves every faction on
-  the same boundary tick. Comment/prose only, zero risk.
+- **[S] The economy reads building counts before directed-build lands them** — within one tick the economy
+  stage runs before directed-build (`lib/world/tick.ts`, economy pulse gate vs the build stage below it), so
+  a building completing on the monthly boundary is invisible to that boundary's economy and waits a full
+  month to be economically recognised. This is an artifact of processor ordering, **not** the deliberate
+  demand-anchor lag (which is booked and intended) — nobody decided it is correct; it just is. Worth a look
+  whenever processor order is next on the table (e.g. if the economy is ever split into a read-inputs phase
+  before build and an apply-effects phase after). Surfaced during the interval-awareness work; low urgency.
 - **[S] `popCap`'s only rise path has no test** — `popCap` is stored and rises **only** at
   `lib/world/tick.ts:348` (`Math.max(s.popCap, housingPopCap(buildings))`, inside `applyBuildingIncreases`,
   gated on housing being among the landed types). Infrastructure decay is downward-only and will not
@@ -80,21 +83,6 @@ Well-defined, can start now.
 ## Needs Design
 
 Direction is clear, approach needs a design doc before implementation.
-
-- **[L] Make the pulse interval a real knob — four processors don't scale with theirs** — `catchUpFactor`
-  (`lib/tick/shard.ts:52`) exists to make a processor apply "elapsed-ticks worth" per run, so tuning an
-  interval changes granularity and not the wall-clock rate. It is wired into **`economy.ts` and
-  `migration.ts` only**. `population.ts`, `infrastructure-decay.ts`, `directed-build.ts` and
-  `directed-logistics.ts` all ride the same pulse and take no magnitude scaling — so changing
-  `MONTH_LENGTH` from 24 to 10 silently makes population growth, decay, construction and logistics 2.4×
-  faster per game-year while the economy and migration correctly compensate. The interval reads as a
-  tunable constant and is not one: it is a performance knob that silently moves gameplay rules, which is
-  the hazard CLAUDE.md names outright. Not urgent (nothing is broken at 24, the calibrated reference),
-  but it blocks every cadence question — including re-basing the tick for armies later. Two parts are not
-  mechanical: `idleMonths` is a *counter* not a rate (halve the interval and "three months idle" becomes
-  1.5 months of game time), and `PER_BUILD_ABSORPTION_CAP` is the minimum-build-time mechanic and must
-  scale with the pool or the parallel-front count moves when someone turns a perf knob. Full findings,
-  the Vic3 reference model, and the open design questions: [processor-interval-awareness.md](./build-plans/processor-interval-awareness.md).
 
 - **[M] Tick perf: `toTickSystems` is the whole off-pulse tick outside events** — it costs 2.5ms/tick
   at 2,400 systems, **19.0% of an off-pulse tick** and, since boundary-gating shipped, the only
