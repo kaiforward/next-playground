@@ -18,3 +18,10 @@ export const CONSTRUCTION_INTERVAL = 24;
 
 /** Directed-logistics' resolution pulse, in ticks. Independent of MONTH_LENGTH — relative pacing knob. */
 export const LOGISTICS_INTERVAL = 24;
+
+/** Per-run cadence override (dev/test surface — the live loop always uses the constants). */
+export interface TickCadence {
+  month: number;
+  construction: number;
+  logistics: number;
+}

@@ -66,4 +66,27 @@ describe("runWorldTick: monthly pulse", () => {
     for (const s of world.systems) expect(Number.isFinite(s.population)).toBe(true);
     for (const m of world.markets) expect(Number.isFinite(m.stock)).toBe(true);
   });
+
+  it("cadence override moves the pulse boundary", async () => {
+    const world = generateWorld({ systemCount: 40, seed: 7 });
+    const cadence = { month: 2, construction: 2, logistics: 2 };
+
+    // Tick 1 is off-pulse under month=2 (1 % 2 !== 0): the economy did not resolve,
+    // so the off-pulse payload reports the shifted period and no resolving systems.
+    const r1 = await runWorldTick(world, { cadence });
+    expect(r1.world.meta.currentTick).toBe(1);
+    const e1 = economyTickEntry(r1.events);
+    expect(e1.shardCount).toBe(2);
+    expect(e1.shardIndex).toBe(1);
+    expect(e1.systemCount).toBe(0);
+
+    // Tick 2 is the first boundary under month=2 (2 % 2 === 0): the economy resolves,
+    // a full month ahead of the default cadence's tick-24 boundary.
+    const r2 = await runWorldTick(r1.world, { cadence });
+    expect(r2.world.meta.currentTick).toBe(2);
+    const e2 = economyTickEntry(r2.events);
+    expect(e2.shardCount).toBe(2);
+    expect(e2.shardIndex).toBe(0);
+    expect(e2.systemCount).toBeGreaterThan(0);
+  });
 });

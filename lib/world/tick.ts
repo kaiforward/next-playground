@@ -39,7 +39,7 @@ import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { MONTH_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
+import { MONTH_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -480,7 +480,13 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 
 export async function runWorldTick(
   world: World,
+  opts?: { cadence?: TickCadence },
 ): Promise<{ world: World; events: TickBroadcastRaw; markets: WorldMarket[] }> {
+  const cadence: TickCadence = opts?.cadence ?? {
+    month: MONTH_LENGTH,
+    construction: CONSTRUCTION_INTERVAL,
+    logistics: LOGISTICS_INTERVAL,
+  };
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
   const scaled = scaleEventCaps(world.systems.length);
@@ -565,10 +571,10 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same off-pulse broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
-  if (isPulseTick(tick, MONTH_LENGTH)) {
+  if (isPulseTick(tick, cadence.month)) {
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
-      interval: MONTH_LENGTH,
+      interval: cadence.month,
       simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
@@ -580,7 +586,7 @@ export async function runWorldTick(
     processorsRun.push("economy");
   } else {
     mergeGlobalEvents(globalEvents, {
-      globalEvents: economyOffPulsePayload(tick, MONTH_LENGTH),
+      globalEvents: economyOffPulsePayload(tick, cadence.month),
     });
   }
 
@@ -627,9 +633,9 @@ export async function runWorldTick(
   //
   // The flowEvents retention prune is deliberately NOT in here: it is cheap, and it
   // runs every tick today (see below the block).
-  const migrationResolves = isPulseTick(tick, MONTH_LENGTH);
-  const logisticsResolves = isPulseTick(tick, LOGISTICS_INTERVAL);
-  const buildResolves = isPulseTick(tick, CONSTRUCTION_INTERVAL);
+  const migrationResolves = isPulseTick(tick, cadence.month);
+  const logisticsResolves = isPulseTick(tick, cadence.logistics);
+  const buildResolves = isPulseTick(tick, cadence.construction);
   if (migrationResolves || logisticsResolves || buildResolves) {
     // ── economy-participation gate (developed only) ──
     // The three economy selection paths gate through isEconomicallyActive: the economy
@@ -652,7 +658,7 @@ export async function runWorldTick(
     {
       const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
       await runMigrationProcessor(migWorld, newTickCtx(), {
-        interval: MONTH_LENGTH,
+        interval: cadence.month,
         flow: MIGRATION_PARAMS,
         delivery: COLONY_DELIVERY_PARAMS,
       });
@@ -694,7 +700,7 @@ export async function runWorldTick(
       );
       const dlWorld = new MemoryDirectedLogisticsWorld(rows);
       await runDirectedLogisticsProcessor(dlWorld, { tick }, {
-        interval: LOGISTICS_INTERVAL,
+        interval: cadence.logistics,
         routeCost,
       });
       markets = applyStockUpdates(markets, dlWorld.stockUpdates);
@@ -777,7 +783,7 @@ export async function runWorldTick(
       const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
       await runDirectedBuildProcessor(dbWorld, { tick }, {
-        interval: CONSTRUCTION_INTERVAL,
+        interval: cadence.construction,
         routeCost,
         construction: {
           cap: CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,
