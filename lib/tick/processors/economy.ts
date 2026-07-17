@@ -2,6 +2,7 @@ import type {
   TickContext,
   TickProcessorResult,
   EconomySignals,
+  GlobalEventMap,
 } from "../types";
 import {
   selfLimitingFactor,
@@ -18,7 +19,6 @@ import type {
   MarketUpdate,
 } from "@/lib/tick/world/economy-world";
 import { dissatisfaction, strikeMultiplier, type GoodSatisfaction } from "@/lib/engine/population";
-import type { GlobalEventMap } from "../types";
 import { pulseShard, isPulseTick, catchUpFactor } from "@/lib/tick/shard";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";

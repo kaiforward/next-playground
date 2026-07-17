@@ -610,15 +610,26 @@ export async function runWorldTick(
   }
 
   // ── monthly pulse: migration, directed-logistics, directed-build (pulse-gated) ──
-  // Every stage below resolves on the same ECONOMY_UPDATE_INTERVAL pulse as economy,
-  // and each one's setup — the participation set, the open-edge graph, the per-system
-  // market row groups, the ownership maps — is read by nothing else. Off-pulse it was
-  // all built and thrown away. Gated on the same predicate the bodies bail on, so the
-  // stages themselves are untouched.
+  // Each stage below resolves on the monthly pulse and bails internally otherwise, but
+  // its setup — the participation set, the open-edge graph, the per-system market row
+  // groups, the ownership maps — is read by nothing else, so off-pulse it was all built
+  // and thrown away. The gate stops building those inputs; the bodies are untouched.
+  //
+  // The condition is the disjunction of the stages' OWN pulse predicates, each built
+  // from the interval that stage's body is handed below, because the setup is shared
+  // and any one stage resolving is reason to build it. The three intervals alias the
+  // month today but are declared separately: gating on just one of them would let a
+  // retune of another silently skip that stage's pulses — a performance mechanism
+  // quietly deciding a gameplay cadence. A disjunction fails the safe way, building
+  // setup nobody reads rather than dropping work. (Gating on the shortest interval
+  // would NOT be safe: it only covers the others when it divides them.)
   //
   // The flowEvents retention prune is deliberately NOT in here: it is cheap, and it
   // runs every tick today (see below the block).
-  if (isPulseTick(tick, ECONOMY_UPDATE_INTERVAL)) {
+  const migrationResolves = isPulseTick(tick, ECONOMY_UPDATE_INTERVAL);
+  const logisticsResolves = isPulseTick(tick, DIRECTED_LOGISTICS.INTERVAL);
+  const buildResolves = isPulseTick(tick, DIRECTED_BUILD.INTERVAL);
+  if (migrationResolves || logisticsResolves || buildResolves) {
     // ── economy-participation gate (developed only) ──
     // The three economy selection paths gate through isEconomicallyActive: the economy
     // adapter's getSystemIds (which cascades to infrastructure-decay + population),
