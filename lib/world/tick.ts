@@ -151,59 +151,64 @@ export function toTickSystems(world: World): TickSystem[] {
     world.factions.map((f) => [f.id, f.governmentType]),
   );
 
-  // One pass over the flat building rows builds the count roster and the two decay-counter rosters.
-  const buildingsBySystem = new Map<string, Record<string, number>>();
-  const idleMonthsBySystem = new Map<string, Record<string, number>>();
-  const collapseDebtBySystem = new Map<string, Record<string, number>>();
+  // One pass over the flat building rows builds each system's roster: the count plus the two
+  // decay-counter records (idle countdown, unrest-collapse debt), keyed together so a system is
+  // resolved with a single map lookup.
+  const rosterBySystem = new Map<
+    string,
+    { counts: Record<string, number>; idleMonths: Record<string, number>; collapseDebt: Record<string, number> }
+  >();
   for (const b of world.buildings) {
-    const rec = buildingsBySystem.get(b.systemId);
-    if (rec) rec[b.buildingType] = b.count;
-    else buildingsBySystem.set(b.systemId, { [b.buildingType]: b.count });
-    const idle = idleMonthsBySystem.get(b.systemId);
-    if (idle) idle[b.buildingType] = b.idleMonths;
-    else idleMonthsBySystem.set(b.systemId, { [b.buildingType]: b.idleMonths });
-    const debt = collapseDebtBySystem.get(b.systemId);
-    if (debt) debt[b.buildingType] = b.collapseDebt ?? 0;
-    else collapseDebtBySystem.set(b.systemId, { [b.buildingType]: b.collapseDebt ?? 0 });
+    let roster = rosterBySystem.get(b.systemId);
+    if (!roster) {
+      roster = { counts: {}, idleMonths: {}, collapseDebt: {} };
+      rosterBySystem.set(b.systemId, roster);
+    }
+    roster.counts[b.buildingType] = b.count;
+    roster.idleMonths[b.buildingType] = b.idleMonths;
+    roster.collapseDebt[b.buildingType] = b.collapseDebt ?? 0;
   }
 
-  return world.systems.map((s) => ({
-    id: s.id,
-    name: s.name,
-    economyType: s.economyType,
-    regionId: s.regionId,
-    factionId: s.factionId,
-    control: s.control,
-    // Every seeded system has a non-null factionId; the fallback covers a
-    // mid-write gap.
-    governmentType: s.factionId
-      ? (governmentByFaction.get(s.factionId) ?? "frontier")
-      : "frontier",
-    population: s.population,
-    popCap: s.popCap,
-    unrest: s.unrest,
-    buildings: buildingsBySystem.get(s.id) ?? {},
-    buildingIdleMonths: idleMonthsBySystem.get(s.id) ?? {},
-    buildingCollapseDebt: collapseDebtBySystem.get(s.id) ?? {},
-    yields: resourceVectorFromColumns(
-      {
-        yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
-        yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
-        yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
-      },
-      "yield",
-    ),
-    slotCap: resourceVectorFromColumns(
-      {
-        slotGas: s.slotGas, slotMinerals: s.slotMinerals, slotOre: s.slotOre,
-        slotBiomass: s.slotBiomass, slotArable: s.slotArable,
-        slotWater: s.slotWater, slotRadioactive: s.slotRadioactive,
-      },
-      "slot",
-    ),
-    generalSpace: s.generalSpace,
-    habitableSpace: s.habitableSpace,
-  }));
+  return world.systems.map((s) => {
+    const roster = rosterBySystem.get(s.id);
+    return {
+      id: s.id,
+      name: s.name,
+      economyType: s.economyType,
+      regionId: s.regionId,
+      factionId: s.factionId,
+      control: s.control,
+      // Every seeded system has a non-null factionId; the fallback covers a
+      // mid-write gap.
+      governmentType: s.factionId
+        ? (governmentByFaction.get(s.factionId) ?? "frontier")
+        : "frontier",
+      population: s.population,
+      popCap: s.popCap,
+      unrest: s.unrest,
+      buildings: roster?.counts ?? {},
+      buildingIdleMonths: roster?.idleMonths ?? {},
+      buildingCollapseDebt: roster?.collapseDebt ?? {},
+      yields: resourceVectorFromColumns(
+        {
+          yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
+          yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
+          yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
+        },
+        "yield",
+      ),
+      slotCap: resourceVectorFromColumns(
+        {
+          slotGas: s.slotGas, slotMinerals: s.slotMinerals, slotOre: s.slotOre,
+          slotBiomass: s.slotBiomass, slotArable: s.slotArable,
+          slotWater: s.slotWater, slotRadioactive: s.slotRadioactive,
+        },
+        "slot",
+      ),
+      generalSpace: s.generalSpace,
+      habitableSpace: s.habitableSpace,
+    };
+  });
 }
 
 // ── Tick → World row merges (write only the fields tick processors mutate;

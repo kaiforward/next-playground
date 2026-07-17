@@ -106,8 +106,8 @@ Every pulse-riding quantity is one of four shapes, and the shape dictates the tr
 
 | Shape | Examples | Treatment |
 |---|---|---|
-| **Rate / flow** — "X per unit time" | production, consumption, migration, population growth, unrest gain/decay, unrest teardown | multiply by `catchUpFactor` per run |
-| **Counter / timer** — "after N months…" | decay's `idleMonths`, collapse debt | accrue `catchUpFactor` per run (fractional); thresholds stay in reference-months |
+| **Rate / flow** — "X per unit time" | production, consumption, migration, population growth, unrest gain/decay | multiply by `catchUpFactor` per run |
+| **Counter / timer** — "after N months…" | decay's `idleMonths`, unrest-teardown collapse debt | accrue `catchUpFactor` per run (fractional); thresholds stay in reference-months |
 | **Budget income** — "points per pulse" | construction pool / absorption cap / floor, logistics haul budget | multiply the income by `catchUpFactor` per run |
 | **Target / stock / cost** — "fill to here", "costs this" | days-of-supply anchor, logistics delivery gap-fills, `workCostPerLevel`, build ceilings | **never scale** — levels are time-free |
 

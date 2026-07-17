@@ -40,6 +40,29 @@ describe("ExperimentConfig", () => {
       const result = ExperimentConfigSchema.safeParse({ systemCount: 0 });
       expect(result.success).toBe(false);
     });
+
+    it("accepts a cadence override", () => {
+      const result = ExperimentConfigSchema.safeParse({
+        cadence: { month: 12, construction: 24, logistics: 48 },
+      });
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.cadence).toEqual({ month: 12, construction: 24, logistics: 48 });
+    });
+
+    it("rejects a cadence interval below 1 (would divide by zero)", () => {
+      const result = ExperimentConfigSchema.safeParse({
+        cadence: { month: 0, construction: 24, logistics: 24 },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects a non-integer cadence interval", () => {
+      const result = ExperimentConfigSchema.safeParse({
+        cadence: { month: 12.5, construction: 24, logistics: 24 },
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("experimentToHarnessConfig", () => {
@@ -55,6 +78,17 @@ describe("ExperimentConfig", () => {
 
       expect(label).toBe("test");
       expect(config).toEqual({ systemCount: 120, seed: 99, tickCount: 200 });
+    });
+
+    it("forwards a cadence override onto the harness config", () => {
+      const exp = ExperimentConfigSchema.parse({
+        seed: 7,
+        cadence: { month: 12, construction: 24, logistics: 48 },
+      });
+
+      const { config } = experimentToHarnessConfig(exp);
+
+      expect(config.cadence).toEqual({ month: 12, construction: 24, logistics: 48 });
     });
 
     it("omits label when none is specified", () => {

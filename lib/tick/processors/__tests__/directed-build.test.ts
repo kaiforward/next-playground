@@ -533,4 +533,40 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     // and cap are left unscaled (the count alone stays 2 either way, so it can't catch a no-scaling bug).
     expect(r12.perFront[0]).toBeCloseTo(r24.perFront[0] / 2, 6);
   });
+
+  it("interval scaling preserves the young-colony floor reservation (the floor scales with the interval)", async () => {
+    // The pool-fairness scenario: a homeworld front build would starve the young colony's build without
+    // the development-scaled pool floor. The floor slice is floorBase × catchUp, so halving the interval
+    // halves the colony's rescued work — exactly like the pool and cap. This is the invariance case that
+    // exercises the floor scaling: if floorBase were left unscaled, the reference-size floor would
+    // over-reserve the (halved) pool at interval 12, so the colony would get MORE than half.
+    const floorScenario = (): SystemBuildRow[] => [
+      {
+        systemId: "H", factionId: "f1", control: "developed", population: 400, unrest: 0,
+        buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+        generalSpace: 0, habitableSpace: 20, markets: [],
+      },
+      {
+        systemId: "C", factionId: "f1", control: "developed", population: 2, unrest: 0,
+        buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+        generalSpace: 0, habitableSpace: 20, markets: [],
+      },
+    ];
+    const inflight = (): WorldConstructionProject[] => [
+      { id: "pH", kind: "build", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+      { id: "pC", kind: "build", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+    ];
+    const colonyWorkDone = async (interval: number): Promise<number> => {
+      const w = new MemoryDirectedBuildWorld(floorScenario(), inflight());
+      await runDirectedBuildProcessor(w, { tick: 0 }, {
+        interval, routeCost: reachable,
+        construction: mkConstruction(1000, 0.05, CONSTRUCTION.POOL_FLOOR_BASE, CONSTRUCTION.FLOOR_DEV_KNEE),
+      });
+      return w.constructionProjects.find((p) => p.id === "pC")?.workDone ?? 0;
+    };
+    const c24 = await colonyWorkDone(24);
+    const c12 = await colonyWorkDone(12);
+    expect(c24).toBeGreaterThan(0);      // the floor rescues the colony at the reference interval
+    expect(c12).toBeCloseTo(c24 / 2, 6); // …and its reserved slice scales with the interval, like pool/cap
+  });
 });
