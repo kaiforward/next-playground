@@ -47,6 +47,29 @@ Well-defined, can start now.
   transfers away), the bridge collapsed and every magnitude assertion in the suite silently became
   meaningless, with nothing detecting it. Make the dependency explicit and alarmed, so the next
   invariance break fails loudly at the bridge instead of quietly everywhere else.
+- **[S] Two different quantities are both called `demandRate`** — `WorldMarket.demandRate` (stored) is
+  civilian consumption **plus** industrial input draw: the days-of-supply pricing denominator and the
+  logistics deficit anchor. `demandRateForGood` (`lib/constants/market-economy.ts:59`) is civilian
+  **only** — it feeds `demandFootprint`, which is what the Population panel's demand chart renders. Both
+  are correct for their context (the SPEC deliberately sums both channels for pricing so a refinery
+  world's Ore "prices honestly rather than cheap-when-scarce"; a population panel should show what the
+  population demands). The hazard is purely comprehension: a reader hits `demandRate` and assumes it is
+  the pricing denominator when it is not. Rename `demandRateForGood` → `civilianDemandRateForGood` (and
+  the `demandRate` key on demand-footprint entries follows), and give `WorldMarket.demandRate` a doc
+  comment naming it as civilian + industrial and as the pricing/logistics anchor. The doc comment is the
+  load-bearing half; rename the stored field only if it reads clearly at its call sites. **No calculation
+  changes** — existing tests must pass untouched apart from the rename.
+- **[S] Stale "48-tick agency clock" claims in the docs** — `docs/SPEC.md:158` and
+  `docs/active/gameplay/economy-autonomic-agency.md:211`/`:265` describe a 48-tick agency clock and
+  per-faction staggering. Neither is true: `MONTH_LENGTH = 24` and `pulseShard` resolves every faction on
+  the same boundary tick. Comment/prose only, zero risk.
+- **[S] `popCap`'s only rise path has no test** — `popCap` is stored and rises **only** at
+  `lib/world/tick.ts:348` (`Math.max(s.popCap, housingPopCap(buildings))`, inside `applyBuildingIncreases`,
+  gated on housing being among the landed types). Infrastructure decay is downward-only and will not
+  repair it, so any refactor that lands housing by another path welds a colony's cap to its seed level
+  **permanently** — it builds housing and never grows into it, silently, with nothing else failing. That
+  is a lot of load on one unasserted line. Add an explicit test: popCap rises when a housing project
+  completes.
 - **[S] Purge the Postgres fossils outside `lib/tick/`** — Prisma was deleted in the Phase-2 pivot, but comments across `lib/types/game.ts:1`, `lib/types/guards.ts:2-4` ("Runtime type guards for Prisma boundary values" — the boundaries are now save-file `deserialize` + API `JSON.parse`), `lib/utils/format.ts:67`, `lib/utils/__tests__/format.test.ts:44`, `lib/world/types.ts:3`, `lib/world/gen.ts:3,49` (points at `prisma/seed.ts`, deleted), `lib/engine/relations.ts:3`, and `lib/engine/system-trade-flow.ts:4,7` still describe it as live. Mostly "no Prisma dependency" negative-space claims that are now vacuous, plus two that point a reader at deleted files. The tick's own two-backend claims were swept with the harness rename; this is the same rot in the layers that PR's scope didn't reach. Comment-only, zero risk. Find them with: `grep -rni "prisma" --include="*.ts" lib/`.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
@@ -57,6 +80,21 @@ Well-defined, can start now.
 ## Needs Design
 
 Direction is clear, approach needs a design doc before implementation.
+
+- **[L] Make the pulse interval a real knob — four processors don't scale with theirs** — `catchUpFactor`
+  (`lib/tick/shard.ts:52`) exists to make a processor apply "elapsed-ticks worth" per run, so tuning an
+  interval changes granularity and not the wall-clock rate. It is wired into **`economy.ts` and
+  `migration.ts` only**. `population.ts`, `infrastructure-decay.ts`, `directed-build.ts` and
+  `directed-logistics.ts` all ride the same pulse and take no magnitude scaling — so changing
+  `MONTH_LENGTH` from 24 to 10 silently makes population growth, decay, construction and logistics 2.4×
+  faster per game-year while the economy and migration correctly compensate. The interval reads as a
+  tunable constant and is not one: it is a performance knob that silently moves gameplay rules, which is
+  the hazard CLAUDE.md names outright. Not urgent (nothing is broken at 24, the calibrated reference),
+  but it blocks every cadence question — including re-basing the tick for armies later. Two parts are not
+  mechanical: `idleMonths` is a *counter* not a rate (halve the interval and "three months idle" becomes
+  1.5 months of game time), and `PER_BUILD_ABSORPTION_CAP` is the minimum-build-time mechanic and must
+  scale with the pool or the parallel-front count moves when someone turns a perf knob. Full findings,
+  the Vic3 reference model, and the open design questions: [processor-interval-awareness.md](./build-plans/processor-interval-awareness.md).
 
 - **[M] Tick perf: `toTickSystems` is the whole off-pulse tick outside events** — it costs 2.5ms/tick
   at 2,400 systems, **19.0% of an off-pulse tick** and, since boundary-gating shipped, the only
