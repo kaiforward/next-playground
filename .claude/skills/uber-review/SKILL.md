@@ -143,6 +143,8 @@ Files changed (<count>):
 <full unified diff>
 ```
 
+> **Note — the architect also runs a spec-conformance pass (Lens 2 in `prompts/architect.md`).** Its spec is the change's design/spec doc, which rides in the diff itself: an added `docs/build-plans/` file (deleted only at merge, so still present at review time) or a doc promoted into `docs/active/` / `docs/planned/` in the same diff. The full diff already carries it — do not strip docs from the architect's diff. When the diff contains no such doc, the architect silently skips that lens.
+
 Dispatch via the `Agent` tool:
 
 - `description`: "Architect review"

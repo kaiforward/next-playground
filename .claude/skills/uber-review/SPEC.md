@@ -88,7 +88,7 @@ agents'.
 
 | # | Agent | Lens | Default model |
 |---|-------|------|---------------|
-| 0 | **Architect** | Approach-level / pattern drift / library misuse / module-boundary violations. Gates pipeline. | Opus |
+| 0 | **Architect** | Approach-level / pattern drift / library misuse / module-boundary violations, **plus spec conformance** — does the code deliver the design/spec doc riding in the diff, and was any doc-fold faithful. Gates pipeline. | Opus |
 | 1 | **Conventions** | Project guardrails: no `as` casts, no `unknown`, no non-null `!`, generics stay generic, form components used instead of raw `<input>`, `"use client"` only where needed | Haiku |
 | 2 | **World integrity** | In-memory world & tick integrity: JSON-serialization safety (no `Map`/`Set`/`Date`/`Infinity`/`NaN` in `World`), deterministic seeded tick math, atomic tick, the `save-files.ts` dynamic-import guardrail, processors going through the `World` interface + adapter | Sonnet |
 | 3 | **Data contract** | Types flowing store/adapter → service → API → hook → component. Guards used only at the boundary. Service-returned types not re-validated downstream. | Sonnet |
@@ -130,6 +130,8 @@ agents'.
 **`minor`** — nit / cleanup / style note. Doesn't gate anything.
 
 **`info`** — FYI / observation. Passes through without validation.
+
+**Spec conformance (Lens 2).** The architect also checks the code against the design/spec doc present in the diff (added `docs/build-plans/`, or a promoted `docs/active/`/`docs/planned/` doc). A *material* spec requirement the code fails to deliver is objective and may be a `blocker` (subject to the same fix-simulation test); partial, ambiguous, or deferred gaps are `major`/`info`. Design *soundness* is out of scope — that critique belongs upstream, before implementation. If no spec doc is in the diff, this lens is skipped.
 
 ## Chunking
 
