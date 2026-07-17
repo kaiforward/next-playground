@@ -18,6 +18,8 @@ export interface InfrastructureStateView {
   buildings: Record<string, number>;
   /** buildingType → sustained-idle countdown (the decay buffer's state). */
   buildingIdleMonths: Record<string, number>;
+  /** buildingType → fractional unrest-collapse accumulator (the catastrophic channel's state). */
+  buildingCollapseDebt: Record<string, number>;
 }
 
 /** One building's decayed count (downward-only; floored at 0 by the adapter). */
@@ -34,6 +36,13 @@ export interface IdleMonthsUpdate {
   idleMonths: number;
 }
 
+/** One building's new unrest-collapse debt (the catastrophic channel's persisted state). */
+export interface CollapseDebtUpdate {
+  systemId: string;
+  buildingType: string;
+  collapseDebt: number;
+}
+
 export interface PopCapUpdate {
   systemId: string;
   popCap: number;
@@ -46,6 +55,8 @@ export interface InfrastructureWorld {
   applyBuildingDecays(updates: BuildingCountUpdate[]): Promise<void>;
   /** Bulk-write updated idle countdowns (the decay buffer's persisted state). */
   applyIdleMonths(updates: IdleMonthsUpdate[]): Promise<void>;
+  /** Bulk-write updated collapse debts (the catastrophic channel's persisted state). */
+  applyCollapseDebts(updates: CollapseDebtUpdate[]): Promise<void>;
   /** Bulk-write recomputed popCap for systems whose housing changed. */
   applyPopCapUpdates(updates: PopCapUpdate[]): Promise<void>;
 }
@@ -53,4 +64,6 @@ export interface InfrastructureWorld {
 /** Per-run params passed alongside the world. */
 export interface InfrastructureProcessorParams {
   decay: DecayParams;
+  /** Pulse interval in ticks; decay counters accrue catchUpFactor(interval) per run. */
+  interval: number;
 }

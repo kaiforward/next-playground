@@ -1,14 +1,27 @@
-/** Calibration-reference interval — the cadence the economy was tuned at (default-scale region count). `catchUpFactor` is 1 here, so the reference config is behavior-identical and needs no re-tune. */
+/**
+ * Calibration anchor — NOT a knob. The divisor in `catchUpFactor`; frozen at the
+ * cadence the economy was tuned at, so the reference config is behaviour-identical
+ * and needs no re-tune. Turn the knobs below, never this.
+ */
 export const REFERENCE_INTERVAL = 24;
-/** Ticks for the economy cluster (economy / trade-flow / migration) to refresh every system once. Fixed gameplay constant → scale-invariant cadence. */
-export const ECONOMY_UPDATE_INTERVAL = 24;
 
 /**
- * One "month" = the resolution-pulse period, in ticks. All faction-scale
- * accounting (economy, infrastructure decay, population, migration, directed
- * logistics, directed build) resolves for the whole galaxy on ticks where
- * `tick % MONTH_LENGTH === 0`. Equal to the economy interval, so each system's
- * magnitude-per-resolution is unchanged from the old rolling shard — only
- * staggered → synchronized changes.
+ * One "month" = the societal resolution-pulse period, in ticks. Economy,
+ * population, infrastructure-decay, and migration resolve for the whole galaxy on
+ * ticks where `tick % MONTH_LENGTH === 0`. A real knob: every rider scales by
+ * `catchUpFactor`, so tuning it changes granularity, not wall-clock rates.
  */
-export const MONTH_LENGTH = ECONOMY_UPDATE_INTERVAL;
+export const MONTH_LENGTH = 24;
+
+/** Directed-build's resolution pulse, in ticks. Independent of MONTH_LENGTH — relative pacing knob. */
+export const CONSTRUCTION_INTERVAL = 24;
+
+/** Directed-logistics' resolution pulse, in ticks. Independent of MONTH_LENGTH — relative pacing knob. */
+export const LOGISTICS_INTERVAL = 24;
+
+/** Per-run cadence override (dev/test surface — the live loop always uses the constants). */
+export interface TickCadence {
+  month: number;
+  construction: number;
+  logistics: number;
+}

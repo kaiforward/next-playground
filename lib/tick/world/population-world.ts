@@ -32,4 +32,6 @@ export interface PopulationWorld {
 export interface PopulationProcessorParams {
   unrest: UnrestParams;
   population: PopulationParams;
+  /** Pulse interval in ticks; rates are reference-denominated and scaled by catchUpFactor. */
+  interval: number;
 }

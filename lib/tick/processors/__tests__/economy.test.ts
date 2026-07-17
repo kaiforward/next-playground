@@ -65,6 +65,7 @@ function makeProducerSystem(id: string, unrest: number): TickSystem {
     unrest,
     buildings: { food: 2 },
     buildingIdleMonths: {},
+    buildingCollapseDebt: {},
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
@@ -86,6 +87,7 @@ function makeConsumerSystem(id: string, unrest: number): TickSystem {
     unrest,
     buildings: {},
     buildingIdleMonths: {},
+    buildingCollapseDebt: {},
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
@@ -375,6 +377,7 @@ describe("economy processor: supply-chain input-gating", () => {
         unrest: 0,
         buildings: { metals: 2, vocational_school: 1 }, // smelter + academy — no ore extractor
         buildingIdleMonths: {},
+        buildingCollapseDebt: {},
         yields: unitResourceVector(),
         slotCap: emptyResourceVector(),
         generalSpace: 0,

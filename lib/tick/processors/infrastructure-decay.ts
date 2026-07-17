@@ -1,11 +1,13 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { computeSystemDecay } from "@/lib/engine/infrastructure-decay";
+import { catchUpFactor } from "@/lib/tick/shard";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type {
   InfrastructureWorld,
   InfrastructureProcessorParams,
   BuildingCountUpdate,
   IdleMonthsUpdate,
+  CollapseDebtUpdate,
   PopCapUpdate,
 } from "@/lib/tick/world/infrastructure-world";
 
@@ -28,8 +30,13 @@ export async function runInfrastructureDecayProcessor(
   const systemIds = [...signals.dissatisfactionBySystem.keys()];
   const states = await world.getInfrastructureState(systemIds);
 
+  // Decay counters are reference-denominated; one run accrues catchUpFactor(interval)
+  // reference-months of idle countdown and collapse debt.
+  const catchUp = catchUpFactor(params.interval);
+
   const countUpdates: BuildingCountUpdate[] = [];
   const idleUpdates: IdleMonthsUpdate[] = [];
+  const debtUpdates: CollapseDebtUpdate[] = [];
   const popCapUpdates: PopCapUpdate[] = [];
   for (const s of states) {
     const uptake = signals.outputUptakeBySystem.get(s.systemId);
@@ -37,17 +44,22 @@ export async function runInfrastructureDecayProcessor(
       {
         buildings: s.buildings,
         buildingIdleMonths: s.buildingIdleMonths,
+        buildingCollapseDebt: s.buildingCollapseDebt,
         population: s.population,
         unrest: s.unrest,
         outputUptake: (goodId) => uptake?.get(goodId) ?? 1,
       },
       params.decay,
+      catchUp,
     );
     for (const [buildingType, count] of Object.entries(result.newCounts)) {
       countUpdates.push({ systemId: s.systemId, buildingType, count });
     }
     for (const [buildingType, idleMonths] of Object.entries(result.newIdleMonths)) {
       idleUpdates.push({ systemId: s.systemId, buildingType, idleMonths });
+    }
+    for (const [buildingType, collapseDebt] of Object.entries(result.newCollapseDebt)) {
+      debtUpdates.push({ systemId: s.systemId, buildingType, collapseDebt });
     }
     if (HOUSING_TYPE in result.newCounts) {
       popCapUpdates.push({ systemId: s.systemId, popCap: result.popCap });
@@ -56,6 +68,7 @@ export async function runInfrastructureDecayProcessor(
 
   await world.applyBuildingDecays(countUpdates);
   await world.applyIdleMonths(idleUpdates);
+  await world.applyCollapseDebts(debtUpdates);
   await world.applyPopCapUpdates(popCapUpdates);
   return {};
 }

@@ -40,6 +40,8 @@ export interface TickSystem {
   buildings: Record<string, number>;
   /** Per-buildingType sustained-idle countdown (parallel to `buildings`); the decay buffer's state. */
   buildingIdleMonths: Record<string, number>;
+  /** Per-buildingType fractional unrest-collapse accumulator (parallel to `buildings`); the catastrophic channel's state. */
+  buildingCollapseDebt: Record<string, number>;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

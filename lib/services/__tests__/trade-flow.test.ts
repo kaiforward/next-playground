@@ -3,12 +3,12 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
 
-// Imports/exports are summed over the flow window then normalised to a per-economy-cycle
+// Imports/exports are summed over the flow window then normalised to a per-logistics-cycle
 // rate (so they share units with production/consumption). Expected values follow suit.
-const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / ECONOMY_UPDATE_INTERVAL;
+const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL;
 const perCycle = (windowTotal: number): number => windowTotal / cyclesInWindow;
 
 let world: World;

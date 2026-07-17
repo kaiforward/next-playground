@@ -2,9 +2,10 @@
  * Experiment system — YAML config parsing, validation, and result serialization.
  *
  * The calibration harness is a thin wrapper over `generateWorld` +
- * `runWorldTick`: there is no per-run constants-override channel —
- * `runWorldTick` reads the same code constants the live game does — so an
- * experiment config only names the world to generate and how long to run it.
+ * `runWorldTick`: the pulse cadence is the one per-run override channel —
+ * otherwise `runWorldTick` reads the same code constants the live game does — so
+ * an experiment config names the world to generate, how long to run it, and
+ * (optionally) the cadence to run it at.
  */
 
 import { z } from "zod";
@@ -13,11 +14,18 @@ import type { HarnessConfig, HarnessResults } from "./types";
 
 // ── Zod schema ───────────────────────────────────────────────────
 
+const CadenceSchema = z.object({
+  month: z.number().int().min(1),
+  construction: z.number().int().min(1),
+  logistics: z.number().int().min(1),
+});
+
 export const ExperimentConfigSchema = z.object({
   label: z.string().optional(),
   seed: z.number().int().default(42),
   ticks: z.number().int().min(1).default(500),
   systemCount: z.number().int().min(1).default(DEFAULT_SYSTEM_COUNT),
+  cadence: CadenceSchema.optional(),
 });
 
 export type ExperimentConfig = z.infer<typeof ExperimentConfigSchema>;
@@ -30,7 +38,7 @@ export function experimentToHarnessConfig(exp: ExperimentConfig): {
   label?: string;
 } {
   return {
-    config: { systemCount: exp.systemCount, seed: exp.seed, tickCount: exp.ticks },
+    config: { systemCount: exp.systemCount, seed: exp.seed, tickCount: exp.ticks, cadence: exp.cadence },
     label: exp.label,
   };
 }

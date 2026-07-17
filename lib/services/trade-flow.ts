@@ -1,7 +1,7 @@
 import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem, flowEventsBySystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -91,8 +91,10 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
 
   const flowsByGood = aggregateLogisticsFlows(flows, systemId, resolveName);
   // Imports/exports are summed over the FLOW_HISTORY_TICKS window; normalise to a
-  // per-economy-cycle rate so they share units with the production/consumption rates.
-  const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / ECONOMY_UPDATE_INTERVAL;
+  // per-logistics-cycle rate so they share units with the production/consumption rates.
+  // Flow events are written only by directed-logistics, so the window holds one batch
+  // per LOGISTICS_INTERVAL — not per month.
+  const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL;
   const model = buildLogisticsRows(prodCon, flowsByGood, cyclesInWindow, inputDemandByGood);
 
   return {

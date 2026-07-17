@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { pulseShard } from "@/lib/tick/shard";
+import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import {
@@ -23,12 +23,16 @@ export interface DirectedLogisticsProcessorParams {
   routeCost: RouteCost;
 }
 
-/** Build the engine's per-system state from raw rows: generation + per-good band + total demand. */
-function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
+/**
+ * Build the engine's per-system state from raw rows: generation + per-good band + total demand.
+ * Generation is per-pulse income and scales by the catch-up factor; the per-good gap-fills
+ * deliberately do NOT (see the processor doc below).
+ */
+function toLogisticsState(row: SystemLogisticsRow, catchUp: number): SystemLogisticsState {
   return {
     systemId: row.systemId,
     factionId: row.factionId,
-    generation: systemLogisticsGeneration(row.population),
+    generation: systemLogisticsGeneration(row.population) * catchUp,
     goods: toGoodMarketStates(row),
   };
 }
@@ -39,14 +43,17 @@ function toLogisticsState(row: SystemLogisticsRow): SystemLogisticsState {
  * every other tick is a no-op. Matched volume is moved silently (stock deltas +
  * logistics flow rows).
  *
- * No catch-up scaling: unlike trade-flow (a per-tick *rate* that must scale with
- * the shard interval), a logistics transfer is an absolute *level-fill* toward the
- * days-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
- * by the interval ratio overshoots the anchor — scaling deliveries by the interval
- * pushes recipients past the surplus margin (≈2× anchor), which both wastes hauls
- * and flips fresh recipients into donors / cheap re-export targets. The anchor
- * (40 economy-runs of cover) already vastly exceeds one month's draw, so a single
- * fill-to-anchor over-provisions on its own.
+ * Catch-up scaling is split down the middle of the mechanic:
+ *  - Deliveries are NOT scaled. A transfer is an absolute *level-fill* toward the
+ *    days-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
+ *    by the interval ratio overshoots the anchor — it pushes recipients past the
+ *    surplus margin (≈2× anchor), wasting hauls and flipping fresh recipients into
+ *    donors / cheap re-export targets. The anchor (40 economy-runs of cover) already
+ *    vastly exceeds one month's draw, so a single fill-to-anchor over-provisions on its own.
+ *  - The haul *budget* IS scaled (`generation × catchUp` in `toLogisticsState`). It is
+ *    per-pulse income (Σ pop × generation, exhaustion = deliberate under-serve); paid
+ *    unscaled but more often, it would silently inflate wall-clock haul capacity exactly
+ *    in the budget-bound under-serve regime the mechanic is designed around.
  */
 export async function runDirectedLogisticsProcessor(
   world: DirectedLogisticsWorld,
@@ -59,6 +66,10 @@ export async function runDirectedLogisticsProcessor(
   const { start, end } = pulseShard(factionKeys.length, ctx.tick, params.interval);
   const dueKeys = factionKeys.slice(start, end);
   if (dueKeys.length === 0) return {};
+
+  // Per-pulse haul budget is reference-denominated; scale it so wall-clock haul capacity is
+  // interval-invariant. Deliveries (level-fills toward the anchor) are not scaled.
+  const catchUp = catchUpFactor(params.interval);
 
   const rows = await world.getSystemsForFactions(dueKeys);
   if (rows.length === 0) return {};
@@ -87,7 +98,7 @@ export async function runDirectedLogisticsProcessor(
   }
 
   const allTransfers = [...byFaction.values()].flatMap((group) =>
-    matchFactionTransfers(group.map(toLogisticsState), params.routeCost),
+    matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp)), params.routeCost),
   );
 
   // Apply: clamp both endpoints, accumulate absolute writes, record flow rows.

@@ -10,7 +10,7 @@ function sys(overrides: Partial<TickSystem>): TickSystem {
     id: "s1", name: "S1", economyType: "extraction", regionId: "r1",
     factionId: "f1", control: "developed", governmentType: "frontier",
     population: 1000, popCap: 1200,
-    unrest: 0, buildings: { ore: 5 }, buildingIdleMonths: {},
+    unrest: 0, buildings: { ore: 5 }, buildingIdleMonths: {}, buildingCollapseDebt: {},
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...overrides,
   };

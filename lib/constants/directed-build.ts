@@ -1,13 +1,9 @@
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
-
 /**
  * Directed-build (faction build planner) tuning. First-draft, simulator-calibrated;
  * only relative shape matters. The up-arrow twin of SP3.5 infrastructure decay.
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 export const DIRECTED_BUILD = {
-  /** Ticks between agency sweeps: every faction plans builds on the monthly resolution pulse (matches logistics). */
-  INTERVAL: ECONOMY_UPDATE_INTERVAL,
   /** Reachability horizon, shared with logistics (tunable; see hop-cap note in the design). */
   MAX_HOPS: 4,
   /** Per-unit route cost = hops × this (proximity weight in placement scoring). */

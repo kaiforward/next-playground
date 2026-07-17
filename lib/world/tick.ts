@@ -39,7 +39,7 @@ import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { MONTH_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -151,54 +151,64 @@ export function toTickSystems(world: World): TickSystem[] {
     world.factions.map((f) => [f.id, f.governmentType]),
   );
 
-  // One pass over the flat building rows builds both the count roster and the idle-months roster.
-  const buildingsBySystem = new Map<string, Record<string, number>>();
-  const idleMonthsBySystem = new Map<string, Record<string, number>>();
+  // One pass over the flat building rows builds each system's roster: the count plus the two
+  // decay-counter records (idle countdown, unrest-collapse debt), keyed together so a system is
+  // resolved with a single map lookup.
+  const rosterBySystem = new Map<
+    string,
+    { counts: Record<string, number>; idleMonths: Record<string, number>; collapseDebt: Record<string, number> }
+  >();
   for (const b of world.buildings) {
-    const rec = buildingsBySystem.get(b.systemId);
-    if (rec) rec[b.buildingType] = b.count;
-    else buildingsBySystem.set(b.systemId, { [b.buildingType]: b.count });
-    const idle = idleMonthsBySystem.get(b.systemId);
-    if (idle) idle[b.buildingType] = b.idleMonths;
-    else idleMonthsBySystem.set(b.systemId, { [b.buildingType]: b.idleMonths });
+    let roster = rosterBySystem.get(b.systemId);
+    if (!roster) {
+      roster = { counts: {}, idleMonths: {}, collapseDebt: {} };
+      rosterBySystem.set(b.systemId, roster);
+    }
+    roster.counts[b.buildingType] = b.count;
+    roster.idleMonths[b.buildingType] = b.idleMonths;
+    roster.collapseDebt[b.buildingType] = b.collapseDebt ?? 0;
   }
 
-  return world.systems.map((s) => ({
-    id: s.id,
-    name: s.name,
-    economyType: s.economyType,
-    regionId: s.regionId,
-    factionId: s.factionId,
-    control: s.control,
-    // Every seeded system has a non-null factionId; the fallback covers a
-    // mid-write gap.
-    governmentType: s.factionId
-      ? (governmentByFaction.get(s.factionId) ?? "frontier")
-      : "frontier",
-    population: s.population,
-    popCap: s.popCap,
-    unrest: s.unrest,
-    buildings: buildingsBySystem.get(s.id) ?? {},
-    buildingIdleMonths: idleMonthsBySystem.get(s.id) ?? {},
-    yields: resourceVectorFromColumns(
-      {
-        yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
-        yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
-        yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
-      },
-      "yield",
-    ),
-    slotCap: resourceVectorFromColumns(
-      {
-        slotGas: s.slotGas, slotMinerals: s.slotMinerals, slotOre: s.slotOre,
-        slotBiomass: s.slotBiomass, slotArable: s.slotArable,
-        slotWater: s.slotWater, slotRadioactive: s.slotRadioactive,
-      },
-      "slot",
-    ),
-    generalSpace: s.generalSpace,
-    habitableSpace: s.habitableSpace,
-  }));
+  return world.systems.map((s) => {
+    const roster = rosterBySystem.get(s.id);
+    return {
+      id: s.id,
+      name: s.name,
+      economyType: s.economyType,
+      regionId: s.regionId,
+      factionId: s.factionId,
+      control: s.control,
+      // Every seeded system has a non-null factionId; the fallback covers a
+      // mid-write gap.
+      governmentType: s.factionId
+        ? (governmentByFaction.get(s.factionId) ?? "frontier")
+        : "frontier",
+      population: s.population,
+      popCap: s.popCap,
+      unrest: s.unrest,
+      buildings: roster?.counts ?? {},
+      buildingIdleMonths: roster?.idleMonths ?? {},
+      buildingCollapseDebt: roster?.collapseDebt ?? {},
+      yields: resourceVectorFromColumns(
+        {
+          yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
+          yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
+          yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
+        },
+        "yield",
+      ),
+      slotCap: resourceVectorFromColumns(
+        {
+          slotGas: s.slotGas, slotMinerals: s.slotMinerals, slotOre: s.slotOre,
+          slotBiomass: s.slotBiomass, slotArable: s.slotArable,
+          slotWater: s.slotWater, slotRadioactive: s.slotRadioactive,
+        },
+        "slot",
+      ),
+      generalSpace: s.generalSpace,
+      habitableSpace: s.habitableSpace,
+    };
+  });
 }
 
 // ── Tick → World row merges (write only the fields tick processors mutate;
@@ -228,7 +238,13 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
   for (const s of tickSystems) {
     for (const [buildingType, count] of Object.entries(s.buildings)) {
       if (count > 0) {
-        rows.push({ systemId: s.id, buildingType, count, idleMonths: s.buildingIdleMonths[buildingType] ?? 0 });
+        rows.push({
+          systemId: s.id,
+          buildingType,
+          count,
+          idleMonths: s.buildingIdleMonths[buildingType] ?? 0,
+          collapseDebt: s.buildingCollapseDebt[buildingType] ?? 0,
+        });
       }
     }
   }
@@ -480,7 +496,13 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 
 export async function runWorldTick(
   world: World,
+  opts?: { cadence?: TickCadence },
 ): Promise<{ world: World; events: TickBroadcastRaw; markets: WorldMarket[] }> {
+  const cadence: TickCadence = opts?.cadence ?? {
+    month: MONTH_LENGTH,
+    construction: CONSTRUCTION_INTERVAL,
+    logistics: LOGISTICS_INTERVAL,
+  };
   const tick = world.meta.currentTick + 1;
   const rng = tickRng(world.meta.seed, tick);
   const scaled = scaleEventCaps(world.systems.length);
@@ -565,10 +587,10 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same off-pulse broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
-  if (isPulseTick(tick, ECONOMY_UPDATE_INTERVAL)) {
+  if (isPulseTick(tick, cadence.month)) {
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
-      interval: ECONOMY_UPDATE_INTERVAL,
+      interval: cadence.month,
       simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
@@ -580,7 +602,7 @@ export async function runWorldTick(
     processorsRun.push("economy");
   } else {
     mergeGlobalEvents(globalEvents, {
-      globalEvents: economyOffPulsePayload(tick, ECONOMY_UPDATE_INTERVAL),
+      globalEvents: economyOffPulsePayload(tick, cadence.month),
     });
   }
 
@@ -590,7 +612,7 @@ export async function runWorldTick(
     await runInfrastructureDecayProcessor(
       decayWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { decay: INFRASTRUCTURE_DECAY_PARAMS },
+      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month },
     );
     systems = decayWorld.systems;
     processorsRun.push("infrastructure-decay");
@@ -602,7 +624,7 @@ export async function runWorldTick(
     await runPopulationProcessor(
       popWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS },
+      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.month },
     );
     systems = popWorld.systems;
     markets = popWorld.markets;
@@ -617,18 +639,19 @@ export async function runWorldTick(
   //
   // The condition is the disjunction of the stages' OWN pulse predicates, each built
   // from the interval that stage's body is handed below, because the setup is shared
-  // and any one stage resolving is reason to build it. The three intervals alias the
-  // month today but are declared separately: gating on just one of them would let a
-  // retune of another silently skip that stage's pulses — a performance mechanism
-  // quietly deciding a gameplay cadence. A disjunction fails the safe way, building
-  // setup nobody reads rather than dropping work. (Gating on the shortest interval
-  // would NOT be safe: it only covers the others when it divides them.)
+  // and any one stage resolving is reason to build it. The three intervals are three
+  // independent knobs (migration rides the month; build and logistics have their own):
+  // gating on just one of them would let a retune of another silently skip that stage's
+  // pulses — a performance mechanism quietly deciding a gameplay cadence. A disjunction
+  // fails the safe way, building setup nobody reads rather than dropping work. (Gating
+  // on the shortest interval would NOT be safe: it only covers the others when it
+  // divides them.)
   //
   // The flowEvents retention prune is deliberately NOT in here: it is cheap, and it
   // runs every tick today (see below the block).
-  const migrationResolves = isPulseTick(tick, ECONOMY_UPDATE_INTERVAL);
-  const logisticsResolves = isPulseTick(tick, DIRECTED_LOGISTICS.INTERVAL);
-  const buildResolves = isPulseTick(tick, DIRECTED_BUILD.INTERVAL);
+  const migrationResolves = isPulseTick(tick, cadence.month);
+  const logisticsResolves = isPulseTick(tick, cadence.logistics);
+  const buildResolves = isPulseTick(tick, cadence.construction);
   if (migrationResolves || logisticsResolves || buildResolves) {
     // ── economy-participation gate (developed only) ──
     // The three economy selection paths gate through isEconomicallyActive: the economy
@@ -651,7 +674,7 @@ export async function runWorldTick(
     {
       const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
       await runMigrationProcessor(migWorld, newTickCtx(), {
-        interval: ECONOMY_UPDATE_INTERVAL,
+        interval: cadence.month,
         flow: MIGRATION_PARAMS,
         delivery: COLONY_DELIVERY_PARAMS,
       });
@@ -693,7 +716,7 @@ export async function runWorldTick(
       );
       const dlWorld = new MemoryDirectedLogisticsWorld(rows);
       await runDirectedLogisticsProcessor(dlWorld, { tick }, {
-        interval: DIRECTED_LOGISTICS.INTERVAL,
+        interval: cadence.logistics,
         routeCost,
       });
       markets = applyStockUpdates(markets, dlWorld.stockUpdates);
@@ -776,7 +799,7 @@ export async function runWorldTick(
       const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
       await runDirectedBuildProcessor(dbWorld, { tick }, {
-        interval: DIRECTED_BUILD.INTERVAL,
+        interval: cadence.construction,
         routeCost,
         construction: {
           cap: CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,

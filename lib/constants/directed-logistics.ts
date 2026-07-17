@@ -1,4 +1,3 @@
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { scaleValue } from "@/lib/constants/economy-scale";
 
 /**
@@ -6,8 +5,6 @@ import { scaleValue } from "@/lib/constants/economy-scale";
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 export const DIRECTED_LOGISTICS = {
-  /** Ticks between agency sweeps: every faction redistributes on the monthly resolution pulse. */
-  INTERVAL: ECONOMY_UPDATE_INTERVAL,
   /** Work-budget a system contributes per cycle = population × this. Free in v1 (no treasury). */
   GENERATION_PER_POP: scaleValue(0.5),
   /** A good is a surplus when stock ≥ targetStock × this (held above its days-of-supply anchor). Margin > 1 leaves a deliberate residual (negative space). */

@@ -95,3 +95,26 @@ A row type earns a `Tick*` shape only by differing from its `World` row. Markets
 - **Adapters mutate in-place, then expose final state via public fields.** After a body returns, `runWorldTick` reads back `world.markets`, `world.systems`, etc. Cleaner than threading return values through every interface method.
 - **`Math.max(0, current - captured)` accumulator resets** keep concurrent-safe numeric semantics (a `GREATEST(0, …)`-style floor); moot with a single writer, but harmless and keeps the intent obvious.
 - **`unknown` stays banned at the boundary.** Adapters narrow string columns to validated unions once, on the way out. Bodies never re-validate.
+
+---
+
+## Cadence and interval awareness
+
+Most processors resolve on a coarse **pulse** rather than every tick — the economy cluster monthly, construction and logistics on their own intervals. The pulse interval is a real knob: `catchUpFactor(interval) = interval / REFERENCE_INTERVAL` (`lib/tick/shard.ts`) lets a body apply "elapsed-ticks worth" per run, so tuning an interval changes granularity, not wall-clock rate. `REFERENCE_INTERVAL` (24) is the calibration anchor and is **not** a knob — it is the divisor that makes the reference cadence `catchUp = 1` and behaviour-identical.
+
+Every pulse-riding quantity is one of four shapes, and the shape dictates the treatment:
+
+| Shape | Examples | Treatment |
+|---|---|---|
+| **Rate / flow** — "X per unit time" | production, consumption, migration, population growth, unrest gain/decay | multiply by `catchUpFactor` per run |
+| **Counter / timer** — "after N months…" | decay's `idleMonths`, unrest-teardown collapse debt | accrue `catchUpFactor` per run (fractional); thresholds stay in reference-months |
+| **Budget income** — "points per pulse" | construction pool / absorption cap / floor, logistics haul budget | multiply the income by `catchUpFactor` per run |
+| **Target / stock / cost** — "fill to here", "costs this" | days-of-supply anchor, logistics delivery gap-fills, `workCostPerLevel`, build ceilings | **never scale** — levels are time-free |
+
+The one-line rule: **scale flows and incomes by `catchUpFactor`; count time in ticks, not runs; never scale targets, stocks, or costs.** Logistics is the instructive hybrid — its per-pulse haul *budget* scales, but its deliveries are gap-fills toward the anchor and must not (filling more often already means smaller fills; scaling them too would overshoot the anchor).
+
+Scaling lives **inside the body** (constants stay reference-denominated; the body computes `catchUpFactor(interval)` and applies it at the point of use), so engine functions stay cadence-unaware.
+
+**Two cadence clusters, not one clock.** Population, infrastructure-decay, and migration read the economy's same-tick signal and process its shard, so they are welded to the economy's `MONTH_LENGTH` — one societal accounting pass. Directed-build and directed-logistics are self-gated on their own `pulseShard(interval)` and coupled only through world state, so they carry independent knobs (`CONSTRUCTION_INTERVAL`, `LOGISTICS_INTERVAL`). Relations runs on its own `RELATIONS_FREQUENCY` (3) with the same latent property: its per-run drift magnitudes are denominated in that frequency and would need the same treatment if it were ever tuned.
+
+**Testing.** Interval invariance is directly checkable — same seed and span, different interval, matching wall-clock rates — but only statistically: pulses land on different ticks (different RNG draws) and `fundQueue`'s non-homogeneous `remaining` term redistributes construction, so exact parity is impossible. `runWorldTick(world, { cadence })` takes an optional per-run override (the live loop never sets it; the harness threads it from an experiment's `cadence:` block) so the gate can run both cadences: `lib/world/__tests__/cadence-invariance.test.ts` for the societal + construction rates, and the full-scale `experiments/examples/cadence-invariance-*.yaml` pair for the budget-bound logistics regime CI can't reach.

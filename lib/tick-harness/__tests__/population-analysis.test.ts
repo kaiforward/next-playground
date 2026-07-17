@@ -66,7 +66,7 @@ function infraSys(id: string, buildings: Record<string, number>, popCap: number)
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 50, popCap,
-    unrest: 0, buildings, buildingIdleMonths: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    unrest: 0, buildings, buildingIdleMonths: {}, buildingCollapseDebt: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 

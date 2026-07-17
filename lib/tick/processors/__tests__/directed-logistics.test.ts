@@ -3,6 +3,7 @@ import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directe
 import { emptyResourceVector } from "@/lib/engine/resources";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 
 describe("MemoryDirectedLogisticsWorld", () => {
   it("groups systems by faction key (null = independents)", async () => {
@@ -57,7 +58,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(1);
     expect(world.flows[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", goodId: "food" });
@@ -85,7 +86,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     const targetStock = 40; // 40 × demandRate 1 × anchorMult 1
     const surplusThreshold = targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 56
@@ -118,7 +119,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows[0].quantity).toBeCloseTo(29.7, 6); // the fraction survives — NOT 29
     expect(world.stockUpdates.get("mB")!).toBeCloseTo(40, 6); // filled exactly to the anchor
@@ -132,7 +133,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 7 },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(0);
   });
@@ -155,9 +156,48 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 1 },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(0);
     expect(world.stockUpdates.size).toBe(0);
+  });
+
+  // A market with a big demandRate → big targetStock, so the deficit's shortfall and the donor's
+  // drawable both dwarf the per-pulse work budget: the budget is the binding constraint.
+  function bigMarket(id: string, goodId: string, stock: number, demandRate: number) {
+    return { id, goodId, stock, anchorMult: 1, demandRate, storageCapacity: 0 };
+  }
+
+  it("haul budget scales with the interval; deliveries stay gap-fills", async () => {
+    // Budget-bound: huge deficit + huge drawable, so the per-pulse work budget (Σ pop × generation)
+    // binds — moved = budget ÷ route cost. Halving the interval halves the budget, so it moves half
+    // as much per pulse (same wall-clock haul capacity when run twice as often).
+    const budgetBound = () => [
+      { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mA", "food", 100000, 1000)] },
+      { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mB", "food", 10, 1000)] },
+    ];
+    const movedAt = async (interval: number): Promise<number> => {
+      const world = new MemoryDirectedLogisticsWorld(budgetBound());
+      await runDirectedLogisticsProcessor(world, { tick: 0 }, { interval, routeCost: () => 1 });
+      return world.flows[0].quantity;
+    };
+    const moved24 = await movedAt(24);
+    const moved12 = await movedAt(12);
+    expect(moved24).toBeGreaterThan(0);
+    expect(moved12).toBeCloseTo(moved24 / 2, 6); // budget scaled with the interval
+
+    // Gap-bound: a small deficit (shortfall 30) with an ample budget fills exactly the gap — a
+    // level-fill toward the anchor, interval-invariant, NOT a scaled multiple.
+    const gapFill = async (interval: number): Promise<number> => {
+      const systems = [
+        { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+        { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+      ];
+      const world = new MemoryDirectedLogisticsWorld(systems);
+      await runDirectedLogisticsProcessor(world, { tick: 0 }, { interval, routeCost: () => 1 });
+      return world.flows[0].quantity;
+    };
+    expect(await gapFill(24)).toBeCloseTo(30, 6);
+    expect(await gapFill(12)).toBeCloseTo(30, 6); // identical at half the interval — gap-fills don't scale
   });
 });

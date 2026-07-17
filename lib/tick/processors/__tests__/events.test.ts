@@ -53,6 +53,7 @@ function makeSystem(
     unrest: 0,
     buildings: {},
     buildingIdleMonths: {},
+    buildingCollapseDebt: {},
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,

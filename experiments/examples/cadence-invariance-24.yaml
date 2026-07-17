@@ -1,0 +1,10 @@
+# Interval-invariance ship gate — baseline (reference cadence, all knobs at 24).
+# Compare its report against cadence-invariance-12.yaml: the same seed and span at
+# half interval must reproduce these wall-clock rates (population, buildings, and —
+# the metric CI can't reach — goods hauled per year and the deliberate under-serve).
+# Full scale + long span so the budget-bound logistics regime actually engages
+# (little moves before ~t=456).
+label: cadence-invariance-24
+seed: 42
+ticks: 1500
+systemCount: 600

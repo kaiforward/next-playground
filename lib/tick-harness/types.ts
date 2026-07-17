@@ -9,6 +9,7 @@
 
 import type { EventTypeId } from "@/lib/constants/events";
 import type { GovernmentType } from "@/lib/types/game";
+import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 
 // ── Calibration harness config ──────────────────────────────────
@@ -17,6 +18,8 @@ export interface HarnessConfig {
   systemCount: number;
   seed: number;
   tickCount: number;
+  /** Optional per-run pulse-cadence override; absent ⇒ the live-loop constants. */
+  cadence?: TickCadence;
 }
 
 // ── Market health ───────────────────────────────────────────────

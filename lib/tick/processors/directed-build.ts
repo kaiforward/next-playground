@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { pulseShard } from "@/lib/tick/shard";
+import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { fundQueueWithFloor, developmentFloorShare, factionThroughputPool, orderProposals } from "@/lib/engine/construction";
 import { systemDevelopment } from "@/lib/engine/development";
@@ -104,6 +104,12 @@ export async function runDirectedBuildProcessor(
   const dueKeys = factionKeys.slice(start, end);
   if (dueKeys.length === 0) return {};
 
+  // Per-pulse incomes are reference-denominated; scale all three together so wall-clock build time,
+  // parallel-front count (pool ÷ cap), and the floor's relative strength are interval-invariant. Work
+  // costs and ceilings are stocks — never scaled.
+  const catchUp = catchUpFactor(params.interval);
+  const cap = params.construction.cap * catchUp;
+
   // ── Claim phase (control tier): every due faction proposes its best in-reach claim; conflicts
   // resolve deterministically (score, seeded-RNG ties); winners are written as ownership assignments.
   // Newly claimed systems are `controlled` (not developed), so the build phase ignores them this pulse. ──
@@ -149,7 +155,7 @@ export async function runDirectedBuildProcessor(
   for (const [factionId, group] of byFaction) {
     // The faction's per-pulse throughput pool: developed systems fund it (controlled/unclaimed
     // systems are inert with population 0). The pool drains the queue; it never enqueues.
-    const pool = factionThroughputPool(group, params.construction.throughputPerPop);
+    const pool = factionThroughputPool(group, params.construction.throughputPerPop * catchUp);
 
     const existing = openByFaction.get(factionId) ?? [];
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
@@ -178,7 +184,7 @@ export async function runDirectedBuildProcessor(
     for (const s of buildStates) {
       if (!isEconomicallyActive(s.control)) continue;
       const share = developmentFloorShare(
-        systemDevelopment(s, developmentRefs), params.construction.floorBase, params.construction.floorKnee,
+        systemDevelopment(s, developmentRefs), params.construction.floorBase * catchUp, params.construction.floorKnee,
       );
       if (share > 0) floorBySystem.set(s.systemId, share);
     }
@@ -223,7 +229,7 @@ export async function runDirectedBuildProcessor(
     // Fund front-first (in-flight work finishes before new commitments), with the development-scaled
     // colony floor reserved ahead of the ROI order; land completed levels.
     const { projects: fundedOpen, landed } = fundQueueWithFloor(
-      [...existing, ...newProjects], pool, params.construction.cap, reserved,
+      [...existing, ...newProjects], pool, cap, reserved,
       (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
     );
     for (const p of fundedOpen) {

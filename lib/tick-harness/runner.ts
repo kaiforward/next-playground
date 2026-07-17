@@ -3,8 +3,8 @@
  * snapshot/analyze. A thin wrapper over the shared tick pipeline
  * (`lib/world/tick.ts`): `runTickHarness` exists to drive the real engine for
  * calibration health checks, not to simulate player trading. There is no bot
- * layer and no per-run constants override — it runs the same code constants
- * the live game does.
+ * layer; it runs the same code constants the live game does, except for an
+ * optional per-run cadence override (a dev/test surface) threaded from config.
  */
 
 import { generateWorld } from "@/lib/world/gen";
@@ -97,7 +97,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   for (let t = 0; t < config.tickCount; t++) {
     const preTickMarkets = currentMarkets;
 
-    const result = await runWorldTick(world);
+    const result = await runWorldTick(world, config.cadence ? { cadence: config.cadence } : undefined);
     world = result.world;
     currentMarkets = result.markets;
 

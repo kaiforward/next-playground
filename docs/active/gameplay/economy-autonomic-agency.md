@@ -208,11 +208,12 @@ by this slice.
 
 ## Cadence
 
-Both halves run on a slow **agency clock** — `INTERVAL = 2 × ECONOMY_UPDATE_INTERVAL` (= 48 ticks; the
-economy clock is 24) — a big, predictable current, per the "nothing vanishes while you watch" legibility
-requirement. Each is a **per-faction shard**: a contiguous window of the stable faction-key order runs each
-tick, so every faction is swept exactly once per interval at any universe scale, with a catch-up factor
-scaling moved/built volume to wall-clock. Two processors join the tick pipeline:
+Both halves run on a slow **resolution pulse** — `LOGISTICS_INTERVAL` and `CONSTRUCTION_INTERVAL` (24 ticks
+each, independently tunable from the economy's `MONTH_LENGTH`) — a big, predictable current, per the
+"nothing vanishes while you watch" legibility requirement. `pulseShard` resolves **every faction together**
+on the boundary tick (`tick % interval === 0`); each processor scales its per-pulse budget by
+`catchUpFactor(interval)`, so the wall-clock rate is invariant to the interval at any universe scale. Two
+processors join the tick pipeline:
 
 - **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, apply silent
   stock deltas + `logistics` flow rows.
@@ -262,7 +263,7 @@ shared deficit/surplus/self-supply classification; greedy surplus→deficit matc
 + `logistics` flow rows; proactive housing (fed-and-calm, paced ahead of population, capped at habitable
 land); rate-deficit-driven, labour-gated industry builds (whole-level spare-labour gate; the planner
 proposes toward the physical ceilings, and the per-faction construction throughput pool alone paces the
-committed queue); both processors on the 48-tick agency clock.
+committed queue); both processors on their monthly resolution pulse.
 
 **Deferred (explicitly out):**
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy
