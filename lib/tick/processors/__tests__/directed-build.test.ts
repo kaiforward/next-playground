@@ -12,6 +12,7 @@ import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const reachable: RouteCost = () => 1;
@@ -35,7 +36,8 @@ function foodMarket(systemId: string, stock: number): MarketRowForLogistics {
   };
 }
 
-const INTERVAL = 4;
+// Reference interval → catchUpFactor 1, so the shipped-magnitude assertions below are unscaled.
+const INTERVAL = REFERENCE_INTERVAL;
 const DUE_TICK = 0;      // monthly pulse: every faction plans on ticks where tick % interval === 0
 const NOT_DUE_TICK = 1;  // off-boundary tick: pulseShard window is empty, no faction is due
 
@@ -461,5 +463,74 @@ describe("runDirectedBuildProcessor — pool fairness floor", () => {
   it("funds a young colony's build that front-first funding would otherwise starve", async () => {
     expect(await colonyWorkDone(0)).toBe(0); // no floor: the homeworld's front build takes the whole pool
     expect(await colonyWorkDone(CONSTRUCTION.POOL_FLOOR_BASE)).toBeGreaterThan(0); // the floor reserves its slice
+  });
+});
+
+describe("runDirectedBuildProcessor — interval invariance", () => {
+  const CAP = 10;
+
+  // A developed builder with no build needs (fully housed, no markets) so the planner proposes nothing
+  // new and funding is purely the in-flight queue. Ample population sets a pool far above the cap.
+  const idleBuilder = (population: number): SystemBuildRow => ({
+    systemId: "B", factionId: "f1", control: "developed", population, unrest: 0,
+    buildings: { [HOUSING_TYPE]: 5 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+    generalSpace: 5, habitableSpace: 5, markets: [],
+  });
+
+  it("interval scaling preserves wall-clock minimum build time", async () => {
+    // One in-flight project whose work is exactly 2 × the reference cap, pool ample (cap binds). At
+    // interval 24 (catchUp 1) it lands after 2 pulses; at interval 12 (catchUp 0.5) the effective cap
+    // halves, so it needs 4 pulses — 2×24 = 4×12 = 48 wall-clock ticks either way.
+    const project = (): WorldConstructionProject => ({
+      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 5, workTotal: 2 * CAP, workDone: 0,
+    });
+    const landingPulse = async (interval: number): Promise<number> => {
+      let rows: SystemBuildRow[] = [idleBuilder(5000)];
+      let projects: WorldConstructionProject[] = [project()];
+      for (let pulse = 1; pulse <= 8; pulse++) {
+        const w = new MemoryDirectedBuildWorld(rows, projects);
+        // Ample pool (throughput 1/pop) so the per-build cap is the binding constraint; floor disabled.
+        await runDirectedBuildProcessor(w, { tick: 0 }, {
+          interval, routeCost: reachable, construction: mkConstruction(CAP, 1, 0, CONSTRUCTION.FLOOR_DEV_KNEE),
+        });
+        if (w.buildingUpdates.length > 0) return pulse; // the project completed and landed this pulse
+        projects = w.constructionProjects;
+        rows = rows.map((r) => {
+          const buildings = { ...r.buildings };
+          for (const u of w.buildingUpdates) if (u.systemId === r.systemId) buildings[u.buildingType] = u.count;
+          return { ...r, buildings };
+        });
+      }
+      return -1;
+    };
+    expect(await landingPulse(24)).toBe(2);
+    expect(await landingPulse(12)).toBe(4);
+  });
+
+  it("interval scaling preserves the parallel-front count (pool and cap scale together)", async () => {
+    // Pool = 400 × 0.05 = 20 = 2 × CAP at the reference interval. Three in-flight projects whose work
+    // far exceeds any pulse's funding (none lands, queue order preserved) → exactly the front two absorb
+    // a cap's worth and the third is starved, at either interval (pool ÷ cap is interval-invariant).
+    const inflight = (): WorldConstructionProject[] => [
+      { id: "p1", kind: "build", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p2", kind: "build", factionId: "f1", systemId: "B", buildingType: "food", levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p3", kind: "build", factionId: "f1", systemId: "B", buildingType: "ore", levels: 9, workTotal: 1000, workDone: 0 },
+    ];
+    const run = async (interval: number): Promise<{ count: number; perFront: number[] }> => {
+      const w = new MemoryDirectedBuildWorld([idleBuilder(400)], inflight());
+      await runDirectedBuildProcessor(w, { tick: 0 }, {
+        interval, routeCost: reachable, construction: mkConstruction(CAP, 0.05, 0, CONSTRUCTION.FLOOR_DEV_KNEE),
+      });
+      const funded = w.constructionProjects.filter((p) => p.workDone > 0);
+      return { count: funded.length, perFront: funded.map((p) => p.workDone).sort((a, b) => b - a) };
+    };
+    const r24 = await run(24);
+    const r12 = await run(12);
+    // Same number of simultaneous fronts at either interval (the invariance the count guards).
+    expect(r24.count).toBe(2);
+    expect(r12.count).toBe(2);
+    // …and each front's per-pulse work scales with the interval — this is what actually fails if pool
+    // and cap are left unscaled (the count alone stays 2 either way, so it can't catch a no-scaling bug).
+    expect(r12.perFront[0]).toBeCloseTo(r24.perFront[0] / 2, 6);
   });
 });
