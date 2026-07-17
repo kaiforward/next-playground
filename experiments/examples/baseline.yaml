@@ -1,7 +1,9 @@
 # The canonical template — every key an experiment config accepts.
-# The harness generates a world and runs the real tick over it, so a config only
-# names the world to generate and how long to run it. Constants come from the
-# same code the live game reads; there is no per-run override channel.
+# The harness generates a world and runs the real tick over it, so a config names
+# the world to generate and how long to run it. Magnitude constants come from the
+# same code the live game reads; the one per-run override is `cadence` (the pulse
+# intervals — see cadence-invariance-12.yaml), a dev/test surface the live loop
+# never sets.
 label: baseline
 seed: 42
 ticks: 500
