@@ -4,7 +4,7 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 
 /**
  * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard
- * update (every `ECONOMY_UPDATE_INTERVAL` ticks, 24), not per game tick. Gain=decay means
+ * update (every `MONTH_LENGTH` ticks, 24), not per game tick. Gain=decay means
  * only sustained high-D systems accumulate unrest; moderate supply deficits fade.
  * Calibrated against the simulator.
  */

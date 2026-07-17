@@ -3,6 +3,7 @@ import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directe
 import { emptyResourceVector } from "@/lib/engine/resources";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 
 describe("MemoryDirectedLogisticsWorld", () => {
   it("groups systems by faction key (null = independents)", async () => {
@@ -57,7 +58,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(1);
     expect(world.flows[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", goodId: "food" });
@@ -85,7 +86,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     const targetStock = 40; // 40 × demandRate 1 × anchorMult 1
     const surplusThreshold = targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 56
@@ -118,7 +119,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows[0].quantity).toBeCloseTo(29.7, 6); // the fraction survives — NOT 29
     expect(world.stockUpdates.get("mB")!).toBeCloseTo(40, 6); // filled exactly to the anchor
@@ -132,7 +133,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 7 },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(0);
   });
@@ -155,7 +156,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 1 },
-      { interval: DIRECTED_LOGISTICS.INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     expect(world.flows).toHaveLength(0);
     expect(world.stockUpdates.size).toBe(0);

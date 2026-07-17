@@ -39,7 +39,7 @@ import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { ECONOMY_UPDATE_INTERVAL } from "@/lib/constants/tick-cadence";
+import { MONTH_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -565,10 +565,10 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same off-pulse broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
-  if (isPulseTick(tick, ECONOMY_UPDATE_INTERVAL)) {
+  if (isPulseTick(tick, MONTH_LENGTH)) {
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
-      interval: ECONOMY_UPDATE_INTERVAL,
+      interval: MONTH_LENGTH,
       simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
@@ -580,7 +580,7 @@ export async function runWorldTick(
     processorsRun.push("economy");
   } else {
     mergeGlobalEvents(globalEvents, {
-      globalEvents: economyOffPulsePayload(tick, ECONOMY_UPDATE_INTERVAL),
+      globalEvents: economyOffPulsePayload(tick, MONTH_LENGTH),
     });
   }
 
@@ -617,18 +617,19 @@ export async function runWorldTick(
   //
   // The condition is the disjunction of the stages' OWN pulse predicates, each built
   // from the interval that stage's body is handed below, because the setup is shared
-  // and any one stage resolving is reason to build it. The three intervals alias the
-  // month today but are declared separately: gating on just one of them would let a
-  // retune of another silently skip that stage's pulses — a performance mechanism
-  // quietly deciding a gameplay cadence. A disjunction fails the safe way, building
-  // setup nobody reads rather than dropping work. (Gating on the shortest interval
-  // would NOT be safe: it only covers the others when it divides them.)
+  // and any one stage resolving is reason to build it. The three intervals are three
+  // independent knobs (migration rides the month; build and logistics have their own):
+  // gating on just one of them would let a retune of another silently skip that stage's
+  // pulses — a performance mechanism quietly deciding a gameplay cadence. A disjunction
+  // fails the safe way, building setup nobody reads rather than dropping work. (Gating
+  // on the shortest interval would NOT be safe: it only covers the others when it
+  // divides them.)
   //
   // The flowEvents retention prune is deliberately NOT in here: it is cheap, and it
   // runs every tick today (see below the block).
-  const migrationResolves = isPulseTick(tick, ECONOMY_UPDATE_INTERVAL);
-  const logisticsResolves = isPulseTick(tick, DIRECTED_LOGISTICS.INTERVAL);
-  const buildResolves = isPulseTick(tick, DIRECTED_BUILD.INTERVAL);
+  const migrationResolves = isPulseTick(tick, MONTH_LENGTH);
+  const logisticsResolves = isPulseTick(tick, LOGISTICS_INTERVAL);
+  const buildResolves = isPulseTick(tick, CONSTRUCTION_INTERVAL);
   if (migrationResolves || logisticsResolves || buildResolves) {
     // ── economy-participation gate (developed only) ──
     // The three economy selection paths gate through isEconomicallyActive: the economy
@@ -651,7 +652,7 @@ export async function runWorldTick(
     {
       const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
       await runMigrationProcessor(migWorld, newTickCtx(), {
-        interval: ECONOMY_UPDATE_INTERVAL,
+        interval: MONTH_LENGTH,
         flow: MIGRATION_PARAMS,
         delivery: COLONY_DELIVERY_PARAMS,
       });
@@ -693,7 +694,7 @@ export async function runWorldTick(
       );
       const dlWorld = new MemoryDirectedLogisticsWorld(rows);
       await runDirectedLogisticsProcessor(dlWorld, { tick }, {
-        interval: DIRECTED_LOGISTICS.INTERVAL,
+        interval: LOGISTICS_INTERVAL,
         routeCost,
       });
       markets = applyStockUpdates(markets, dlWorld.stockUpdates);
@@ -776,7 +777,7 @@ export async function runWorldTick(
       const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
       await runDirectedBuildProcessor(dbWorld, { tick }, {
-        interval: DIRECTED_BUILD.INTERVAL,
+        interval: CONSTRUCTION_INTERVAL,
         routeCost,
         construction: {
           cap: CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,

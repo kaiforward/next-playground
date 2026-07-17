@@ -1,7 +1,7 @@
 import type { DecayParams } from "@/lib/engine/infrastructure-decay";
 
 /**
- * Autonomic infrastructure decay (per economy-shard run, every ECONOMY_UPDATE_INTERVAL ticks ≈ one
+ * Autonomic infrastructure decay (per economy-shard run, every MONTH_LENGTH ticks ≈ one
  * month). Capacity is a whole-level ratchet — decay only sheds levels, and slowly:
  *  - idleBufferMonths: a level must sit idle this many runs before the marginal idle level tears down.
  *    The buffer makes a brief labour/supply dip cost nothing (the countdown resets on refill) — the
