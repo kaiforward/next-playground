@@ -137,6 +137,8 @@ export interface WorldBuilding {
   count: number;
   /** Sustained-idle countdown for this (system, type): counts up while ≥1 whole level sits idle, resets on refill, sheds one level at the decay buffer. */
   idleMonths: number;
+  /** Fractional unrest-collapse accumulator for this (system, type); whole levels tear down as it crosses integers. Absent in pre-cadence saves ⇒ 0. */
+  collapseDebt?: number;
 }
 
 /** Fields every committed construction project shares — funded by `factionId`'s per-pulse pool. */

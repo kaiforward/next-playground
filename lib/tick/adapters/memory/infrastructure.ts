@@ -3,6 +3,7 @@ import type {
   InfrastructureStateView,
   BuildingCountUpdate,
   IdleMonthsUpdate,
+  CollapseDebtUpdate,
   PopCapUpdate,
 } from "@/lib/tick/world/infrastructure-world";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -20,6 +21,7 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
       ...s,
       buildings: { ...s.buildings },
       buildingIdleMonths: { ...s.buildingIdleMonths },
+      buildingCollapseDebt: { ...s.buildingCollapseDebt },
     }));
   }
 
@@ -34,6 +36,7 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
           unrest: s.unrest,
           buildings: { ...s.buildings },
           buildingIdleMonths: { ...s.buildingIdleMonths },
+          buildingCollapseDebt: { ...s.buildingCollapseDebt },
         })),
     );
   }
@@ -73,6 +76,24 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
       const buildingIdleMonths = { ...s.buildingIdleMonths };
       for (const [type, idle] of m) buildingIdleMonths[type] = idle;
       return { ...s, buildingIdleMonths };
+    });
+    return Promise.resolve();
+  }
+
+  applyCollapseDebts(updates: CollapseDebtUpdate[]): Promise<void> {
+    if (updates.length === 0) return Promise.resolve();
+    const bySystem = new Map<string, Map<string, number>>();
+    for (const u of updates) {
+      const m = bySystem.get(u.systemId) ?? new Map<string, number>();
+      m.set(u.buildingType, u.collapseDebt);
+      bySystem.set(u.systemId, m);
+    }
+    this.systems = this.systems.map((s) => {
+      const m = bySystem.get(s.id);
+      if (!m) return s;
+      const buildingCollapseDebt = { ...s.buildingCollapseDebt };
+      for (const [type, debt] of m) buildingCollapseDebt[type] = debt;
+      return { ...s, buildingCollapseDebt };
     });
     return Promise.resolve();
   }

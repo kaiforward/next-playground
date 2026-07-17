@@ -151,9 +151,10 @@ export function toTickSystems(world: World): TickSystem[] {
     world.factions.map((f) => [f.id, f.governmentType]),
   );
 
-  // One pass over the flat building rows builds both the count roster and the idle-months roster.
+  // One pass over the flat building rows builds the count roster and the two decay-counter rosters.
   const buildingsBySystem = new Map<string, Record<string, number>>();
   const idleMonthsBySystem = new Map<string, Record<string, number>>();
+  const collapseDebtBySystem = new Map<string, Record<string, number>>();
   for (const b of world.buildings) {
     const rec = buildingsBySystem.get(b.systemId);
     if (rec) rec[b.buildingType] = b.count;
@@ -161,6 +162,9 @@ export function toTickSystems(world: World): TickSystem[] {
     const idle = idleMonthsBySystem.get(b.systemId);
     if (idle) idle[b.buildingType] = b.idleMonths;
     else idleMonthsBySystem.set(b.systemId, { [b.buildingType]: b.idleMonths });
+    const debt = collapseDebtBySystem.get(b.systemId);
+    if (debt) debt[b.buildingType] = b.collapseDebt ?? 0;
+    else collapseDebtBySystem.set(b.systemId, { [b.buildingType]: b.collapseDebt ?? 0 });
   }
 
   return world.systems.map((s) => ({
@@ -180,6 +184,7 @@ export function toTickSystems(world: World): TickSystem[] {
     unrest: s.unrest,
     buildings: buildingsBySystem.get(s.id) ?? {},
     buildingIdleMonths: idleMonthsBySystem.get(s.id) ?? {},
+    buildingCollapseDebt: collapseDebtBySystem.get(s.id) ?? {},
     yields: resourceVectorFromColumns(
       {
         yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -228,7 +233,13 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
   for (const s of tickSystems) {
     for (const [buildingType, count] of Object.entries(s.buildings)) {
       if (count > 0) {
-        rows.push({ systemId: s.id, buildingType, count, idleMonths: s.buildingIdleMonths[buildingType] ?? 0 });
+        rows.push({
+          systemId: s.id,
+          buildingType,
+          count,
+          idleMonths: s.buildingIdleMonths[buildingType] ?? 0,
+          collapseDebt: s.buildingCollapseDebt[buildingType] ?? 0,
+        });
       }
     }
   }
@@ -596,7 +607,7 @@ export async function runWorldTick(
     await runInfrastructureDecayProcessor(
       decayWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { decay: INFRASTRUCTURE_DECAY_PARAMS },
+      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month },
     );
     systems = decayWorld.systems;
     processorsRun.push("infrastructure-decay");
