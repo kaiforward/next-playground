@@ -95,11 +95,27 @@ describe("computeMarketHealth — stock pins", () => {
   });
 
   it("sorts goods by total pinned fraction so the worst pathologies surface first", () => {
+    // Each stock is placed against its OWN good's band — ore and metals have
+    // different price ceilings, so a stock that reads mid-band for one can read
+    // pinned for the other. The totals must stay apart (ore 1.0 vs metals 0.5)
+    // for the ordering to mean anything: on a tie the comparator returns 0 and
+    // a stable sort keeps insertion order, so the assertion would pass whichever
+    // way the sort pointed.
+    // ore: single market at the floor → total pinned 1.0.
+    // metals: one at the floor, one mid-band → total pinned 0.5.
+    const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);
+    const metalsBand = marketBandForRow(market("sys-1", "metals", 0), GOODS.metals);
     const { stockPins } = computeMarketHealth([
-      market("sys-1", "ore", 5), // ore fully floor-pinned
-      market("sys-1", "metals", 5), // metals half-pinned
-      market("sys-2", "metals", 100),
+      market("sys-1", "ore", oreBand.minStock),
+      market("sys-1", "metals", metalsBand.minStock),
+      market("sys-2", "metals", (metalsBand.minStock + metalsBand.maxStock) / 2),
     ]);
+
+    const ore = stockPins.find((p) => p.goodId === "ore")!;
+    const metals = stockPins.find((p) => p.goodId === "metals")!;
+    expect(ore.floorFrac + ore.ceilingFrac).toBeCloseTo(1, 5);
+    expect(metals.floorFrac + metals.ceilingFrac).toBeCloseTo(0.5, 5);
+
     expect(stockPins[0].goodId).toBe("ore");
   });
 });

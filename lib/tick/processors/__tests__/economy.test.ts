@@ -115,7 +115,7 @@ describe("economy processor: strike suppression", () => {
   it("high unrest (≥ threshold) produces lower post-tick stock than unrest=0", async () => {
     const goodId = "food";
     // Active-production zone: below the operating ceiling (targetStock × holdCover = 40 × 1.3 = 52)
-    // and well above the floor (minStock=8) so both production factors are positive and the
+    // and well above the floor (minStock=20) so both production factors are positive and the
     // strike multiplier's suppression is observable.
     const prodStock = FIXTURE_BAND.targetStock - 2; // ≈ 38 — below operating ceiling
 
@@ -166,7 +166,7 @@ describe("economy processor: strike suppression", () => {
 
   it("strike does NOT suppress consumption (consumers drain stock regardless)", async () => {
     const goodId = "food";
-    // Near the band ceiling (maxStock=320) so the consumer has plenty to drain
+    // Near the band ceiling (maxStock=200) so the consumer has plenty to drain
     // and the assertion is not affected by stock hitting the floor mid-tick.
     const highStock = FIXTURE_BAND.maxStock - 10;
 
@@ -194,7 +194,7 @@ describe("economy processor: strike suppression", () => {
 describe("economy processor: dissatisfaction signal", () => {
   it("returns economySignals with dissatisfactionBySystem", async () => {
     const consumer = makeConsumerSystem("sys-c", 0);
-    // Mid-band stock (minStock=8, maxStock=320 → mid≈164) — a neutral starting point.
+    // Mid-band stock (minStock=20, maxStock=200 → mid=110) — a neutral starting point.
     const midStock = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-c", "food", midStock)], modifiers: [] },
@@ -206,8 +206,8 @@ describe("economy processor: dissatisfaction signal", () => {
 
   it("D > 0 for a starved consumer system (stock pinned just above minStock)", async () => {
     const consumer = makeConsumerSystem("sys-starved", 0);
-    // Pin stock just above the real per-market floor (minStock=8) so it's in
-    // the low-satisfaction zone. minStock+1=9 is well inside the scarcity region.
+    // Pin stock just above the real per-market floor (minStock=20) so it's in
+    // the low-satisfaction zone. minStock+1=21 is well inside the scarcity region.
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-starved", "food", FIXTURE_BAND.minStock + 1)], modifiers: [] },
     );
@@ -218,7 +218,7 @@ describe("economy processor: dissatisfaction signal", () => {
 
   it("D ≈ 0 for a well-fed consumer system (stock near maxStock)", async () => {
     const consumer = makeConsumerSystem("sys-fed", 0);
-    // Pin stock near the per-market ceiling (maxStock=320) so satisfaction is very high.
+    // Pin stock near the per-market ceiling (maxStock=200) so satisfaction is very high.
     const world = new InMemoryEconomyWorld(
       { systems: [consumer], markets: [makeMarket("sys-fed", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
     );
@@ -229,7 +229,7 @@ describe("economy processor: dissatisfaction signal", () => {
 
   it("starved system has higher D than well-fed system", async () => {
     const starved = makeConsumerSystem("sys-s", 0);
-    // Starved: just above minStock(8) → scarcity zone → high D.
+    // Starved: just above minStock(20) → scarcity zone → high D.
     const starvedWorld = new InMemoryEconomyWorld(
       { systems: [starved], markets: [makeMarket("sys-s", "food", FIXTURE_BAND.minStock + 1)], modifiers: [] },
     );
@@ -237,7 +237,7 @@ describe("economy processor: dissatisfaction signal", () => {
     const dStarved = starvedResult.economySignals!.dissatisfactionBySystem.get("sys-s") ?? 0;
 
     const fed = makeConsumerSystem("sys-f", 0);
-    // Fed: near maxStock(320) → abundance zone → low D.
+    // Fed: near maxStock(200) → abundance zone → low D.
     const fedWorld = new InMemoryEconomyWorld(
       { systems: [fed], markets: [makeMarket("sys-f", "food", FIXTURE_BAND.maxStock - 1)], modifiers: [] },
     );
@@ -248,10 +248,9 @@ describe("economy processor: dissatisfaction signal", () => {
   });
 
   it("reports a well-supplied system (stock at the anchor) as fully content", async () => {
-    // Seed stock at targetStock (=40 for demandRate=1). After the change the
-    // consume factor saturates at the anchor, so post-tick stock is just slightly
-    // below targetStock — satisfaction ≈ 1 → D ≈ 0. Pre-change: ceiling was maxStock
-    // (320), giving factor ≈ sqrt(32/312) ≈ 0.32 at stock=40, D >> 0.05.
+    // Seed stock at targetStock (=40 for demandRate=1). The consume factor
+    // saturates at the anchor, so post-tick stock is just slightly below
+    // targetStock — satisfaction ≈ 1 → D ≈ 0.
     const systemId = "sys-anchor";
     const consumer = makeConsumerSystem(systemId, 0);
     const world = new InMemoryEconomyWorld({
@@ -266,7 +265,7 @@ describe("economy processor: dissatisfaction signal", () => {
 
   it("producer system with stock near maxStock has very low D", async () => {
     // Producers also consume at per-capita rates but with small population;
-    // when stock is near the per-market ceiling (maxStock=320), satisfaction
+    // when stock is near the per-market ceiling (maxStock=200), satisfaction
     // is near 1, so D ≈ 0.
     const producer = makeProducerSystem("sys-p", 0);
     const world = new InMemoryEconomyWorld(
@@ -358,7 +357,9 @@ describe("economy processor: supply-chain input-gating", () => {
   it("throttles metals production when local ore is scarce", async () => {
     // Active-production zone for metals: below the operating ceiling (targetStock × 1.3 ≈ 52)
     // so production can occur when ore is available and be fully blocked when gate = 0.
-    const MID_METALS = FIXTURE_BAND.minStock + 10; // ≈ 18 — well within [floor=8, ceiling≈52]
+    // The band that matters here is metals' OWN (GOODS.metals priceCeiling 2.5
+    // ⇒ floor=16), not food's — FIXTURE_BAND just supplies a convenient scalar.
+    const MID_METALS = FIXTURE_BAND.minStock + 10; // 30 — well within [floor=16, ceiling≈52]
 
     function makeSmeltingSystem(id: string): TickSystem {
       return {
@@ -409,7 +410,7 @@ describe("economy processor: supply-chain input-gating", () => {
     const metalsB = worldB.markets.find((m) => m.goodId === "metals")!.stock;
 
     // Ore-rich A: ore at 4× targetStock (160), gate ≈ 1 → metals production raises stock above its start.
-    // Ore-starved B: ore at floor (minStock=8, drawable=0), gate = 0 → no metals output,
+    // Ore-starved B: ore at floor (minStock=20, drawable=0), gate = 0 → no metals output,
     // so stock cannot rise (noise is off; it only holds flat or drains via consumption).
     expect(metalsA).toBeGreaterThan(MID_METALS);
     expect(metalsB).toBeLessThanOrEqual(MID_METALS);

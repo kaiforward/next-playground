@@ -9,7 +9,7 @@ import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { isEventTypeId } from "@/lib/types/guards";
 import type { WorldEvent, WorldEventModifier } from "@/lib/world/types";
@@ -139,10 +139,7 @@ export function getEconomySnapshot(): ServiceResult<{ systems: EconomySnapshotSy
       goodId: m.goodId,
       goodName: good.name,
       stock: m.stock,
-      price: spotPrice(
-        curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, m.demandRate, m.anchorMult),
-        m.stock,
-      ),
+      price: spotPrice(curveForRow(m, good), m.stock),
     });
     marketsBySystem.set(m.systemId, list);
   }

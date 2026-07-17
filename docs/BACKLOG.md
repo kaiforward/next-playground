@@ -10,6 +10,22 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
+- **[M] Type `goodId` as a `GoodId` union instead of `string`** — `GOODS` is declared
+  `Record<string, GoodDefinition>` (`lib/constants/goods.ts`) and every `goodId` is a bare `string`, so
+  `GOODS[goodId]` type-checks as `GoodDefinition` and never narrows to `undefined` — a typo'd or stale id
+  is a runtime `undefined` deref with no compile-time signal. Not currently a live bug: world-gen seeds
+  every `goodId` from `Object.keys(GOODS)`, so the key always exists. It became worth doing when the
+  market World↔Tick round-trip was deleted: the tick used to resolve the catalog in exactly one place
+  (`toTickMarkets`), and now reads `GOODS[goodId]` at ~10 point-of-use sites, so the untyped key is
+  load-bearing in more places. Violates the "Typed keys" checklist item and "fix the types at the
+  source rather than casting at the consumer".
+  **Sized as its own PR, not a fold-in**: 89 `goodId: string` declaration sites across 96 files. The
+  shape is `export const GOODS = {...} satisfies Record<string, GoodDefinition>` +
+  `type GoodId = keyof typeof GOODS`, then propagate through `WorldMarket.goodId`,
+  `MarketRowForLogistics`, and every consumer. The real work is the **save-file boundary**: `deserialize`
+  takes untrusted JSON, so a save written before the union (or hand-edited) needs a guard in
+  `lib/types/guards.ts` narrowing `string` → `GoodId` with a decided failure mode (reject the save vs
+  drop the row). Don't start it without settling that.
 - **[S] The default quick-run is too short to exercise logistics** — `npm run simulate` runs 500 ticks,
   and directed-logistics does not move a single unit before tick 456. Measured at 600 systems / seed 42:
   the 500-tick default reports **30 transfers over 2 pulses across 19 systems and 6 of 26 goods**, while
@@ -76,8 +92,16 @@ Blocked on prerequisites or very large scope.
   longer blocked** — the market round-trip it waited on has shipped.
   The gateable off-boundary setup now reads (2,400 systems): `migration+edges` 12.4%,
   `marketRowsBySystem` 12.3%, `toTickSystems` 13.3% — together ~38% of an off-boundary tick, second
-  only to events (~40%, which gating cannot touch). `marketRowsBySystem` is the one the round-trip
-  deletion left standing: it still rebuilds a row per market every tick, so it is the natural first
-  cut.
+  only to events (~40%, which gating cannot touch). `marketRowsBySystem` is the natural first cut of
+  those: it still rebuilds a row per market every tick.
+  **`marketRowsBySystem` is not the only full-market pass left, though — re-measure before assuming
+  it is.** Each adapter still copies every market row on construction
+  (`initial.markets.map((m) => ({ ...m }))`), and both the events and economy stages are
+  unconditional, so **two full ~62K-row copies run back-to-back every tick** (a third — population —
+  on boundary ticks only). Deleting the round-trip removed the top-of-tick copy but left these, so
+  they are now a larger share of a smaller tick. They are not removable by gating alone: they are what
+  stops a stage mutating rows the previous world still holds (see the `let markets` comment in
+  `lib/world/tick.ts`). Retiring them means giving markets a real dirty/ownership model, which is its
+  own piece of work — size it before folding it in here.
 - **[M] Switchable faction relation model** — `FactionRelation` currently stores one shared `score` per faction pair (symmetric). If the War re-spec or later play-testing reveals asymmetric opinions matter (one-sided grudges, vassal arrangements, "I trust you more than you trust me"), switch to per-direction scores. Two shapes available: (a) add `aOpinionOfB` / `bOpinionOfA` columns keeping the canonical-ordering convention; (b) drop ordering, store two rows per pair. Reevaluate when the pivot's diplomacy phase (Phase 5) or war (Phase 6) is specced.
 - **[S] Flow-overlay particle thresholds vs economy-scale** — The map flow-overlay particle density (`LOGISTICS_FLOW` / `TRADE_FLOW` in `components/map/pixi/theme.ts`: `volumePerExtraParticle`, `minParticlesPerEdge`, `maxParticlesPerEdge`, `maxTotalParticles`) is tuned for S=1 flow magnitudes and is intentionally **not** scaled by `ECONOMY_SCALE` (client-side visual constants; the knob is server-only by design). At the calibrated S≈100 every edge pins at `maxParticlesPerEdge` and the global budget concentrates on the top flows, so the overlay loses its high- vs low-volume contrast (purely a legibility loss, not perf/correctness). Revisit the thresholds when running at the scaled economy; also a natural fold-in for the pivot's flow-system merge (Phase 4).

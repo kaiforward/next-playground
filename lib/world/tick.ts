@@ -512,6 +512,11 @@ export async function runWorldTick(
   }
 
   // ── events ──
+  // Load-bearing for the market alias above (see `let markets`): this stage is
+  // unconditional and the first to touch markets, and its adapter copies every
+  // row on construction — so `markets` stops aliasing `world.markets` here,
+  // before any stage writes. Gating this stage, or moving it after another
+  // market writer, would leave the previous world's rows exposed to mutation.
   {
     const eventsWorld = new InMemoryEventsWorld(
       { events, modifiers: [], markets, nextId },

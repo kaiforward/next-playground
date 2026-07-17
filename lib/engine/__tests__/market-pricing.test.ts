@@ -67,7 +67,7 @@ describe("spotPrice", () => {
   });
 });
 
-import { curveForGood, marketBand } from "../market-pricing";
+import { curveForGood, curveForRow, marketBand } from "../market-pricing";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 
 describe("marketBand", () => {
@@ -121,5 +121,39 @@ describe("curveForGood", () => {
     const thin = curveForGood(25, 0.5, 2.0, 1);
     const deep = curveForGood(25, 0.5, 2.0, 8);
     expect(deep.targetStock).toBeGreaterThan(thin.targetStock);
+  });
+});
+
+describe("curveForRow", () => {
+  const good = { basePrice: 25, priceFloor: 0.5, priceCeiling: 2.0 };
+
+  it("builds the curve the equivalent five-argument curveForGood call builds", () => {
+    expect(curveForRow({ demandRate: 3, anchorMult: 2 }, good)).toEqual(
+      curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, 3, 2),
+    );
+  });
+
+  it("reads the good's price multiples from the catalog entry, not the row", () => {
+    expect(curveForRow({ demandRate: 3, anchorMult: 1 }, good)).toEqual({
+      basePrice: 25,
+      targetStock: TARGET_COVER * 3,
+      k: 1,
+      floorMult: 0.5,
+      ceilingMult: 2.0,
+    });
+  });
+
+  it("defaults a row with no anchorMult to an unshifted anchor", () => {
+    // A row that omits anchorMult carries no active anchor_shift event, which
+    // is the same reference as an explicit 1 — not a collapsed (zero) anchor.
+    expect(curveForRow({ demandRate: 3 }, good).targetStock).toBe(
+      curveForRow({ demandRate: 3, anchorMult: 1 }, good).targetStock,
+    );
+  });
+
+  it("carries the row's anchorMult through to the reference", () => {
+    const base = curveForRow({ demandRate: 3, anchorMult: 1 }, good);
+    const shifted = curveForRow({ demandRate: 3, anchorMult: 2 }, good);
+    expect(shifted.targetStock).toBeCloseTo(base.targetStock * 2);
   });
 });

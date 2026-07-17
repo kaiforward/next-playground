@@ -1,5 +1,5 @@
 import { getWorld } from "@/lib/world/store";
-import { spotPrice, curveForGood } from "@/lib/engine/market-pricing";
+import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { ServiceError } from "./errors";
 import type { MarketComparisonEntry } from "@/lib/types/game";
@@ -25,10 +25,7 @@ export function getMarketComparison(
     .map((m) => ({
       systemId: m.systemId,
       basePrice: good.basePrice,
-      currentPrice: spotPrice(
-        curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, m.demandRate, m.anchorMult),
-        m.stock,
-      ),
+      currentPrice: spotPrice(curveForRow(m, good), m.stock),
       stock: Math.floor(m.stock),
     }));
 

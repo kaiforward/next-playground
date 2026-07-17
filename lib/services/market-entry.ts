@@ -1,6 +1,6 @@
 import {
   spotPrice,
-  curveForGood,
+  curveForRow,
   type MarketCurve,
 } from "@/lib/engine/market-pricing";
 import { GOOD_NAME_TO_KEY } from "@/lib/constants/goods";
@@ -23,7 +23,7 @@ export function curveForGoodRow(
   const goodKey = GOOD_NAME_TO_KEY.get(good.name) ?? good.name;
   return {
     goodKey,
-    curve: curveForGood(good.basePrice, good.priceFloor, good.priceCeiling, demandRate, anchorMult),
+    curve: curveForRow({ demandRate, anchorMult }, good),
   };
 }
 
