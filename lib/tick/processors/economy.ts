@@ -2,6 +2,7 @@ import type {
   TickContext,
   TickProcessorResult,
   EconomySignals,
+  GlobalEventMap,
 } from "../types";
 import {
   selfLimitingFactor,
@@ -18,9 +19,21 @@ import type {
   MarketUpdate,
 } from "@/lib/tick/world/economy-world";
 import { dissatisfaction, strikeMultiplier, type GoodSatisfaction } from "@/lib/engine/population";
-import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
+import { pulseShard, isPulseTick, catchUpFactor } from "@/lib/tick/shard";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
+
+/**
+ * The broadcast this processor emits on a tick where it resolves nothing.
+ *
+ * Exported because `runWorldTick` gates this stage's setup off-pulse and so never
+ * calls the body — it emits this instead, keeping the per-tick signal identical to
+ * an ungated run. One definition so the gated and ungated paths can't diverge.
+ */
+export function economyOffPulsePayload(tick: number, interval: number): Partial<GlobalEventMap> {
+  const iv = Math.max(1, Math.floor(interval));
+  return { economyTick: [{ systemCount: 0, shardIndex: ((tick % iv) + iv) % iv, shardCount: iv }] };
+}
 
 /**
  * Pure processor body, run against the in-memory adapter by `runWorldTick`.
@@ -41,15 +54,20 @@ export async function runEconomyProcessor(
 ): Promise<TickProcessorResult> {
   const { interval, simParams, modifierCaps, strikeParams } = params;
 
-  const allSystemIds = await world.getSystemIds();
-  const { start, end } = pulseShard(allSystemIds.length, ctx.tick, interval);
   // Normalize the interval the same way pulseShard does so the reported shard
   // index/count can't diverge from the actual pulse boundary for a non-integer interval.
   const iv = Math.max(1, Math.floor(interval));
   const shardIndex = ((ctx.tick % iv) + iv) % iv;
-  const emptyPayload = {
-    economyTick: [{ systemCount: 0, shardIndex, shardCount: iv }],
-  };
+  const emptyPayload = economyOffPulsePayload(ctx.tick, interval);
+  // Off-pulse before reading the world: the system list is fetched only for its
+  // length, which pulseShard uses solely to distinguish "empty galaxy" — so off-pulse
+  // it cost a filter and a sort over every system to reach a foregone conclusion.
+  if (!isPulseTick(ctx.tick, interval)) {
+    return { globalEvents: emptyPayload };
+  }
+
+  const allSystemIds = await world.getSystemIds();
+  const { start, end } = pulseShard(allSystemIds.length, ctx.tick, interval);
   if (start >= end) {
     return { globalEvents: emptyPayload };
   }

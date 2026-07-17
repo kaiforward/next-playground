@@ -1,4 +1,4 @@
-import { shardRange, catchUpFactor, shardGroupForIndex, ticksUntilShard, pulseShard } from "@/lib/tick/shard";
+import { shardRange, catchUpFactor, shardGroupForIndex, ticksUntilShard, pulseShard, isPulseTick } from "@/lib/tick/shard";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 
 it("covers every index exactly once across one interval, no overlap", () => {
@@ -43,6 +43,33 @@ it("shardGroupForIndex inverts shardRange: every index falls in its group's wind
 });
 it("shardGroupForIndex degenerates safely (empty list → group 0)", () => {
   expect(shardGroupForIndex(0, 0, 24)).toBe(0);
+});
+it("isPulseTick: true only on the boundary tick, periodic in tick", () => {
+  const interval = 24;
+  for (const t of [0, 24, 48, 240]) expect(isPulseTick(t, interval)).toBe(true);
+  for (let t = 1; t < interval; t++) expect(isPulseTick(t, interval)).toBe(false);
+  expect(isPulseTick(25, interval)).toBe(false);
+});
+it("isPulseTick: degenerates safely (interval ≤ 1 → every tick; non-integer floors; negative ticks)", () => {
+  expect(isPulseTick(7, 1)).toBe(true);   // interval 1 → every tick is a pulse
+  expect(isPulseTick(7, 0)).toBe(true);   // clamped to 1
+  expect(isPulseTick(7, -5)).toBe(true);  // clamped to 1
+  expect(isPulseTick(24, 24.9)).toBe(true);  // floors to 24
+  expect(isPulseTick(25, 24.9)).toBe(false);
+  // Negative ticks stay non-negative through the double-modulo, so they agree with
+  // their positive counterparts rather than reporting a spurious pulse.
+  expect(isPulseTick(-24, 24)).toBe(true);
+  expect(isPulseTick(-1, 24)).toBe(false);
+});
+it("isPulseTick: is the predicate pulseShard resolves — the two can never disagree", () => {
+  // runWorldTick gates pulse stages' setup on isPulseTick while the bodies bail on
+  // pulseShard; a divergence would silently skip a stage. Pin them to one definition.
+  for (const interval of [1, 3, 24, 24.9]) {
+    for (let t = 0; t < 50; t++) {
+      const { start, end } = pulseShard(100, t, interval);
+      expect(start < end).toBe(isPulseTick(t, interval));
+    }
+  }
 });
 it("pulseShard: whole list on the boundary tick, empty otherwise", () => {
   const total = 100, interval = 24;

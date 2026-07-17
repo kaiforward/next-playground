@@ -58,19 +58,47 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
-- **[M] Tick perf: the events processor scales worst in the tick — and is now the biggest lever in
-  it** — it costs 1.3ms/tick at 600 systems and 10.5ms at 2,400: **~7× the cost for 4× the systems**,
-  the worst scaling curve of any stage. Deleting the market World↔Tick round-trip roughly halved the
-  off-boundary tick without touching events, so its share **doubled from 19.4% to ~40%** — it is now
-  the single largest stage off-boundary, where the round-trip used to be. It legitimately runs every
-  tick (phase progression, plus a spawn every `EVENT_SPAWN_INTERVAL`), so boundary-gating does not
-  touch it; the cost is the processor itself. At 10,000+ systems this is the wall. **Fold it into the
-  events re-point** (pivot Phase 5, [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4
-  "Re-point") rather than fixing it standalone — that pass rewrites the model anyway (physical
-  perturbations + player-facing choice events), so pay the perf work once, there.
+- **[M] Tick perf: `toTickSystems` is the whole off-pulse tick outside events** — it costs 2.5ms/tick
+  at 2,400 systems, **19.0% of an off-pulse tick** and, since boundary-gating shipped, the only
+  remaining cost there other than events (67.5%). **Gating cannot touch it**: ship-arrivals and events
+  both genuinely run every tick and both consume `TickSystem` rows, so the join has to happen. The
+  lever is to *narrow* it, not skip it — it walks every building row in the galaxy to build the count
+  and idle-months rosters, then maps every system, and off-pulse the only consumers are ship-arrivals
+  (ids/names) and events (ids, names, control, region). Worth checking what those two actually read
+  before assuming the full row is needed; a cheaper off-pulse projection, or moving the roster join
+  behind what needs it, is the likely shape. Fold into the events re-point only if that pass changes
+  what events reads from a system — otherwise it stands alone.
+- **[M] Tick perf: the events processor scales worst in the tick — and is now two-thirds of it** — it
+  costs 1.3ms/tick at 600 systems and ~9-10ms at 2,400: **~7× the cost for 4× the systems**, the worst
+  scaling curve of any stage. Two shipped changes have hollowed out everything around it without
+  touching it — deleting the market World↔Tick round-trip, then gating the monthly-pulse stages' setup
+  — so its share has gone **19.4% → ~40% → 67.5% of an off-pulse tick**. It legitimately runs every
+  tick (phase progression, plus a spawn every `EVENT_SPAWN_INTERVAL`), so neither lever touched it;
+  the cost is the processor itself. Off-pulse it now essentially *is* the tick: events 67.5%,
+  `toTickSystems` 19.0% (its own entry above), relations 7.8%, everything else <4%. At 10,000+ systems
+  this is the wall. **Fold it into the events re-point** (pivot Phase 5,
+  [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4 "Re-point") rather than fixing it
+  standalone — that pass rewrites the model anyway (physical perturbations + player-facing choice
+  events), so pay the perf work once, there.
   Percentages are the portable figure — absolute ms move with machine and load (the same off-boundary
   tick measured 54ms on 2026-07-16 and 94ms on 2026-07-17 pre-fix), so re-baseline in-run rather than
-  comparing ms across sessions.
+  comparing ms across sessions, and measure a before/after in one process as the gating change did.
+- **[M] Give markets a real dirty/ownership model — the last full-galaxy copy per tick** — every tick
+  the events adapter copies every market row in the galaxy on construction
+  (`initial.markets.map((m) => ({ ...m }))`, `lib/tick/adapters/memory/events.ts`) — ~62,000 rows at
+  2,400 systems — and events almost never writes one (the spawn log routinely reports `0 shocks`).
+  That copy is **load-bearing, not waste**: `markets` starts as `world.markets` itself, and the events
+  adapter is the first stage to touch it, so its copy is what stops a later stage mutating rows the
+  previous world still holds (see the `let markets` comment in `lib/world/tick.ts`). It cannot be
+  gated away for the same reason the events stage cannot — it runs every tick by design.
+  Boundary-gating already removed the *second* copy (economy's, which off-pulse was a redundant copy
+  of rows events had just de-aliased); population's is pulse-only. So this is now the one remaining
+  per-tick full-market pass, and retiring it needs an actual ownership model — copy-on-write rows, or
+  a dirty flag the events stage sets when it shocks a market — not another gate. Real correctness risk
+  (aliasing the previous world corrupts a save), so it needs a design pass.
+  Note the obvious dirty-check is dead on arrival for the same reason recorded when the round-trip was
+  deleted: reference-identity against the adapter output always reports "dirty", because the
+  constructor hands back fresh rows whether or not anything changed.
 - **[L] Paradox-style nested/pinnable deep tooltips** — Rich-tooltip infrastructure in the spirit of
   Stellaris / EU5 / Victoria: tooltips whose terms are themselves hoverable (nested), pinnable for comparison,
   backed by a cross-linking concept glossary so any mechanic term (labour grade, basket, anchor, fulfilment)
@@ -83,25 +111,5 @@ Direction is clear, approach needs a design doc before implementation.
 
 Blocked on prerequisites or very large scope.
 
-- **[S] Tick perf: gate the per-tick setup work at the boundary** — most stages build their full setup
-  every tick and rely on the *processor* to bail internally via `pulseShard`; relations is the only
-  block in `runWorldTick` that is itself tick-gated. Gating the setup for economy/migration/logistics/
-  build recovers roughly the same absolute ms as before, but against a tick that is now half as long
-  — so its **share roughly doubled** (the ~13% scoping was taken against the baseline from before the
-  market round-trip was deleted). Scoped on the parked `perf/tick-boundary-gating` branch; **no
-  longer blocked** — the market round-trip it waited on has shipped.
-  The gateable off-boundary setup now reads (2,400 systems): `migration+edges` 12.4%,
-  `marketRowsBySystem` 12.3%, `toTickSystems` 13.3% — together ~38% of an off-boundary tick, second
-  only to events (~40%, which gating cannot touch). `marketRowsBySystem` is the natural first cut of
-  those: it still rebuilds a row per market every tick.
-  **`marketRowsBySystem` is not the only full-market pass left, though — re-measure before assuming
-  it is.** Each adapter still copies every market row on construction
-  (`initial.markets.map((m) => ({ ...m }))`), and both the events and economy stages are
-  unconditional, so **two full ~62K-row copies run back-to-back every tick** (a third — population —
-  on boundary ticks only). Deleting the round-trip removed the top-of-tick copy but left these, so
-  they are now a larger share of a smaller tick. They are not removable by gating alone: they are what
-  stops a stage mutating rows the previous world still holds (see the `let markets` comment in
-  `lib/world/tick.ts`). Retiring them means giving markets a real dirty/ownership model, which is its
-  own piece of work — size it before folding it in here.
 - **[M] Switchable faction relation model** — `FactionRelation` currently stores one shared `score` per faction pair (symmetric). If the War re-spec or later play-testing reveals asymmetric opinions matter (one-sided grudges, vassal arrangements, "I trust you more than you trust me"), switch to per-direction scores. Two shapes available: (a) add `aOpinionOfB` / `bOpinionOfA` columns keeping the canonical-ordering convention; (b) drop ordering, store two rows per pair. Reevaluate when the pivot's diplomacy phase (Phase 5) or war (Phase 6) is specced.
 - **[S] Flow-overlay particle thresholds vs economy-scale** — The map flow-overlay particle density (`LOGISTICS_FLOW` / `TRADE_FLOW` in `components/map/pixi/theme.ts`: `volumePerExtraParticle`, `minParticlesPerEdge`, `maxParticlesPerEdge`, `maxTotalParticles`) is tuned for S=1 flow magnitudes and is intentionally **not** scaled by `ECONOMY_SCALE` (client-side visual constants; the knob is server-only by design). At the calibrated S≈100 every edge pins at `maxParticlesPerEdge` and the global budget concentrates on the top flows, so the overlay loses its high- vs low-volume contrast (purely a legibility loss, not perf/correctness). Revisit the thresholds when running at the scaled economy; also a natural fold-in for the pivot's flow-system merge (Phase 4).

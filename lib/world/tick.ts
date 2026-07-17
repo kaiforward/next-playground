@@ -12,6 +12,12 @@
  * → relations. Economy signals flow between stages via the in-memory
  * `TickContext.results` map.
  *
+ * Only ship-arrivals and events run every tick. Everything from economy to
+ * directed-build resolves on the monthly pulse (`isPulseTick`), and its setup is
+ * gated on that same predicate rather than built and discarded — the bodies bail
+ * internally too, so the gate is an optimisation, not the rule. Relations keeps its
+ * own `RELATIONS_FREQUENCY` cadence.
+ *
  * Some of `World`'s flat rows (`WorldSystem`, …) don't match the adapters'
  * `Tick*` row shapes field-for-field (see the join/merge helpers below) —
  * `World` is schema-faithful and omits derived data (a system's owning
@@ -57,7 +63,7 @@ import type { GovernmentType } from "@/lib/types/game";
 
 import { runShipArrivalsProcessor } from "@/lib/tick/processors/ship-arrivals";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
-import { runEconomyProcessor } from "@/lib/tick/processors/economy";
+import { runEconomyProcessor, economyOffPulsePayload } from "@/lib/tick/processors/economy";
 import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
 import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runMigrationProcessor } from "@/lib/tick/processors/migration";
@@ -76,10 +82,12 @@ import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-bu
 import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
+import { isPulseTick } from "@/lib/tick/shard";
 import type {
   TickContext,
   TickBroadcastRaw,
   GlobalEventMap,
+  EconomySignals,
 } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
@@ -551,19 +559,30 @@ export async function runWorldTick(
     processorsRun.push("events");
   }
 
-  // ── economy ──
-  const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
-  const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
-    interval: ECONOMY_UPDATE_INTERVAL,
-    simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
-    modifierCaps: MODIFIER_CAPS,
-    strikeParams: STRIKE_PARAMS,
-  });
-  systems = economyWorld.systems;
-  markets = economyWorld.markets;
-  const economySignals = economyResult.economySignals;
-  mergeGlobalEvents(globalEvents, economyResult);
-  processorsRun.push("economy");
+  // ── economy (pulse-gated) ──
+  // Off-pulse this stage resolves nothing, so building its adapter — which copies
+  // every system row and every market row in the galaxy — only to have the body bail
+  // is pure waste. The gate emits the same off-pulse broadcast the body would have,
+  // so a gated tick is indistinguishable from an ungated one from the outside.
+  let economySignals: EconomySignals | undefined;
+  if (isPulseTick(tick, ECONOMY_UPDATE_INTERVAL)) {
+    const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
+    const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
+      interval: ECONOMY_UPDATE_INTERVAL,
+      simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
+      modifierCaps: MODIFIER_CAPS,
+      strikeParams: STRIKE_PARAMS,
+    });
+    systems = economyWorld.systems;
+    markets = economyWorld.markets;
+    economySignals = economyResult.economySignals;
+    mergeGlobalEvents(globalEvents, economyResult);
+    processorsRun.push("economy");
+  } else {
+    mergeGlobalEvents(globalEvents, {
+      globalEvents: economyOffPulsePayload(tick, ECONOMY_UPDATE_INTERVAL),
+    });
+  }
 
   // ── infrastructure-decay ──
   if (economySignals) {
@@ -590,191 +609,221 @@ export async function runWorldTick(
     processorsRun.push("population");
   }
 
-  // ── economy-participation gate (developed only) ──
-  // The three economy selection paths gate through isEconomicallyActive: the economy
-  // adapter's getSystemIds (which cascades to infrastructure-decay + population),
-  // migration's open edges (below), and directed-logistics' participants (below).
-  // directed-build keeps the full `systems` — it needs unclaimed/controlled to claim
-  // and develop.
-  const developedSystemIds = new Set(
-    systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
-  );
-
-  // ── open edges (faction-bounded, then gated to developed-both for migration) ──
-  const sysFactionForEdges = new Map(systems.map((s) => [s.id, s.factionId]));
-  const openEdges: EdgeView[] = buildOpenEdges(connections, sysFactionForEdges);
-  const migrationEdges = openEdges.filter(
-    (e) => developedSystemIds.has(e.aSystemId) && developedSystemIds.has(e.bSystemId),
-  );
-
-  // ── migration ──
-  {
-    const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
-    await runMigrationProcessor(migWorld, newTickCtx(), {
-      interval: ECONOMY_UPDATE_INTERVAL,
-      flow: MIGRATION_PARAMS,
-      delivery: COLONY_DELIVERY_PARAMS,
-    });
-    systems = migWorld.systems;
-    processorsRun.push("migration");
-  }
-
-  // directed-logistics and directed-build share one hop-BFS, run at the
-  // larger of their two (independently tunable) MAX_HOPS radii — each
-  // stage's routeCost closure still applies its OWN cutoff below, so a BFS
-  // computed at the larger radius is a safe superset for the smaller one.
-  // The BFS is computed once per world, not per tick (see hopsCache).
-  if (hopsCache?.key !== world.connections) {
-    hopsCache = {
-      key: world.connections,
-      hops: computeBoundedHopDistances(
-        connections,
-        Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
-      ),
-    };
-  }
-  const hops = hopsCache.hops;
-  // Per-system market row groups, built once and shared: directed-build
-  // patches just the stock deltas directed-logistics applied instead of
-  // remapping every market row a second time (see patchMarketRowStocks).
-  const logisticsMarketRows = marketRowsBySystem(markets);
-  let dlStockUpdates: Map<string, number> = new Map();
-
-  // ── directed-logistics ──
-  {
-    const routeCost: RouteCost = (f, t) => {
-      const h = hops.get(f)?.get(t);
-      return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
-    };
-    // Directed-logistics moves goods only between developed systems.
-    const rows = buildLogisticsRows(
-      systems.filter((s) => developedSystemIds.has(s.id)),
-      logisticsMarketRows,
+  // ── monthly pulse: migration, directed-logistics, directed-build (pulse-gated) ──
+  // Each stage below resolves on the monthly pulse and bails internally otherwise, but
+  // its setup — the participation set, the open-edge graph, the per-system market row
+  // groups, the ownership maps — is read by nothing else, so off-pulse it was all built
+  // and thrown away. The gate stops building those inputs; the bodies are untouched.
+  //
+  // The condition is the disjunction of the stages' OWN pulse predicates, each built
+  // from the interval that stage's body is handed below, because the setup is shared
+  // and any one stage resolving is reason to build it. The three intervals alias the
+  // month today but are declared separately: gating on just one of them would let a
+  // retune of another silently skip that stage's pulses — a performance mechanism
+  // quietly deciding a gameplay cadence. A disjunction fails the safe way, building
+  // setup nobody reads rather than dropping work. (Gating on the shortest interval
+  // would NOT be safe: it only covers the others when it divides them.)
+  //
+  // The flowEvents retention prune is deliberately NOT in here: it is cheap, and it
+  // runs every tick today (see below the block).
+  const migrationResolves = isPulseTick(tick, ECONOMY_UPDATE_INTERVAL);
+  const logisticsResolves = isPulseTick(tick, DIRECTED_LOGISTICS.INTERVAL);
+  const buildResolves = isPulseTick(tick, DIRECTED_BUILD.INTERVAL);
+  if (migrationResolves || logisticsResolves || buildResolves) {
+    // ── economy-participation gate (developed only) ──
+    // The three economy selection paths gate through isEconomicallyActive: the economy
+    // adapter's getSystemIds (which cascades to infrastructure-decay + population),
+    // migration's open edges (below), and directed-logistics' participants (below).
+    // directed-build keeps the full `systems` — it needs unclaimed/controlled to claim
+    // and develop.
+    const developedSystemIds = new Set(
+      systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
     );
-    const dlWorld = new MemoryDirectedLogisticsWorld(rows);
-    await runDirectedLogisticsProcessor(dlWorld, { tick }, {
-      interval: DIRECTED_LOGISTICS.INTERVAL,
-      routeCost,
-    });
-    markets = applyStockUpdates(markets, dlWorld.stockUpdates);
-    dlStockUpdates = dlWorld.stockUpdates;
-    const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
-    flowEvents = [...flowEvents, ...newLogisticsFlows];
-    // Directed-logistics is the only writer of flowEvents; prune the log to the
-    // overlay/logistics retention window here, after the append.
-    const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
-    flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
-    processorsRun.push("directed-logistics");
-  }
 
-  // ── directed-build ──
-  {
-    const routeCost = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+    // ── open edges (faction-bounded, then gated to developed-both for migration) ──
+    const sysFactionForEdges = new Map(systems.map((s) => [s.id, s.factionId]));
+    const openEdges: EdgeView[] = buildOpenEdges(connections, sysFactionForEdges);
+    const migrationEdges = openEdges.filter(
+      (e) => developedSystemIds.has(e.aSystemId) && developedSystemIds.has(e.bSystemId),
+    );
 
-    // Ownership lookups reused by both providers.
-    const factionBySystem = new Map(systems.map((s) => [s.id, s.factionId]));
-    const controlBySystem = new Map(systems.map((s) => [s.id, s.control]));
-    const tickSystemById = new Map(systems.map((s) => [s.id, s]));
+    // ── migration ──
+    {
+      const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
+      await runMigrationProcessor(migWorld, newTickCtx(), {
+        interval: ECONOMY_UPDATE_INTERVAL,
+        flow: MIGRATION_PARAMS,
+        delivery: COLONY_DELIVERY_PARAMS,
+      });
+      systems = migWorld.systems;
+      processorsRun.push("migration");
+    }
 
-    // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
-    const reachProvider = (factionId: string): ClaimCandidate[] => {
-      const minHopByCandidate = new Map<string, number>();
-      for (const s of systems) {
-        if (s.factionId !== factionId) continue;
-        const neighbours = hops.get(s.id);
-        if (!neighbours) continue;
-        for (const [destId, h] of neighbours) {
-          if (h <= 0 || h > EXPANSION.REACH_JUMPS) continue;
-          if (factionBySystem.get(destId) !== null) continue; // only unclaimed
-          const prev = minHopByCandidate.get(destId);
-          if (prev === undefined || h < prev) minHopByCandidate.set(destId, h);
-        }
-      }
-      const candidates: ClaimCandidate[] = [];
-      for (const [candidateId, minHops] of minHopByCandidate) {
-        const cand = tickSystemById.get(candidateId);
-        if (!cand) continue;
-        candidates.push({
-          systemId: candidateId, minHops,
-          habitableSpace: cand.habitableSpace,
-          resourceDiversity: countResourceDiversity(cand),
-        });
-      }
-      return candidates;
-    };
+    // directed-logistics and directed-build share one hop-BFS, run at the
+    // larger of their two (independently tunable) MAX_HOPS radii — each
+    // stage's routeCost closure still applies its OWN cutoff below, so a BFS
+    // computed at the larger radius is a safe superset for the smaller one.
+    // The BFS is computed once per world, not per tick (see hopsCache).
+    if (hopsCache?.key !== world.connections) {
+      hopsCache = {
+        key: world.connections,
+        hops: computeBoundedHopDistances(
+          connections,
+          Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS),
+        ),
+      };
+    }
+    const hops = hopsCache.hops;
+    // Per-system market row groups, built once and shared: directed-build
+    // patches just the stock deltas directed-logistics applied instead of
+    // remapping every market row a second time (see patchMarketRowStocks).
+    const logisticsMarketRows = marketRowsBySystem(markets);
+    let dlStockUpdates: Map<string, number> = new Map();
 
-    // Colony-candidate provider: a faction's CONTROLLED systems that have a reachable developed
-    // same-faction seed source, tagged with their substrate + that source. The colony planner scores
-    // them via colonyValue and funds establish projects from the shared pool.
-    const developProvider = (factionId: string): ColonyEstablishCandidate[] => {
-      const candidates: ColonyEstablishCandidate[] = [];
-      for (const s of systems) {
-        if (s.factionId !== factionId || s.control !== "controlled") continue;
-        const neighbours = hops.get(s.id);
-        let sourceSystemId: string | null = null;
-        let bestHop = Infinity;
-        if (neighbours) {
+    // ── directed-logistics ──
+    {
+      const routeCost: RouteCost = (f, t) => {
+        const h = hops.get(f)?.get(t);
+        return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
+      };
+      // Directed-logistics moves goods only between developed systems.
+      const rows = buildLogisticsRows(
+        systems.filter((s) => developedSystemIds.has(s.id)),
+        logisticsMarketRows,
+      );
+      const dlWorld = new MemoryDirectedLogisticsWorld(rows);
+      await runDirectedLogisticsProcessor(dlWorld, { tick }, {
+        interval: DIRECTED_LOGISTICS.INTERVAL,
+        routeCost,
+      });
+      markets = applyStockUpdates(markets, dlWorld.stockUpdates);
+      dlStockUpdates = dlWorld.stockUpdates;
+      const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
+      flowEvents = [...flowEvents, ...newLogisticsFlows];
+      processorsRun.push("directed-logistics");
+    }
+
+    // ── directed-build ──
+    // ⚠ Splitting construction's decision cadence from its execution cadence lands
+    // inside this gate: work would accrue every tick while planning stays monthly, so
+    // the per-tick funding step has to be carved back out of the pulse block above.
+    // Planning inputs only move on the pulse, so the gate is correct as it stands.
+    {
+      const routeCost = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
+
+      // Ownership lookups reused by both providers.
+      const factionBySystem = new Map(systems.map((s) => [s.id, s.factionId]));
+      const controlBySystem = new Map(systems.map((s) => [s.id, s.control]));
+      const tickSystemById = new Map(systems.map((s) => [s.id, s]));
+
+      // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
+      const reachProvider = (factionId: string): ClaimCandidate[] => {
+        const minHopByCandidate = new Map<string, number>();
+        for (const s of systems) {
+          if (s.factionId !== factionId) continue;
+          const neighbours = hops.get(s.id);
+          if (!neighbours) continue;
           for (const [destId, h] of neighbours) {
-            if (h <= 0) continue;
-            if (factionBySystem.get(destId) !== factionId) continue;
-            if (controlBySystem.get(destId) !== "developed") continue;
-            if (h < bestHop) { bestHop = h; sourceSystemId = destId; }
+            if (h <= 0 || h > EXPANSION.REACH_JUMPS) continue;
+            if (factionBySystem.get(destId) !== null) continue; // only unclaimed
+            const prev = minHopByCandidate.get(destId);
+            if (prev === undefined || h < prev) minHopByCandidate.set(destId, h);
           }
         }
-        if (sourceSystemId === null) continue; // no developed seed source reachable → cannot establish
-        candidates.push({
-          systemId: s.id,
-          habitableSpace: s.habitableSpace,
-          generalSpace: s.generalSpace,
-          slotCap: s.slotCap,
-          sourceSystemId,
-        });
-      }
-      return candidates;
-    };
+        const candidates: ClaimCandidate[] = [];
+        for (const [candidateId, minHops] of minHopByCandidate) {
+          const cand = tickSystemById.get(candidateId);
+          if (!cand) continue;
+          candidates.push({
+            systemId: candidateId, minHops,
+            habitableSpace: cand.habitableSpace,
+            resourceDiversity: countResourceDiversity(cand),
+          });
+        }
+        return candidates;
+      };
 
-    const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
-    const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
-    await runDirectedBuildProcessor(dbWorld, { tick }, {
-      interval: DIRECTED_BUILD.INTERVAL,
-      routeCost,
-      construction: {
-        cap: CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,
-        throughputPerPop: CONSTRUCTION.THROUGHPUT_PER_POP,
-        floorBase: CONSTRUCTION.POOL_FLOOR_BASE,
-        floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE,
-        // Project ids draw from the world's monotonic counter, threaded through this tick.
-        mintId: () => `construction-${nextId++}`,
-      },
-      claim: {
-        reachProvider, rng,
-        params: { maxClaimsPerPulse: EXPANSION.MAX_CLAIMS_PER_PULSE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
-      },
-      develop: {
-        candidateProvider: developProvider,
-        params: {
-          landPremium: COLONISATION.LAND_PREMIUM,
-          landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
-          landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
-          sigmaFloor: COLONISATION.SIGMA_FLOOR,
-          establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
-          seedPop: EXPANSION.COLONY_SEED_POP,
-          habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
-          popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
-          minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
-          employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
+      // Colony-candidate provider: a faction's CONTROLLED systems that have a reachable developed
+      // same-faction seed source, tagged with their substrate + that source. The colony planner scores
+      // them via colonyValue and funds establish projects from the shared pool.
+      const developProvider = (factionId: string): ColonyEstablishCandidate[] => {
+        const candidates: ColonyEstablishCandidate[] = [];
+        for (const s of systems) {
+          if (s.factionId !== factionId || s.control !== "controlled") continue;
+          const neighbours = hops.get(s.id);
+          let sourceSystemId: string | null = null;
+          let bestHop = Infinity;
+          if (neighbours) {
+            for (const [destId, h] of neighbours) {
+              if (h <= 0) continue;
+              if (factionBySystem.get(destId) !== factionId) continue;
+              if (controlBySystem.get(destId) !== "developed") continue;
+              if (h < bestHop) { bestHop = h; sourceSystemId = destId; }
+            }
+          }
+          if (sourceSystemId === null) continue; // no developed seed source reachable → cannot establish
+          candidates.push({
+            systemId: s.id,
+            habitableSpace: s.habitableSpace,
+            generalSpace: s.generalSpace,
+            slotCap: s.slotCap,
+            sourceSystemId,
+          });
+        }
+        return candidates;
+      };
+
+      const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
+      const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
+      await runDirectedBuildProcessor(dbWorld, { tick }, {
+        interval: DIRECTED_BUILD.INTERVAL,
+        routeCost,
+        construction: {
+          cap: CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,
+          throughputPerPop: CONSTRUCTION.THROUGHPUT_PER_POP,
+          floorBase: CONSTRUCTION.POOL_FLOOR_BASE,
+          floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE,
+          // Project ids draw from the world's monotonic counter, threaded through this tick.
+          mintId: () => `construction-${nextId++}`,
         },
-      },
-    });
-    systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
-    systems = applyClaims(systems, dbWorld.claims);
-    systems = applyDevelopments(systems, dbWorld.developments);
-    constructionProjects = dbWorld.constructionProjects;
-    processorsRun.push("directed-build");
-  }
+        claim: {
+          reachProvider, rng,
+          params: { maxClaimsPerPulse: EXPANSION.MAX_CLAIMS_PER_PULSE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
+        },
+        develop: {
+          candidateProvider: developProvider,
+          params: {
+            landPremium: COLONISATION.LAND_PREMIUM,
+            landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
+            landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
+            sigmaFloor: COLONISATION.SIGMA_FLOOR,
+            establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
+            seedPop: EXPANSION.COLONY_SEED_POP,
+            habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+            popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
+            minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
+            employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
+          },
+        },
+      });
+      systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
+      systems = applyClaims(systems, dbWorld.claims);
+      systems = applyDevelopments(systems, dbWorld.developments);
+      constructionProjects = dbWorld.constructionProjects;
+      processorsRun.push("directed-build");
+    }
 
-  // ── relations (gated by RELATIONS_FREQUENCY, offset 0 — the one
-  // processor that runs every Nth tick rather than every tick) ──
+  } // ── end monthly pulse ──
+
+  // Directed-logistics is the only writer of flowEvents, and it only appends on the
+  // pulse — but the prune stays every-tick, outside the gate above, so the retention
+  // window is enforced on the tick it expires rather than up to a month late. It is a
+  // filter over an already-bounded log; the pulse gate is not worth the drift.
+  const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
+  flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
+
+  // ── relations (gated by RELATIONS_FREQUENCY, offset 0 — the one stage on its
+  // own cadence rather than the monthly pulse the block above rides) ──
   if (world.factions.length >= 2 && tick % RELATIONS_FREQUENCY === 0) {
     const territoryByFaction = new Map<string, Set<string>>();
     for (const s of world.systems) {
