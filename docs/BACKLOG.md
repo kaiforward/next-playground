@@ -26,29 +26,6 @@ Well-defined, can start now.
   takes untrusted JSON, so a save written before the union (or hand-edited) needs a guard in
   `lib/types/guards.ts` narrowing `string` → `GoodId` with a decided failure mode (reject the save vs
   drop the row). Don't start it without settling that.
-- **[M] The economy recognises completed buildings a month late (construction-vs-economy ordering)** —
-  on the monthly turnover tick the economy stage runs (`lib/world/tick.ts`, economy pulse ~L590) before
-  directed-build funds and lands buildings (~L832), and economy is monthly, so a building that **completes
-  on the turnover is invisible to that turnover's economy and waits a full month** for the next pulse to
-  price/produce/consume against it. Real artifact of processor ordering — **not** the deliberate
-  demand-anchor lag (which is booked and intended).
-  Verified this session (don't re-derive): the lag is carried by the *funding/completion* order, **not**
-  the landing. Directed-build already lands buildings at the END of the pulse, so extracting only the
-  landing into a pre-economy processor is a **no-op** — economy's next run is a month away either way. The
-  only thing that shortens the lag is running the construction **funding/completion decision** ahead of
-  economy on the turnover tick (a new processor before the economy stage).
-  That is a genuine tradeoff, not a free win. Today's stage order is
-  `economy → population → directed-logistics → directed-build`, so directed-build funds off **this** month's
-  post-population pop (`factionThroughputPool`) and post-logistics stocks (`patchMarketRowStocks`). Pulled
-  ahead of economy it funds off **last** month's (month-start) pop + pre-logistics stocks. So:
-  keep today's order (construction reads fresh state; economy sees completions a month late) **or** reorder
-  (economy sees completions immediately; construction plans off month-start state). **We get a lag one way
-  or the other** — so decide by **precedent**: check what **EU5 / Victoria 3** do (does a finished building
-  register with the same economic tick it completes on, or the next?) and match it. If we reorder, two open
-  structural questions: (a) does the claim/develop half of directed-build move ahead of economy too, or only
-  build-completion? (b) splitting build off directed-logistics breaks their shared hop-BFS and the
-  `patchMarketRowStocks` stock-patch coupling — how is that rewired? Belongs with the deferred
-  processor-order pass; not urgent.
 - **[S] Purge the Postgres fossils outside `lib/tick/`** — Prisma was deleted in the Phase-2 pivot, but comments across `lib/types/game.ts:1`, `lib/types/guards.ts:2-4` ("Runtime type guards for Prisma boundary values" — the boundaries are now save-file `deserialize` + API `JSON.parse`), `lib/utils/format.ts:67`, `lib/utils/__tests__/format.test.ts:44`, `lib/world/types.ts:3`, `lib/world/gen.ts:3,49` (points at `prisma/seed.ts`, deleted), `lib/engine/relations.ts:3`, and `lib/engine/system-trade-flow.ts:4,7` still describe it as live. Mostly "no Prisma dependency" negative-space claims that are now vacuous, plus two that point a reader at deleted files. The tick's own two-backend claims were swept with the harness rename; this is the same rot in the layers that PR's scope didn't reach. Comment-only, zero risk. Find them with: `grep -rni "prisma" --include="*.ts" lib/`.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
