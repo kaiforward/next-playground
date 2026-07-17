@@ -1,5 +1,6 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { accumulateUnrest, populationDelta } from "@/lib/engine/population";
+import { accumulateUnrest, populationDelta, type UnrestParams } from "@/lib/engine/population";
+import { catchUpFactor } from "@/lib/tick/shard";
 import type {
   PopulationProcessorParams, PopulationUpdate, PopulationWorld,
 } from "@/lib/tick/world/population-world";
@@ -22,12 +23,21 @@ export async function runPopulationProcessor(
   const systemIds = [...signals.dissatisfactionBySystem.keys()];
   const states = await world.getPopulationState(systemIds);
 
+  // Rates are reference-denominated; one run applies catchUpFactor(interval)
+  // reference-months of change. Unrest is a linear filter, so both its gain and
+  // decay pre-scale (rescaling the time step); the population delta scales directly.
+  const catchUp = catchUpFactor(params.interval);
+  const scaledUnrest: UnrestParams = {
+    gain: params.unrest.gain * catchUp,
+    decay: params.unrest.decay * catchUp,
+  };
+
   const popUpdates: PopulationUpdate[] = [];
   const demandPops: Array<{ systemId: string; population: number }> = [];
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
-    const unrest = accumulateUnrest(s.unrest, d, params.unrest);
-    const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population));
+    const unrest = accumulateUnrest(s.unrest, d, scaledUnrest);
+    const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
     popUpdates.push({ systemId: s.systemId, population, unrest });
     demandPops.push({ systemId: s.systemId, population });
   }

@@ -9,7 +9,13 @@ import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 
-const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 } };
+const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 }, interval: 24 };
+
+// Invariance fixture: a lower unrest decay than PARAMS. The unrest filter is integrated
+// with explicit Euler, whose split residue between one full step and two half steps is
+// ≈ 0.25·decay from a zero start — an integrator artifact, not a scaling error. Keeping
+// decay small holds that residue well under the 1% first-order bar the scaling must meet.
+const INVARIANCE_PARAMS = { unrest: { gain: 0.06, decay: 0.02 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 } };
 
 /** A demand basis with no skilled work — matches these fixtures' academy-free systems. */
 const popOnly = (population: number): CivilianDemandBasis => ({
@@ -110,6 +116,45 @@ describe("population processor", () => {
     const popOnlyTotal = totalDemandRateForGood("consumer_goods", popOnly(afterPop), buildings, unitResourceVector(), snap.state);
     expect(m.demandRate).toBeCloseTo(realBasisTotal, 6);
     expect(m.demandRate).not.toBeCloseTo(popOnlyTotal, 6);
+  });
+
+  it("halving the interval halves the per-run growth (wall-clock rate preserved)", async () => {
+    // Fed system (D=0 ⇒ unrest stays 0, decline term 0): pure logistic growth.
+    // One run at interval 24 must match two runs at interval 12 over the same
+    // wall-clock span, each run fed the same fresh D as the economy would.
+    const worldA = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [market("a", "food")] });
+    await runPopulationProcessor(worldA, ctxWithD(new Map([["a", 0]])), { ...INVARIANCE_PARAMS, interval: 24 });
+    const popA = worldA.systems.find((s) => s.id === "a")!.population;
+
+    const worldB = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [market("a", "food")] });
+    await runPopulationProcessor(worldB, ctxWithD(new Map([["a", 0]])), { ...INVARIANCE_PARAMS, interval: 12 });
+    await runPopulationProcessor(worldB, ctxWithD(new Map([["a", 0]])), { ...INVARIANCE_PARAMS, interval: 12 });
+    const popB = worldB.systems.find((s) => s.id === "a")!.population;
+
+    // Compare the growth increment, not the total: growth is ~1% of population, so an
+    // unscaled two-run world (double the increment) would still sit within 1% of the
+    // total — the invariance must bite on the delta that actually scales.
+    const growthA = popA - 500;
+    const growthB = popB - 500;
+    expect(growthA).toBeGreaterThan(0); // it actually grew (guards a trivial no-op pass)
+    expect(Math.abs(growthA - growthB) / growthA).toBeLessThan(0.01);
+  });
+
+  it("unrest integration scales with the interval", async () => {
+    // Constant dissatisfaction: one run at 24 vs two runs at 12 must reach the
+    // same wall-clock unrest, because gain and decay both scale by catchUpFactor.
+    const D = 0.5;
+    const worldA = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [market("a", "food")] });
+    await runPopulationProcessor(worldA, ctxWithD(new Map([["a", D]])), { ...INVARIANCE_PARAMS, interval: 24 });
+    const unrestA = worldA.systems.find((s) => s.id === "a")!.unrest;
+
+    const worldB = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [market("a", "food")] });
+    await runPopulationProcessor(worldB, ctxWithD(new Map([["a", D]])), { ...INVARIANCE_PARAMS, interval: 12 });
+    await runPopulationProcessor(worldB, ctxWithD(new Map([["a", D]])), { ...INVARIANCE_PARAMS, interval: 12 });
+    const unrestB = worldB.systems.find((s) => s.id === "a")!.unrest;
+
+    expect(unrestA).toBeGreaterThan(0); // unrest actually accumulated
+    expect(Math.abs(unrestA - unrestB) / unrestA).toBeLessThan(0.01);
   });
 
   it("no-ops when the economy left no signals", async () => {
