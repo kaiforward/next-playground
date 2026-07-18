@@ -54,15 +54,18 @@ export function FactionCard({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3
-              className={
-                size === "md"
-                  ? "font-display text-lg text-text-primary"
-                  : "font-display text-base text-text-primary truncate"
-              }
-            >
-              {faction.name}
-            </h3>
+            <div className="flex items-center gap-2 min-w-0">
+              <h3
+                className={
+                  size === "md"
+                    ? "font-display text-lg text-text-primary"
+                    : "font-display text-base text-text-primary truncate"
+                }
+              >
+                {faction.name}
+              </h3>
+              {faction.isPlayer && <Badge color="amber">You</Badge>}
+            </div>
             <FactionStatusBadge status={faction.status} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

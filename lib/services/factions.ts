@@ -27,6 +27,8 @@ export interface FactionSummary {
   homeworldName: string;
   territorySize: number;
   status: FactionStatus;
+  /** True for the faction the human player controls (world.player); false for AI factions. */
+  isPlayer: boolean;
 }
 
 export interface FactionTerritorySystem {
@@ -128,6 +130,7 @@ function toSummary(
     homeworldName: homeworld?.name ?? "",
     territorySize,
     status: deriveFactionStatus(territorySize, totalSystems),
+    isPlayer: world.player?.controlledFactionId === faction.id,
   };
 }
 

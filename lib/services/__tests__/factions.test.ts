@@ -187,3 +187,29 @@ describe("getRelationsMatrix", () => {
     expect(matrix.pairs.filter((p) => p.hasAlliance)).toHaveLength(1);
   });
 });
+
+describe("factions service — isPlayer", () => {
+  it("flags exactly the controlled faction", () => {
+    const playerWorld = generateWorld({
+      systemCount: 150,
+      seed: 5,
+      playerFaction: { name: "Seat Holders", governmentType: "militarist", doctrine: "opportunistic" },
+    });
+    setWorld(playerWorld);
+    expect(playerWorld.player).not.toBeNull();
+    const playerId = playerWorld.factions.find(
+      (f) => f.id === playerWorld.player?.controlledFactionId,
+    )!.id;
+
+    const summaries = listFactions();
+    expect(summaries.filter((f) => f.isPlayer).map((f) => f.id)).toEqual([playerId]);
+    expect(getFactionDetail(playerId).isPlayer).toBe(true);
+    const otherId = summaries.find((f) => f.id !== playerId)!.id;
+    expect(getFactionDetail(otherId).isPlayer).toBe(false);
+  });
+
+  it("flags nobody in a playerless world", () => {
+    setWorld(generateWorld({ systemCount: 150, seed: 5 }));
+    expect(listFactions().some((f) => f.isPlayer)).toBe(false);
+  });
+});
