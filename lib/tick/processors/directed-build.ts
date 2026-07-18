@@ -231,6 +231,7 @@ export async function runDirectedBuildProcessor(
           newProjects.push({
             kind: "build",
             id: params.construction.mintId(),
+            origin: "auto",
             factionId: p.factionId,
             systemId: p.systemId,
             buildingType: item.buildingType,
@@ -243,6 +244,7 @@ export async function runDirectedBuildProcessor(
         newProjects.push({
           kind: "colony_establish",
           id: params.construction.mintId(),
+          origin: "auto",
           factionId: p.factionId,
           systemId: p.systemId,
           sourceSystemId: p.sourceSystemId,

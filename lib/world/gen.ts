@@ -213,7 +213,10 @@ export function generateWorld(options: GenerateWorldOptions): World {
 
   const player =
     universe.playerFactionIndex !== null
-      ? { controlledFactionId: factionIds[universe.playerFactionIndex] }
+      ? {
+          controlledFactionId: factionIds[universe.playerFactionIndex],
+          automation: { build: true, colonisation: true },
+        }
       : null;
 
   return {

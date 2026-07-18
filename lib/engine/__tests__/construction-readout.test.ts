@@ -12,7 +12,7 @@ import {
 import { GOODS } from "@/lib/constants/goods";
 
 function build(id: string, workTotal: number, workDone: number): WorldBuildProject {
-  return { kind: "build", id, factionId: "f1", systemId: "s1", buildingType: "housing", levels: 1, workTotal, workDone };
+  return { kind: "build", id, origin: "auto", factionId: "f1", systemId: "s1", buildingType: "housing", levels: 1, workTotal, workDone };
 }
 
 describe("forecastEtaPulses", () => {
@@ -94,8 +94,8 @@ describe("computeFactionConstruction", () => {
     { id: "ctrl", name: "Kepler Reach", control: "controlled", population: 0, buildings: {} },
   ];
   const projects: WorldConstructionProject[] = [
-    { kind: "colony_establish", id: "c1", factionId: "f1", systemId: "ctrl", sourceSystemId: "dev1", seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62 },
-    { kind: "build", id: "b1", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
+    { kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl", sourceSystemId: "dev1", seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62 },
+    { kind: "build", id: "b1", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
   ];
 
   it("pools only economically-active systems and splits expansion vs build-out", () => {
@@ -118,8 +118,8 @@ describe("computeFactionConstruction", () => {
       { id: "dev1", name: "Vela Prime", control: "developed", population: 80, buildings: {} },
     ];
     const twoBuilds: WorldConstructionProject[] = [
-      { kind: "build", id: "front", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
-      { kind: "build", id: "back", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "front", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "back", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
     ];
     const r = computeFactionConstruction(twoBuilds, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
     expect(r.pool).toBeCloseTo(4, 6);
@@ -150,8 +150,8 @@ describe("computeFactionConstruction", () => {
     ];
     // Same-kind projects on differently-named systems, inserted in reverse-alphabetical order.
     const zetaThenAlpha: WorldConstructionProject[] = [
-      { kind: "build", id: "pZ", factionId: "f1", systemId: "sysZ", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
-      { kind: "build", id: "pA", factionId: "f1", systemId: "sysA", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "pZ", origin: "auto", factionId: "f1", systemId: "sysZ", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "pA", origin: "auto", factionId: "f1", systemId: "sysA", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
     ];
     // throughputPerPop 0 zeroes the pool regardless of population — every project stalls (etaPulses null).
     const r = computeFactionConstruction(zetaThenAlpha, twoNamedSystems, { throughputPerPop: 0, pointsPerLevel: 0 }, 4);

@@ -57,12 +57,12 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 6 (world.player)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(6);
+  it("is at save format version 7 (automation + project origin)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(7);
   });
 
-  it("rejects a prior-version (v4) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 4, world });
+  it("rejects a prior-version (v6) save — saves break on the shape bump", () => {
+    const json = JSON.stringify({ formatVersion: 6, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
@@ -74,6 +74,7 @@ describe("serializeWorld / deserializeWorld", () => {
         {
           kind: "build",
           id: "proj-1",
+          origin: "auto",
           factionId: world.factions[0].id,
           systemId: world.systems[0].id,
           buildingType: "housing",
@@ -97,6 +98,7 @@ describe("serializeWorld / deserializeWorld", () => {
         {
           kind: "colony_establish",
           id: "establish-1",
+          origin: "auto",
           factionId: world.factions[0].id,
           systemId: world.systems[1].id,
           sourceSystemId: world.systems[0].id,

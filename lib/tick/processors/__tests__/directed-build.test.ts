@@ -103,7 +103,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
 
   it("funds existing open projects front-first, advancing workDone (persists deltas)", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
@@ -197,7 +197,7 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
 
   it("keeps in-flight projects ahead of newly proposed work", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
@@ -517,8 +517,8 @@ describe("runDirectedBuildProcessor — pool fairness floor", () => {
     },
   ];
   const inflight = (): WorldConstructionProject[] => [
-    { id: "pH", kind: "build", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
-    { id: "pC", kind: "build", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+    { id: "pH", kind: "build", origin: "auto", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+    { id: "pC", kind: "build", origin: "auto", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
   ];
   const colonyWorkDone = async (floorBase: number): Promise<number> => {
     const w = new MemoryDirectedBuildWorld(floorScenario(), inflight());
@@ -551,7 +551,7 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     // interval 24 (catchUp 1) it lands after 2 pulses; at interval 12 (catchUp 0.5) the effective cap
     // halves, so it needs 4 pulses — 2×24 = 4×12 = 48 wall-clock ticks either way.
     const project = (): WorldConstructionProject => ({
-      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 5, workTotal: 2 * CAP, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 5, workTotal: 2 * CAP, workDone: 0,
     });
     const landingPulse = async (interval: number): Promise<number> => {
       let rows: SystemBuildRow[] = [idleBuilder(5000)];
@@ -581,9 +581,9 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     // far exceeds any pulse's funding (none lands, queue order preserved) → exactly the front two absorb
     // a cap's worth and the third is starved, at either interval (pool ÷ cap is interval-invariant).
     const inflight = (): WorldConstructionProject[] => [
-      { id: "p1", kind: "build", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 9, workTotal: 1000, workDone: 0 },
-      { id: "p2", kind: "build", factionId: "f1", systemId: "B", buildingType: "food", levels: 9, workTotal: 1000, workDone: 0 },
-      { id: "p3", kind: "build", factionId: "f1", systemId: "B", buildingType: "ore", levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p1", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p2", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "food", levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p3", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "ore", levels: 9, workTotal: 1000, workDone: 0 },
     ];
     const run = async (interval: number): Promise<{ count: number; perFront: number[] }> => {
       const w = new MemoryDirectedBuildWorld([idleBuilder(400)], inflight());
@@ -622,8 +622,8 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
       },
     ];
     const inflight = (): WorldConstructionProject[] => [
-      { id: "pH", kind: "build", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
-      { id: "pC", kind: "build", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+      { id: "pH", kind: "build", origin: "auto", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+      { id: "pC", kind: "build", origin: "auto", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
     ];
     const colonyWorkDone = async (interval: number): Promise<number> => {
       const w = new MemoryDirectedBuildWorld(floorScenario(), inflight());

@@ -13,7 +13,7 @@ function project(
   workDone = 0,
   workTotal = levels * workCostPerLevel(buildingType),
 ): WorldConstructionProject {
-  return { kind: "build", id, factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
+  return { kind: "build", id, origin: "auto", factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
 }
 
 describe("factionConstructionPool", () => {
@@ -177,7 +177,7 @@ function projectAt(
   workDone: number,
   workTotal: number,
 ): WorldConstructionProject {
-  return { kind: "build", id, factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
+  return { kind: "build", id, origin: "auto", factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
 }
 
 describe("developmentFloorShare", () => {

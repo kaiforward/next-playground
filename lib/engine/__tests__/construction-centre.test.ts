@@ -21,7 +21,7 @@ function proposal(systemId: string, value: number, work: number, buildingType = 
 }
 
 function centreProject(workDone = 1): WorldConstructionProject {
-  return { kind: "build", id: "c1", factionId: "f1", systemId: "s1",
+  return { kind: "build", id: "c1", origin: "auto", factionId: "f1", systemId: "s1",
     buildingType: CONSTRUCTION_CENTRE_TYPE, levels: 1,
     workTotal: workCostPerLevel(CONSTRUCTION_CENTRE_TYPE), workDone };
 }
@@ -47,7 +47,7 @@ describe("planCentreProposal", () => {
 
   it("counts in-flight remaining work toward the frontier", () => {
     // 55 remaining in-flight + a 10-work proposal = 65 > 60 → that proposal is starved.
-    const open: WorldConstructionProject[] = [{ kind: "build", id: "b1", factionId: "f1",
+    const open: WorldConstructionProject[] = [{ kind: "build", id: "b1", origin: "auto", factionId: "f1",
       systemId: "s1", buildingType: "metals", levels: 3, workTotal: 60, workDone: 5 }];
     const ordered = [proposal("s1", 30, 10)];
     const p = planCentreProposal("f1", ordered, open, [system("s1", 500)], 10, PARAMS);
