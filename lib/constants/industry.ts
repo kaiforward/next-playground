@@ -280,6 +280,11 @@ export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
 /** The 26 production building type ids (good ids), in canonical good order. */
 export const PRODUCTION_BUILDING_TYPES: string[] = [...GOOD_NAMES];
 
+/** Building types with no market output and no capacity/modifier role — employment/holding only (currently just the centre). Derived from the catalog so a future addition doesn't need a second list to stay in sync. */
+export const SUPPORT_TYPES: string[] = Object.entries(BUILDING_TYPES)
+  .filter(([, def]) => def.output.kind === "none")
+  .map(([type]) => type);
+
 /** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). First-draft; subject to calibration. */
 export const EXTRACTOR_STORAGE_PER_UNIT = scaleValue(40);
 /** Storage one tier-1+ factory adds for its output good (output buffer). */

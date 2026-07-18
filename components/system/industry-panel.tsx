@@ -12,6 +12,7 @@ import {
   CONSTRUCTION_CENTRE_TYPE,
   COMPLEX_TYPES,
   COMPLEX_BY_TYPE,
+  SUPPORT_TYPES,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
@@ -159,6 +160,7 @@ function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributo
 function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
   const isComplex = COMPLEX_TYPES.includes(b.buildingType);
+  const isSupport = SUPPORT_TYPES.includes(b.buildingType);
   const isProducer = b.outputGood !== undefined && !isAcademy && b.tier >= 0;
   const goodTier = producerTier(b);
   const grades = isProducer
@@ -178,7 +180,7 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
       <p className="font-display text-[12px] font-semibold text-text-primary">{label(b.buildingType)}</p>
       {(tierLabel || b.count > 0) && (
         <p className="font-mono text-[10px] text-text-tertiary">
-          {tierLabel && !isAcademy && !isComplex ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
+          {tierLabel && !isAcademy && !isComplex && !isSupport ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
         </p>
       )}
       <p className="text-[11px] leading-snug text-text-secondary">{describeBuilding(b.buildingType)}</p>
@@ -562,17 +564,24 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD })]++;
   }
 
-  // Extractors sit on deposit slots; factories/complexes on general land (housing folds into the
-  // magbar; academies into the Labour card's licensing rows).
+  // Extractors sit on deposit slots; factories/complexes/support buildings on general land (housing
+  // folds into the magbar; academies into the Labour card's licensing rows; support buildings — e.g.
+  // the Construction Centre — get their own group below).
   const extractors = buildings.filter(
-    (b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType) && !COMPLEX_TYPES.includes(b.buildingType),
+    (b) =>
+      b.tier === 0 &&
+      !ACADEMY_TYPES.includes(b.buildingType) &&
+      !COMPLEX_TYPES.includes(b.buildingType) &&
+      !SUPPORT_TYPES.includes(b.buildingType),
   );
   // General-land building groups (housing folds into the magbar too; academies live in the Labour card).
-  // Specialisation sits above Production — the complexes buff the families beneath them.
+  // Specialisation sits above Production — the complexes buff the families beneath them. Support sits
+  // last — enabling infrastructure (construction throughput), not manufacturing.
   const buildingGroups = [
     { title: "Housing", buildings: buildings.filter((b) => b.tier === -1) },
     { title: "Specialisation", buildings: buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType)) },
     { title: "Production", buildings: buildings.filter((b) => b.tier >= 1) },
+    { title: "Support", buildings: buildings.filter((b) => SUPPORT_TYPES.includes(b.buildingType)) },
   ];
 
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));

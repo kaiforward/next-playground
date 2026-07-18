@@ -89,4 +89,16 @@ describe("planCentreProposal", () => {
       items: [{ buildingType: "housing", levels: 10 }], value: 0, work: 80 };
     expect(planCentreProposal("f1", [housing], [], [system("s1", 500)], 1, PARAMS)).toBeNull();
   });
+
+  it("prices off the HIGHER of two starved ROIs regardless of proposal order", () => {
+    // Tiny budget (pool 1 × window 6 = 6) puts both proposals well beyond the frontier, so
+    // Math.max must pick the higher ROI (150/50=3) over the lower (50/50=1) either way round.
+    const low = proposal("s1", 50, 50);   // roi 1
+    const high = proposal("s1", 150, 50); // roi 3
+    const expectedValue = PARAMS.pointsPerLevel * 3 * PARAMS.paybackHorizon; // 5 × 3 × 12 = 180
+    const forward = planCentreProposal("f1", [low, high], [], [system("s1", 500)], 1, PARAMS);
+    const reversed = planCentreProposal("f1", [high, low], [], [system("s1", 500)], 1, PARAMS);
+    expect(forward?.value).toBeCloseTo(expectedValue);
+    expect(reversed?.value).toBeCloseTo(expectedValue);
+  });
 });

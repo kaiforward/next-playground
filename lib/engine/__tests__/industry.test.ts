@@ -52,6 +52,7 @@ import {
   INPUT_DEMAND_MULTIPLIER,
   SPECIALISATION_FAMILIES,
   ANCHOR_RATED_COVERAGE,
+  CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -889,6 +890,29 @@ describe("buildIndustryReadout — complex row", () => {
     const row = r.buildings.find((b) => b.buildingType === HEAVY_INDUSTRY_COMPLEX)!;
     expect(row.used).toBe(0);            // orphaned → 0, despite population being huge
     expect(row.output).toBeUndefined();  // produces no good
+  });
+});
+
+describe("buildIndustryReadout — support row (kind 'none')", () => {
+  it("emits a fully-staffed centre entry shaped like an academy: tier 0, no output, used = count × labourFulfil", () => {
+    const buildings = { [CONSTRUCTION_CENTRE_TYPE]: 2 };
+    const pop = labourDemand(buildings); // exactly enough heads to fully staff it
+    const readout = buildIndustryReadout(buildings, pop, {}, () => 0, unitResourceVector());
+    const centre = readout.buildings.find((b) => b.buildingType === CONSTRUCTION_CENTRE_TYPE)!;
+    expect(centre.tier).toBe(0);
+    expect(centre.outputGood).toBeUndefined();
+    expect(centre.output).toBeUndefined();
+    expect(centre.used).toBeCloseTo(2, 6);
+    expect(centre.staffedFraction).toBeCloseTo(1, 6);
+  });
+
+  it("staffedFraction tracks labour fulfilment, not a producer's effectiveFulfilment, when understaffed", () => {
+    const buildings = { [CONSTRUCTION_CENTRE_TYPE]: 4 };
+    const pop = labourDemand(buildings) / 2; // half the required heads
+    const readout = buildIndustryReadout(buildings, pop, {}, () => 0, unitResourceVector());
+    const centre = readout.buildings.find((b) => b.buildingType === CONSTRUCTION_CENTRE_TYPE)!;
+    expect(centre.used).toBeCloseTo(2, 6); // count × labourFulfil = 4 × 0.5
+    expect(centre.staffedFraction).toBeCloseTo(0.5, 6);
   });
 });
 

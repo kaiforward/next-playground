@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getFactionConstruction, getSystemConstruction } from "@/lib/services/construction";
 import { ServiceError } from "@/lib/services/errors";
+import { CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE } from "@/lib/constants/industry";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -52,6 +53,25 @@ describe("getFactionConstruction", () => {
       expect(err.status).toBe(404);
       expect(err.message).toContain("nope");
     }
+  });
+  it("splits the pool into base and centre components via the buildingsBySystem join", () => {
+    // Seed the developed system with a Construction Centre + the school that staffs it, replacing
+    // any world-gen entries of the same (system, type) pair so the fixture is deterministic.
+    const withoutTarget = world.buildings.filter(
+      (b) => !(b.systemId === dev.id && (b.buildingType === CONSTRUCTION_CENTRE_TYPE || b.buildingType === VOCATIONAL_SCHOOL_TYPE)),
+    );
+    setWorld({
+      ...world,
+      buildings: [
+        ...withoutTarget,
+        { systemId: dev.id, buildingType: CONSTRUCTION_CENTRE_TYPE, count: 1, idleMonths: 0 },
+        { systemId: dev.id, buildingType: VOCATIONAL_SCHOOL_TYPE, count: 1, idleMonths: 0 },
+      ],
+    });
+
+    const data = getFactionConstruction(factionId);
+    expect(data.poolCentres).toBeGreaterThan(0);
+    expect(data.poolBase + data.poolCentres).toBeCloseTo(data.pool, 6);
   });
 });
 
