@@ -1,7 +1,7 @@
 /**
  * Ledger placement for a system's in-flight BUILD projects — each ghost row lands in the group its
  * building will join (extractors on the deposit table via their resource; everything else under its
- * Housing / Specialisation / Production / Support heading), so the Industry tab reads
+ * Housing / Academies / Specialisation / Production / Support heading), so the Industry tab reads
  * "have N, M more coming" in place. Colony rows are excluded: a forming colony is the undeveloped
  * surface's content, not a ledger entry.
  */
@@ -11,7 +11,7 @@ import {
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 
-export type GhostGroup = "deposit" | "Housing" | "Specialisation" | "Production" | "Support";
+export type GhostGroup = "deposit" | "Housing" | "Academies" | "Specialisation" | "Production" | "Support";
 
 export interface GhostRow {
   projectId: string;
@@ -31,7 +31,7 @@ function groupFor(buildingType: string): { group: GhostGroup; resource?: string 
   if (buildingType === HOUSING_TYPE) return { group: "Housing" };
   if (COMPLEX_TYPES.includes(buildingType)) return { group: "Specialisation" };
   if (SUPPORT_TYPES.includes(buildingType)) return { group: "Support" };
-  if (ACADEMY_TYPES.includes(buildingType)) return { group: "Support" }; // academies have no ledger row; surface them with Support
+  if (ACADEMY_TYPES.includes(buildingType)) return { group: "Academies" };
   if ((GOOD_TIER_BY_KEY[buildingType] ?? 0) >= 1) return { group: "Production" };
   return null;
 }

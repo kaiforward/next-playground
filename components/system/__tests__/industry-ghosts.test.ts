@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { classifyGhosts } from "@/components/system/industry-ghosts";
 import {
-  HOUSING_TYPE, CONSTRUCTION_CENTRE_TYPE, COMPLEX_TYPES, BUILDING_TYPES,
+  HOUSING_TYPE, CONSTRUCTION_CENTRE_TYPE, COMPLEX_TYPES, BUILDING_TYPES, VOCATIONAL_SCHOOL_TYPE,
 } from "@/lib/constants/industry";
 import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 
@@ -19,12 +19,13 @@ describe("classifyGhosts", () => {
     const complex = COMPLEX_TYPES[0];
     const ghosts = classifyGhosts([
       buildRow(tier0), buildRow(HOUSING_TYPE, "player"),
-      buildRow(CONSTRUCTION_CENTRE_TYPE), buildRow(complex),
+      buildRow(CONSTRUCTION_CENTRE_TYPE), buildRow(complex), buildRow(VOCATIONAL_SCHOOL_TYPE),
     ]);
     expect(ghosts.get("deposit")?.[0]?.resource).toBe(BUILDING_TYPES[tier0].resource);
     expect(ghosts.get("Housing")?.[0]?.origin).toBe("player");
     expect(ghosts.get("Support")?.[0]?.buildingType).toBe(CONSTRUCTION_CENTRE_TYPE);
     expect(ghosts.get("Specialisation")?.[0]?.buildingType).toBe(complex);
+    expect(ghosts.get("Academies")?.[0]?.buildingType).toBe(VOCATIONAL_SCHOOL_TYPE);
   });
 
   it("excludes colony rows — they belong to the undeveloped surface, not the ledger", () => {

@@ -276,7 +276,7 @@ function GhostNameCell({
   );
 }
 
-/** In-flight extractor in the deposit ledger: name cell, then progress% / — / ETA under Worked / Yield / Out-cyc. */
+/** In-flight extractor in the deposit ledger: name cell, then progress% / — / — / ETA under Worked / Slots / Yield / Out-cyc. */
 function DepositGhostRow({
   ghost, canCancel, onCancel, cancelPending, showActionColumn,
 }: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean; showActionColumn: boolean }) {
@@ -284,6 +284,7 @@ function DepositGhostRow({
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
+      <td />
       <td />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaPulses)}</td>
       {showActionColumn && <td />}
@@ -308,10 +309,10 @@ function BuildingGhostRow({
 // ── Tables ───────────────────────────────────────────────────────────────────
 
 /**
- * Deposit table: per-resource slot fill — health glyph · resource · worked/slots · yield · output. On the
- * player's own systems, a trailing quick-add column offers +1 level on the resource's sole extractor type
- * (ambiguous resources — more than one catalog extractor — defer to the New-industry dialog), and in-flight
- * extractor orders render as ghost rows under their matching deposit.
+ * Deposit table: per-resource slot fill — health glyph · resource · worked/built · built/slots · yield ·
+ * output. On the player's own systems, a trailing quick-add column offers +1 level on the resource's sole
+ * extractor type (ambiguous resources — more than one catalog extractor — defer to the New-industry
+ * dialog), and in-flight extractor orders render as ghost rows under their matching deposit.
  */
 function DepositTable({
   rows, contributorsFor, systemId, canOrder, optionByType, ghosts, onCancel, cancelPending,
@@ -329,7 +330,7 @@ function DepositTable({
     <table className="w-full border-collapse">
       <thead>
         <tr>
-          <Th>Deposit</Th><Th right>Worked</Th><Th right>Yield</Th><Th right>Out/cyc</Th>
+          <Th>Deposit</Th><Th right>Worked</Th><Th right>Slots</Th><Th right>Yield</Th><Th right>Out/cyc</Th>
           {canOrder && <Th right> </Th>}
         </tr>
       </thead>
@@ -349,7 +350,8 @@ function DepositTable({
                     </Tooltip>
                   </span>
                 </td>
-                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.slotCap} health={row.health} /></td>
+                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.built} health={row.health} /></td>
+                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.slotCap)}</td>
                 <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
                 <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
                 {canOrder && (
@@ -536,7 +538,7 @@ function LegendTooltip() {
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
-          <p className="text-[11px] text-text-secondary"><span className="font-mono">worked/slots</span> is units in use of the deposit&apos;s slots (staffed &amp; selling); <span className="font-mono">out/cyc</span> is real output after input gates.</p>
+          <p className="text-[11px] text-text-secondary"><span className="font-mono">worked/built</span> is units in use of the built extractor levels (staffed &amp; selling); <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates.</p>
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
@@ -715,8 +717,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   }
 
   // Extractors sit on deposit slots; factories/complexes/support buildings on general land (housing
-  // folds into the magbar; academies into the Labour card's licensing rows; support buildings — e.g.
-  // the Construction Centre — get their own group below).
+  // folds into the magbar; academies get their own ledger group below, alongside the Labour card's
+  // licensing rows; support buildings — e.g. the Construction Centre — get their own group too).
   const extractors = buildings.filter(
     (b) =>
       b.tier === 0 &&
@@ -724,11 +726,13 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
       !COMPLEX_TYPES.includes(b.buildingType) &&
       !SUPPORT_TYPES.includes(b.buildingType),
   );
-  // General-land building groups (housing folds into the magbar too; academies live in the Labour card).
-  // Specialisation sits above Production — the complexes buff the families beneath them. Support sits
-  // last — enabling infrastructure (construction throughput), not manufacturing.
+  // General-land building groups (housing folds into the magbar too; academies sit directly under it
+  // as their own group, the Labour card keeps its licensing rows regardless). Specialisation sits above
+  // Production — the complexes buff the families beneath them. Support sits last — enabling
+  // infrastructure (construction throughput), not manufacturing.
   const buildingGroups: Array<{ title: BuildingGroupTitle; buildings: BuildingEntry[] }> = [
     { title: "Housing", buildings: buildings.filter((b) => b.tier === -1) },
+    { title: "Academies", buildings: buildings.filter((b) => ACADEMY_TYPES.includes(b.buildingType)) },
     { title: "Specialisation", buildings: buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType)) },
     { title: "Production", buildings: buildings.filter((b) => b.tier >= 1) },
     { title: "Support", buildings: buildings.filter((b) => SUPPORT_TYPES.includes(b.buildingType)) },
@@ -801,7 +805,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <PoolHead
             title="Deposit land"
             sub="extractors"
-            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{depSlots} worked</>}
+            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{Math.round(depSlots)} worked</>}
           />
           <DepositTable
             rows={depRows}
