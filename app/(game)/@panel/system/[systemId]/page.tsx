@@ -1,14 +1,15 @@
 "use client";
 
 import { use, useMemo, type ReactNode } from "react";
+import Link from "next/link";
 import { useEvents } from "@/lib/hooks/use-events";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useUniverse } from "@/lib/hooks/use-universe";
+import { useSystemConstruction } from "@/lib/hooks/use-system-construction";
 import { Card, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
-import { SystemConstructionSection } from "@/components/construction/system-construction-section";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { formatPeople, splitMagnitude } from "@/lib/utils/format";
@@ -178,9 +179,26 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
         </div>
       </Card>
 
-      {/* Construction — in-flight builds / a forming colony (hidden when nothing is under way on a developed world) */}
-      <SystemConstructionSection systemId={systemId} />
+      <ConstructionPointer systemId={systemId} />
     </>
+  );
+}
+
+/** One-line scent trail to the Industry tab while anything is forming/building here. No bars, no queue. */
+function ConstructionPointer({ systemId }: { systemId: string }) {
+  const data = useSystemConstruction(systemId);
+  if (data.visibility !== "visible" || data.projects.length === 0) return null;
+  const colony = data.projects.find((p) => p.kind === "colony_establish");
+  const text = colony
+    ? `colony forming — ${Math.round(colony.progress * 100)}%`
+    : `${data.projects.length} project${data.projects.length === 1 ? "" : "s"} building`;
+  return (
+    <Link
+      href={`/system/${systemId}/industry`}
+      className="mb-6 block text-xs text-text-accent transition-colors hover:text-text-accent-hover"
+    >
+      {text} → Industry
+    </Link>
   );
 }
 

@@ -39,6 +39,7 @@ import { depositRows, generalLand, type DepositRow, type GeneralLand } from "@/c
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
+import { ColonySection } from "@/components/construction/colony-section";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 
@@ -696,7 +697,12 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const newIndustryDialog = useDialog();
 
   if (data.visibility === "unknown") {
-    return <EmptyState message="This system isn't developed yet — no industry to survey." />;
+    return (
+      <>
+        <ColonySection systemId={systemId} />
+        <EmptyState message="This system isn't developed yet — no industry to survey." />
+      </>
+    );
   }
 
   const { space, deposits, labour, labourAllocation, labourFulfillment, buildings, supplyChain, unrest, skillBaskets } = data;

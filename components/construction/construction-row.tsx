@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { Badge } from "@/components/ui/badge";
 import { formatMagnitude } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
 
@@ -10,8 +11,18 @@ import { formatEta } from "@/lib/utils/construction-format";
  * One stat-block construction row (the locked style B): title · detail line · exact full-width
  * progress bar, with a coarse ETA. `showSystem` appends "— <system>" to the title on the faction
  * roll-up (where rows span systems); the per-system section omits it (the system is the page).
+ * Player-ordered rows carry an ORDERED badge; `onCancel` (also player-origin gated) adds a cancel
+ * button to the detail line.
  */
-export function ConstructionRow({ row, showSystem }: { row: ConstructionProjectRow; showSystem: boolean }) {
+export function ConstructionRow({
+  row,
+  showSystem,
+  onCancel,
+}: {
+  row: ConstructionProjectRow;
+  showSystem: boolean;
+  onCancel?: (projectId: string) => void;
+}) {
   const stalled = row.etaPulses === null;
   const baseTitle =
     row.kind === "colony_establish" ? "Establish Colony" : `${row.buildingLabel} ×${row.levels}`;
@@ -36,6 +47,7 @@ export function ConstructionRow({ row, showSystem }: { row: ConstructionProjectR
             </>
           )}
         </span>
+        {row.origin === "player" && <Badge color="amber">ORDERED</Badge>}
         <span
           className={`ml-auto font-mono text-[11px] ${stalled ? "text-status-amber-light" : "text-text-secondary"}`}
         >
@@ -44,21 +56,35 @@ export function ConstructionRow({ row, showSystem }: { row: ConstructionProjectR
       </div>
 
       <p className="mt-0.5 mb-1 text-xs text-text-secondary">
-        {row.kind === "colony_establish" ? (
-          <>
-            seed <span className="font-mono text-text-primary">{formatMagnitude(row.seedPop)}</span> pop ·{" "}
-            <span className="font-mono text-text-primary">{row.housingLevels}</span> housing bundled ·{" "}
-            <span className="text-text-tertiary">from </span>
-            <Link
-              href={`/system/${row.sourceSystemId}`}
-              className="text-text-accent hover:text-text-accent-hover transition-colors"
+        <span className="flex items-center gap-2">
+          <span>
+            {row.kind === "colony_establish" ? (
+              <>
+                seed <span className="font-mono text-text-primary">{formatMagnitude(row.seedPop)}</span> pop ·{" "}
+                <span className="font-mono text-text-primary">{row.housingLevels}</span> housing bundled ·{" "}
+                <span className="text-text-tertiary">from </span>
+                <Link
+                  href={`/system/${row.sourceSystemId}`}
+                  className="text-text-accent hover:text-text-accent-hover transition-colors"
+                >
+                  {row.sourceSystemName}
+                </Link>
+              </>
+            ) : (
+              row.detail
+            )}
+          </span>
+          {row.origin === "player" && onCancel && (
+            <button
+              type="button"
+              aria-label="Cancel order"
+              onClick={() => onCancel(row.id)}
+              className="ml-auto px-1.5 text-[11px] text-status-red-light transition-colors hover:text-status-red"
             >
-              {row.sourceSystemName}
-            </Link>
-          </>
-        ) : (
-          row.detail
-        )}
+              ✕ Cancel
+            </button>
+          )}
+        </span>
       </p>
 
       {row.kind === "colony_establish" && (
