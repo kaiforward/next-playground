@@ -71,6 +71,14 @@ describe("planCentreProposal", () => {
     expect(tied?.systemId).toBe("s1");
   });
 
+  it("sites at the developed system with more remaining space when spare labour ties", () => {
+    // Tier-0 proposal (zero committed space) so the space term isn't contaminated by the queue.
+    const ordered = [proposal("s1", 100, 50, "ore")];
+    // Equal population, no buildings → spare labour ties; s2 has more remaining general space.
+    const p = planCentreProposal("f1", ordered, [], [system("s1", 300, 40), system("s2", 300, 60)], 1, PARAMS);
+    expect(p?.systemId).toBe("s2");
+  });
+
   it("returns null when no developed system has general space for the centre", () => {
     const ordered = [proposal("s1", 100, 50), proposal("s1", 100, 50)];
     expect(planCentreProposal("f1", ordered, [], [system("s1", 500, 0.5)], 1, PARAMS)).toBeNull();
