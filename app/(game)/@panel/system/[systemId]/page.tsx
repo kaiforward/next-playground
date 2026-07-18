@@ -16,6 +16,7 @@ import { formatPeople, splitMagnitude } from "@/lib/utils/format";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { useSystemVitals } from "@/lib/hooks/use-system-vitals";
+import { ColonySection } from "@/components/construction/colony-section";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GRADE } from "@/lib/constants/ui";
 import {
@@ -46,6 +47,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { data: universeData } = useUniverse();
   const substrate = useSystemSubstrate(systemId);
   const vitals = useSystemVitals(systemId);
+  const construction = useSystemConstruction(systemId);
 
   // Owning faction (the source of government). Falls back to the region's
   // dominant faction when a system has no factionId yet.
@@ -109,9 +111,22 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 ]}
               />
             </VitalTile>
+            <VitalTile
+              label="Construction"
+              dotColor="var(--color-status-amber)"
+              value={String(construction.visibility === "visible" ? construction.projects.length : 0)}
+              hint={
+                <Link
+                  href={`/system/${systemId}/industry`}
+                  className="text-text-accent transition-colors hover:text-text-accent-hover"
+                >
+                  → Industry
+                </Link>
+              }
+            />
             <GhostVitalTile
               label="Future vitals"
-              colSpan={4}
+              colSpan={3}
               future={
                 <>
                   control · treasury
@@ -142,6 +157,10 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
 
       {/* Vitals grid — loud stability / development / population, + a ghost tile for future stats */}
       {vitalsSection}
+
+      {/* Colony surface — the founding entry for a controlled, not-yet-developed system. No-ops
+          (renders null) once the system is developed or has nothing forming. */}
+      <ColonySection systemId={systemId} />
 
       {/* Context strip — quiet, tight 2-up. Region + Gateway already surface in the panel header. */}
       <Card variant="bordered" padding="sm" className="mb-6">
@@ -178,27 +197,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </ContextRow>
         </div>
       </Card>
-
-      <ConstructionPointer systemId={systemId} />
     </>
-  );
-}
-
-/** One-line scent trail to the Industry tab while anything is forming/building here. No bars, no queue. */
-function ConstructionPointer({ systemId }: { systemId: string }) {
-  const data = useSystemConstruction(systemId);
-  if (data.visibility !== "visible" || data.projects.length === 0) return null;
-  const colony = data.projects.find((p) => p.kind === "colony_establish");
-  const text = colony
-    ? `colony forming — ${Math.round(colony.progress * 100)}%`
-    : `${data.projects.length} project${data.projects.length === 1 ? "" : "s"} building`;
-  return (
-    <Link
-      href={`/system/${systemId}/industry`}
-      className="mb-6 block text-xs text-text-accent transition-colors hover:text-text-accent-hover"
-    >
-      {text} → Industry
-    </Link>
   );
 }
 

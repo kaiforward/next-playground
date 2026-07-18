@@ -10,10 +10,11 @@ import { formatMagnitude } from "@/lib/utils/format";
 import { COLONY_BLOCK_COPY } from "@/lib/services/construction-orders";
 
 /**
- * A controlled system's Industry-tab content — the ledger's founding entry. Forming → the colony
- * project hero-sized (cancellable when player-ordered); eligible → the Establish verb + its preview
- * (the preview line IS the confirmation surface — the click orders directly); ineligible → the
- * verb disabled with the planner's blocking reason. Foreign systems render forming read-only.
+ * A controlled system's founding entry, rendered on the system Overview for a not-yet-developed
+ * system. Forming → the colony project hero-sized (cancellable when player-ordered); eligible →
+ * the Establish verb + its preview (the preview line IS the confirmation surface — the click
+ * orders directly); ineligible → the verb disabled with the planner's blocking reason. Foreign
+ * systems render forming read-only.
  */
 export function ColonySection({ systemId }: { systemId: string }) {
   const construction = useSystemConstruction(systemId);
