@@ -172,6 +172,15 @@ describe("summarizeColonisation — construction queue split", () => {
     });
   });
 
+  it("counts open centre projects under kind 'centre'", () => {
+    const summary = summarizeColonisation([], new Set(), [
+      { kind: "build", id: "c1", factionId: "f1", systemId: "x",
+        buildingType: CONSTRUCTION_CENTRE_TYPE, levels: 1,
+        workTotal: workCostPerLevel(CONSTRUCTION_CENTRE_TYPE), workDone: 0 },
+    ]);
+    expect(summary.queue.colonyByKind["centre"]).toBe(1);
+  });
+
   it("reports zero colony progress when there are no colony projects (division guard)", () => {
     const summary = summarizeColonisation([], new Set(["hw"]), [project("hw", "ore")]);
     expect(summary.queue.colonyProjects).toBe(0);
@@ -225,12 +234,11 @@ describe("summarizeConstructionPool", () => {
     expect(s.queueRemainingWork).toBe(20);
   });
 
-  it("counts open centre projects under kind 'centre'", () => {
-    const summary = summarizeColonisation([], new Set(), [
-      { kind: "build", id: "c1", factionId: "f1", systemId: "x",
-        buildingType: CONSTRUCTION_CENTRE_TYPE, levels: 1,
-        workTotal: workCostPerLevel(CONSTRUCTION_CENTRE_TYPE), workDone: 0 },
-    ]);
-    expect(summary.queue.colonyByKind["centre"]).toBe(1);
+  it("excludes non-developed systems from centreLevels even when they carry the building", () => {
+    // Mirrors the outpost fixture pattern above: a controlled (non-developed) system holding a
+    // Construction Centre shouldn't count toward built centre levels.
+    const outpost = devSys("cc", { control: "controlled", buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1 } });
+    const s = summarizeConstructionPool([outpost], []);
+    expect(s.centreLevels).toBe(0);
   });
 });
