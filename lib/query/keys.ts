@@ -42,6 +42,9 @@ export const queryKeys = {
   // Per-system construction section — tick-invalidated (progress advances each funded pulse).
   systemConstructionAll: ["systemConstruction"] as const,
   systemConstruction: (systemId: string) => ["systemConstruction", systemId] as const,
+  // Per-system player build options (feasibility + verbs) — tick-invalidated.
+  systemBuildOptionsAll: ["systemBuildOptions"] as const,
+  systemBuildOptions: (systemId: string) => ["systemBuildOptions", systemId] as const,
   // Per-faction construction roll-up — tick-invalidated.
   factionConstructionAll: ["factionConstruction"] as const,
   factionConstruction: (factionId: string) => ["factionConstruction", factionId] as const,
