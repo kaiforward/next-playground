@@ -42,6 +42,8 @@ interface ConstructionRowBase {
 
 export interface ConstructionProjectBuildRow extends ConstructionRowBase {
   kind: "build";
+  /** Raw building-type id — ledger-group classification keys on this, not the label. */
+  buildingType: string;
   /** "Housing", "Foundry", "Vocational School", … */
   buildingLabel: string;
   levels: number;
@@ -176,6 +178,7 @@ export function computeFactionConstruction(
       const row: ConstructionProjectBuildRow = {
         ...base,
         kind: "build",
+        buildingType: p.buildingType,
         buildingLabel: buildingLabel(p.buildingType),
         levels: p.levels,
         detail: describeBuildProject(p.buildingType),
