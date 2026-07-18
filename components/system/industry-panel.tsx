@@ -9,6 +9,7 @@ import {
   ACADEMY_TYPES,
   VOCATIONAL_SCHOOL_TYPE,
   RESEARCH_INSTITUTE_TYPE,
+  CONSTRUCTION_CENTRE_TYPE,
   COMPLEX_TYPES,
   COMPLEX_BY_TYPE,
 } from "@/lib/constants/industry";
@@ -72,10 +73,11 @@ function producerTier(b: BuildingEntry): GoodTier {
   return b.tier === 1 ? 1 : b.tier === 2 ? 2 : 0;
 }
 
-/** Academy building types don't produce a good, so they're not in GOODS — name them explicitly. */
-const ACADEMY_LABELS: Record<string, string> = {
+/** Non-good building types aren't in GOODS — name them explicitly. */
+const NON_GOOD_LABELS: Record<string, string> = {
   [VOCATIONAL_SCHOOL_TYPE]: "Vocational School",
   [RESEARCH_INSTITUTE_TYPE]: "Research Institute",
+  [CONSTRUCTION_CENTRE_TYPE]: "Construction Centre",
 };
 
 /** Complex building types aren't in GOODS either — name them from the family catalog. */
@@ -86,7 +88,7 @@ const COMPLEX_LABELS: Record<string, string> = Object.fromEntries(
 /** Human-readable label for a building type or good id. */
 function label(id: string): string {
   if (id === HOUSING_TYPE) return "Housing";
-  return ACADEMY_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
+  return NON_GOOD_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
 // ── Small shared pieces ──────────────────────────────────────────────────────

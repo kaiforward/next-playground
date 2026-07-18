@@ -284,6 +284,8 @@ export type SystemConstructionData =
 export interface FactionConstructionData {
   factionId: string;
   pool: number;
+  poolBase: number;
+  poolCentres: number;
   expandCount: number;
   buildCount: number;
   expansion: ConstructionProjectColonyRow[];
