@@ -7,13 +7,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConstructionRow } from "@/components/construction/construction-row";
 import { formatMagnitude } from "@/lib/utils/format";
-import type { ColonyBlockReason } from "@/lib/services/construction-orders";
-
-const REASON_COPY: Record<ColonyBlockReason, string> = {
-  already_forming: "A colony is already forming here.",
-  below_habitable_floor: "Below the habitable floor — this world cannot hold a colony.",
-  no_seed_source: "No developed system in range to seed a colony from.",
-};
+import { COLONY_BLOCK_COPY } from "@/lib/services/construction-orders";
 
 /**
  * A controlled system's Industry-tab content — the ledger's founding entry. Forming → the colony
@@ -68,7 +62,7 @@ export function ColonySection({ systemId }: { systemId: string }) {
           <>
             <p className="mb-3 text-sm text-text-tertiary">Controlled, not yet colonised.</p>
             <Button variant="action" color="green" size="sm" disabled>◆ Establish colony</Button>
-            <p className="mt-2.5 text-xs text-status-amber-light">{REASON_COPY[colony.reason]}</p>
+            <p className="mt-2.5 text-xs text-status-amber-light">{COLONY_BLOCK_COPY[colony.reason]}</p>
           </>
         ) : null}
       </CardContent>

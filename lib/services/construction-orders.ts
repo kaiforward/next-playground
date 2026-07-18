@@ -142,6 +142,13 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
 /** Why a controlled system can't take a colony order right now (mirrors planner eligibility). */
 export type ColonyBlockReason = "already_forming" | "below_habitable_floor" | "no_seed_source";
 
+/** User-facing copy for each block reason — shared by the order error and the Industry-tab UI. */
+export const COLONY_BLOCK_COPY: Record<ColonyBlockReason, string> = {
+  already_forming: "A colony is already forming here.",
+  below_habitable_floor: "Below the habitable floor — this world cannot hold a colony.",
+  no_seed_source: "No developed system in range to seed a colony from.",
+};
+
 /** Nearest developed same-faction seed source within the tick's reach radius, or null. */
 export function findSeedSource(world: World, factionId: string, systemId: string): string | null {
   const hops = boundedHopsFromOrigin(systemId, toTickConnections(world), COLONY_REACH_HOPS);
@@ -192,12 +199,7 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
 
   const check = colonyEligibility(seat.world, seat.factionId, system);
   if (!check.eligible) {
-    const message: Record<ColonyBlockReason, string> = {
-      already_forming: "A colony is already forming here.",
-      below_habitable_floor: "Below the habitable floor — this world cannot hold a colony.",
-      no_seed_source: "No developed system in range to seed the colony from.",
-    };
-    return { ok: false, error: message[check.reason] };
+    return { ok: false, error: COLONY_BLOCK_COPY[check.reason] };
   }
   const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
   if (sizing === null) return { ok: false, error: "Below the habitable floor — this world cannot hold a colony." };
