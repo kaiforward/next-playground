@@ -13,7 +13,7 @@ function MapContent({ initialSystemId }: { initialSystemId?: string }) {
     <div className="h-[calc(100vh-var(--topbar-height))] w-full relative">
       <StarMap
         atlas={atlas}
-        initialSelectedSystemId={initialSystemId}
+        initialSelectedSystemId={initialSystemId ?? atlas.player?.homeworldSystemId}
       />
     </div>
   );

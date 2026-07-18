@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { saveGameSchema, loadGameSchema } from "@/lib/schemas/game-setup";
+import { saveGameSchema, loadGameSchema, newGameSchema } from "@/lib/schemas/game-setup";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 
 describe("saveGameSchema", () => {
@@ -34,5 +34,40 @@ describe("loadGameSchema", () => {
   it("rejects empty / empty-sanitizing names (mirrors saveGameSchema)", () => {
     expect(loadGameSchema.safeParse({ name: "" }).success).toBe(false);
     expect(loadGameSchema.safeParse({ name: "???" }).success).toBe(false);
+  });
+});
+
+describe("newGameSchema — authored faction", () => {
+  const valid = {
+    systemCount: 600,
+    name: "Aurelian League",
+    governmentType: "federation",
+    doctrine: "expansionist",
+  };
+
+  it("accepts a valid authored faction", () => {
+    const r = newGameSchema.safeParse(valid);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.name).toBe("Aurelian League");
+      expect(r.data.governmentType).toBe("federation");
+      expect(r.data.doctrine).toBe("expansionist");
+    }
+  });
+
+  it("rejects an out-of-set government", () => {
+    expect(newGameSchema.safeParse({ ...valid, governmentType: "monarchy" }).success).toBe(false);
+  });
+
+  it("rejects an out-of-set doctrine", () => {
+    expect(newGameSchema.safeParse({ ...valid, doctrine: "pacifist" }).success).toBe(false);
+  });
+
+  it("rejects an empty name", () => {
+    expect(newGameSchema.safeParse({ ...valid, name: "   " }).success).toBe(false);
+  });
+
+  it("rejects an overlong name (over the 40-char bound)", () => {
+    expect(newGameSchema.safeParse({ ...valid, name: "x".repeat(41) }).success).toBe(false);
   });
 });

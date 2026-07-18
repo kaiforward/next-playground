@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, getWorld, clearWorld, hasWorld } from "@/lib/world/store";
 import { setSavesDirForTesting } from "@/lib/world/save-files";
-import { saveGame, loadGame, listGameSaves } from "@/lib/services/game";
+import { newGame, saveGame, loadGame, listGameSaves } from "@/lib/services/game";
 
 describe("game lifecycle services (save/load)", () => {
   const world = generateWorld({ systemCount: 60, seed: 7 });
@@ -91,5 +91,29 @@ describe("game lifecycle services (save/load)", () => {
     const times = saves.map((s) => Date.parse(s.savedAt));
     const sorted = [...times].sort((a, b) => b - a);
     expect(times).toEqual(sorted);
+  });
+});
+
+describe("newGame — authored player faction", () => {
+  afterEach(() => {
+    clearWorld();
+  });
+
+  it("wires the authored faction into world.player and the roster, then swaps it into the store", () => {
+    const meta = newGame({
+      systemCount: 120,
+      seed: 42,
+      name: "Wiring Test",
+      governmentType: "technocratic",
+      doctrine: "mercantile",
+    });
+    expect(meta.systemCount).toBeGreaterThan(0);
+
+    const world = getWorld();
+    expect(world.player).not.toBeNull();
+    const seat = world.factions.find((f) => f.id === world.player?.controlledFactionId)!;
+    expect(seat.name).toBe("Wiring Test");
+    expect(seat.governmentType).toBe("technocratic");
+    expect(seat.doctrine).toBe("mercantile");
   });
 });

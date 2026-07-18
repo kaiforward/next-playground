@@ -9,7 +9,6 @@ import { apiFetch, apiMutate } from "@/lib/query/fetcher";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import type { SaveInfo } from "@/lib/world/save-files";
 import type { WorldMeta } from "@/lib/world/types";
-import { NewGameForm } from "./new-game-form";
 
 function formatSavedAt(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -82,8 +81,10 @@ export function StartScreen() {
       )}
 
       <Card>
-        <CardHeader title="New Game" />
-        <NewGameForm />
+        <CardHeader title="New Game" subtitle="Author a faction and drop into a fresh galaxy." />
+        <Button href="/start/new" fullWidth>
+          New Game
+        </Button>
       </Card>
 
       <Card>

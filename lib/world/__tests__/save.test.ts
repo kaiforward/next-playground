@@ -42,10 +42,10 @@ describe("serializeWorld / deserializeWorld", () => {
   });
 
   it("rejects a world whose meta is missing mapSize (tile geometry depends on it)", () => {
-    const { seed, systemCount, currentTick, startingSystemId } = world.meta;
+    const { seed, systemCount, currentTick } = world.meta;
     const json = JSON.stringify({
       formatVersion: 2,
-      world: { ...world, meta: { seed, systemCount, currentTick, startingSystemId } },
+      world: { ...world, meta: { seed, systemCount, currentTick } },
     });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
@@ -57,8 +57,8 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 5 (discriminated construction projects)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(5);
+  it("is at save format version 6 (world.player)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(6);
   });
 
   it("rejects a prior-version (v4) save — saves break on the shape bump", () => {
@@ -111,5 +111,24 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world).toStrictEqual(withColony);
+  });
+});
+
+describe("save format — player seat", () => {
+  it("round-trips world.player", () => {
+    const world = generateWorld({
+      systemCount: 120,
+      seed: 7,
+      playerFaction: { name: "Testers Guild", governmentType: "corporate", doctrine: "hegemonic" },
+    });
+    const back = deserializeWorld(serializeWorld(world));
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(back.world.player).toEqual(world.player);
+  });
+
+  it("rejects a pre-6 save cleanly", () => {
+    const stale = JSON.stringify({ formatVersion: 5, world: { meta: {} } });
+    const result = deserializeWorld(stale);
+    expect(result.ok).toBe(false);
   });
 });

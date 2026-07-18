@@ -159,3 +159,28 @@ describe("getAtlas", () => {
     expect(developed.developed).toBe(true); // developed, even with popCap === 0
   });
 });
+
+describe("getAtlas — player", () => {
+  it("exposes the controlled faction and its homeworld system", () => {
+    const playerWorld = generateWorld({
+      systemCount: 150,
+      seed: 99,
+      playerFaction: { name: "Focus Test", governmentType: "cooperative", doctrine: "protectionist" },
+    });
+    setWorld(playerWorld);
+
+    const atlas = getAtlas();
+    expect(atlas.player).not.toBeNull();
+    const seatId = playerWorld.factions.find(
+      (f) => f.id === playerWorld.player?.controlledFactionId,
+    )!.id;
+    expect(atlas.player?.controlledFactionId).toBe(seatId);
+    const faction = playerWorld.factions.find((f) => f.id === seatId)!;
+    expect(atlas.player?.homeworldSystemId).toBe(faction.homeworldId);
+  });
+
+  it("is null for a playerless world", () => {
+    setWorld(generateWorld({ systemCount: 150, seed: 99 }));
+    expect(getAtlas().player).toBeNull();
+  });
+});

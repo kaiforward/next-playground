@@ -29,7 +29,14 @@ export interface WorldMeta {
   systemCount: number;
   mapSize: number;
   currentTick: number;
-  startingSystemId: string;
+}
+
+// ── Player ──────────────────────────────────────────────────────
+
+/** The human seat: which faction the player controls. Null in a playerless world (the
+ *  calibration harness). Everything else player-specific hangs off the controlled faction. */
+export interface WorldPlayer {
+  controlledFactionId: string;
 }
 
 // ── Regions ─────────────────────────────────────────────────────
@@ -343,6 +350,8 @@ export interface WorldFlowEvent {
 
 export interface World {
   meta: WorldMeta;
+  /** The human player's seat, or null for a playerless (harness-generated) world. */
+  player: WorldPlayer | null;
   regions: WorldRegion[];
   systems: WorldSystem[];
   bodies: WorldBody[];

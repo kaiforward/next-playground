@@ -117,11 +117,6 @@ describe("generateWorld", () => {
     }
   });
 
-  it("points meta.startingSystemId at a real generated system", () => {
-    const systemIds = new Set(world.systems.map((s) => s.id));
-    expect(systemIds.has(world.meta.startingSystemId)).toBe(true);
-  });
-
   it("seeds no ships, events, modifiers, alliance pacts, or flow events", () => {
     expect(world.ships).toEqual([]);
     expect(world.events).toEqual([]);
@@ -167,5 +162,61 @@ describe("generateWorld: control flag", () => {
         expect(s.factionId).toBeNull();
       }
     }
+  });
+});
+
+describe("generateWorld — player faction", () => {
+  const base = { systemCount: 200, seed: 12345 };
+  const authored = {
+    name: "Aurelian League",
+    governmentType: "technocratic" as const,
+    doctrine: "mercantile" as const,
+  };
+
+  it("seeds the authored faction as an additional major and points world.player at it", () => {
+    const world = generateWorld({ ...base, playerFaction: authored });
+
+    expect(world.player).not.toBeNull();
+    const seatId = world.player?.controlledFactionId;
+    const player = world.factions.find((f) => f.id === seatId)!;
+    expect(player.name).toBe("Aurelian League");
+    expect(player.governmentType).toBe("technocratic");
+    expect(player.doctrine).toBe("mercantile");
+    // Placed like everyone: it owns exactly its homeworld, which is developed.
+    const home = world.systems.find((s) => s.id === player.homeworldId)!;
+    expect(home.factionId).toBe(player.id);
+    expect(home.control).toBe("developed");
+  });
+
+  it("is additive — one more faction, with presets + minors unchanged", () => {
+    const playerless = generateWorld(base);
+    const withPlayer = generateWorld({ ...base, playerFaction: authored });
+
+    expect(withPlayer.factions.length).toBe(playerless.factions.length + 1);
+    // The authored faction is the only new identity: every preset major and procedural
+    // minor keeps its name and array position (they're generated before the player is
+    // spliced in at the major/minor boundary).
+    const nonPlayerNames = withPlayer.factions
+      .filter((f) => f.id !== withPlayer.player?.controlledFactionId)
+      .map((f) => f.name);
+    expect(nonPlayerNames).toEqual(playerless.factions.map((f) => f.name));
+  });
+
+  it("wires every faction's homeworld to its own id after the player splice + reindex", () => {
+    // The player is spliced in at the major/minor boundary and every faction's
+    // index is reassigned before placement/ownership. A stale index would attribute
+    // a faction's homeworld to a *different* (still-valid) faction id — which the
+    // generic ownership test can't catch (it only checks the id is some valid one).
+    // Assert every faction — player and non-player alike — owns its own homeworld.
+    const world = generateWorld({ ...base, playerFaction: authored });
+    for (const f of world.factions) {
+      const home = world.systems.find((s) => s.id === f.homeworldId)!;
+      expect(home.factionId).toBe(f.id);
+    }
+  });
+
+  it("stays playerless when no faction is authored (the harness path)", () => {
+    const world = generateWorld(base);
+    expect(world.player).toBeNull();
   });
 });

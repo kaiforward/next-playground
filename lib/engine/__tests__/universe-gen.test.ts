@@ -10,13 +10,11 @@ import {
   generateSystems,
   generateConnections,
   generateUniverse,
-  selectStartingSystem,
   stampHomeworldPrefabs,
   type GenParams,
   type GeneratedRegion,
   type GeneratedSystem,
 } from "../universe-gen";
-import type { GeneratedFaction } from "../faction-gen";
 import { HOME_SYSTEM_PREFAB } from "@/lib/engine/homeworld-prefab";
 import { emptyResourceVector } from "@/lib/engine/resources";
 import {
@@ -43,16 +41,6 @@ function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem
     availableSpace: 0, generalSpace: 0, habitableSpace: 0,
     slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
-    ...p,
-  };
-}
-
-/** Minimal GeneratedFaction for unit tests. Defaults to a federation major. */
-function mkFaction(p: Partial<GeneratedFaction> & { index: number }): GeneratedFaction {
-  return {
-    key: `f${p.index}`, name: `F${p.index}`, description: "",
-    governmentType: "federation", doctrine: "expansionist",
-    color: "#000000", isMajor: true, homeworldSystemIndex: p.index,
     ...p,
   };
 }
@@ -461,36 +449,6 @@ describe("stampHomeworldPrefabs", () => {
   });
 });
 
-// ── Starting system ─────────────────────────────────────────────
-
-describe("selectStartingSystem", () => {
-  it("places the player in Federation-major territory", () => {
-    const params = defaultParams();
-    const universe = generateUniverse(params, REGION_NAMES);
-    const startFactionIdx = universe.systemFactionAssignments[universe.startingSystemIndex];
-    const startFaction = universe.factions[startFactionIdx];
-    expect(startFaction.isMajor).toBe(true);
-    expect(startFaction.governmentType).toBe("federation");
-  });
-
-  it("prefers a core-economy system closest to map center among a faction's candidates", () => {
-    // Under homeworld-only world-gen a faction owns a single system, so generateUniverse
-    // can't hand selectStartingSystem multiple candidates. Exercise the core + proximity
-    // tie-break directly: a federation major owning four systems — the nearest to center is
-    // non-core, plus core systems near and far — must yield the near core (index 2), proving
-    // core preference wins over raw proximity.
-    const fed = mkFaction({ index: 0, isMajor: true, governmentType: "federation" });
-    const systems = [
-      mkSys({ index: 0, x: 90, y: 90, economyType: "core" }),       // core but far from center (50,50)
-      mkSys({ index: 1, x: 52, y: 50, economyType: "extraction" }), // nearest to center, but not core
-      mkSys({ index: 2, x: 55, y: 50, economyType: "core" }),       // core and near center → winner
-      mkSys({ index: 3, x: 10, y: 10, economyType: "core" }),       // core but far
-    ];
-    const assignments = [fed.index, fed.index, fed.index, fed.index];
-    expect(selectStartingSystem(systems, [fed], assignments, 100)).toBe(2);
-  });
-});
-
 // ── Full generation determinism ─────────────────────────────────
 
 describe("generateUniverse", () => {
@@ -504,7 +462,41 @@ describe("generateUniverse", () => {
     expect(u1.connections).toEqual(u2.connections);
     expect(u1.factions).toEqual(u2.factions);
     expect(u1.systemFactionAssignments).toEqual(u2.systemFactionAssignments);
-    expect(u1.startingSystemIndex).toBe(u2.startingSystemIndex);
+  });
+
+  it("returns a valid playerFactionIndex pointing at the authored faction when one is supplied", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES, {
+      name: "Aurelian League",
+      governmentType: "technocratic",
+      doctrine: "mercantile",
+    });
+    expect(u.playerFactionIndex).not.toBeNull();
+    const idx = u.playerFactionIndex;
+    if (idx === null) throw new Error("expected a player faction index");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(idx).toBeLessThan(u.factions.length);
+    const player = u.factions[idx];
+    expect(player.key).toBe("player");
+    expect(player.name).toBe("Aurelian League");
+    expect(player.isMajor).toBe(true);
+  });
+
+  it("is null for a playerless universe and deterministic with an authored player", () => {
+    const params = defaultParams();
+    expect(generateUniverse(params, REGION_NAMES).playerFactionIndex).toBeNull();
+    const a = generateUniverse(params, REGION_NAMES, {
+      name: "Seat",
+      governmentType: "cooperative",
+      doctrine: "protectionist",
+    });
+    const b = generateUniverse(params, REGION_NAMES, {
+      name: "Seat",
+      governmentType: "cooperative",
+      doctrine: "protectionist",
+    });
+    expect(a.playerFactionIndex).toBe(b.playerFactionIndex);
+    expect(a.factions).toEqual(b.factions);
   });
 
   it("produces different output for different seeds", () => {
@@ -526,8 +518,6 @@ describe("generateUniverse", () => {
     expect(u.systems.length).toBeLessThanOrEqual(params.totalSystems);
     // At minimum MST edges (bidirectional) per region
     expect(u.connections.length).toBeGreaterThan(500);
-    expect(u.startingSystemIndex).toBeGreaterThanOrEqual(0);
-    expect(u.startingSystemIndex).toBeLessThan(u.systems.length);
   });
 
   it("no region has fewer than 5 systems", () => {

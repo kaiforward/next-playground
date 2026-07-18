@@ -40,11 +40,20 @@ export interface GeneratedFaction {
 
 // ── Configuration ───────────────────────────────────────────────
 
+/** The human player's authored faction, seeded as an additional major. */
+export interface PlayerFactionInput {
+  name: string;
+  governmentType: GovernmentType;
+  doctrine: Doctrine;
+}
+
 export interface FactionGenParams {
   /** Number of minor factions to procedurally generate. */
   minorFactionCount: number;
   /** Map size — sets the homeworld spacing threshold. */
   mapSize: number;
+  /** When present, the human player's authored faction — seeded as an additional major. */
+  playerFaction?: PlayerFactionInput;
 }
 
 // ── Faction generation ──────────────────────────────────────────
@@ -98,6 +107,27 @@ export function generateFactions(
       isMajor: false,
       homeworldSystemIndex: -1,
     });
+  }
+
+  // ── Player faction: an additional major, authored on the New-Game screen ──
+  // Built AFTER minors so their procedural names/colours match a playerless run (the
+  // harness), then spliced in at the major/minor boundary so placement gives it major-tier
+  // homeworld priority. Colour is drawn distinct from every faction already placed.
+  if (params.playerFaction) {
+    const color = makeMinorColor(rng, usedHues);
+    usedHues.push(hexToHue(color));
+    factions.splice(FACTION_ROSTER.length, 0, {
+      index: FACTION_ROSTER.length, // reassigned below
+      key: "player",
+      name: params.playerFaction.name,
+      description: "",
+      governmentType: params.playerFaction.governmentType,
+      doctrine: params.playerFaction.doctrine,
+      color,
+      isMajor: true,
+      homeworldSystemIndex: -1,
+    });
+    factions.forEach((f, i) => { f.index = i; });
   }
 
   // ── Placement: every faction gets a spaced, seed-biased homeworld ──

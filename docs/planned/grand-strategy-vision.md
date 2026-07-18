@@ -30,7 +30,7 @@ This is deliberately above implementation: it locks the concept, records what is
 
 ## 3. The player
 
-- **Seat**: an existing faction, from the first minute. No personal avatar, no rise-from-one-ship arc, no starting smaller than faction scale. (The Mount & Blade progression fantasy is explicitly retired — its payoff was real-time battles we will never have.)
+- **Seat**: a faction you author on New Game (name, government, doctrine), from the first minute — seeded as an additional major alongside the AI powers. No personal avatar, no rise-from-one-ship arc, no starting smaller than faction scale. (The Mount & Blade progression fantasy is explicitly retired — its payoff was real-time battles we will never have.)
 - **Arc**: small core → colonise → develop → specialise → project power. The three-phase feel comes from empire size, not unlock gates.
 - **Verbs (v1 target)**: set budgets and priorities; place/expand industry, housing, and special buildings (fractional allocations); direct colonisation; influence flow effectiveness; conduct basic diplomacy; respond to events; toggle per-domain automation.
 - **Verbs (later)**: policies/laws over pops and ideology; war — mobilisation, fronts, interdiction; deeper diplomacy (pacts, claims, coalitions).
