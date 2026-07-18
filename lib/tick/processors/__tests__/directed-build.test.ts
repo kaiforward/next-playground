@@ -642,19 +642,37 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
 
 describe("player orders in the funding queue", () => {
   it("funds a fresh player order ahead of this pulse's new autonomic proposals", async () => {
-    // World with a deficit (so the planner proposes) and ONE fresh player order in the open set;
-    // pool sized to fund exactly one project's pulse-cap. The player row must receive work; the
-    // new proposals must not.
+    // Stored order is [fresh player row, committed auto row] — the WRONG-for-funding order, so
+    // orderOpenProjects must actually move the committed row ahead of the fresh player row for this
+    // test to pass; a processor that funded raw stored order ([...existing, ...newProjects], no
+    // reorder) would flip which row gets the front-of-queue cap and which gets the pool's leftover.
+    // Floor disabled (floorBase 0) so the whole pool is plain front-first, no reserved slice to confound
+    // the arithmetic. cap=4, pool=5000×0.001=5: the front row absorbs a full cap (4), the second row
+    // gets only the pool's leftover (1), and nothing reaches this pulse's new proposals (pool exhausted).
     const playerOrder: WorldConstructionProject = { kind: "build", id: "player-1", factionId: "f1",
       systemId: "s1", origin: "player", buildingType: "metals", levels: 1, workTotal: 20, workDone: 0 };
-    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [playerOrder]);
+    const committedAuto: WorldConstructionProject = { kind: "build", id: "auto-committed", factionId: "f1",
+      systemId: "s2", origin: "auto", buildingType: "metals", levels: 1, workTotal: 20, workDone: 5 };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [playerOrder, committedAuto]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
-      construction: { ...mkConstruction(5, 0.001) }, // tiny pool: one absorption only
+      construction: mkConstruction(4, 0.001, 0, CONSTRUCTION.FLOOR_DEV_KNEE),
     });
-    const persisted = w.constructionProjects.find((p) => p.id === "player-1");
-    expect(persisted).toBeDefined();
-    expect(persisted?.workDone).toBeGreaterThan(0);
+    const persistedPlayer = w.constructionProjects.find((p) => p.id === "player-1");
+    const persistedAuto = w.constructionProjects.find((p) => p.id === "auto-committed");
+    // The committed row was reordered to the front → it absorbs the full cap (5 + 4 = 9); the fresh
+    // player row only gets the pool's leftover (1) — pinning the exact split proves which row went
+    // first, not merely that both got something (either order would leave both non-zero here).
+    expect(persistedAuto?.workDone).toBe(9);
+    expect(persistedPlayer?.workDone).toBe(1);
+    // Both pre-existing rows drained the pool before any of this pulse's new autonomic proposals: every
+    // other persisted project (this pulse's new proposals for the scenario's food/housing deficit) is
+    // still at workDone 0.
+    const newProposals = w.constructionProjects.filter(
+      (p) => p.id !== "player-1" && p.id !== "auto-committed",
+    );
+    expect(newProposals.length).toBeGreaterThan(0);
+    expect(newProposals.every((p) => p.workDone === 0)).toBe(true);
   });
 
   it("never drops an unfunded player order (persist-if-funded is auto-only)", async () => {
