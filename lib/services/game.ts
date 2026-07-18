@@ -4,18 +4,27 @@ import { deserializeWorld, sanitizeSaveName } from "@/lib/world/save";
 import { tickLoop, type Speed } from "@/lib/world/tick-loop";
 import type { SaveInfo } from "@/lib/world/save-files";
 import type { WorldMeta } from "@/lib/world/types";
+import type { NewGameInput } from "@/lib/schemas/game-setup";
 
 /**
  * Create a fresh world and swap it into the store. Pauses the tick loop first
  * so the swap can't race a tick mid-generation; the player resumes pacing
  * explicitly from the UI.
  */
-export function newGame(input: { systemCount: number; seed?: number }): WorldMeta {
+export function newGame(input: NewGameInput): WorldMeta {
   // The only permissible Math.random — a default seed picked outside the
   // deterministic tick path.
   const seed = input.seed ?? Math.floor(Math.random() * 2_000_000_000);
   tickLoop.setSpeed("paused");
-  const world = generateWorld({ systemCount: input.systemCount, seed });
+  const world = generateWorld({
+    systemCount: input.systemCount,
+    seed,
+    playerFaction: {
+      name: input.name,
+      governmentType: input.governmentType,
+      doctrine: input.doctrine,
+    },
+  });
   setWorld(world);
   return world.meta;
 }

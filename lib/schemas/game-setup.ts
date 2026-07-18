@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { sanitizeSaveName, AUTOSAVE_NAME } from "@/lib/world/save";
+import { ALL_GOVERNMENT_TYPES, ALL_DOCTRINES } from "@/lib/types/guards";
 
 export const newGameSchema = z.object({
   systemCount: z
@@ -8,6 +9,13 @@ export const newGameSchema = z.object({
     .min(50, "System count must be at least 50")
     .max(20000, "System count must be at most 20,000"),
   seed: z.number("Seed must be a number").int("Seed must be a whole number").optional(),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Faction name is required")
+    .max(40, "Faction name must be at most 40 characters"),
+  governmentType: z.enum(ALL_GOVERNMENT_TYPES),
+  doctrine: z.enum(ALL_DOCTRINES),
 });
 
 export const speedSchema = z.object({
