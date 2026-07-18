@@ -14,7 +14,7 @@ The whole world is a single in-memory object held by a globalThis-cached store (
 - The store is `globalThis.__world`, so dev-server module reloads don't spawn a second world.
 - `version` is a plain change counter (used to key caches / detect new-game swaps), **not** a tick-level optimistic lock. Ticks don't contend: one in-process loop owns advancement.
 
-`World` (`lib/world/types.ts`) is **hand-owned and JSON-serializable**: flat arrays of plain rows (`WorldSystem`, `WorldMarket`, `WorldBuilding`, `WorldEvent`, …) plus a `meta` block (`{ currentTick, systemCount, seed, mapSize, startingSystemId }`). No `Map`/`Set`/`Date`/class instances ever enter world state — that keeps it structured-clone-able (save files, and a future path-B worker boundary) and schema-faithful to the pre-pivot relational shape.
+`World` (`lib/world/types.ts`) is **hand-owned and JSON-serializable**: flat arrays of plain rows (`WorldSystem`, `WorldMarket`, `WorldBuilding`, `WorldEvent`, …) plus a `meta` block (`{ currentTick, systemCount, seed, mapSize }`) and a `player` seat (`{ controlledFactionId } | null`). No `Map`/`Set`/`Date`/class instances ever enter world state — that keeps it structured-clone-able (save files, and a future path-B worker boundary) and schema-faithful to the pre-pivot relational shape.
 
 ## World generation
 
@@ -71,4 +71,4 @@ The runtime is packaging **path A** (in-process singleton) held to **path-B puri
 
 ## Not yet implemented
 
-Planned, not built (see [grand-strategy-vision.md](../../planned/grand-strategy-vision.md)): the player seat and faction pick; treasury/budgets and build orders; small-cores world-gen and colonisation; fog of war; the map-first UI redesign; time fiction; desktop (Electron/Tauri) packaging; the worker-side engine extraction. Ship travel, the fleet models, and the `ship-arrivals` processor exist in the backend, but world-gen seeds no ships, so they stay dormant until player fleets are built.
+Planned, not built (see [grand-strategy-vision.md](../../planned/grand-strategy-vision.md)): the rest of the player seat — direct control verbs; treasury/budgets and build orders; small-cores world-gen and colonisation; fog of war; the map-first UI redesign; time fiction; desktop (Electron/Tauri) packaging; the worker-side engine extraction. Ship travel, the fleet models, and the `ship-arrivals` processor exist in the backend, but world-gen seeds no ships, so they stay dormant until player fleets are built.

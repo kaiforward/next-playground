@@ -325,7 +325,7 @@ Claiming stays gradual — bounded by a small per-pulse cap, the reach radius, a
 
 ### Starting Position (Implemented)
 
-**There is no player.** There is no `Player` model, registration, or per-player reputation. World-gen records a `meta.startingSystemId` — a core-economy system near map center, owned by a Federation-government major — as the reserved, faction-unaligned start point for the planned player seat. The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), which is planned.
+**The player authors a faction.** On New Game the player supplies a name, government, and doctrine; world-gen seeds that faction as an additional major — placed by the same spacing + seed-biased homeworld logic as every other faction — and records the seat as `world.player.controlledFactionId` (a playerless world, e.g. the calibration harness, sets `world.player` to null). The player's faction runs on the same autonomic agency as every AI faction; direct control verbs are planned. The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), which is planned.
 
 ---
 

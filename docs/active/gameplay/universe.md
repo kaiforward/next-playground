@@ -157,7 +157,7 @@ When viewing a system, the detail page shows:
 
 ## Starting Position
 
-World-gen records a `startingSystemId` on `meta` — a core-economy system in the region closest to the map center — as the reserved start point for the planned player seat. No player spawns there yet. Selection: find the region closest to (mapSize/2, mapSize/2), pick core economy systems, choose the one closest to the region center. Fallback: closest system to region center regardless of economy.
+The player authors a faction on New Game (name/government/doctrine); world-gen seeds it as an additional major placed like every other faction, and records the seat as `world.player`. There is no reserved start *system* — the map auto-focuses the player's homeworld on entry. See [faction-system.md](./faction-system.md#5-homeworlds) and [single-player-runtime.md](../engineering/single-player-runtime.md).
 
 ---
 
