@@ -6,6 +6,7 @@
 import { getWorld } from "@/lib/world/store";
 import { ServiceError } from "@/lib/services/errors";
 import { CONSTRUCTION } from "@/lib/constants/construction";
+import { buildingsBySystem } from "@/lib/services/world-index";
 import {
   computeFactionConstruction,
   type ConstructionSystemInfo,
@@ -18,13 +19,19 @@ function readoutForFaction(factionId: string): FactionConstructionReadout {
   const faction = world.factions.find((f) => f.id === factionId);
   if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, 404);
 
+  const buildings = buildingsBySystem();
   const systems: ConstructionSystemInfo[] = world.systems
     .filter((s) => s.factionId === factionId)
-    .map((s) => ({ id: s.id, name: s.name, control: s.control, population: s.population }));
+    .map((s) => ({
+      id: s.id, name: s.name, control: s.control, population: s.population,
+      buildings: buildings.get(s.id) ?? {},
+    }));
   const projects = world.constructionProjects.filter((p) => p.factionId === factionId);
 
   return computeFactionConstruction(
-    projects, systems, CONSTRUCTION.THROUGHPUT_PER_POP, CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,
+    projects, systems,
+    { throughputPerPop: CONSTRUCTION.THROUGHPUT_PER_POP, pointsPerLevel: CONSTRUCTION.POINTS_PER_LEVEL },
+    CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,
   );
 }
 
@@ -33,6 +40,8 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
   return {
     factionId,
     pool: readout.pool,
+    poolBase: readout.poolBase,
+    poolCentres: readout.poolCentres,
     expandCount: readout.expandCount,
     buildCount: readout.buildCount,
     expansion: readout.expansion,

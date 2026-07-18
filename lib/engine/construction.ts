@@ -10,23 +10,61 @@ import type { SystemControl, WorldConstructionProject } from "@/lib/world/types"
 import type { Proposal } from "@/lib/engine/directed-build";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
+import { computeLabourAllocation, labourParts, labourStateFromParts } from "@/lib/engine/industry";
+import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
+
+/** The per-system fields the pool reads: ownership tier, headcount, and the built base. */
+export interface ConstructionPoolSystem {
+  control: SystemControl;
+  population: number;
+  buildings: Record<string, number>;
+}
+
+/** Per-pulse point rates. Callers scale both by catchUp when funding (they are pulse incomes). */
+export interface ConstructionPoolRates {
+  /** Construction points per eligible head per pulse. */
+  throughputPerPop: number;
+  /** Construction points one fully-staffed Construction Centre level adds per pulse. */
+  pointsPerLevel: number;
+}
+
+/** A faction's pool, split by source — base (eligible heads) and centre (capital) output. */
+export interface ConstructionPool {
+  base: number;
+  centres: number;
+  total: number;
+}
 
 /**
- * A faction's per-pulse construction throughput pool: Σ over its economically-active (developed)
- * systems of population × throughputPerPop. Controlled/unclaimed systems are inert (population 0)
- * and contribute nothing. This is the single pacing meter — the planner proposes toward physical
- * ceilings; this pool decides how fast fundQueue drains the queue. A money/treasury gate stacks on
- * top of this at the same seam later (docs/planned/economy-demand-driven-model.md §5).
+ * A faction's per-pulse construction pool over its economically-active (developed) systems.
+ *
+ * The base is ELIGIBLE heads, not raw headcount: population minus the heads actually employed in
+ * technician/engineer jobs (`computeLabourAllocation` — employment-bounded, so a licensed head with
+ * no skilled job still builds). An industrialising faction's base erodes as skilled jobs absorb
+ * heads; Construction Centres substitute capital for that lost labour, adding
+ * `levels × pointsPerLevel × min(labourFulfil, skill1Fulfil)` (the centre's own staffing gate —
+ * headcount plus its technician draw). Controlled/unclaimed systems are inert (population 0) and
+ * contribute nothing. This remains the single pacing meter: the planner proposes toward physical
+ * ceilings; this pool decides how fast fundQueue drains the queue.
  */
-export function factionThroughputPool(
-  systems: Array<{ control: SystemControl; population: number }>,
-  throughputPerPop: number,
-): number {
-  let pool = 0;
+export function factionConstructionPool(
+  systems: ConstructionPoolSystem[],
+  rates: ConstructionPoolRates,
+): ConstructionPool {
+  let base = 0;
+  let centres = 0;
   for (const s of systems) {
-    if (isEconomicallyActive(s.control)) pool += Math.max(0, s.population) * throughputPerPop;
+    if (!isEconomicallyActive(s.control)) continue;
+    const parts = labourParts(s.buildings);
+    const alloc = computeLabourAllocation(parts, s.population);
+    base += (alloc.unskilled + alloc.unemployed) * rates.throughputPerPop;
+    const count = s.buildings[CONSTRUCTION_CENTRE_TYPE] ?? 0;
+    if (count > 0) {
+      const state = labourStateFromParts(parts, s.population);
+      centres += count * rates.pointsPerLevel * Math.min(state.labourFulfil, state.skill1Fulfil);
+    }
   }
-  return pool;
+  return { base, centres, total: base + centres };
 }
 
 export interface FundQueueResult {

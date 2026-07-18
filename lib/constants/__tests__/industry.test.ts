@@ -18,6 +18,7 @@ import {
   COMPLEX_TYPES,
   ANCHOR_FOOTPRINT,
   ANCHOR_UNSKILLED_LABOUR,
+  CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 
 describe("BUILDING_TYPES catalog", () => {
@@ -156,5 +157,18 @@ describe("specialisation families", () => {
       expect(def?.outputGood).toBeUndefined(); // produces no good
       expect(def?.resource).toBeUndefined();   // not an extractor → bills to general space
     }
+  });
+});
+
+describe("construction centre", () => {
+  it("is a non-producing, tier-1-staffed building on normal general space", () => {
+    const def = BUILDING_TYPES[CONSTRUCTION_CENTRE_TYPE];
+    expect(def).toBeDefined();
+    expect(def.output).toEqual({ kind: "none" });
+    expect(def.outputGood).toBeUndefined();
+    expect(def.skill1Licensed).toBeUndefined();
+    expect(def.skill2Licensed).toBeUndefined();
+    expect(def.labour).toEqual({ unskilled: 18, skill1: 7, skill2: 0 });
+    expect(def.spaceCost).toBe(1.0);
   });
 });

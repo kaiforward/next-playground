@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionThroughputPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
+import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionConstructionPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
 import type { Proposal, ColonyProposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
-import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { HOUSING_TYPE, CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE } from "@/lib/constants/industry";
 import type { WorldConstructionProject } from "@/lib/world/types";
 
 /** Build an open project; workTotal defaults to `levels × workCostPerLevel(type)`. */
@@ -16,19 +16,78 @@ function project(
   return { kind: "build", id, factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
 }
 
-describe("factionThroughputPool", () => {
-  it("sums pop × rate over economically-active (developed) systems only", () => {
+describe("factionConstructionPool", () => {
+  const rates = { throughputPerPop: 0.05, pointsPerLevel: 5 };
+
+  it("counts every head at a system with no skilled employment (young economy unchanged)", () => {
     const systems = [
-      { control: "developed" as const, population: 100 },
-      { control: "controlled" as const, population: 50 },   // inert
-      { control: "unclaimed" as const, population: 0 },      // inert
-      { control: "developed" as const, population: 200 },
+      { control: "developed" as const, population: 100, buildings: {} },
+      { control: "controlled" as const, population: 50, buildings: {} },  // inert
+      { control: "developed" as const, population: 200, buildings: {} },
     ];
-    expect(factionThroughputPool(systems, 0.05)).toBeCloseTo((100 + 200) * 0.05);
+    const pool = factionConstructionPool(systems, rates);
+    expect(pool.base).toBeCloseTo((100 + 200) * 0.05);
+    expect(pool.centres).toBe(0);
+    expect(pool.total).toBeCloseTo(pool.base);
+  });
+
+  it("removes employed technicians/engineers from the base, but not licensed-but-jobless heads", () => {
+    // metals: labour { unskilled: 18, skill1: 7 } (tier-1 default). One school licenses 150 skill-1 seats.
+    // 2 metals factories demand 14 technician heads; the school itself draws 15 unskilled.
+    const employed = {
+      control: "developed" as const,
+      population: 200,
+      buildings: { metals: 2, [VOCATIONAL_SCHOOL_TYPE]: 1 },
+    };
+    // Same licences, no skilled jobs: graduates still swing hammers — full population counts.
+    const jobless = {
+      control: "developed" as const,
+      population: 200,
+      buildings: { [VOCATIONAL_SCHOOL_TYPE]: 1 },
+    };
+    const withJobs = factionConstructionPool([employed], rates);
+    const withoutJobs = factionConstructionPool([jobless], rates);
+    expect(withJobs.base).toBeCloseTo((200 - 14) * 0.05); // 14 technician heads employed
+    expect(withoutJobs.base).toBeCloseTo(200 * 0.05);     // licences alone cost nothing
+  });
+
+  it("adds centre output scaled by staffing fulfilment (labour and technician gates)", () => {
+    // 1 centre: 25 heads (18 unskilled + 7 skill1); a school licenses its technicians; pop staffs fully.
+    const staffed = {
+      control: "developed" as const,
+      population: 200,
+      buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1, [VOCATIONAL_SCHOOL_TYPE]: 1 },
+    };
+    const full = factionConstructionPool([staffed], rates);
+    expect(full.centres).toBeCloseTo(5); // 1 level × 5 × fulfilment 1
+    // The centre's own technicians are employed heads — they leave the base.
+    expect(full.base).toBeCloseTo((200 - 7) * 0.05);
+    expect(full.total).toBeCloseTo(full.base + full.centres);
+
+    // No school → skill1Fulfil = 0 → centre produces nothing.
+    const unlicensed = {
+      control: "developed" as const,
+      population: 200,
+      buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1 },
+    };
+    expect(factionConstructionPool([unlicensed], rates).centres).toBe(0);
+
+    // Half the heads → labourFulfil scales output down proportionally.
+    const short = {
+      control: "developed" as const,
+      population: 20, // demand = 25 (centre) + 15 (school) = 40 → labourFulfil = 0.5
+      buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1, [VOCATIONAL_SCHOOL_TYPE]: 1 },
+    };
+    expect(factionConstructionPool([short], rates).centres).toBeCloseTo(5 * 0.5);
   });
 
   it("floors negative population at zero", () => {
-    expect(factionThroughputPool([{ control: "developed" as const, population: -10 }], 0.05)).toBe(0);
+    expect(
+      factionConstructionPool(
+        [{ control: "developed" as const, population: -10, buildings: {} }],
+        rates,
+      ).total,
+    ).toBe(0);
   });
 });
 
@@ -282,5 +341,16 @@ describe("construction constants", () => {
   it("exposes a positive throughput-per-pop and per-build absorption cap", () => {
     expect(CONSTRUCTION.THROUGHPUT_PER_POP).toBeGreaterThan(0);
     expect(CONSTRUCTION.PER_BUILD_ABSORPTION_CAP).toBeGreaterThan(0);
+  });
+
+  it("prices a construction-centre level above a tier-1 factory and below a complex", () => {
+    expect(workCostPerLevel(CONSTRUCTION_CENTRE_TYPE)).toBeGreaterThan(workCostPerLevel("metals"));
+    expect(workCostPerLevel(CONSTRUCTION_CENTRE_TYPE)).toBeLessThan(workCostPerLevel("heavy_industry_complex"));
+  });
+
+  it("exposes positive centre knobs (points per level, payback horizon, backlog window)", () => {
+    expect(CONSTRUCTION.POINTS_PER_LEVEL).toBeGreaterThan(0);
+    expect(CONSTRUCTION.PAYBACK_HORIZON).toBeGreaterThan(0);
+    expect(CONSTRUCTION.BACKLOG_WINDOW).toBeGreaterThan(0);
   });
 });

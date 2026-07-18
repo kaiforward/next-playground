@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { summarizeColonisation } from "../build-analysis";
+import { summarizeColonisation, summarizeConstructionPool } from "../build-analysis";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, HEAVY_INDUSTRY_COMPLEX,
+  CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
+import { CONSTRUCTION, workCostPerLevel } from "@/lib/constants/construction";
 import { unitResourceVector, emptyResourceVector, makeResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
@@ -170,6 +172,15 @@ describe("summarizeColonisation — construction queue split", () => {
     });
   });
 
+  it("counts open centre projects under kind 'centre'", () => {
+    const summary = summarizeColonisation([], new Set(), [
+      { kind: "build", id: "c1", factionId: "f1", systemId: "x",
+        buildingType: CONSTRUCTION_CENTRE_TYPE, levels: 1,
+        workTotal: workCostPerLevel(CONSTRUCTION_CENTRE_TYPE), workDone: 0 },
+    ]);
+    expect(summary.queue.colonyByKind["centre"]).toBe(1);
+  });
+
   it("reports zero colony progress when there are no colony projects (division guard)", () => {
     const summary = summarizeColonisation([], new Set(["hw"]), [project("hw", "ore")]);
     expect(summary.queue.colonyProjects).toBe(0);
@@ -191,5 +202,43 @@ describe("summarizeColonisation — construction queue split", () => {
     expect(summary.queue.colonyProjects).toBe(0);
     expect(summary.queue.colonyLevels).toBe(0);
     expect(Number.isNaN(summary.queue.colonyMeanProgress)).toBe(false);
+  });
+});
+
+describe("summarizeConstructionPool", () => {
+  it("splits base vs centre points and derives the queue ETA", () => {
+    // One developed system, 200 pop, 1 staffed centre + school (matches the engine test's fixture).
+    const sys = devSys("s1", {
+      population: 200,
+      buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1, vocational_school: 1 },
+    });
+    const projects: WorldConstructionProject[] = [
+      { kind: "build", id: "p1", factionId: "f1", systemId: sys.id, buildingType: "metals",
+        levels: 2, workTotal: 40, workDone: 10 },
+    ];
+    const s = summarizeConstructionPool([sys], projects);
+    expect(s.poolCentres).toBeCloseTo(CONSTRUCTION.POINTS_PER_LEVEL);
+    expect(s.poolBase).toBeCloseTo((200 - 7) * CONSTRUCTION.THROUGHPUT_PER_POP);
+    expect(s.centreShare).toBeCloseTo(s.poolCentres / (s.poolBase + s.poolCentres));
+    expect(s.centreLevels).toBe(1);
+    expect(s.queueRemainingWork).toBe(30);
+    expect(s.queueEtaPulses).toBeCloseTo(30 / (s.poolBase + s.poolCentres));
+  });
+
+  it("reports a null ETA when nothing funds the queue", () => {
+    const s = summarizeConstructionPool([], [
+      { kind: "build", id: "p1", factionId: "f1", systemId: "x", buildingType: "metals",
+        levels: 1, workTotal: 20, workDone: 0 },
+    ]);
+    expect(s.queueEtaPulses).toBeNull();
+    expect(s.queueRemainingWork).toBe(20);
+  });
+
+  it("excludes non-developed systems from centreLevels even when they carry the building", () => {
+    // Mirrors the outpost fixture pattern above: a controlled (non-developed) system holding a
+    // Construction Centre shouldn't count toward built centre levels.
+    const outpost = devSys("cc", { control: "controlled", buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1 } });
+    const s = summarizeConstructionPool([outpost], []);
+    expect(s.centreLevels).toBe(0);
   });
 });

@@ -11,7 +11,7 @@ import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engi
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { CONSTRUCTION } from "@/lib/constants/construction";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY, CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
@@ -25,7 +25,13 @@ function mkConstruction(
   floorKnee: number = CONSTRUCTION.FLOOR_DEV_KNEE,
 ) {
   let n = 0;
-  return { cap, throughputPerPop, floorBase, floorKnee, mintId: () => `proj-${n++}` };
+  return {
+    cap, throughputPerPop, floorBase, floorKnee,
+    pointsPerLevel: CONSTRUCTION.POINTS_PER_LEVEL,
+    paybackHorizon: CONSTRUCTION.PAYBACK_HORIZON,
+    backlogWindow: CONSTRUCTION.BACKLOG_WINDOW,
+    mintId: () => `proj-${n++}`,
+  };
 }
 
 // food market with a high demandRate so the band's targetStock is large — stock 1 is a deep deficit.
@@ -48,7 +54,10 @@ function builderSlots(n: number) {
 }
 
 // A: deep structural food deficit, no capacity. B: builder with arable slots + population, reachable from A.
-function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[] {
+// generalSpace defaults to habitableSpace (100) so housing's habitable-capped headroom also exhausts B's
+// general space, matching every pre-existing call site; the centre tests below widen it so a centre can
+// still site itself once housing has claimed its habitable-bounded share.
+function scenario(bFood: number, bHousing: number, slots = 20, generalSpace = 100): SystemBuildRow[] {
   return [
     {
       systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
@@ -59,7 +68,7 @@ function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[]
       systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0,
       buildings: { food: bFood, housing: bHousing },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
-      generalSpace: 100, habitableSpace: 100, markets: [],
+      generalSpace, habitableSpace: 100, markets: [],
     },
   ];
 }
@@ -108,7 +117,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     // pool = 5000 × 0.0001 = 0.5 construction points — far below any level's work cost; cap is generous.
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
-      construction: { cap: 1000, throughputPerPop: 0.0001, floorBase: CONSTRUCTION.POOL_FLOOR_BASE, floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE, mintId: mkConstruction().mintId },
+      construction: mkConstruction(1000, 0.0001),
     });
     expect(w.buildingUpdates).toHaveLength(0);          // nothing landed
     expect(w.constructionProjects.length).toBeGreaterThan(0); // but the work is committed
@@ -149,7 +158,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
       const w = new MemoryDirectedBuildWorld(rows, projects);
       await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
         interval: INTERVAL, routeCost: reachable,
-        construction: { cap: 6, throughputPerPop: 0.05, floorBase: CONSTRUCTION.POOL_FLOOR_BASE, floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE, mintId: mint },
+        construction: { ...mkConstruction(6), mintId: mint },
       });
       rows = rows.map((r) => {
         const buildings = { ...r.buildings };
@@ -240,6 +249,66 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
     expect(deepIdx).toBeGreaterThanOrEqual(0);
     expect(shallowIdx).toBeGreaterThanOrEqual(0);
     expect(deepIdx).toBeLessThan(shallowIdx); // ROI-desc overrides the "B1" < "B2" tiebreak
+  });
+});
+
+describe("construction centres", () => {
+  it("commits a centre project when the backlog runs beyond the frontier", async () => {
+    // Deficit scenario with the pool throttled so committed work vastly outruns what BACKLOG_WINDOW
+    // pulses can drain (tiny throughputPerPop → deep starved backlog → a centre is proposed), and a
+    // SMALL cap so the pool spreads across parallel fronts — the high-ROI centre must actually
+    // receive work this pulse, because persist-if-funded drops a workless centre (next test). B's
+    // general space is widened past its habitable cap (1000 vs the default 100) so a centre can still
+    // site itself once housing has claimed its habitable-bounded 100-unit share.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(2, 0.001),
+    });
+    const centres = w.constructionProjects.filter(
+      (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+    );
+    expect(centres.length).toBe(1); // planCentreProposal commits at most one centre per pulse
+    // The high-ROI centre proposal actually receives work this pulse (persist-if-funded next test
+    // proves the converse) — not merely committed.
+    expect(centres.some((p) => p.workDone > 0)).toBe(true);
+  });
+
+  it("drops an unfunded centre project instead of persisting it (persist-if-funded)", async () => {
+    // Same starved world (same widened general space, so siting still succeeds), pool ≈ 0: the centre
+    // proposal is committed but receives no work, so it must NOT appear in the persisted open set.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(1000, 0), // zero pool: nothing funds
+    });
+    const centres = w.constructionProjects.filter(
+      (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+    );
+    expect(centres).toHaveLength(0);
+  });
+
+  it("prices the centre off the UNSCALED pool — the commit decision is interval-invariant", async () => {
+    // A world tuned so the backlog (one 12-work food bundle; housing is already at its habitable cap,
+    // so it proposes nothing) sits just above the reference-interval frontier budget
+    // (poolRef.total=1 × BACKLOG_WINDOW=6 = 6 < 12) but just below what a WRONGLY-scaled budget would
+    // read at catchUp=2 (1 × 2 × 6 = 12, no longer < 12) — so a regression that fed the scaled funding
+    // pool into planCentreProposal (instead of the unscaled poolRef.total) would commit a centre at the
+    // reference interval (24) but NOT at interval 48, while the correct unscaled valuation commits at
+    // both (mirrors the non-reference-interval construction in "interval invariance" below).
+    const fullyHoused = scenario(0, 100, 20, 1000);
+    const committed = async (interval: number): Promise<boolean> => {
+      const w = new MemoryDirectedBuildWorld(fullyHoused);
+      await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+        interval, routeCost: reachable,
+        construction: mkConstruction(2, 0.0002),
+      });
+      return w.constructionProjects.some(
+        (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+      );
+    };
+    expect(await committed(INTERVAL)).toBe(await committed(48));
+    expect(await committed(INTERVAL)).toBe(true); // sanity: the invariant isn't trivially "both false"
   });
 });
 

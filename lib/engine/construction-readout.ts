@@ -5,18 +5,22 @@
  * grouped) and the per-system section (filtered to one system via `all`).
  */
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
-import { factionThroughputPool, forecastEtaPulses, fundQueue } from "@/lib/engine/construction";
+import {
+  factionConstructionPool, forecastEtaPulses, fundQueue, type ConstructionPoolRates,
+} from "@/lib/engine/construction";
 import { GOODS } from "@/lib/constants/goods";
 import {
-  HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_BY_TYPE,
+  HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, CONSTRUCTION_CENTRE_TYPE, COMPLEX_BY_TYPE,
 } from "@/lib/constants/industry";
 
-/** The faction-system fields the readout needs: identity (name) + pool inputs (control, population). */
+/** The faction-system fields the readout needs: identity (name) + pool inputs (control, population, built base). */
 export interface ConstructionSystemInfo {
   id: string;
   name: string;
   control: SystemControl;
   population: number;
+  /** Built base — feeds the eligible-heads pool split and centre output. */
+  buildings: Record<string, number>;
 }
 
 interface ConstructionRowBase {
@@ -54,8 +58,12 @@ export interface ConstructionProjectColonyRow extends ConstructionRowBase {
 export type ConstructionProjectRow = ConstructionProjectBuildRow | ConstructionProjectColonyRow;
 
 export interface FactionConstructionReadout {
-  /** Σ population × throughputPerPop over developed systems — the per-pulse funding rate. */
+  /** Total per-pulse funding rate (base + centres) — the value the ETA forecast runs on. */
   pool: number;
+  /** Eligible-heads component of the pool (population not employed in skilled work). */
+  poolBase: number;
+  /** Construction Centre component of the pool (capital-generated points). */
+  poolCentres: number;
   expandCount: number;
   buildCount: number;
   /** colony_establish rows, soonest-ETA first (stalled last). */
@@ -71,6 +79,7 @@ export function buildingLabel(buildingType: string): string {
   if (buildingType === HOUSING_TYPE) return "Housing";
   if (buildingType === VOCATIONAL_SCHOOL_TYPE) return "Vocational School";
   if (buildingType === RESEARCH_INSTITUTE_TYPE) return "Research Institute";
+  if (buildingType === CONSTRUCTION_CENTRE_TYPE) return "Construction Centre";
   return COMPLEX_BY_TYPE[buildingType]?.label ?? GOODS[buildingType]?.name ?? buildingType;
 }
 
@@ -79,6 +88,7 @@ export function describeBuildProject(buildingType: string): string {
   if (buildingType === HOUSING_TYPE) return "housing · adds population capacity";
   if (buildingType === VOCATIONAL_SCHOOL_TYPE) return "workforce · licenses technician-grade work";
   if (buildingType === RESEARCH_INSTITUTE_TYPE) return "workforce · licenses engineer-grade work";
+  if (buildingType === CONSTRUCTION_CENTRE_TYPE) return "construction · adds faction build throughput";
   const complex = COMPLEX_BY_TYPE[buildingType];
   if (complex) return `specialisation · anchors ${complex.label} yield`;
   return `industry · produces ${GOODS[buildingType]?.name ?? buildingType}`;
@@ -124,11 +134,12 @@ export function nextPulseGains(
 export function computeFactionConstruction(
   projects: WorldConstructionProject[],
   systems: ConstructionSystemInfo[],
-  throughputPerPop: number,
+  rates: ConstructionPoolRates,
   cap: number,
 ): FactionConstructionReadout {
   const nameById = new Map(systems.map((s) => [s.id, s.name]));
-  const pool = factionThroughputPool(systems, throughputPerPop);
+  const poolParts = factionConstructionPool(systems, rates);
+  const pool = poolParts.total;
   const etas = forecastEtaPulses(projects, pool, cap);
   const gains = nextPulseGains(projects, pool, cap);
 
@@ -174,5 +185,8 @@ export function computeFactionConstruction(
   expansion.sort(byEta);
   buildOut.sort(byEta);
 
-  return { pool, expandCount: expansion.length, buildCount: buildOut.length, expansion, buildOut, all };
+  return {
+    pool, poolBase: poolParts.base, poolCentres: poolParts.centres,
+    expandCount: expansion.length, buildCount: buildOut.length, expansion, buildOut, all,
+  };
 }

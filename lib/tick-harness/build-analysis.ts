@@ -12,8 +12,10 @@ import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
-  HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES,
+  HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
+import { factionConstructionPool } from "@/lib/engine/construction";
+import { CONSTRUCTION } from "@/lib/constants/construction";
 
 /** How a developed system's built base breaks down by role/tier. */
 interface BuildBreakdown {
@@ -23,15 +25,17 @@ interface BuildBreakdown {
   housing: number;
   academy: number; // vocational schools + research institutes
   complex: number; // specialisation complexes
+  centre: number; // construction centres
 }
 
 function breakdown(buildings: Record<string, number>): BuildBreakdown {
-  const b: BuildBreakdown = { tier0: 0, tier1: 0, tier2: 0, housing: 0, academy: 0, complex: 0 };
+  const b: BuildBreakdown = { tier0: 0, tier1: 0, tier2: 0, housing: 0, academy: 0, complex: 0, centre: 0 };
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
     if (type === HOUSING_TYPE) { b.housing += count; continue; }
     if (type === VOCATIONAL_SCHOOL_TYPE || type === RESEARCH_INSTITUTE_TYPE) { b.academy += count; continue; }
     if (COMPLEX_TYPES.includes(type)) { b.complex += count; continue; }
+    if (type === CONSTRUCTION_CENTRE_TYPE) { b.centre += count; continue; }
     const tier = GOOD_TIER_BY_KEY[type];
     if (tier === 0) b.tier0 += count;
     else if (tier === 1) b.tier1 += count;
@@ -89,6 +93,7 @@ function projectKind(buildingType: string): string {
   if (buildingType === HOUSING_TYPE) return "housing";
   if (buildingType === VOCATIONAL_SCHOOL_TYPE || buildingType === RESEARCH_INSTITUTE_TYPE) return "academy";
   if (COMPLEX_TYPES.includes(buildingType)) return "complex";
+  if (buildingType === CONSTRUCTION_CENTRE_TYPE) return "centre";
   const tier = GOOD_TIER_BY_KEY[buildingType];
   return tier === 0 ? "tier0" : tier === 1 ? "tier1" : tier === 2 ? "tier2" : "other";
 }
@@ -150,5 +155,55 @@ export function summarizeColonisation(
       colonyMeanProgress: colonyProjects > 0 ? colonyProgressSum / colonyProjects : 0,
       colonyByKind,
     },
+  };
+}
+
+/** Galaxy-wide construction-pool composition + queue pressure — starvation made visible. */
+export interface ConstructionPoolSummary {
+  poolBase: number;
+  poolCentres: number;
+  /** poolCentres / (poolBase + poolCentres); 0 when the pool is empty. */
+  centreShare: number;
+  /** Built centre levels across developed systems. */
+  centreLevels: number;
+  /** Open centre build projects. */
+  centreProjects: number;
+  /** Σ max(0, workTotal − workDone) over all open projects. */
+  queueRemainingWork: number;
+  /** Pulses to drain the whole open queue at the current total pool; null when the pool is 0. */
+  queueEtaPulses: number | null;
+}
+
+/**
+ * Pool composition (eligible-heads base vs Construction Centre output) and how many pulses the open
+ * queue takes to drain at that rate. Composition aggregates linearly over developed systems, so one
+ * pass over the whole galaxy equals the per-faction sum.
+ */
+export function summarizeConstructionPool(
+  systems: TickSystem[],
+  projects: WorldConstructionProject[],
+): ConstructionPoolSummary {
+  const pool = factionConstructionPool(
+    systems.map((s) => ({ control: s.control, population: s.population, buildings: s.buildings })),
+    { throughputPerPop: CONSTRUCTION.THROUGHPUT_PER_POP, pointsPerLevel: CONSTRUCTION.POINTS_PER_LEVEL },
+  );
+  let centreLevels = 0;
+  for (const s of systems) {
+    if (s.control === "developed") centreLevels += s.buildings[CONSTRUCTION_CENTRE_TYPE] ?? 0;
+  }
+  let centreProjects = 0;
+  let queueRemainingWork = 0;
+  for (const p of projects) {
+    queueRemainingWork += Math.max(0, p.workTotal - p.workDone);
+    if (p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE) centreProjects++;
+  }
+  return {
+    poolBase: pool.base,
+    poolCentres: pool.centres,
+    centreShare: pool.total > 0 ? pool.centres / pool.total : 0,
+    centreLevels,
+    centreProjects,
+    queueRemainingWork,
+    queueEtaPulses: pool.total > 0 ? queueRemainingWork / pool.total : null,
   };
 }
