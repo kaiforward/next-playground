@@ -138,7 +138,7 @@ export interface WorldBody {
 
 export interface WorldBuilding {
   systemId: string;
-  /** Production-good type id, or "housing" | "vocational_school" | "research_institute". */
+  /** Production-good type id, or a non-production type: "housing", an academy, a specialisation complex, or "construction_centre". */
   buildingType: string;
   /** Whole-integer level count. Grows only via landed construction projects; sheds whole levels via decay. */
   count: number;

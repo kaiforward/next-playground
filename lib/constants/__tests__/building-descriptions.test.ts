@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { BUILDING_DESCRIPTIONS, TIER_LABELS, describeBuilding } from "@/lib/constants/building-descriptions";
-import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES } from "@/lib/constants/industry";
+import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { GOODS } from "@/lib/constants/goods";
 
 describe("building descriptions", () => {
-  it("carries bespoke copy for the three non-good buildings", () => {
-    for (const t of [HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE]) {
+  it("carries bespoke copy for the four non-good buildings", () => {
+    for (const t of [HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, CONSTRUCTION_CENTRE_TYPE]) {
       expect(BUILDING_DESCRIPTIONS[t], t).toBeDefined();
       expect(BUILDING_DESCRIPTIONS[t].length, t).toBeGreaterThan(20);
     }

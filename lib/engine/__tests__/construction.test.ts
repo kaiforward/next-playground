@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionThroughputPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
 import type { Proposal, ColonyProposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
-import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { HOUSING_TYPE, CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import type { WorldConstructionProject } from "@/lib/world/types";
 
 /** Build an open project; workTotal defaults to `levels × workCostPerLevel(type)`. */
@@ -282,5 +282,16 @@ describe("construction constants", () => {
   it("exposes a positive throughput-per-pop and per-build absorption cap", () => {
     expect(CONSTRUCTION.THROUGHPUT_PER_POP).toBeGreaterThan(0);
     expect(CONSTRUCTION.PER_BUILD_ABSORPTION_CAP).toBeGreaterThan(0);
+  });
+
+  it("prices a construction-centre level above a tier-1 factory and below a complex", () => {
+    expect(workCostPerLevel(CONSTRUCTION_CENTRE_TYPE)).toBeGreaterThan(workCostPerLevel("metals"));
+    expect(workCostPerLevel(CONSTRUCTION_CENTRE_TYPE)).toBeLessThan(workCostPerLevel("heavy_industry_complex"));
+  });
+
+  it("exposes positive centre knobs (points per level, payback horizon, backlog window)", () => {
+    expect(CONSTRUCTION.POINTS_PER_LEVEL).toBeGreaterThan(0);
+    expect(CONSTRUCTION.PAYBACK_HORIZON).toBeGreaterThan(0);
+    expect(CONSTRUCTION.BACKLOG_WINDOW).toBeGreaterThan(0);
   });
 });

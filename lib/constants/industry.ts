@@ -23,6 +23,7 @@ import { scaleValue, scaleRecord } from "@/lib/constants/economy-scale";
 export const HOUSING_TYPE = "housing";
 export const VOCATIONAL_SCHOOL_TYPE = "vocational_school";
 export const RESEARCH_INSTITUTE_TYPE = "research_institute";
+export const CONSTRUCTION_CENTRE_TYPE = "construction_centre";
 /** The two academy building type ids, in grade order. */
 export const ACADEMY_TYPES: string[] = [VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE];
 
@@ -268,6 +269,11 @@ export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
     spaceCost: 2.0,
     labour: { unskilled: 20, skill1: 0, skill2: 0 },
     skill2Licensed: SKILL2_PER_INSTITUTE,
+  },
+  [CONSTRUCTION_CENTRE_TYPE]: {
+    output: { kind: "none" },
+    spaceCost: DEFAULT_SPACE_COST,
+    labour: { unskilled: 18, skill1: 7, skill2: 0 },
   },
 };
 
