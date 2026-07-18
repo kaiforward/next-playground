@@ -262,20 +262,36 @@ world.player.automation: { build: boolean; colonisation: boolean }   // both def
 Toggled off, the directed-build processor skips **proposal generation** for the player's faction in
 that domain — funding of already-committed projects always continues, and manual orders still flow.
 AI factions ignore the field entirely. No logistics toggle: logistics has no manual verb in this
-slice, and a toggle with nothing behind it is a lie. Save bump 6 → 7 (world-shape change).
+slice, and a toggle with nothing behind it is a lie. Surfaced as the switch pair on the faction
+construction command card (§6). Save bump 6 → 7 (world-shape change).
 
 ### 5. Manual verbs
 
-- **Order a build** — pick system + building type + levels. Space and deposit-slot ceilings are
-  **hard rejections** (the same physical checks the planner uses); the labour gate is a **warning,
-  not a block** — the player may overbuild what their pops can staff, and staffing dilution +
-  idle-decay punish it honestly. The planner protects the AI from that mistake; the player gets to
-  make it.
-- **Direct a colony** — pick an eligible controlled system → creates the colony-establish project
-  directly (same eligibility as planner candidates: habitable floor, seed source, not already in
-  flight).
-- **Cancel** a queued player project (work spent is lost). Add + cancel are the whole verb set —
-  reorder/pause come later if wanted.
+Ordering always happens **standing in the system** — on its Industry tab, next to the evidence.
+
+- **Order a build** — two entry points:
+  - **Quick-add**: a `+` control on every buildable ledger row — existing buildings, housing,
+    support, and charted deposits (including unworked ones). One click queues +1 level of that
+    row's type, no dialog; repeat clicks extend the same open player project (`levels` +1,
+    `workTotal` grows by the level's work cost) so orders batch into one row. A hover tooltip
+    carries the quick numbers (work · ≈ pulses at the current pool). Hard-blocked rows (no space /
+    no free deposit slots) render the `+` disabled with the reason.
+  - **New-industry dialog**: for types with no ledger row yet (including academies) — building +
+    levels + a live feasibility readout (space, deposit slots, labour added, est. staffing, work,
+    ETA), system fixed by where it was opened. Hard ceilings block submit; staffing shows amber.
+  Space and deposit-slot ceilings are **hard rejections** everywhere (the same physical checks the
+  planner uses); the labour gate is a **warning, not a block** — the ledger and labour card carry
+  the staffing evidence in situ, and the player may overbuild what their pops can staff; staffing
+  dilution + idle-decay punish it honestly. The planner protects the AI from that mistake; the
+  player gets to make it.
+- **Direct a colony** — the Industry tab of an eligible controlled system; its "not yet colonised"
+  state is the invitation (button + a preview line: seed source, seed pop, bundled housing, work).
+  Click creates the colony-establish project directly — the preview line is the confirmation
+  surface, no dialog. Same eligibility as planner candidates (habitable floor, seed source, not
+  already in flight); an ineligible controlled system shows the verb disabled with the blocking
+  reason — it teaches the planner's rules.
+- **Cancel** — inline ✕ on player-originated rows (ghost rows and the forming-colony row; work
+  spent is lost). Add + cancel are the whole verb set — reorder/pause come later if wanted.
 
 **Queue position:** in-flight committed work finishes first, then **player orders outrank all
 autonomic proposals** (FIFO among themselves), then the usual housing → ROI order. Eviction comes
@@ -284,37 +300,62 @@ manual orders consuming the pool *is* the push-out.
 
 **Plumbing:** manual and autonomic projects are the same `WorldConstructionProject` rows — one
 queue, one funder; a row gains `origin: "player" | "auto"` (priority, display, cancel-permission).
-Zod-validated route → mutation service returning a discriminated union → world store.
+Zod-validated route → mutation service returning a discriminated union → world store. One
+feasibility computation (per system, per building type: space, slots, labour delta, est. staffing,
+work, ETA) serves the dialog readout, the quick-add disabled states, and route validation.
 
 ### 6. UI
 
-Additions to existing surfaces, no new pages:
+**The Industry tab is the construction surface** — everything physically being built in a system
+lives there. The Overview construction section is deleted (it was the placeholder queue).
 
-- Faction construction card: automation toggles, a **Queue build** action, cancel buttons on
-  player-originated rows, pool header shows composition (base + centres).
-- System panel (eligible controlled systems): **Establish colony** action.
-- One new dialog (building type + levels) using `components/form/` controls.
-
-Below the HTML-prototype bar — buttons and a dialog on existing cards.
+- **Ghost rows** — in-flight builds render *inside the ledger group where they will land*:
+  extractor builds in the deposit table, everything else under its Housing / Specialisation /
+  Production / Support group (a group with only ghosts still renders). Grammar: ◇ amber glyph
+  (distinct from the health set ● ▽ ▼), dim text, `+N` levels, a slim progress bar, progress % in
+  the Worked column, ETA in the Out/cyc column. Player-originated ghosts add a gold ORDERED tag +
+  inline ✕ cancel.
+- **Verbs on the tab** — the quick-add `+` per row (§5) and a **New industry** button in the
+  health strip, both player-controlled systems only.
+- **Colonisation** — an undeveloped controlled system's Industry tab replaces its dead empty
+  state: eligible → the Establish colony verb + preview; forming → the colony project hero-sized
+  in the same ghost grammar (the founding entry of the ledger — when it completes, the ledger
+  opens where the row stood).
+- **Rival visibility** — AI systems render the tab read-only with ghost rows visible (parity with
+  the old Overview card, which already showed any faction's construction).
+- **Overview** — the construction section is gone; the context strip gains a one-line pointer
+  while anything is forming/building here ("colony forming — 46% → Industry"). No bars, no queue.
+- **Faction construction card** becomes a **command summary**: the automation switch pair
+  (player faction only), the pool with base + centres composition, and two compact link lists —
+  build-out (system → its Industry tab · project count, sorted by count) and forming colonies
+  (system links). The per-project roll-up is deleted; detail lives where the thing is built. AI
+  faction pages show pool + lists, no switches.
+- Deferred and booked in `docs/BACKLOG.md`: a faction-screen colonise verb with **map-based**
+  target selection (not a dropdown).
 
 ### 7. Slice 2 testing
 
 - **Engine**: eligible-pop pool math (skilled employment shrinks the pool; underemployed graduates
   don't); centre output × fulfilment; frontier-ROI valuation (funds under valuable backlog, waits on
-  junk or a draining queue); queue ordering with player rows (in-flight → player → housing → ROI).
+  junk or a draining queue); queue ordering with player rows (in-flight → player → housing → ROI);
+  quick-add batching (a second order extends the open player project, not a second row); the
+  feasibility computation (hard ceilings vs the labour warning; colony eligibility reasons).
 - **Simulator gate (the real proof)**: AI factions still colonise and develop; centres appear under
   backlog pressure and *don't* appear without it; no runaway/NaN. Add a pool-composition
   (base vs centres) + queue-ETA metric to the health report so starvation is visible.
-- **Component**: build dialog validation; toggle wiring.
+- **Component**: ledger ghost rows render in the right groups; quick-add enabled/disabled states;
+  new-industry dialog validation; toggle wiring; faction command-card lists.
 - **Save/load**: v7 round-trip (`automation`, `origin`); v6 rejected cleanly.
 
 ### 8. Sequencing
 
 Shared feature branch; two PRs, each `/uber-review`'d going in:
 
-- **PR A — the economy half**: stratified base + Construction Centre + frontier-ROI valuation,
-  sim-validated. All-faction recalibration risk isolated here, no UI.
-- **PR B — the control half**: toggles + verbs + UI on top.
+- **PR A — the economy half** *(shipped to shared)*: stratified base + Construction Centre +
+  frontier-ROI valuation, sim-validated. All-faction recalibration risk isolated here, no UI.
+- **PR B — the control half**: toggles + verbs + the Industry-tab construction surface (ghost
+  rows, quick-add, new-industry dialog, colony states), Overview card removal, faction command
+  card. Save 6 → 7.
 
 ---
 

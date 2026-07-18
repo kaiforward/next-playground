@@ -37,6 +37,13 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
+- **[M] Faction-screen colonise verb with map-based target selection** — deferred from the Slice 2
+  control-surface design pass (2026-07-18). The faction construction command card gets a colonise
+  action that enters a **map target-selection mode** (eligible systems highlighted, click to direct
+  the colony) — explicitly not a dropdown. Complements the per-system verb on the Industry tab
+  (`docs/build-plans/player-seat.md` Slice 2 §5–6, promoted to `docs/active/` on ship). Needs a
+  short design pass for the map selection-mode interaction before building.
+
 - **[M] Tick perf: `toTickSystems` is the whole off-pulse tick outside events** — it costs 2.5ms/tick
   at 2,400 systems, **19.0% of an off-pulse tick** and, since boundary-gating shipped, the only
   remaining cost there other than events (67.5%). **Gating cannot touch it**: ship-arrivals and events
