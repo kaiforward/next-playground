@@ -16,7 +16,6 @@ function fakeWorld(): World {
       systemCount: 0,
       mapSize: 0,
       currentTick: 0,
-      startingSystemId: "s1",
     },
     regions: [],
     systems: [],

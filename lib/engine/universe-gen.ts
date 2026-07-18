@@ -67,7 +67,6 @@ export interface GeneratedUniverse {
   factions: GeneratedFaction[];
   /** factionIndex per system (parallel to `systems` by system.index). */
   systemFactionAssignments: number[];
-  startingSystemIndex: number;
 }
 
 // ── Generation parameters ───────────────────────────────────────
@@ -666,54 +665,6 @@ export function stampHomeworldPrefabs(
   }
 }
 
-// ── Starting system selection ───────────────────────────────────
-
-/**
- * Choose the system new players spawn at. Filters for Federation-major
- * territory so players begin under stable, regulated rule — `factionAssignments`
- * tells us which systems belong to whom, and `factions` carries each major's
- * governmentType.
- */
-export function selectStartingSystem(
-  systems: GeneratedSystem[],
-  factions: GeneratedFaction[],
-  factionAssignments: number[],
-  mapSize: number,
-): number {
-  const center = mapSize / 2;
-
-  // Federation-government majors. With the FACTION_ROSTER fixed at one major per
-  // government type there's exactly one; defensive `.filter()` still covers the
-  // case where the roster grows or shifts in the future.
-  const federationMajors = factions.filter(
-    (f) => f.isMajor && f.governmentType === "federation",
-  );
-  const acceptedFactionIndices = new Set(federationMajors.map((f) => f.index));
-
-  const candidates = systems.filter((s) =>
-    acceptedFactionIndices.has(factionAssignments[s.index]),
-  );
-
-  // No federation territory yet — defensive fallback uses every system so seed
-  // never hard-fails. Wouldn't trigger under FACTION_ROSTER as currently shaped.
-  const pool = candidates.length > 0 ? candidates : systems;
-
-  // Among those, prefer core economies closest to map center.
-  const coreSystems = pool.filter((s) => s.economyType === "core");
-  const finalPool = coreSystems.length > 0 ? coreSystems : pool;
-
-  let best = finalPool[0];
-  let bestDist = distance(best.x, best.y, center, center);
-  for (const sys of finalPool) {
-    const d = distance(sys.x, sys.y, center, center);
-    if (d < bestDist) {
-      best = sys;
-      bestDist = d;
-    }
-  }
-  return best.index;
-}
-
 // ── Top-level generation ────────────────────────────────────────
 
 export function generateUniverse(
@@ -736,19 +687,11 @@ export function generateUniverse(
 
   const systemFactionAssignments = assignHomeworldOwnership(systems.length, factions);
 
-  const startingSystemIndex = selectStartingSystem(
-    systems,
-    factions,
-    systemFactionAssignments,
-    params.mapSize,
-  );
-
   return {
     regions,
     systems,
     connections,
     factions,
     systemFactionAssignments,
-    startingSystemIndex,
   };
 }

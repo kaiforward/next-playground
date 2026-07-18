@@ -210,15 +210,12 @@ export function generateWorld(options: GenerateWorldOptions): World {
     }
   }
 
-  const startingSystemId = systemIds[universe.startingSystemIndex];
-
   return {
     meta: {
       seed,
       systemCount: config.TOTAL_SYSTEMS,
       mapSize: config.MAP_SIZE,
       currentTick: 0,
-      startingSystemId,
     },
     regions,
     systems,

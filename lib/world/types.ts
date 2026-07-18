@@ -29,7 +29,6 @@ export interface WorldMeta {
   systemCount: number;
   mapSize: number;
   currentTick: number;
-  startingSystemId: string;
 }
 
 // ── Regions ─────────────────────────────────────────────────────

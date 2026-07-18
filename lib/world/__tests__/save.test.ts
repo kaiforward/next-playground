@@ -42,10 +42,10 @@ describe("serializeWorld / deserializeWorld", () => {
   });
 
   it("rejects a world whose meta is missing mapSize (tile geometry depends on it)", () => {
-    const { seed, systemCount, currentTick, startingSystemId } = world.meta;
+    const { seed, systemCount, currentTick } = world.meta;
     const json = JSON.stringify({
       formatVersion: 2,
-      world: { ...world, meta: { seed, systemCount, currentTick, startingSystemId } },
+      world: { ...world, meta: { seed, systemCount, currentTick } },
     });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);

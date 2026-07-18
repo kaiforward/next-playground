@@ -27,7 +27,6 @@ function buildWorld(systems: WorldSystem[]): World {
       systemCount: systems.length,
       mapSize: 100,
       currentTick: 0,
-      startingSystemId: systems[0].id,
     },
     regions: [],
     systems,

@@ -117,11 +117,6 @@ describe("generateWorld", () => {
     }
   });
 
-  it("points meta.startingSystemId at a real generated system", () => {
-    const systemIds = new Set(world.systems.map((s) => s.id));
-    expect(systemIds.has(world.meta.startingSystemId)).toBe(true);
-  });
-
   it("seeds no ships, events, modifiers, alliance pacts, or flow events", () => {
     expect(world.ships).toEqual([]);
     expect(world.events).toEqual([]);
