@@ -38,15 +38,33 @@ function readoutForFaction(factionId: string): FactionConstructionReadout {
 
 export function getFactionConstruction(factionId: string): FactionConstructionData {
   const readout = readoutForFaction(factionId);
+  const world = getWorld();
+
+  const bySystem = new Map<string, { systemName: string; count: number }>();
+  const colonies: Array<{ systemId: string; systemName: string; progress: number }> = [];
+  let orderedCount = 0;
+  for (const row of readout.all) {
+    if (row.origin === "player") orderedCount += 1;
+    if (row.kind === "colony_establish") {
+      colonies.push({ systemId: row.systemId, systemName: row.systemName, progress: row.progress });
+    } else {
+      const entry = bySystem.get(row.systemId) ?? { systemName: row.systemName, count: 0 };
+      entry.count += 1;
+      bySystem.set(row.systemId, entry);
+    }
+  }
+  const buildSystems = [...bySystem]
+    .map(([systemId, v]) => ({ systemId, systemName: v.systemName, count: v.count }))
+    .sort((a, b) => b.count - a.count || a.systemName.localeCompare(b.systemName));
+  colonies.sort((a, b) => b.progress - a.progress || a.systemName.localeCompare(b.systemName));
+
+  const automation =
+    world.player?.controlledFactionId === factionId ? { ...world.player.automation } : null;
+
   return {
     factionId,
-    pool: readout.pool,
-    poolBase: readout.poolBase,
-    poolCentres: readout.poolCentres,
-    expandCount: readout.expandCount,
-    buildCount: readout.buildCount,
-    expansion: readout.expansion,
-    buildOut: readout.buildOut,
+    pool: readout.pool, poolBase: readout.poolBase, poolCentres: readout.poolCentres,
+    automation, buildSystems, colonies, orderedCount,
   };
 }
 

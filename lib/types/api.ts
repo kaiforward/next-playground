@@ -268,9 +268,7 @@ export type SystemIndustryData =
 export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 
 // ── Construction (build-queue / colony-visibility) ────────────────────────────
-import type {
-  ConstructionProjectRow, ConstructionProjectColonyRow, ConstructionProjectBuildRow,
-} from "@/lib/engine/construction-readout";
+import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 
 /** Per-system Construction section state. `hidden` renders nothing (developed with nothing building);
  *  `empty` is the controlled-not-yet-colonised state; `visible` carries the rows for this system.
@@ -280,16 +278,20 @@ export type SystemConstructionData =
   | { visibility: "empty"; control: "controlled"; factionId: string }
   | { visibility: "visible"; factionId: string; projects: ConstructionProjectRow[] };
 
-/** Faction roll-up card state — pool header + the two locked groups. */
+/** Faction command-summary card state — pool composition + automation switches + link lists. */
 export interface FactionConstructionData {
   factionId: string;
   pool: number;
   poolBase: number;
   poolCentres: number;
-  expandCount: number;
-  buildCount: number;
-  expansion: ConstructionProjectColonyRow[];
-  buildOut: ConstructionProjectBuildRow[];
+  /** The player's switches; null on AI factions (no switches rendered). */
+  automation: { build: boolean; colonisation: boolean } | null;
+  /** Systems with open build projects — count desc, then name asc. */
+  buildSystems: Array<{ systemId: string; systemName: string; count: number }>;
+  /** Forming colonies — progress desc, then name asc. */
+  colonies: Array<{ systemId: string; systemName: string; progress: number }>;
+  /** Player-originated open projects across the faction. */
+  orderedCount: number;
 }
 
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
