@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,7 +15,6 @@ function formatSavedAt(iso: string): string {
 }
 
 export function StartScreen() {
-  const router = useRouter();
   const [saves, setSaves] = useState<SaveInfo[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   // Name of the save currently being loaded — doubles as the "busy" flag so
@@ -84,7 +82,7 @@ export function StartScreen() {
 
       <Card>
         <CardHeader title="New Game" subtitle="Author a faction and drop into a fresh galaxy." />
-        <Button fullWidth onClick={() => router.push("/start/new")}>
+        <Button href="/start/new" fullWidth>
           New Game
         </Button>
       </Card>

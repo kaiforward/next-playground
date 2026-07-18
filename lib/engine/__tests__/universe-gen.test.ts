@@ -464,6 +464,41 @@ describe("generateUniverse", () => {
     expect(u1.systemFactionAssignments).toEqual(u2.systemFactionAssignments);
   });
 
+  it("returns a valid playerFactionIndex pointing at the authored faction when one is supplied", () => {
+    const params = defaultParams();
+    const u = generateUniverse(params, REGION_NAMES, {
+      name: "Aurelian League",
+      governmentType: "technocratic",
+      doctrine: "mercantile",
+    });
+    expect(u.playerFactionIndex).not.toBeNull();
+    const idx = u.playerFactionIndex;
+    if (idx === null) throw new Error("expected a player faction index");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(idx).toBeLessThan(u.factions.length);
+    const player = u.factions[idx];
+    expect(player.key).toBe("player");
+    expect(player.name).toBe("Aurelian League");
+    expect(player.isMajor).toBe(true);
+  });
+
+  it("is null for a playerless universe and deterministic with an authored player", () => {
+    const params = defaultParams();
+    expect(generateUniverse(params, REGION_NAMES).playerFactionIndex).toBeNull();
+    const a = generateUniverse(params, REGION_NAMES, {
+      name: "Seat",
+      governmentType: "cooperative",
+      doctrine: "protectionist",
+    });
+    const b = generateUniverse(params, REGION_NAMES, {
+      name: "Seat",
+      governmentType: "cooperative",
+      doctrine: "protectionist",
+    });
+    expect(a.playerFactionIndex).toBe(b.playerFactionIndex);
+    expect(a.factions).toEqual(b.factions);
+  });
+
   it("produces different output for different seeds", () => {
     const p1 = { ...defaultParams(), seed: 42 };
     const p2 = { ...defaultParams(), seed: 99 };

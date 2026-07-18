@@ -202,6 +202,19 @@ describe("generateWorld — player faction", () => {
     expect(nonPlayerNames).toEqual(playerless.factions.map((f) => f.name));
   });
 
+  it("wires every faction's homeworld to its own id after the player splice + reindex", () => {
+    // The player is spliced in at the major/minor boundary and every faction's
+    // index is reassigned before placement/ownership. A stale index would attribute
+    // a faction's homeworld to a *different* (still-valid) faction id — which the
+    // generic ownership test can't catch (it only checks the id is some valid one).
+    // Assert every faction — player and non-player alike — owns its own homeworld.
+    const world = generateWorld({ ...base, playerFaction: authored });
+    for (const f of world.factions) {
+      const home = world.systems.find((s) => s.id === f.homeworldId)!;
+      expect(home.factionId).toBe(f.id);
+    }
+  });
+
   it("stays playerless when no faction is authored (the harness path)", () => {
     const world = generateWorld(base);
     expect(world.player).toBeNull();

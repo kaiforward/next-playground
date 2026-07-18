@@ -66,4 +66,8 @@ describe("newGameSchema — authored faction", () => {
   it("rejects an empty name", () => {
     expect(newGameSchema.safeParse({ ...valid, name: "   " }).success).toBe(false);
   });
+
+  it("rejects an overlong name (over the 40-char bound)", () => {
+    expect(newGameSchema.safeParse({ ...valid, name: "x".repeat(41) }).success).toBe(false);
+  });
 });
