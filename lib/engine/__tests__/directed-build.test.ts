@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findStructuralDeficits, buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { findStructuralDeficits, buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
@@ -1421,5 +1421,22 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
   it("does not gate when minSettlerSupply is 0 (disabled)", () => {
     const candidates = Array.from({ length: 8 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: 100 }));
     expect(planFactionColonyProposals("f1", [supplyCore], candidates, [], COLONY_PARAMS)).toHaveLength(8);
+  });
+});
+
+describe("sizeColonyEstablish", () => {
+  const params = { seedPop: 500, establishWork: 100 };
+
+  it("sizes seed to the whole-level habitable cap with housing to house it", () => {
+    const s = sizeColonyEstablish(3, params); // habitable 3 → 3 whole housing levels possible
+    expect(s).not.toBeNull();
+    if (s === null) return;
+    expect(s.housingLevels).toBeGreaterThanOrEqual(1);
+    expect(s.seedPop).toBeLessThanOrEqual(params.seedPop);
+    expect(s.work).toBe(params.establishWork + s.housingLevels * workCostPerLevel(HOUSING_TYPE));
+  });
+
+  it("returns null when the site cannot hold one whole housing level", () => {
+    expect(sizeColonyEstablish(0.4, params)).toBeNull();
   });
 });

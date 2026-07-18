@@ -258,7 +258,7 @@ function generalSpaceUsed(buildings: Record<string, number>): number {
 }
 
 /** Deposit-slot units already used for `resource` (goods sharing the resource share the cap). */
-function extractorsOnResource(buildings: Record<string, number>, resource: string): number {
+export function extractorsOnResource(buildings: Record<string, number>, resource: string): number {
   let used = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0 || GOOD_TIER_BY_KEY[type] !== 0) continue;
@@ -880,6 +880,24 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
   return [...byGood].map(([goodId, rateDeficit]) => ({ goodId, rateDeficit }));
 }
 
+/** Seed + bundled-housing sizing for a colony at `habitableSpace` — the planner's whole-level rule,
+ *  shared with the player's direct-colony verb so both order identical projects. Null = the site
+ *  can't hold one whole housing level (not viable). */
+export interface ColonySizing { seedPop: number; housingLevels: number; work: number }
+
+export function sizeColonyEstablish(
+  habitableSpace: number,
+  params: Pick<ColonyEstablishParams, "seedPop" | "establishWork">,
+): ColonySizing | null {
+  const housingCost = effectiveSpaceCost(HOUSING_TYPE);
+  const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, habitableSpace) / housingCost) : 0;
+  const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
+  const seedPop = Math.min(params.seedPop, habitableCap);
+  const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
+  if (housingLevels < 1 || seedPop <= 0) return null;
+  return { seedPop, housingLevels, work: params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE) };
+}
+
 /**
  * Emit a colony-establish proposal for each controlled candidate above the ROI floor, scored on the same
  * demand-rate axis as a build (docs/planned/economy-colonisation-cost.md §3). Faction-level aggregates
@@ -912,7 +930,6 @@ export function planFactionColonyProposals(
   const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
 
   const inFlight = new Set(openColonyProjects.map((p) => p.systemId));
-  const housingCost = effectiveSpaceCost(HOUSING_TYPE);
 
   const proposals: ColonyProposal[] = [];
   for (const c of candidates) {
@@ -921,11 +938,9 @@ export function planFactionColonyProposals(
 
     // Land-sized seed + bundled housing, on WHOLE housing levels so popCap ≥ seedPop exactly (no rounding
     // gap): seed capped to the whole-level habitable capacity; housing sized to house it, land-bounded.
-    const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, c.habitableSpace) / housingCost) : 0;
-    const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
-    const seedPop = Math.min(params.seedPop, habitableCap);
-    const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
-    if (housingLevels < 1 || seedPop <= 0) continue;        // no whole housing level → not viable, skip
+    const sizing = sizeColonyEstablish(c.habitableSpace, params);
+    if (sizing === null) continue; // no whole housing level → not viable, skip
+    const { seedPop, housingLevels, work } = sizing;
 
     // Seed-population opportunity cost (§7.3): charge the source's forgone output for the part of the
     // seed that must come from STAFFED workers — idle labour is ≈ free, so founding prefers a job-short
@@ -947,7 +962,6 @@ export function planFactionColonyProposals(
     }
     const value = colonyValue(c, unblocked, sigma, params) - popCost;
     if (value <= 0) continue; // net-negative — the labour it would drain outweighs the colony's worth
-    const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
 
     proposals.push({
       kind: "colony_establish", factionId, systemId: c.systemId,
