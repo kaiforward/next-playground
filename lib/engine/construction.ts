@@ -187,6 +187,24 @@ export function fundQueueWithFloor(
   return { projects: open, landed };
 }
 
+/**
+ * Funding order over a faction's STORED open set: everything already committed keeps its stored
+ * order (front-first — including unfunded auto rows and floor-funded rows the stored order
+ * interleaves); fresh player orders (origin "player" with no work yet) move to the back of it,
+ * preserving their own insertion (FIFO) order. The caller appends this pulse's new proposals after,
+ * so the full priority reads: committed work → player orders → new autonomic proposals. Pure;
+ * identity for queues with no fresh player rows.
+ */
+export function orderOpenProjects(projects: WorldConstructionProject[]): WorldConstructionProject[] {
+  const committed: WorldConstructionProject[] = [];
+  const freshPlayer: WorldConstructionProject[] = [];
+  for (const p of projects) {
+    if (p.origin === "player" && p.workDone <= 0) freshPlayer.push(p);
+    else committed.push(p);
+  }
+  return [...committed, ...freshPlayer];
+}
+
 /** ROI of a proposal on the shared construction pool: served value ÷ whole-bundle work (0 if no work). */
 export function proposalRoi(p: Proposal): number {
   return p.work > 0 ? p.value / p.work : 0;

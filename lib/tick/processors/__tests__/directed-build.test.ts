@@ -639,3 +639,33 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     expect(c12).toBeCloseTo(c24 / 2, 6); // …and its reserved slice scales with the interval, like pool/cap
   });
 });
+
+describe("player orders in the funding queue", () => {
+  it("funds a fresh player order ahead of this pulse's new autonomic proposals", async () => {
+    // World with a deficit (so the planner proposes) and ONE fresh player order in the open set;
+    // pool sized to fund exactly one project's pulse-cap. The player row must receive work; the
+    // new proposals must not.
+    const playerOrder: WorldConstructionProject = { kind: "build", id: "player-1", factionId: "f1",
+      systemId: "s1", origin: "player", buildingType: "metals", levels: 1, workTotal: 20, workDone: 0 };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [playerOrder]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: { ...mkConstruction(5, 0.001) }, // tiny pool: one absorption only
+    });
+    const persisted = w.constructionProjects.find((p) => p.id === "player-1");
+    expect(persisted).toBeDefined();
+    expect(persisted?.workDone).toBeGreaterThan(0);
+  });
+
+  it("never drops an unfunded player order (persist-if-funded is auto-only)", async () => {
+    const playerColony: WorldConstructionProject = { kind: "colony_establish", id: "player-c1",
+      factionId: "f1", systemId: "s9", origin: "player", sourceSystemId: "s1",
+      seedPop: 100, housingLevels: 1, workTotal: 60, workDone: 0 };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [playerColony]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: { ...mkConstruction(1000, 0) }, // zero pool: nothing funds
+    });
+    expect(w.constructionProjects.some((p) => p.id === "player-c1")).toBe(true);
+  });
+});

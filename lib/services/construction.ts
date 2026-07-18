@@ -12,6 +12,7 @@ import {
   type ConstructionSystemInfo,
   type FactionConstructionReadout,
 } from "@/lib/engine/construction-readout";
+import { orderOpenProjects } from "@/lib/engine/construction";
 import type { SystemConstructionData, FactionConstructionData } from "@/lib/types/api";
 
 function readoutForFaction(factionId: string): FactionConstructionReadout {
@@ -26,7 +27,7 @@ function readoutForFaction(factionId: string): FactionConstructionReadout {
       id: s.id, name: s.name, control: s.control, population: s.population,
       buildings: buildings.get(s.id) ?? {},
     }));
-  const projects = world.constructionProjects.filter((p) => p.factionId === factionId);
+  const projects = orderOpenProjects(world.constructionProjects.filter((p) => p.factionId === factionId));
 
   return computeFactionConstruction(
     projects, systems,

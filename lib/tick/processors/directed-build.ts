@@ -1,7 +1,7 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
-import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals } from "@/lib/engine/construction";
+import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
 import { planCentreProposal } from "@/lib/engine/construction-centre";
 import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { systemDevelopment } from "@/lib/engine/development";
@@ -256,20 +256,21 @@ export async function runDirectedBuildProcessor(
       }
     }
 
-    // Fund front-first (in-flight work finishes before new commitments), with the development-scaled
-    // colony floor reserved ahead of the ROI order; land completed levels.
+    // Fund front-first (in-flight work finishes before new commitments, then fresh player orders,
+    // then this pulse's new autonomic proposals), with the development-scaled colony floor reserved
+    // ahead of the ROI order; land completed levels.
     const { projects: fundedOpen, landed } = fundQueueWithFloor(
-      [...existing, ...newProjects], pool, cap, reserved,
+      [...orderOpenProjects(existing), ...newProjects], pool, cap, reserved,
       (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
     );
     for (const p of fundedOpen) {
-      // Persist-if-funded for colonies AND centres: a project of either kind that got NO work this
-      // pulse is dropped and re-scored next pulse — colonies so the open queue never balloons,
-      // centres so their frontier price stays live instead of a stale commitment queue-jumping
-      // later pulses. In-flight rows always have workDone > 0, so they persist. Ordinary builds
-      // persist regardless (their in-flight subtraction already bounds them).
-      if (p.kind === "colony_establish" && p.workDone <= 0) continue;
-      if (p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE && p.workDone <= 0) continue;
+      // Persist-if-funded applies to AUTONOMIC colonies and centres only — they are re-emitted and
+      // re-priced next pulse, so a workless row is dropped to keep the queue live. A player order is
+      // a standing commitment with no re-emitter: it always persists until funded or cancelled.
+      if (p.origin !== "player") {
+        if (p.kind === "colony_establish" && p.workDone <= 0) continue;
+        if (p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE && p.workDone <= 0) continue;
+      }
       nextOpen.push(p);
     }
     for (const l of landed) {
