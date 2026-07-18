@@ -268,7 +268,7 @@ describe("construction centres", () => {
     const centres = w.constructionProjects.filter(
       (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
     );
-    expect(centres.length).toBeGreaterThanOrEqual(1);
+    expect(centres.length).toBe(1); // planCentreProposal commits at most one centre per pulse
     // The high-ROI centre proposal actually receives work this pulse (persist-if-funded next test
     // proves the converse) — not merely committed.
     expect(centres.some((p) => p.workDone > 0)).toBe(true);
@@ -286,6 +286,29 @@ describe("construction centres", () => {
       (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
     );
     expect(centres).toHaveLength(0);
+  });
+
+  it("prices the centre off the UNSCALED pool — the commit decision is interval-invariant", async () => {
+    // A world tuned so the backlog (one 12-work food bundle; housing is already at its habitable cap,
+    // so it proposes nothing) sits just above the reference-interval frontier budget
+    // (poolRef.total=1 × BACKLOG_WINDOW=6 = 6 < 12) but just below what a WRONGLY-scaled budget would
+    // read at catchUp=2 (1 × 2 × 6 = 12, no longer < 12) — so a regression that fed the scaled funding
+    // pool into planCentreProposal (instead of the unscaled poolRef.total) would commit a centre at the
+    // reference interval (24) but NOT at interval 48, while the correct unscaled valuation commits at
+    // both (mirrors the non-reference-interval construction in "interval invariance" below).
+    const fullyHoused = scenario(0, 100, 20, 1000);
+    const committed = async (interval: number): Promise<boolean> => {
+      const w = new MemoryDirectedBuildWorld(fullyHoused);
+      await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+        interval, routeCost: reachable,
+        construction: mkConstruction(2, 0.0002),
+      });
+      return w.constructionProjects.some(
+        (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+      );
+    };
+    expect(await committed(INTERVAL)).toBe(await committed(48));
+    expect(await committed(INTERVAL)).toBe(true); // sanity: the invariant isn't trivially "both false"
   });
 });
 
