@@ -1,7 +1,6 @@
 "use client";
 
-import { use } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
@@ -87,6 +86,7 @@ function SystemPanelContent({
       title={systemInfo?.name ?? "System"}
       subtitle={subtitle}
       headerAction={headerAction}
+      scrollResetKey={systemId}
       subHeader={
         <TabList aria-label="System tabs">
           {tabs.map((tab) => (
@@ -109,12 +109,20 @@ function SystemPanelContent({
 
 export default function SystemPanelLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ systemId: string }>;
 }) {
-  const { systemId } = use(params);
+  // One level ABOVE the [systemId] dynamic segment: the App Router preserves a layout's state
+  // across changes to a segment nested beneath it, so DetailPanel (which animates on mount)
+  // persists across system-to-system navigation instead of remounting per system. `systemId`
+  // isn't in this layout's own `params`, so it's read via useParams() from the matched child
+  // segment instead.
+  const params = useParams();
+  const systemId = params.systemId;
+
+  // Can't happen in practice (this layout only renders under /system/[systemId]/**), but
+  // params are string | string[] | undefined — narrow before use rather than asserting.
+  if (typeof systemId !== "string") return children;
 
   return (
     <QueryBoundary>
@@ -124,4 +132,3 @@ export default function SystemPanelLayout({
     </QueryBoundary>
   );
 }
-

@@ -216,11 +216,22 @@ export function StarMap({
   });
 
   // ── Click handlers — navigate by id; the panel loads its own detail ──
+  // Preserves the currently open sub-tab (e.g. /system/<id>/industry) onto the newly selected
+  // system, so picking a different system on the map doesn't bounce the drawer back to Overview.
+  // Astrography is always visible regardless of developed tier, so it carries over unconditionally;
+  // any other sub-tab only carries over if the TARGET system is developed (undeveloped systems only
+  // show Overview + Astrography — see the same gate in @panel/system/layout.tsx), else falls back
+  // to the base path.
   const onSelectSystem = useCallback(
     (systemId: string) => {
-      router.push(`/system/${systemId}`);
+      const match = /^\/system\/[^/]+\/([^/?]+)/.exec(pathname);
+      const segment = match ? match[1] : null;
+      const isDeveloped = ownership.get(systemId)?.developed ?? true;
+      const keepSegment = segment === "astrography" || (segment !== null && isDeveloped);
+      const path = keepSegment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
+      router.push(path);
     },
-    [router],
+    [router, pathname, ownership],
   );
 
   const onEmptyClick = useCallback(() => {
