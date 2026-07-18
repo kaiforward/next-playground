@@ -806,6 +806,9 @@ export async function runWorldTick(
           throughputPerPop: CONSTRUCTION.THROUGHPUT_PER_POP,
           floorBase: CONSTRUCTION.POOL_FLOOR_BASE,
           floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE,
+          pointsPerLevel: CONSTRUCTION.POINTS_PER_LEVEL,
+          paybackHorizon: CONSTRUCTION.PAYBACK_HORIZON,
+          backlogWindow: CONSTRUCTION.BACKLOG_WINDOW,
           // Project ids draw from the world's monotonic counter, threaded through this tick.
           mintId: () => `construction-${nextId++}`,
         },

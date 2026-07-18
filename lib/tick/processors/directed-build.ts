@@ -1,7 +1,9 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
-import { fundQueueWithFloor, developmentFloorShare, factionThroughputPool, orderProposals } from "@/lib/engine/construction";
+import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals } from "@/lib/engine/construction";
+import { planCentreProposal } from "@/lib/engine/construction-centre";
+import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
@@ -38,6 +40,12 @@ export interface DirectedBuildProcessorParams {
     floorBase: number;
     /** Development at which a colony weans fully off the pool floor. */
     floorKnee: number;
+    /** Points one fully-staffed Construction Centre level adds per reference month. */
+    pointsPerLevel: number;
+    /** Reference months of centre output its proposal value amortises. */
+    paybackHorizon: number;
+    /** Reference months of pool drain defining the centre-valuation frontier. */
+    backlogWindow: number;
     /** Mints a unique id for each newly-committed project (backed by the world's nextId counter). */
     mintId: () => string;
   };
@@ -153,9 +161,18 @@ export async function runDirectedBuildProcessor(
   const nextOpen: WorldConstructionProject[] = [];
 
   for (const [factionId, group] of byFaction) {
-    // The faction's per-pulse throughput pool: developed systems fund it (controlled/unclaimed
-    // systems are inert with population 0). The pool drains the queue; it never enqueues.
-    const pool = factionThroughputPool(group, params.construction.throughputPerPop * catchUp);
+    // The faction's per-pulse pool: eligible heads + centre output over developed systems
+    // (controlled/unclaimed are inert). Valuation reads the unscaled reference-month pool;
+    // funding scales it by catchUp like every pulse income. The pool drains the queue; it
+    // never enqueues.
+    const poolRef = factionConstructionPool(
+      group.map((r) => ({ control: r.control, population: r.population, buildings: r.buildings })),
+      {
+        throughputPerPop: params.construction.throughputPerPop,
+        pointsPerLevel: params.construction.pointsPerLevel,
+      },
+    );
+    const pool = poolRef.total * catchUp;
 
     const existing = openByFaction.get(factionId) ?? [];
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
@@ -191,7 +208,18 @@ export async function runDirectedBuildProcessor(
     let reserved = 0;
     for (const v of floorBySystem.values()) reserved += v;
 
-    const ordered = orderProposals([...buildProposals, ...colonyProposals]);
+    let ordered = orderProposals([...buildProposals, ...colonyProposals]);
+
+    // At most one centre proposal per pulse, priced off the backlog frontier; it re-enters the
+    // ROI ordering as a normal proposal (independent systems — null faction — never build centres).
+    if (factionId !== null) {
+      const centre = planCentreProposal(factionId, ordered, existing, buildStates, poolRef.total, {
+        pointsPerLevel: params.construction.pointsPerLevel,
+        paybackHorizon: params.construction.paybackHorizon,
+        backlogWindow: params.construction.backlogWindow,
+      });
+      if (centre) ordered = orderProposals([...ordered, centre]);
+    }
 
     // Expand each proposal into whole-level project rows: a build bundle's `items` are already gate-first
     // (complex → academies → production); a colony is a single colony-establish project whose workTotal is
@@ -233,11 +261,13 @@ export async function runDirectedBuildProcessor(
       (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
     );
     for (const p of fundedOpen) {
-      // Persist-if-funded for colonies: a colony-establish that got NO work this pulse is dropped and
-      // re-scored next pulse, so the open queue never balloons with unfunded colonies (pool-pacing alone
-      // bounds expansion — there is no per-pulse develop cap). In-flight colonies always have workDone > 0,
-      // so they persist. Builds persist regardless (their in-flight subtraction already bounds them).
+      // Persist-if-funded for colonies AND centres: a project of either kind that got NO work this
+      // pulse is dropped and re-scored next pulse — colonies so the open queue never balloons,
+      // centres so their frontier price stays live instead of a stale commitment queue-jumping
+      // later pulses. In-flight rows always have workDone > 0, so they persist. Ordinary builds
+      // persist regardless (their in-flight subtraction already bounds them).
       if (p.kind === "colony_establish" && p.workDone <= 0) continue;
+      if (p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE && p.workDone <= 0) continue;
       nextOpen.push(p);
     }
     for (const l of landed) {
