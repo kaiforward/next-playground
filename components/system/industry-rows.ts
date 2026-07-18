@@ -11,6 +11,16 @@ import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, Indus
 /** Severity ordering for the worst-of-contributors aggregation (collapsing is worst). */
 const SEVERITY: Record<IndustryHealth, number> = { stable: 0, contracting: 1, collapsing: 2 };
 
+/** One catalog extractor type's contribution to a shared deposit — the per-type breakdown under a
+ *  resource worked by more than one building type. Zeroed with health "stable" when nothing's built. */
+export interface DepositTypeRow {
+  buildingType: string;
+  built: number;
+  worked: number;
+  output: number;
+  health: IndustryHealth;
+}
+
 export interface DepositRow {
   resource: ResourceType;
   yieldMult: number;
@@ -25,13 +35,22 @@ export interface DepositRow {
   output: number;
   /** Worst health across the resource's extractors — drives the row indicator. */
   health: IndustryHealth;
+  /**
+   * One entry per catalog extractor type on this resource (BUILDING_TYPES[t].resource === resource),
+   * in catalog order. A resource worked by a single type carries exactly one entry; a resource shared
+   * by several types (e.g. arable → food + textiles) surfaces each type separately — including a type
+   * with nothing built yet — so the player can see it exists and quick-add it.
+   */
+  types: DepositTypeRow[];
 }
 
 /**
  * Per-resource deposit rows, joining the per-resource deposit summary (slots, yield) to the
  * per-building extractor readout (built count, in-use, output, health). A resource shared by
- * several goods (food + textiles → arable) sums their levels/working/output and takes the
- * worst contributor's health. Deposits arrive richest-cap-first (summariseDeposits).
+ * several goods (food + textiles → arable) sums their levels/working/output for the aggregate
+ * fields and takes the worst contributor's health, while `types` keeps each contributing type's
+ * own numbers so the shared pool doesn't hide how much of each good exists. Deposits arrive
+ * richest-cap-first (summariseDeposits).
  */
 export function depositRows(
   deposits: SystemDepositSummary[],
@@ -40,6 +59,7 @@ export function depositRows(
   unrestThreshold: number,
 ): DepositRow[] {
   const byResource = new Map<ResourceType, { built: number; worked: number; output: number; health: IndustryHealth }>();
+  const byType = new Map<string, DepositTypeRow>();
   for (const b of extractors) {
     const resource = BUILDING_TYPES[b.buildingType]?.resource;
     if (!resource) continue;
@@ -50,12 +70,16 @@ export function depositRows(
     acc.output += b.output ?? 0;
     if (SEVERITY[h] > SEVERITY[acc.health]) acc.health = h;
     byResource.set(resource, acc);
+    byType.set(b.buildingType, { buildingType: b.buildingType, built: b.count, worked: b.used, output: b.output ?? 0, health: h });
   }
   return deposits
     .filter((d) => d.slotCap > 0)
     .map((d) => {
       const agg = byResource.get(d.resource) ?? { built: 0, worked: 0, output: 0, health: "stable" as IndustryHealth };
-      return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg };
+      const types = Object.keys(BUILDING_TYPES)
+        .filter((t) => BUILDING_TYPES[t].resource === d.resource)
+        .map((t) => byType.get(t) ?? { buildingType: t, built: 0, worked: 0, output: 0, health: "stable" as IndustryHealth });
+      return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg, types };
     });
 }
 

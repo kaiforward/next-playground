@@ -35,7 +35,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { useDialog } from "@/components/ui/dialog";
-import { depositRows, generalLand, type DepositRow, type GeneralLand } from "@/components/system/industry-rows";
+import { depositRows, generalLand, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
@@ -309,10 +309,48 @@ function BuildingGhostRow({
 // ── Tables ───────────────────────────────────────────────────────────────────
 
 /**
+ * One extractor type's sub-row under a shared multi-type deposit (e.g. arable → food + textiles): the
+ * "└" glyph ties it to the parent's aggregate above. Slots and Yield stay blank — the parent row above
+ * owns those (they're the shared pool a build of either type draws down) — only Worked and Out/cyc are
+ * this type's own numbers, so quick-add here restores the one-click add the ambiguous parent row lost.
+ */
+function DepositTypeSubRow({
+  t, systemId, canOrder, option,
+}: {
+  t: DepositTypeRow;
+  systemId: string;
+  canOrder: boolean;
+  option?: BuildOptionData;
+}) {
+  return (
+    <tr className="border-b border-border/40 last:border-b-0">
+      <td className="px-1.5 py-1 text-[12px] text-text-secondary">
+        <span className="flex items-center gap-1.5 pl-3">
+          <span aria-hidden className="font-mono text-[10px] text-text-tertiary">└</span>
+          {label(t.buildingType)}
+        </span>
+      </td>
+      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={t.worked} total={t.built} health={t.health} /></td>
+      <td />
+      <td />
+      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{t.output > 0 ? formatUnitsShort(t.output) : "—"}</td>
+      {canOrder && (
+        <td className="px-1.5 py-1 text-right">
+          {option && <QuickAddButton systemId={systemId} option={option} />}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+/**
  * Deposit table: per-resource slot fill — health glyph · resource · worked/built · built/slots · yield ·
- * output. On the player's own systems, a trailing quick-add column offers +1 level on the resource's sole
- * extractor type (ambiguous resources — more than one catalog extractor — defer to the New-industry
- * dialog), and in-flight extractor orders render as ghost rows under their matching deposit.
+ * output. A resource worked by exactly one catalog extractor type renders as today: a single row, with a
+ * trailing quick-add column on the player's own systems. A resource shared by several types (e.g. arable →
+ * food + textiles) renders the parent row as the shared/aggregate picture — Slots is the shared pool,
+ * built either type draws it down — with no quick-add of its own, and one sub-row per type below carrying
+ * that type's own Worked/Out and its own quick-add. In-flight extractor orders render as ghost rows under
+ * their matching row: the single row for a one-type resource, the matching sub-row for a shared one.
  */
 function DepositTable({
   rows, contributorsFor, systemId, canOrder, optionByType, ghosts, onCancel, cancelPending,
@@ -336,8 +374,8 @@ function DepositTable({
       </thead>
       <tbody>
         {rows.map((row) => {
-          const extractorTypes = Object.keys(BUILDING_TYPES).filter((t) => BUILDING_TYPES[t].resource === row.resource);
-          const quickAddOption = canOrder && extractorTypes.length === 1 ? optionByType.get(extractorTypes[0]) : undefined;
+          const multi = row.types.length > 1;
+          const quickAddOption = canOrder && row.types.length === 1 ? optionByType.get(row.types[0].buildingType) : undefined;
           return (
             <Fragment key={row.resource}>
               <tr className="border-b border-border/40 last:border-b-0">
@@ -360,8 +398,16 @@ function DepositTable({
                   </td>
                 )}
               </tr>
-              {ghosts.filter((g) => g.resource === row.resource).map((g) => (
+              {!multi && ghosts.filter((g) => g.resource === row.resource).map((g) => (
                 <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
+              ))}
+              {multi && row.types.map((t) => (
+                <Fragment key={t.buildingType}>
+                  <DepositTypeSubRow t={t} systemId={systemId} canOrder={canOrder} option={optionByType.get(t.buildingType)} />
+                  {ghosts.filter((g) => g.buildingType === t.buildingType).map((g) => (
+                    <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
+                  ))}
+                </Fragment>
               ))}
             </Fragment>
           );
