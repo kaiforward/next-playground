@@ -9,7 +9,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, civilianDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot, facilityStorageForGood } from "@/lib/engine/industry";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
-import { deriveDominantEconomy } from "@/lib/engine/faction-gen";
+import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { slotColumns, qualColumns, yieldColumns } from "@/lib/engine/resources";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
 import type {
@@ -27,6 +27,7 @@ import type {
 export interface GenerateWorldOptions {
   systemCount: number;
   seed: number;
+  playerFaction?: PlayerFactionInput;
 }
 
 /**
@@ -84,7 +85,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
   const { systemCount, seed } = options;
   const config = genConfigForSystemCount(systemCount);
   const params = buildGenParams(seed, config);
-  const universe = generateUniverse(params, REGION_NAMES);
+  const universe = generateUniverse(params, REGION_NAMES, options.playerFaction);
 
   const minter: IdMinter = { next: 0 };
 
@@ -210,6 +211,11 @@ export function generateWorld(options: GenerateWorldOptions): World {
     }
   }
 
+  const player =
+    universe.playerFactionIndex !== null
+      ? { controlledFactionId: factionIds[universe.playerFactionIndex] }
+      : null;
+
   return {
     meta: {
       seed,
@@ -217,6 +223,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
       mapSize: config.MAP_SIZE,
       currentTick: 0,
     },
+    player,
     regions,
     systems,
     bodies,

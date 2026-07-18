@@ -12,6 +12,7 @@ import {
   generateFactions,
   assignHomeworldOwnership,
   type GeneratedFaction,
+  type PlayerFactionInput,
 } from "./faction-gen";
 
 // ── Output types ────────────────────────────────────────────────
@@ -67,6 +68,8 @@ export interface GeneratedUniverse {
   factions: GeneratedFaction[];
   /** factionIndex per system (parallel to `systems` by system.index). */
   systemFactionAssignments: number[];
+  /** Index into `factions` of the human player's authored faction, or null when playerless. */
+  playerFactionIndex: number | null;
 }
 
 // ── Generation parameters ───────────────────────────────────────
@@ -670,6 +673,7 @@ export function stampHomeworldPrefabs(
 export function generateUniverse(
   params: GenParams,
   names: string[],
+  playerFaction?: PlayerFactionInput,
 ): GeneratedUniverse {
   const rng = mulberry32(params.seed);
 
@@ -680,6 +684,7 @@ export function generateUniverse(
   const factions = generateFactions(rng, systems, {
     minorFactionCount: params.minorFactionCount,
     mapSize: params.mapSize,
+    playerFaction,
   });
 
   const homeworldIndices = new Set(factions.map((f) => f.homeworldSystemIndex));
@@ -687,11 +692,16 @@ export function generateUniverse(
 
   const systemFactionAssignments = assignHomeworldOwnership(systems.length, factions);
 
+  const playerFactionIndex = playerFaction
+    ? factions.findIndex((f) => f.key === "player")
+    : null;
+
   return {
     regions,
     systems,
     connections,
     factions,
     systemFactionAssignments,
+    playerFactionIndex,
   };
 }

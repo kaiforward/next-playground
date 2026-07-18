@@ -17,6 +17,7 @@ function fakeWorld(): World {
       mapSize: 0,
       currentTick: 0,
     },
+    player: null,
     regions: [],
     systems: [],
     bodies: [],

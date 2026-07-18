@@ -164,3 +164,46 @@ describe("generateWorld: control flag", () => {
     }
   });
 });
+
+describe("generateWorld — player faction", () => {
+  const base = { systemCount: 200, seed: 12345 };
+  const authored = {
+    name: "Aurelian League",
+    governmentType: "technocratic" as const,
+    doctrine: "mercantile" as const,
+  };
+
+  it("seeds the authored faction as an additional major and points world.player at it", () => {
+    const world = generateWorld({ ...base, playerFaction: authored });
+
+    expect(world.player).not.toBeNull();
+    const seatId = world.player?.controlledFactionId;
+    const player = world.factions.find((f) => f.id === seatId)!;
+    expect(player.name).toBe("Aurelian League");
+    expect(player.governmentType).toBe("technocratic");
+    expect(player.doctrine).toBe("mercantile");
+    // Placed like everyone: it owns exactly its homeworld, which is developed.
+    const home = world.systems.find((s) => s.id === player.homeworldId)!;
+    expect(home.factionId).toBe(player.id);
+    expect(home.control).toBe("developed");
+  });
+
+  it("is additive — one more faction, with presets + minors unchanged", () => {
+    const playerless = generateWorld(base);
+    const withPlayer = generateWorld({ ...base, playerFaction: authored });
+
+    expect(withPlayer.factions.length).toBe(playerless.factions.length + 1);
+    // The authored faction is the only new identity: every preset major and procedural
+    // minor keeps its name and array position (they're generated before the player is
+    // spliced in at the major/minor boundary).
+    const nonPlayerNames = withPlayer.factions
+      .filter((f) => f.id !== withPlayer.player?.controlledFactionId)
+      .map((f) => f.name);
+    expect(nonPlayerNames).toEqual(playerless.factions.map((f) => f.name));
+  });
+
+  it("stays playerless when no faction is authored (the harness path)", () => {
+    const world = generateWorld(base);
+    expect(world.player).toBeNull();
+  });
+});

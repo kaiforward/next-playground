@@ -28,6 +28,7 @@ function buildWorld(systems: WorldSystem[]): World {
       mapSize: 100,
       currentTick: 0,
     },
+    player: null,
     regions: [],
     systems,
     bodies: [],
