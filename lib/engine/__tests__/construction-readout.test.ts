@@ -175,4 +175,15 @@ describe("computeFactionConstruction", () => {
     expect(buildingLabel(CONSTRUCTION_CENTRE_TYPE)).toBe("Construction Centre");
     expect(describeBuildProject(CONSTRUCTION_CENTRE_TYPE)).toContain("construction");
   });
+
+  it("carries each project's origin through to its row", () => {
+    const originProjects: WorldConstructionProject[] = [
+      { kind: "build", id: "a", factionId: "f1", systemId: "dev1", origin: "auto",
+        buildingType: "housing", levels: 1, workTotal: 10, workDone: 0 },
+      { kind: "build", id: "b", factionId: "f1", systemId: "dev1", origin: "player",
+        buildingType: "housing", levels: 1, workTotal: 10, workDone: 0 },
+    ];
+    const r = computeFactionConstruction(originProjects, systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
+    expect(r.all.map((row) => row.origin)).toEqual(["auto", "player"]);
+  });
 });

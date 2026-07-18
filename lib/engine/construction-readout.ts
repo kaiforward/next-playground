@@ -27,6 +27,8 @@ interface ConstructionRowBase {
   id: string;
   systemId: string;
   systemName: string;
+  /** Who committed this row: the autonomic planner, or a player order (display + cancel-permission). */
+  origin: "auto" | "player";
   /** Exact workDone/workTotal in [0,1]. */
   progress: number;
   workDone: number;
@@ -152,6 +154,7 @@ export function computeFactionConstruction(
       id: p.id,
       systemId: p.systemId,
       systemName: nameById.get(p.systemId) ?? p.systemId,
+      origin: p.origin,
       progress: progressOf(p),
       workDone: p.workDone,
       workTotal: p.workTotal,

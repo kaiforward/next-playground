@@ -295,6 +295,37 @@ export interface FactionConstructionData {
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
 export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
 
+// ── Player build-options surface (per-system verbs: colonise / build) ────────
+import type { BuildOption } from "@/lib/engine/build-options";
+import type { ColonyBlockReason } from "@/lib/services/construction-orders";
+
+/** One dialog/quick-add option: engine feasibility + display label + queue-aware ETA. */
+export interface BuildOptionData extends BuildOption {
+  label: string;
+  /** ≈pulses until a 1-level order placed NOW would land (player queue position); null = stalled pool. */
+  etaPulses: number | null;
+}
+/** Per-system verb surface: which construction verb applies here and its feasibility. */
+export type SystemBuildOptionsData =
+  | { mode: "none" } // not the player's system (or no seat)
+  | {
+      mode: "colony";
+      colony:
+        | {
+            state: "eligible";
+            preview: {
+              sourceSystemId: string;
+              sourceSystemName: string;
+              seedPop: number;
+              housingLevels: number;
+              work: number;
+            };
+          }
+        | { state: "ineligible"; reason: ColonyBlockReason };
+    }
+  | { mode: "build"; options: BuildOptionData[] };
+export type SystemBuildOptionsResponse = ApiResponse<SystemBuildOptionsData>;
+
 // ── Player construction verbs (build/colony orders, cancel, automation) ──────
 export type OrderBuildResponse = ApiResponse<{ projectId: string; levels: number }>;
 export type OrderColonyResponse = ApiResponse<{ projectId: string }>;
