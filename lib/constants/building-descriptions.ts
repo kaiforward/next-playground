@@ -3,8 +3,8 @@
  *
  * Production buildings map 1:1 to a good, so their copy is the good's own description
  * (GOODS[id].description) — `describeBuilding` falls back to it rather than duplicating
- * 26 strings here. Only the three non-good buildings (housing + the two academies, the
- * least self-explanatory) carry bespoke role copy.
+ * 26 strings here. Only the non-good buildings (housing, the two academies, and the
+ * construction centre — the least self-explanatory) carry bespoke role copy.
  */
 import type { GoodTier } from "@/lib/types/game";
 import { GOODS } from "@/lib/constants/goods";
