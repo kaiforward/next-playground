@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -61,6 +61,20 @@ export function BuildDialog({
     resolver: zodResolver(orderSchema),
     defaultValues: { buildingType: options[0]?.buildingType ?? "", levels: 1 },
   });
+
+  // The host <dialog> renders in the browser top layer (showModal()), so the
+  // building-select menu must portal into it rather than document.body, or it
+  // would render beneath the dialog. Derived via the form's nearest <dialog>
+  // ancestor since Dialog doesn't expose its element to children.
+  const [dialogEl, setDialogEl] = useState<HTMLDialogElement | null>(null);
+  const formRef = useCallback((node: HTMLFormElement | null) => {
+    if (!node) {
+      setDialogEl(null);
+      return;
+    }
+    const dialog = node.closest("dialog");
+    setDialogEl(dialog instanceof HTMLDialogElement ? dialog : null);
+  }, []);
   const chosenType = watch("buildingType");
   const levels = watch("levels");
   const option = useMemo(() => options.find((o) => o.buildingType === chosenType), [options, chosenType]);
@@ -80,7 +94,7 @@ export function BuildDialog({
       <p className="mb-4 mt-0.5 text-xs text-text-tertiary">
         Ordered work outranks autonomic proposals in the funding queue.
       </p>
-      <form onSubmit={submit} className="grid grid-cols-1 gap-6 sm:grid-cols-[1fr_260px]" noValidate>
+      <form ref={formRef} onSubmit={submit} className="grid grid-cols-1 gap-6 sm:grid-cols-[1fr_260px]" noValidate>
         <div>
           <Controller
             control={control}
@@ -92,6 +106,7 @@ export function BuildDialog({
                 onChange={field.onChange}
                 options={options.map((o) => ({ value: o.buildingType, label: o.label }))}
                 error={errors.buildingType?.message}
+                menuPortalTarget={dialogEl}
               />
             )}
           />
