@@ -21,16 +21,19 @@ player seat is a *human seat* on machinery that already exists; it is not new AI
 Phase 3 is multi-subsystem. It ships as four sequential sub-projects, each its own spec → plan → build,
 each independently playable. Build order:
 
-1. **The Seat** *(this slice)* — author a faction on New Game; a `world.player` marks which faction is
-   yours; the existing read-only UI reframes around you (auto-focus your homeworld, a "You" tag). **No
-   new verbs** — your faction runs on the autonomic brain, identical to the AI. The one unavoidable
-   structural change (who is "the player", threaded through save/load) lands in the smallest possible
-   slice, de-risking everything after it.
-2. **Direct control + automation toggles** — the inversion made playable. Per-domain automation
-   switches plus the first manual verbs (place/expand a build, pick a colony target) behind them.
-3. **The purse** — faction money: tax from your economy, a treasury, budget bands that fund
-   construction/logistics (replacing today's free population-funded pool). Comes after verbs, because
-   budgets only matter once there is something to fund by hand.
+1. **The Seat** *(shipped — PR #185)* — author a faction on New Game; a `world.player` marks which
+   faction is yours; the existing read-only UI reframes around you (auto-focus your homeworld, a "You"
+   tag). **No new verbs** — your faction runs on the autonomic brain, identical to the AI. The one
+   unavoidable structural change (who is "the player", threaded through save/load) lands in the
+   smallest possible slice, de-risking everything after it.
+2. **Control + construction actualisation** *(this slice)* — the inversion made playable. Per-domain
+   automation switches plus the first manual verbs (order a build, direct a colony) behind them —
+   landing together with a construction-points rework (stratified pop base + Construction Centres) so
+   the resource the verbs direct is a real, partly-built one. Design in Slice 2 below.
+3. **The purse** — faction money, EU5-shaped: buildings carry a monetary dimension (tax yield,
+   maintenance cost) feeding a treasury and budget bands, attached to structures that already exist
+   rather than needing its own building roster invented first. Tax policy trades revenue against pop
+   happiness. Comes after verbs.
 4. **Alert feed** — the faction situation log, once there is enough happening to need telling where to
    look.
 
@@ -39,7 +42,7 @@ list.
 
 ---
 
-## Slice 1 — The Seat
+## Slice 1 — The Seat *(shipped — PR #185)*
 
 **Headline.** Clicking **New Game** opens a setup screen where you author a faction — name, government,
 doctrine — plus galaxy size and an optional seed. World-gen seeds your faction as one more major
@@ -161,7 +164,7 @@ run on the same brain as the AI. Everything actionable is Slice 2+.
 
 ---
 
-## Testing
+### Slice 1 testing
 
 - **World-gen** (`lib/world/__tests__/gen.test.ts`, `lib/engine/__tests__/*`): with a `playerFaction`,
   the world contains a ninth major carrying the authored name/government/doctrine with a placed
@@ -177,7 +180,145 @@ run on the same brain as the AI. Everything actionable is Slice 2+.
 - **Setup form**: renders the government/doctrine selects and validates required fields (component test,
   matching how the current New-Game form is covered).
 
+---
+
+## Slice 2 — Control + construction actualisation
+
+**Headline.** Two things land together. First, construction points become a real, partly-*built*
+resource: the pop-generated base pool narrows to heads not employed in skilled work, and a new
+**Construction Centre** building adds capital-generated points — so a faction that educates its
+population must substitute infrastructure for the labour it loses. Second, the player gets the first
+manual verbs — **order a build**, **direct a colony**, **cancel** — behind per-domain automation
+toggles. All factions share the points rework (the AI plans centres via the same ROI machinery); the
+verbs are the player's alone. Money is explicitly **not** in this slice (Slice 3).
+
+### 1. Construction points — stratified pop base
+
+The faction throughput pool's per-system contribution changes from raw headcount to **eligible
+heads**:
+
+```
+eligible = population − employed technicians − employed engineers
+pool     = Σ over developed systems of eligible × THROUGHPUT_PER_POP  (+ centre output, §2)
+```
+
+Eligibility follows **employment, not education** — `splitLabour` already classifies technician/
+engineer heads as people *working* skill-1/skill-2 jobs (licence-capped), and everyone else lands in
+unskilled/unemployed, who all still build. Consequences, both emergent rather than tuned:
+
+- A faction that industrialises absorbs heads into skilled jobs and its base construction labour
+  erodes automatically — richer factions *need* Construction Centres. Nobody wrote a "rich factions
+  build slower" rule.
+- An underemployed graduate (licensed, no skilled job) still swings a hammer; education alone costs
+  nothing — only actually employing your educated pops does.
+
+`THROUGHPUT_PER_POP` is recalibrated upward so a young low-skill economy's pool is roughly unchanged
+(the eligible base is nearly the whole population there). The pool function gains the system's
+buildings as input (the split derives from them).
+
+### 2. The Construction Centre
+
+A new non-production building type (pattern: vocational school — it produces no market good):
+
+| Aspect | Behaviour |
+|---|---|
+| Output | `levels × POINTS_PER_LEVEL × staffing fulfilment` added to the faction pool each pulse |
+| Staffing | Tier-1-factory-like profile: mostly unskilled + a meaningful technician draw |
+| Space | Normal general-space footprint |
+| Build cost | Work-cost override entry (`WORK_PER_LEVEL_OVERRIDE`) |
+| Decay | Subject to idle-decay like any building |
+
+Staffing fulfilment is computed from the system's buildings + population via the existing industry
+helpers. The technician draw completes the substitution loop: you convert a few educated heads plus
+capital into more points than the many raw labourers you lost.
+
+### 3. Centre valuation — priced on the existing ROI axis
+
+A centre serves no demand, so it gets no invented value; instead **a construction point's worth is
+the best work it can't yet fund**. Per faction per pulse:
+
+1. Order the backlog (open projects + this pulse's proposals) into funding order as usual.
+2. Find the **frontier**: work beyond what the current pool drains within `BACKLOG_WINDOW` pulses.
+3. `r` = the best ROI among proposals beyond the frontier (`0` if the backlog drains inside the
+   window).
+4. Emit at most **one** centre proposal — and none while a centre project is already in flight for
+   the faction: `value = POINTS_PER_LEVEL × r × PAYBACK_HORIZON`, `work = workCostPerLevel(centre)`,
+   sited at the developed system with the most spare labour and space (deterministic tie-break by
+   systemId). It enters `orderProposals` as a normal proposal and competes on ROI.
+
+Emergent behaviour — the starvation trigger derived instead of invented: a deep backlog of
+*valuable* work → high frontier ROI → the centre outranks mid-queue proposals and funds; a draining
+backlog → `r ≈ 0` → never builds; a deep backlog of *junk* → the centre ranks as low as the junk and
+correctly waits. Self-limiting: a landed centre grows the pool, pushing the frontier out and dropping
+the next centre's value. Two interpretable constants (`PAYBACK_HORIZON` — capital payback;
+`BACKLOG_WINDOW`), both simulator-calibrated.
+
+### 4. Automation toggles
+
+```
+world.player.automation: { build: boolean; colonisation: boolean }   // both default true
+```
+
+Toggled off, the directed-build processor skips **proposal generation** for the player's faction in
+that domain — funding of already-committed projects always continues, and manual orders still flow.
+AI factions ignore the field entirely. No logistics toggle: logistics has no manual verb in this
+slice, and a toggle with nothing behind it is a lie. Save bump 6 → 7 (world-shape change).
+
+### 5. Manual verbs
+
+- **Order a build** — pick system + building type + levels. Space and deposit-slot ceilings are
+  **hard rejections** (the same physical checks the planner uses); the labour gate is a **warning,
+  not a block** — the player may overbuild what their pops can staff, and staffing dilution +
+  idle-decay punish it honestly. The planner protects the AI from that mistake; the player gets to
+  make it.
+- **Direct a colony** — pick an eligible controlled system → creates the colony-establish project
+  directly (same eligibility as planner candidates: habitable floor, seed source, not already in
+  flight).
+- **Cancel** a queued player project (work spent is lost). Add + cancel are the whole verb set —
+  reorder/pause come later if wanted.
+
+**Queue position:** in-flight committed work finishes first, then **player orders outrank all
+autonomic proposals** (FIFO among themselves), then the usual housing → ROI order. Eviction comes
+free: unfunded autonomic proposals are never persisted (persist-if-funded) and re-emit next pulse, so
+manual orders consuming the pool *is* the push-out.
+
+**Plumbing:** manual and autonomic projects are the same `WorldConstructionProject` rows — one
+queue, one funder; a row gains `origin: "player" | "auto"` (priority, display, cancel-permission).
+Zod-validated route → mutation service returning a discriminated union → world store.
+
+### 6. UI
+
+Additions to existing surfaces, no new pages:
+
+- Faction construction card: automation toggles, a **Queue build** action, cancel buttons on
+  player-originated rows, pool header shows composition (base + centres).
+- System panel (eligible controlled systems): **Establish colony** action.
+- One new dialog (building type + levels) using `components/form/` controls.
+
+Below the HTML-prototype bar — buttons and a dialog on existing cards.
+
+### 7. Slice 2 testing
+
+- **Engine**: eligible-pop pool math (skilled employment shrinks the pool; underemployed graduates
+  don't); centre output × fulfilment; frontier-ROI valuation (funds under valuable backlog, waits on
+  junk or a draining queue); queue ordering with player rows (in-flight → player → housing → ROI).
+- **Simulator gate (the real proof)**: AI factions still colonise and develop; centres appear under
+  backlog pressure and *don't* appear without it; no runaway/NaN. Add a pool-composition
+  (base vs centres) + queue-ETA metric to the health report so starvation is visible.
+- **Component**: build dialog validation; toggle wiring.
+- **Save/load**: v7 round-trip (`automation`, `origin`); v6 rejected cleanly.
+
+### 8. Sequencing
+
+Shared feature branch; two PRs, each `/uber-review`'d going in:
+
+- **PR A — the economy half**: stratified base + Construction Centre + frontier-ROI valuation,
+  sim-validated. All-faction recalibration risk isolated here, no UI.
+- **PR B — the control half**: toggles + verbs + UI on top.
+
+---
+
 ## Build gate
 
-`npx next build --webpack`, `npx vitest run`, and `npm run simulate` (confirming the playerless economy
-metrics are unmoved) before the PR.
+`npx next build --webpack`, `npx vitest run`, and `npm run simulate` (for Slice 2: confirming the
+AI-faction health metrics per §7's simulator gate) before each PR.
