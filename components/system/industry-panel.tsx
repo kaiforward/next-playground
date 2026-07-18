@@ -248,7 +248,9 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
 type BuildingGroupTitle = Exclude<GhostGroup, "deposit">;
 
 /** Ghost row's name cell: ◇ marker · label · +levels · ORDERED badge · cancel (player rows, when cancellable). */
-function GhostNameCell({ ghost, canCancel, onCancel }: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void }) {
+function GhostNameCell({
+  ghost, canCancel, onCancel, cancelPending,
+}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean }) {
   return (
     <td className="px-1.5 py-1 text-[12px] text-text-tertiary">
       <span className="flex items-center gap-1.5">
@@ -259,8 +261,9 @@ function GhostNameCell({ ghost, canCancel, onCancel }: { ghost: GhostRow; canCan
           <button
             type="button"
             aria-label={`Cancel ${ghost.label} order`}
+            disabled={cancelPending}
             onClick={() => onCancel(ghost.projectId)}
-            className="px-1 text-[11px] text-status-red-light transition-colors hover:text-status-red"
+            className="px-1 text-[11px] text-status-red-light transition-colors hover:text-status-red disabled:cursor-not-allowed disabled:opacity-35"
           >
             ✕
           </button>
@@ -275,11 +278,11 @@ function GhostNameCell({ ghost, canCancel, onCancel }: { ghost: GhostRow; canCan
 
 /** In-flight extractor in the deposit ledger: name cell, then progress% / — / ETA under Worked / Yield / Out-cyc. */
 function DepositGhostRow({
-  ghost, canCancel, onCancel, showActionColumn,
-}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; showActionColumn: boolean }) {
+  ghost, canCancel, onCancel, cancelPending, showActionColumn,
+}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean; showActionColumn: boolean }) {
   return (
     <tr className="border-b border-border/40 last:border-b-0">
-      <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} />
+      <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
       <td />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaPulses)}</td>
@@ -290,11 +293,11 @@ function DepositGhostRow({
 
 /** In-flight building in the general-land ledger: name cell, then progress% / ETA under Worked / Out-cyc. */
 function BuildingGhostRow({
-  ghost, canCancel, onCancel, showActionColumn,
-}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; showActionColumn: boolean }) {
+  ghost, canCancel, onCancel, cancelPending, showActionColumn,
+}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean; showActionColumn: boolean }) {
   return (
     <tr className="border-b border-border/40 last:border-b-0">
-      <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} />
+      <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaPulses)}</td>
       {showActionColumn && <td />}
@@ -311,7 +314,7 @@ function BuildingGhostRow({
  * extractor orders render as ghost rows under their matching deposit.
  */
 function DepositTable({
-  rows, contributorsFor, systemId, canOrder, optionByType, ghosts, onCancel,
+  rows, contributorsFor, systemId, canOrder, optionByType, ghosts, onCancel, cancelPending,
 }: {
   rows: DepositRow[];
   contributorsFor: (r: DepositRow["resource"]) => BuildingEntry[];
@@ -320,6 +323,7 @@ function DepositTable({
   optionByType: Map<string, BuildOptionData>;
   ghosts: GhostRow[];
   onCancel: (projectId: string) => void;
+  cancelPending: boolean;
 }) {
   return (
     <table className="w-full border-collapse">
@@ -355,7 +359,7 @@ function DepositTable({
                 )}
               </tr>
               {ghosts.filter((g) => g.resource === row.resource).map((g) => (
-                <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} showActionColumn={canOrder} />
+                <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
               ))}
             </Fragment>
           );
@@ -443,6 +447,7 @@ function BuildingsTable({
   optionByType,
   ghostsByGroup,
   onCancel,
+  cancelPending,
 }: {
   groups: Array<{ title: BuildingGroupTitle; buildings: BuildingEntry[] }>;
   labour: SystemLabour;
@@ -453,6 +458,7 @@ function BuildingsTable({
   optionByType: Map<string, BuildOptionData>;
   ghostsByGroup: Map<GhostGroup, GhostRow[]>;
   onCancel: (projectId: string) => void;
+  cancelPending: boolean;
 }) {
   const active = groups.filter((g) => g.buildings.length > 0 || (ghostsByGroup.get(g.title)?.length ?? 0) > 0);
   if (active.length === 0) return null;
@@ -486,7 +492,7 @@ function BuildingsTable({
               />
             ))}
             {(ghostsByGroup.get(group.title) ?? []).map((g) => (
-              <BuildingGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} showActionColumn={canOrder} />
+              <BuildingGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
             ))}
           </Fragment>
         ))}
@@ -778,6 +784,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
 
       {canOrder && (
         <BuildDialog
+          key={systemId}
           systemId={systemId}
           systemName={systemInfo?.name ?? systemId}
           options={dialogOptions}
@@ -804,6 +811,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             optionByType={optionByType}
             ghosts={ghostRows.get("deposit") ?? []}
             onCancel={onCancelOrder}
+            cancelPending={cancelOrder.isPending}
           />
         </Card>
       )}
@@ -832,6 +840,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           optionByType={optionByType}
           ghostsByGroup={ghostRows}
           onCancel={onCancelOrder}
+          cancelPending={cancelOrder.isPending}
         />
       </Card>
     </div>
