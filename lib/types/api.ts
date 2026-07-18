@@ -295,6 +295,12 @@ export interface FactionConstructionData {
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
 export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
 
+// ── Player construction verbs (build/colony orders, cancel, automation) ──────
+export type OrderBuildResponse = ApiResponse<{ projectId: string; levels: number }>;
+export type OrderColonyResponse = ApiResponse<{ projectId: string }>;
+export type CancelOrderResponse = ApiResponse<{ projectId: string }>;
+export type AutomationResponse = ApiResponse<{ build: boolean; colonisation: boolean }>;
+
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
 export type EventsResponse = ApiResponse<ActiveEvent[]>;
