@@ -687,3 +687,48 @@ describe("player orders in the funding queue", () => {
     expect(w.constructionProjects.some((p) => p.id === "player-c1")).toBe(true);
   });
 });
+
+describe("runDirectedBuildProcessor: player automation gating (proposal generation only)", () => {
+  it("skips build proposal generation for the player's faction when automation.build is off", async () => {
+    // Deficit scenario that WOULD propose builds; with build automation off, no new projects appear
+    // for the player faction — but a pre-existing committed row still receives funding. A tiny cap (4)
+    // keeps the committed row (remaining work 15) from completing in a single pulse — matching how
+    // "funds existing open projects front-first" above isolates the same advance-without-landing signal.
+    const inFlight: WorldConstructionProject = { kind: "build", id: "b-committed", factionId: "f1",
+      systemId: "s1", origin: "auto", buildingType: "metals", levels: 1, workTotal: 20, workDone: 5 };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [inFlight]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+    });
+    expect(w.constructionProjects.every((p) => p.id === "b-committed")).toBe(true);
+    expect(w.constructionProjects[0]?.workDone).toBeGreaterThan(5);
+  });
+
+  it("skips colony proposal generation when automation.colonisation is off, leaving builds alone", async () => {
+    // Reuses the build-vs-colony arbitration fixture (homeWithFoodDeficit + colonyOf/COLONY_PARAMS):
+    // a build deficit competes with an eligible colony candidate for the same pool. With colonisation
+    // off, no colony_establish proposal is generated at all — the build proposal wins the whole pool
+    // and its row persists regardless of funding (persist-if-funded only gates colonies/centres).
+    const w = new MemoryDirectedBuildWorld([homeWithFoodDeficit(1000)]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(6, 0.004),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyOf("c1", 1_000_000)] : []), params: COLONY_PARAMS },
+      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+    });
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
+    expect(w.constructionProjects.some((p) => p.kind === "build")).toBe(true);
+  });
+
+  it("ignores automation entirely for non-player factions", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(4),
+      player: { factionId: "someone-else", automation: { build: false, colonisation: false } },
+    });
+    expect(w.constructionProjects.length).toBeGreaterThan(0); // f1 planned as usual
+  });
+});

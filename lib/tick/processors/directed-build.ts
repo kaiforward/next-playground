@@ -61,6 +61,9 @@ export interface DirectedBuildProcessorParams {
     candidateProvider: (factionId: string) => ColonyEstablishCandidate[];
     params: ColonyEstablishParams;
   };
+  /** The human seat, when one exists: gates PROPOSAL GENERATION for this faction per domain.
+   *  Funding of committed work and manual orders is never gated. Omitted → no gating (harness). */
+  player?: { factionId: string; automation: { build: boolean; colonisation: boolean } };
 }
 
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */
@@ -175,15 +178,21 @@ export async function runDirectedBuildProcessor(
     const pool = poolRef.total * catchUp;
 
     const existing = openByFaction.get(factionId) ?? [];
+    // The human seat's per-domain switches: off = skip PROPOSAL GENERATION for this faction in that
+    // domain. Committed funding always continues below; manual orders arrive via `existing`.
+    const automation = params.player?.factionId === factionId ? params.player.automation : null;
+    const skipBuild = automation !== null && !automation.build;
+    const skipColonise = automation !== null && !automation.colonisation;
+
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
     const buildStates = group.map(toBuildState);
-    const buildProposals = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
+    const buildProposals = skipBuild ? [] : planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
 
     // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
     // colonise (a null-faction group is independents — never); the develop param is omitted in build-only tests.
     let colonyProposals: ColonyProposal[] = [];
-    if (params.develop && factionId !== null) {
+    if (params.develop && factionId !== null && !skipColonise) {
       const developedStates = buildStates.filter((s) => isEconomicallyActive(s.control));
       const openColonies = existing.filter(
         (p): p is WorldColonyEstablishProject => p.kind === "colony_establish",
@@ -212,7 +221,8 @@ export async function runDirectedBuildProcessor(
 
     // At most one centre proposal per pulse, priced off the backlog frontier; it re-enters the
     // ROI ordering as a normal proposal (independent systems — null faction — never build centres).
-    if (factionId !== null) {
+    // A centre is a build-domain proposal, so it is gated by the same switch as ordinary builds.
+    if (factionId !== null && !skipBuild) {
       const centre = planCentreProposal(factionId, ordered, existing, buildStates, poolRef.total, {
         pointsPerLevel: params.construction.pointsPerLevel,
         paybackHorizon: params.construction.paybackHorizon,
