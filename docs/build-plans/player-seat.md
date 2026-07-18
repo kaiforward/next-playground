@@ -108,8 +108,9 @@ AtlasData.player: { controlledFactionId: string; homeworldSystemId: string } | n
 
 The atlas is already the map's bootstrap payload and is cached `staleTime: Infinity` — the same
 per-world, static cadence player identity has. The API resolves `controlledFactionId` → faction →
-`homeworldId` so the client gets the homeworld **system** id directly (what auto-focus needs). A tiny
-`usePlayer()` selector over the atlas gives non-map screens the same identity for the "You" tag.
+`homeworldId` so the client gets the homeworld **system** id directly (what auto-focus needs).
+`atlas.player` exists specifically to feed auto-focus (§4); the "You" tag (§5) instead reads a
+service-resolved `FactionSummary.isPlayer`, so the faction surfaces need no atlas cross-reference.
 
 ### 4. Auto-focus the homeworld
 
@@ -124,9 +125,11 @@ world in the browser), behaviour is exactly today's fit-to-galaxy view.
 ### 5. Minimal identity surfacing
 
 A small **"You"** badge marks the controlled faction in the two read surfaces that list/lead with a
-faction: the faction list and the faction panel header. That is the whole of the identity treatment for
-this slice — no bespoke your-territory map tint, no panels defaulting to you beyond the camera focus.
-Those ride with Slice 2's control surface, where they have verbs to attach to.
+faction: the faction list and the faction panel header. Both render through one component
+(`FactionCard`), and `FactionDetail extends FactionSummary`, so a single service-resolved
+`FactionSummary.isPlayer` (set from `world.player`) lights up both surfaces. That is the whole of the
+identity treatment for this slice — no bespoke your-territory map tint, no panels defaulting to you
+beyond the camera focus. Those ride with Slice 2's control surface, where they have verbs to attach to.
 
 ### 6. Schema / API
 
@@ -166,8 +169,9 @@ run on the same brain as the AI. Everything actionable is Slice 2+.
   today (playerless, `world.player === null`) — the harness path is pinned.
 - **Schema**: `newGameSchema` accepts valid government/doctrine and rejects out-of-set values, empty/
   overlong names.
-- **Save/load** (`lib/world/__tests__/save.test.ts`): `world.player` survives the serialize/deserialize
-  round-trip (and a legacy player-less save deserialises with `player: null`).
+- **Save/load** (`lib/world/__tests__/save.test.ts`): `SAVE_FORMAT_VERSION` bumps 5 → 6 (adding
+  `world.player` is a world-shape change); `world.player` survives the serialize/deserialize round-trip,
+  and a v5 save is rejected cleanly ("saves break on upgrade", per project convention).
 - **`startingSystemId` removal**: the tests that assert on it are removed with the field; nothing else
   references it.
 - **Setup form**: renders the government/doctrine selects and validates required fields (component test,
