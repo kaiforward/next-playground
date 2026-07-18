@@ -45,6 +45,11 @@ export function getAtlas(): AtlasData {
     };
   });
 
+  const playerFactionId = world.player?.controlledFactionId ?? null;
+  const playerHomeworldId = playerFactionId
+    ? world.factions.find((f) => f.id === playerFactionId)?.homeworldId ?? null
+    : null;
+
   return {
     meta: {
       mapSize: world.meta.mapSize,
@@ -74,5 +79,9 @@ export function getAtlas(): AtlasData {
       name: f.name,
       color: f.color,
     })),
+    player:
+      playerFactionId && playerHomeworldId
+        ? { controlledFactionId: playerFactionId, homeworldSystemId: playerHomeworldId }
+        : null,
   };
 }

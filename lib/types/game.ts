@@ -257,6 +257,8 @@ export interface AtlasData {
   systems: AtlasSystem[];
   connections: SystemConnectionInfo[];
   factions: AtlasFaction[];
+  /** The human player's seat + homeworld system for auto-focus; null in a playerless world. */
+  player: { controlledFactionId: string; homeworldSystemId: string } | null;
 }
 
 export interface ActiveEvent {
