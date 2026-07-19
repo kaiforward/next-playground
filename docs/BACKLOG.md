@@ -44,7 +44,11 @@ Well-defined, can start now.
   (`treasurySummary`/`treasurySnapshots`), so this is one YAML config + a read.
 - **[L] Economy band reconciliation — equilibrium vs anchor, the floor's identity, and regime
   legibility** (design pass: brainstorm + EU5/Vic3 research BEFORE spec — direction leaning but NOT
-  settled; ideally lands before Purse Slice 3 Plan 2 calibration, which tunes against current equilibria).
+  settled. **Sequenced AFTER the purse slice ships** (decided 2026-07-19): Plan 2's mechanics are
+  structurally independent of where equilibrium sits, so interleaving isn't worth parking the slice —
+  but Plan 2's calibration must stay deliberately coarse/range-y, and this pass triggers a
+  Task-10-style treasury recalibration when it lands (realized output moves → tax income moves).
+  The EU5/Vic3 research is cheap and may front-run between sessions.)
   Trigger was a "UI bug" report that turned out to be structure (2026-07-19, investigated on a live
   save; all UI surfaces verified internally consistent — needs want = civilian-only, logistics consumes
   = civilian+industrial, industry out/cyc = production).
