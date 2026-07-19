@@ -892,7 +892,19 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             <HealthGlyph health={sysHealth} className="mr-1 text-xs" decorative />
             {HEALTH[sysHealth].label}
           </Badge>
-          {unmet.length > 0 && (
+          <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
+            <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
+            <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
+            <LegendTooltip />
+            {canOrder && (
+              <Button variant="outline" size="xs" type="button" onClick={newIndustryDialog.onOpen}>
+                + New industry
+              </Button>
+            )}
+          </span>
+        </div>
+        {unmet.length > 0 && (
+          <div className="mt-1.5">
             <Tooltip>
               <TooltipTriggerLabel className="inline-flex items-center gap-1.5 border border-border bg-surface-active px-2 py-0.5 text-[11px]">
                 <span aria-hidden className={`font-mono text-[10px] ${SEVERITY_TEXT[needSeverity(unmet[0].satisfaction)]}`}>{SEVERITY_GLYPH[needSeverity(unmet[0].satisfaction)]}</span>
@@ -913,18 +925,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                 </div>
               </TooltipContent>
             </Tooltip>
-          )}
-          <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
-            <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
-            <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
-            <LegendTooltip />
-            {canOrder && (
-              <Button variant="outline" size="xs" type="button" onClick={newIndustryDialog.onOpen}>
-                + New industry
-              </Button>
-            )}
-          </span>
-        </div>
+          </div>
+        )}
         <p className="mt-1.5 flex gap-3 font-mono text-[11px]">
           <span className="text-status-green-light">{tally.stable} stable</span>
           <span className="text-status-amber-light">{tally.contracting} contracting</span>
