@@ -33,6 +33,15 @@ Well-defined, can start now.
   `lib/types/guards.ts` narrowing `string` → `GoodId` with a decided failure mode (reject the save vs
   drop the row). Don't start it without settling that.
 - **[S] Purge the Postgres fossils outside `lib/tick/`** — Prisma was deleted in the Phase-2 pivot, but comments across `lib/types/game.ts:1`, `lib/types/guards.ts:2-4` ("Runtime type guards for Prisma boundary values" — the boundaries are now save-file `deserialize` + API `JSON.parse`), `lib/utils/format.ts:67`, `lib/utils/__tests__/format.test.ts:44`, `lib/world/types.ts:3`, `lib/world/gen.ts:3,49` (points at `prisma/seed.ts`, deleted), `lib/engine/relations.ts:3`, and `lib/engine/system-trade-flow.ts:4,7` still describe it as live. Mostly "no Prisma dependency" negative-space claims that are now vacuous, plus two that point a reader at deleted files. The tick's own two-backend claims were swept with the harness rename; this is the same rot in the layers that PR's scope didn't reach. Comment-only, zero risk. Find them with: `grep -rni "prisma" --include="*.ts" lib/`.
+- **[S] Re-validate treasury hoard-boundedness at a long horizon (with Purse Slice 3 Plan 2)** — the
+  treasury-core calibration (rates in `lib/constants/treasury.ts`) proved early-game solvency and real
+  scarcity windows on 500/1500-tick runs, but the 1500-tick balance trajectory ends in its
+  fastest-growing sampled window (mean +12.65/tick over t=1250–1500) with bills consuming only ~34% of
+  income at the final pulse — "no runaway hoard" is not yet demonstrated, only "not monotone". Before or
+  alongside Plan 2 (when funded fractions start gating construction/logistics and a hoard becomes
+  gameplay-relevant), run 2500–3000+ ticks and check balance-to-income ratio over time settles rather
+  than climbs; retune sink rates if it climbs. Treasury metrics persist in `experiments/*.json`
+  (`treasurySummary`/`treasurySnapshots`), so this is one YAML config + a read.
 - **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
