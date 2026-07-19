@@ -655,7 +655,7 @@ export async function runWorldTick(
     await runInfrastructureDecayProcessor(
       decayWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month },
+      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month, bufferScaleBySystem: maintenanceBufferScaleBySystem },
     );
     systems = decayWorld.systems;
     processorsRun.push("infrastructure-decay");

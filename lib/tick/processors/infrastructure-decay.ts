@@ -40,6 +40,13 @@ export async function runInfrastructureDecayProcessor(
   const popCapUpdates: PopCapUpdate[] = [];
   for (const s of states) {
     const uptake = signals.outputUptakeBySystem.get(s.systemId);
+    // Maintenance funding stretches/shrinks the idle buffer only — the unrest
+    // channel and the buffer machinery itself are untouched (no new decay channel).
+    const bufferScale = params.bufferScaleBySystem?.get(s.systemId) ?? 1;
+    const decayParams =
+      bufferScale === 1
+        ? params.decay
+        : { ...params.decay, idleBufferMonths: params.decay.idleBufferMonths * bufferScale };
     const result = computeSystemDecay(
       {
         buildings: s.buildings,
@@ -49,7 +56,7 @@ export async function runInfrastructureDecayProcessor(
         unrest: s.unrest,
         outputUptake: (goodId) => uptake?.get(goodId) ?? 1,
       },
-      params.decay,
+      decayParams,
       catchUp,
     );
     for (const [buildingType, count] of Object.entries(result.newCounts)) {
