@@ -22,7 +22,7 @@ import type {
   TaxLevel,
 } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
-import type { TreasuryBands } from "@/lib/engine/treasury";
+import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -280,10 +280,8 @@ export interface TreasuryIncomeBySystem {
   production: number;
 }
 
-export interface TreasuryMaintenanceLine {
-  buildingType: string;
-  amount: number;
-}
+/** World-facing name for the engine's maintenance line item — one shape, no drift. */
+export type TreasuryMaintenanceLine = MaintenanceBillLine;
 
 /** The last monthly settlement's itemised snapshot — persisted so UI reads never recompute transients. */
 export interface WorldTreasurySettlement {

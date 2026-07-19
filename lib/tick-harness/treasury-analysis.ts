@@ -60,7 +60,19 @@ export function summarizeTreasuries(
   const fundedSums = { maintenance: 0, logistics: 0, construction: 0 };
   let invalidRows = 0;
   for (const t of treasuries) {
+    // Every money value that feeds the aggregates below must be in this guard,
+    // or a NaN would corrupt the summary without ever incrementing invalidRows.
     const moneyFields = [t.balance, t.pendingWork.logistics, t.pendingWork.construction];
+    if (t.lastSettlement !== null) {
+      moneyFields.push(
+        t.lastSettlement.headsIncome,
+        t.lastSettlement.productionIncome,
+        t.lastSettlement.maintenanceBill,
+        t.lastSettlement.logisticsBill,
+        t.lastSettlement.constructionBill,
+      );
+    }
+    for (const band of BANDS) moneyFields.push(t.funded[band]);
     if (moneyFields.some((v) => !Number.isFinite(v) || v < 0)) invalidRows++;
     heads += t.lastSettlement?.headsIncome ?? 0;
     production += t.lastSettlement?.productionIncome ?? 0;

@@ -52,10 +52,13 @@ describe("maintenanceBill", () => {
   it("charges standing levels weighted by embodied build work, itemised by type", () => {
     const levels = new Map([["housing", 10], ["ore", 5]]);
     const result = maintenanceBill(levels, 0.002);
-    expect(result.total).toBeGreaterThan(0);
+    // housing: 10 levels x 8 work x 0.002 = 0.16; ore (tier-0 extractor): 5 x 12 x 0.002 = 0.12.
     expect(result.byType).toHaveLength(2);
-    const sum = result.byType.reduce((acc, l) => acc + l.amount, 0);
-    expect(sum).toBeCloseTo(result.total);
+    const housing = result.byType.find((l) => l.buildingType === "housing")!;
+    const ore = result.byType.find((l) => l.buildingType === "ore")!;
+    expect(housing.amount).toBeCloseTo(0.16);
+    expect(ore.amount).toBeCloseTo(0.12);
+    expect(result.total).toBeCloseTo(0.28);
   });
 });
 

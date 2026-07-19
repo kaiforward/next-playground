@@ -5,6 +5,7 @@ import {
   productionTaxIncome,
   maintenanceBill,
   settleLadder,
+  safeMoney,
 } from "@/lib/engine/treasury";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { TAX_LEVEL_RATE_MULT } from "@/lib/constants/treasury";
@@ -46,7 +47,8 @@ export async function runTreasuryProcessor(
 
   const scale =
     Number.isFinite(params.economyScale) && params.economyScale > 0 ? params.economyScale : 1;
-  const catchUp = catchUpFactor(params.interval);
+  const rawCatchUp = catchUpFactor(params.interval);
+  const catchUp = Number.isFinite(rawCatchUp) && rawCatchUp > 0 ? rawCatchUp : 1;
   const realizedBySystem =
     ctx.results.get("economy")?.economySignals?.realizedProductionBySystem ?? EMPTY_REALIZED;
 
@@ -61,10 +63,16 @@ export async function runTreasuryProcessor(
 
   const updates: WorldFactionTreasury[] = [];
   for (const t of treasuries) {
-    const pendingConstruction =
-      t.pendingWork.construction + (params.constructionWorkByFaction.get(t.factionId) ?? 0);
-    const pendingLogistics =
-      t.pendingWork.logistics + (params.logisticsWorkByFaction.get(t.factionId) ?? 0) / scale;
+    // Work signals cross a processor boundary — coerce here so neither the
+    // off-pulse pendingWork write nor the on-pulse bills → lastSettlement path
+    // can carry a non-finite value into persisted state (settleLadder sanitises
+    // internally but never returns a sanitised bill).
+    const pendingConstruction = safeMoney(
+      t.pendingWork.construction + (params.constructionWorkByFaction.get(t.factionId) ?? 0),
+    );
+    const pendingLogistics = safeMoney(
+      t.pendingWork.logistics + (params.logisticsWorkByFaction.get(t.factionId) ?? 0) / scale,
+    );
 
     if (!settles) {
       if (

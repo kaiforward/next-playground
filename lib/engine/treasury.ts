@@ -47,7 +47,10 @@ export interface SettlementLadderResult {
   funded: TreasuryBands;
 }
 
-const safe = (n: number): number => (Number.isFinite(n) ? Math.max(0, n) : 0);
+/** Coerce a money-path value: non-finite → 0, floored at 0. Exported so the
+ *  treasury processor applies the same guarantee to sums it persists. */
+export const safeMoney = (n: number): number => (Number.isFinite(n) ? Math.max(0, n) : 0);
+const safe = safeMoney;
 
 export function headsTaxIncome(
   alloc: HeadsTaxInput,

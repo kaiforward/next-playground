@@ -865,16 +865,20 @@ export async function runWorldTick(
     const hasWork =
       (constructionWorkByFaction?.size ?? 0) > 0 || (logisticsWorkByFaction?.size ?? 0) > 0;
     if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
+      // The processor reads systems only when settling — an off-pulse accrual
+      // tick (band work without a month boundary) skips the O(systems) build.
       const treasuryWorld = new InMemoryTreasuryWorld({
         treasuries,
-        systems: systems
-          .filter((s) => s.factionId !== null && isEconomicallyActive(s.control))
-          .map((s) => ({
-            systemId: s.id,
-            factionId: s.factionId ?? "",
-            population: s.population,
-            buildings: s.buildings,
-          })),
+        systems: treasuryResolves
+          ? systems
+              .filter((s) => s.factionId !== null && isEconomicallyActive(s.control))
+              .map((s) => ({
+                systemId: s.id,
+                factionId: s.factionId ?? "",
+                population: s.population,
+                buildings: s.buildings,
+              }))
+          : [],
       });
       await runTreasuryProcessor(
         treasuryWorld,

@@ -45,4 +45,19 @@ describe("tax level tables", () => {
       expect(ALL_TAX_LEVELS).toContain(DEFAULT_TAX_LEVEL[gov]);
     }
   });
+
+  it("pins each government's intended default stance", () => {
+    // The specific mapping is the design, not just membership — a swapped or
+    // homogenised table must fail here.
+    expect(DEFAULT_TAX_LEVEL).toEqual({
+      federation: "normal",
+      corporate: "low",
+      authoritarian: "high",
+      frontier: "low",
+      cooperative: "normal",
+      technocratic: "normal",
+      militarist: "high",
+      theocratic: "normal",
+    });
+  });
 });

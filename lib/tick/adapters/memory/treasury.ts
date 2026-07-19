@@ -7,7 +7,9 @@ export class InMemoryTreasuryWorld implements TreasuryWorld {
 
   constructor(initial: { treasuries: WorldFactionTreasury[]; systems: TreasuryFactionSystemRow[] }) {
     this.treasuries = initial.treasuries.map((t) => ({ ...t }));
-    this.systems = initial.systems.map((s) => ({ ...s, buildings: { ...s.buildings } }));
+    // Read-only for this processor (applyTreasuryUpdates writes treasuries only),
+    // so the rows need no defensive copy.
+    this.systems = initial.systems;
   }
 
   getTreasuries(): Promise<WorldFactionTreasury[]> {

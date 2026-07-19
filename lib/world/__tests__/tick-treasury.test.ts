@@ -30,4 +30,34 @@ describe("treasury over the live tick", () => {
       (acc, t) => acc + (t.lastSettlement?.headsIncome ?? 0) + (t.lastSettlement?.productionIncome ?? 0), 0);
     expect(totalIncome).toBeGreaterThan(0);
   });
+
+  it("accrues band-pulse work off the month pulse without settling, then bills it at the boundary", async () => {
+    // Divergent cadences: construction/logistics pulse at 24 while the month is 48,
+    // so the treasury gate's hasWork-only branch fires mid-month.
+    const cadence = { month: 48, construction: 24, logistics: 24 };
+    let world = generateWorld({ systemCount: 40, seed: 11 });
+    let sawOffPulseAccrual = false;
+    for (let tick = 1; tick <= 47; tick++) {
+      const result = await runWorldTick(world, { cadence });
+      world = result.world;
+      if (result.events.processors?.includes("treasury")) {
+        sawOffPulseAccrual = true;
+        // Accrual must never settle ahead of the month boundary.
+        for (const t of world.treasuries) expect(t.lastSettlement, t.factionId).toBeNull();
+      }
+    }
+    expect(sawOffPulseAccrual).toBe(true);
+    const accrued = world.treasuries.reduce(
+      (acc, t) => acc + t.pendingWork.construction + t.pendingWork.logistics, 0);
+    expect(accrued).toBeGreaterThan(0);
+    expect(Number.isFinite(accrued)).toBe(true);
+
+    const boundary = await runWorldTick(world, { cadence }); // tick 48 — the month pulse
+    world = boundary.world;
+    expect(boundary.events.processors).toContain("treasury");
+    for (const t of world.treasuries) {
+      expect(t.lastSettlement, t.factionId).not.toBeNull();
+      expect(t.pendingWork).toEqual({ logistics: 0, construction: 0 });
+    }
+  });
 });

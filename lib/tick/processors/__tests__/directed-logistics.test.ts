@@ -86,7 +86,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
     );
     // routeCost is a flat 1/unit, so the planned cost equals the moved quantity.
-    expect(result.workPerformedByFaction!.get("f1")).toBeCloseTo(world.flows[0].quantity, 6);
+    expect(result.workPerformedByFaction?.get("f1")).toBeCloseTo(world.flows[0].quantity, 6);
   });
 
   it("fills a deficit toward its anchor in one delivery — never overshoots into surplus", async () => {

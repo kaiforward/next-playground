@@ -186,7 +186,7 @@ describe("simulateSystemEconomyTick — realized output", () => {
     const consumerResult = simulated.find((e) => e.goodId === "water")!;
 
     expect(tier0Result.realized).toBeCloseTo(20, 6);
-    expect(starvedResult.realized).toBeLessThan(20 * 0.1);
+    expect(starvedResult.realized).toBe(0);
     expect(consumerResult.realized).toBe(0);
   });
 });
