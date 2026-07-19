@@ -3,6 +3,7 @@ import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { SystemPopulationData } from "@/lib/types/api";
 
@@ -19,7 +20,8 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
   if (!isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
-  const needs = systemPopNeeds(systemId, buildings, system.population);
+  const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
+  const needs = systemPopNeeds(systemId, basis);
 
   return {
     visibility: "visible",

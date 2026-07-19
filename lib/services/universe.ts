@@ -210,21 +210,24 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   );
   const worked = extractorsByResource(buildings);
 
-  const popNeeds = systemPopNeeds(systemId, buildings, system.population);
+  // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
+  // but feed the deposit-fill rows and the production/consumption profile below.
+  const readout = buildIndustryReadout(
+    buildings,
+    system.population,
+    marketStock,
+    (goodKey) => minStockByGood[goodKey] ?? 0,
+    yields,
+    (goodKey) => maxStockByGood[goodKey],
+  );
+  // The readout's labourAllocation IS the civilian demand basis — reuse it
+  // rather than running a second labour pass for the needs read.
+  const popNeeds = systemPopNeeds(systemId, readout.labourAllocation);
 
   return {
     visibility: "visible",
     unrest: system.unrest,
-    // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
-    // but feed the deposit-fill rows and the production/consumption profile below.
-    ...buildIndustryReadout(
-      buildings,
-      system.population,
-      marketStock,
-      (goodKey) => minStockByGood[goodKey] ?? 0,
-      yields,
-      (goodKey) => maxStockByGood[goodKey],
-    ),
+    ...readout,
     space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
     deposits: summariseDeposits(slotCap, worked, yields),
     goods: capacityGoodRates(buildings, system.population, yields),
