@@ -11,7 +11,7 @@ import { X } from "lucide-react";
 
 const panel = tv({
   slots: {
-    base: "fixed left-0 bottom-0 top-[var(--topbar-height)] z-30 w-[clamp(400px,30vw,560px)] bg-surface border-r border-border-strong shadow-[8px_0_30px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden transition-all duration-200",
+    base: "fixed left-0 bottom-0 top-[var(--topbar-height)] z-30 w-[560px] max-w-full bg-surface border-r border-border-strong shadow-[8px_0_30px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden transition-all duration-200",
     header:
       "flex items-center justify-between px-4 py-3 border-b border-border shrink-0",
     title: "text-lg font-bold font-display text-text-primary",
