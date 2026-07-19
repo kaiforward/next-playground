@@ -58,6 +58,9 @@ export type GovernmentType =
   | "militarist"
   | "theocratic";
 
+/** Five-step faction tax stance (very low → very high) — a policy lever, not a slider. */
+export type TaxLevel = "very_low" | "low" | "normal" | "high" | "very_high";
+
 export type Doctrine =
   | "expansionist"
   | "protectionist"
