@@ -40,6 +40,7 @@ describe("infrastructure-decay processor", () => {
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     const s = world.systems[0];
@@ -53,6 +54,7 @@ describe("infrastructure-decay processor", () => {
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     expect(world.systems.find((x) => x.id === "s2")!.buildings).toEqual({ [HOUSING_TYPE]: 10, ore: 10 });
@@ -63,6 +65,7 @@ describe("infrastructure-decay processor", () => {
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       outputUptakeBySystem: new Map(), // no uptake recorded for s1 → defaults to 1
+      realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     // ore has ≥1 idle level (staffed 4 of 10) → sheds 1 at the buffer; unrest 1 > 0.75 → sheds 1 more.
@@ -78,6 +81,7 @@ describe("infrastructure-decay processor", () => {
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
     expect(world.systems[0].buildings.ore).toBe(3); // nothing torn down yet

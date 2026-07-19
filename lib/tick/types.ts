@@ -57,6 +57,9 @@ export interface EconomySignals {
    * by the infrastructure-decay processor. Empty inner map ⇒ system produces nothing.
    */
   outputUptakeBySystem: Map<string, Map<string, number>>;
+  /** Per-system, per-good physical output actually produced this pulse (post
+   *  input-gate and operating-ceiling) — the production-tax base. Absent system ⇒ produced nothing. */
+  realizedProductionBySystem: Map<string, Map<string, number>>;
 }
 
 /** Result returned by each processor. */

@@ -22,6 +22,12 @@ import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 /** Good → processing rank, derived once from the static recipe-topological order. */
 const PRODUCTION_ORDER_INDEX = new Map(PRODUCTION_GOOD_ORDER.map((g, i) => [g, i]));
 
+/** A market entry after simulation: post-tick stock plus the physical output actually produced. */
+export interface SimulatedMarketEntry extends MarketTickEntry {
+  /** Output actually produced this run — post input-gate and operating-ceiling. 0 for non-producers. */
+  realized: number;
+}
+
 /**
  * Input-availability throttle in [0, 1] for one producing good. Returns 1 for
  * tier-0 / no-recipe goods and for zero production. Computed against drawable
@@ -56,8 +62,12 @@ export function inputGate(
 export function simulateSystemEconomyTick(
   entries: MarketTickEntry[],
   params: EconomySimParams,
-): MarketTickEntry[] {
+): SimulatedMarketEntry[] {
   const { holdCover } = params;
+
+  // Realized (actually produced, post input-gate and operating-ceiling) output
+  // per good this run — the production-tax base. Absent good ⇒ produced nothing.
+  const realizedByGood = new Map<string, number>();
 
   // Build per-good band lookups from entry data.
   const minStockMap = new Map<string, number>();
@@ -89,6 +99,7 @@ export function simulateSystemEconomyTick(
       const operatingCeiling = entry.targetStock * holdCover;
       const ceiling = selfLimitingFactor(s, minStock, operatingCeiling, "produce");
       const actualOutput = effectiveProduction * gate * ceiling;
+      realizedByGood.set(entry.goodId, (realizedByGood.get(entry.goodId) ?? 0) + actualOutput);
       s += actualOutput;
       // Drain inputs proportional to actual output. Because gate ≤ ratio_i =
       // drawable_i / desiredDraw_i, the actual draw ≤ drawable_i, keeping
@@ -113,7 +124,11 @@ export function simulateSystemEconomyTick(
     stock.set(entry.goodId, s);
   }
 
-  return entries.map((e) => ({ ...e, stock: stockOf(e.goodId) }));
+  return entries.map((e) => ({
+    ...e,
+    stock: stockOf(e.goodId),
+    realized: realizedByGood.get(e.goodId) ?? 0,
+  }));
 }
 
 /**
@@ -126,13 +141,13 @@ export function simulateCoupledEconomyTick(
   entries: MarketTickEntry[],
   systemIds: string[],
   params: EconomySimParams,
-): MarketTickEntry[] {
+): SimulatedMarketEntry[] {
   const groups = new Map<string, number[]>();
   systemIds.forEach((sysId, i) => {
     (groups.get(sysId) ?? groups.set(sysId, []).get(sysId)!).push(i);
   });
 
-  const result = new Array<MarketTickEntry>(entries.length);
+  const result = new Array<SimulatedMarketEntry>(entries.length);
   for (const indices of groups.values()) {
     const simulated = simulateSystemEconomyTick(
       indices.map((i) => entries[i]),

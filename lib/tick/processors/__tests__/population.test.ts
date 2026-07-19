@@ -35,7 +35,12 @@ function market(systemId: string, goodId: string): WorldMarket {
   return { systemId, goodId, stock: 100, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>): TickContext {
-  return { tick: 0, results: new Map([["economy", { economySignals: { dissatisfactionBySystem: d, outputUptakeBySystem: new Map() } }]]) };
+  return {
+    tick: 0,
+    results: new Map([
+      ["economy", { economySignals: { dissatisfactionBySystem: d, outputUptakeBySystem: new Map(), realizedProductionBySystem: new Map() } }],
+    ]),
+  };
 }
 
 describe("population processor", () => {
