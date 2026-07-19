@@ -58,7 +58,8 @@ import { COLONISATION } from "@/lib/constants/colonisation";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
-import { TREASURY, REFERENCE_VALUE } from "@/lib/constants/treasury";
+import { TREASURY, REFERENCE_VALUE, TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
+import { maintenanceOutputMalus, maintenanceBufferScale } from "@/lib/engine/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -545,6 +546,34 @@ export async function runWorldTick(
   // behind — the accepted funding lag, same shape as construction's) ──
   const fundedByFaction = new Map(treasuries.map((t) => [t.factionId, t.funded]));
 
+  const taxPressureByFaction = new Map(
+    treasuries.map((t) => [t.factionId, TAX_LEVEL_UNREST_PRESSURE[t.taxLevel]]),
+  );
+  // Per-system effect maps for the monthly-pulse stages (economy malus, decay
+  // buffer, unrest tax pressure). Only built when those stages resolve.
+  let maintenanceMalusBySystem: Map<string, number> | undefined;
+  let maintenanceBufferScaleBySystem: Map<string, number> | undefined;
+  let taxPressureBySystem: Map<string, number> | undefined;
+  if (isPulseTick(tick, cadence.month) && treasuries.length > 0) {
+    maintenanceMalusBySystem = new Map();
+    maintenanceBufferScaleBySystem = new Map();
+    taxPressureBySystem = new Map();
+    for (const s of systems) {
+      if (s.factionId === null) continue;
+      const funded = fundedByFaction.get(s.factionId);
+      if (funded !== undefined) {
+        maintenanceMalusBySystem.set(
+          s.id, maintenanceOutputMalus(funded.maintenance, TREASURY.MAINTENANCE_OUTPUT_MALUS_SLOPE),
+        );
+        maintenanceBufferScaleBySystem.set(
+          s.id, maintenanceBufferScale(funded.maintenance, TREASURY.MAINTENANCE_BUFFER_SCALE_BASE),
+        );
+      }
+      const pressure = taxPressureByFaction.get(s.factionId);
+      if (pressure !== undefined && pressure > 0) taxPressureBySystem.set(s.id, pressure);
+    }
+  }
+
   // ── ship-arrivals ──
   {
     const shipsWorld = new InMemoryShipArrivalsWorld({ ships }, systems);
@@ -607,6 +636,7 @@ export async function runWorldTick(
       simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
+      maintenanceMalusBySystem,
     });
     systems = economyWorld.systems;
     markets = economyWorld.markets;

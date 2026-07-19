@@ -52,7 +52,7 @@ export async function runEconomyProcessor(
   ctx: TickContext,
   params: EconomyProcessorParams,
 ): Promise<TickProcessorResult> {
-  const { interval, simParams, modifierCaps, strikeParams } = params;
+  const { interval, simParams, modifierCaps, strikeParams, maintenanceMalusBySystem } = params;
 
   // Normalize the interval the same way pulseShard does so the reported shard
   // index/count can't diverge from the actual pulse boundary for a non-integer interval.
@@ -125,7 +125,9 @@ export async function runEconomyProcessor(
       baseProductionRate: m.baseProductionRate != null ? m.baseProductionRate * catchUp : undefined,
       baseConsumptionRate: m.baseConsumptionRate != null ? m.baseConsumptionRate * catchUp : undefined,
       govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
-      productionSuppress: strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams),
+      productionSuppress:
+        strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams) *
+        (maintenanceMalusBySystem?.get(m.systemId) ?? 1),
       modifiers: modifiersBySystem.get(m.systemId) ?? [],
       modifierCaps,
     }),

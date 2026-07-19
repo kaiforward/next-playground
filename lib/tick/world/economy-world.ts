@@ -80,4 +80,8 @@ export interface EconomyProcessorParams {
   modifierCaps: ModifierCaps;
   /** Strike production-suppression regime derived from unrest. */
   strikeParams: StrikeParams;
+  /** Per-system maintenance output malus (production multiplier, 1 = none) from the
+   *  owning faction's latched maintenance funding. Missing system or omitted map → 1.
+   *  Rides productionSuppress — flow-only, must never feed buildingUsed utilization. */
+  maintenanceMalusBySystem?: ReadonlyMap<string, number>;
 }
