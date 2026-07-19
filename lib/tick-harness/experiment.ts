@@ -11,6 +11,7 @@
 import { z } from "zod";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import type { HarnessConfig, HarnessResults } from "./types";
+import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 
 // ── Zod schema ───────────────────────────────────────────────────
 
@@ -53,6 +54,8 @@ export interface ExperimentResult {
   economyScale: number;
   marketHealth: HarnessResults["marketHealth"];
   eventImpacts: HarnessResults["eventImpacts"];
+  treasurySummary: TreasurySummary;
+  treasurySnapshots: TreasurySnapshot[];
   elapsedMs: number;
 }
 
@@ -67,6 +70,8 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     economyScale: results.economyScale,
     marketHealth: results.marketHealth,
     eventImpacts: results.eventImpacts,
+    treasurySummary: results.treasurySummary,
+    treasurySnapshots: results.treasurySnapshots,
     elapsedMs: results.elapsedMs,
   };
 }
