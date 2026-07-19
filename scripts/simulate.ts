@@ -26,7 +26,7 @@ import {
   buildExperimentResult,
 } from "../lib/tick-harness/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
-import { summarizeColonisation } from "../lib/tick-harness/build-analysis";
+import { summarizeColonisation, summarizeConstructionPool } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
@@ -264,6 +264,15 @@ function formatTable(results: HarnessResults): string {
     if (kinds.length > 0) {
       lines.push(`  colony projects by kind: ${kinds.map(([k, n]) => `${k}=${n}`).join(", ")}`);
     }
+    const cp = summarizeConstructionPool(finalTickSystems, finalWorld.constructionProjects);
+    lines.push(
+      `Construction pool: base ${fmtNum(cp.poolBase)} + centres ${fmtNum(cp.poolCentres)} ` +
+        `(${(cp.centreShare * 100).toFixed(1)}% centre) | centres built ${cp.centreLevels}, in flight ${cp.centreProjects}`,
+    );
+    lines.push(
+      `  queue: ${fmtNum(cp.queueRemainingWork)} work remaining` +
+        (cp.queueEtaPulses !== null ? ` ≈ ${cp.queueEtaPulses.toFixed(1)} pulses at current pool` : " (pool is zero — stalled)"),
+    );
   }
 
   // Logistics activity — did directed-logistics actually move anything?

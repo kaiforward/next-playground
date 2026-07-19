@@ -1,5 +1,5 @@
 /** Canonical list of system-panel tabs, in display order. Sourced by the full
- * system panel (`@panel/system/[systemId]/layout.tsx`) and the map's system
+ * system panel (`@panel/system/layout.tsx`) and the map's system
  * detail sidebar so the two can't drift out of sync. */
 export const SYSTEM_TABS = [
   { label: "Overview", segment: "" },

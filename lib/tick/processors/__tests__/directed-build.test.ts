@@ -11,7 +11,7 @@ import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engi
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { CONSTRUCTION } from "@/lib/constants/construction";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY, CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
@@ -25,7 +25,13 @@ function mkConstruction(
   floorKnee: number = CONSTRUCTION.FLOOR_DEV_KNEE,
 ) {
   let n = 0;
-  return { cap, throughputPerPop, floorBase, floorKnee, mintId: () => `proj-${n++}` };
+  return {
+    cap, throughputPerPop, floorBase, floorKnee,
+    pointsPerLevel: CONSTRUCTION.POINTS_PER_LEVEL,
+    paybackHorizon: CONSTRUCTION.PAYBACK_HORIZON,
+    backlogWindow: CONSTRUCTION.BACKLOG_WINDOW,
+    mintId: () => `proj-${n++}`,
+  };
 }
 
 // food market with a high demandRate so the band's targetStock is large — stock 1 is a deep deficit.
@@ -48,7 +54,10 @@ function builderSlots(n: number) {
 }
 
 // A: deep structural food deficit, no capacity. B: builder with arable slots + population, reachable from A.
-function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[] {
+// generalSpace defaults to habitableSpace (100) so housing's habitable-capped headroom also exhausts B's
+// general space, matching every pre-existing call site; the centre tests below widen it so a centre can
+// still site itself once housing has claimed its habitable-bounded share.
+function scenario(bFood: number, bHousing: number, slots = 20, generalSpace = 100): SystemBuildRow[] {
   return [
     {
       systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
@@ -59,7 +68,7 @@ function scenario(bFood: number, bHousing: number, slots = 20): SystemBuildRow[]
       systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0,
       buildings: { food: bFood, housing: bHousing },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
-      generalSpace: 100, habitableSpace: 100, markets: [],
+      generalSpace, habitableSpace: 100, markets: [],
     },
   ];
 }
@@ -94,7 +103,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
 
   it("funds existing open projects front-first, advancing workDone (persists deltas)", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "housing", levels: 2, workTotal: 16, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
@@ -108,7 +117,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     // pool = 5000 × 0.0001 = 0.5 construction points — far below any level's work cost; cap is generous.
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
-      construction: { cap: 1000, throughputPerPop: 0.0001, floorBase: CONSTRUCTION.POOL_FLOOR_BASE, floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE, mintId: mkConstruction().mintId },
+      construction: mkConstruction(1000, 0.0001),
     });
     expect(w.buildingUpdates).toHaveLength(0);          // nothing landed
     expect(w.constructionProjects.length).toBeGreaterThan(0); // but the work is committed
@@ -149,7 +158,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
       const w = new MemoryDirectedBuildWorld(rows, projects);
       await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
         interval: INTERVAL, routeCost: reachable,
-        construction: { cap: 6, throughputPerPop: 0.05, floorBase: CONSTRUCTION.POOL_FLOOR_BASE, floorKnee: CONSTRUCTION.FLOOR_DEV_KNEE, mintId: mint },
+        construction: { ...mkConstruction(6), mintId: mint },
       });
       rows = rows.map((r) => {
         const buildings = { ...r.buildings };
@@ -188,7 +197,7 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
 
   it("keeps in-flight projects ahead of newly proposed work", async () => {
     const existing: WorldConstructionProject = {
-      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "food", levels: 2, workTotal: 24, workDone: 0,
     };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [existing]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
@@ -240,6 +249,66 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
     expect(deepIdx).toBeGreaterThanOrEqual(0);
     expect(shallowIdx).toBeGreaterThanOrEqual(0);
     expect(deepIdx).toBeLessThan(shallowIdx); // ROI-desc overrides the "B1" < "B2" tiebreak
+  });
+});
+
+describe("construction centres", () => {
+  it("commits a centre project when the backlog runs beyond the frontier", async () => {
+    // Deficit scenario with the pool throttled so committed work vastly outruns what BACKLOG_WINDOW
+    // pulses can drain (tiny throughputPerPop → deep starved backlog → a centre is proposed), and a
+    // SMALL cap so the pool spreads across parallel fronts — the high-ROI centre must actually
+    // receive work this pulse, because persist-if-funded drops a workless centre (next test). B's
+    // general space is widened past its habitable cap (1000 vs the default 100) so a centre can still
+    // site itself once housing has claimed its habitable-bounded 100-unit share.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(2, 0.001),
+    });
+    const centres = w.constructionProjects.filter(
+      (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+    );
+    expect(centres.length).toBe(1); // planCentreProposal commits at most one centre per pulse
+    // The high-ROI centre proposal actually receives work this pulse (persist-if-funded next test
+    // proves the converse) — not merely committed.
+    expect(centres.some((p) => p.workDone > 0)).toBe(true);
+  });
+
+  it("drops an unfunded centre project instead of persisting it (persist-if-funded)", async () => {
+    // Same starved world (same widened general space, so siting still succeeds), pool ≈ 0: the centre
+    // proposal is committed but receives no work, so it must NOT appear in the persisted open set.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(1000, 0), // zero pool: nothing funds
+    });
+    const centres = w.constructionProjects.filter(
+      (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+    );
+    expect(centres).toHaveLength(0);
+  });
+
+  it("prices the centre off the UNSCALED pool — the commit decision is interval-invariant", async () => {
+    // A world tuned so the backlog (one 12-work food bundle; housing is already at its habitable cap,
+    // so it proposes nothing) sits just above the reference-interval frontier budget
+    // (poolRef.total=1 × BACKLOG_WINDOW=6 = 6 < 12) but just below what a WRONGLY-scaled budget would
+    // read at catchUp=2 (1 × 2 × 6 = 12, no longer < 12) — so a regression that fed the scaled funding
+    // pool into planCentreProposal (instead of the unscaled poolRef.total) would commit a centre at the
+    // reference interval (24) but NOT at interval 48, while the correct unscaled valuation commits at
+    // both (mirrors the non-reference-interval construction in "interval invariance" below).
+    const fullyHoused = scenario(0, 100, 20, 1000);
+    const committed = async (interval: number): Promise<boolean> => {
+      const w = new MemoryDirectedBuildWorld(fullyHoused);
+      await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+        interval, routeCost: reachable,
+        construction: mkConstruction(2, 0.0002),
+      });
+      return w.constructionProjects.some(
+        (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+      );
+    };
+    expect(await committed(INTERVAL)).toBe(await committed(48));
+    expect(await committed(INTERVAL)).toBe(true); // sanity: the invariant isn't trivially "both false"
   });
 });
 
@@ -448,8 +517,8 @@ describe("runDirectedBuildProcessor — pool fairness floor", () => {
     },
   ];
   const inflight = (): WorldConstructionProject[] => [
-    { id: "pH", kind: "build", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
-    { id: "pC", kind: "build", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+    { id: "pH", kind: "build", origin: "auto", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+    { id: "pC", kind: "build", origin: "auto", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
   ];
   const colonyWorkDone = async (floorBase: number): Promise<number> => {
     const w = new MemoryDirectedBuildWorld(floorScenario(), inflight());
@@ -482,7 +551,7 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     // interval 24 (catchUp 1) it lands after 2 pulses; at interval 12 (catchUp 0.5) the effective cap
     // halves, so it needs 4 pulses — 2×24 = 4×12 = 48 wall-clock ticks either way.
     const project = (): WorldConstructionProject => ({
-      id: "e", kind: "build", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 5, workTotal: 2 * CAP, workDone: 0,
+      id: "e", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 5, workTotal: 2 * CAP, workDone: 0,
     });
     const landingPulse = async (interval: number): Promise<number> => {
       let rows: SystemBuildRow[] = [idleBuilder(5000)];
@@ -512,9 +581,9 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     // far exceeds any pulse's funding (none lands, queue order preserved) → exactly the front two absorb
     // a cap's worth and the third is starved, at either interval (pool ÷ cap is interval-invariant).
     const inflight = (): WorldConstructionProject[] => [
-      { id: "p1", kind: "build", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 9, workTotal: 1000, workDone: 0 },
-      { id: "p2", kind: "build", factionId: "f1", systemId: "B", buildingType: "food", levels: 9, workTotal: 1000, workDone: 0 },
-      { id: "p3", kind: "build", factionId: "f1", systemId: "B", buildingType: "ore", levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p1", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: HOUSING_TYPE, levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p2", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "food", levels: 9, workTotal: 1000, workDone: 0 },
+      { id: "p3", kind: "build", origin: "auto", factionId: "f1", systemId: "B", buildingType: "ore", levels: 9, workTotal: 1000, workDone: 0 },
     ];
     const run = async (interval: number): Promise<{ count: number; perFront: number[] }> => {
       const w = new MemoryDirectedBuildWorld([idleBuilder(400)], inflight());
@@ -553,8 +622,8 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
       },
     ];
     const inflight = (): WorldConstructionProject[] => [
-      { id: "pH", kind: "build", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
-      { id: "pC", kind: "build", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+      { id: "pH", kind: "build", origin: "auto", factionId: "f1", systemId: "H", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
+      { id: "pC", kind: "build", origin: "auto", factionId: "f1", systemId: "C", buildingType: HOUSING_TYPE, levels: 5, workTotal: 1000, workDone: 0 },
     ];
     const colonyWorkDone = async (interval: number): Promise<number> => {
       const w = new MemoryDirectedBuildWorld(floorScenario(), inflight());
@@ -568,5 +637,98 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     const c12 = await colonyWorkDone(12);
     expect(c24).toBeGreaterThan(0);      // the floor rescues the colony at the reference interval
     expect(c12).toBeCloseTo(c24 / 2, 6); // …and its reserved slice scales with the interval, like pool/cap
+  });
+});
+
+describe("player orders in the funding queue", () => {
+  it("funds a fresh player order ahead of this pulse's new autonomic proposals", async () => {
+    // Stored order is [fresh player row, committed auto row] — the WRONG-for-funding order, so
+    // orderOpenProjects must actually move the committed row ahead of the fresh player row for this
+    // test to pass; a processor that funded raw stored order ([...existing, ...newProjects], no
+    // reorder) would flip which row gets the front-of-queue cap and which gets the pool's leftover.
+    // Floor disabled (floorBase 0) so the whole pool is plain front-first, no reserved slice to confound
+    // the arithmetic. cap=4, pool=5000×0.001=5: the front row absorbs a full cap (4), the second row
+    // gets only the pool's leftover (1), and nothing reaches this pulse's new proposals (pool exhausted).
+    const playerOrder: WorldConstructionProject = { kind: "build", id: "player-1", factionId: "f1",
+      systemId: "s1", origin: "player", buildingType: "metals", levels: 1, workTotal: 20, workDone: 0 };
+    const committedAuto: WorldConstructionProject = { kind: "build", id: "auto-committed", factionId: "f1",
+      systemId: "s2", origin: "auto", buildingType: "metals", levels: 1, workTotal: 20, workDone: 5 };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [playerOrder, committedAuto]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(4, 0.001, 0, CONSTRUCTION.FLOOR_DEV_KNEE),
+    });
+    const persistedPlayer = w.constructionProjects.find((p) => p.id === "player-1");
+    const persistedAuto = w.constructionProjects.find((p) => p.id === "auto-committed");
+    // The committed row was reordered to the front → it absorbs the full cap (5 + 4 = 9); the fresh
+    // player row only gets the pool's leftover (1) — pinning the exact split proves which row went
+    // first, not merely that both got something (either order would leave both non-zero here).
+    expect(persistedAuto?.workDone).toBe(9);
+    expect(persistedPlayer?.workDone).toBe(1);
+    // Both pre-existing rows drained the pool before any of this pulse's new autonomic proposals: every
+    // other persisted project (this pulse's new proposals for the scenario's food/housing deficit) is
+    // still at workDone 0.
+    const newProposals = w.constructionProjects.filter(
+      (p) => p.id !== "player-1" && p.id !== "auto-committed",
+    );
+    expect(newProposals.length).toBeGreaterThan(0);
+    expect(newProposals.every((p) => p.workDone === 0)).toBe(true);
+  });
+
+  it("never drops an unfunded player order (persist-if-funded is auto-only)", async () => {
+    const playerColony: WorldConstructionProject = { kind: "colony_establish", id: "player-c1",
+      factionId: "f1", systemId: "s9", origin: "player", sourceSystemId: "s1",
+      seedPop: 100, housingLevels: 1, workTotal: 60, workDone: 0 };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [playerColony]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: { ...mkConstruction(1000, 0) }, // zero pool: nothing funds
+    });
+    expect(w.constructionProjects.some((p) => p.id === "player-c1")).toBe(true);
+  });
+});
+
+describe("runDirectedBuildProcessor: player automation gating (proposal generation only)", () => {
+  it("skips build proposal generation for the player's faction when automation.build is off", async () => {
+    // Deficit scenario that WOULD propose builds; with build automation off, no new projects appear
+    // for the player faction — but a pre-existing committed row still receives funding. A tiny cap (4)
+    // keeps the committed row (remaining work 15) from completing in a single pulse — matching how
+    // "funds existing open projects front-first" above isolates the same advance-without-landing signal.
+    const inFlight: WorldConstructionProject = { kind: "build", id: "b-committed", factionId: "f1",
+      systemId: "s1", origin: "auto", buildingType: "metals", levels: 1, workTotal: 20, workDone: 5 };
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0), [inFlight]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+    });
+    expect(w.constructionProjects.every((p) => p.id === "b-committed")).toBe(true);
+    expect(w.constructionProjects[0]?.workDone).toBeGreaterThan(5);
+  });
+
+  it("skips colony proposal generation when automation.colonisation is off, leaving builds alone", async () => {
+    // Reuses the build-vs-colony arbitration fixture (homeWithFoodDeficit + colonyOf/COLONY_PARAMS):
+    // a build deficit competes with an eligible colony candidate for the same pool. With colonisation
+    // off, no colony_establish proposal is generated at all — the build proposal wins the whole pool
+    // and its row persists regardless of funding (persist-if-funded only gates colonies/centres).
+    const w = new MemoryDirectedBuildWorld([homeWithFoodDeficit(1000)]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(6, 0.004),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyOf("c1", 1_000_000)] : []), params: COLONY_PARAMS },
+      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+    });
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
+    expect(w.constructionProjects.some((p) => p.kind === "build")).toBe(true);
+  });
+
+  it("ignores automation entirely for non-player factions", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(4),
+      player: { factionId: "someone-else", automation: { build: false, colonisation: false } },
+    });
+    expect(w.constructionProjects.length).toBeGreaterThan(0); // f1 planned as usual
   });
 });

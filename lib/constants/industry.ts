@@ -23,6 +23,7 @@ import { scaleValue, scaleRecord } from "@/lib/constants/economy-scale";
 export const HOUSING_TYPE = "housing";
 export const VOCATIONAL_SCHOOL_TYPE = "vocational_school";
 export const RESEARCH_INSTITUTE_TYPE = "research_institute";
+export const CONSTRUCTION_CENTRE_TYPE = "construction_centre";
 /** The two academy building type ids, in grade order. */
 export const ACADEMY_TYPES: string[] = [VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE];
 
@@ -269,10 +270,20 @@ export const BUILDING_TYPES: Record<string, BuildingTypeDef> = {
     labour: { unskilled: 20, skill1: 0, skill2: 0 },
     skill2Licensed: SKILL2_PER_INSTITUTE,
   },
+  [CONSTRUCTION_CENTRE_TYPE]: {
+    output: { kind: "none" },
+    spaceCost: DEFAULT_SPACE_COST,
+    labour: { unskilled: 18, skill1: 7, skill2: 0 },
+  },
 };
 
 /** The 26 production building type ids (good ids), in canonical good order. */
 export const PRODUCTION_BUILDING_TYPES: string[] = [...GOOD_NAMES];
+
+/** Building types with no market output and no capacity/modifier role — employment/holding only (currently just the centre). Derived from the catalog so a future addition doesn't need a second list to stay in sync. */
+export const SUPPORT_TYPES: string[] = Object.entries(BUILDING_TYPES)
+  .filter(([, def]) => def.output.kind === "none")
+  .map(([type]) => type);
 
 /** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). First-draft; subject to calibration. */
 export const EXTRACTOR_STORAGE_PER_UNIT = scaleValue(40);

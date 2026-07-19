@@ -37,6 +37,9 @@ export interface WorldMeta {
  *  calibration harness). Everything else player-specific hangs off the controlled faction. */
 export interface WorldPlayer {
   controlledFactionId: string;
+  /** Per-domain autonomic switches. Off = the planner stops PROPOSING in that domain for the player's
+   *  faction; committed funding and manual orders always continue. AI factions never read this. */
+  automation: { build: boolean; colonisation: boolean };
 }
 
 // ── Regions ─────────────────────────────────────────────────────
@@ -138,7 +141,7 @@ export interface WorldBody {
 
 export interface WorldBuilding {
   systemId: string;
-  /** Production-good type id, or "housing" | "vocational_school" | "research_institute". */
+  /** Production-good type id, or a non-production type: "housing", an academy, a specialisation complex, or "construction_centre". */
   buildingType: string;
   /** Whole-integer level count. Grows only via landed construction projects; sheds whole levels via decay. */
   count: number;
@@ -153,6 +156,8 @@ interface WorldConstructionProjectBase {
   id: string;
   factionId: string;
   systemId: string;
+  /** Who committed this row: the autonomic planner, or a player order (priority, display, cancel-permission). */
+  origin: "auto" | "player";
   /** Total construction work to complete. */
   workTotal: number;
   /** Construction points accumulated so far, in [0, workTotal]. */

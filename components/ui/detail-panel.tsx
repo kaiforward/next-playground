@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { tv } from "tailwind-variants";
 import { X } from "lucide-react";
@@ -37,19 +37,33 @@ interface DetailPanelProps {
   subHeader?: React.ReactNode;
   /** Path to navigate to when the panel is closed (default: "/"). */
   backPath?: string;
+  /**
+   * When the panel body persists across navigations within the same panel (e.g. switching
+   * systems while the drawer stays mounted), pass the identity of the current subject here
+   * so the scrolled body resets to top on each change instead of leaking scroll offset
+   * between subjects.
+   */
+  scrollResetKey?: string;
   children: React.ReactNode;
 }
 
-export function DetailPanel({ title, subtitle, headerAction, subHeader, backPath = "/", children }: DetailPanelProps) {
+export function DetailPanel({ title, subtitle, headerAction, subHeader, backPath = "/", scrollResetKey, children }: DetailPanelProps) {
   const router = useRouter();
   const styles = panel();
   const [mounted, setMounted] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   // Trigger enter animation after first paint
   useEffect(() => {
     const frame = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  // Reset scroll to top when the subject changes — the body div persists across navigations
+  // within the panel (e.g. system-to-system), so without this its offset would leak between them.
+  useEffect(() => {
+    bodyRef.current?.scrollTo(0, 0);
+  }, [scrollResetKey]);
 
   const close = useCallback(() => {
     router.push(backPath);
@@ -99,7 +113,7 @@ export function DetailPanel({ title, subtitle, headerAction, subHeader, backPath
       {subHeader && <div className={styles.subHeader()}>{subHeader}</div>}
 
       {/* Body */}
-      <div className={styles.body()}>
+      <div ref={bodyRef} className={styles.body()}>
         {children}
       </div>
     </aside>

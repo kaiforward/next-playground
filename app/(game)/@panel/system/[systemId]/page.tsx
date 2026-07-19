@@ -1,20 +1,22 @@
 "use client";
 
 import { use, useMemo, type ReactNode } from "react";
+import Link from "next/link";
 import { useEvents } from "@/lib/hooks/use-events";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useUniverse } from "@/lib/hooks/use-universe";
+import { useSystemConstruction } from "@/lib/hooks/use-system-construction";
 import { Card, CardContent } from "@/components/ui/card";
 import { ActiveEventsSection } from "@/components/events/active-events-section";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
-import { SystemConstructionSection } from "@/components/construction/system-construction-section";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
 import { formatPeople, splitMagnitude } from "@/lib/utils/format";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { useSystemVitals } from "@/lib/hooks/use-system-vitals";
+import { ColonySection } from "@/components/construction/colony-section";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { GRADE } from "@/lib/constants/ui";
 import {
@@ -45,6 +47,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const { data: universeData } = useUniverse();
   const substrate = useSystemSubstrate(systemId);
   const vitals = useSystemVitals(systemId);
+  const construction = useSystemConstruction(systemId);
 
   // Owning faction (the source of government). Falls back to the region's
   // dominant faction when a system has no factionId yet.
@@ -108,9 +111,22 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 ]}
               />
             </VitalTile>
+            <VitalTile
+              label="Construction"
+              dotColor="var(--color-status-amber)"
+              value={String(construction.visibility === "visible" ? construction.projects.length : 0)}
+              hint={
+                <Link
+                  href={`/system/${systemId}/industry`}
+                  className="text-text-accent transition-colors hover:text-text-accent-hover"
+                >
+                  → Industry
+                </Link>
+              }
+            />
             <GhostVitalTile
               label="Future vitals"
-              colSpan={4}
+              colSpan={3}
               future={
                 <>
                   control · treasury
@@ -141,6 +157,10 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
 
       {/* Vitals grid — loud stability / development / population, + a ghost tile for future stats */}
       {vitalsSection}
+
+      {/* Colony surface — the founding entry for a controlled, not-yet-developed system. No-ops
+          (renders null) once the system is developed or has nothing forming. */}
+      <ColonySection systemId={systemId} />
 
       {/* Context strip — quiet, tight 2-up. Region + Gateway already surface in the panel header. */}
       <Card variant="bordered" padding="sm" className="mb-6">
@@ -177,9 +197,6 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
           </ContextRow>
         </div>
       </Card>
-
-      {/* Construction — in-flight builds / a forming colony (hidden when nothing is under way on a developed world) */}
-      <SystemConstructionSection systemId={systemId} />
     </>
   );
 }

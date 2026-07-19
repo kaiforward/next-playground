@@ -3,6 +3,7 @@ import {
   VOCATIONAL_SCHOOL_TYPE,
   RESEARCH_INSTITUTE_TYPE,
   COMPLEX_TYPES,
+  CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 
@@ -32,6 +33,16 @@ export const CONSTRUCTION = {
   POOL_FLOOR_BASE: 4,
   /** Development at which a colony has weaned fully off the pool floor (self-weaning training wheels). */
   FLOOR_DEV_KNEE: 0.3,
+  /**
+   * Construction points one fully-staffed Construction Centre level adds to its faction's pool per
+   * reference month. Set well above what the level's own labour draw would yield as eligible heads
+   * (25 heads × THROUGHPUT_PER_POP ≈ 1.25), so substituting capital + technicians for raw labour pays.
+   */
+  POINTS_PER_LEVEL: 5,
+  /** Reference months of point output a centre's value is amortised over (the ROI numerator horizon). */
+  PAYBACK_HORIZON: 12,
+  /** Reference months of pool drain that define the funding frontier — work beyond it is "starved". */
+  BACKLOG_WINDOW: 6,
 } as const;
 
 /** Explicit per-level work costs for the non-production building types (housing, academies, complexes). */
@@ -39,6 +50,7 @@ const WORK_PER_LEVEL_OVERRIDE: Record<string, number> = {
   [HOUSING_TYPE]: 8,
   [VOCATIONAL_SCHOOL_TYPE]: 15,
   [RESEARCH_INSTITUTE_TYPE]: 15,
+  [CONSTRUCTION_CENTRE_TYPE]: 25,
   ...Object.fromEntries(COMPLEX_TYPES.map((t) => [t, 40])),
 };
 

@@ -325,7 +325,7 @@ Claiming stays gradual — bounded by a small per-pulse cap, the reach radius, a
 
 ### Starting Position (Implemented)
 
-**The player authors a faction.** On New Game the player supplies a name, government, and doctrine; world-gen seeds that faction as an additional major — placed by the same spacing + seed-biased homeworld logic as every other faction — and records the seat as `world.player.controlledFactionId` (a playerless world, e.g. the calibration harness, sets `world.player` to null). The player's faction runs on the same autonomic agency as every AI faction; direct control verbs are planned. The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), which is planned.
+**The player authors a faction.** On New Game the player supplies a name, government, and doctrine; world-gen seeds that faction as an additional major — placed by the same spacing + seed-biased homeworld logic as every other faction — and records the seat as `world.player.controlledFactionId` (a playerless world, e.g. the calibration harness, sets `world.player` to null). The player's faction runs on the same autonomic agency as every AI faction, with a control surface on top — per-domain automation switches and manual construction/colonisation verbs; see [player-seat.md](./player-seat.md). The player-as-faction relationship to other factions is the diplomacy layer (§2 relations), which is planned.
 
 ---
 

@@ -37,6 +37,8 @@ export function useTickInvalidation() {
         // Construction advances every funded pulse (same monthly economy tick) — refresh both surfaces.
         queryClient.invalidateQueries({ queryKey: queryKeys.systemConstructionAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.factionConstructionAll });
+        // Build-options feasibility (ETA, pool headroom) shifts on the same pulse.
+        queryClient.invalidateQueries({ queryKey: queryKeys.systemBuildOptionsAll });
         // Faction Overview vitals (pop/stability/development roll-up + territory) advance every tick.
         queryClient.invalidateQueries({ queryKey: queryKeys.factionVitalsAll });
       }),

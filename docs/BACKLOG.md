@@ -31,11 +31,41 @@ Well-defined, can start now.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
+- **[S] Colony seed-source tie-break differs between the player verb and the planner on an exact hop
+  tie** — the player's direct-colony verb (`findSeedSource`, `lib/services/colony-eligibility.ts`) picks
+  the nearest developed same-faction system with a deterministic **smallest-id** tie-break; the autonomic
+  planner's own candidate provider (`developProvider`, `lib/world/tick.ts`) picks whichever tied system
+  its hop-map iteration encounters **first** (insertion order, not sorted). Decision recorded during the
+  Slice 2 PR B review: keep as-is (both are valid, deterministic choices and an exact tie is rare) —
+  align only if it ever actually matters (e.g. a test or a player report keys off which specific source
+  system a colony drew from).
+- **[S] Two independently-coded build-ceiling checks assume monotonic system ownership** — the
+  build-options read service (`lib/services/build-options.ts`) nets committed levels from the player
+  **faction's** open rows at a system, while the mutation service's own check
+  (`committedAt`, `lib/services/construction-orders.ts`) nets **all** open rows at the system regardless
+  of faction. The two agree only because a system's owning faction cannot currently change under it
+  (conquest doesn't exist yet) — unify behind one shared helper before any ownership-transfer mechanic
+  (conquest, rebellion) ships, or a stale rival's in-flight row could under/over-count a player's ceiling.
+- **[S] `estStaffing` and `buildingUsed`'s "none"-kind dispatch read staffing differently for support
+  types** — `computeBuildOptions`'s `estStaffing` (feasibility readout) is `min` over the grades a
+  building's labour vector actually draws (e.g. a Construction Centre's unskilled + skill1); the tick's
+  own `buildingUsed` (`lib/engine/industry.ts`) dispatches an `output: { kind: "none" }` building through
+  `count × labourFulfil` only (unskilled/overall fulfilment, not skill1). The two numbers can diverge for
+  a support building whose skill1 draw is the binding constraint — a display-consistency note, not a
+  correctness bug (both are internally consistent with what they each drive); worth a single shared
+  staffing-estimate helper if the divergence ever confuses a player-facing readout.
 - **[M] System-finder dev tool** — A queryable dev panel (or `scripts/` CLI) to surface representative systems by characteristic for manual smoke-testing / QA: population band (dead/undeveloped/tiny-outpost/healthy), economy-type, deposit profile, building roster, NaN/anomaly checks — returning name + direct `/system/<id>` link. Recurring need whenever generation/economy changes land (e.g. verifying barren-but-alive systems read correctly). Build it against the in-memory world (`getWorld()`), surfaced in a `scripts/` CLI or the dev-tools panel.
 
 ## Needs Design
 
 Direction is clear, approach needs a design doc before implementation.
+
+- **[M] Faction-screen colonise verb with map-based target selection** — deferred from the Slice 2
+  control-surface design pass (2026-07-18). The faction construction command card gets a colonise
+  action that enters a **map target-selection mode** (eligible systems highlighted, click to direct
+  the colony) — explicitly not a dropdown. Complements the shipped per-system Establish-colony verb on
+  a controlled system's Overview (see [player-seat.md](./active/gameplay/player-seat.md)). Needs a
+  short design pass for the map selection-mode interaction before building.
 
 - **[M] Tick perf: `toTickSystems` is the whole off-pulse tick outside events** — it costs 2.5ms/tick
   at 2,400 systems, **19.0% of an off-pulse tick** and, since boundary-gating shipped, the only

@@ -1,7 +1,11 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
+import { useSystemInfo } from "@/lib/hooks/use-system-info";
+import { useSystemConstruction } from "@/lib/hooks/use-system-construction";
+import { useSystemBuildOptions } from "@/lib/hooks/use-build-options";
+import { useCancelOrder } from "@/lib/hooks/use-construction-orders";
 import { GOODS } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES,
@@ -9,8 +13,10 @@ import {
   ACADEMY_TYPES,
   VOCATIONAL_SCHOOL_TYPE,
   RESEARCH_INSTITUTE_TYPE,
+  CONSTRUCTION_CENTRE_TYPE,
   COMPLEX_TYPES,
   COMPLEX_BY_TYPE,
+  SUPPORT_TYPES,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
@@ -19,13 +25,20 @@ import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descript
 import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
 import type { IndustryHealth, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry } from "@/lib/engine/industry";
 import type { GoodTier } from "@/lib/types/game";
+import type { BuildOptionData } from "@/lib/types/api";
 import { formatMagnitude, formatPeople, formatUnitsShort } from "@/lib/utils/format";
+import { formatEta } from "@/lib/utils/construction-format";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
-import { depositRows, generalLand, type DepositRow, type GeneralLand } from "@/components/system/industry-rows";
+import { useDialog } from "@/components/ui/dialog";
+import { depositRows, generalLand, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
+import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
+import { QuickAddButton } from "@/components/construction/quick-add-button";
+import { BuildDialog } from "@/components/construction/build-dialog";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 
@@ -72,10 +85,11 @@ function producerTier(b: BuildingEntry): GoodTier {
   return b.tier === 1 ? 1 : b.tier === 2 ? 2 : 0;
 }
 
-/** Academy building types don't produce a good, so they're not in GOODS — name them explicitly. */
-const ACADEMY_LABELS: Record<string, string> = {
+/** Non-good building types aren't in GOODS — name them explicitly. */
+const NON_GOOD_LABELS: Record<string, string> = {
   [VOCATIONAL_SCHOOL_TYPE]: "Vocational School",
   [RESEARCH_INSTITUTE_TYPE]: "Research Institute",
+  [CONSTRUCTION_CENTRE_TYPE]: "Construction Centre",
 };
 
 /** Complex building types aren't in GOODS either — name them from the family catalog. */
@@ -86,7 +100,7 @@ const COMPLEX_LABELS: Record<string, string> = Object.fromEntries(
 /** Human-readable label for a building type or good id. */
 function label(id: string): string {
   if (id === HOUSING_TYPE) return "Housing";
-  return ACADEMY_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
+  return NON_GOOD_LABELS[id] ?? COMPLEX_LABELS[id] ?? GOODS[id]?.name ?? id;
 }
 
 // ── Small shared pieces ──────────────────────────────────────────────────────
@@ -157,6 +171,7 @@ function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributo
 function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
   const isComplex = COMPLEX_TYPES.includes(b.buildingType);
+  const isSupport = SUPPORT_TYPES.includes(b.buildingType);
   const isProducer = b.outputGood !== undefined && !isAcademy && b.tier >= 0;
   const goodTier = producerTier(b);
   const grades = isProducer
@@ -176,7 +191,7 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
       <p className="font-display text-[12px] font-semibold text-text-primary">{label(b.buildingType)}</p>
       {(tierLabel || b.count > 0) && (
         <p className="font-mono text-[10px] text-text-tertiary">
-          {tierLabel && !isAcademy && !isComplex ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
+          {tierLabel && !isAcademy && !isComplex && !isSupport ? `tier ${b.tier} · ${tierLabel} · ` : ""}×{formatMagnitude(b.count)} built
         </p>
       )}
       <p className="text-[11px] leading-snug text-text-secondary">{describeBuilding(b.buildingType)}</p>
@@ -227,32 +242,176 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
   );
 }
 
+// ── Ghost rows (in-flight builds surfaced inline in the ledger) ──────────────
+
+/** Ledger group titles the buildings table renders headings for — the deposit table owns "deposit". */
+type BuildingGroupTitle = Exclude<GhostGroup, "deposit">;
+
+/** Ghost row's name cell: ◇ marker · label · +levels · ORDERED badge · cancel (player rows, when cancellable). */
+function GhostNameCell({
+  ghost, canCancel, onCancel, cancelPending,
+}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean }) {
+  return (
+    <td className="px-1.5 py-1 text-[12px] text-text-tertiary">
+      <span className="flex items-center gap-1.5">
+        <span aria-hidden className="font-mono text-[9px] text-status-amber-light">◇</span>
+        {ghost.label} <span className="font-mono">+{ghost.levels}</span>
+        {ghost.origin === "player" && <Badge color="amber">ORDERED</Badge>}
+        {ghost.origin === "player" && canCancel && (
+          <button
+            type="button"
+            aria-label={`Cancel ${ghost.label} order`}
+            disabled={cancelPending}
+            onClick={() => onCancel(ghost.projectId)}
+            className="px-1 text-[11px] text-status-red-light transition-colors hover:text-status-red disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            ✕
+          </button>
+        )}
+      </span>
+      <span className="mt-0.5 block h-1 max-w-[180px] bg-surface-active">
+        <span aria-hidden className="block h-full bg-status-amber/75" style={{ width: `${Math.round(ghost.progress * 100)}%` }} />
+      </span>
+    </td>
+  );
+}
+
+/** In-flight extractor in the deposit ledger: name cell, then progress% / — / — / ETA under Worked / Slots / Yield / Out-cyc. */
+function DepositGhostRow({
+  ghost, canCancel, onCancel, cancelPending, showActionColumn,
+}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean; showActionColumn: boolean }) {
+  return (
+    <tr className="border-b border-border/40 last:border-b-0">
+      <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
+      <td />
+      <td />
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaPulses)}</td>
+      {showActionColumn && <td />}
+    </tr>
+  );
+}
+
+/** In-flight building in the general-land ledger: name cell, then progress% / ETA under Worked / Out-cyc. */
+function BuildingGhostRow({
+  ghost, canCancel, onCancel, cancelPending, showActionColumn,
+}: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean; showActionColumn: boolean }) {
+  return (
+    <tr className="border-b border-border/40 last:border-b-0">
+      <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaPulses)}</td>
+      {showActionColumn && <td />}
+    </tr>
+  );
+}
+
 // ── Tables ───────────────────────────────────────────────────────────────────
 
-/** Deposit table: per-resource slot fill — health glyph · resource · worked/slots · yield · output. */
-function DepositTable({ rows, contributorsFor }: { rows: DepositRow[]; contributorsFor: (r: DepositRow["resource"]) => BuildingEntry[] }) {
+/**
+ * One extractor type's sub-row under a shared multi-type deposit (e.g. arable → food + textiles): the
+ * "└" glyph ties it to the parent's aggregate above. Slots and Yield stay blank — the parent row above
+ * owns those (they're the shared pool a build of either type draws down) — only Worked and Out/cyc are
+ * this type's own numbers, so quick-add here restores the one-click add the ambiguous parent row lost.
+ */
+function DepositTypeSubRow({
+  t, systemId, canOrder, option,
+}: {
+  t: DepositTypeRow;
+  systemId: string;
+  canOrder: boolean;
+  option?: BuildOptionData;
+}) {
+  return (
+    <tr className="border-b border-border/40 last:border-b-0">
+      <td className="px-1.5 py-1 text-[12px] text-text-secondary">
+        <span className="flex items-center gap-1.5 pl-3">
+          <span aria-hidden className="font-mono text-[10px] text-text-tertiary">└</span>
+          {label(t.buildingType)}
+        </span>
+      </td>
+      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={t.worked} total={t.built} health={t.health} /></td>
+      <td />
+      <td />
+      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{t.output > 0 ? formatUnitsShort(t.output) : "—"}</td>
+      {canOrder && (
+        <td className="px-1.5 py-1 text-right">
+          {option && <QuickAddButton systemId={systemId} option={option} />}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+/**
+ * Deposit table: per-resource slot fill — health glyph · resource · worked/built · built/slots · yield ·
+ * output. A resource worked by exactly one catalog extractor type renders as today: a single row, with a
+ * trailing quick-add column on the player's own systems. A resource shared by several types (e.g. arable →
+ * food + textiles) renders the parent row as the shared/aggregate picture — Slots is the shared pool,
+ * built either type draws it down — with no quick-add of its own, and one sub-row per type below carrying
+ * that type's own Worked/Out and its own quick-add. In-flight extractor orders render as ghost rows under
+ * their matching row: the single row for a one-type resource, the matching sub-row for a shared one.
+ */
+function DepositTable({
+  rows, contributorsFor, systemId, canOrder, optionByType, ghosts, onCancel, cancelPending,
+}: {
+  rows: DepositRow[];
+  contributorsFor: (r: DepositRow["resource"]) => BuildingEntry[];
+  systemId: string;
+  canOrder: boolean;
+  optionByType: Map<string, BuildOptionData>;
+  ghosts: GhostRow[];
+  onCancel: (projectId: string) => void;
+  cancelPending: boolean;
+}) {
   return (
     <table className="w-full border-collapse">
       <thead>
-        <tr><Th>Deposit</Th><Th right>Worked</Th><Th right>Yield</Th><Th right>Out/cyc</Th></tr>
+        <tr>
+          <Th>Deposit</Th><Th right>Worked</Th><Th right>Slots</Th><Th right>Yield</Th><Th right>Out/cyc</Th>
+          {canOrder && <Th right> </Th>}
+        </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={row.resource} className="border-b border-border/40 last:border-b-0">
-            <td className="px-1.5 py-1 text-[12px] text-text-primary">
-              <span className="flex items-center gap-1.5">
-                <HealthGlyph health={row.health} className="text-[9px]" />
-                <Tooltip>
-                  <TooltipTriggerLabel className="capitalize">{row.resource}</TooltipTriggerLabel>
-                  <TooltipContent className="w-56"><DepositTooltipBody row={row} contributors={contributorsFor(row.resource)} /></TooltipContent>
-                </Tooltip>
-              </span>
-            </td>
-            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.slotCap} health={row.health} /></td>
-            <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
-            <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
-          </tr>
-        ))}
+        {rows.map((row) => {
+          const multi = row.types.length > 1;
+          const quickAddOption = canOrder && row.types.length === 1 ? optionByType.get(row.types[0].buildingType) : undefined;
+          return (
+            <Fragment key={row.resource}>
+              <tr className="border-b border-border/40 last:border-b-0">
+                <td className="px-1.5 py-1 text-[12px] text-text-primary">
+                  <span className="flex items-center gap-1.5">
+                    <HealthGlyph health={row.health} className="text-[9px]" />
+                    <Tooltip>
+                      <TooltipTriggerLabel className="capitalize">{row.resource}</TooltipTriggerLabel>
+                      <TooltipContent className="w-56"><DepositTooltipBody row={row} contributors={contributorsFor(row.resource)} /></TooltipContent>
+                    </Tooltip>
+                  </span>
+                </td>
+                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.built} health={row.health} /></td>
+                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.slotCap)}</td>
+                <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
+                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
+                {canOrder && (
+                  <td className="px-1.5 py-1 text-right">
+                    {quickAddOption && <QuickAddButton systemId={systemId} option={quickAddOption} />}
+                  </td>
+                )}
+              </tr>
+              {!multi && ghosts.filter((g) => g.resource === row.resource).map((g) => (
+                <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
+              ))}
+              {multi && row.types.map((t) => (
+                <Fragment key={t.buildingType}>
+                  <DepositTypeSubRow t={t} systemId={systemId} canOrder={canOrder} option={optionByType.get(t.buildingType)} />
+                  {ghosts.filter((g) => g.buildingType === t.buildingType).map((g) => (
+                    <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
+                  ))}
+                </Fragment>
+              ))}
+            </Fragment>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -277,17 +436,24 @@ function NeedsLine({ supply }: { supply: SystemIndustryReadout["supplyChain"][nu
   );
 }
 
-/** One general-land building row — health glyph · name (tooltip) · worked/built · output, with a needs sub-row. */
+/** One general-land building row — health glyph · name (tooltip) · worked/built · output, with a needs sub-row.
+ *  On the player's own systems, a trailing quick-add column offers +1 level when a feasibility option exists. */
 function BuildingRow({
   b,
   labour,
   unrest,
   supply,
+  systemId,
+  canOrder,
+  option,
 }: {
   b: BuildingEntry;
   labour: SystemLabour;
   unrest: number;
   supply?: SystemIndustryReadout["supplyChain"][number];
+  systemId: string;
+  canOrder: boolean;
+  option?: BuildOptionData;
 }) {
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const hasNeeds = supply && Object.keys(GOOD_RECIPES[supply.goodId] ?? {}).length > 0;
@@ -305,34 +471,59 @@ function BuildingRow({
       </td>
       <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} /></td>
       <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
+      {canOrder && (
+        <td className="px-1.5 py-1 align-top text-right">
+          {option && <QuickAddButton systemId={systemId} option={option} />}
+        </td>
+      )}
     </tr>
   );
 }
 
-/** General-land buildings, grouped under Housing / Production / Specialisation subheadings. */
+/**
+ * General-land buildings, grouped under Housing / Production / Specialisation / Support subheadings. A group
+ * with no built rows but in-flight ghosts still renders its heading — that's the only content telling the
+ * player something is coming. Player systems get a trailing quick-add column.
+ */
 function BuildingsTable({
   groups,
   labour,
   unrest,
   supplyByGood,
+  systemId,
+  canOrder,
+  optionByType,
+  ghostsByGroup,
+  onCancel,
+  cancelPending,
 }: {
-  groups: Array<{ title: string; buildings: BuildingEntry[] }>;
+  groups: Array<{ title: BuildingGroupTitle; buildings: BuildingEntry[] }>;
   labour: SystemLabour;
   unrest: number;
   supplyByGood: Map<string, SystemIndustryReadout["supplyChain"][number]>;
+  systemId: string;
+  canOrder: boolean;
+  optionByType: Map<string, BuildOptionData>;
+  ghostsByGroup: Map<GhostGroup, GhostRow[]>;
+  onCancel: (projectId: string) => void;
+  cancelPending: boolean;
 }) {
-  const active = groups.filter((g) => g.buildings.length > 0);
+  const active = groups.filter((g) => g.buildings.length > 0 || (ghostsByGroup.get(g.title)?.length ?? 0) > 0);
   if (active.length === 0) return null;
+  const columns = canOrder ? 4 : 3;
   return (
     <table className="mt-3 w-full border-collapse">
       <thead>
-        <tr><Th>Building</Th><Th right>Worked</Th><Th right>Out/cyc</Th></tr>
+        <tr>
+          <Th>Building</Th><Th right>Worked</Th><Th right>Out/cyc</Th>
+          {canOrder && <Th right> </Th>}
+        </tr>
       </thead>
       <tbody>
         {active.map((group) => (
           <Fragment key={group.title}>
             <tr>
-              <td colSpan={3} className="px-1.5 pb-0.5 pt-2.5 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+              <td colSpan={columns} className="px-1.5 pb-0.5 pt-2.5 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
                 {group.title}
               </td>
             </tr>
@@ -343,7 +534,13 @@ function BuildingsTable({
                 labour={labour}
                 unrest={unrest}
                 supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined}
+                systemId={systemId}
+                canOrder={canOrder}
+                option={optionByType.get(b.buildingType)}
               />
+            ))}
+            {(ghostsByGroup.get(group.title) ?? []).map((g) => (
+              <BuildingGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
             ))}
           </Fragment>
         ))}
@@ -387,7 +584,7 @@ function LegendTooltip() {
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
-          <p className="text-[11px] text-text-secondary"><span className="font-mono">worked/slots</span> is units in use of the deposit's slots (staffed &amp; selling); <span className="font-mono">out/cyc</span> is real output after input gates.</p>
+          <p className="text-[11px] text-text-secondary"><span className="font-mono">worked/built</span> is units in use of the built extractor levels (staffed &amp; selling); <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates.</p>
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
@@ -540,12 +737,40 @@ function LabourCard({
 
 export function IndustryPanel({ systemId }: { systemId: string }) {
   const data = useSystemIndustry(systemId);
+  const { systemInfo } = useSystemInfo(systemId);
+  const construction = useSystemConstruction(systemId);
+  const buildSurface = useSystemBuildOptions(systemId);
+  const cancelOrder = useCancelOrder();
+  const newIndustryDialog = useDialog();
+
+  // The construction surface: only the player's own systems get order verbs (quick-add, cancel, the
+  // New-industry dialog) — AI/rival systems render the same ghost rows read-only, no extra column.
+  // Pulled out ahead of the early-return guards below (with safe fallbacks) so the memos that derive
+  // from them can be called unconditionally on every render — hooks can't sit after a guard whose
+  // branch varies render to render.
+  const canOrder = buildSurface.mode === "build";
+  const buildOptions = useMemo(
+    () => (buildSurface.mode === "build" ? buildSurface.options : []),
+    [buildSurface],
+  );
+  const buildings = useMemo(() => (data.visibility === "visible" ? data.buildings : []), [data]);
+
+  const optionByType = useMemo(() => new Map(buildOptions.map((o) => [o.buildingType, o])), [buildOptions]);
+  const currentTypes = useMemo(() => new Set(buildings.map((b) => b.buildingType)), [buildings]);
+  const dialogOptions = useMemo(
+    () => buildOptions.filter((o) => !currentTypes.has(o.buildingType) && o.maxLevels > 0),
+    [buildOptions, currentTypes],
+  );
+  const ghostRows = useMemo(
+    () => classifyGhosts(construction.visibility === "visible" ? construction.projects : []),
+    [construction],
+  );
 
   if (data.visibility === "unknown") {
     return <EmptyState message="This system isn't developed yet — no industry to survey." />;
   }
 
-  const { space, deposits, labour, labourAllocation, labourFulfillment, buildings, supplyChain, unrest, skillBaskets } = data;
+  const { space, deposits, labour, labourAllocation, labourFulfillment, supplyChain, unrest, skillBaskets } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -560,17 +785,26 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD })]++;
   }
 
-  // Extractors sit on deposit slots; factories/complexes on general land (housing folds into the
-  // magbar; academies into the Labour card's licensing rows).
+  // Extractors sit on deposit slots; factories/complexes/support buildings on general land (housing
+  // folds into the magbar; academies get their own ledger group below, alongside the Labour card's
+  // licensing rows; support buildings — e.g. the Construction Centre — get their own group too).
   const extractors = buildings.filter(
-    (b) => b.tier === 0 && !ACADEMY_TYPES.includes(b.buildingType) && !COMPLEX_TYPES.includes(b.buildingType),
+    (b) =>
+      b.tier === 0 &&
+      !ACADEMY_TYPES.includes(b.buildingType) &&
+      !COMPLEX_TYPES.includes(b.buildingType) &&
+      !SUPPORT_TYPES.includes(b.buildingType),
   );
-  // General-land building groups (housing folds into the magbar too; academies live in the Labour card).
-  // Specialisation sits above Production — the complexes buff the families beneath them.
-  const buildingGroups = [
+  // General-land building groups (housing folds into the magbar too; academies sit directly under it
+  // as their own group, the Labour card keeps its licensing rows regardless). Specialisation sits above
+  // Production — the complexes buff the families beneath them. Support sits last — enabling
+  // infrastructure (construction throughput), not manufacturing.
+  const buildingGroups: Array<{ title: BuildingGroupTitle; buildings: BuildingEntry[] }> = [
     { title: "Housing", buildings: buildings.filter((b) => b.tier === -1) },
+    { title: "Academies", buildings: buildings.filter((b) => ACADEMY_TYPES.includes(b.buildingType)) },
     { title: "Specialisation", buildings: buildings.filter((b) => COMPLEX_TYPES.includes(b.buildingType)) },
     { title: "Production", buildings: buildings.filter((b) => b.tier >= 1) },
+    { title: "Support", buildings: buildings.filter((b) => SUPPORT_TYPES.includes(b.buildingType)) },
   ];
 
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
@@ -583,6 +817,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const land = generalLand(space);
   const generalUsed = land.housing + land.factory;
   const generalFree = land.habitableFree + land.factoryFree;
+
+  const onCancelOrder = (projectId: string) => cancelOrder.mutate({ projectId });
 
   return (
     <div className="space-y-4">
@@ -597,6 +833,11 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
             <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
             <LegendTooltip />
+            {canOrder && (
+              <Button variant="outline" size="xs" type="button" onClick={newIndustryDialog.onOpen}>
+                + New industry
+              </Button>
+            )}
           </span>
         </div>
         <p className="mt-1.5 flex gap-3 font-mono text-[11px]">
@@ -606,6 +847,17 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         </p>
       </Card>
 
+      {canOrder && (
+        <BuildDialog
+          key={systemId}
+          systemId={systemId}
+          systemName={systemInfo?.name ?? systemId}
+          options={dialogOptions}
+          open={newIndustryDialog.open}
+          onClose={newIndustryDialog.onClose}
+        />
+      )}
+
       <LabourCard labour={labour} allocation={labourAllocation} skillBaskets={skillBaskets} />
 
       {/* Deposit land */}
@@ -614,9 +866,18 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <PoolHead
             title="Deposit land"
             sub="extractors"
-            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{depSlots} worked</>}
+            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{Math.round(depSlots)} worked</>}
           />
-          <DepositTable rows={depRows} contributorsFor={contributorsFor} />
+          <DepositTable
+            rows={depRows}
+            contributorsFor={contributorsFor}
+            systemId={systemId}
+            canOrder={canOrder}
+            optionByType={optionByType}
+            ghosts={ghostRows.get("deposit") ?? []}
+            onCancel={onCancelOrder}
+            cancelPending={cancelOrder.isPending}
+          />
         </Card>
       )}
 
@@ -634,7 +895,18 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border" style={{ backgroundImage: COPPER_HATCH }} /> Habitable {formatMagnitude(land.habitable)}</span>
           <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 border border-border bg-surface-active" /> Free {formatMagnitude(generalFree)}</span>
         </div>
-        <BuildingsTable groups={buildingGroups} labour={labour} unrest={unrest} supplyByGood={supplyByGood} />
+        <BuildingsTable
+          groups={buildingGroups}
+          labour={labour}
+          unrest={unrest}
+          supplyByGood={supplyByGood}
+          systemId={systemId}
+          canOrder={canOrder}
+          optionByType={optionByType}
+          ghostsByGroup={ghostRows}
+          onCancel={onCancelOrder}
+          cancelPending={cancelOrder.isPending}
+        />
       </Card>
     </div>
   );

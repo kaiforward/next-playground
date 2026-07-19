@@ -3,13 +3,13 @@
  *
  * Production buildings map 1:1 to a good, so their copy is the good's own description
  * (GOODS[id].description) — `describeBuilding` falls back to it rather than duplicating
- * 26 strings here. Only the three non-good buildings (housing + the two academies, the
- * least self-explanatory) carry bespoke role copy.
+ * 26 strings here. Only the non-good buildings (housing, the two academies, and the
+ * construction centre — the least self-explanatory) carry bespoke role copy.
  */
 import type { GoodTier } from "@/lib/types/game";
 import { GOODS } from "@/lib/constants/goods";
 import {
-  HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE,
+  HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, CONSTRUCTION_CENTRE_TYPE,
   HEAVY_INDUSTRY_COMPLEX, CHEMICALS_COMPLEX, ELECTRONICS_COMPLEX, ARMAMENTS_COMPLEX, CONSUMER_COMPLEX,
 } from "@/lib/constants/industry";
 
@@ -28,6 +28,8 @@ export const BUILDING_DESCRIPTIONS: Record<string, string> = {
     "Vocational school — trains residents for technician-grade (skill-1) work. Licenses a system-wide ceiling on how much basic manufacturing can be staffed; without one, no processed goods can be made here. Draws unskilled labour to run, and decays toward the technician demand it actually serves.",
   [RESEARCH_INSTITUTE_TYPE]:
     "Research institute — certifies residents for engineer-grade (skill-2) work. Licenses a system-wide ceiling on advanced manufacturing; without one, no advanced goods can be made here. Draws unskilled labour to run, and decays toward the engineer demand it actually serves.",
+  [CONSTRUCTION_CENTRE_TYPE]:
+    "Construction centre — industrial fabricators, yards, and heavy plant. Adds capital-generated construction points to the faction's build pool, substituting for the raw labour a skilled economy absorbs into its factories. Draws unskilled labour and technicians to run; decays when it cannot be staffed.",
   [HEAVY_INDUSTRY_COMPLEX]:
     "Heavy Industry Complex — an integrated metallurgical anchor. Grants a system-wide yield bonus to the whole heavy chain (metals, alloys, hull plating, components, machinery, ship frames). One complex per system; its large footprint crowds out breadth, so the world specialises and imports the rest. Decays toward the family output it actually buffs.",
   [CHEMICALS_COMPLEX]:

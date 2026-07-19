@@ -268,9 +268,7 @@ export type SystemIndustryData =
 export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 
 // ── Construction (build-queue / colony-visibility) ────────────────────────────
-import type {
-  ConstructionProjectRow, ConstructionProjectColonyRow, ConstructionProjectBuildRow,
-} from "@/lib/engine/construction-readout";
+import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 
 /** Per-system Construction section state. `hidden` renders nothing (developed with nothing building);
  *  `empty` is the controlled-not-yet-colonised state; `visible` carries the rows for this system.
@@ -280,18 +278,61 @@ export type SystemConstructionData =
   | { visibility: "empty"; control: "controlled"; factionId: string }
   | { visibility: "visible"; factionId: string; projects: ConstructionProjectRow[] };
 
-/** Faction roll-up card state — pool header + the two locked groups. */
+/** Faction command-summary card state — pool composition + automation switches + link lists. */
 export interface FactionConstructionData {
   factionId: string;
   pool: number;
-  expandCount: number;
-  buildCount: number;
-  expansion: ConstructionProjectColonyRow[];
-  buildOut: ConstructionProjectBuildRow[];
+  poolBase: number;
+  poolCentres: number;
+  /** The player's switches; null on AI factions (no switches rendered). */
+  automation: { build: boolean; colonisation: boolean } | null;
+  /** Systems with open build projects — count desc, then name asc. */
+  buildSystems: Array<{ systemId: string; systemName: string; count: number }>;
+  /** Forming colonies — progress desc, then name asc. */
+  colonies: Array<{ systemId: string; systemName: string; progress: number }>;
+  /** Player-originated open projects across the faction. */
+  orderedCount: number;
 }
 
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
 export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
+
+// ── Player build-options surface (per-system verbs: colonise / build) ────────
+import type { BuildOption } from "@/lib/engine/build-options";
+import type { ColonyBlockReason } from "@/lib/types/colonisation";
+
+/** One dialog/quick-add option: engine feasibility + display label + queue-aware ETA. */
+export interface BuildOptionData extends BuildOption {
+  label: string;
+  /** ≈pulses until a 1-level order placed NOW would land (player queue position); null = stalled pool. */
+  etaPulses: number | null;
+}
+/** Per-system verb surface: which construction verb applies here and its feasibility. */
+export type SystemBuildOptionsData =
+  | { mode: "none" } // not the player's system (or no seat)
+  | {
+      mode: "colony";
+      colony:
+        | {
+            state: "eligible";
+            preview: {
+              sourceSystemId: string;
+              sourceSystemName: string;
+              seedPop: number;
+              housingLevels: number;
+              work: number;
+            };
+          }
+        | { state: "ineligible"; reason: ColonyBlockReason };
+    }
+  | { mode: "build"; options: BuildOptionData[] };
+export type SystemBuildOptionsResponse = ApiResponse<SystemBuildOptionsData>;
+
+// ── Player construction verbs (build/colony orders, cancel, automation) ──────
+export type OrderBuildResponse = ApiResponse<{ projectId: string; levels: number }>;
+export type OrderColonyResponse = ApiResponse<{ projectId: string }>;
+export type CancelOrderResponse = ApiResponse<{ projectId: string }>;
+export type AutomationResponse = ApiResponse<{ build: boolean; colonisation: boolean }>;
 
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;

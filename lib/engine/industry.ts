@@ -725,6 +725,14 @@ export function buildIndustryReadout(
       buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
       continue;
     }
+    if (def?.output.kind === "none") {
+      // A support building (e.g. the Construction Centre) — draws labour like a producer but sells
+      // nothing. Displayed like an academy/complex: staffedFraction = used/count, no market output.
+      const used = buildingUsed(buildingType, count, ctx);
+      const staffedFraction = count > 0 ? used / count : 0;
+      buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
+      continue;
+    }
     const outputGood = def?.outputGood;
     const tier: GoodTier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
     const fulfil = effectiveFulfilment(state, tier);
