@@ -42,6 +42,10 @@ describe("productionTaxIncome", () => {
     const realized = new Map([["mystery_good", 100], ["ore", NaN]]);
     expect(productionTaxIncome(realized, REF, 0.05, 1, 1)).toBe(0);
   });
+
+  it("skips goods with non-finite reference values", () => {
+    expect(productionTaxIncome(new Map([["ore", 100]]), { ore: NaN }, 0.05, 1, 1)).toBe(0);
+  });
 });
 
 describe("maintenanceBill", () => {

@@ -73,7 +73,7 @@ export function productionTaxIncome(
   let assessed = 0;
   for (const [goodId, units] of realizedByGood) {
     const ref = referenceValues[goodId];
-    if (ref === undefined || !Number.isFinite(units) || units <= 0) continue;
+    if (ref === undefined || !Number.isFinite(ref) || !Number.isFinite(units) || units <= 0) continue;
     assessed += (units / scale) * ref;
   }
   return assessed * safe(rate) * safe(rateMult);
