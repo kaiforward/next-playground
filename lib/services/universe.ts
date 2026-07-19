@@ -11,9 +11,8 @@ import {
   extractorsByResource,
   summariseSpace,
   summariseDeposits,
-  computeSystemLabourSnapshot,
 } from "@/lib/engine/industry";
-import { computePopNeeds } from "@/lib/engine/pop-needs";
+import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
@@ -211,11 +210,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   );
   const worked = extractorsByResource(buildings);
 
-  const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
-  const popNeeds = computePopNeeds(basis, marketsBySystem().get(systemId) ?? []).map((n) => ({
-    ...n,
-    goodName: GOODS[n.goodId]?.name ?? n.goodId,
-  }));
+  const popNeeds = systemPopNeeds(systemId, buildings, system.population);
 
   return {
     visibility: "visible",

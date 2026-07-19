@@ -1,9 +1,11 @@
 /**
- * Read-side per-good pop-needs snapshot — the display projection of the exact
- * signal the unrest spine integrates. Satisfaction is the consume-direction
+ * Read-side per-good pop-needs snapshot — the display projection of the signal
+ * the unrest spine integrates. Satisfaction is the consume-direction
  * self-limiting factor on the market band (what the economy pulse applies as
- * the consumption gate); pressure is the same demand-share × gap² term
- * `dissatisfaction()` sums. Pure — callers pass market rows and a demand basis.
+ * the consumption gate); pressure mirrors the demand-share × gap² shape of the
+ * `dissatisfaction()` sum, weighted by unfloored civilian want (the pulse's own
+ * shares fold in demand floors and modifiers, so magnitudes can differ
+ * slightly). Pure — callers pass market rows and a demand basis.
  */
 import { consumptionBreakdown, consumptionRate, type CivilianDemandBasis, type ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import { marketBandForRow } from "@/lib/engine/market-pricing";

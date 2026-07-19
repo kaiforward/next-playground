@@ -1,11 +1,9 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, marketsBySystem } from "@/lib/services/world-index";
+import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
-import { computePopNeeds } from "@/lib/engine/pop-needs";
-import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import { GOODS } from "@/lib/constants/goods";
 import type { SystemPopulationData } from "@/lib/types/api";
 
 /**
@@ -21,12 +19,7 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
   if (!isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
-  const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
-
-  const needs = computePopNeeds(basis, marketsBySystem().get(systemId) ?? []).map((n) => ({
-    ...n,
-    goodName: GOODS[n.goodId]?.name ?? n.goodId,
-  }));
+  const needs = systemPopNeeds(systemId, buildings, system.population);
 
   return {
     visibility: "visible",

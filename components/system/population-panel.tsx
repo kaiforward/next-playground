@@ -11,6 +11,7 @@ import { StabilityBadge } from "@/components/ui/stability-badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { needSeverity, splitNeedsLedger, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
+import { NeedCells, NeedsTable } from "@/components/system/needs-table";
 
 // Tier swatch colours match the dataviz-validated categorical set (base copper /
 // technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
@@ -47,18 +48,11 @@ function NeedTooltip({ n }: { n: PopNeedData }) {
 }
 
 function NeedRow({ n }: { n: PopNeedData }) {
-  const sev = needSeverity(n.satisfaction);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <tr tabIndex={0} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
-          <td className="px-1.5 py-1 text-xs text-text-primary">
-            <span aria-label={sev} className={`mr-1.5 font-mono text-[10px] ${SEVERITY_TEXT[sev]}`}>{SEVERITY_GLYPH[sev]}</span>
-            {n.goodName}
-          </td>
-          <td className={`px-1.5 py-1 text-right font-mono text-[11px] ${SEVERITY_TEXT[sev]}`}>{Math.round(n.satisfaction * 100)}%</td>
-          <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-secondary">{n.want.toFixed(1)}</td>
-          <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-secondary">{n.delivered.toFixed(1)}</td>
+          <NeedCells n={n} density="panel" />
         </tr>
       </TooltipTrigger>
       <TooltipContent className="w-64"><NeedTooltip n={n} /></TooltipContent>
@@ -70,29 +64,20 @@ function NeedsLedger({ needs }: { needs: PopNeedData[] }) {
   const [expanded, setExpanded] = useState(false);
   const { problems, met } = splitNeedsLedger(needs);
   return (
-    <table className="w-full border-collapse">
-      <thead>
+    <NeedsTable density="panel">
+      {problems.map((n) => <NeedRow key={n.goodId} n={n} />)}
+      {met.length > 0 && !expanded && (
         <tr>
-          {["Need", "Met", "Want", "Delivered"].map((h, i) => (
-            <th key={h} className={`border-b border-border-strong px-1.5 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary ${i > 0 ? "text-right" : "text-left"}`}>{h}</th>
-          ))}
+          <td colSpan={4} className="px-1.5 py-1.5 text-xs text-text-tertiary">
+            <button type="button" onClick={() => setExpanded(true)} className="inline-flex items-center gap-1.5 hover:text-text-secondary">
+              <span aria-hidden className="font-mono text-[10px] text-status-green-light">✓</span>
+              {met.length} needs met <span className="font-mono text-[10px]">▸ expand</span>
+            </button>
+          </td>
         </tr>
-      </thead>
-      <tbody>
-        {problems.map((n) => <NeedRow key={n.goodId} n={n} />)}
-        {met.length > 0 && !expanded && (
-          <tr>
-            <td colSpan={4} className="px-1.5 py-1.5 text-xs text-text-tertiary">
-              <button type="button" onClick={() => setExpanded(true)} className="inline-flex items-center gap-1.5 hover:text-text-secondary">
-                <span aria-hidden className="font-mono text-[10px] text-status-green-light">✓</span>
-                {met.length} needs met <span className="font-mono text-[10px]">▸ expand</span>
-              </button>
-            </td>
-          </tr>
-        )}
-        {expanded && met.map((n) => <NeedRow key={n.goodId} n={n} />)}
-      </tbody>
-    </table>
+      )}
+      {expanded && met.map((n) => <NeedRow key={n.goodId} n={n} />)}
+    </NeedsTable>
   );
 }
 

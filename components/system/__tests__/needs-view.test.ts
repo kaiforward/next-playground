@@ -33,4 +33,9 @@ describe("buildProblems", () => {
       { kind: "pops", label: "pops short 41%", severity: "critical" },
     ]);
   });
+  it("a throttled input with a met-grade gate still reads short, never green", () => {
+    expect(buildProblems({ inputGate: 0.97, throttledBy: ["gas"] }, undefined, label)).toEqual([
+      { kind: "input", label: "gas 97%", severity: "short" },
+    ]);
+  });
 });

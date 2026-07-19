@@ -38,6 +38,7 @@ import { useDialog } from "@/components/ui/dialog";
 import { depositRows, generalLand, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
+import { NeedCells, NeedsTable } from "@/components/system/needs-table";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
 
@@ -914,32 +915,11 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
               </TooltipTriggerLabel>
               <TooltipContent className="w-80">
                 <div className="space-y-1 text-xs">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr>
-                        <th className="border-b border-border/60 px-1 py-0.5 text-left font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary">Need</th>
-                        <th className="border-b border-border/60 px-1 py-0.5 text-right font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary">Met</th>
-                        <th className="border-b border-border/60 px-1 py-0.5 text-right font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary">Want</th>
-                        <th className="border-b border-border/60 px-1 py-0.5 text-right font-display text-[9px] font-semibold uppercase tracking-wider text-text-tertiary">Delivered</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {unmet.map((n) => {
-                        const sev = needSeverity(n.satisfaction);
-                        return (
-                          <tr key={n.goodId}>
-                            <td className="px-1 py-0.5 text-text-primary">
-                              <span aria-label={sev} className={`mr-1 font-mono text-[9px] ${SEVERITY_TEXT[sev]}`}>{SEVERITY_GLYPH[sev]}</span>
-                              {n.goodName}
-                            </td>
-                            <td className={`px-1 py-0.5 text-right font-mono ${SEVERITY_TEXT[sev]}`}>{Math.round(n.satisfaction * 100)}%</td>
-                            <td className="px-1 py-0.5 text-right font-mono text-text-secondary">{n.want.toFixed(1)}</td>
-                            <td className="px-1 py-0.5 text-right font-mono text-text-secondary">{n.delivered.toFixed(1)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <NeedsTable density="tooltip">
+                    {unmet.map((n) => (
+                      <tr key={n.goodId}><NeedCells n={n} density="tooltip" /></tr>
+                    ))}
+                  </NeedsTable>
                   <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
                 </div>
               </TooltipContent>
