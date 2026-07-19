@@ -667,7 +667,7 @@ export async function runWorldTick(
     await runPopulationProcessor(
       popWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.month },
+      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.month, taxPressureBySystem },
     );
     systems = popWorld.systems;
     markets = popWorld.markets;

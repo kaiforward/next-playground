@@ -174,4 +174,24 @@ describe("population processor", () => {
     await runPopulationProcessor(world, ctxWithD(new Map()), PARAMS);
     expect(world.systems[0].population).toBe(before);
   });
+
+  it("adds per-system tax pressure to the unrest integrator only", async () => {
+    // d = 0, unrest starts 0, interval 24 (catchUp 1), UNREST_PARAMS-style gain 0.06:
+    // taxed system integrates gain × pressure; untaxed stays at 0.
+    const world = new InMemoryPopulationWorld({
+      systems: [
+        sys("taxed", 100, 1000, 0),
+        sys("free", 100, 1000, 0),
+      ],
+      markets: [],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["taxed", 0], ["free", 0]])), {
+      unrest: { gain: 0.06, decay: 0.06 },
+      population: { growthRate: 0, declineRate: 0, overshootDeathRate: 0 },
+      interval: 24,
+      taxPressureBySystem: new Map([["taxed", 0.18]]),
+    });
+    expect(world.systems.find((s) => s.id === "taxed")!.unrest).toBeCloseTo(0.06 * 0.18, 9);
+    expect(world.systems.find((s) => s.id === "free")!.unrest).toBe(0);
+  });
 });
