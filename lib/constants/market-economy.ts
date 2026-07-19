@@ -3,7 +3,6 @@
  * docs/active/gameplay/economy.md.
  */
 
-import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { scaleValue } from "@/lib/constants/economy-scale";
 import {
   buildingProduction,
@@ -82,22 +81,6 @@ export function totalDemandRateForGood(
   const state = labourState ?? computeLabourState(buildings, basis.population);
   const industrial = inputDemandForGood(buildings, goodId, state, yields);
   return Math.max(civilian + industrial, MIN_DEMAND);
-}
-
-/**
- * Per-good CIVILIAN demand a system's demand basis generates, descending by
- * magnitude — the population's own consumption footprint (what the Population
- * panel's demand chart renders), NOT the stored WorldMarket.demandRate pricing
- * anchor (which also folds in industrial input draw — see totalDemandRateForGood).
- * Only goods with a positive per-capita need appear; each entry equals
- * civilianDemandRateForGood (so it floors at MIN_DEMAND). Pure — driven by the
- * civilian demand basis.
- */
-export function demandFootprint(basis: CivilianDemandBasis): Array<{ goodId: string; civilianDemandRate: number }> {
-  return Object.keys(GOOD_CONSUMPTION)
-    .filter((goodId) => GOOD_CONSUMPTION[goodId] > 0)
-    .map((goodId) => ({ goodId, civilianDemandRate: civilianDemandRateForGood(goodId, basis) }))
-    .sort((a, b) => b.civilianDemandRate - a.civilianDemandRate);
 }
 
 /**

@@ -64,7 +64,7 @@ describe("LABOUR_HALF_POP", () => {
 });
 
 describe("skill consumption baskets", () => {
-  it("every basket good is a base-consumed good (POP_CENTRE_STORAGE flag + demandFootprint filter rely on this)", () => {
+  it("every basket good is a base-consumed good (POP_CENTRE_STORAGE flag + computePopNeeds' consumed-goods filter rely on this)", () => {
     for (const basket of [SKILL1_CONSUMPTION, SKILL2_CONSUMPTION]) {
       for (const goodId of Object.keys(basket)) {
         expect(GOOD_CONSUMPTION[goodId], goodId).toBeGreaterThan(0);
