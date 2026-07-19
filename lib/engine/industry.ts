@@ -15,7 +15,7 @@
  * substrate read service.
  */
 import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
-import type { CivilianDemandBasis, SubstrateGoodRate } from "@/lib/engine/physical-economy";
+import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
@@ -233,7 +233,7 @@ export function computeLabourAllocation(parts: LabourParts, population: number):
  */
 export interface SystemLabourSnapshot {
   state: LabourState;
-  basis: CivilianDemandBasis;
+  basis: LabourAllocation;
 }
 
 export function computeSystemLabourSnapshot(
